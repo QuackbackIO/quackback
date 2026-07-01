@@ -219,7 +219,7 @@ export function VisitorConversationThread({
       if (!ready) {
         setUploadError(
           intl.formatMessage({
-            id: 'widget.chat.upload.failed',
+            id: 'widget.messenger.upload.failed',
             defaultMessage: "Couldn't upload that image. Please try again.",
           })
         )
@@ -597,10 +597,10 @@ export function VisitorConversationThread({
               className="rounded-full border border-border/60 px-3 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
             >
               {loadingOlder ? (
-                <FormattedMessage id="widget.chat.loadingOlder" defaultMessage="Loading…" />
+                <FormattedMessage id="widget.messenger.loadingOlder" defaultMessage="Loading…" />
               ) : (
                 <FormattedMessage
-                  id="widget.chat.loadOlder"
+                  id="widget.messenger.loadOlder"
                   defaultMessage="Load earlier messages"
                 />
               )}
@@ -623,7 +623,7 @@ export function VisitorConversationThread({
             authorName={
               isVisitor
                 ? (currentUser?.name ??
-                  intl.formatMessage({ id: 'widget.chat.you', defaultMessage: 'You' }))
+                  intl.formatMessage({ id: 'widget.messenger.you', defaultMessage: 'You' }))
                 : (m.author?.displayName ?? teamName ?? undefined)
             }
             authorAvatar={
@@ -645,15 +645,18 @@ export function VisitorConversationThread({
         const event = row.message.systemEvent
         const notice =
           event?.kind === 'chat_ended' ? (
-            <FormattedMessage id="widget.chat.system.ended" defaultMessage="Conversation ended" />
+            <FormattedMessage
+              id="widget.messenger.system.ended"
+              defaultMessage="Conversation ended"
+            />
           ) : event?.kind === 'chat_reopened' ? (
             <FormattedMessage
-              id="widget.chat.system.reopened"
+              id="widget.messenger.system.reopened"
               defaultMessage="Conversation reopened"
             />
           ) : event?.kind === 'assigned' ? (
             <FormattedMessage
-              id="widget.chat.system.assigned"
+              id="widget.messenger.system.assigned"
               defaultMessage="Assigned to {name}"
               values={{ name: event.agentName ?? 'an agent' }}
             />
@@ -674,7 +677,7 @@ export function VisitorConversationThread({
             <ChatBubbleLeftRightIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
             <p className="text-sm font-medium text-muted-foreground/70">
               <FormattedMessage
-                id="widget.chat.startPrompt"
+                id="widget.messenger.startPrompt"
                 defaultMessage="Send us a message and we'll get back to you."
               />
             </p>
@@ -683,7 +686,7 @@ export function VisitorConversationThread({
       case 'seen':
         return (
           <p className="text-end text-[10px] text-muted-foreground/50 pe-1">
-            <FormattedMessage id="widget.chat.seen" defaultMessage="Seen" />
+            <FormattedMessage id="widget.messenger.seen" defaultMessage="Seen" />
           </p>
         )
       case 'typing':
@@ -692,7 +695,7 @@ export function VisitorConversationThread({
             <TypingDots />
             <span>
               <FormattedMessage
-                id="widget.chat.typing"
+                id="widget.messenger.typing"
                 defaultMessage="{name} is typing…"
                 values={{ name: teamName ?? 'Support' }}
               />
@@ -707,7 +710,7 @@ export function VisitorConversationThread({
               <>
                 <p className="mb-1.5 text-xs text-muted-foreground">
                   <FormattedMessage
-                    id="widget.chat.csat.prompt"
+                    id="widget.messenger.csat.prompt"
                     defaultMessage="How was your conversation?"
                   />
                 </p>
@@ -730,7 +733,7 @@ export function VisitorConversationThread({
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-muted-foreground">
                   <FormattedMessage
-                    id="widget.chat.csat.commentPrompt"
+                    id="widget.messenger.csat.commentPrompt"
                     defaultMessage="Thanks! Anything we could improve?"
                   />
                 </p>
@@ -742,11 +745,11 @@ export function VisitorConversationThread({
                   // The visible prompt <p> above already labels this section, so
                   // name the field by its own purpose to avoid a double announce.
                   aria-label={intl.formatMessage({
-                    id: 'widget.chat.csat.commentPlaceholder',
+                    id: 'widget.messenger.csat.commentPlaceholder',
                     defaultMessage: 'Add a comment (optional)',
                   })}
                   placeholder={intl.formatMessage({
-                    id: 'widget.chat.csat.commentPlaceholder',
+                    id: 'widget.messenger.csat.commentPlaceholder',
                     defaultMessage: 'Add a comment (optional)',
                   })}
                   className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
@@ -756,14 +759,17 @@ export function VisitorConversationThread({
                   onClick={submitComment}
                   className="self-center rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 >
-                  <FormattedMessage id="widget.chat.csat.send" defaultMessage="Send feedback" />
+                  <FormattedMessage
+                    id="widget.messenger.csat.send"
+                    defaultMessage="Send feedback"
+                  />
                 </button>
               </div>
             ) : (
               // Final state: commented, or a returning already-rated visitor.
               <p className="text-xs text-muted-foreground">
                 <FormattedMessage
-                  id="widget.chat.csat.thanks"
+                  id="widget.messenger.csat.thanks"
                   defaultMessage="Thanks for your feedback!"
                 />
               </p>
@@ -804,7 +810,7 @@ export function VisitorConversationThread({
             type="button"
             onClick={() => virtualizer.scrollToEnd({ behavior: 'smooth' })}
             aria-label={intl.formatMessage({
-              id: 'widget.chat.jumpToLatest',
+              id: 'widget.messenger.jumpToLatest',
               defaultMessage: 'Jump to latest',
             })}
             className="absolute bottom-2 end-2 z-10 flex items-center justify-center size-8 rounded-full border border-border bg-card text-muted-foreground shadow-md hover:bg-muted hover:text-foreground transition-colors"
@@ -819,7 +825,7 @@ export function VisitorConversationThread({
         <div className="px-3 pb-1">
           <p className="px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
             <FormattedMessage
-              id="widget.chat.suggestedArticles"
+              id="widget.messenger.suggestedArticles"
               defaultMessage="Suggested articles"
             />
           </p>
@@ -849,7 +855,7 @@ export function VisitorConversationThread({
               offlineMessage
             ) : (
               <FormattedMessage
-                id="widget.chat.offline.noEmail"
+                id="widget.messenger.offline.noEmail"
                 defaultMessage="We're away right now — leave a message and we'll reply here when we're back."
               />
             )}
@@ -857,7 +863,7 @@ export function VisitorConversationThread({
           {reopenLabel && (
             <p className="mt-0.5">
               <FormattedMessage
-                id="widget.chat.offline.backAt"
+                id="widget.messenger.offline.backAt"
                 defaultMessage="Back {when}"
                 values={{ when: reopenLabel }}
               />
@@ -873,7 +879,7 @@ export function VisitorConversationThread({
           <span className="h-px flex-1 bg-border/50" />
           <span className="text-center text-[11px] text-muted-foreground">
             <FormattedMessage
-              id="widget.chat.closedReopen"
+              id="widget.messenger.closedReopen"
               defaultMessage="This conversation was closed. Reply to reopen it."
             />
           </span>
@@ -890,12 +896,12 @@ export function VisitorConversationThread({
             >
               {preChatMode === 'required' ? (
                 <FormattedMessage
-                  id="widget.chat.email.required"
+                  id="widget.messenger.email.required"
                   defaultMessage="Your email so we can reply"
                 />
               ) : (
                 <FormattedMessage
-                  id="widget.chat.email.optional"
+                  id="widget.messenger.email.optional"
                   defaultMessage="Your email (optional)"
                 />
               )}
@@ -917,7 +923,7 @@ export function VisitorConversationThread({
                 className="mt-1 text-[11px] text-muted-foreground/70 underline hover:text-foreground"
               >
                 <FormattedMessage
-                  id="widget.chat.email.skip"
+                  id="widget.messenger.email.skip"
                   defaultMessage="Continue without email"
                 />
               </button>
@@ -947,7 +953,7 @@ export function VisitorConversationThread({
             resetSignal={composerResetSignal}
             disabled={sending || emailBlocksSend}
             placeholder={intl.formatMessage({
-              id: 'widget.chat.placeholder',
+              id: 'widget.messenger.placeholder',
               defaultMessage: 'Type your message…',
             })}
             onChange={(text, doc) => {
@@ -971,7 +977,7 @@ export function VisitorConversationThread({
               onClick={() => fileInputRef.current?.click()}
               className="shrink-0 flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
               aria-label={intl.formatMessage({
-                id: 'widget.chat.attach',
+                id: 'widget.messenger.attach',
                 defaultMessage: 'Attach image',
               })}
             >
@@ -994,7 +1000,10 @@ export function VisitorConversationThread({
                 emailBlocksSend
               }
               className="shrink-0 flex items-center justify-center size-8 rounded-md bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
-              aria-label={intl.formatMessage({ id: 'widget.chat.send', defaultMessage: 'Send' })}
+              aria-label={intl.formatMessage({
+                id: 'widget.messenger.send',
+                defaultMessage: 'Send',
+              })}
             >
               <PaperAirplaneIcon className="w-4 h-4" />
             </button>

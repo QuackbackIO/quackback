@@ -24,9 +24,9 @@ export function ConversationPresenceBadge({
         aria-hidden
       />
       {available ? (
-        <FormattedMessage id="widget.chat.online" defaultMessage="We're online" />
+        <FormattedMessage id="widget.messenger.online" defaultMessage="We're online" />
       ) : (
-        <FormattedMessage id="widget.chat.offline" defaultMessage="We'll reply by email" />
+        <FormattedMessage id="widget.messenger.offline" defaultMessage="We'll reply by email" />
       )}
     </span>
   )

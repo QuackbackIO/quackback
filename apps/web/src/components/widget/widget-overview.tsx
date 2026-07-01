@@ -105,7 +105,7 @@ export function WidgetOverview({
                 title={
                   tabs.chat && !tabs.help ? (
                     <FormattedMessage
-                      id="widget.launcher.action.support.chatOnly"
+                      id="widget.launcher.action.support.messengerOnly"
                       defaultMessage="Send us a message"
                     />
                   ) : (
@@ -125,7 +125,7 @@ export function WidgetOverview({
                     />
                   ) : (
                     <FormattedMessage
-                      id="widget.launcher.action.help.sub.chatOnly"
+                      id="widget.launcher.action.help.sub.messengerOnly"
                       defaultMessage="Chat with our team"
                     />
                   )
