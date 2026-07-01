@@ -9,9 +9,9 @@ import {
   resolveInitialView,
 } from '../widget-nav'
 
-// Nav model: Chat is folded into the Help (support) surface, so the bottom bar
+// Nav model: Messenger is folded into the Help (support) surface, so the bottom bar
 // is at most home | feedback | changelog | help. A "content surface" is
-// feedback, changelog, or support (help OR chat). The aggregated Home appears
+// feedback, changelog, or support (help OR messenger). The aggregated Home appears
 // only when 2+ content surfaces are enabled; otherwise the widget lands
 // directly on the single surface and the bar is hidden.
 

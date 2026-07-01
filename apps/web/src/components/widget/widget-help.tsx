@@ -21,14 +21,18 @@ interface WidgetHelpProps {
   onArticleSelect?: (articleSlug: string) => void
   onCategorySelect?: (categoryId: string, categoryName: string, categoryIcon: string | null) => void
   /**
-   * When live chat is part of this (merged) support surface, open the chat
-   * thread. Surfaced as a Messages entry above the articles. Omit when chat is
+   * When messenger is part of this (merged) support surface, open the messenger
+   * thread. Surfaced as a Messages entry above the articles. Omit when messenger is
    * disabled — the support surface is then help articles only.
    */
-  onOpenChat?: (target?: import('@quackback/ids').ConversationId | 'new') => void
+  onOpenMessenger?: (target?: import('@quackback/ids').ConversationId | 'new') => void
 }
 
-export function WidgetHelp({ onArticleSelect, onCategorySelect, onOpenChat }: WidgetHelpProps) {
+export function WidgetHelp({
+  onArticleSelect,
+  onCategorySelect,
+  onOpenMessenger,
+}: WidgetHelpProps) {
   const intl = useIntl()
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<WidgetHelpArticle[]>([])
@@ -159,8 +163,8 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect, onOpenChat }: Wi
                 </div>
               )}
 
-              {/* Messages — the chat half of the combined support surface. */}
-              {onOpenChat && <WidgetMessagesSection onOpenChat={onOpenChat} />}
+              {/* Messages — the messenger half of the combined support surface. */}
+              {onOpenMessenger && <WidgetMessagesSection onOpenMessenger={onOpenMessenger} />}
             </>
           )}
 

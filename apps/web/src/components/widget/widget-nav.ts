@@ -4,10 +4,10 @@
  * config. Kept as a pure module (no React) so the routing rules are unit-tested
  * directly rather than through the route component.
  *
- * Chat is folded into the Help (support) surface: the bottom bar carries at
+ * Messenger is folded into the Help (support) surface: the bottom bar carries at
  * most home | feedback | changelog | help, and the Help tab hosts both articles
  * and messages. A "content surface" is feedback, changelog, or support (help OR
- * chat); the aggregated Home appears only when 2+ are enabled.
+ * messenger); the aggregated Home appears only when 2+ are enabled.
  */
 
 /** Bottom-bar tabs. "help" is the combined support surface (articles + messages). */
@@ -15,7 +15,7 @@ export type WidgetTab = 'home' | 'feedback' | 'changelog' | 'help'
 
 /**
  * Discrete views the widget can render. The feedback surface's root is
- * 'feedback'; 'overview' is the aggregated Home. 'chat' is the live-chat
+ * 'feedback'; 'overview' is the aggregated Home. 'messenger' is the conversation
  * thread, reached from inside the support surface (and the Home resume card),
  * not from its own bottom tab. Detail views are pushed on top of a root.
  */
@@ -29,7 +29,7 @@ export type WidgetView =
   | 'help'
   | 'help-category'
   | 'help-detail'
-  | 'chat'
+  | 'messenger'
   | 'messages'
 
 /** Which surfaces the workspace has enabled for this widget (from the loader). */
@@ -46,20 +46,20 @@ export interface EnabledTabs {
   home?: boolean
 }
 
-/** The support surface is on when either help articles or live chat is enabled. */
+/** The support surface is on when either help articles or messenger is enabled. */
 export function supportEnabled(tabs: EnabledTabs): boolean {
   return !!(tabs.help || tabs.chat)
 }
 
 /**
  * Root view for the support tab: the help articles when help is on, otherwise
- * the messages list (a chat-only support surface opens the conversation list).
+ * the messages list (a messenger-only support surface opens the conversation list).
  */
 export function supportRootView(tabs: EnabledTabs): Extract<WidgetView, 'help' | 'messages'> {
   return tabs.help ? 'help' : 'messages'
 }
 
-/** Number of distinct content surfaces enabled (help + chat collapse to one). */
+/** Number of distinct content surfaces enabled (help + messenger collapse to one). */
 export function contentSurfaceCount(tabs: EnabledTabs): number {
   return [tabs.feedback, tabs.changelog, supportEnabled(tabs)].filter(Boolean).length
 }

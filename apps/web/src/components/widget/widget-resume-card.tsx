@@ -10,7 +10,7 @@ interface WidgetResumeCardProps {
   teamName: string | null
   /** Whether an agent is reachable now — drives the presence dot. */
   agentsOnline: boolean
-  /** Resume the conversation (opens the full chat thread). */
+  /** Resume the conversation (opens the full messenger thread). */
   onClick: () => void
 }
 

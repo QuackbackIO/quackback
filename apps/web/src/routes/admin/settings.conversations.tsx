@@ -178,7 +178,7 @@ function ConversationsSettingsPage() {
       >
         <div className="flex items-center justify-between py-1">
           <div className="pr-4">
-            <Label htmlFor="chat-enabled" className="text-sm font-medium cursor-pointer">
+            <Label htmlFor="messenger-enabled" className="text-sm font-medium cursor-pointer">
               Enable Messenger
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -192,7 +192,7 @@ function ConversationsSettingsPage() {
               <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             )}
             <Switch
-              id="chat-enabled"
+              id="messenger-enabled"
               checked={enabled}
               onCheckedChange={onToggleEnabled}
               disabled={isBusy}
@@ -235,9 +235,9 @@ function ConversationsSettingsPage() {
       >
         <div className="space-y-5">
           <div className="space-y-1.5">
-            <Label htmlFor="chat-team-name">Team name</Label>
+            <Label htmlFor="messenger-team-name">Team name</Label>
             <Input
-              id="chat-team-name"
+              id="messenger-team-name"
               value={teamName}
               maxLength={80}
               placeholder="Support"
@@ -251,9 +251,9 @@ function ConversationsSettingsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="chat-welcome">Welcome message</Label>
+            <Label htmlFor="messenger-welcome">Welcome message</Label>
             <Textarea
-              id="chat-welcome"
+              id="messenger-welcome"
               value={welcomeMessage}
               maxLength={500}
               rows={2}
@@ -272,9 +272,9 @@ function ConversationsSettingsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="chat-offline">Offline message</Label>
+            <Label htmlFor="messenger-offline">Offline message</Label>
             <Textarea
-              id="chat-offline"
+              id="messenger-offline"
               value={offlineMessage}
               maxLength={500}
               rows={2}
@@ -291,9 +291,9 @@ function ConversationsSettingsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="chat-prechat-email">Ask for an email</Label>
+            <Label htmlFor="messenger-prechat-email">Ask for an email</Label>
             <select
-              id="chat-prechat-email"
+              id="messenger-prechat-email"
               value={preChatEmail}
               onChange={(e) => {
                 const next = e.target.value as 'off' | 'optional' | 'required'

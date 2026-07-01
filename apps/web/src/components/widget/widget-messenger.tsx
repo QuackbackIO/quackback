@@ -8,7 +8,7 @@ import { useConversationPresence, markAgentPresentInCache } from './use-messenge
 import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
 
 interface WidgetMessengerProps {
-  /** Whether the help center is available (gates in-chat article suggestions). */
+  /** Whether the help center is available (gates in-conversation article suggestions). */
   helpEnabled?: boolean
   /** Open a help article by slug (switches the widget to the article view). */
   onArticleSelect?: (slug: string) => void

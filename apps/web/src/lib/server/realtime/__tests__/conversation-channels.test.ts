@@ -1,5 +1,5 @@
 /**
- * Channel routing for chat events, with a focus on the security-critical
+ * Channel routing for conversation events, with a focus on the security-critical
  * invariant that agent-only data (internal notes, captured visitor email)
  * never reaches the visitor's conversation channel.
  */

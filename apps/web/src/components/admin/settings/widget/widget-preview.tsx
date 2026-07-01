@@ -12,33 +12,33 @@ import {
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
-type PreviewTab = 'feedback' | 'changelog' | 'help' | 'chat'
+type PreviewTab = 'feedback' | 'changelog' | 'help' | 'messenger'
 
 // Tab bar order + icons/labels — mirrors TAB_CONFIG in the real widget shell
 // (components/widget/widget-shell.tsx) so the preview renders the same tabs in
 // the same order as the embedded widget.
-const TAB_ORDER: PreviewTab[] = ['feedback', 'changelog', 'help', 'chat']
+const TAB_ORDER: PreviewTab[] = ['feedback', 'changelog', 'help', 'messenger']
 const TAB_META: Record<PreviewTab, { icon: typeof LightBulbIcon; label: string }> = {
   feedback: { icon: LightBulbIcon, label: 'Feedback' },
   changelog: { icon: NewspaperIcon, label: 'Changelog' },
   help: { icon: BookOpenIcon, label: 'Help' },
-  chat: { icon: ChatBubbleLeftRightIcon, label: 'Chat' },
+  messenger: { icon: ChatBubbleLeftRightIcon, label: 'Messenger' },
 }
 
 interface WidgetPreviewProps {
   position: 'bottom-right' | 'bottom-left'
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean; chat?: boolean }
-  /** Chat config, surfaced so the chat view mirrors the real widget. */
-  chat?: { teamName?: string; welcomeMessage?: string }
+  /** Messenger config, surfaced so the messenger view mirrors the real widget. */
+  messenger?: { teamName?: string; welcomeMessage?: string }
 }
 
 export function WidgetPreview({
   position,
   tabs = { feedback: true, changelog: false, help: false, chat: false },
-  chat,
+  messenger,
 }: WidgetPreviewProps) {
   const [isOpen, setIsOpen] = useState(true)
-  const enabledTabs = TAB_ORDER.filter((t) => Boolean(tabs[t]))
+  const enabledTabs = TAB_ORDER.filter((t) => (t === 'messenger' ? tabs.chat : tabs[t]))
   const showTabBar = enabledTabs.length > 1
 
   // Active tab is derived: honour the user's selection while it's still enabled,
@@ -72,8 +72,8 @@ export function WidgetPreview({
                 ? 'Share your ideas'
                 : activeTab === 'help'
                   ? 'Help & Support'
-                  : activeTab === 'chat'
-                    ? 'Chat with us'
+                  : activeTab === 'messenger'
+                    ? 'Message us'
                     : "What's new"}
             </p>
             <button
@@ -121,8 +121,11 @@ export function WidgetPreview({
                   <MockHelpCategory icon="🔧" title="Troubleshooting" articles={5} />
                 </div>
               </>
-            ) : activeTab === 'chat' ? (
-              <MockChatView teamName={chat?.teamName} welcomeMessage={chat?.welcomeMessage} />
+            ) : activeTab === 'messenger' ? (
+              <MockMessengerView
+                teamName={messenger?.teamName}
+                welcomeMessage={messenger?.welcomeMessage}
+              />
             ) : (
               <div className="space-y-1 pt-0.5">
                 <MockChangelogEntry
@@ -285,7 +288,7 @@ function MockHelpCategory({
   )
 }
 
-function MockChatView({
+function MockMessengerView({
   teamName,
   welcomeMessage,
 }: {

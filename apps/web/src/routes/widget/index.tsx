@@ -35,7 +35,7 @@ import { CONVERSATION_PRESENCE_QUERY_KEY } from '@/components/widget/use-messeng
 
 const searchSchema = z.object({
   board: z.string().optional(),
-  // `?c=<conversationId>` opens the widget straight to live chat — used by the
+  // `?c=<conversationId>` opens the widget straight to Messenger — used by the
   // deep link in agent-reply emails. Navigation only; carries no capability.
   c: z.string().optional(),
 })
@@ -61,8 +61,8 @@ export const Route = createFileRoute('/widget/')({
 
     const { getBaseUrl } = await import('@/lib/server/config')
 
-    // Same triple-gate as the `chat` tab below: Support Inbox flag + live chat
-    // enabled + tab on. Hoisted so we only compute presence when chat shows.
+    // Same triple-gate as the `chat` tab below: Support Inbox flag + Messenger
+    // enabled + tab on. Hoisted so we only compute presence when Messenger shows.
     const chatTabEnabled =
       ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
       (settings?.publicWidgetConfig?.messenger?.enabled ?? false) &&
@@ -70,10 +70,10 @@ export const Route = createFileRoute('/widget/')({
 
     // Presence is tenant-global (not visitor-specific), so the anonymous SSR
     // baseline value is exactly correct for every visitor — seed the shared
-    // presence query so the chat online/offline strip paints right immediately
+    // presence query so the Messenger online/offline strip paints right immediately
     // instead of flashing "away" until the first client poll. The seed is
     // dehydrated to the client just like the votedPosts seed below. Skipped when
-    // chat isn't shown.
+    // Messenger isn't shown.
     if (chatTabEnabled) {
       try {
         // Call the server fn (not an unwrapped helper): its handler — and the
@@ -126,7 +126,7 @@ export const Route = createFileRoute('/widget/')({
           ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
           (settings?.helpCenterConfig?.enabled ?? false) &&
           (settings?.publicWidgetConfig?.tabs?.help ?? false),
-        // Support Inbox flag + live chat enabled + tab on (computed above).
+        // Support Inbox flag + Messenger enabled + tab on (computed above).
         chat: chatTabEnabled,
         // Admin opt-out for the aggregated Home tab (defaults to shown).
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
@@ -193,17 +193,17 @@ function WidgetPage() {
 
   const { c: resumeConversationId } = Route.useSearch()
   const initialTab = resolveInitialTab(tabs)
-  // A `?c=` deep link opens straight to chat (when chat is enabled); the widget
+  // A `?c=` deep link opens straight to Messenger (when Messenger is enabled); the widget
   // then loads the visitor's active conversation from their session.
   const [view, setView] = useState<WidgetView>(
-    resumeConversationId && tabs.chat ? 'chat' : resolveInitialView(tabs)
+    resumeConversationId && tabs.chat ? 'messenger' : resolveInitialView(tabs)
   )
   const [activeTab, setActiveTab] = useState<WidgetTab>(
     resumeConversationId && tabs.chat ? 'help' : initialTab
   )
-  // Which thread the chat view opens: an id, 'new', or null (active/default).
+  // Which thread the messenger view opens: an id, 'new', or null (active/default).
   // Seeded from the ?c= deep link so it opens that exact thread.
-  const [chatTarget, setChatTarget] = useState<ConversationId | 'new' | null>(
+  const [conversationTarget, setConversationTarget] = useState<ConversationId | 'new' | null>(
     resumeConversationId ? (resumeConversationId as ConversationId) : null
   )
 
@@ -223,10 +223,10 @@ function WidgetPage() {
     return [...createdPosts, ...posts.filter((p) => !createdIds.has(p.id))]
   }, [posts, createdPosts])
 
-  const openChat = useCallback((target?: ConversationId | 'new') => {
-    setChatTarget(target ?? null)
+  const openMessenger = useCallback((target?: ConversationId | 'new') => {
+    setConversationTarget(target ?? null)
     setActiveTab('help')
-    setView('chat')
+    setView('messenger')
   }, [])
 
   // Listen for quackback:open messages from the SDK
@@ -244,7 +244,7 @@ function WidgetPage() {
         setActiveTab('help')
         setView(supportRootView(tabs))
       } else if ((opts.view === 'chat' || opts.view === 'live-chat') && tabs.chat) {
-        openChat()
+        openMessenger()
       } else if ((opts.view === 'home' || opts.view === 'overview') && homeEnabled(tabs)) {
         setActiveTab('home')
         setView('overview')
@@ -252,7 +252,7 @@ function WidgetPage() {
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [tabs, openChat])
+  }, [tabs, openMessenger])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
     setCreatedPosts((prev) => [
@@ -295,9 +295,9 @@ function WidgetPage() {
       setView('help')
       return
     }
-    if (view === 'chat') {
-      // Chat is opened from the support surface; back returns to its root
-      // (help articles, or the messages list for a chat-only widget).
+    if (view === 'messenger') {
+      // Messenger is opened from the support surface; back returns to its root
+      // (help articles, or the messages list for a messenger-only widget).
       setView(supportRootView(tabs))
       return
     }
@@ -349,7 +349,7 @@ function WidgetPage() {
     setView('help-detail')
   }, [])
 
-  // Root views have no back arrow. 'messages' is the chat-only support root.
+  // Root views have no back arrow. 'messages' is the messenger-only support root.
   const shellOnBack =
     view !== 'overview' &&
     view !== 'feedback' &&
@@ -374,7 +374,7 @@ function WidgetPage() {
           tabs={tabs}
           onLeaveFeedback={() => handleTabChange('feedback')}
           onGetHelp={() => handleTabChange('help')}
-          onResumeChat={() => openChat()}
+          onResumeMessenger={() => openMessenger()}
           onSeeChangelog={() => handleTabChange('changelog')}
           onOpenChangelogEntry={(id) => {
             setActiveTab('changelog')
@@ -385,19 +385,19 @@ function WidgetPage() {
 
       {view === 'changelog' && <WidgetChangelog onEntrySelect={handleChangelogEntrySelect} />}
 
-      {view === 'chat' && (
+      {view === 'messenger' && (
         <WidgetMessenger
-          key={chatTarget ?? 'active'}
+          key={conversationTarget ?? 'active'}
           helpEnabled={tabs.help}
           onArticleSelect={handleHelpArticleSelect}
-          conversationTarget={chatTarget === null ? undefined : chatTarget}
+          conversationTarget={conversationTarget === null ? undefined : conversationTarget}
           linkPreviews={linkPreviews}
         />
       )}
 
       {view === 'messages' && (
         <div className="flex h-full flex-col overflow-y-auto px-3 pb-3">
-          <WidgetMessagesSection onOpenChat={openChat} />
+          <WidgetMessagesSection onOpenMessenger={openMessenger} />
         </div>
       )}
 
@@ -409,7 +409,7 @@ function WidgetPage() {
         <WidgetHelp
           onArticleSelect={handleHelpArticleSelect}
           onCategorySelect={handleHelpCategorySelect}
-          onOpenChat={tabs.chat ? () => openChat() : undefined}
+          onOpenMessenger={tabs.chat ? () => openMessenger() : undefined}
         />
       )}
 

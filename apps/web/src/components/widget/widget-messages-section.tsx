@@ -10,7 +10,7 @@ import { ConversationPresenceBadge } from '@/components/shared/conversation/conv
 interface WidgetMessagesSectionProps {
   /** Open a conversation: an id opens that thread, 'new' starts a fresh one,
    *  undefined opens the visitor's active/most-recent thread. */
-  onOpenChat: (target?: ConversationId | 'new') => void
+  onOpenMessenger: (target?: ConversationId | 'new') => void
 }
 
 /**
@@ -18,7 +18,7 @@ interface WidgetMessagesSectionProps {
  * most-recent thread, the tappable list of previous threads, and an always-on
  * "New conversation" entry so a visitor can start a thread even with one open.
  */
-export function WidgetMessagesSection({ onOpenChat }: WidgetMessagesSectionProps) {
+export function WidgetMessagesSection({ onOpenMessenger }: WidgetMessagesSectionProps) {
   const { conversation, teamName, agentsOnline, withinOfficeHours } = useConversationSummary(true)
   const available = conversationAvailable(agentsOnline, withinOfficeHours)
 
@@ -34,17 +34,20 @@ export function WidgetMessagesSection({ onOpenChat }: WidgetMessagesSectionProps
             conversation={conversation}
             teamName={teamName}
             agentsOnline={agentsOnline}
-            onClick={() => onOpenChat(conversation.id)}
+            onClick={() => onOpenMessenger(conversation.id)}
           />
         </div>
       )}
 
-      <WidgetConversationHistory activeId={conversation?.id} onSelect={(id) => onOpenChat(id)} />
+      <WidgetConversationHistory
+        activeId={conversation?.id}
+        onSelect={(id) => onOpenMessenger(id)}
+      />
 
       {/* Always available — Intercom-style: start a new thread anytime. */}
       <button
         type="button"
-        onClick={() => onOpenChat('new')}
+        onClick={() => onOpenMessenger('new')}
         className="mt-2 flex w-full items-center gap-2.5 rounded-lg border border-border/60 bg-card px-3 py-2.5 text-start transition-colors hover:bg-muted/40"
       >
         <ChatBubbleLeftRightIcon className="h-4 w-4 shrink-0 text-muted-foreground" />

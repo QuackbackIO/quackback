@@ -2,73 +2,74 @@
 /**
  * <WidgetPreview> — admin widget settings live preview.
  *
- * Covers the Chat tab integration (the preview must mirror the real widget's
+ * Covers the Messenger tab integration (the preview must mirror the real widget's
  * tab set so admins see an accurate representation):
- *   - A chat-only config renders the chat view ("Chat with us" heading) and
+ *   - A messenger-only config renders the messenger view ("Message us" heading) and
  *     reflects the configured teamName + welcomeMessage, with no tab bar.
- *   - With multiple tabs enabled, a "Chat" tab button appears and selecting it
- *     switches to the chat view.
- *   - Chat is not rendered when tabs.chat is off.
+ *   - With multiple tabs enabled, a "Messenger" tab button appears and selecting it
+ *     switches to the messenger view.
+ *   - Messenger is not rendered when tabs.chat is off.
  */
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { WidgetPreview } from '../widget-preview'
 
-describe('WidgetPreview — chat tab', () => {
-  it('renders the chat view with configured team name + welcome message when chat is the only tab', () => {
+describe('WidgetPreview — messenger tab', () => {
+  it('renders the messenger view with configured team name + welcome message when messenger is the only tab', () => {
     render(
       <WidgetPreview
         position="bottom-right"
         tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        chat={{ teamName: 'Acme Support', welcomeMessage: 'Hi! How can we help you today?' }}
+        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Hi! How can we help you today?' }}
       />
     )
 
-    expect(screen.getByText('Chat with us')).toBeTruthy()
+    expect(screen.getByText('Message us')).toBeTruthy()
     expect(screen.getByText('Hi! How can we help you today?')).toBeTruthy()
     expect(screen.getByText('Acme Support')).toBeTruthy()
     // Single tab → no tab bar.
-    expect(screen.queryByRole('button', { name: /Chat tab/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Messenger tab/i })).toBeNull()
   })
 
-  it('exposes a Chat tab and switches to the chat view when selected', () => {
+  it('exposes a Messenger tab and switches to the messenger view when selected', () => {
     render(
       <WidgetPreview
         position="bottom-right"
         tabs={{ feedback: true, changelog: false, help: false, chat: true }}
-        chat={{ teamName: 'Acme Support', welcomeMessage: 'Welcome aboard!' }}
+        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Welcome aboard!' }}
       />
     )
 
     // Starts on feedback.
     expect(screen.getByText('Share your ideas')).toBeTruthy()
 
-    const chatTab = screen.getByRole('button', { name: /Chat tab/i })
-    fireEvent.click(chatTab)
+    const messengerTab = screen.getByRole('button', { name: /Messenger tab/i })
+    fireEvent.click(messengerTab)
 
-    expect(screen.getByText('Chat with us')).toBeTruthy()
+    expect(screen.getByText('Message us')).toBeTruthy()
     expect(screen.getByText('Welcome aboard!')).toBeTruthy()
   })
 
-  it('does not render the chat view when chat tab is off', () => {
+  it('does not render the messenger view when messenger tab is off', () => {
     render(
       <WidgetPreview
         position="bottom-right"
         tabs={{ feedback: true, changelog: true, help: false, chat: false }}
-        chat={{ teamName: 'Acme Support', welcomeMessage: 'Welcome aboard!' }}
+        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Welcome aboard!' }}
       />
     )
 
-    expect(screen.queryByText('Chat with us')).toBeNull()
-    expect(screen.queryByRole('button', { name: /Chat tab/i })).toBeNull()
+    expect(screen.queryByText('Message us')).toBeNull()
+    expect(screen.queryByText('Welcome aboard!')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Messenger tab/i })).toBeNull()
   })
 
-  it('renders the availability presence strip in the chat view (mirrors the real widget)', () => {
+  it('renders the availability presence strip in the messenger view (mirrors the real widget)', () => {
     render(
       <WidgetPreview
         position="bottom-right"
         tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        chat={{ teamName: 'Acme Support', welcomeMessage: 'Hi!' }}
+        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Hi!' }}
       />
     )
 
@@ -80,7 +81,7 @@ describe('WidgetPreview — chat tab', () => {
       <WidgetPreview
         position="bottom-right"
         tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        chat={{ teamName: 'Acme Support', welcomeMessage: '' }}
+        messenger={{ teamName: 'Acme Support', welcomeMessage: '' }}
       />
     )
 
@@ -94,7 +95,7 @@ describe('WidgetPreview — chat tab', () => {
       <WidgetPreview
         position="bottom-right"
         tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        chat={{ welcomeMessage: 'Hello there' }}
+        messenger={{ welcomeMessage: 'Hello there' }}
       />
     )
 

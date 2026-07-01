@@ -16,8 +16,8 @@ interface WidgetOverviewProps {
   onLeaveFeedback: () => void
   /** Open the support surface (help articles + messages). */
   onGetHelp: () => void
-  /** Resume an in-flight conversation (opens the chat thread directly). */
-  onResumeChat: () => void
+  /** Resume an in-flight conversation (opens the messenger thread directly). */
+  onResumeMessenger: () => void
   /** Open the full changelog. */
   onSeeChangelog: () => void
   /** Open a single changelog entry from the teaser. */
@@ -25,7 +25,7 @@ interface WidgetOverviewProps {
 }
 
 /**
- * Aggregated Home — greets the visitor (with live-chat presence), surfaces a
+ * Aggregated Home — greets the visitor (with messenger presence), surfaces a
  * recent-conversation resume card, routes to each enabled surface via action
  * cards, and shows an ambient latest-changelog teaser at the bottom. Rendered
  * only when 2+ content surfaces exist (see homeEnabled in widget-nav), so it
@@ -35,15 +35,15 @@ export function WidgetOverview({
   tabs,
   onLeaveFeedback,
   onGetHelp,
-  onResumeChat,
+  onResumeMessenger,
   onSeeChangelog,
   onOpenChangelogEntry,
 }: WidgetOverviewProps) {
   const { user } = useWidgetAuth()
   const firstName = firstNameOf(user?.name)
 
-  // A recent-conversation resume card is a chat concept — only fetched/shown
-  // when chat is part of the support surface. Presence now lives on the support
+  // A recent-conversation resume card is a messenger concept — only fetched/shown
+  // when messenger is part of the support surface. Presence now lives on the support
   // surface's message CTA, not here.
   const { conversation, teamName, agentsOnline } = useConversationSummary(!!tabs.chat)
 
@@ -73,7 +73,7 @@ export function WidgetOverview({
               conversation={conversation}
               teamName={teamName}
               agentsOnline={agentsOnline}
-              onClick={onResumeChat}
+              onClick={onResumeMessenger}
             />
           )}
 
