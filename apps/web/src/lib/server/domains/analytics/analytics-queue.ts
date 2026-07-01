@@ -5,6 +5,8 @@
 import { Queue, Worker } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
 import { logger } from '@/lib/server/logger'
+import { db, refreshVisitorAnalytics } from '@/lib/server/db'
+import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { refreshAnalytics } from './analytics.service'
 
 const log = logger.child({ component: 'analytics-queue' })
@@ -39,6 +41,9 @@ async function initializeQueue() {
     async (job) => {
       if (job.data.type === 'refresh-analytics') {
         await refreshAnalytics()
+        if (await isFeatureEnabled('visitorAnalytics')) {
+          await refreshVisitorAnalytics(db)
+        }
       }
     },
     { connection, concurrency: CONCURRENCY }
