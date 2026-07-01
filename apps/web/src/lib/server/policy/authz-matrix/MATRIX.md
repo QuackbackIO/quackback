@@ -176,11 +176,11 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/conversation-tags.ts`::removeConversationTagFn | conversation.set_tags |
 | `lib/server/functions/conversation.ts`::sendConversationMessageFn | END_USER (any authenticated) |
 | `lib/server/functions/conversation.ts`::listConversationMessagesFn | END_USER (any authenticated) |
-| `lib/server/functions/conversation.ts`::markChatReadFn | END_USER (any authenticated) |
-| `lib/server/functions/conversation.ts`::sendChatTypingFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::markConversationReadFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::sendConversationTypingFn | END_USER (any authenticated) |
 | `lib/server/functions/conversation.ts`::submitCsatFn | END_USER (any authenticated) |
 | `lib/server/functions/conversation.ts`::setAgentAvailabilityFn | conversation.view |
-| `lib/server/functions/conversation.ts`::mintChatStreamTokenFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::mintConversationStreamTokenFn | END_USER (any authenticated) |
 | `lib/server/functions/conversation.ts`::deleteConversationMessageFn | END_USER (any authenticated) |
 | `lib/server/functions/conversation.ts`::getCannedRepliesFn | conversation.reply |
 | `lib/server/functions/conversation.ts`::listConversationsFn | conversation.view |
@@ -588,7 +588,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/comments.ts`::canPinCommentFn | server-fn |
 | `lib/server/functions/comments.ts`::getCommentPermissionsFn | server-fn |
 | `lib/server/functions/conversation.ts`::getConversationPresenceFn | server-fn |
-| `lib/server/functions/conversation.ts`::getMyChatFn | server-fn |
+| `lib/server/functions/conversation.ts`::getMyConversationFn | server-fn |
 | `lib/server/functions/conversation.ts`::getMyConversationsFn | server-fn |
 | `lib/server/functions/embeds.ts`::getEmbedPreviewFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicArticleBySlugFn | server-fn |

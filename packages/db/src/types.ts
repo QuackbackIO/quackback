@@ -333,13 +333,13 @@ export const CONVERSATION_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent
 export type ConversationPriority = (typeof CONVERSATION_PRIORITIES)[number]
 
 // Which side of a conversation a message came from — kept in sync with the
-// chat_messages.sender_type column enum. 'system' rows are status events (e.g.
+// conversation_messages.sender_type column enum. 'system' rows are status events (e.g.
 // assignment) shown to both sides; attributed to the relevant agent's principal
 // and never counted as unread.
 export const MESSAGE_SENDER_TYPES = ['visitor', 'agent', 'system'] as const
 export type MessageSenderType = (typeof MESSAGE_SENDER_TYPES)[number]
 
-// A single attachment ref stored on a chat message (chat_messages.attachments).
+// A single attachment ref stored on a conversation message (conversation_messages.attachments).
 export interface ConversationAttachment {
   url: string
   name: string

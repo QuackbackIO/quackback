@@ -42,7 +42,7 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'chat' })
+const log = logger.child({ component: 'conversation' })
 
 const attachmentSchema = z.object({
   url: z.string().min(1),
@@ -274,7 +274,7 @@ export const getConversationPresenceFn = createServerFn({ method: 'GET' }).handl
 const myChatSchema = z.object({ conversationId: z.string().nullish() }).optional()
 
 /** The current visitor's active conversation + first page of messages. */
-export const getMyChatFn = createServerFn({ method: 'GET' })
+export const getMyConversationFn = createServerFn({ method: 'GET' })
   .validator(myChatSchema)
   .handler(async ({ data }) => {
     try {
@@ -410,7 +410,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
     const ctx = await getOptionalAuth()
     if (!ctx?.principal) return { conversations: [] }
 
-    // Non-team callers must hold portal access (mirrors getMyChatFn gating).
+    // Non-team callers must hold portal access (mirrors getMyConversationFn gating).
     if (!isTeamMember(ctx.principal.role)) {
       const { resolvePortalAccessForRequest } = await import('./portal-access')
       const access = await resolvePortalAccessForRequest()
@@ -463,7 +463,7 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
   })
 
 /** Mark a conversation read up to now for the caller's side. */
-export const markChatReadFn = createServerFn({ method: 'POST' })
+export const markConversationReadFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
@@ -483,7 +483,7 @@ export const markChatReadFn = createServerFn({ method: 'POST' })
   })
 
 /** Broadcast that the caller is typing (ephemeral; client-throttled). */
-export const sendChatTypingFn = createServerFn({ method: 'POST' })
+export const sendConversationTypingFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
     try {
@@ -536,7 +536,7 @@ export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
   })
 
 /** Mint a short-lived token authorizing this principal's SSE stream. */
-export const mintChatStreamTokenFn = createServerFn({ method: 'GET' }).handler(async () => {
+export const mintConversationStreamTokenFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {
     const ctx = await requireAuth()
     await assertVisitorChatAccess(ctx.principal.role)

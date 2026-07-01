@@ -137,7 +137,7 @@ describe('mergeAnonymousToIdentified', () => {
   })
 
   it('re-points chat conversations + messages before deleting the principal', async () => {
-    // conversations.visitor_principal_id and chat_messages.principal_id are
+    // conversations.visitor_principal_id and conversation_messages.principal_id are
     // ON DELETE RESTRICT, so the anon-principal delete would throw if the chat
     // rows were not transferred first. This pins that ordering.
     await mergeAnonymousToIdentified(defaultParams)

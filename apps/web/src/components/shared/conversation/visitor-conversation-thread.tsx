@@ -34,12 +34,12 @@ import type {
 } from '@/lib/shared/conversation/types'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
 import {
-  getMyChatFn,
+  getMyConversationFn,
   sendConversationMessageFn,
   listConversationMessagesFn,
-  markChatReadFn,
-  mintChatStreamTokenFn,
-  sendChatTypingFn,
+  markConversationReadFn,
+  mintConversationStreamTokenFn,
+  sendConversationTypingFn,
   submitCsatFn,
 } from '@/lib/server/functions/conversation'
 
@@ -174,7 +174,7 @@ export function VisitorConversationThread({
 
   const sendTyping = useCallback(() => {
     if (!conversationId) return
-    void sendChatTypingFn({
+    void sendConversationTypingFn({
       data: { conversationId },
       headers: getAuthHeaders(),
     }).catch(() => {})
@@ -242,7 +242,7 @@ export function VisitorConversationThread({
     let cancelled = false
     void (async () => {
       try {
-        const res = await getMyChatFn({
+        const res = await getMyConversationFn({
           // 'new' → null (blank greeting); an id → that thread; undefined → active.
           data: {
             conversationId: conversationTarget === 'new' ? null : (conversationTarget ?? undefined),
@@ -316,7 +316,7 @@ export function VisitorConversationThread({
     buildUrl: async () => {
       if (!conversationId) return null
       try {
-        const { token } = await mintChatStreamTokenFn({ headers: getAuthHeaders() })
+        const { token } = await mintConversationStreamTokenFn({ headers: getAuthHeaders() })
         if (!token) return null
         return `/api/chat/stream?conversationId=${encodeURIComponent(
           conversationId
@@ -507,7 +507,9 @@ export function VisitorConversationThread({
   useEffect(() => {
     if (!conversationId) return
     if (messages.at(-1)?.senderType !== 'agent') return
-    void markChatReadFn({ data: { conversationId }, headers: getAuthHeaders() }).catch(() => {})
+    void markConversationReadFn({ data: { conversationId }, headers: getAuthHeaders() }).catch(
+      () => {}
+    )
   }, [conversationId, lastMessageId])
 
   const send = useCallback(async () => {

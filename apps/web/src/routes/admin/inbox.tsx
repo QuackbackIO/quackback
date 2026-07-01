@@ -18,8 +18,8 @@ import {
   listConversationMessagesFn,
   sendAgentMessageFn,
   addChatNoteFn,
-  markChatReadFn,
-  sendChatTypingFn,
+  markConversationReadFn,
+  sendConversationTypingFn,
   getCannedRepliesFn,
   deleteConversationMessageFn,
   addMessageReactionFn,
@@ -682,7 +682,7 @@ function ConversationThread({
   const jumpPagesRef = useRef(0)
 
   const sendTyping = useCallback(() => {
-    void sendChatTypingFn({ data: { conversationId } }).catch(() => {})
+    void sendConversationTypingFn({ data: { conversationId } }).catch(() => {})
   }, [conversationId])
   const { onLocalInput } = useConversationTyping(sendTyping)
 
@@ -890,7 +890,7 @@ function ConversationThread({
   useEffect(() => {
     if (isLoading || messages.length === 0) return
     if (messages.at(-1)?.senderType !== 'visitor') return
-    void markChatReadFn({ data: { conversationId } })
+    void markConversationReadFn({ data: { conversationId } })
       .then(() => onChanged())
       .catch(() => {})
   }, [conversationId, lastMessageId, isLoading, onChanged])

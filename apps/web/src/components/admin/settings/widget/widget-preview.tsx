@@ -292,7 +292,7 @@ function MockChatView({
   teamName?: string
   welcomeMessage?: string
 }) {
-  // Faithful mini of widget-live-chat.tsx: an always-on presence strip, the
+  // Faithful mini of widget-messenger.tsx: an always-on presence strip, the
   // greeting as an agent bubble authored by the (optional) team name, and the
   // composer. When no welcome message is configured the real widget shows the
   // empty-state prompt rather than a greeting bubble — mirror that here.

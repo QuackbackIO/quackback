@@ -93,7 +93,7 @@ import type {
 } from './conversation.types'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'chat' })
+const log = logger.child({ component: 'conversation' })
 
 /** Actor for system-initiated events (auto-routing): no principal, service type. */
 function systemActor(): Actor {

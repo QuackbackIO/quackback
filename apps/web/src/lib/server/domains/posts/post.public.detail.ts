@@ -99,7 +99,7 @@ export async function getPublicPostDetail(
   //
   // Built as raw SQL fragments so they can be interpolated into the two
   // execute() blocks below. The principalId is passed as a uuid param to
-  // match the comments.principal_id column type.
+  // match the post_comments.principal_id column type.
   const ownPendingPrincipalUuid = principalId ? toUuid(principalId) : null
   const moderationFilterSql = includePrivateComments
     ? sql``

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { getMyChatFn } from '@/lib/server/functions/conversation'
+import { getMyConversationFn } from '@/lib/server/functions/conversation'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import { useConversationPresence } from './use-messenger-presence'
 
@@ -14,7 +14,7 @@ export interface ConversationSummary {
 
 /**
  * Lightweight read of the visitor's chat summary: the most-recent conversation
- * (+ team name) from getMyChatFn, merged with the shared presence verdict from
+ * (+ team name) from getMyConversationFn, merged with the shared presence verdict from
  * useConversationPresence. Re-keyed on sessionVersion. Shared by the Home overview and
  * the Help Messages section so the resume card and presence stay consistent.
  * Pass `enabled=false` (e.g. when chat is off) to skip the fetch entirely.
@@ -38,7 +38,7 @@ export function useConversationSummary(enabled: boolean): ConversationSummary {
     let cancelled = false
     void (async () => {
       try {
-        const res = await getMyChatFn({ headers: getWidgetAuthHeaders() })
+        const res = await getMyConversationFn({ headers: getWidgetAuthHeaders() })
         if (cancelled) return
         setThread({ conversation: res.conversation ?? null, teamName: res.teamName })
       } catch {

@@ -80,10 +80,14 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/conversation.ts::listConversationMessagesFn': END_USER(
     'visitor pages their own chat'
   ),
-  'lib/server/functions/conversation.ts::markChatReadFn': END_USER('visitor marks their chat read'),
-  'lib/server/functions/conversation.ts::sendChatTypingFn': END_USER('visitor typing indicator'),
+  'lib/server/functions/conversation.ts::markConversationReadFn': END_USER(
+    'visitor marks their conversation read'
+  ),
+  'lib/server/functions/conversation.ts::sendConversationTypingFn': END_USER(
+    'visitor typing indicator'
+  ),
   'lib/server/functions/conversation.ts::submitCsatFn': END_USER('visitor submits a CSAT rating'),
-  'lib/server/functions/conversation.ts::mintChatStreamTokenFn': END_USER(
+  'lib/server/functions/conversation.ts::mintConversationStreamTokenFn': END_USER(
     'visitor mints their SSE stream token'
   ),
   'lib/server/functions/conversation.ts::deleteConversationMessageFn': END_USER(
@@ -210,7 +214,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/conversation.ts::sendConversationMessageFn::isTeamMember': NOT_A_GATE(
     'team skips the per-visitor send-rate throttle'
   ),
-  'lib/server/functions/conversation.ts::getMyChatFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/conversation.ts::getMyConversationFn::isTeamMember': NOT_A_GATE(
     'non-team callers gated behind portal access; team reads from the admin inbox'
   ),
   'lib/server/functions/conversation.ts::getMyConversationsFn::isTeamMember': NOT_A_GATE(
