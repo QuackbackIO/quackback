@@ -460,7 +460,10 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ type: data.type }, 'fetch integration by type')
     try {
-      await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
+      // integration.manage (admin-only), not integration.view: this returns the
+      // raw integration.config, which holds live OAuth/bot tokens. A Manager-tier
+      // read permission must never see those.
+      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const { integrations } = await import('@/lib/server/db')
       const { getIntegration } = await import('@/lib/server/integrations')
