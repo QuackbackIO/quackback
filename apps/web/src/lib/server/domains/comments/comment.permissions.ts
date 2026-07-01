@@ -15,7 +15,7 @@ import {
   posts,
   type PostComment,
 } from '@/lib/server/db'
-import { type CommentId, type PrincipalId } from '@quackback/ids'
+import { type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { Role } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -38,7 +38,7 @@ const log = logger.child({ component: 'comment-permissions' })
  * Check if a comment has any reply from a team member
  * Recursively checks all descendants
  */
-export async function hasTeamMemberReply(commentId: CommentId): Promise<boolean> {
+export async function hasTeamMemberReply(commentId: PostCommentId): Promise<boolean> {
   const replies = await db.query.postComments.findMany({
     where: and(eq(postComments.parentId, commentId), isNull(postComments.deletedAt)),
   })
@@ -68,7 +68,7 @@ export async function hasTeamMemberReply(commentId: CommentId): Promise<boolean>
  * @returns Result containing permission check result
  */
 export async function canEditComment(
-  commentId: CommentId,
+  commentId: PostCommentId,
   actor: { principalId: PrincipalId; role: Role }
 ): Promise<CommentPermissionCheckResult> {
   log.debug({ comment_id: commentId }, 'can edit comment check')
@@ -117,7 +117,7 @@ export async function canEditComment(
  * @returns Result containing permission check result
  */
 export async function canDeleteComment(
-  commentId: CommentId,
+  commentId: PostCommentId,
   actor: { principalId: PrincipalId; role: Role }
 ): Promise<CommentPermissionCheckResult> {
   log.debug({ comment_id: commentId }, 'can delete comment check')
@@ -171,7 +171,7 @@ export async function canDeleteComment(
  * @returns Result containing updated comment or error
  */
 export async function userEditComment(
-  commentId: CommentId,
+  commentId: PostCommentId,
   content: string,
   actor: { principalId: PrincipalId; role: Role },
   options?: { contentJson?: TiptapContent | null }
@@ -260,7 +260,7 @@ export async function userEditComment(
  * @returns Result indicating success or error
  */
 export async function softDeleteComment(
-  commentId: CommentId,
+  commentId: PostCommentId,
   actor: { principalId: PrincipalId; role: Role }
 ): Promise<void> {
   log.info({ comment_id: commentId }, 'soft delete comment')

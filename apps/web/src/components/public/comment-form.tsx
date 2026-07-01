@@ -24,7 +24,7 @@ import { cn } from '@/lib/shared/utils'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import type { PostId, CommentId } from '@quackback/ids'
+import type { PostId, PostCommentId } from '@quackback/ids'
 
 export type CreateCommentMutation = UseMutationResult<
   unknown,
@@ -44,7 +44,7 @@ export type CreateCommentMutation = UseMutationResult<
 
 interface CommentFormProps {
   postId: PostId
-  parentId?: CommentId
+  parentId?: PostCommentId
   onSuccess?: () => void
   onCancel?: () => void
   user?: { name: string | null; email: string; principalId?: string }

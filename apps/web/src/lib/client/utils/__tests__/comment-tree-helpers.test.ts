@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { addReplyToTree, replaceOptimisticInTree } from '../comment-tree-helpers'
-import type { CommentId } from '@quackback/ids'
+import type { PostCommentId } from '@quackback/ids'
 
 interface TestComment {
   id: string
@@ -59,7 +59,7 @@ describe('replaceOptimisticInTree', () => {
       { id: 'comment_temp123', parentId: null, content: 'hello', replies: [] },
     ]
     const result = replaceOptimisticInTree(comments, 'comment_temp', null, 'hello', {
-      id: 'comment_real456' as CommentId,
+      id: 'comment_real456' as PostCommentId,
       createdAt: new Date('2025-01-01'),
     })
 
@@ -76,7 +76,7 @@ describe('replaceOptimisticInTree', () => {
       },
     ]
     const result = replaceOptimisticInTree(comments, 'comment_optimistic_', 'c1', 'child', {
-      id: 'comment_real789' as CommentId,
+      id: 'comment_real789' as PostCommentId,
       createdAt: '2025-01-01T00:00:00.000Z',
     })
 
@@ -88,7 +88,7 @@ describe('replaceOptimisticInTree', () => {
       { id: 'comment_temp1', parentId: null, content: 'hello', replies: [] },
     ]
     const result = replaceOptimisticInTree(comments, 'comment_temp', null, 'different content', {
-      id: 'comment_real' as CommentId,
+      id: 'comment_real' as PostCommentId,
       createdAt: new Date(),
     })
 
@@ -100,7 +100,7 @@ describe('replaceOptimisticInTree', () => {
       { id: 'comment_temp1', parentId: 'p1', content: 'hello', replies: [] },
     ]
     const result = replaceOptimisticInTree(comments, 'comment_temp', 'p2', 'hello', {
-      id: 'comment_real' as CommentId,
+      id: 'comment_real' as PostCommentId,
       createdAt: new Date(),
     })
 
@@ -112,7 +112,7 @@ describe('replaceOptimisticInTree', () => {
       { id: 'comment_temp1', parentId: null, content: 'test', replies: [] },
     ]
     const result = replaceOptimisticInTree(comments, 'comment_temp', null, 'test', {
-      id: 'comment_real' as CommentId,
+      id: 'comment_real' as PostCommentId,
       createdAt: '2025-06-15T12:00:00.000Z',
     })
 
@@ -124,7 +124,7 @@ describe('replaceOptimisticInTree', () => {
       { id: 'comment_temp1', parentId: null, content: 'test', replies: [] },
     ]
     const result = replaceOptimisticInTree(comments, 'comment_temp', null, 'test', {
-      id: 'comment_real' as CommentId,
+      id: 'comment_real' as PostCommentId,
       createdAt: new Date('2025-06-15T12:00:00.000Z'),
     })
 

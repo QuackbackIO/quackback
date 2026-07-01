@@ -7,7 +7,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { getCommentPermissionsFn, canPinCommentFn } from '@/lib/server/functions/comments'
-import type { CommentId } from '@quackback/ids'
+import type { PostCommentId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -27,7 +27,7 @@ interface CommentPermissions {
 export const commentKeys = {
   all: ['comments'] as const,
   permissions: () => [...commentKeys.all, 'permissions'] as const,
-  permission: (commentId: CommentId) => [...commentKeys.permissions(), commentId] as const,
+  permission: (commentId: PostCommentId) => [...commentKeys.permissions(), commentId] as const,
 }
 
 // ============================================================================
@@ -41,7 +41,7 @@ export function useCommentPermissions({
   commentId,
   enabled = true,
 }: {
-  commentId: CommentId
+  commentId: PostCommentId
   enabled?: boolean
 }) {
   return useQuery({
@@ -65,7 +65,7 @@ export function useCanPinComment({
   commentId,
   enabled = true,
 }: {
-  commentId: CommentId
+  commentId: PostCommentId
   enabled?: boolean
 }) {
   return useQuery({

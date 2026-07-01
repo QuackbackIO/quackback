@@ -15,7 +15,7 @@ import {
   roadmaps,
   principal as principalTable,
 } from '@/lib/server/db'
-import { toUuid, fromUuid, type PostId, type CommentId, type PrincipalId } from '@quackback/ids'
+import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
 import { resolveAvatarUrl, parseJson, parseAvatarData } from './post.public'
@@ -373,9 +373,11 @@ export async function getPublicPostDetail(
   //   2. clients receive the documented `comment_…` / `principal_…`
   //      shape and can round-trip it back into pin/react/reply mutations
   const commentsResult = commentsRaw.map((comment) => ({
-    id: fromUuid('comment', comment.id) as CommentId,
+    id: fromUuid('post_comment', comment.id) as PostCommentId,
     postId: fromUuid('post', comment.post_id) as PostId,
-    parentId: comment.parent_id ? (fromUuid('comment', comment.parent_id) as CommentId) : null,
+    parentId: comment.parent_id
+      ? (fromUuid('post_comment', comment.parent_id) as PostCommentId)
+      : null,
     principalId: fromUuid('principal', comment.principal_id) as PrincipalId,
     authorName: comment.author_name,
     content: comment.content,
@@ -410,7 +412,7 @@ export async function getPublicPostDetail(
   const mapToPublicComment = (node: (typeof commentTree)[0]): PublicComment => {
     const deleted = !!node.deletedAt
     return {
-      id: node.id as CommentId,
+      id: node.id as PostCommentId,
       content: deleted ? '' : node.content,
       contentJson: deleted
         ? null
@@ -421,7 +423,7 @@ export async function getPublicPostDetail(
       deletedAt: node.deletedAt,
       isRemovedByTeam:
         deleted && !!node.deletedByPrincipalId && node.deletedByPrincipalId !== node.principalId,
-      parentId: node.parentId as CommentId | null,
+      parentId: node.parentId as PostCommentId | null,
       isTeamMember: deleted ? false : node.isTeamMember,
       isPrivate: node.isPrivate,
       isEdited: !deleted && !!node.updatedAt,
@@ -500,7 +502,7 @@ export async function getPublicPostDetail(
     roadmaps: roadmapsResult,
     comments: hydratedRootComments,
     pinnedComment,
-    pinnedCommentId: pinnedComment ? (postResult.pinnedCommentId as CommentId) : null,
+    pinnedCommentId: pinnedComment ? (postResult.pinnedCommentId as PostCommentId) : null,
     isCommentsLocked: postResult.isCommentsLocked,
   }
 }

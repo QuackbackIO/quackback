@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PostId, PrincipalId, CommentId, SegmentId } from '@quackback/ids'
+import type { PostId, PrincipalId, PostCommentId, SegmentId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 // --- Mock tracking ---
@@ -37,7 +37,7 @@ function createChainMock() {
   chain.where = vi.fn().mockReturnValue(chain)
   chain.returning = vi.fn(async () => [
     {
-      id: 'comment_mock' as CommentId,
+      id: 'comment_mock' as PostCommentId,
       postId: 'post_mock' as PostId,
       content: 'test',
       parentId: null,
@@ -321,7 +321,7 @@ describe('Comment count maintenance', () => {
     it('should use a transaction', async () => {
       const { softDeleteComment } = await import('../comment.permissions')
 
-      await softDeleteComment('comment_mock' as CommentId, {
+      await softDeleteComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })
@@ -332,7 +332,7 @@ describe('Comment count maintenance', () => {
     it('should decrement comment_count in the transaction', async () => {
       const { softDeleteComment } = await import('../comment.permissions')
 
-      await softDeleteComment('comment_mock' as CommentId, {
+      await softDeleteComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })
@@ -381,7 +381,7 @@ describe('Comment count maintenance', () => {
       const { softDeleteComment } = await import('../comment.permissions')
       setCalls.length = 0
 
-      await softDeleteComment('comment_mock' as CommentId, {
+      await softDeleteComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })
@@ -398,7 +398,7 @@ describe('Comment count maintenance', () => {
     it('should use a transaction', async () => {
       const { deleteComment } = await import('../comment.service')
 
-      await deleteComment('comment_mock' as CommentId, {
+      await deleteComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })
@@ -409,7 +409,7 @@ describe('Comment count maintenance', () => {
     it('should decrement comment_count in the transaction', async () => {
       const { deleteComment } = await import('../comment.service')
 
-      await deleteComment('comment_mock' as CommentId, {
+      await deleteComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })
@@ -449,7 +449,7 @@ describe('Comment count maintenance', () => {
       const { deleteComment } = await import('../comment.service')
       setCalls.length = 0
 
-      await deleteComment('comment_mock' as CommentId, {
+      await deleteComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })
@@ -492,7 +492,7 @@ describe('Comment count maintenance', () => {
       const { deleteComment } = await import('../comment.service')
       setCalls.length = 0
 
-      await deleteComment('comment_mock' as CommentId, {
+      await deleteComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })

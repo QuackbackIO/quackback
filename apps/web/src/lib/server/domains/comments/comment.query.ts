@@ -9,7 +9,7 @@ import {
   principal,
   type PostComment,
 } from '@/lib/server/db'
-import { type CommentId, type PostId, type PrincipalId } from '@quackback/ids'
+import { type PostCommentId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import type { CommentThread } from './comment.types'
@@ -22,7 +22,7 @@ import { buildCommentTree, toStatusChange } from '@/lib/shared'
  * @returns Result containing the comment or an error
  */
 export async function getCommentById(
-  id: CommentId
+  id: PostCommentId
 ): Promise<PostComment & { authorName: string | null; authorEmail: string | null }> {
   const comment = await db.query.postComments.findFirst({
     where: eq(postComments.id, id),

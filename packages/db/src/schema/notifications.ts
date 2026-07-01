@@ -152,9 +152,12 @@ export const inAppNotifications = pgTable(
     postId: typeIdColumnNullable('post')('post_id').references(() => posts.id, {
       onDelete: 'cascade',
     }),
-    commentId: typeIdColumnNullable('comment')('comment_id').references(() => postComments.id, {
-      onDelete: 'cascade',
-    }),
+    commentId: typeIdColumnNullable('post_comment')('comment_id').references(
+      () => postComments.id,
+      {
+        onDelete: 'cascade',
+      }
+    ),
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     readAt: timestamp('read_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),

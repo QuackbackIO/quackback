@@ -74,7 +74,7 @@ export const posts = pgTable(
     commentCount: integer('comment_count').default(0).notNull(),
     // Pinned comment as official response
     // References a team member's root-level comment that serves as the official response
-    pinnedCommentId: typeIdColumnNullable('comment')('pinned_comment_id'),
+    pinnedCommentId: typeIdColumnNullable('post_comment')('pinned_comment_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
@@ -237,11 +237,11 @@ export const postVotes = pgTable(
 export const postComments = pgTable(
   'post_comments',
   {
-    id: typeIdWithDefault('comment')('id').primaryKey(),
+    id: typeIdWithDefault('post_comment')('id').primaryKey(),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
-    parentId: typeIdColumn('comment')('parent_id'),
+    parentId: typeIdColumn('post_comment')('parent_id'),
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'restrict' }),
@@ -295,7 +295,7 @@ export const postCommentReactions = pgTable(
   'post_comment_reactions',
   {
     id: typeIdWithDefault('reaction')('id').primaryKey(),
-    commentId: typeIdColumn('comment')('comment_id')
+    commentId: typeIdColumn('post_comment')('comment_id')
       .notNull()
       .references(() => postComments.id, { onDelete: 'cascade' }),
     // principal_id is required - only authenticated users can react
@@ -342,7 +342,7 @@ export const postCommentEditHistory = pgTable(
   'post_comment_edit_history',
   {
     id: typeIdWithDefault('comment_edit')('id').primaryKey(),
-    commentId: typeIdColumn('comment')('comment_id')
+    commentId: typeIdColumn('post_comment')('comment_id')
       .notNull()
       .references(() => postComments.id, { onDelete: 'cascade' }),
     editorPrincipalId: typeIdColumn('principal')('editor_principal_id')

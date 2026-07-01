@@ -5,7 +5,7 @@
  * TipTap doc instead of parsing markdown on every render.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CommentId, PostId, PrincipalId, SegmentId } from '@quackback/ids'
+import type { PostCommentId, PostId, PrincipalId, SegmentId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const insertedComments: Record<string, unknown>[] = []
@@ -32,7 +32,7 @@ vi.mock('@/lib/server/db', async () => {
         const last = updatedComments.at(-1) ?? insertedComments.at(-1) ?? {}
         return [
           {
-            id: 'comment_existing' as unknown as CommentId,
+            id: 'comment_existing' as unknown as PostCommentId,
             postId: 'post_p' as unknown as PostId,
             content: last.content ?? 'Hi',
             contentJson: last.contentJson ?? null,
@@ -198,7 +198,7 @@ describe('userEditComment contentJson dual-write', () => {
 
   it('updates contentJson alongside content and stores previousContentJson in history', async () => {
     const { userEditComment } = await import('../comment.permissions')
-    await userEditComment('comment_existing' as unknown as CommentId, '*italic* edited', {
+    await userEditComment('comment_existing' as unknown as PostCommentId, '*italic* edited', {
       principalId: 'principal_author' as unknown as PrincipalId,
       role: 'user',
     })

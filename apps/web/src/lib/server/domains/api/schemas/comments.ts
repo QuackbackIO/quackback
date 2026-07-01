@@ -30,7 +30,7 @@ const ReactionCountSchema = z.object({
 // Comment list item schema (GET /posts/:id/comments) - threaded with replies
 const CommentListItemSchema: z.ZodType = z.lazy(() =>
   z.object({
-    id: TypeIdSchema.meta({ example: 'comment_01h455vb4pex5vsknk084sn02q' }),
+    id: TypeIdSchema.meta({ example: 'post_comment_01h455vb4pex5vsknk084sn02q' }),
     postId: TypeIdSchema,
     parentId: TypeIdSchema.nullable().meta({ description: 'Parent comment ID for replies' }),
     content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
@@ -52,7 +52,7 @@ const CommentListItemSchema: z.ZodType = z.lazy(() =>
 
 // Comment detail schema (GET /comments/:id)
 const CommentDetailSchema = z.object({
-  id: TypeIdSchema.meta({ example: 'comment_01h455vb4pex5vsknk084sn02q' }),
+  id: TypeIdSchema.meta({ example: 'post_comment_01h455vb4pex5vsknk084sn02q' }),
   postId: TypeIdSchema,
   parentId: TypeIdSchema.nullable().meta({ description: 'Parent comment ID for replies' }),
   content: z.string().meta({ example: 'Great idea! This would be very useful.' }),
@@ -73,7 +73,7 @@ const CommentDetailSchema = z.object({
 
 // Comment create/update response schema
 const CommentResponseSchema = z.object({
-  id: TypeIdSchema.meta({ example: 'comment_01h455vb4pex5vsknk084sn02q' }),
+  id: TypeIdSchema.meta({ example: 'post_comment_01h455vb4pex5vsknk084sn02q' }),
   postId: TypeIdSchema,
   parentId: TypeIdSchema.nullable(),
   content: z.string(),

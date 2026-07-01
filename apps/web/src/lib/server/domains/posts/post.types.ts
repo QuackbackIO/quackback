@@ -3,7 +3,14 @@
  */
 
 import type { Post, Board, BoardAccess, PostTag, TiptapContent } from '@/lib/server/db'
-import type { PostId, BoardId, PostTagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
+import type {
+  PostId,
+  BoardId,
+  PostTagId,
+  StatusId,
+  PrincipalId,
+  PostCommentId,
+} from '@quackback/ids'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 
 /**
@@ -196,7 +203,7 @@ export interface RoadmapPostListResult {
  * Pinned comment serving as the official response
  */
 export interface PinnedComment {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -210,7 +217,7 @@ export interface PinnedComment {
  * Public comment for portal view
  */
 export interface PublicComment {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -218,7 +225,7 @@ export interface PublicComment {
   createdAt: Date
   deletedAt: Date | null
   isRemovedByTeam: boolean
-  parentId: CommentId | null
+  parentId: PostCommentId | null
   isTeamMember: boolean
   isPrivate: boolean
   isEdited: boolean
@@ -255,7 +262,7 @@ export interface PublicPostDetail {
   /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
-  pinnedCommentId: CommentId | null
+  pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked: boolean
 }

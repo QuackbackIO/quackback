@@ -10,7 +10,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { CommentId } from '@quackback/ids'
+import type { PostCommentId } from '@quackback/ids'
 
 // Input validation schema
 const updateCommentSchema = z.object({
@@ -29,7 +29,11 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
-          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
+          const commentId = parseTypeId<PostCommentId>(
+            params.commentId,
+            'post_comment',
+            'comment ID'
+          )
 
           const { getCommentById } = await import('@/lib/server/domains/comments/comment.query')
 
@@ -63,7 +67,11 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             permission: PERMISSIONS.COMMENT_EDIT,
           })
 
-          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
+          const commentId = parseTypeId<PostCommentId>(
+            params.commentId,
+            'post_comment',
+            'comment ID'
+          )
 
           const body = await request.json()
           const parsed = updateCommentSchema.safeParse(body)
@@ -128,7 +136,11 @@ export const Route = createFileRoute('/api/v1/comments/$commentId')({
             permission: PERMISSIONS.COMMENT_EDIT,
           })
 
-          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
+          const commentId = parseTypeId<PostCommentId>(
+            params.commentId,
+            'post_comment',
+            'comment ID'
+          )
 
           const { softDeleteComment } =
             await import('@/lib/server/domains/comments/comment.permissions')

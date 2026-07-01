@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CommentId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PrincipalId } from '@quackback/ids'
 import {
   ForbiddenError,
   NotFoundError,
@@ -68,7 +68,7 @@ const COMMENT_ID_STR = 'comment_test123'
 const PRINCIPAL_ID = 'principal_1' as PrincipalId
 
 const mockComment = {
-  id: COMMENT_ID_STR as unknown as CommentId,
+  id: COMMENT_ID_STR as unknown as PostCommentId,
   postId: 'post_test',
   parentId: null,
   content: 'Original comment',

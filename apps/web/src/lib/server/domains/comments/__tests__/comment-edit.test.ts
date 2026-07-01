@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CommentId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 // ── Mock state ────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const COMMENT_ID = 'comment_test123' as unknown as CommentId
+const COMMENT_ID = 'comment_test123' as unknown as PostCommentId
 const AUTHOR_ID = 'principal_author' as unknown as PrincipalId
 const OTHER_ID = 'principal_other' as unknown as PrincipalId
 

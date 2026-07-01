@@ -14,7 +14,7 @@
  * NotFoundError-shaped error (don't leak existence to denied callers).
  */
 import { db, eq, and, isNull, posts, boards, postComments } from '@/lib/server/db'
-import { type CommentId, type PostId } from '@quackback/ids'
+import { type PostCommentId, type PostId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { canViewPost, canVotePost, isTeamActor, type Actor } from '@/lib/server/policy'
 
@@ -129,7 +129,7 @@ export async function assertPostVotable(postId: PostId, actor: Actor): Promise<v
  * Throws NotFoundError on every deny path so the response shape is
  * uniform — denied callers can't probe existence by varying inputs.
  */
-export async function assertCommentViewable(commentId: CommentId, actor: Actor): Promise<void> {
+export async function assertCommentViewable(commentId: PostCommentId, actor: Actor): Promise<void> {
   const rows = await db
     .select({
       isPrivate: postComments.isPrivate,

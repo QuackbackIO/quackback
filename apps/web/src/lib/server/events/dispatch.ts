@@ -6,7 +6,14 @@
  * Errors are caught and logged rather than propagated to the caller.
  */
 
-import type { BoardId, ChangelogId, CommentId, PostId, PrincipalId, UserId } from '@quackback/ids'
+import type {
+  BoardId,
+  ChangelogId,
+  PostCommentId,
+  PostId,
+  PrincipalId,
+  UserId,
+} from '@quackback/ids'
 
 import type {
   EventActor,
@@ -75,7 +82,7 @@ export interface PostStatusChangedInput {
 }
 
 export interface CommentCreatedInput {
-  id: CommentId
+  id: PostCommentId
   content: string
   authorEmail?: string
   authorName?: string
@@ -234,7 +241,7 @@ export async function dispatchPostUnmerged(
 }
 
 export interface CommentUpdatedInput {
-  id: CommentId
+  id: PostCommentId
   content: string
   authorEmail?: string
   authorName?: string
@@ -254,7 +261,7 @@ export async function dispatchCommentUpdated(
 }
 
 export interface CommentDeletedInput {
-  id: CommentId
+  id: PostCommentId
   isPrivate?: boolean
 }
 

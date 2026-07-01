@@ -30,7 +30,7 @@ import {
 import { toast } from 'sonner'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
-import { isValidTypeId, type CommentId, type PostId } from '@quackback/ids'
+import { isValidTypeId, type PostCommentId, type PostId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 
 export const Route = createFileRoute('/_portal/b/$slug/posts/$postId')({
@@ -272,16 +272,16 @@ function PostDetailPage() {
             }
             statuses={statusesQuery.data}
             currentStatusId={post.statusId}
-            onPinComment={(commentId: CommentId) => pinComment.mutate(commentId)}
+            onPinComment={(commentId: PostCommentId) => pinComment.mutate(commentId)}
             onUnpinComment={() => unpinComment.mutate()}
             isPinPending={pinComment.isPending || unpinComment.isPending}
-            onDeleteComment={(commentId: CommentId) => deleteComment.mutate(commentId)}
+            onDeleteComment={(commentId: PostCommentId) => deleteComment.mutate(commentId)}
             deletingCommentId={
-              deleteComment.isPending ? (deleteComment.variables as CommentId) : null
+              deleteComment.isPending ? (deleteComment.variables as PostCommentId) : null
             }
-            onRestoreComment={(commentId: CommentId) => restoreComment.mutate(commentId)}
+            onRestoreComment={(commentId: PostCommentId) => restoreComment.mutate(commentId)}
             restoringCommentId={
-              restoreComment.isPending ? (restoreComment.variables as CommentId) : null
+              restoreComment.isPending ? (restoreComment.variables as PostCommentId) : null
             }
           />
         </Suspense>

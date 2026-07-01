@@ -6,7 +6,7 @@
  */
 
 import { db, eq, and, sql, postComments, posts } from '@/lib/server/db'
-import { type CommentId, type PostId, type PrincipalId } from '@quackback/ids'
+import { type PostCommentId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -22,7 +22,7 @@ const log = logger.child({ component: 'comment-pin' })
  * @param actor - Actor information with principalId and role
  */
 export async function restoreComment(
-  commentId: CommentId,
+  commentId: PostCommentId,
   actor: { principalId: PrincipalId; role: Role }
 ): Promise<void> {
   log.info({ comment_id: commentId }, 'restore comment')
@@ -96,7 +96,7 @@ export async function restoreComment(
  * @param commentId - Comment ID to check
  * @returns Whether the comment can be pinned
  */
-export async function canPinComment(commentId: CommentId): Promise<{
+export async function canPinComment(commentId: PostCommentId): Promise<{
   canPin: boolean
   reason?: string
 }> {
@@ -140,7 +140,7 @@ export async function canPinComment(commentId: CommentId): Promise<{
  * @returns The updated post ID
  */
 export async function pinComment(
-  commentId: CommentId,
+  commentId: PostCommentId,
   actor: { principalId: PrincipalId; role: Role }
 ): Promise<{ postId: PostId }> {
   log.info({ comment_id: commentId }, 'pin comment')

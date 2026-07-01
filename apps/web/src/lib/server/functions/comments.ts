@@ -5,7 +5,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { type CommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
+import { type PostCommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -120,7 +120,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
           contentJson: (data.contentJson ?? undefined) as
             | import('@/lib/shared/db-types').TiptapContent
             | undefined,
-          parentId: data.parentId as CommentId | undefined,
+          parentId: data.parentId as PostCommentId | undefined,
           statusId: data.statusId as StatusId | undefined,
           isPrivate: data.isPrivate,
         },
@@ -162,7 +162,7 @@ export const addReactionFn = createServerFn({ method: 'POST' })
       // commentIds on team-only / private comments.
       const actor = await policyActorFromAuth(auth)
       const result = await addReaction(
-        data.commentId as CommentId,
+        data.commentId as PostCommentId,
         data.emoji,
         auth.principal.id,
         actor
@@ -188,7 +188,7 @@ export const removeReactionFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth()
       const actor = await policyActorFromAuth(auth)
       const result = await removeReaction(
-        data.commentId as CommentId,
+        data.commentId as PostCommentId,
         data.emoji,
         auth.principal.id,
         actor
@@ -221,8 +221,8 @@ export const getCommentPermissionsFn = createServerFn({ method: 'GET' })
 
       const actor = { principalId: ctx.principal.id, role: ctx.principal.role }
       const [editResult, deleteResult] = await Promise.all([
-        canEditComment(data.commentId as CommentId, actor),
-        canDeleteComment(data.commentId as CommentId, actor),
+        canEditComment(data.commentId as PostCommentId, actor),
+        canDeleteComment(data.commentId as PostCommentId, actor),
       ])
 
       log.debug(
@@ -262,11 +262,11 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
       const ctx = await requireAuth()
       const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')
       const policyActor = await policyActorFromAuth(ctx)
-      await assertCommentViewable(data.commentId as CommentId, policyActor)
+      await assertCommentViewable(data.commentId as PostCommentId, policyActor)
 
       const actor = { principalId: ctx.principal.id, role: ctx.principal.role }
 
-      const result = await userEditComment(data.commentId as CommentId, data.content, actor, {
+      const result = await userEditComment(data.commentId as PostCommentId, data.content, actor, {
         contentJson: (data.contentJson ?? undefined) as
           | import('@/lib/shared/db-types').TiptapContent
           | undefined,
@@ -292,11 +292,11 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
       const ctx = await requireAuth()
       const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')
       const policyActor = await policyActorFromAuth(ctx)
-      await assertCommentViewable(data.commentId as CommentId, policyActor)
+      await assertCommentViewable(data.commentId as PostCommentId, policyActor)
 
       const actor = { principalId: ctx.principal.id, role: ctx.principal.role }
 
-      await softDeleteComment(data.commentId as CommentId, actor)
+      await softDeleteComment(data.commentId as PostCommentId, actor)
       log.info({ comment_id: data.commentId }, 'comment deleted')
       return { id: data.commentId }
     } catch (error) {
@@ -319,7 +319,7 @@ export const restoreCommentFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_MODERATE })
 
-      await restoreComment(data.commentId as CommentId, {
+      await restoreComment(data.commentId as PostCommentId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
       })
@@ -355,7 +355,7 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_PIN })
 
-      const result = await pinComment(data.commentId as CommentId, {
+      const result = await pinComment(data.commentId as PostCommentId, {
         principalId: auth.principal.id,
         role: auth.principal.role,
       })
@@ -421,7 +421,7 @@ export const canPinCommentFn = createServerFn({ method: 'GET' })
         return { canPin: false, reason: 'Only team members can pin comments' }
       }
 
-      const result = await canPinComment(data.commentId as CommentId)
+      const result = await canPinComment(data.commentId as PostCommentId)
       log.debug({ can_pin: result.canPin }, 'can pin comment result')
       return result
     } catch (error) {

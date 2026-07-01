@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { CommentId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 
 // --- Mock: capture handlers registered via createServerFn ---
@@ -110,7 +110,7 @@ beforeEach(async () => {
 
 // --- Shared fixtures ---
 
-const COMMENT_ID = 'comment_test123' as unknown as CommentId
+const COMMENT_ID = 'comment_test123' as unknown as PostCommentId
 const MOCK_AUTH_CONTEXT = {
   principal: {
     id: 'principal_test123' as PrincipalId,

@@ -4,7 +4,7 @@ import { useIntl } from 'react-intl'
 import { portalDetailQueries, type PublicCommentView } from '@/lib/client/queries/portal-detail'
 import { AuthCommentsSection } from '@/components/public/auth-comments-section'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { CommentId, PostId } from '@quackback/ids'
+import type { PostCommentId, PostId } from '@quackback/ids'
 
 /**
  * Recursively count all live (non-deleted) comments including nested replies
@@ -55,7 +55,7 @@ interface CommentsSectionProps {
   /** Enable comment pinning (admin only) */
   canPinComments?: boolean
   /** Callback when comment is pinned */
-  onPinComment?: (commentId: CommentId) => void
+  onPinComment?: (commentId: PostCommentId) => void
   /** Callback when comment is unpinned */
   onUnpinComment?: () => void
   /** Whether pin/unpin is in progress */
@@ -74,13 +74,13 @@ interface CommentsSectionProps {
   /** Whether the current user is a team member */
   isTeamMember?: boolean
   /** Callback when a comment is deleted */
-  onDeleteComment?: (commentId: CommentId) => void
+  onDeleteComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being deleted */
-  deletingCommentId?: CommentId | null
+  deletingCommentId?: PostCommentId | null
   /** Callback when a comment is restored (team only) */
-  onRestoreComment?: (commentId: CommentId) => void
+  onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
-  restoringCommentId?: CommentId | null
+  restoringCommentId?: PostCommentId | null
 }
 
 export function CommentsSection({

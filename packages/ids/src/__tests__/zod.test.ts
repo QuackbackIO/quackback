@@ -106,7 +106,7 @@ describe('Zod TypeID Schemas', () => {
     it('accepts any valid TypeID', () => {
       expect(anyTypeIdSchema.parse(generateId('post'))).toBeTruthy()
       expect(anyTypeIdSchema.parse(generateId('board'))).toBeTruthy()
-      expect(anyTypeIdSchema.parse(generateId('comment'))).toBeTruthy()
+      expect(anyTypeIdSchema.parse(generateId('post_comment'))).toBeTruthy()
     })
 
     it('rejects non-TypeID strings', () => {

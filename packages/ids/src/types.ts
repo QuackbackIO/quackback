@@ -29,7 +29,7 @@ export type PostId = TypeId<'post'>
 export type BoardId = TypeId<'board'>
 
 /** Comment ID - e.g., comment_01h455vb4pex5vsknk084sn02q */
-export type CommentId = TypeId<'comment'>
+export type PostCommentId = TypeId<'post_comment'>
 
 /** Vote ID - e.g., vote_01h455vb4pex5vsknk084sn02q */
 export type VoteId = TypeId<'vote'>
@@ -242,7 +242,7 @@ export type ExtractPrefix<T extends string> = T extends `${infer P}_${string}` ?
 export interface EntityIdMap {
   post: PostId
   board: BoardId
-  comment: CommentId
+  post_comment: PostCommentId
   vote: VoteId
   post_tag: PostTagId
   status: StatusId

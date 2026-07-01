@@ -104,7 +104,7 @@ import type {
   PostTagId,
   StatusId,
   PrincipalId,
-  CommentId,
+  PostCommentId,
   ChangelogId,
   RoadmapId,
   FeedbackSuggestionId,
@@ -1121,7 +1121,7 @@ Examples:
           {
             postId: args.postId as PostId,
             content: args.content,
-            parentId: args.parentId as CommentId | undefined,
+            parentId: args.parentId as PostCommentId | undefined,
             isPrivate: args.isPrivate,
           },
           {
@@ -1345,13 +1345,13 @@ Examples:
         // it via MCP, matching the portal path (functions/comments.ts).
         const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')
         const callerSegmentIds = await segmentIdsForPrincipal(auth.principalId)
-        await assertCommentViewable(args.commentId as CommentId, {
+        await assertCommentViewable(args.commentId as PostCommentId, {
           principalId: auth.principalId,
           role: auth.role,
           principalType: auth.userId ? ('user' as const) : ('service' as const),
           segmentIds: callerSegmentIds,
         })
-        const result = await userEditComment(args.commentId as CommentId, args.content, {
+        const result = await userEditComment(args.commentId as PostCommentId, args.content, {
           principalId: auth.principalId,
           role: auth.role,
         })
@@ -1386,13 +1386,13 @@ Examples:
         // portal path and react_to_comment.
         const { assertCommentViewable } = await import('@/lib/server/domains/posts/post.access')
         const callerSegmentIds = await segmentIdsForPrincipal(auth.principalId)
-        await assertCommentViewable(args.commentId as CommentId, {
+        await assertCommentViewable(args.commentId as PostCommentId, {
           principalId: auth.principalId,
           role: auth.role,
           principalType: auth.userId ? ('user' as const) : ('service' as const),
           segmentIds: callerSegmentIds,
         })
-        await deleteComment(args.commentId as CommentId, {
+        await deleteComment(args.commentId as PostCommentId, {
           principalId: auth.principalId,
           role: auth.role,
         })
@@ -1430,13 +1430,13 @@ Examples:
         const result =
           args.action === 'add'
             ? await addReaction(
-                args.commentId as CommentId,
+                args.commentId as PostCommentId,
                 args.emoji,
                 auth.principalId,
                 mcpReactionActor
               )
             : await removeReaction(
-                args.commentId as CommentId,
+                args.commentId as PostCommentId,
                 args.emoji,
                 auth.principalId,
                 mcpReactionActor

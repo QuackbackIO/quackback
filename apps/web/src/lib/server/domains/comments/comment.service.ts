@@ -10,7 +10,7 @@ import {
   type PostComment,
   type ModerationState,
 } from '@/lib/server/db'
-import { type CommentId, type PrincipalId, type StatusId, type UserId } from '@quackback/ids'
+import { type PostCommentId, type PrincipalId, type StatusId, type UserId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
@@ -327,7 +327,7 @@ export async function createComment(
 }
 
 export async function updateComment(
-  id: CommentId,
+  id: PostCommentId,
   input: UpdateCommentInput,
   actor: { principalId: PrincipalId; role: Role; userId?: UserId }
 ): Promise<PostComment> {
@@ -421,7 +421,7 @@ export async function updateComment(
  * @returns Result indicating success or an error
  */
 export async function deleteComment(
-  id: CommentId,
+  id: PostCommentId,
   actor: { principalId: PrincipalId; role: Role; userId?: UserId }
 ): Promise<void> {
   log.info({ comment_id: id }, 'delete comment')

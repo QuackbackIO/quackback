@@ -67,7 +67,7 @@ export type {
   // Application entities
   PostId,
   BoardId,
-  CommentId,
+  PostCommentId,
   VoteId,
   PostTagId,
   StatusId,

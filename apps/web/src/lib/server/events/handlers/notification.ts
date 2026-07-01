@@ -10,7 +10,7 @@ import type { HookHandler, HookResult } from '../hook-types'
 import type { EventData, EventPostMentionedData } from '../types'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import type { CreateNotificationInput, NotificationType } from '@/lib/server/domains/notifications'
-import type { PrincipalId, PostId, CommentId } from '@quackback/ids'
+import type { PrincipalId, PostId, PostCommentId } from '@quackback/ids'
 import { truncate, isRetryableError } from '../hook-utils'
 import { logger } from '@/lib/server/logger'
 
@@ -31,7 +31,7 @@ export interface NotificationConfig {
   postTitle?: string
   boardSlug?: string
   postUrl?: string
-  commentId?: CommentId
+  commentId?: PostCommentId
   previousStatus?: string
   newStatus?: string
   commenterName?: string
@@ -48,7 +48,10 @@ export const notificationHook: HookHandler = {
       return { success: true }
     }
 
-    log.debug({ event_type: event.type, member_count: principalIds.length }, 'creating notifications')
+    log.debug(
+      { event_type: event.type, member_count: principalIds.length },
+      'creating notifications'
+    )
 
     try {
       const notifications = buildNotifications(event, principalIds, cfg)

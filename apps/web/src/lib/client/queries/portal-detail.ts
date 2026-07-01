@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
+import type { PostId, StatusId, PostCommentId, PrincipalId } from '@quackback/ids'
 import {
   fetchPublicBoardBySlug,
   fetchPublicPostDetail,
@@ -13,7 +13,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
  * Comment type for client components (Date fields may be strings after serialization)
  */
 export interface PublicCommentView {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -21,7 +21,7 @@ export interface PublicCommentView {
   createdAt: Date | string
   deletedAt: Date | string | null
   isRemovedByTeam: boolean
-  parentId: CommentId | null
+  parentId: PostCommentId | null
   isTeamMember: boolean
   isPrivate?: boolean
   isEdited: boolean
@@ -35,7 +35,7 @@ export interface PublicCommentView {
  * Pinned comment for client components (Date fields may be strings after serialization)
  */
 export interface PinnedCommentView {
-  id: CommentId
+  id: PostCommentId
   content: string
   contentJson?: TiptapContent | null
   authorName: string | null
@@ -64,7 +64,7 @@ export interface PublicPostDetailView {
   roadmaps: Array<{ id: string; name: string; slug: string }>
   comments: PublicCommentView[]
   pinnedComment: PinnedCommentView | null
-  pinnedCommentId: CommentId | null
+  pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
   /**

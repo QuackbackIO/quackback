@@ -4,7 +4,7 @@
  * Type definitions for in-app notifications
  */
 
-import type { NotificationId, PostId, CommentId, PrincipalId } from '@quackback/ids'
+import type { NotificationId, PostId, PostCommentId, PrincipalId } from '@quackback/ids'
 
 /**
  * Notification event types that can trigger in-app notifications
@@ -26,7 +26,7 @@ export interface CreateNotificationInput {
   title: string
   body?: string
   postId?: PostId
-  commentId?: CommentId
+  commentId?: PostCommentId
   metadata?: Record<string, unknown>
 }
 
@@ -40,7 +40,7 @@ export interface Notification {
   title: string
   body: string | null
   postId: PostId | null
-  commentId: CommentId | null
+  commentId: PostCommentId | null
   metadata: Record<string, unknown> | null
   readAt: Date | null
   archivedAt: Date | null

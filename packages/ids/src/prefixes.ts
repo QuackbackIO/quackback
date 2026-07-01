@@ -14,7 +14,7 @@ export const ID_PREFIXES = {
   // Feedback domain
   post: 'post',
   board: 'board',
-  comment: 'comment',
+  post_comment: 'post_comment',
   vote: 'vote',
   post_tag: 'post_tag',
   status: 'status',

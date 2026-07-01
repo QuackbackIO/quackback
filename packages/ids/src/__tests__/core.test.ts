@@ -34,11 +34,11 @@ describe('TypeID Core', () => {
     it('generates IDs with different prefixes', () => {
       const postId = generateId('post')
       const boardId = generateId('board')
-      const commentId = generateId('comment')
+      const commentId = generateId('post_comment')
 
       expect(postId).toMatch(/^post_/)
       expect(boardId).toMatch(/^board_/)
-      expect(commentId).toMatch(/^comment_/)
+      expect(commentId).toMatch(/^post_comment_/)
     })
 
     it('generates time-ordered IDs (UUIDv7)', () => {
@@ -136,7 +136,7 @@ describe('TypeID Core', () => {
     })
 
     it('works with different prefixes', () => {
-      const prefixes = ['post', 'board', 'comment', 'workspace', 'user'] as const
+      const prefixes = ['post', 'board', 'post_comment', 'workspace', 'user'] as const
 
       for (const prefix of prefixes) {
         const typeId = generateId(prefix)

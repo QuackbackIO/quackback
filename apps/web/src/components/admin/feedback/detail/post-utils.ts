@@ -5,14 +5,14 @@
  */
 
 import type { JSONContent } from '@tiptap/react'
-import type { CommentId } from '@quackback/ids'
+import type { PostCommentId } from '@quackback/ids'
 import type { PostDetails } from '@/lib/shared/types'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 
 /** Convert admin comments to portal-compatible format */
 export function toPortalComments(post: PostDetails): PublicCommentView[] {
   const mapComment = (c: PostDetails['comments'][0]): PublicCommentView => ({
-    id: c.id as CommentId,
+    id: c.id as PostCommentId,
     content: c.content,
     contentJson: c.contentJson ?? null,
     authorName: c.authorName,
@@ -21,7 +21,7 @@ export function toPortalComments(post: PostDetails): PublicCommentView[] {
     deletedAt: c.deletedAt ?? null,
     isRemovedByTeam:
       !!c.deletedAt && !!c.deletedByPrincipalId && c.deletedByPrincipalId !== c.principalId,
-    parentId: c.parentId as CommentId | null,
+    parentId: c.parentId as PostCommentId | null,
     isTeamMember: c.isTeamMember,
     isPrivate: c.isPrivate,
     isEdited: !!c.updatedAt,

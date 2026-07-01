@@ -6,11 +6,11 @@
  */
 
 import type { Board, PostTag } from '@/lib/shared/db-types'
-import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
+import type { PostId, StatusId, PostCommentId, PrincipalId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
 export interface PinnedComment {
-  id: CommentId
+  id: PostCommentId
   content: string
   authorName: string | null
   principalId: PrincipalId | null
@@ -53,7 +53,7 @@ export interface PostDetails {
   /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
-  pinnedCommentId: CommentId | null
+  pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked?: boolean
   /** Map of principalId to avatar URL (base64 or external URL) */

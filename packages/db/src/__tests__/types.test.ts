@@ -162,7 +162,7 @@ describe('Type definitions', () => {
     })
 
     it('Comment.parentId can be null', () => {
-      // parentId is now CommentId | null (TypeId branded string)
+      // parentId is now PostCommentId | null (TypeId branded string)
       expectTypeOf<Comment['parentId']>().toMatchTypeOf<`comment_${string}` | null>()
     })
   })

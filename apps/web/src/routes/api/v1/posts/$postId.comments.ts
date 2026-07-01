@@ -11,7 +11,7 @@ import {
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId, parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import type { Role } from '@/lib/shared/roles'
-import type { PostId, CommentId, PrincipalId } from '@quackback/ids'
+import type { PostId, PostCommentId, PrincipalId } from '@quackback/ids'
 
 // Input validation schema
 const createCommentSchema = z.object({
@@ -82,9 +82,9 @@ export const Route = createFileRoute('/api/v1/posts/$postId/comments')({
             })
           }
 
-          const parentId = parseOptionalTypeId<CommentId>(
+          const parentId = parseOptionalTypeId<PostCommentId>(
             parsed.data.parentId,
-            'comment',
+            'post_comment',
             'parent ID'
           )
 

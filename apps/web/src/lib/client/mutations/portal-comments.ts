@@ -16,7 +16,7 @@ import {
   pinCommentFn,
   unpinCommentFn,
 } from '@/lib/server/functions/comments'
-import type { PostId, CommentId } from '@quackback/ids'
+import type { PostId, PostCommentId } from '@quackback/ids'
 import { portalDetailQueries } from '@/lib/client/queries/portal-detail'
 import { commentKeys } from '@/lib/client/hooks/use-comments-query'
 import { addReplyToTree, replaceOptimisticInTree } from '@/lib/client/utils/comment-tree-helpers'
@@ -27,7 +27,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 // ============================================================================
 
 interface OptimisticComment {
-  id: CommentId
+  id: PostCommentId
   content: string
   /** TipTap JSON when the form supplied it. Needed for the optimistic render
    * to show mention chips (and other rich nodes) before the server response
@@ -64,21 +64,21 @@ interface UseCreateCommentOptions {
 }
 
 interface UseEditCommentOptions {
-  commentId: CommentId
+  commentId: PostCommentId
   postId: PostId
   onSuccess?: (comment: unknown) => void
   onError?: (error: Error) => void
 }
 
 interface UseDeleteCommentOptions {
-  commentId?: CommentId
+  commentId?: PostCommentId
   postId: PostId
   onSuccess?: () => void
   onError?: (error: Error) => void
 }
 
 interface UseToggleReactionOptions {
-  commentId: CommentId
+  commentId: PostCommentId
   postId: PostId
   onSuccess?: (result: {
     added: boolean
@@ -117,7 +117,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
           postId,
           content: input.content,
           contentJson: input.contentJson ?? undefined,
-          parentId: (input.parentId || undefined) as CommentId | undefined,
+          parentId: (input.parentId || undefined) as PostCommentId | undefined,
           statusId: input.statusId || undefined,
           isPrivate: input.isPrivate,
         },
@@ -131,7 +131,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
 
       if (previousPost && (authorName || author)) {
         const optimisticComment: OptimisticComment = {
-          id: `comment_optimistic_${Date.now()}` as CommentId,
+          id: `comment_optimistic_${Date.now()}` as PostCommentId,
           content: input.content,
           contentJson: input.contentJson ?? null,
           authorName,
@@ -162,7 +162,7 @@ export function useCreateComment({ postId, author, onSuccess, onError }: UseCrea
       onError?.(error)
     },
     onSuccess: (data, input) => {
-      const serverComment = data as { comment: { id: CommentId; createdAt: Date } }
+      const serverComment = data as { comment: { id: PostCommentId; createdAt: Date } }
       queryClient.setQueryData(queryKey, (old: unknown) => {
         if (!old || typeof old !== 'object') return old
         const post = old as { comments: OptimisticComment[] }
@@ -219,7 +219,7 @@ export function useDeleteComment({
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (dynamicCommentId?: CommentId) =>
+    mutationFn: (dynamicCommentId?: PostCommentId) =>
       userDeleteCommentFn({ data: { commentId: dynamicCommentId ?? fixedCommentId! } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
@@ -246,7 +246,7 @@ export function useRestoreComment({
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (commentId: CommentId) => restoreCommentFn({ data: { commentId } }),
+    mutationFn: (commentId: PostCommentId) => restoreCommentFn({ data: { commentId } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })
       queryClient.invalidateQueries({ queryKey: ['inbox', 'detail', postId] })
@@ -289,7 +289,7 @@ export function usePinComment({ postId, onSuccess, onError }: UsePinCommentOptio
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (commentId: CommentId) => pinCommentFn({ data: { commentId } }),
+    mutationFn: (commentId: PostCommentId) => pinCommentFn({ data: { commentId } }),
     onSuccess: () => {
       // Invalidate both portal and admin queries
       queryClient.invalidateQueries({ queryKey: portalDetailQueries.postDetail(postId).queryKey })

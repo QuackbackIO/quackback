@@ -59,7 +59,7 @@ import {
   type StatusId,
   type PostTagId,
   type RoadmapId,
-  type CommentId,
+  type PostCommentId,
   type BoardId,
 } from '@quackback/ids'
 import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
@@ -445,20 +445,20 @@ function PostModalContent({
                     statuses={statuses}
                     currentStatusId={post.statusId}
                     isTeamMember
-                    onDeleteComment={(commentId: CommentId) =>
+                    onDeleteComment={(commentId: PostCommentId) =>
                       deleteCommentMutation.mutate(commentId)
                     }
                     deletingCommentId={
                       deleteCommentMutation.isPending
-                        ? (deleteCommentMutation.variables as CommentId)
+                        ? (deleteCommentMutation.variables as PostCommentId)
                         : null
                     }
-                    onRestoreComment={(commentId: CommentId) =>
+                    onRestoreComment={(commentId: PostCommentId) =>
                       restoreCommentMutation.mutate(commentId)
                     }
                     restoringCommentId={
                       restoreCommentMutation.isPending
-                        ? (restoreCommentMutation.variables as CommentId)
+                        ? (restoreCommentMutation.variables as PostCommentId)
                         : null
                     }
                   />

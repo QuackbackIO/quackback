@@ -5,7 +5,7 @@
  */
 
 import { db, eq, and, postCommentReactions, principal } from '@/lib/server/db'
-import { type CommentId, type PrincipalId } from '@quackback/ids'
+import { type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { aggregateReactions } from '@/lib/shared'
 import { type Actor } from '@/lib/server/policy'
 import { assertCommentViewable } from '@/lib/server/domains/posts/post.access'
@@ -17,7 +17,7 @@ const log = logger.child({ component: 'comment-reactions' })
 /** Load a comment's reactions aggregated with the reactors' display names (for
  *  the hover tooltip) and the viewer's hasReacted flag. */
 async function aggregatedReactionsFor(
-  commentId: CommentId,
+  commentId: PostCommentId,
   viewerPrincipalId: PrincipalId
 ): Promise<CommentReactionCount[]> {
   const rows = await db
@@ -44,7 +44,7 @@ async function aggregatedReactionsFor(
  * @returns Result containing reaction status or an error
  */
 export async function addReaction(
-  commentId: CommentId,
+  commentId: PostCommentId,
   emoji: string,
   principalId: PrincipalId,
   actor: Actor
@@ -84,7 +84,7 @@ export async function addReaction(
  * @returns Result containing reaction status or an error
  */
 export async function removeReaction(
-  commentId: CommentId,
+  commentId: PostCommentId,
   emoji: string,
   principalId: PrincipalId,
   actor: Actor

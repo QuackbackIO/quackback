@@ -31,7 +31,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { COMMENT_EDITOR_FEATURES } from './comment-editor-features'
 import { commentMarkdownToTiptapJson } from '@/lib/server/markdown-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 
 /**
  * Groups root-level comments so consecutive private comments are wrapped
@@ -125,7 +125,7 @@ interface CommentThreadProps {
   /** Enable comment pinning (admin only) */
   canPinComments?: boolean
   /** Callback when comment is pinned */
-  onPinComment?: (commentId: CommentId) => void
+  onPinComment?: (commentId: PostCommentId) => void
   /** Callback when comment is unpinned */
   onUnpinComment?: () => void
   /** Whether pin/unpin is in progress */
@@ -140,13 +140,13 @@ interface CommentThreadProps {
   /** Hide the comment form area entirely (for readonly previews) */
   hideCommentForm?: boolean
   /** Callback when a comment is deleted */
-  onDeleteComment?: (commentId: CommentId) => void
+  onDeleteComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being deleted (for loading state) */
-  deletingCommentId?: CommentId | null
+  deletingCommentId?: PostCommentId | null
   /** Callback when a comment is restored (team only) */
-  onRestoreComment?: (commentId: CommentId) => void
+  onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
-  restoringCommentId?: CommentId | null
+  restoringCommentId?: PostCommentId | null
 }
 
 export function CommentThread({
@@ -288,19 +288,19 @@ interface CommentItemProps {
   pinnedCommentId?: string | null
   // Admin mode props
   canPinComments?: boolean
-  onPinComment?: (commentId: CommentId) => void
+  onPinComment?: (commentId: PostCommentId) => void
   onUnpinComment?: () => void
   isPinPending?: boolean
   /** Whether the current user is a team member */
   isTeamMember?: boolean
   /** Callback when a comment is deleted */
-  onDeleteComment?: (commentId: CommentId) => void
+  onDeleteComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being deleted */
-  deletingCommentId?: CommentId | null
+  deletingCommentId?: PostCommentId | null
   /** Callback when a comment is restored (team only) */
-  onRestoreComment?: (commentId: CommentId) => void
+  onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
-  restoringCommentId?: CommentId | null
+  restoringCommentId?: PostCommentId | null
   /** Whether this comment is rendered inside a PrivateNoteCard (suppresses per-comment private styling) */
   insidePrivateCard?: boolean
 }
@@ -346,7 +346,7 @@ function CommentItem({
   }, [comment.contentJson, comment.content])
 
   const editMutation = useEditComment({
-    commentId: comment.id as CommentId,
+    commentId: comment.id as PostCommentId,
     postId,
   })
 
@@ -805,7 +805,9 @@ function CommentItem({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={isPinned ? onUnpinComment : () => onPinComment?.(comment.id as CommentId)}
+                onClick={
+                  isPinned ? onUnpinComment : () => onPinComment?.(comment.id as PostCommentId)
+                }
                 disabled={isPinPending}
               >
                 <MapPinIcon className="h-3 w-3 me-1" />
@@ -824,7 +826,7 @@ function CommentItem({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => onRestoreComment!(comment.id as CommentId)}
+                onClick={() => onRestoreComment!(comment.id as PostCommentId)}
                 disabled={isBeingRestored}
               >
                 <ArrowUturnLeftIcon className="h-3 w-3 me-1" />
@@ -862,7 +864,7 @@ function CommentItem({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-                onClick={() => onDeleteComment!(comment.id as CommentId)}
+                onClick={() => onDeleteComment!(comment.id as PostCommentId)}
                 disabled={isBeingDeleted}
               >
                 <TrashIcon className="h-3 w-3 me-1" />

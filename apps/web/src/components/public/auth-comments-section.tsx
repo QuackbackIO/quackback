@@ -7,7 +7,7 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { useCreateComment } from '@/lib/client/mutations'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
-import type { CommentId, PostId, PrincipalId } from '@quackback/ids'
+import type { PostCommentId, PostId, PrincipalId } from '@quackback/ids'
 import { resolveCommentingState } from '@/components/public/comment-permission'
 
 interface AuthCommentsSectionProps {
@@ -24,7 +24,7 @@ interface AuthCommentsSectionProps {
   /** Enable comment pinning (admin only) */
   canPinComments?: boolean
   /** Callback when comment is pinned */
-  onPinComment?: (commentId: CommentId) => void
+  onPinComment?: (commentId: PostCommentId) => void
   /** Callback when comment is unpinned */
   onUnpinComment?: () => void
   /** Whether pin/unpin is in progress */
@@ -39,13 +39,13 @@ interface AuthCommentsSectionProps {
   /** Hide the comment form area entirely (for readonly previews) */
   hideCommentForm?: boolean
   /** Callback when a comment is deleted */
-  onDeleteComment?: (commentId: CommentId) => void
+  onDeleteComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being deleted */
-  deletingCommentId?: CommentId | null
+  deletingCommentId?: PostCommentId | null
   /** Callback when a comment is restored (team only) */
-  onRestoreComment?: (commentId: CommentId) => void
+  onRestoreComment?: (commentId: PostCommentId) => void
   /** ID of the comment currently being restored */
-  restoringCommentId?: CommentId | null
+  restoringCommentId?: PostCommentId | null
 }
 
 /**

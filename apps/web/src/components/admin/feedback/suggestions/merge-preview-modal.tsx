@@ -23,7 +23,7 @@ import {
   toPortalComments,
   getInitialContentJson,
 } from '@/components/admin/feedback/detail/post-utils'
-import type { PostId, CommentId } from '@quackback/ids'
+import type { PostId, PostCommentId } from '@quackback/ids'
 import type { PostDetails } from '@/lib/shared/types'
 import type { PublicCommentView } from '@/lib/client/queries/portal-detail'
 
@@ -87,7 +87,7 @@ function MergePreviewContent({
   const duplicateComments: PublicCommentView[] = data.duplicateComments.map(
     function mapComment(c): PublicCommentView {
       return {
-        id: c.id as CommentId,
+        id: c.id as PostCommentId,
         content: c.content,
         authorName: c.authorName,
         principalId: c.principalId,
@@ -95,7 +95,7 @@ function MergePreviewContent({
         deletedAt: c.deletedAt ?? null,
         isRemovedByTeam:
           !!c.deletedAt && !!c.deletedByPrincipalId && c.deletedByPrincipalId !== c.principalId,
-        parentId: c.parentId as CommentId | null,
+        parentId: c.parentId as PostCommentId | null,
         isTeamMember: c.isTeamMember,
         isEdited: !!c.updatedAt,
         avatarUrl: c.avatarUrl ?? null,
