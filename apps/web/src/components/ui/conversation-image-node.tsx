@@ -9,7 +9,7 @@ import { cn } from '@/lib/shared/utils'
  * mounted (ProseMirror needs a DOM host) and stays non-editable; a node with no
  * src simply renders nothing inside it.
  */
-function ChatImageNodeView({ node, selected, deleteNode }: ReactNodeViewProps) {
+function ConversationImageNodeView({ node, selected, deleteNode }: ReactNodeViewProps) {
   const src = node.attrs.src as string | null
   const alt = (node.attrs.alt as string | null) ?? ''
   return (
@@ -81,6 +81,6 @@ export const ConversationImage = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(ChatImageNodeView)
+    return ReactNodeViewRenderer(ConversationImageNodeView)
   },
 })

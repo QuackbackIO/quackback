@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/rich-text-editor'
 import { cn } from '@/lib/shared/utils'
 
-interface ChatNoteEditorProps {
+interface ConversationNoteEditorProps {
   placeholder?: string
   disabled?: boolean
   /** Bump to clear the editor — used to reset it after a note is sent. */
@@ -30,7 +30,7 @@ interface ChatNoteEditorProps {
 }
 
 /** Imperative handle so the composer's emoji picker can insert into the note. */
-export interface ChatNoteEditorHandle {
+export interface ConversationNoteEditorHandle {
   insertText: (text: string) => void
 }
 
@@ -46,115 +46,116 @@ export interface ChatNoteEditorHandle {
  * picker via hasActiveSuggestion() rather than racing the suggestion plugin's
  * own key handling.
  */
-export const ChatNoteEditor = forwardRef<ChatNoteEditorHandle, ChatNoteEditorProps>(
-  function ChatNoteEditor(
-    { placeholder, disabled, resetSignal, onChange, onSubmit, onImageFiles, className },
-    ref
-  ) {
-    // Keep callbacks fresh without tearing down + rebuilding the editor.
-    const onSubmitRef = useRef(onSubmit)
-    onSubmitRef.current = onSubmit
-    const onChangeRef = useRef(onChange)
-    onChangeRef.current = onChange
-    const onImageFilesRef = useRef(onImageFiles)
-    onImageFilesRef.current = onImageFiles
-    // The live TipTap editor, captured on create so the keymap can ask it whether
-    // the @-mention picker is open (matches hasActiveSuggestion's call pattern).
-    const editorRef = useRef<Editor | null>(null)
+export const ConversationNoteEditor = forwardRef<
+  ConversationNoteEditorHandle,
+  ConversationNoteEditorProps
+>(function ConversationNoteEditor(
+  { placeholder, disabled, resetSignal, onChange, onSubmit, onImageFiles, className },
+  ref
+) {
+  // Keep callbacks fresh without tearing down + rebuilding the editor.
+  const onSubmitRef = useRef(onSubmit)
+  onSubmitRef.current = onSubmit
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  const onImageFilesRef = useRef(onImageFiles)
+  onImageFilesRef.current = onImageFiles
+  // The live TipTap editor, captured on create so the keymap can ask it whether
+  // the @-mention picker is open (matches hasActiveSuggestion's call pattern).
+  const editorRef = useRef<Editor | null>(null)
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        insertText: (text: string) =>
-          withLiveEditor(editorRef.current, (e) => e.chain().focus().insertContent(text).run()),
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText: (text: string) =>
+        withLiveEditor(editorRef.current, (e) => e.chain().focus().insertContent(text).run()),
+    }),
+    []
+  )
+
+  const editor = useEditor({
+    editable: !disabled,
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        horizontalRule: false,
+        link: false,
       }),
-      []
-    )
-
-    const editor = useEditor({
-      editable: !disabled,
-      extensions: [
-        StarterKit.configure({
-          heading: false,
-          codeBlock: false,
-          horizontalRule: false,
-          link: false,
-        }),
-        Placeholder.configure({
-          placeholder: placeholder ?? 'Add an internal note for your team…',
-          emptyEditorClass: 'is-editor-empty',
-        }),
-        // Autolink typed/pasted URLs; Backspace at a link edge unlinks.
-        ConversationLink,
-        LinkBackspaceUnlink,
-        TeamMentionExtension,
-        // Pasting a Quackback post/changelog link becomes a live embed card.
-        QuackbackEmbed.configure({ enablePaste: true }),
-        // `:`-triggered inline emoji picker (same as posts).
-        createEmojiExtension(),
-      ],
-      editorProps: {
-        attributes: {
-          class:
-            'prose prose-sm prose-neutral dark:prose-invert max-w-none focus:outline-none min-h-[1.5rem] py-1',
-        },
-        handleKeyDown: (_view, event) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
-            // The picker owns Enter while it's open (selects a teammate).
-            if (editorRef.current && hasActiveSuggestion(editorRef.current)) return false
-            event.preventDefault()
-            onSubmitRef.current()
-            return true
-          }
-          return false
-        },
-        // Pasted images go to the note's attachment tray (handed up to the
-        // parent); non-image paste falls through to default handling.
-        handlePaste: (_view, event) => {
-          const handler = onImageFilesRef.current
-          if (!handler) return false
-          const images = Array.from(event.clipboardData?.files ?? []).filter((f) =>
-            f.type.startsWith('image/')
-          )
-          if (images.length === 0) return false
-          event.preventDefault()
-          handler(images)
-          return true
-        },
-        // Dropped image files go to the tray too. `moved` is an in-editor drag,
-        // not an external file — leave those to ProseMirror.
-        handleDrop: (_view, event, _slice, moved) => {
-          const handler = onImageFilesRef.current
-          if (!handler || moved) return false
-          const images = Array.from(event.dataTransfer?.files ?? []).filter((f) =>
-            f.type.startsWith('image/')
-          )
-          if (images.length === 0) return false
-          event.preventDefault()
-          handler(images)
-          return true
-        },
+      Placeholder.configure({
+        placeholder: placeholder ?? 'Add an internal note for your team…',
+        emptyEditorClass: 'is-editor-empty',
+      }),
+      // Autolink typed/pasted URLs; Backspace at a link edge unlinks.
+      ConversationLink,
+      LinkBackspaceUnlink,
+      TeamMentionExtension,
+      // Pasting a Quackback post/changelog link becomes a live embed card.
+      QuackbackEmbed.configure({ enablePaste: true }),
+      // `:`-triggered inline emoji picker (same as posts).
+      createEmojiExtension(),
+    ],
+    editorProps: {
+      attributes: {
+        class:
+          'prose prose-sm prose-neutral dark:prose-invert max-w-none focus:outline-none min-h-[1.5rem] py-1',
       },
-      onUpdate: ({ editor }) => onChangeRef.current(editor.getText().trim(), editor.getJSON()),
-    })
+      handleKeyDown: (_view, event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          // The picker owns Enter while it's open (selects a teammate).
+          if (editorRef.current && hasActiveSuggestion(editorRef.current)) return false
+          event.preventDefault()
+          onSubmitRef.current()
+          return true
+        }
+        return false
+      },
+      // Pasted images go to the note's attachment tray (handed up to the
+      // parent); non-image paste falls through to default handling.
+      handlePaste: (_view, event) => {
+        const handler = onImageFilesRef.current
+        if (!handler) return false
+        const images = Array.from(event.clipboardData?.files ?? []).filter((f) =>
+          f.type.startsWith('image/')
+        )
+        if (images.length === 0) return false
+        event.preventDefault()
+        handler(images)
+        return true
+      },
+      // Dropped image files go to the tray too. `moved` is an in-editor drag,
+      // not an external file — leave those to ProseMirror.
+      handleDrop: (_view, event, _slice, moved) => {
+        const handler = onImageFilesRef.current
+        if (!handler || moved) return false
+        const images = Array.from(event.dataTransfer?.files ?? []).filter((f) =>
+          f.type.startsWith('image/')
+        )
+        if (images.length === 0) return false
+        event.preventDefault()
+        handler(images)
+        return true
+      },
+    },
+    onUpdate: ({ editor }) => onChangeRef.current(editor.getText().trim(), editor.getJSON()),
+  })
 
-    // Keep the ref on the LIVE editor every render: TipTap can recreate the
-    // editor (e.g. React StrictMode double-mount), leaving an onCreate-only ref
-    // pointing at a destroyed instance whose commandManager is null.
-    editorRef.current = editor
+  // Keep the ref on the LIVE editor every render: TipTap can recreate the
+  // editor (e.g. React StrictMode double-mount), leaving an onCreate-only ref
+  // pointing at a destroyed instance whose commandManager is null.
+  editorRef.current = editor
 
-    // Clear on send (parent bumps resetSignal) and keep focus so the next note
-    // can be typed without re-clicking the editor.
-    useEffect(() => {
-      if (resetSignal > 0) editor?.chain().clearContent().focus().run()
-    }, [resetSignal, editor])
+  // Clear on send (parent bumps resetSignal) and keep focus so the next note
+  // can be typed without re-clicking the editor.
+  useEffect(() => {
+    if (resetSignal > 0) editor?.chain().clearContent().focus().run()
+  }, [resetSignal, editor])
 
-    useEffect(() => {
-      editor?.setEditable(!disabled)
-    }, [disabled, editor])
+  useEffect(() => {
+    editor?.setEditable(!disabled)
+  }, [disabled, editor])
 
-    return (
-      <EditorContent editor={editor} className={cn('flex-1 overflow-y-auto max-h-32', className)} />
-    )
-  }
-)
+  return (
+    <EditorContent editor={editor} className={cn('flex-1 overflow-y-auto max-h-32', className)} />
+  )
+})

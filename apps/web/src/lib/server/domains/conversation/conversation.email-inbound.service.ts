@@ -21,7 +21,7 @@ import {
   extractEmailAddress,
 } from './conversation.email-inbound'
 import { conversationIdFromInboundAddress } from './conversation.email-channel'
-import { assertChatSendRate, ChatRateLimitError } from './conversation.ratelimit'
+import { assertChatSendRate, ConversationRateLimitError } from './conversation.ratelimit'
 import { sendVisitorMessage } from './conversation.service'
 
 export type IngestInboundResult =
@@ -102,7 +102,7 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
   try {
     await assertChatSendRate(visitorPrincipalId)
   } catch (err) {
-    if (err instanceof ChatRateLimitError) return { status: 'rate_limited' }
+    if (err instanceof ConversationRateLimitError) return { status: 'rate_limited' }
     throw err
   }
 

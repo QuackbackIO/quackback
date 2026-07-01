@@ -26,7 +26,7 @@ vi.mock('../conversation.service', () => ({
 
 vi.mock('../conversation.ratelimit', () => ({
   assertChatSendRate: (...a: unknown[]) => assertChatSendRate(...a),
-  ChatRateLimitError: class ChatRateLimitError extends Error {
+  ConversationRateLimitError: class ConversationRateLimitError extends Error {
     readonly code = 'RATE_LIMITED'
     readonly retryAfter = 5
   },
@@ -240,8 +240,8 @@ describe('ingestInboundEmail', () => {
   })
 
   it('rate-limits the inbound path (acks without fanning out a message)', async () => {
-    const { ChatRateLimitError } = await import('../conversation.ratelimit')
-    assertChatSendRate.mockRejectedValueOnce(new ChatRateLimitError(5))
+    const { ConversationRateLimitError } = await import('../conversation.ratelimit')
+    assertChatSendRate.mockRejectedValueOnce(new ConversationRateLimitError(5))
 
     const result = await ingestInboundEmail(baseEvent)
 

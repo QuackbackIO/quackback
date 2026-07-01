@@ -86,7 +86,7 @@ import { syncConversationMessageMentions } from './sync-conversation-mentions'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type {
-  ChatAuthorInput,
+  ConversationAuthorInput,
   SendVisitorMessageInput,
   SendVisitorMessageResult,
   SendAgentMessageResult,
@@ -226,7 +226,7 @@ export async function captureVisitorContactEmail(
 /** Visitor send. Starts a conversation when no conversationId is supplied. */
 export async function sendVisitorMessage(
   input: SendVisitorMessageInput,
-  author: ChatAuthorInput,
+  author: ConversationAuthorInput,
   actor: Actor,
   contentJson?: TiptapContent | null
 ): Promise<SendVisitorMessageResult> {
@@ -400,7 +400,7 @@ export interface StartAgentConversationInput {
  */
 export async function startAgentConversation(
   input: StartAgentConversationInput,
-  agent: ChatAuthorInput,
+  agent: ConversationAuthorInput,
   actor: Actor
 ): Promise<SendVisitorMessageResult> {
   const decision = canActAsAgent(actor)
@@ -512,7 +512,7 @@ export async function startAgentConversation(
 export async function sendAgentMessage(
   conversationId: ConversationId,
   rawContent: string,
-  agent: ChatAuthorInput,
+  agent: ConversationAuthorInput,
   actor: Actor,
   rawAttachments?: ConversationAttachment[],
   contentJson?: TiptapContent | null
@@ -618,7 +618,7 @@ export async function sendAgentMessage(
 export async function addAgentNote(
   conversationId: ConversationId,
   rawContent: string,
-  agent: ChatAuthorInput,
+  agent: ConversationAuthorInput,
   actor: Actor,
   contentJson?: TiptapContent | null,
   attachments?: ConversationAttachment[]

@@ -4,14 +4,14 @@
  * from chat.service after a write commits: a dispatch failure must never break
  * sending a message (matches the chat.notify pattern).
  *
- * Chat authors carry no userId (ChatAuthorInput), so the EventActor is built
+ * Chat authors carry no userId (ConversationAuthorInput), so the EventActor is built
  * from actor.principalType rather than reusing buildEventActor (which keys on
  * userId). Synthetic anonymous emails are stripped via realEmail() everywhere
  * an email surfaces.
  */
 import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
-import type { ChatAuthorInput } from './conversation.types'
+import type { ConversationAuthorInput } from './conversation.types'
 import type {
   EventActor,
   EventConversationData,
@@ -34,7 +34,7 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'chat-webhooks' })
 
-function toEventActor(actor: Actor, author?: ChatAuthorInput | null): EventActor {
+function toEventActor(actor: Actor, author?: ConversationAuthorInput | null): EventActor {
   const principalId = actor.principalId ?? undefined
   const displayName = author?.displayName ?? undefined
   if (actor.principalType === 'service') {
@@ -68,7 +68,7 @@ function conversationRef(c: Conversation): EventConversationRef {
   return { id: c.id, status: c.status, channel: c.channel, priority: c.priority }
 }
 
-function messageData(m: ConversationMessage, author: ChatAuthorInput): EventMessageData {
+function messageData(m: ConversationMessage, author: ConversationAuthorInput): EventMessageData {
   return {
     id: m.id,
     conversationId: m.conversationId,
@@ -91,7 +91,7 @@ async function safe(label: string, fn: () => Promise<void>): Promise<void> {
 
 export async function emitConversationCreated(
   actor: Actor,
-  author: ChatAuthorInput,
+  author: ConversationAuthorInput,
   conversation: Conversation
 ): Promise<void> {
   await safe('conversation.created', () =>
@@ -101,7 +101,7 @@ export async function emitConversationCreated(
 
 export async function emitMessageCreated(
   actor: Actor,
-  author: ChatAuthorInput,
+  author: ConversationAuthorInput,
   message: ConversationMessage,
   conversation: Conversation
 ): Promise<void> {
@@ -116,7 +116,7 @@ export async function emitMessageCreated(
 
 export async function emitMessageNoteCreated(
   actor: Actor,
-  author: ChatAuthorInput,
+  author: ConversationAuthorInput,
   message: ConversationMessage,
   conversation: Conversation
 ): Promise<void> {

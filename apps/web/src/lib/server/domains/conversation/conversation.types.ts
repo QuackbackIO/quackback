@@ -7,7 +7,7 @@ import type {
 } from '@/lib/shared/conversation/types'
 
 /** Author identity passed into a send call (resolved from the auth context). */
-export interface ChatAuthorInput {
+export interface ConversationAuthorInput {
   principalId: PrincipalId
   displayName?: string | null
   avatarUrl?: string | null

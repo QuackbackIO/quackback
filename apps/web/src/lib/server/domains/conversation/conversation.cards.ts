@@ -21,12 +21,12 @@ import { canActAsAgent } from '@/lib/server/policy/conversation'
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { toMessageDTO, resolveAuthor, enrichMessageForAgent } from './conversation.query'
 import { publishAgentConversationEvent } from '@/lib/server/realtime/conversation-channels'
-import type { ChatAuthorInput, SendAgentMessageResult } from './conversation.types'
+import type { ConversationAuthorInput, SendAgentMessageResult } from './conversation.types'
 
 export interface CardAgentCtx {
   agentActor: Actor
   agentPrincipalId: PrincipalId
-  agent: ChatAuthorInput
+  agent: ConversationAuthorInput
 }
 
 /** Embed doc for a feedback post — a single-node doc carrying a quackbackEmbed.

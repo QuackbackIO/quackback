@@ -7,7 +7,7 @@
  * server-only code (server functions, API routes).
  */
 export type {
-  ChatAuthorInput,
+  ConversationAuthorInput,
   SendVisitorMessageInput,
   SendVisitorMessageResult,
   SendAgentMessageResult,

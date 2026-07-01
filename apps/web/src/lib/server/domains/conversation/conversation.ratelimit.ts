@@ -12,25 +12,25 @@ const SEND_WINDOW_SECONDS = 30
 const SEND_MAX = 20
 
 /** Thrown when a visitor exceeds the chat send rate. Carries a retry hint. */
-export class ChatRateLimitError extends Error {
+export class ConversationRateLimitError extends Error {
   readonly code = 'RATE_LIMITED'
   readonly retryAfter: number
   constructor(retryAfter: number) {
     super('You are sending messages too quickly. Please wait a moment.')
-    this.name = 'ChatRateLimitError'
+    this.name = 'ConversationRateLimitError'
     this.retryAfter = retryAfter
   }
 }
 
 /**
  * Throttle a visitor's message sends (which also gate conversation creation and
- * offline notifications). Throws ChatRateLimitError when the window is exceeded.
+ * offline notifications). Throws ConversationRateLimitError when the window is exceeded.
  */
 export async function assertChatSendRate(principalId: PrincipalId): Promise<void> {
   const spec = { key: `chat:send:${principalId}`, windowSeconds: SEND_WINDOW_SECONDS }
   const { count } = await incrementBucket(spec)
   // count === null means Redis errored — fail open.
   if (count !== null && count > SEND_MAX) {
-    throw new ChatRateLimitError(await bucketRetryAfter(spec))
+    throw new ConversationRateLimitError(await bucketRetryAfter(spec))
   }
 }

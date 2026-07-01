@@ -12,7 +12,7 @@ import { config } from '@/lib/server/config'
 import type { Actor } from '@/lib/server/policy/types'
 import { canActAsAgent } from '@/lib/server/policy/conversation'
 import { assertConversationViewable } from './conversation.service'
-import type { ChatAuthorInput } from './conversation.types'
+import type { ConversationAuthorInput } from './conversation.types'
 
 export interface ConvertChatToPostInput {
   conversationId: ConversationId
@@ -34,7 +34,7 @@ export interface ConvertChatToPostResult {
 
 export async function createPostFromConversation(
   input: ConvertChatToPostInput,
-  ctx: { agentActor: Actor; agentPrincipalId: PrincipalId; agent: ChatAuthorInput }
+  ctx: { agentActor: Actor; agentPrincipalId: PrincipalId; agent: ConversationAuthorInput }
 ): Promise<ConvertChatToPostResult> {
   const decision = canActAsAgent(ctx.agentActor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)

@@ -48,14 +48,14 @@ import { SharePostDialog } from '@/components/admin/conversation/share-post-dial
 import { ConversationListColumn } from '@/components/admin/conversation/conversation-list-column'
 import { SavedMessagesColumn } from '@/components/admin/conversation/saved-messages-column'
 import {
-  ChatNoteEditor,
-  type ChatNoteEditorHandle,
+  ConversationNoteEditor,
+  type ConversationNoteEditorHandle,
 } from '@/components/admin/conversation/conversation-note-editor'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import {
-  ChatRichComposer,
-  type ChatRichComposerHandle,
+  ConversationRichComposer,
+  type ConversationRichComposerHandle,
 } from '@/components/admin/conversation/conversation-rich-composer'
 import {
   InboxNavSidebar,
@@ -477,7 +477,7 @@ function InboxPage() {
       {/* Thread */}
       <div className={cn('min-w-0 flex-1', !selectedId && 'hidden md:block')}>
         {selectedId ? (
-          <ChatThread
+          <ConversationThread
             key={selectedId}
             conversationId={selectedId}
             targetMessageId={targetMessageId}
@@ -588,7 +588,7 @@ function toggleReactionLocal(
 const FLASH_MS = 2200
 const MAX_JUMP_PAGES = 20
 
-function ChatThread({
+function ConversationThread({
   conversationId,
   targetMessageId,
   onChanged,
@@ -692,8 +692,8 @@ function ChatThread({
     uploading,
   } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const replyComposerRef = useRef<ChatRichComposerHandle>(null)
-  const noteEditorRef = useRef<ChatNoteEditorHandle>(null)
+  const replyComposerRef = useRef<ConversationRichComposerHandle>(null)
+  const noteEditorRef = useRef<ConversationNoteEditorHandle>(null)
 
   // Shared factory (same key as `threadKey`) so a `?c=` deep-link prefetched by
   // the route loader hydrates this thread on first paint.
@@ -1412,7 +1412,7 @@ function ChatThread({
               }}
             />
             {noteMode ? (
-              <ChatNoteEditor
+              <ConversationNoteEditor
                 ref={noteEditorRef}
                 resetSignal={noteResetSignal}
                 disabled={noteMutation.isPending}
@@ -1424,7 +1424,7 @@ function ChatThread({
                 onImageFiles={(files) => void addFiles(files)}
               />
             ) : (
-              <ChatRichComposer
+              <ConversationRichComposer
                 ref={replyComposerRef}
                 resetSignal={replyResetSignal}
                 disabled={sendMutation.isPending}

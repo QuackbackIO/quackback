@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
-import type { ChatAuthorInput } from '../conversation.types'
+import type { ConversationAuthorInput } from '../conversation.types'
 
 const dispatch = vi.hoisted(() => ({
   dispatchConversationCreated: vi.fn().mockResolvedValue(undefined),
@@ -57,7 +57,7 @@ const visitorActor: Actor = {
   segmentIds: new Set(),
 } as unknown as Actor
 
-const anonAuthor: ChatAuthorInput = {
+const anonAuthor: ConversationAuthorInput = {
   principalId: 'principal_v',
   displayName: 'A visitor',
   email: 'temp-abc@anon.quackback.io',
@@ -122,7 +122,7 @@ describe('chat.webhooks emit helpers', () => {
       senderType: 'agent',
       isInternal: true,
     } as unknown as ConversationMessage
-    const agent: ChatAuthorInput = {
+    const agent: ConversationAuthorInput = {
       principalId: 'principal_a',
       displayName: 'Agent',
       email: 'agent@acme.com',

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { buildChatRows, type ChatRow } from './conversation-rows'
+import { buildConversationRows, type ConversationRow } from './conversation-rows'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
 import { chatAvailable } from '@/lib/shared/conversation/presence'
 import { PaperAirplaneIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -19,8 +19,8 @@ import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conve
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import {
-  ChatRichComposer,
-  type ChatRichComposerHandle,
+  ConversationRichComposer,
+  type ConversationRichComposerHandle,
 } from '@/components/admin/conversation/conversation-rich-composer'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
@@ -232,7 +232,7 @@ export function VisitorConversationThread({
   // Live link unfurl while composing (debounced), matching admin.
   const debouncedMessageText = useDebouncedValue(messageText, 500)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const composerRef = useRef<ChatRichComposerHandle>(null)
+  const composerRef = useRef<ConversationRichComposerHandle>(null)
 
   // Initial load — resumes an existing conversation for the current principal
   // (works without forcing a session: getMyChat returns just the greeting when
@@ -457,7 +457,7 @@ export function VisitorConversationThread({
   const showEmpty = !loading && messages.length === 0 && !welcomeMessage
   const rows = useMemo(
     () =>
-      buildChatRows({
+      buildConversationRows({
         messages,
         hasMoreOlder,
         hasGreeting,
@@ -583,7 +583,7 @@ export function VisitorConversationThread({
     onConversationStarted,
   ])
 
-  const renderRow = (row: ChatRow) => {
+  const renderRow = (row: ConversationRow) => {
     switch (row.type) {
       case 'load-older':
         return (
@@ -937,7 +937,7 @@ export function VisitorConversationThread({
               e.target.value = ''
             }}
           />
-          <ChatRichComposer
+          <ConversationRichComposer
             ref={composerRef}
             resetSignal={composerResetSignal}
             disabled={sending || emailBlocksSend}

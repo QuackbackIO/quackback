@@ -13,7 +13,7 @@ vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
   bucketRetryAfter: (...args: unknown[]) => bucketRetryAfter(...args),
 }))
 
-import { assertChatSendRate, ChatRateLimitError } from '../conversation.ratelimit'
+import { assertChatSendRate, ConversationRateLimitError } from '../conversation.ratelimit'
 
 const principal = 'principal_v' as PrincipalId
 
@@ -27,7 +27,7 @@ describe('assertChatSendRate', () => {
 
   it('throws once the window is exceeded, with a retry hint', async () => {
     incrementBucket.mockResolvedValue({ count: 21 })
-    await expect(assertChatSendRate(principal)).rejects.toBeInstanceOf(ChatRateLimitError)
+    await expect(assertChatSendRate(principal)).rejects.toBeInstanceOf(ConversationRateLimitError)
     incrementBucket.mockResolvedValue({ count: 21 })
     await expect(assertChatSendRate(principal)).rejects.toMatchObject({ retryAfter: 30 })
   })

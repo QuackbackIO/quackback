@@ -5,7 +5,7 @@ import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
  * (stable across prepend, so the virtualizer can anchor the viewport when older
  * history loads); the surrounding affordances use fixed keys.
  */
-export type ChatRow =
+export type ConversationRow =
   | { type: 'load-older'; key: 'load-older' }
   | { type: 'greeting'; key: 'greeting' }
   | { type: 'message'; key: string; message: ConversationMessageDTO }
@@ -15,7 +15,7 @@ export type ChatRow =
   | { type: 'typing'; key: 'typing' }
   | { type: 'csat'; key: 'csat' }
 
-export interface ChatRowsInput {
+export interface ConversationRowsInput {
   messages: ConversationMessageDTO[]
   /** A "load earlier messages" affordance sits above the thread. */
   hasMoreOlder: boolean
@@ -36,8 +36,8 @@ export interface ChatRowsInput {
  * virtualizer: load-older → greeting → messages → seen → typing → csat. Pure so
  * the ordering/keying is unit-tested directly.
  */
-export function buildChatRows(input: ChatRowsInput): ChatRow[] {
-  const rows: ChatRow[] = []
+export function buildConversationRows(input: ConversationRowsInput): ConversationRow[] {
+  const rows: ConversationRow[] = []
   if (input.hasMoreOlder) rows.push({ type: 'load-older', key: 'load-older' })
   if (input.hasGreeting) rows.push({ type: 'greeting', key: 'greeting' })
   for (const message of input.messages) {
