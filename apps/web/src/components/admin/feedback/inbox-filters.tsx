@@ -2,14 +2,14 @@ import { FilterList, StatusFilterList, BoardFilterList } from './single-select-f
 import { toggleItem } from '@/components/shared/filter-utils'
 import { FilterSection } from '@/components/shared/filter-section'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
-import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
+import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 
 interface InboxFiltersProps {
   filters: InboxFilters
   onFiltersChange: (updates: Partial<InboxFilters>) => void
   boards: Board[]
-  tags: Tag[]
+  tags: PostTag[]
   statuses: PostStatusEntity[]
   segments?: SegmentListItem[]
 }

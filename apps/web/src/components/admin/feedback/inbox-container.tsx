@@ -13,7 +13,7 @@ import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import type { CurrentUser } from '@/lib/shared/types'
-import type { Board, Tag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
+import type { Board, PostTag, InboxPostListResult, PostStatusEntity } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
 import type { PostId } from '@quackback/ids'
 import { saveNavigationContext } from '@/components/admin/feedback/detail/use-navigation-context'
@@ -21,7 +21,7 @@ import { saveNavigationContext } from '@/components/admin/feedback/detail/use-na
 interface InboxContainerProps {
   initialPosts: InboxPostListResult
   boards: Board[]
-  tags: Tag[]
+  tags: PostTag[]
   statuses: PostStatusEntity[]
   members: TeamMember[]
   currentUser: CurrentUser

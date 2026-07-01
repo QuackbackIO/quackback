@@ -4,16 +4,16 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { TagId } from '@quackback/ids'
+import type { PostTagId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
-  listTags,
+  listPostTags,
   getTagById,
-  createTag,
-  updateTag,
-  deleteTag,
-} from '@/lib/server/domains/tags/tag.service'
+  createPostTag,
+  updatePostTag,
+  deletePostTag,
+} from '@/lib/server/domains/post-tags/post-tag.service'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'tags' })
@@ -71,7 +71,7 @@ export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
   try {
     await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
-    const tags = await listTags()
+    const tags = await listPostTags()
     log.debug({ count: tags.length }, 'fetch tags')
     return tags
   } catch (error) {
@@ -90,7 +90,7 @@ export const fetchTag = createServerFn({ method: 'GET' })
     try {
       await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
-      const tag = await getTagById(data.id as TagId)
+      const tag = await getTagById(data.id as PostTagId)
       log.debug({ found: !!tag }, 'fetch tag')
       return tag
     } catch (error) {
@@ -106,14 +106,14 @@ export const fetchTag = createServerFn({ method: 'GET' })
 /**
  * Create a new tag
  */
-export const createTagFn = createServerFn({ method: 'POST' })
+export const createPostTagFn = createServerFn({ method: 'POST' })
   .validator(createTagSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create tag')
     try {
       await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
-      const tag = await createTag({
+      const tag = await createPostTag({
         name: data.name,
         color: data.color,
         description: data.description,
@@ -129,14 +129,14 @@ export const createTagFn = createServerFn({ method: 'POST' })
 /**
  * Update an existing tag
  */
-export const updateTagFn = createServerFn({ method: 'POST' })
+export const updatePostTagFn = createServerFn({ method: 'POST' })
   .validator(updateTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'update tag')
     try {
       await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
-      const tag = await updateTag(data.id as TagId, {
+      const tag = await updatePostTag(data.id as PostTagId, {
         name: data.name,
         color: data.color,
         description: data.description,
@@ -152,16 +152,16 @@ export const updateTagFn = createServerFn({ method: 'POST' })
 /**
  * Delete a tag
  */
-export const deleteTagFn = createServerFn({ method: 'POST' })
+export const deletePostTagFn = createServerFn({ method: 'POST' })
   .validator(deleteTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'delete tag')
     try {
       await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
-      await deleteTag(data.id as TagId)
+      await deletePostTag(data.id as PostTagId)
       log.info({ tag_id: data.id }, 'tag deleted')
-      return { id: data.id as TagId }
+      return { id: data.id as PostTagId }
     } catch (error) {
       log.error({ err: error }, 'delete tag failed')
       throw error

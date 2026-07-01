@@ -17,8 +17,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { cn } from '@/lib/shared/utils'
-import type { Tag } from '@/lib/shared/db-types'
-import { createTagFn, updateTagFn, deleteTagFn } from '@/lib/server/functions/tags'
+import type { PostTag } from '@/lib/shared/db-types'
+import { createPostTagFn, updatePostTagFn, deletePostTagFn } from '@/lib/server/functions/post-tags'
 
 // ============================================================================
 // Constants
@@ -150,14 +150,14 @@ function ColorHexInput({
 }
 
 // ============================================================================
-// Tag Dialog (Create + Edit)
+// PostTag Dialog (Create + Edit)
 // ============================================================================
 
 interface TagDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  tag: Tag | null
-  onSaved: (saved: Tag) => void
+  tag: PostTag | null
+  onSaved: (saved: PostTag) => void
 }
 
 function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
@@ -203,9 +203,9 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
     setError(null)
 
     try {
-      let saved: Tag
+      let saved: PostTag
       if (isEdit) {
-        saved = await updateTagFn({
+        saved = await updatePostTagFn({
           data: {
             id: tag.id,
             name: trimmedName,
@@ -214,7 +214,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
           },
         })
       } else {
-        saved = await createTagFn({
+        saved = await createPostTagFn({
           data: {
             name: trimmedName,
             color,
@@ -245,7 +245,7 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
             className="inline-flex items-center px-3 py-0.5 rounded-md text-sm font-medium"
             style={{ backgroundColor: color + '20', color }}
           >
-            {name.trim() || 'Tag name'}
+            {name.trim() || 'PostTag name'}
           </span>
         </div>
 
@@ -296,11 +296,11 @@ function TagDialog({ open, onOpenChange, tag, onSaved }: TagDialogProps) {
 }
 
 // ============================================================================
-// Tag List (main export)
+// PostTag List (main export)
 // ============================================================================
 
 interface TagListProps {
-  initialTags: Tag[]
+  initialTags: PostTag[]
 }
 
 export function TagList({ initialTags }: TagListProps) {
@@ -309,17 +309,17 @@ export function TagList({ initialTags }: TagListProps) {
   const [tags, setTags] = useState(initialTags)
   const [savingField, setSavingField] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingTag, setEditingTag] = useState<Tag | null>(null)
-  const [deletingTag, setDeletingTag] = useState<Tag | null>(null)
+  const [editingTag, setEditingTag] = useState<PostTag | null>(null)
+  const [deletingTag, setDeletingTag] = useState<PostTag | null>(null)
 
   // Change color inline — save immediately
-  const handleColorChange = async (tag: Tag, color: string) => {
+  const handleColorChange = async (tag: PostTag, color: string) => {
     const previousColor = tag.color
     setSavingField(`color-${tag.id}`)
     setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, color } : t)))
 
     try {
-      await updateTagFn({ data: { id: tag.id, color } })
+      await updatePostTagFn({ data: { id: tag.id, color } })
       startTransition(() => router.invalidate())
     } catch {
       toast.error('Failed to update color')
@@ -329,7 +329,7 @@ export function TagList({ initialTags }: TagListProps) {
     }
   }
 
-  function handleTagSaved(saved: Tag) {
+  function handleTagSaved(saved: PostTag) {
     if (editingTag) {
       setTags((prev) => prev.map((t) => (t.id === saved.id ? saved : t)))
     } else {
@@ -343,7 +343,7 @@ export function TagList({ initialTags }: TagListProps) {
     setDialogOpen(true)
   }
 
-  function openEdit(tag: Tag) {
+  function openEdit(tag: PostTag) {
     setEditingTag(tag)
     setDialogOpen(true)
   }
@@ -351,7 +351,7 @@ export function TagList({ initialTags }: TagListProps) {
   async function handleDelete() {
     if (!deletingTag) return
     try {
-      await deleteTagFn({ data: { id: deletingTag.id } })
+      await deletePostTagFn({ data: { id: deletingTag.id } })
       setTags((prev) => prev.filter((t) => t.id !== deletingTag.id))
       startTransition(() => router.invalidate())
     } catch (error) {

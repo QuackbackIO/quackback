@@ -1,13 +1,13 @@
 /**
- * Tag domain module exports
+ * PostTag domain module exports
  *
  * IMPORTANT: This barrel export only includes types.
  * Service functions that access the database are NOT exported here to prevent
  * them from being bundled into the client.
  *
- * For service functions, import directly from './tag.service' in server-only code
+ * For service functions, import directly from './post-tag.service' in server-only code
  * (server functions, API routes, etc.)
  */
 
 // Types (no DB dependency)
-export type { CreateTagInput, UpdateTagInput } from './tag.types'
+export type { CreateTagInput, UpdateTagInput } from './post-tag.types'

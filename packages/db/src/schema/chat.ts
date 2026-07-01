@@ -142,7 +142,7 @@ export const chatMessages = pgTable(
 /**
  * Conversation tags — agent-managed, org-wide, created on the fly from a
  * conversation and used to filter the inbox. Same shape as the feedback tag
- * catalog (type ConversationTag mirrors Tag) but intentionally SEPARATE: the two
+ * catalog (type ConversationTag mirrors PostTag) but intentionally SEPARATE: the two
  * share no rows, ids, or lifecycle, so a tag here never leaks into feedback
  * boards and vice-versa. Applied to conversations via `conversation_tag_assignments`.
  */

@@ -13,7 +13,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
-import { boards, tags, roadmaps } from './boards'
+import { boards, postTags, roadmaps } from './boards'
 import { postStatuses } from './statuses'
 import { postExternalLinks } from './external-links'
 import { feedbackSuggestions } from './feedback'
@@ -167,7 +167,7 @@ export const postTagAssignments = pgTable(
       .references(() => posts.id, { onDelete: 'cascade' }),
     tagId: typeIdColumn('tag')('tag_id')
       .notNull()
-      .references(() => tags.id, { onDelete: 'cascade' }),
+      .references(() => postTags.id, { onDelete: 'cascade' }),
   },
   (table) => [
     uniqueIndex('post_tag_assignments_pk').on(table.postId, table.tagId),
@@ -498,9 +498,9 @@ export const postTagAssignmentsRelations = relations(postTagAssignments, ({ one 
     fields: [postTagAssignments.postId],
     references: [posts.id],
   }),
-  tag: one(tags, {
+  tag: one(postTags, {
     fields: [postTagAssignments.tagId],
-    references: [tags.id],
+    references: [postTags.id],
   }),
 }))
 

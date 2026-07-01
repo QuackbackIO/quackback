@@ -69,7 +69,7 @@ export type {
   BoardId,
   CommentId,
   VoteId,
-  TagId,
+  PostTagId,
   StatusId,
   ReactionId,
   PostEditId,

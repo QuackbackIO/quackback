@@ -9,7 +9,7 @@ import {
   commentReactions,
 } from '../schema/posts'
 import { REACTION_EMOJIS, MODERATION_STATES } from '../types'
-import { boards, roadmaps, tags } from '../schema/boards'
+import { boards, roadmaps, postTags } from '../schema/boards'
 import { integrations } from '../schema/integrations'
 import { changelogEntries } from '../schema/changelog'
 import { user, session, settings, principal, invitation } from '../schema/auth'
@@ -65,13 +65,13 @@ describe('Schema definitions', () => {
     })
   })
 
-  describe('tags schema', () => {
+  describe('postTags schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(tags)).toBe('tags')
+      expect(getTableName(postTags)).toBe('post_tags')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(tags))
+      const columns = Object.keys(getTableColumns(postTags))
       expect(columns).toContain('id')
       expect(columns).toContain('name')
       expect(columns).toContain('color')

@@ -8,7 +8,7 @@ import {
   type PrincipalId,
   type SegmentId,
 } from '@quackback/ids'
-import type { BoardId, TagId } from '@quackback/ids'
+import type { BoardId, PostTagId } from '@quackback/ids'
 import {
   getSetupState,
   isOnboardingComplete as checkComplete,
@@ -28,7 +28,7 @@ import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
-import { listTags } from '@/lib/server/domains/tags/tag.service'
+import { listPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
 import { listStatuses } from '@/lib/server/domains/statuses/status.service'
 import {
   listTeamMembers,
@@ -146,7 +146,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
       const result = await listInboxPosts({
         boardIds: data.boardIds as BoardId[] | undefined,
         statusSlugs: data.statusSlugs,
-        tagIds: data.tagIds as TagId[] | undefined,
+        tagIds: data.tagIds as PostTagId[] | undefined,
         segmentIds: data.segmentIds as SegmentId[] | undefined,
         ownerId: data.ownerId as PrincipalId | null | undefined,
         search: data.search,
@@ -209,7 +209,7 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
   try {
     await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
-    const result = await listTags()
+    const result = await listPostTags()
     log.debug({ count: result.length }, 'fetch tags list')
     return result
   } catch (error) {

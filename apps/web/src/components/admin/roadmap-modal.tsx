@@ -26,7 +26,7 @@ import {
 } from '@/lib/client/mutations'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
 import { Route } from '@/routes/admin/roadmap'
-import { type PostId, type StatusId, type TagId, type RoadmapId } from '@quackback/ids'
+import { type PostId, type StatusId, type PostTagId, type RoadmapId } from '@quackback/ids'
 import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { toPortalComments } from '@/components/admin/feedback/detail/post-utils'
@@ -95,7 +95,7 @@ function RoadmapModalContent({ postId, currentUser, onClose }: RoadmapModalConte
     }
   }
 
-  const handleTagsChange = async (tagIds: TagId[]) => {
+  const handleTagsChange = async (tagIds: PostTagId[]) => {
     setIsUpdating(true)
     try {
       await updateTags.mutateAsync({ postId: post.id as PostId, tagIds, allTags: tags })

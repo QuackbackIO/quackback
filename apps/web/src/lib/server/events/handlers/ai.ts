@@ -10,7 +10,7 @@ import type { EventData } from '../types'
 import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment/sentiment.service'
 import { generatePostEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import type { PostId } from '@quackback/ids'
-import { db, postTagAssignments, tags, eq } from '@/lib/server/db'
+import { db, postTagAssignments, postTags, eq } from '@/lib/server/db'
 import { claimHookDelivery } from '../hook-idempotency'
 import { logger } from '@/lib/server/logger'
 
@@ -87,9 +87,9 @@ async function processSentiment(postId: PostId, title: string, content: string):
 async function getPostTagNames(postId: PostId): Promise<string[]> {
   try {
     const result = await db
-      .select({ name: tags.name })
+      .select({ name: postTags.name })
       .from(postTagAssignments)
-      .innerJoin(tags, eq(postTagAssignments.tagId, tags.id))
+      .innerJoin(postTags, eq(postTagAssignments.tagId, postTags.id))
       .where(eq(postTagAssignments.postId, postId))
 
     return result.map((r) => r.name)

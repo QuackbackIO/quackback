@@ -904,6 +904,13 @@
       "when": 1783900800000,
       "tag": "0128_post_tag_assignments_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1783987200000,
+      "tag": "0129_post_tags_catalog_rename",
+      "breakpoints": true
     }
   ]
 }

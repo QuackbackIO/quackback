@@ -135,8 +135,8 @@ export {
   boardsRelations,
   roadmaps,
   roadmapsRelations,
-  tags,
-  tagsRelations,
+  postTags,
+  postTagsRelations,
   // Schema tables - statuses
   DEFAULT_STATUSES,
   postStatuses,

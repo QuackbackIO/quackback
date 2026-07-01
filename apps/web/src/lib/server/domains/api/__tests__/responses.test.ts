@@ -289,7 +289,7 @@ describe('API Responses', () => {
     })
 
     it('should use statusCode fallback for ConflictError with custom code', () => {
-      const err = new ConflictError('DUPLICATE_NAME', 'Tag name already exists')
+      const err = new ConflictError('DUPLICATE_NAME', 'PostTag name already exists')
       expect(handleDomainError(err).status).toBe(409)
     })
 

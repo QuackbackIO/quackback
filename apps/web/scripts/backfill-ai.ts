@@ -31,7 +31,7 @@ try {
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { eq, and, isNull, sql, count } from 'drizzle-orm'
-import { posts, postSentiment, postTagAssignments, tags } from '@quackback/db/schema'
+import { posts, postSentiment, postTagAssignments, postTags } from '@quackback/db/schema'
 import { generateId, type PostId } from '@quackback/ids'
 import { getOpenAI } from '../src/lib/server/domains/ai/config'
 import { getChatModel, getEmbeddingModel } from '../src/lib/server/domains/ai/models'
@@ -194,9 +194,9 @@ function formatPostText(title: string, content: string, tagNames: string[]): str
 async function getPostTagNames(postId: PostId): Promise<string[]> {
   try {
     const result = await db
-      .select({ name: tags.name })
+      .select({ name: postTags.name })
       .from(postTagAssignments)
-      .innerJoin(tags, eq(postTagAssignments.tagId, tags.id))
+      .innerJoin(postTags, eq(postTagAssignments.tagId, postTags.id))
       .where(eq(postTagAssignments.postId, postId))
     return result.map((r) => r.name)
   } catch {

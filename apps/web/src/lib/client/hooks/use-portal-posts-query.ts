@@ -13,7 +13,7 @@ import {
 } from '@/lib/server/functions/public-posts'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
 import type { PublicPostListItem } from '@/lib/shared/types'
-import type { PostId, StatusId, TagId } from '@quackback/ids'
+import type { PostId, StatusId, PostTagId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -93,7 +93,7 @@ async function fetchPublicPosts(
       search: filters.search,
       statusIds: statusIds.length > 0 ? (statusIds as StatusId[]) : undefined,
       statusSlugs: statusSlugs.length > 0 ? statusSlugs : undefined,
-      tagIds: filters.tagIds as TagId[] | undefined,
+      tagIds: filters.tagIds as PostTagId[] | undefined,
       sort: filters.sort || 'top',
       page,
       limit: 20,

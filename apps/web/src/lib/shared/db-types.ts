@@ -6,7 +6,7 @@
  *
  * @example
  * // In a client component:
- * import type { Board, Tag } from '@/lib/shared/db-types'
+ * import type { Board, PostTag } from '@/lib/shared/db-types'
  * import { REACTION_EMOJIS } from '@/lib/shared/db-types'
  */
 

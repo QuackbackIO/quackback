@@ -11,12 +11,18 @@ import {
   posts,
   boards,
   postTagAssignments,
-  tags,
+  postTags,
   votes,
   postStatuses,
   principal as principalTable,
 } from '@/lib/server/db'
-import { toUuid, type PostId, type StatusId, type TagId, type PrincipalId } from '@quackback/ids'
+import {
+  toUuid,
+  type PostId,
+  type StatusId,
+  type PostTagId,
+  type PrincipalId,
+} from '@quackback/ids'
 import type { PublicPostListResult } from './post.types'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
@@ -72,7 +78,7 @@ export interface PostWithVotesAndAvatars {
   authorName: string | null
   principalId: string
   createdAt: Date
-  tags: Array<{ id: TagId; name: string; color: string }>
+  tags: Array<{ id: PostTagId; name: string; color: string }>
   board: { id: string; name: string; slug: string }
   hasVoted: boolean
   avatarUrl: string | null
@@ -83,7 +89,7 @@ interface PostListParams {
   search?: string
   statusIds?: StatusId[]
   statusSlugs?: string[]
-  tagIds?: TagId[]
+  tagIds?: PostTagId[]
   sort?: SortOrder
   page?: number
   limit?: number
@@ -203,7 +209,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       tagsJson: sql<string>`COALESCE(
         (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
          FROM ${postTagAssignments} pt
-         INNER JOIN ${tags} t ON t.id = pt.tag_id
+         INNER JOIN ${postTags} t ON t.id = pt.tag_id
          WHERE pt.post_id = ${posts.id}),
         '[]'
       )`.as('tags_json'),
@@ -243,7 +249,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       authorName: post.authorName,
       principalId: post.principalId,
       createdAt: post.createdAt,
-      tags: parseJson<Array<{ id: TagId; name: string; color: string }>>(post.tagsJson),
+      tags: parseJson<Array<{ id: PostTagId; name: string; color: string }>>(post.tagsJson),
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
       hasVoted: post.hasVoted ?? false,
       avatarUrl: parseAvatarData(post.avatarData),
@@ -277,7 +283,7 @@ export async function listPublicPosts(
       tagsJson: sql<string>`COALESCE(
         (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
          FROM ${postTagAssignments} pt
-         INNER JOIN ${tags} t ON t.id = pt.tag_id
+         INNER JOIN ${postTags} t ON t.id = pt.tag_id
          WHERE pt.post_id = ${posts.id}),
         '[]'
       )`.as('tags_json'),
@@ -306,7 +312,7 @@ export async function listPublicPosts(
     principalId: post.principalId,
     createdAt: post.createdAt,
     commentCount: post.commentCount,
-    tags: parseJson<Array<{ id: TagId; name: string; color: string }>>(post.tagsJson),
+    tags: parseJson<Array<{ id: PostTagId; name: string; color: string }>>(post.tagsJson),
     board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
   }))
 

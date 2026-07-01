@@ -1,10 +1,10 @@
 /**
- * Tag Service - Business logic for tag operations
+ * PostTag Service - Business logic for tag operations
  *
  * This module handles all tag-related business logic including:
- * - Tag creation and updates
- * - Tag deletion
- * - Tag retrieval and listing
+ * - PostTag creation and updates
+ * - PostTag deletion
+ * - PostTag retrieval and listing
  * - Validation
  *
  * Note: Authorization is handled at the action/API layer, not in services.
@@ -16,15 +16,15 @@ import {
   and,
   isNull,
   asc,
-  type Tag,
-  tags,
+  type PostTag,
+  postTags,
   boards,
   postTagAssignments,
   posts,
 } from '@/lib/server/db'
-import type { TagId, BoardId } from '@quackback/ids'
+import type { PostTagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
-import type { CreateTagInput, UpdateTagInput } from './tag.types'
+import type { CreateTagInput, UpdateTagInput } from './post-tag.types'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'tags' })
@@ -33,27 +33,27 @@ const log = logger.child({ component: 'tags' })
  * Create a new tag
  *
  * Validates that:
- * - Tag name is valid and unique within the organization
+ * - PostTag name is valid and unique within the organization
  * - Color is valid
  *
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
-export async function createTag(input: CreateTagInput): Promise<Tag> {
+export async function createPostTag(input: CreateTagInput): Promise<PostTag> {
   log.debug({ name: input.name }, 'create tag')
   // Basic validation
   if (!input.name || !input.name.trim()) {
-    throw new ValidationError('VALIDATION_ERROR', 'Tag name is required')
+    throw new ValidationError('VALIDATION_ERROR', 'PostTag name is required')
   }
 
   const trimmedName = input.name.trim()
 
   if (trimmedName.length > 50) {
-    throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
+    throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
   }
 
   // Check for duplicate name in the organization
-  const existingTags = await db.query.tags.findMany({
-    orderBy: [asc(tags.name)],
+  const existingTags = await db.query.postTags.findMany({
+    orderBy: [asc(postTags.name)],
   })
   const duplicate = existingTags.find((tag) => tag.name.toLowerCase() === trimmedName.toLowerCase())
   if (duplicate) {
@@ -70,7 +70,7 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
 
   // Create the tag
   const [tag] = await db
-    .insert(tags)
+    .insert(postTags)
     .values({
       name: trimmedName,
       color,
@@ -85,24 +85,24 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
  * Update an existing tag
  *
  * Validates that:
- * - Tag exists
+ * - PostTag exists
  * - Update data is valid
  *
  * Note: Authorization should be checked at the action/API layer before calling this.
  */
-export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> {
+export async function updatePostTag(id: PostTagId, input: UpdateTagInput): Promise<PostTag> {
   log.debug({ tag_id: id }, 'update tag')
   // Get existing tag
-  const existingTag = await db.query.tags.findFirst({
-    where: eq(tags.id, id),
+  const existingTag = await db.query.postTags.findFirst({
+    where: eq(postTags.id, id),
   })
   if (!existingTag) {
-    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+    throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)
   }
 
   // Basic validation
   if (input.name !== undefined && !input.name.trim()) {
-    throw new ValidationError('VALIDATION_ERROR', 'Tag name cannot be empty')
+    throw new ValidationError('VALIDATION_ERROR', 'PostTag name cannot be empty')
   }
 
   // Check for duplicate name (excluding current tag)
@@ -110,10 +110,10 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
     const trimmedName = input.name.trim()
 
     if (trimmedName.length > 50) {
-      throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
+      throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
     }
-    const existingTags = await db.query.tags.findMany({
-      orderBy: [asc(tags.name)],
+    const existingTags = await db.query.postTags.findMany({
+      orderBy: [asc(postTags.name)],
     })
     const duplicate = existingTags.find(
       (tag) => tag.id !== id && tag.name.toLowerCase() === trimmedName.toLowerCase()
@@ -135,16 +135,20 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
   }
 
   // Build update data
-  const updateData: Partial<Tag> = {}
+  const updateData: Partial<PostTag> = {}
   if (input.name !== undefined) updateData.name = input.name.trim()
   if (input.color !== undefined) updateData.color = input.color
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
 
   // Update the tag
-  const [updatedTag] = await db.update(tags).set(updateData).where(eq(tags.id, id)).returning()
+  const [updatedTag] = await db
+    .update(postTags)
+    .set(updateData)
+    .where(eq(postTags.id, id))
+    .returning()
 
   if (!updatedTag) {
-    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+    throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)
   }
 
   return updatedTag
@@ -154,35 +158,35 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
  * Soft delete a tag
  *
  * Validates that:
- * - Tag exists and is not already deleted
+ * - PostTag exists and is not already deleted
  *
  * Note: Sets deletedAt timestamp instead of removing the row.
  * Authorization should be checked at the action/API layer before calling this.
  */
-export async function deleteTag(id: TagId): Promise<void> {
+export async function deletePostTag(id: PostTagId): Promise<void> {
   log.debug({ tag_id: id }, 'delete tag')
   // Soft delete the tag by setting deletedAt
   const result = await db
-    .update(tags)
+    .update(postTags)
     .set({ deletedAt: new Date() })
-    .where(and(eq(tags.id, id), isNull(tags.deletedAt)))
+    .where(and(eq(postTags.id, id), isNull(postTags.deletedAt)))
     .returning()
 
   if (result.length === 0) {
-    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+    throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)
   }
 }
 
 /**
  * Get a tag by ID
  */
-export async function getTagById(id: TagId): Promise<Tag> {
+export async function getTagById(id: PostTagId): Promise<PostTag> {
   log.debug({ tag_id: id }, 'get tag by id')
-  const tag = await db.query.tags.findFirst({
-    where: eq(tags.id, id),
+  const tag = await db.query.postTags.findFirst({
+    where: eq(postTags.id, id),
   })
   if (!tag) {
-    throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+    throw new NotFoundError('TAG_NOT_FOUND', `PostTag with ID ${id} not found`)
   }
 
   return tag
@@ -191,11 +195,11 @@ export async function getTagById(id: TagId): Promise<Tag> {
 /**
  * List all tags for the organization (excludes soft-deleted)
  */
-export async function listTags(): Promise<Tag[]> {
+export async function listPostTags(): Promise<PostTag[]> {
   log.debug('list tags')
-  const tagList = await db.query.tags.findMany({
-    where: isNull(tags.deletedAt),
-    orderBy: [asc(tags.name)],
+  const tagList = await db.query.postTags.findMany({
+    where: isNull(postTags.deletedAt),
+    orderBy: [asc(postTags.name)],
   })
 
   return tagList
@@ -206,7 +210,7 @@ export async function listTags(): Promise<Tag[]> {
  *
  * This returns only tags that are actually used by posts in the board.
  */
-export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
+export async function getPostTagsByBoard(boardId: BoardId): Promise<PostTag[]> {
   log.debug({ board_id: boardId }, 'get tags by board')
   // Validate board exists
   const board = await db.query.boards.findFirst({
@@ -218,9 +222,9 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
 
   // Get unique tag IDs used by non-deleted posts in this board
   const tagResults = await db
-    .selectDistinct({ id: tags.id })
-    .from(tags)
-    .innerJoin(postTagAssignments, eq(tags.id, postTagAssignments.tagId))
+    .selectDistinct({ id: postTags.id })
+    .from(postTags)
+    .innerJoin(postTagAssignments, eq(postTags.id, postTagAssignments.tagId))
     .innerJoin(posts, eq(postTagAssignments.postId, posts.id))
     .where(and(eq(posts.boardId, boardId), isNull(posts.deletedAt)))
 
@@ -230,9 +234,9 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
 
   // Fetch full tag details
   const tagIds = tagResults.map((t) => t.id)
-  const tagList = await db.query.tags.findMany({
-    where: (tags, { inArray }) => inArray(tags.id, tagIds),
-    orderBy: [asc(tags.name)],
+  const tagList = await db.query.postTags.findMany({
+    where: (tags, { inArray }) => inArray(postTags.id, tagIds),
+    orderBy: [asc(postTags.name)],
   })
 
   return tagList
@@ -244,12 +248,12 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
  * Returns tags ordered by name.
  * This method is used for public endpoints like feedback portal filtering.
  */
-export async function listPublicTags(): Promise<Tag[]> {
+export async function listPublicPostTags(): Promise<PostTag[]> {
   log.debug('list public tags')
   try {
-    return await db.query.tags.findMany({
-      where: isNull(tags.deletedAt),
-      orderBy: [asc(tags.name)],
+    return await db.query.postTags.findMany({
+      where: isNull(postTags.deletedAt),
+      orderBy: [asc(postTags.name)],
     })
   } catch (error) {
     log.error({ err: error }, 'list public tags failed')

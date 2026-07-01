@@ -19,7 +19,7 @@ import {
   ValidationErrorSchema,
 } from './common'
 
-// Tag nested schema (shared between list and detail)
+// PostTag nested schema (shared between list and detail)
 const TagSchema = z.object({
   id: TypeIdSchema,
   name: z.string(),
@@ -137,7 +137,7 @@ const CreatePostSchema = z
       example: 'board_01h455vb4pex5vsknk084sn02q',
     }),
     statusId: TypeIdSchema.optional().meta({ description: 'Initial status ID' }),
-    tagIds: z.array(TypeIdSchema).optional().meta({ description: 'Tag IDs to assign' }),
+    tagIds: z.array(TypeIdSchema).optional().meta({ description: 'PostTag IDs to assign' }),
   })
   .meta({ description: 'Create post request body' })
 

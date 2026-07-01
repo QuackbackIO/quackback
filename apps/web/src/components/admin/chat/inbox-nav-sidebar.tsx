@@ -113,7 +113,7 @@ const itemClass = (active: boolean) =>
       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
   )
 
-/** A selectable scope row carrying a color + count (a Tag or a Segment). */
+/** A selectable scope row carrying a color + count (a PostTag or a Segment). */
 type ScopeRow = { id: string; name: string; color: string; count: number }
 
 /**
@@ -213,7 +213,7 @@ const segmentNavItem = (id: string): InboxNavItem => ({
 /**
  * Grouped inbox navigation: a Conversations group (Mine / Unassigned / All /
  * Mentions / Saved), a Tags group with per-tag conversation counts, and a
- * Segments group with per-segment open-conversation counts. Tag and segment
+ * Segments group with per-segment open-conversation counts. PostTag and segment
  * scopes are mutually exclusive with each other and the views. Desktop-only
  * (lg+); the mobile equivalent is InboxScopeMenu in the list header.
  */

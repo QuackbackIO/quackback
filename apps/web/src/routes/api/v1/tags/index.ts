@@ -32,9 +32,9 @@ export const Route = createFileRoute('/api/v1/tags/')({
           await withApiKeyAuth(request)
 
           // Import service function
-          const { listTags } = await import('@/lib/server/domains/tags/tag.service')
+          const { listPostTags } = await import('@/lib/server/domains/post-tags/post-tag.service')
 
-          const tags = await listTags()
+          const tags = await listPostTags()
 
           return successResponse(
             tags.map((tag) => ({
@@ -69,9 +69,9 @@ export const Route = createFileRoute('/api/v1/tags/')({
           }
 
           // Import service function
-          const { createTag } = await import('@/lib/server/domains/tags/tag.service')
+          const { createPostTag } = await import('@/lib/server/domains/post-tags/post-tag.service')
 
-          const tag = await createTag({
+          const tag = await createPostTag({
             name: parsed.data.name,
             color: parsed.data.color,
             description: parsed.data.description,

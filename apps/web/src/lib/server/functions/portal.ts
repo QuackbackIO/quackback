@@ -7,7 +7,7 @@ import {
   type RoadmapId,
   type SegmentId,
   type StatusId,
-  type TagId,
+  type PostTagId,
   type UserId,
 } from '@quackback/ids'
 import type { BoardSettings, BoardAccess } from '@/lib/server/db'
@@ -34,7 +34,7 @@ import {
 import { getPublicPostDetail } from '@/lib/server/domains/posts/post.public.detail'
 import { getPostMergeInfo, getMergedPosts } from '@/lib/server/domains/posts/post.merge'
 import { listPublicStatuses } from '@/lib/server/domains/statuses/status.service'
-import { listPublicTags } from '@/lib/server/domains/tags/tag.service'
+import { listPublicPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
 import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscription.service'
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
@@ -166,7 +166,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           boardSlug: data.boardSlug,
           search: data.search,
           statusSlugs: data.statusSlugs,
-          tagIds: data.tagIds as TagId[] | undefined,
+          tagIds: data.tagIds as PostTagId[] | undefined,
           sort: data.sort,
           page: 1,
           limit: 20,
@@ -175,7 +175,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
           responded: data.responded,
         }),
         listPublicStatuses(),
-        listPublicTags(),
+        listPublicPostTags(),
         // Get ALL voted post IDs for this user (runs in parallel, we'll filter to displayed posts)
         data.userId
           ? getVotedPostIdsByUserId(data.userId as UserId)
@@ -426,7 +426,7 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
       log.debug('portal access denied, returning empty')
       return []
     }
-    return await listPublicTags()
+    return await listPublicPostTags()
   } catch (error) {
     log.error({ err: error }, 'fetch public tags failed')
     throw error
@@ -601,7 +601,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
           offset: data.offset ?? 0,
           search: data.search,
           boardIds: data.boardIds as BoardId[] | undefined,
-          tagIds: data.tagIds as TagId[] | undefined,
+          tagIds: data.tagIds as PostTagId[] | undefined,
           segmentIds,
           sort: data.sort,
         },

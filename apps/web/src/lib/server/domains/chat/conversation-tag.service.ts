@@ -1,7 +1,7 @@
 /**
  * Conversation tag service — agent-managed tags for the support inbox.
  *
- * Deliberately separate from the feedback tag service (`domains/tags`): different
+ * Deliberately separate from the feedback tag service (`domains/post-tags`): different
  * tables, ids, and lifecycle, so a conversation tag never leaks into feedback
  * boards and vice-versa. Tags are org-wide, created on the fly from a
  * conversation, and used to filter the inbox. Authorization is enforced at the
@@ -35,9 +35,9 @@ export function normalizeConversationTagInput(input: { name: string; color?: str
   color: string
 } {
   const name = input.name?.trim() ?? ''
-  if (!name) throw new ValidationError('VALIDATION_ERROR', 'Tag name is required')
+  if (!name) throw new ValidationError('VALIDATION_ERROR', 'PostTag name is required')
   if (name.length > 50) {
-    throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
+    throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
   }
   const color = input.color || DEFAULT_COLOR
   if (!HEX_COLOR.test(color)) {
@@ -156,9 +156,9 @@ export async function updateConversationTag(
   const patch: { name?: string; color?: string } = {}
   if (input.name !== undefined) {
     const name = input.name.trim()
-    if (!name) throw new ValidationError('VALIDATION_ERROR', 'Tag name is required')
+    if (!name) throw new ValidationError('VALIDATION_ERROR', 'PostTag name is required')
     if (name.length > 50) {
-      throw new ValidationError('VALIDATION_ERROR', 'Tag name must not exceed 50 characters')
+      throw new ValidationError('VALIDATION_ERROR', 'PostTag name must not exceed 50 characters')
     }
     const live = await db.query.conversationTags.findMany({
       where: isNull(conversationTags.deletedAt),

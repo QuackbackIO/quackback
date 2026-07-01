@@ -9,7 +9,7 @@ import {
   type PostId,
   type StatusId,
   type BoardId,
-  type TagId,
+  type PostTagId,
   type SegmentId,
 } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
@@ -322,7 +322,7 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
         offset: data.offset,
         search: data.search,
         boardIds: data.boardIds as BoardId[] | undefined,
-        tagIds: data.tagIds as TagId[] | undefined,
+        tagIds: data.tagIds as PostTagId[] | undefined,
         segmentIds: data.segmentIds as SegmentId[] | undefined,
         sort: data.sort,
       })

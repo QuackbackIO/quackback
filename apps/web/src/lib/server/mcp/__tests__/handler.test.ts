@@ -264,8 +264,8 @@ vi.mock('@/lib/server/domains/statuses/status.service', () => ({
     .mockResolvedValue([{ id: 'status_test', name: 'Open', slug: 'open', color: '#22c55e' }]),
 }))
 
-vi.mock('@/lib/server/domains/tags/tag.service', () => ({
-  listTags: vi.fn().mockResolvedValue([{ id: 'tag_test', name: 'Bug', color: '#ef4444' }]),
+vi.mock('@/lib/server/domains/post-tags/post-tag.service', () => ({
+  listPostTags: vi.fn().mockResolvedValue([{ id: 'tag_test', name: 'Bug', color: '#ef4444' }]),
 }))
 
 vi.mock('@/lib/server/domains/roadmaps/roadmap.service', () => ({

@@ -33,13 +33,13 @@ import { AuthorSelector, type NewAuthor } from '@/components/shared/author-selec
 import { useCreatePortalUser, useUpdatePortalUser } from '@/lib/client/mutations'
 import { cn } from '@/lib/shared/utils'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
+import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 import type { CurrentUser } from '@/lib/shared/types/inbox'
 import { Form } from '@/components/ui/form'
 
 interface CreatePostDialogProps {
   boards: Board[]
-  tags: Tag[]
+  tags: PostTag[]
   statuses: PostStatusEntity[]
   currentUser: CurrentUser
   onPostCreated?: () => void

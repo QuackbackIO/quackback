@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PostId, PrincipalId, StatusId, TagId } from '@quackback/ids'
+import type { PostId, PrincipalId, StatusId, PostTagId } from '@quackback/ids'
 
 const createActivity = vi.fn()
 const dispatchPostStatusChanged = vi.fn()
@@ -29,7 +29,7 @@ vi.mock('@/lib/server/db', async () => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 
   const postTagsTable = { postId: 'post_id', tagId: 'tag_id', __name: 'postTagAssignments' }
-  const tagsTable = { id: 'tag_id', name: 'tag_name', __name: 'tags' }
+  const tagsTable = { id: 'tag_id', name: 'tag_name', __name: 'post_tags' }
 
   return {
     db: {
@@ -50,7 +50,7 @@ vi.mock('@/lib/server/db', async () => {
     postStatuses: { id: 'status_id' },
     posts: { id: 'post_id' },
     postTagAssignments: postTagsTable,
-    tags: tagsTable,
+    postTags: tagsTable,
     principal: { id: 'principal_id' },
     sql: realSql,
   }
@@ -110,9 +110,9 @@ describe('post.service updatePost', () => {
         name: 'Closed',
         color: '#111111',
       })
-    selectWhere.mockResolvedValueOnce([{ tagId: 'tag_old' as TagId }]).mockResolvedValueOnce([
-      { id: 'tag_old' as TagId, name: 'Old tag' },
-      { id: 'tag_new' as TagId, name: 'New tag' },
+    selectWhere.mockResolvedValueOnce([{ tagId: 'tag_old' as PostTagId }]).mockResolvedValueOnce([
+      { id: 'tag_old' as PostTagId, name: 'Old tag' },
+      { id: 'tag_new' as PostTagId, name: 'New tag' },
     ])
     updateReturning.mockResolvedValue([
       {
@@ -147,7 +147,7 @@ describe('post.service updatePost', () => {
       {
         statusId: 'status_closed' as StatusId,
         ownerPrincipalId: 'principal_next' as PrincipalId,
-        tagIds: ['tag_new' as TagId],
+        tagIds: ['tag_new' as PostTagId],
       },
       {
         principalId: 'principal_actor' as PrincipalId,

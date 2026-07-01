@@ -13,14 +13,14 @@ import { FormError } from '@/components/shared/form-error'
 import { TitleInput } from '@/components/shared/title-input'
 import { usePostImageUpload } from '@/lib/client/hooks/use-image-upload'
 import type { JSONContent } from '@tiptap/react'
-import type { Board, Tag, PostStatusEntity } from '@/lib/shared/db-types'
+import type { Board, PostTag, PostStatusEntity } from '@/lib/shared/db-types'
 
 interface PostFormFieldsProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: UseFormReturn<any>
   boards: Board[]
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   contentJson: JSONContent | null
   onContentChange: (json: JSONContent, html: string, markdown: string) => void
   error?: string

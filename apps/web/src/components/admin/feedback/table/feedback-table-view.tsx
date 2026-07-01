@@ -8,7 +8,7 @@ import { AdminListHeader } from '@/components/admin/admin-list-header'
 import { InboxEmptyState } from '@/components/admin/feedback/inbox-empty-state'
 import { ActiveFiltersBar } from '@/components/admin/feedback/active-filters-bar'
 import { FeedbackRow } from './feedback-row'
-import type { PostListItem, PostStatusEntity, Board, Tag } from '@/lib/shared/db-types'
+import type { PostListItem, PostStatusEntity, Board, PostTag } from '@/lib/shared/db-types'
 import type { TeamMember } from '@/lib/shared/types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import type { InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
@@ -18,7 +18,7 @@ interface FeedbackTableViewProps {
   posts: PostListItem[]
   statuses: PostStatusEntity[]
   boards: Board[]
-  tags: Tag[]
+  tags: PostTag[]
   members: TeamMember[]
   segments?: SegmentListItem[]
   filters: InboxFilters

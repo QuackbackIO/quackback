@@ -57,7 +57,7 @@ import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
   type StatusId,
-  type TagId,
+  type PostTagId,
   type RoadmapId,
   type CommentId,
   type BoardId,
@@ -188,7 +188,7 @@ function PostModalContent({
     }
   }
 
-  const handleTagsChange = async (tagIds: TagId[]) => {
+  const handleTagsChange = async (tagIds: PostTagId[]) => {
     setIsUpdating(true)
     try {
       await updateTags.mutateAsync({ postId: post.id as PostId, tagIds, allTags: tags })

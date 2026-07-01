@@ -25,7 +25,7 @@ import {
   postStatuses,
   posts,
   postTagAssignments,
-  tags,
+  postTags,
   votes,
   principal as principalTable,
   type Post,
@@ -34,7 +34,7 @@ import { sql, isNull } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
 import { createId } from '@quackback/ids'
-import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
+import { type PostId, type PrincipalId, type UserId, type PostTagId } from '@quackback/ids'
 import {
   dispatchPostStatusChanged,
   dispatchPostUpdated,
@@ -505,13 +505,13 @@ export async function updatePost(
 
     if (added.length > 0 || removed.length > 0) {
       // Resolve all tag names in one query
-      const allChangedIds = [...added, ...removed] as TagId[]
+      const allChangedIds = [...added, ...removed] as PostTagId[]
       const tagRows =
         allChangedIds.length > 0
           ? await db
-              .select({ id: tags.id, name: tags.name })
-              .from(tags)
-              .where(inArray(tags.id, allChangedIds))
+              .select({ id: postTags.id, name: postTags.name })
+              .from(postTags)
+              .where(inArray(postTags.id, allChangedIds))
           : []
       const tagNameMap = new Map(tagRows.map((t) => [String(t.id), t.name]))
 

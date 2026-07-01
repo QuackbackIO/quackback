@@ -12,7 +12,7 @@ import { cn } from '@/lib/shared/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { RoadmapFilters } from '@/lib/shared/types'
-import type { Tag } from '@/lib/shared/db-types'
+import type { PostTag } from '@/lib/shared/db-types'
 import type { SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 
 // ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ export interface RoadmapFiltersBarProps {
   onFiltersChange: (updates: Partial<RoadmapFilters>) => void
   onClearAll: () => void
   boards: FilterBarBoard[]
-  tags: Tag[]
+  tags: PostTag[]
   segments?: SegmentListItem[]
   onToggleBoard: (id: string) => void
   onToggleTag: (id: string) => void
@@ -60,7 +60,7 @@ const FILTER_ICON_MAP: Record<RoadmapFilterType, IconComponent> = {
 
 const FILTER_CATEGORIES: { key: FilterCategory; label: string; icon: IconComponent }[] = [
   { key: 'board', label: 'Board', icon: Squares2X2Icon },
-  { key: 'tags', label: 'Tag', icon: TagIcon },
+  { key: 'tags', label: 'PostTag', icon: TagIcon },
   { key: 'segment', label: 'Segment', icon: UserGroupIcon },
 ]
 
@@ -98,7 +98,7 @@ interface ActiveFilter {
 function computeActiveFilters(
   filters: RoadmapFilters,
   boards: FilterBarBoard[],
-  tags: Tag[],
+  tags: PostTag[],
   segments: SegmentListItem[] | undefined,
   onFiltersChange: (updates: Partial<RoadmapFilters>) => void
 ): ActiveFilter[] {
@@ -136,7 +136,7 @@ function computeActiveFilters(
       result.push({
         key: `tag-${id}`,
         type: 'tags',
-        label: 'Tag:',
+        label: 'PostTag:',
         value: tag.name,
         valueId: id,
         options: tagOptions,
@@ -197,7 +197,7 @@ function AddFilterButton({
   onToggleSegment,
 }: {
   boards: FilterBarBoard[]
-  tags: Tag[]
+  tags: PostTag[]
   segments?: SegmentListItem[]
   onToggleBoard: (id: string) => void
   onToggleTag: (id: string) => void

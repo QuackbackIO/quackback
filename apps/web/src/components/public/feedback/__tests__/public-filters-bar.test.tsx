@@ -7,7 +7,7 @@ import {
   PublicFiltersAddButton,
   PublicFiltersToolbarButton,
 } from '../public-filters-bar'
-import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
+import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 
 const statuses: PostStatusEntity[] = [
   {
@@ -26,9 +26,9 @@ const statuses: PostStatusEntity[] = [
   } as PostStatusEntity,
 ]
 
-const tags: Tag[] = [
-  { id: 'tag_1', name: 'Backend', color: '#8b5cf6' } as unknown as Tag,
-  { id: 'tag_2', name: 'Frontend', color: '#ec4899' } as unknown as Tag,
+const tags: PostTag[] = [
+  { id: 'tag_1', name: 'Backend', color: '#8b5cf6' } as unknown as PostTag,
+  { id: 'tag_2', name: 'Frontend', color: '#ec4899' } as unknown as PostTag,
 ]
 
 const boards = [
@@ -83,10 +83,10 @@ describe('PublicFiltersBar', () => {
   })
 
   it('renders combined Tags chip when 3+ tags selected', () => {
-    const tagsMany: Tag[] = [
+    const tagsMany: PostTag[] = [
       ...tags,
-      { id: 'tag_3', name: 'API', color: '#f59e0b' } as unknown as Tag,
-      { id: 'tag_4', name: 'Mobile', color: '#06b6d4' } as unknown as Tag,
+      { id: 'tag_3', name: 'API', color: '#f59e0b' } as unknown as PostTag,
+      { id: 'tag_4', name: 'Mobile', color: '#06b6d4' } as unknown as PostTag,
     ]
     renderBar({
       filters: { sort: 'top', tagIds: ['tag_1', 'tag_2', 'tag_3', 'tag_4'] },

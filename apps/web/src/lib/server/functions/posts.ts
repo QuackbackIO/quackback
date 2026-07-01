@@ -9,7 +9,7 @@ import {
   type PostId,
   type BoardId,
   type StatusId,
-  type TagId,
+  type PostTagId,
   type SegmentId,
   type PrincipalId,
   type UserId,
@@ -184,7 +184,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
         boardIds: data.boardIds as BoardId[] | undefined,
         statusIds: data.statusIds as StatusId[] | undefined,
         statusSlugs: data.statusSlugs,
-        tagIds: data.tagIds as TagId[] | undefined,
+        tagIds: data.tagIds as PostTagId[] | undefined,
         segmentIds: data.segmentIds as SegmentId[] | undefined,
         ownerId: data.ownerId as PrincipalId | null | undefined,
         search: data.search,
@@ -382,7 +382,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
           contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
           boardId: data.boardId as BoardId,
           statusId: data.statusId as StatusId | undefined,
-          tagIds: data.tagIds as TagId[] | undefined,
+          tagIds: data.tagIds as PostTagId[] | undefined,
         },
         author,
         { headers: getRequestHeaders() }
@@ -608,7 +608,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
       await updatePost(
         data.id as PostId,
         {
-          tagIds: data.tagIds as TagId[],
+          tagIds: data.tagIds as PostTagId[],
         },
         {
           principalId: auth.principal.id,

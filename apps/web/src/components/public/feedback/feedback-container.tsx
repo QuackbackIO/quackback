@@ -15,7 +15,7 @@ import { usePublicFilters } from '@/components/public/feedback/use-public-filter
 import { PostCard } from '@/components/public/post-card'
 import type { PublicBoardWithStats } from '@/lib/shared/types'
 import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
-import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
+import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import {
   flattenPublicPosts,
@@ -31,7 +31,7 @@ interface FeedbackContainerProps {
   boards: PublicBoardWithStats[]
   posts: PublicPostListItem[]
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   hasMore: boolean
   votedPostIds: string[]
   currentBoard?: string

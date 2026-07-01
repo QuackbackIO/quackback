@@ -9,7 +9,7 @@ import { useQuery, useInfiniteQuery, type InfiniteData } from '@tanstack/react-q
 import { fetchInboxPostsForAdmin, fetchPostWithDetails } from '@/lib/server/functions/posts'
 import type { InboxFilters, PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult } from '@/lib/shared/db-types'
-import type { BoardId, PrincipalId, PostId, TagId, SegmentId } from '@quackback/ids'
+import type { BoardId, PrincipalId, PostId, PostTagId, SegmentId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -49,7 +49,7 @@ async function fetchInboxPosts(
     data: {
       boardIds: filters.board as BoardId[] | undefined,
       statusSlugs: filters.status,
-      tagIds: filters.tags as TagId[] | undefined,
+      tagIds: filters.tags as PostTagId[] | undefined,
       segmentIds: filters.segmentIds as SegmentId[] | undefined,
       ownerId: (filters.owner || undefined) as PrincipalId | null | undefined,
       search: filters.search,

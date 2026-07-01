@@ -38,7 +38,7 @@ import { VotersAvatarStack } from '@/components/admin/feedback/voters-avatar-sta
 import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
 import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
-import type { PostId, StatusId, TagId, RoadmapId, BoardId } from '@quackback/ids'
+import type { PostId, StatusId, PostTagId, RoadmapId, BoardId } from '@quackback/ids'
 
 export function MetadataSidebarSkeleton({
   variant = 'column',
@@ -261,7 +261,7 @@ interface MetadataSidebarProps {
   /** Callback when status changes */
   onStatusChange?: (statusId: StatusId) => Promise<void>
   /** Callback when tags change */
-  onTagsChange?: (tagIds: TagId[]) => Promise<void>
+  onTagsChange?: (tagIds: PostTagId[]) => Promise<void>
   /** Callback when roadmap added */
   onRoadmapAdd?: (roadmapId: RoadmapId) => Promise<void>
   /** Callback when roadmap removed */
@@ -354,18 +354,18 @@ export function MetadataSidebar({
   const availableRoadmaps = allRoadmaps.filter((r) => !currentRoadmapIds.includes(r.id))
 
   // Handlers for admin mode
-  async function handleTagToggle(tagId: TagId) {
+  async function handleTagToggle(tagId: PostTagId) {
     if (!onTagsChange) return
-    const currentTagIds = tags.map((t) => t.id as TagId)
+    const currentTagIds = tags.map((t) => t.id as PostTagId)
     const newTagIds = currentTagIds.includes(tagId)
       ? currentTagIds.filter((id) => id !== tagId)
       : [...currentTagIds, tagId]
     await onTagsChange(newTagIds)
   }
 
-  async function handleAddTag(tagId: TagId) {
+  async function handleAddTag(tagId: PostTagId) {
     if (!onTagsChange) return
-    const currentTagIds = tags.map((t) => t.id as TagId)
+    const currentTagIds = tags.map((t) => t.id as PostTagId)
     if (!currentTagIds.includes(tagId)) {
       await onTagsChange([...currentTagIds, tagId])
     }
@@ -562,7 +562,7 @@ export function MetadataSidebar({
                 <button
                   key={tag.id}
                   type="button"
-                  onClick={() => handleTagToggle(tag.id as TagId)}
+                  onClick={() => handleTagToggle(tag.id as PostTagId)}
                   disabled={isUpdating}
                   className={cn(
                     'group inline-flex items-center gap-0.5 ps-1.5 pe-1 py-0.5',
@@ -614,7 +614,7 @@ export function MetadataSidebar({
                           <button
                             key={tag.id}
                             type="button"
-                            onClick={() => handleAddTag(tag.id as TagId)}
+                            onClick={() => handleAddTag(tag.id as PostTagId)}
                             className={cn(
                               'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-md',
                               'text-foreground/80 hover:text-foreground hover:bg-muted/60',

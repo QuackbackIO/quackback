@@ -23,7 +23,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import type { PublicFeedbackFilters } from '@/lib/shared/types'
-import type { PostStatusEntity, Tag } from '@/lib/shared/db-types'
+import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { toggleItem } from '@/components/shared/filter-utils'
 import { CircleIcon } from '@/components/shared/filter-menu'
 import {
@@ -61,7 +61,7 @@ interface PublicFiltersBarProps {
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   clearFilters: () => void
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   boards: FilterBarBoard[]
 }
 
@@ -123,7 +123,7 @@ interface AddFilterButtonProps {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   boards: FilterBarBoard[]
   /**
    * Trigger style:
@@ -195,7 +195,7 @@ function AddFilterButton({
         key: 'tag',
         label: intl.formatMessage({
           id: 'portal.feedback.filter.category.tag',
-          defaultMessage: 'Tag',
+          defaultMessage: 'PostTag',
         }),
         icon: TagIcon,
       },
@@ -469,7 +469,7 @@ function buildActiveChips(args: {
   filters: PublicFeedbackFilters
   setFilters: (updates: Partial<PublicFeedbackFilters>) => void
   statuses: PostStatusEntity[]
-  tags: Tag[]
+  tags: PostTag[]
   boards: FilterBarBoard[]
   intl: ReturnType<typeof useIntl>
 }): ActiveChipDescriptor[] {
@@ -544,7 +544,7 @@ function buildActiveChips(args: {
           type: 'tags',
           label: intl.formatMessage({
             id: 'portal.feedback.filter.chip.tag',
-            defaultMessage: 'Tag:',
+            defaultMessage: 'PostTag:',
           }),
           value: tag.name,
           valueId: id,

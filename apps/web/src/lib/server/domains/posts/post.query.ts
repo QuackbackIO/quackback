@@ -12,7 +12,7 @@ import {
   boards,
   postTagAssignments,
   postRoadmaps,
-  tags,
+  postTags,
   comments,
   eq,
   and,
@@ -92,12 +92,12 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
     db.query.boards.findFirst({ where: eq(boards.id, post.boardId) }),
     db
       .select({
-        id: tags.id,
-        name: tags.name,
-        color: tags.color,
+        id: postTags.id,
+        name: postTags.name,
+        color: postTags.color,
       })
       .from(postTagAssignments)
-      .innerJoin(tags, eq(tags.id, postTagAssignments.tagId))
+      .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
       .where(eq(postTagAssignments.postId, postId)),
     db
       .select({ roadmapId: postRoadmaps.roadmapId })

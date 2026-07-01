@@ -1,10 +1,11 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
 import type { StatusId } from '@quackback/ids'
-import type { boards, roadmaps, tags } from './schema/boards'
+import type { boards, roadmaps, postTags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
 import type {
   posts,
   postRoadmaps,
+  postTagAssignments,
   votes,
   comments,
   commentReactions,
@@ -260,9 +261,11 @@ export function getBoardSettings(board: Board): BoardSettings {
 export type Roadmap = InferSelectModel<typeof roadmaps>
 export type NewRoadmap = InferInsertModel<typeof roadmaps>
 
-// Tag types
-export type Tag = InferSelectModel<typeof tags>
-export type NewTag = InferInsertModel<typeof tags>
+// Post tag types (catalog + assignment junction)
+export type PostTag = InferSelectModel<typeof postTags>
+export type NewPostTag = InferInsertModel<typeof postTags>
+export type PostTagAssignment = InferSelectModel<typeof postTagAssignments>
+export type NewPostTagAssignment = InferInsertModel<typeof postTagAssignments>
 
 // Post status types (customizable statuses)
 export type PostStatusEntity = InferSelectModel<typeof postStatuses>
@@ -419,7 +422,7 @@ export type CommentWithReplies = Comment & {
 
 export type PostWithDetails = Post & {
   board: Board
-  tags: Tag[]
+  tags: PostTag[]
   roadmaps: Roadmap[]
   comments: CommentWithReplies[]
   votes: Vote[]
@@ -428,7 +431,7 @@ export type PostWithDetails = Post & {
 // Inbox query types
 export type PostListItem = Post & {
   board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Pick<Tag, 'id' | 'name' | 'color'>[]
+  tags: Pick<PostTag, 'id' | 'name' | 'color'>[]
   commentCount: number
   authorName: string | null
 }

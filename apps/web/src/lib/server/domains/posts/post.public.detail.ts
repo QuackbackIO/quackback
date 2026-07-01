@@ -7,7 +7,7 @@ import {
   posts,
   boards,
   postTagAssignments,
-  tags,
+  postTags,
   comments,
   commentReactions,
   postStatuses,
@@ -135,7 +135,7 @@ export async function getPublicPostDetail(
         tagsJson: sql<string>`COALESCE(
           (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
            FROM ${postTagAssignments} pt
-           INNER JOIN ${tags} t ON t.id = pt.tag_id
+           INNER JOIN ${postTags} t ON t.id = pt.tag_id
            WHERE pt.post_id = ${posts.id}),
           '[]'
         )`.as('tags_json'),
@@ -316,7 +316,7 @@ export async function getPublicPostDetail(
   }
 
   const tagsResult = parseJson<
-    Array<{ id: import('@quackback/ids').TagId; name: string; color: string }>
+    Array<{ id: import('@quackback/ids').PostTagId; name: string; color: string }>
   >(postResult.tagsJson)
   const roadmapsResult = parseJson<Array<{ id: string; name: string; slug: string }>>(
     postResult.roadmapsJson

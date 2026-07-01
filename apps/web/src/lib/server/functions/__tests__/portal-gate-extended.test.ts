@@ -124,8 +124,8 @@ vi.mock('@/lib/server/domains/statuses/status.service', () => ({
   getDefaultStatus: vi.fn(),
 }))
 
-vi.mock('@/lib/server/domains/tags/tag.service', () => ({
-  listPublicTags: (...a: unknown[]) => mockListPublicTags(...a),
+vi.mock('@/lib/server/domains/post-tags/post-tag.service', () => ({
+  listPublicPostTags: (...a: unknown[]) => mockListPublicTags(...a),
 }))
 
 vi.mock('@/lib/server/domains/roadmaps/roadmap.service', () => ({

@@ -6,14 +6,14 @@
 
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { db, posts, tags, postTagAssignments, postStatuses, eq } from '@/lib/server/db'
+import { db, posts, postTags, postTagAssignments, postStatuses, eq } from '@/lib/server/db'
 import {
   boardIdSchema,
   createId,
   type BoardId,
   type PrincipalId,
   type PostId,
-  type TagId,
+  type PostTagId,
   type StatusId,
 } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
@@ -159,9 +159,9 @@ export async function processBatch(
   const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
 
   // Get all existing tags for lookup (we only need id for junction records)
-  const existingTags = await db.query.tags.findMany()
-  const tagMap = new Map<string, { id: TagId }>(
-    existingTags.map((t) => [t.name.toLowerCase(), { id: t.id as TagId }])
+  const existingTags = await db.query.postTags.findMany()
+  const tagMap = new Map<string, { id: PostTagId }>(
+    existingTags.map((t) => [t.name.toLowerCase(), { id: t.id as PostTagId }])
   )
 
   // Collect all unique tag names that need to be created
@@ -285,7 +285,7 @@ export async function processBatch(
   }))
 
   // Build all post-tag junction records (we now know all IDs upfront)
-  const postTagsToInsert: { postId: PostId; tagId: TagId }[] = []
+  const postTagsToInsert: { postId: PostId; tagId: PostTagId }[] = []
 
   for (let i = 0; i < validRows.length; i++) {
     const { row } = validRows[i]
@@ -302,7 +302,7 @@ export async function processBatch(
   // Execute sequential inserts (no interactive transaction needed)
   // Insert new tags first
   if (newTagsWithIds.length > 0) {
-    await db.insert(tags).values(newTagsWithIds)
+    await db.insert(postTags).values(newTagsWithIds)
     result.createdTags = tagsToCreateArray
   }
 

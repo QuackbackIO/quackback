@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm'
 import postgres from 'postgres'
 import { generateId } from '@quackback/ids'
 import type {
-  TagId,
+  PostTagId,
   BoardId,
   StatusId,
   PrincipalId,
@@ -24,7 +24,7 @@ import type {
   RawFeedbackItemId,
 } from '@quackback/ids'
 import { user, account, settings, principal } from './schema/auth'
-import { boards, tags, roadmaps } from './schema/boards'
+import { boards, postTags, roadmaps } from './schema/boards'
 import { posts, postTagAssignments, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
 import { changelogEntries, changelogEntryPosts } from './schema/changelog'
@@ -389,15 +389,15 @@ async function seed() {
   }
 
   // Create or get tags
-  const tagIds: TagId[] = []
-  const existingTags = await db.select().from(tags)
+  const tagIds: PostTagId[] = []
+  const existingTags = await db.select().from(postTags)
   if (existingTags.length > 0) {
     tagIds.push(...existingTags.map((t) => t.id))
     console.log(`Using ${existingTags.length} existing tags`)
   } else {
     for (const t of tagPresets) {
       const tagId = generateId('tag')
-      await db.insert(tags).values({
+      await db.insert(postTags).values({
         id: tagId,
         name: t.name,
         color: t.color,
@@ -493,7 +493,7 @@ async function seed() {
 
       // Add 1-2 tags
       const numTags = 1 + Math.floor(Math.random() * 2)
-      const usedTags = new Set<TagId>()
+      const usedTags = new Set<PostTagId>()
       for (let t = 0; t < numTags; t++) {
         const tagId = pick(tagIds)
         if (!usedTags.has(tagId)) {

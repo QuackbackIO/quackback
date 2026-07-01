@@ -2,8 +2,8 @@
  * Input/Output types for PostService operations
  */
 
-import type { Post, Board, BoardAccess, Tag, TiptapContent } from '@/lib/server/db'
-import type { PostId, BoardId, TagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
+import type { Post, Board, BoardAccess, PostTag, TiptapContent } from '@/lib/server/db'
+import type { PostId, BoardId, PostTagId, StatusId, PrincipalId, CommentId } from '@quackback/ids'
 import type { CommentReactionCount, CommentStatusChange } from '@/lib/shared'
 
 /**
@@ -15,7 +15,7 @@ export interface CreatePostInput {
   content?: string
   contentJson?: TiptapContent | null
   statusId?: StatusId
-  tagIds?: TagId[]
+  tagIds?: PostTagId[]
   widgetMetadata?: Record<string, string>
   /** Override creation timestamp (admin-only, for imports) */
   createdAt?: Date
@@ -31,7 +31,7 @@ export interface UpdatePostInput {
   content?: string
   contentJson?: TiptapContent | null
   statusId?: StatusId
-  tagIds?: TagId[]
+  tagIds?: PostTagId[]
   ownerPrincipalId?: PrincipalId | null
 }
 
@@ -63,7 +63,7 @@ export interface PostWithDetails extends Post {
     slug: string
   }
   tags: Array<{
-    id: TagId
+    id: PostTagId
     name: string
     color: string
   }>
@@ -90,7 +90,7 @@ export interface PublicPostListItem {
   principalId: PrincipalId | null
   createdAt: Date
   commentCount: number
-  tags: Array<{ id: TagId; name: string; color: string }>
+  tags: Array<{ id: PostTagId; name: string; color: string }>
   board?: { id: BoardId; name: string; slug: string }
 }
 
@@ -112,7 +112,7 @@ export interface InboxPostListParams {
   statusIds?: StatusId[]
   /** Filter by status slugs - uses indexed lookup */
   statusSlugs?: string[]
-  tagIds?: TagId[]
+  tagIds?: PostTagId[]
   /** Filter by segment IDs - posts whose author is in any of these segments */
   segmentIds?: import('@quackback/ids').SegmentId[]
   ownerId?: string | null
@@ -145,7 +145,7 @@ export interface InboxPostListResult {
  */
 export interface PostListItem extends Post {
   board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Array<Pick<Tag, 'id' | 'name' | 'color'>>
+  tags: Array<Pick<PostTag, 'id' | 'name' | 'color'>>
   commentCount: number
   /** Author name resolved from member->user relation */
   authorName: string | null
@@ -286,7 +286,7 @@ export interface AdminEditPostInput {
   content: string
   contentJson?: TiptapContent | null
   statusId?: StatusId
-  tagIds: TagId[]
+  tagIds: PostTagId[]
 }
 
 /**

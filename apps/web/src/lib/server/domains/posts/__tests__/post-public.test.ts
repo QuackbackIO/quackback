@@ -74,7 +74,11 @@ vi.mock('@/lib/server/db', () => ({
     postId: Symbol('postTagAssignments.postId'),
     tagId: Symbol('postTagAssignments.tagId'),
   },
-  tags: { id: Symbol('tags.id'), name: Symbol('tags.name'), color: Symbol('tags.color') },
+  postTags: {
+    id: Symbol('postTags.id'),
+    name: Symbol('postTags.name'),
+    color: Symbol('postTags.color'),
+  },
   votes: { postId: Symbol('votes.postId'), principalId: Symbol('votes.principalId') },
   principal: { id: Symbol('principal.id') },
 }))

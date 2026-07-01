@@ -4,12 +4,12 @@ import type {
   NewBoard,
   Roadmap,
   NewRoadmap,
-  Tag,
-  NewTag,
-  Post,
-  NewPost,
   PostTag,
   NewPostTag,
+  Post,
+  NewPost,
+  PostTagAssignment,
+  NewPostTagAssignment,
   PostRoadmap,
   NewPostRoadmap,
   Vote,
@@ -77,15 +77,15 @@ describe('Type definitions', () => {
     })
   })
 
-  describe('Tag types', () => {
-    it('Tag has correct shape', () => {
-      expectTypeOf<Tag>().toHaveProperty('id')
-      expectTypeOf<Tag>().toHaveProperty('name')
-      expectTypeOf<Tag>().toHaveProperty('color')
+  describe('PostTag types', () => {
+    it('PostTag has correct shape', () => {
+      expectTypeOf<PostTag>().toHaveProperty('id')
+      expectTypeOf<PostTag>().toHaveProperty('name')
+      expectTypeOf<PostTag>().toHaveProperty('color')
     })
 
-    it('NewTag has required fields', () => {
-      expectTypeOf<NewTag>().toHaveProperty('name')
+    it('NewPostTag has required fields', () => {
+      expectTypeOf<NewPostTag>().toHaveProperty('name')
     })
   })
 
@@ -112,14 +112,14 @@ describe('Type definitions', () => {
   })
 
   describe('Junction table types', () => {
-    it('PostTag has correct shape', () => {
-      expectTypeOf<PostTag>().toHaveProperty('postId')
-      expectTypeOf<PostTag>().toHaveProperty('tagId')
+    it('PostTagAssignment has correct shape', () => {
+      expectTypeOf<PostTagAssignment>().toHaveProperty('postId')
+      expectTypeOf<PostTagAssignment>().toHaveProperty('tagId')
     })
 
-    it('NewPostTag has required fields', () => {
-      expectTypeOf<NewPostTag>().toHaveProperty('postId')
-      expectTypeOf<NewPostTag>().toHaveProperty('tagId')
+    it('NewPostTagAssignment has required fields', () => {
+      expectTypeOf<NewPostTagAssignment>().toHaveProperty('postId')
+      expectTypeOf<NewPostTagAssignment>().toHaveProperty('tagId')
     })
 
     it('PostRoadmap has correct shape', () => {
@@ -224,7 +224,7 @@ describe('Type definitions', () => {
       expectTypeOf<PostWithTags>().toHaveProperty('id')
       expectTypeOf<PostWithTags>().toHaveProperty('title')
       expectTypeOf<PostWithTags>().toHaveProperty('tags')
-      expectTypeOf<PostWithTags['tags']>().toEqualTypeOf<Tag[]>()
+      expectTypeOf<PostWithTags['tags']>().toEqualTypeOf<PostTag[]>()
     })
 
     it('PostWithRoadmaps extends Post with roadmaps array', () => {

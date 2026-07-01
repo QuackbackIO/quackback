@@ -18,7 +18,7 @@ import {
   ValidationErrorSchema,
 } from './common'
 
-// Tag schema
+// PostTag schema
 const TagSchema = z.object({
   id: TypeIdSchema.meta({ example: 'tag_01h455vb4pex5vsknk084sn02q' }),
   name: z.string().meta({ example: 'Bug' }),
@@ -29,8 +29,8 @@ const TagSchema = z.object({
 // Request body schemas
 const CreateTagSchema = z
   .object({
-    name: z.string().min(1).max(50).meta({ description: 'Tag name', example: 'Bug' }),
-    color: HexColorSchema.optional().meta({ description: 'Tag color', default: '#6b7280' }),
+    name: z.string().min(1).max(50).meta({ description: 'PostTag name', example: 'Bug' }),
+    color: HexColorSchema.optional().meta({ description: 'PostTag color', default: '#6b7280' }),
   })
   .meta({ description: 'Create tag request body' })
 
@@ -80,7 +80,7 @@ registerPath('/tags', {
     },
     responses: {
       201: {
-        description: 'Tag created',
+        description: 'PostTag created',
         content: {
           'application/json': { schema: createItemResponseSchema(TagSchema, 'Created tag') },
         },
@@ -109,14 +109,14 @@ registerPath('/tags/{tagId}', {
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Tag ID',
+        description: 'PostTag ID',
       },
     ],
     responses: {
       200: {
-        description: 'Tag details',
+        description: 'PostTag details',
         content: {
-          'application/json': { schema: createItemResponseSchema(TagSchema, 'Tag details') },
+          'application/json': { schema: createItemResponseSchema(TagSchema, 'PostTag details') },
         },
       },
       401: {
@@ -124,7 +124,7 @@ registerPath('/tags/{tagId}', {
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
       },
       404: {
-        description: 'Tag not found',
+        description: 'PostTag not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },
@@ -143,7 +143,7 @@ registerPath('/tags/{tagId}', {
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Tag ID',
+        description: 'PostTag ID',
       },
     ],
     requestBody: {
@@ -156,7 +156,7 @@ registerPath('/tags/{tagId}', {
     },
     responses: {
       200: {
-        description: 'Tag updated',
+        description: 'PostTag updated',
         content: {
           'application/json': { schema: createItemResponseSchema(TagSchema, 'Updated tag') },
         },
@@ -170,7 +170,7 @@ registerPath('/tags/{tagId}', {
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
       },
       404: {
-        description: 'Tag not found',
+        description: 'PostTag not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },
@@ -189,17 +189,17 @@ registerPath('/tags/{tagId}', {
         in: 'path',
         required: true,
         schema: { type: 'string' },
-        description: 'Tag ID',
+        description: 'PostTag ID',
       },
     ],
     responses: {
-      204: { description: 'Tag deleted' },
+      204: { description: 'PostTag deleted' },
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },
       },
       404: {
-        description: 'Tag not found',
+        description: 'PostTag not found',
         content: { 'application/json': { schema: NotFoundErrorSchema } },
       },
     },

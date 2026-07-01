@@ -5,7 +5,7 @@
  * Moved here to centralize domain types and fix import direction.
  */
 
-import type { Board, Tag } from '@/lib/shared/db-types'
+import type { Board, PostTag } from '@/lib/shared/db-types'
 import type { PostId, StatusId, CommentId, PrincipalId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
@@ -48,7 +48,7 @@ export interface PostDetails {
   authorEmail: string | null
   createdAt: Date
   board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Pick<Tag, 'id' | 'name' | 'color'>[]
+  tags: Pick<PostTag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
   /** Pinned comment as official response */
   pinnedComment: PinnedComment | null

@@ -610,9 +610,12 @@ test.describe('Admin Roadmap - Cross-View Verification', () => {
       return
     }
 
-    const statusPicker = detailModal
-      .locator('[data-testid="status-selector"]')
-      .or(detailModal.locator('button').filter({ hasText: /open|under review|planned|in progress|complete|closed/i }).first())
+    const statusPicker = detailModal.locator('[data-testid="status-selector"]').or(
+      detailModal
+        .locator('button')
+        .filter({ hasText: /open|under review|planned|in progress|complete|closed/i })
+        .first()
+    )
 
     if ((await statusPicker.count()) === 0) {
       test.skip()
@@ -622,7 +625,8 @@ test.describe('Admin Roadmap - Cross-View Verification', () => {
     await statusPicker.first().click()
 
     // Select "Planned" (showOnRoadmap = true in seed defaults)
-    const plannedOption = page.getByRole('option', { name: /^planned$/i })
+    const plannedOption = page
+      .getByRole('option', { name: /^planned$/i })
       .or(page.locator('[role="menuitem"]').filter({ hasText: /^planned$/i }))
       .or(page.getByText(/^planned$/i).first())
 
@@ -795,12 +799,12 @@ test.describe('Admin Roadmap - Filters bar', () => {
       if ((await addFilterBtn.count()) > 0) {
         await addFilterBtn.click()
 
-        // Popover should open with Board / Tag categories
+        // Popover should open with Board / PostTag categories
         const popover = page.locator('[data-slot="popover-content"]')
         await expect(popover).toBeVisible({ timeout: 5000 })
 
         await expect(popover.getByText('Board')).toBeVisible()
-        await expect(popover.getByText('Tag')).toBeVisible()
+        await expect(popover.getByText('PostTag')).toBeVisible()
 
         // Close popover
         await page.keyboard.press('Escape')

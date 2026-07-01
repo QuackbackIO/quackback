@@ -274,6 +274,11 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/post-merge.ts`::unmergePostFn | post.merge |
 | `lib/server/functions/post-merge.ts`::getMergedPostsFn | post.view_private |
 | `lib/server/functions/post-merge.ts`::fetchMergePreviewFn | post.view_private |
+| `lib/server/functions/post-tags.ts`::fetchTags | tag.view |
+| `lib/server/functions/post-tags.ts`::fetchTag | tag.view |
+| `lib/server/functions/post-tags.ts`::createPostTagFn | tag.manage |
+| `lib/server/functions/post-tags.ts`::updatePostTagFn | tag.manage |
+| `lib/server/functions/post-tags.ts`::deletePostTagFn | tag.manage |
 | `lib/server/functions/posts.ts`::fetchInboxPostsForAdmin | post.view_private |
 | `lib/server/functions/posts.ts`::fetchPostWithDetails | post.view_private |
 | `lib/server/functions/posts.ts`::fetchPostVotersFn | post.view_private |
@@ -353,11 +358,6 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/subscriptions.ts`::unsubscribeFromPostFn | END_USER (any authenticated) |
 | `lib/server/functions/subscriptions.ts`::updateSubscriptionLevelFn | END_USER (any authenticated) |
 | `lib/server/functions/subscriptions.ts`::adminUpdateVoterSubscriptionFn | post.vote_on_behalf |
-| `lib/server/functions/tags.ts`::fetchTags | tag.view |
-| `lib/server/functions/tags.ts`::fetchTag | tag.view |
-| `lib/server/functions/tags.ts`::createTagFn | tag.manage |
-| `lib/server/functions/tags.ts`::updateTagFn | tag.manage |
-| `lib/server/functions/tags.ts`::deleteTagFn | tag.manage |
 | `lib/server/functions/uploads.ts`::getPresignedUploadUrlFn | post.create |
 | `lib/server/functions/uploads.ts`::getChangelogImageUploadUrlFn | changelog.manage |
 | `lib/server/functions/uploads.ts`::getPostImageUploadUrlFn | post.create |

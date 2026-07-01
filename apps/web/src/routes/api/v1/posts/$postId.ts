@@ -15,7 +15,7 @@ import {
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { PostId, StatusId, TagId, PrincipalId } from '@quackback/ids'
+import type { PostId, StatusId, PostTagId, PrincipalId } from '@quackback/ids'
 import type { MergedPostSummary } from '@/lib/server/domains/posts/post.types'
 
 // Input validation schema
@@ -134,7 +134,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           )
           const tagIds =
             parsed.data.tagIds !== undefined
-              ? parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
+              ? parseTypeIdArray<PostTagId>(parsed.data.tagIds, 'tag', 'tag IDs')
               : undefined
 
           const { updatePost } = await import('@/lib/server/domains/posts/post.service')

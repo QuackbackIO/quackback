@@ -101,7 +101,7 @@ import type { McpAuthContext, McpScope } from './types'
 import type {
   PostId,
   BoardId,
-  TagId,
+  PostTagId,
   StatusId,
   PrincipalId,
   CommentId,
@@ -399,7 +399,7 @@ const createPostSchema = {
       'Post content (max 10,000 characters). Markdown (GFM). Images via ![alt](url) are auto-rehosted to workspace storage on save. See tool description for full format details.'
     ),
   statusId: z.string().optional().describe('Initial status TypeID (defaults to board default)'),
-  tagIds: z.array(z.string()).optional().describe('Tag TypeIDs to apply'),
+  tagIds: z.array(z.string()).optional().describe('PostTag TypeIDs to apply'),
 }
 
 const votePostSchema = {
@@ -951,7 +951,7 @@ Examples:
           args.postId as PostId,
           {
             statusId: args.statusId as StatusId | undefined,
-            tagIds: args.tagIds as TagId[] | undefined,
+            tagIds: args.tagIds as PostTagId[] | undefined,
             ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
           },
           {
@@ -1183,7 +1183,7 @@ Examples:
             title: args.title,
             content: args.content ?? '',
             statusId: args.statusId as StatusId | undefined,
-            tagIds: args.tagIds as TagId[] | undefined,
+            tagIds: args.tagIds as PostTagId[] | undefined,
           },
           {
             principalId: auth.principalId,
@@ -2333,7 +2333,7 @@ async function searchPosts(args: SearchArgs): Promise<CallToolResult> {
     search: args.query,
     boardIds: args.boardId ? [args.boardId as BoardId] : undefined,
     statusSlugs: args.status ? [args.status] : undefined,
-    tagIds: args.tagIds as TagId[] | undefined,
+    tagIds: args.tagIds as PostTagId[] | undefined,
     dateFrom: args.dateFrom ? new Date(args.dateFrom) : undefined,
     dateTo: (() => {
       if (!args.dateTo) return undefined

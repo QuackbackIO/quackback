@@ -118,7 +118,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     conditions.push(sql`${posts.commentCount} >= ${minComments}`)
   }
 
-  // Tag filter - use subquery to find posts with at least one of the selected tags
+  // PostTag filter - use subquery to find posts with at least one of the selected tags
   if (tagIds && tagIds.length > 0) {
     const postIdsWithTagsSubquery = db
       .selectDistinct({ postId: postTagAssignments.postId })

@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { BoardId, TagId, PrincipalId, PostId, RoadmapId } from '@quackback/ids'
+import type { BoardId, PostTagId, PrincipalId, PostId, RoadmapId } from '@quackback/ids'
 import {
   fetchInboxPosts,
   fetchBoardsList,
@@ -42,7 +42,7 @@ import type { PortalUserListParams } from '@/lib/shared/types'
 export interface InboxPostListParams {
   boardIds?: BoardId[]
   statusSlugs?: string[]
-  tagIds?: TagId[]
+  tagIds?: PostTagId[]
   ownerId?: PrincipalId | null | undefined
   search?: string
   dateFrom?: string

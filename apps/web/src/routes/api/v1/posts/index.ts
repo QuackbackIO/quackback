@@ -15,7 +15,7 @@ import {
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { BoardId, PrincipalId, StatusId, TagId } from '@quackback/ids'
+import type { BoardId, PrincipalId, StatusId, PostTagId } from '@quackback/ids'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 // Input validation schemas
@@ -66,7 +66,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
           const { listInboxPosts } = await import('@/lib/server/domains/posts/post.inbox')
 
           const tagIdArray = tagIdsParam
-            ? (tagIdsParam.split(',').filter((id) => id && isValidTypeId(id, 'tag')) as TagId[])
+            ? (tagIdsParam.split(',').filter((id) => id && isValidTypeId(id, 'tag')) as PostTagId[])
             : undefined
 
           const dateFrom = dateFromParam ? new Date(dateFromParam) : undefined
@@ -146,7 +146,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
             'status',
             'status ID'
           )
-          const tagIds = parseTypeIdArray<TagId>(parsed.data.tagIds, 'tag', 'tag IDs')
+          const tagIds = parseTypeIdArray<PostTagId>(parsed.data.tagIds, 'tag', 'tag IDs')
 
           // Admin-only override; mirrors how createdAt is gated below.
           const overridePrincipalId =

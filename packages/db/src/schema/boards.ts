@@ -48,8 +48,8 @@ export const roadmaps = pgTable(
   ]
 )
 
-export const tags = pgTable(
-  'tags',
+export const postTags = pgTable(
+  'post_tags',
   {
     id: typeIdWithDefault('tag')('id').primaryKey(),
     name: text('name').notNull().unique(),
@@ -59,7 +59,7 @@ export const tags = pgTable(
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  (table) => [index('tags_deleted_at_idx').on(table.deletedAt)]
+  (table) => [index('post_tags_deleted_at_idx').on(table.deletedAt)]
 )
 
 // Relations - defined after posts import to avoid circular dependency
@@ -75,7 +75,7 @@ export const roadmapsRelations = relations(roadmaps, ({ many }) => ({
   postRoadmaps: many(postRoadmaps),
 }))
 
-export const tagsRelations = relations(tags, ({ many }) => ({
+export const postTagsRelations = relations(postTags, ({ many }) => ({
   postTagAssignments: many(postTagAssignments),
 }))
 

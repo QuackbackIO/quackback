@@ -90,8 +90,8 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
     'quackback://tags',
     { description: 'List all tags' },
     scopeGated(auth, 'read:feedback', async () => {
-      const { listTags } = await import('@/lib/server/domains/tags/tag.service')
-      const tags = await listTags()
+      const { listPostTags } = await import('@/lib/server/domains/post-tags/post-tag.service')
+      const tags = await listPostTags()
       return jsonResource(
         'tags',
         tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))

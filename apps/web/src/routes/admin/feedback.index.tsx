@@ -3,7 +3,7 @@ import { useSuspenseQuery, useQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
 import { InboxContainer } from '@/components/admin/feedback/inbox-container'
-import { type BoardId, type TagId, type PrincipalId } from '@quackback/ids'
+import { type BoardId, type PostTagId, type PrincipalId } from '@quackback/ids'
 import type { InboxPostListResult } from '@/lib/shared/db-types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
@@ -39,7 +39,7 @@ export const Route = createFileRoute('/admin/feedback/')({
 
     // Parse filter params
     const boardFilterIds = (deps.board || []) as BoardId[]
-    const tagFilterIds = (deps.tags || []) as TagId[]
+    const tagFilterIds = (deps.tags || []) as PostTagId[]
     const statusFilterSlugs = deps.status || []
     const ownerFilterId = deps.owner
 
@@ -107,7 +107,7 @@ function FeedbackIndexPage() {
 
   // Parse filter params
   const boardFilterIds = (search.board || []) as BoardId[]
-  const tagFilterIds = (search.tags || []) as TagId[]
+  const tagFilterIds = (search.tags || []) as PostTagId[]
   const statusFilterSlugs = search.status || []
   const ownerFilterId = search.owner
 
