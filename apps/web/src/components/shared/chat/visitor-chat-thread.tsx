@@ -2,17 +2,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { buildChatRows, type ChatRow } from './chat-rows'
-import { ChatPresenceBadge } from './chat-presence-badge'
-import { chatAvailable } from '@/lib/shared/chat/presence'
+import { ConversationPresenceBadge } from './chat-presence-badge'
+import { chatAvailable } from '@/lib/shared/conversation/presence'
 import { PaperAirplaneIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftRightIcon, PaperClipIcon, BookOpenIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { TypingDots } from '@/components/shared/typing-dots'
-import { ChatAttachmentList } from '@/components/shared/chat-attachments'
+import { ConversationAttachmentList } from '@/components/shared/chat-attachments'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
-import { personalizeMessage, firstNameOf } from '@/lib/shared/chat/personalize'
+import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
 import { useChatStream } from '@/lib/client/hooks/use-chat-stream'
 import { useChatTyping } from '@/lib/client/hooks/use-chat-typing'
 import { useChatComposerAttachments } from '@/lib/client/hooks/use-chat-composer-attachments'
@@ -28,8 +28,11 @@ import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import type { JSONContent } from '@tiptap/core'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import type { ChatAttachment, ConversationMessageDTO } from '@/lib/shared/chat/types'
-import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/chat/jumbo-emoji'
+import type {
+  ConversationAttachment,
+  ConversationMessageDTO,
+} from '@/lib/shared/conversation/types'
+import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
 import {
   getMyChatFn,
   sendConversationMessageFn,
@@ -38,7 +41,7 @@ import {
   mintChatStreamTokenFn,
   sendChatTypingFn,
   submitCsatFn,
-} from '@/lib/server/functions/chat'
+} from '@/lib/server/functions/conversation'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -769,7 +772,7 @@ export function VisitorChatThread({
     <div className="flex flex-col h-full">
       {/* Presence strip */}
       <div className="flex items-center px-4 py-2 border-b border-border/40 shrink-0">
-        <ChatPresenceBadge available={available} />
+        <ConversationPresenceBadge available={available} />
       </div>
 
       <div className="relative flex-1 min-h-0">
@@ -1004,7 +1007,7 @@ interface ChatBubbleProps {
   contentJson?: TiptapContent | null
   authorName?: string
   authorAvatar?: string | null
-  attachments?: ChatAttachment[]
+  attachments?: ConversationAttachment[]
   time?: string
   linkPreviews?: boolean
   getAuthHeaders?: () => Record<string, string>
@@ -1062,7 +1065,9 @@ function ChatBubble({
             </div>
           )
         )}
-        {attachments && attachments.length > 0 && <ChatAttachmentList attachments={attachments} />}
+        {attachments && attachments.length > 0 && (
+          <ConversationAttachmentList attachments={attachments} />
+        )}
         {linkPreviews && (
           <LinkPreviews
             content={content}

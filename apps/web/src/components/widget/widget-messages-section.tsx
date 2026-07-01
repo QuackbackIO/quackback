@@ -1,11 +1,11 @@
 import { FormattedMessage } from 'react-intl'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
-import { chatAvailable } from '@/lib/shared/chat/presence'
-import { useChatSummary } from './use-chat-summary'
+import { chatAvailable } from '@/lib/shared/conversation/presence'
+import { useConversationSummary } from './use-chat-summary'
 import { WidgetResumeCard } from './widget-resume-card'
 import { WidgetConversationHistory } from './widget-conversation-history'
-import { ChatPresenceBadge } from '@/components/shared/chat/chat-presence-badge'
+import { ConversationPresenceBadge } from '@/components/shared/chat/chat-presence-badge'
 
 interface WidgetMessagesSectionProps {
   /** Open a conversation: an id opens that thread, 'new' starts a fresh one,
@@ -19,7 +19,7 @@ interface WidgetMessagesSectionProps {
  * "New conversation" entry so a visitor can start a thread even with one open.
  */
 export function WidgetMessagesSection({ onOpenChat }: WidgetMessagesSectionProps) {
-  const { conversation, teamName, agentsOnline, withinOfficeHours } = useChatSummary(true)
+  const { conversation, teamName, agentsOnline, withinOfficeHours } = useConversationSummary(true)
   const available = chatAvailable(agentsOnline, withinOfficeHours)
 
   return (
@@ -56,7 +56,7 @@ export function WidgetMessagesSection({ onOpenChat }: WidgetMessagesSectionProps
               <FormattedMessage id="widget.messages.start" defaultMessage="Send us a message" />
             )}
           </span>
-          <ChatPresenceBadge available={available} className="mt-0.5" />
+          <ConversationPresenceBadge available={available} className="mt-0.5" />
         </span>
       </button>
     </div>

@@ -26,7 +26,8 @@ export const Route = createFileRoute('/api/v1/conversations/')({
           const assignedAgentPrincipalId =
             (url.searchParams.get('assignedAgentPrincipalId') as PrincipalId | null) ?? undefined
 
-          const { listConversationsForAgent } = await import('@/lib/server/domains/chat/chat.query')
+          const { listConversationsForAgent } =
+            await import('@/lib/server/domains/conversation/conversation.query')
           const result = await listConversationsForAgent({
             status,
             priority,

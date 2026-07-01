@@ -28,8 +28,9 @@ export const Route = createFileRoute('/api/v1/conversations/$conversationId/mess
           const includeInternal = url.searchParams.get('includeInternal') === 'true'
 
           const { assertConversationViewable } =
-            await import('@/lib/server/domains/chat/chat.service')
-          const { listMessages } = await import('@/lib/server/domains/chat/chat.query')
+            await import('@/lib/server/domains/conversation/conversation.service')
+          const { listMessages } =
+            await import('@/lib/server/domains/conversation/conversation.query')
 
           // team-role API key: canViewConversation short-circuits on role; segments unused
           const actor = {

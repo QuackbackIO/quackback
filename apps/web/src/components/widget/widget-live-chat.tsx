@@ -4,7 +4,7 @@ import type { ConversationId } from '@quackback/ids'
 import { VisitorChatThread } from '@/components/shared/chat/visitor-chat-thread'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { useChatPresence, markAgentPresentInCache } from './use-chat-presence'
+import { useConversationPresence, markAgentPresentInCache } from './use-chat-presence'
 import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
 
 interface WidgetLiveChatProps {
@@ -35,7 +35,7 @@ export function WidgetLiveChat({
   const { user, ensureSession, sessionVersion } = useWidgetAuth()
   // Presence (online/offline + office hours) comes from the one shared query —
   // SSR-seeded, polled once, and shared with every other widget surface.
-  const presence = useChatPresence(true)
+  const presence = useConversationPresence(true)
   const { upload } = useWidgetImageUpload()
 
   const onAgentActivity = useCallback(() => markAgentPresentInCache(queryClient), [queryClient])

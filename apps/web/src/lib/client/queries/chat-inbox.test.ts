@@ -9,7 +9,7 @@ import type { ConversationTagId, SegmentId, ConversationId } from '@quackback/id
 
 // Stub the server fns so importing the factory doesn't pull server-only code
 // (config/env validation) into the test; we only assert on queryKey here.
-vi.mock('@/lib/server/functions/chat', () => ({
+vi.mock('@/lib/server/functions/conversation', () => ({
   listConversationsFn: vi.fn(),
   getConversationFn: vi.fn(),
 }))

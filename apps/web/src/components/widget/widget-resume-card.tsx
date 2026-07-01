@@ -3,7 +3,7 @@ import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
-import type { ConversationDTO } from '@/lib/shared/chat/types'
+import type { ConversationDTO } from '@/lib/shared/conversation/types'
 
 interface WidgetResumeCardProps {
   conversation: ConversationDTO

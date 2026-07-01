@@ -7,7 +7,7 @@
 
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
-import type { OfficeHoursConfig, PreChatEmailMode } from '@/lib/shared/chat/types'
+import type { OfficeHoursConfig, PreChatEmailMode } from '@/lib/shared/conversation/types'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)

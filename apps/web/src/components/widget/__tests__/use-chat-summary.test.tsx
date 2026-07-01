@@ -13,12 +13,12 @@ vi.mock('@/lib/client/widget-auth', () => ({
 }))
 // Keep both fetches pending: presence comes from the seeded shared query, and
 // the thread fetch (getMyChatFn) stays pending so only the seed is under test.
-vi.mock('@/lib/server/functions/chat', () => ({
+vi.mock('@/lib/server/functions/conversation', () => ({
   getMyChatFn: () => new Promise(() => {}),
-  getChatPresenceFn: () => new Promise(() => {}),
+  getConversationPresenceFn: () => new Promise(() => {}),
 }))
 
-import { useChatSummary } from '../use-chat-summary'
+import { useConversationSummary } from '../use-chat-summary'
 import { CHAT_PRESENCE_QUERY_KEY } from '../use-chat-presence'
 
 function seeded(seed?: unknown) {
@@ -29,9 +29,9 @@ function seeded(seed?: unknown) {
   )
 }
 
-describe('useChatSummary', () => {
+describe('useConversationSummary', () => {
   it('reads its presence verdict from the shared seeded query (no flash)', () => {
-    const { result } = renderHook(() => useChatSummary(true), {
+    const { result } = renderHook(() => useConversationSummary(true), {
       wrapper: seeded({ agentsOnline: true, withinOfficeHours: null, nextOpenAt: null }),
     })
     expect(result.current.agentsOnline).toBe(true)
@@ -40,14 +40,14 @@ describe('useChatSummary', () => {
   })
 
   it('carries the seeded office-hours verdict through', () => {
-    const { result } = renderHook(() => useChatSummary(true), {
+    const { result } = renderHook(() => useConversationSummary(true), {
       wrapper: seeded({ agentsOnline: false, withinOfficeHours: true, nextOpenAt: null }),
     })
     expect(result.current.withinOfficeHours).toBe(true)
   })
 
   it('falls back to offline when there is no seed', () => {
-    const { result } = renderHook(() => useChatSummary(true), { wrapper: seeded() })
+    const { result } = renderHook(() => useConversationSummary(true), { wrapper: seeded() })
     expect(result.current.agentsOnline).toBe(false)
     expect(result.current.withinOfficeHours).toBe(null)
   })

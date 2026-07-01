@@ -282,17 +282,17 @@ vi.mock('@/lib/server/domains/principals/principal.service', () => ({
     .mockResolvedValue([{ id: 'principal_test', name: 'Jane', role: 'admin' }]),
 }))
 
-vi.mock('@/lib/server/domains/chat/chat.query', () => ({
+vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   listConversationsForAgent: vi.fn(),
   listMessages: vi.fn(),
   conversationToDTO: vi.fn(),
 }))
-vi.mock('@/lib/server/domains/chat/chat.service', () => ({
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   assertConversationViewable: vi.fn(),
   sendAgentMessage: vi.fn(),
   setConversationStatus: vi.fn(),
 }))
-vi.mock('@/lib/server/domains/chat/chat.cards', () => ({
+vi.mock('@/lib/server/domains/conversation/conversation.cards', () => ({
   suggestPost: vi.fn(),
   sharePost: vi.fn(),
 }))
@@ -2276,7 +2276,8 @@ describe('MCP HTTP Handler', () => {
   describe('chat tools', () => {
     it('list_conversations returns conversations for a team API key', async () => {
       const handle = await initializeSession()
-      const { listConversationsForAgent } = await import('@/lib/server/domains/chat/chat.query')
+      const { listConversationsForAgent } =
+        await import('@/lib/server/domains/conversation/conversation.query')
       vi.mocked(listConversationsForAgent).mockResolvedValue({
         conversations: [
           {
@@ -2313,9 +2314,10 @@ describe('MCP HTTP Handler', () => {
 
     it('get_conversation excludes internal notes by default', async () => {
       const handle = await initializeSession()
-      const { assertConversationViewable } = await import('@/lib/server/domains/chat/chat.service')
+      const { assertConversationViewable } =
+        await import('@/lib/server/domains/conversation/conversation.service')
       const { conversationToDTO, listMessages } =
-        await import('@/lib/server/domains/chat/chat.query')
+        await import('@/lib/server/domains/conversation/conversation.query')
       vi.mocked(assertConversationViewable).mockResolvedValue({ id: 'conversation_1' } as never)
       vi.mocked(conversationToDTO).mockResolvedValue({
         id: 'conversation_1',
@@ -2357,7 +2359,8 @@ describe('MCP HTTP Handler', () => {
 
     it('reply_to_conversation calls sendAgentMessage with the caller as the agent', async () => {
       const handle = await initializeSession()
-      const { sendAgentMessage } = await import('@/lib/server/domains/chat/chat.service')
+      const { sendAgentMessage } =
+        await import('@/lib/server/domains/conversation/conversation.service')
       vi.mocked(sendAgentMessage).mockResolvedValue({
         message: {
           id: 'chat_msg_1',
@@ -2385,7 +2388,8 @@ describe('MCP HTTP Handler', () => {
 
     it('set_conversation_status transitions the conversation', async () => {
       const handle = await initializeSession()
-      const { setConversationStatus } = await import('@/lib/server/domains/chat/chat.service')
+      const { setConversationStatus } =
+        await import('@/lib/server/domains/conversation/conversation.service')
       vi.mocked(setConversationStatus).mockResolvedValue({
         id: 'conversation_1',
         status: 'closed',
@@ -2408,7 +2412,7 @@ describe('MCP HTTP Handler', () => {
 
     it('suggest_post calls suggestPost with the caller as agent', async () => {
       const handle = await initializeSession()
-      const { suggestPost } = await import('@/lib/server/domains/chat/chat.cards')
+      const { suggestPost } = await import('@/lib/server/domains/conversation/conversation.cards')
       vi.mocked(suggestPost).mockResolvedValue({ messageId: 'chat_msg_2' } as never)
 
       await handle(
@@ -2440,7 +2444,7 @@ describe('MCP HTTP Handler', () => {
 
     it('share_post calls sharePost with the caller as agent', async () => {
       const handle = await initializeSession()
-      const { sharePost } = await import('@/lib/server/domains/chat/chat.cards')
+      const { sharePost } = await import('@/lib/server/domains/conversation/conversation.cards')
       vi.mocked(sharePost).mockResolvedValue({
         message: { id: 'chat_msg_3', conversationId: 'conversation_1' },
         conversation: { id: 'conversation_1', status: 'open' },

@@ -1,4 +1,4 @@
-import type { ConversationMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 /**
  * A single virtualized row in the chat thread. Messages are keyed by their id

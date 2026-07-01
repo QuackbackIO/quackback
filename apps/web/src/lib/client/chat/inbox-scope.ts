@@ -6,7 +6,7 @@
  * unit-tested directly; the nav-sidebar component re-exports the nav types.
  */
 import type { ConversationTagId, SegmentId } from '@quackback/ids'
-import type { ConversationStatus, ConversationPriority } from '@/lib/shared/chat/types'
+import type { ConversationStatus, ConversationPriority } from '@/lib/shared/conversation/types'
 
 export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions' | 'saved'
 

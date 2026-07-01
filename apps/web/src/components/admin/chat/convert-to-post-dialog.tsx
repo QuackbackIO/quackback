@@ -11,7 +11,7 @@ import {
   captureVisitorContactEmailFn,
   createPostFromConversationFn,
   sharePostFn,
-} from '@/lib/server/functions/chat'
+} from '@/lib/server/functions/conversation'
 import { findSimilarPostsFn } from '@/lib/server/functions/public-posts'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'

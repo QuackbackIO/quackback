@@ -26,15 +26,15 @@ import {
   removeMessageReactionFn,
   setMessageFlagFn,
   markConversationUnreadFromMessageFn,
-} from '@/lib/server/functions/chat'
+} from '@/lib/server/functions/conversation'
 import type {
-  ChatAttachment,
+  ConversationAttachment,
   ConversationMessageDTO,
   AgentConversationMessageDTO,
   MessageReactionCount,
   ConversationDTO,
   ConversationPriority,
-} from '@/lib/shared/chat/types'
+} from '@/lib/shared/conversation/types'
 import { AdminBubble, UnreadDivider } from '@/components/admin/chat/admin-bubble'
 import { PriorityControl } from '@/components/admin/chat/priority-control'
 import { AssigneeControl } from '@/components/admin/chat/assignee-control'
@@ -901,7 +901,7 @@ function ChatThread({
     mutationFn: (vars: {
       content: string
       contentJson: JSONContent | null
-      attachments?: ChatAttachment[]
+      attachments?: ConversationAttachment[]
     }) =>
       sendAgentMessageFn({
         data: {
@@ -925,7 +925,7 @@ function ChatThread({
     mutationFn: (vars: {
       content: string
       contentJson: JSONContent | null
-      attachments?: ChatAttachment[]
+      attachments?: ConversationAttachment[]
     }) =>
       addChatNoteFn({
         data: {

@@ -1,6 +1,6 @@
 import { PaperClipIcon } from '@heroicons/react/24/outline'
 import { ZoomableImage } from '@/components/shared/zoomable-image'
-import type { ChatAttachment } from '@/lib/shared/chat/types'
+import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 
 function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -23,7 +23,11 @@ function isSafeUrl(url: string): boolean {
 }
 
 /** Renders a message's attachments — images inline, other files as chips. */
-export function ChatAttachmentList({ attachments }: { attachments: ChatAttachment[] }) {
+export function ConversationAttachmentList({
+  attachments,
+}: {
+  attachments: ConversationAttachment[]
+}) {
   const safe = (attachments ?? []).filter((a) => isSafeUrl(a.url))
   if (safe.length === 0) return null
   return (

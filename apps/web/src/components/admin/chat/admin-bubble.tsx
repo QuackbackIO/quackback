@@ -13,10 +13,10 @@ import {
 } from '@heroicons/react/24/solid'
 import { BookmarkIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
-import { ChatAttachmentList } from '@/components/shared/chat-attachments'
+import { ConversationAttachmentList } from '@/components/shared/chat-attachments'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { NoteContent } from './note-content'
-import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/chat/jumbo-emoji'
+import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
-import type { AgentConversationMessageDTO } from '@/lib/shared/chat/types'
+import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -217,7 +217,9 @@ export function AdminBubble({
             </div>
           )
         )}
-        {message.attachments.length > 0 && <ChatAttachmentList attachments={message.attachments} />}
+        {message.attachments.length > 0 && (
+          <ConversationAttachmentList attachments={message.attachments} />
+        )}
         {linkPreviews && !isNote && (
           <LinkPreviews content={message.content} contentJson={message.contentJson} />
         )}

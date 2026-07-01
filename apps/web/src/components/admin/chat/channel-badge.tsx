@@ -1,5 +1,5 @@
 import { EnvelopeIcon } from '@heroicons/react/24/solid'
-import type { Channel } from '@/lib/shared/chat/types'
+import type { Channel } from '@/lib/shared/conversation/types'
 
 const LABELS: Partial<Record<Channel, string>> = {
   email: 'Email',

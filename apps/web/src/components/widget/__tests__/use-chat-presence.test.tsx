@@ -6,12 +6,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('@/lib/client/widget-auth', () => ({ getWidgetAuthHeaders: () => ({}) }))
 // Never resolves: the value under test is the SSR seed in the cache, not a fetch.
-vi.mock('@/lib/server/functions/chat', () => ({
-  getChatPresenceFn: () => new Promise(() => {}),
+vi.mock('@/lib/server/functions/conversation', () => ({
+  getConversationPresenceFn: () => new Promise(() => {}),
 }))
 
 import {
-  useChatPresence,
+  useConversationPresence,
   markAgentPresentInCache,
   CHAT_PRESENCE_QUERY_KEY,
 } from '../use-chat-presence'
@@ -25,16 +25,16 @@ function seeded(seed?: unknown) {
   return { qc, wrapper }
 }
 
-describe('useChatPresence', () => {
+describe('useConversationPresence', () => {
   it('returns the SSR-seeded verdict without fetching', () => {
     const { wrapper } = seeded({ agentsOnline: true, withinOfficeHours: null, nextOpenAt: null })
-    const { result } = renderHook(() => useChatPresence(true), { wrapper })
+    const { result } = renderHook(() => useConversationPresence(true), { wrapper })
     expect(result.current.agentsOnline).toBe(true)
   })
 
   it('falls back to offline when there is no seed', () => {
     const { wrapper } = seeded()
-    const { result } = renderHook(() => useChatPresence(true), { wrapper })
+    const { result } = renderHook(() => useConversationPresence(true), { wrapper })
     expect(result.current).toEqual({
       agentsOnline: false,
       withinOfficeHours: null,
@@ -44,7 +44,7 @@ describe('useChatPresence', () => {
 
   it('reports offline when disabled (chat off)', () => {
     const { wrapper } = seeded()
-    const { result } = renderHook(() => useChatPresence(false), { wrapper })
+    const { result } = renderHook(() => useConversationPresence(false), { wrapper })
     expect(result.current.agentsOnline).toBe(false)
   })
 })

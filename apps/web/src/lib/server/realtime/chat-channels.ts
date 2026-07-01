@@ -9,7 +9,11 @@
  * agent's inbox update at once. Clients dedupe by message id.
  */
 import type { ConversationId, PrincipalId } from '@quackback/ids'
-import type { ChatStreamEvent, ConversationDTO, ConversationSide } from '@/lib/shared/chat/types'
+import type {
+  ChatStreamEvent,
+  ConversationDTO,
+  ConversationSide,
+} from '@/lib/shared/conversation/types'
 import { publish } from './pubsub'
 
 export function conversationChannel(conversationId: ConversationId): string {

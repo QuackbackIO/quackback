@@ -20,7 +20,7 @@ import {
   attachTag,
   detachTag,
   listTagsForConversation,
-} from '@/lib/server/domains/chat/conversation-tag.service'
+} from '@/lib/server/domains/conversation/conversation-tag.service'
 
 const createConversationTagSchema = z.object({
   name: z.string().min(1).max(50),

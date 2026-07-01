@@ -2042,7 +2042,8 @@ Examples:
       const denied = requireScope(auth, 'read:chat') ?? requireTeamRole(auth)
       if (denied) return denied
       try {
-        const { listConversationsForAgent } = await import('@/lib/server/domains/chat/chat.query')
+        const { listConversationsForAgent } =
+          await import('@/lib/server/domains/conversation/conversation.query')
         const result = await listConversationsForAgent({
           status: args.status,
           priority: args.priority,
@@ -2098,9 +2099,9 @@ Example: get_conversation({ conversationId: "conversation_01abc...", includeInte
       if (denied) return denied
       try {
         const { assertConversationViewable } =
-          await import('@/lib/server/domains/chat/chat.service')
+          await import('@/lib/server/domains/conversation/conversation.service')
         const { listMessages, conversationToDTO } =
-          await import('@/lib/server/domains/chat/chat.query')
+          await import('@/lib/server/domains/conversation/conversation.query')
         // team-role API key: canViewConversation short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,
@@ -2164,7 +2165,8 @@ Example: reply_to_conversation({ conversationId: "conversation_01abc...", conten
       const denied = requireScope(auth, 'write:chat') ?? requireTeamRole(auth)
       if (denied) return denied
       try {
-        const { sendAgentMessage } = await import('@/lib/server/domains/chat/chat.service')
+        const { sendAgentMessage } =
+          await import('@/lib/server/domains/conversation/conversation.service')
         // team-role API key: canActAsAgent short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,
@@ -2214,7 +2216,7 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
       const denied = requireScope(auth, 'write:chat') ?? requireTeamRole(auth)
       if (denied) return denied
       try {
-        const { suggestPost } = await import('@/lib/server/domains/chat/chat.cards')
+        const { suggestPost } = await import('@/lib/server/domains/conversation/conversation.cards')
         // team-role API key: canActAsAgent short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,
@@ -2255,7 +2257,7 @@ Example: share_post({ conversationId: "conversation_01...", postId: "post_01..."
       const denied = requireScope(auth, 'write:chat') ?? requireTeamRole(auth)
       if (denied) return denied
       try {
-        const { sharePost } = await import('@/lib/server/domains/chat/chat.cards')
+        const { sharePost } = await import('@/lib/server/domains/conversation/conversation.cards')
         // team-role API key: canActAsAgent short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,
@@ -2293,7 +2295,8 @@ Example: set_conversation_status({ conversationId: "conversation_01abc...", stat
       const denied = requireScope(auth, 'write:chat') ?? requireTeamRole(auth)
       if (denied) return denied
       try {
-        const { setConversationStatus } = await import('@/lib/server/domains/chat/chat.service')
+        const { setConversationStatus } =
+          await import('@/lib/server/domains/conversation/conversation.service')
         // team-role API key: canActAsAgent short-circuits on role; segments unused
         const actor = {
           principalId: auth.principalId,

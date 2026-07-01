@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { getMyChatFn } from '@/lib/server/functions/chat'
-import type { ConversationDTO } from '@/lib/shared/chat/types'
-import { useChatPresence } from './use-chat-presence'
+import { getMyChatFn } from '@/lib/server/functions/conversation'
+import type { ConversationDTO } from '@/lib/shared/conversation/types'
+import { useConversationPresence } from './use-chat-presence'
 
-export interface ChatSummary {
+export interface ConversationSummary {
   conversation: ConversationDTO | null
   teamName: string | null
   agentsOnline: boolean
@@ -15,16 +15,16 @@ export interface ChatSummary {
 /**
  * Lightweight read of the visitor's chat summary: the most-recent conversation
  * (+ team name) from getMyChatFn, merged with the shared presence verdict from
- * useChatPresence. Re-keyed on sessionVersion. Shared by the Home overview and
+ * useConversationPresence. Re-keyed on sessionVersion. Shared by the Home overview and
  * the Help Messages section so the resume card and presence stay consistent.
  * Pass `enabled=false` (e.g. when chat is off) to skip the fetch entirely.
  *
- * Presence is NOT fetched here — it lives in the one shared useChatPresence
+ * Presence is NOT fetched here — it lives in the one shared useConversationPresence
  * query (SSR-seeded, polled once), so every surface reads the same value.
  */
-export function useChatSummary(enabled: boolean): ChatSummary {
+export function useConversationSummary(enabled: boolean): ConversationSummary {
   const { sessionVersion } = useWidgetAuth()
-  const presence = useChatPresence(enabled)
+  const presence = useConversationPresence(enabled)
   const [thread, setThread] = useState<{
     conversation: ConversationDTO | null
     teamName: string | null

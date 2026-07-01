@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/solid'
 import type { ConversationId, PostId } from '@quackback/ids'
-import { sharePostFn } from '@/lib/server/functions/chat'
+import { sharePostFn } from '@/lib/server/functions/conversation'
 import { findSimilarPostsFn } from '@/lib/server/functions/public-posts'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import {

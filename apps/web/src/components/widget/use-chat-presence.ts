@@ -1,7 +1,10 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { getChatPresenceFn } from '@/lib/server/functions/chat'
-import { CHAT_PRESENCE_POLL_MS, type ChatPresence } from '@/lib/shared/chat/presence'
+import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
+import {
+  CHAT_PRESENCE_POLL_MS,
+  type ConversationPresence,
+} from '@/lib/shared/conversation/presence'
 
 /**
  * Stable, tenant-global query key — presence is the same for every visitor, so
@@ -10,7 +13,11 @@ import { CHAT_PRESENCE_POLL_MS, type ChatPresence } from '@/lib/shared/chat/pres
  */
 export const CHAT_PRESENCE_QUERY_KEY = ['widget', 'chat-presence'] as const
 
-const OFFLINE: ChatPresence = { agentsOnline: false, withinOfficeHours: null, nextOpenAt: null }
+const OFFLINE: ConversationPresence = {
+  agentsOnline: false,
+  withinOfficeHours: null,
+  nextOpenAt: null,
+}
 
 /**
  * The single source of truth for the widget's team-availability verdict. Every
@@ -21,10 +28,10 @@ const OFFLINE: ChatPresence = { agentsOnline: false, withinOfficeHours: null, ne
  * SSR-seeded by the loader, then polled every CHAT_PRESENCE_POLL_MS while the
  * widget is open. Pass `enabled=false` (chat off) to skip the query entirely.
  */
-export function useChatPresence(enabled: boolean): ChatPresence {
+export function useConversationPresence(enabled: boolean): ConversationPresence {
   const { data } = useQuery({
     queryKey: CHAT_PRESENCE_QUERY_KEY,
-    queryFn: () => getChatPresenceFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () => getConversationPresenceFn({ headers: getWidgetAuthHeaders() }),
     enabled,
     refetchInterval: CHAT_PRESENCE_POLL_MS,
     // The SSR seed is fresh at page load, so trust it across the first interval
@@ -46,7 +53,7 @@ export function useChatPresence(enabled: boolean): ChatPresence {
  * harmless, since an actively-messaging agent already reads as available.)
  */
 export function markAgentPresentInCache(queryClient: QueryClient): void {
-  queryClient.setQueryData<ChatPresence>(CHAT_PRESENCE_QUERY_KEY, (prev) =>
+  queryClient.setQueryData<ConversationPresence>(CHAT_PRESENCE_QUERY_KEY, (prev) =>
     prev ? { ...prev, agentsOnline: true } : { ...OFFLINE, agentsOnline: true }
   )
 }

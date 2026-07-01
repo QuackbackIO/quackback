@@ -79,8 +79,8 @@ export const Route = createFileRoute('/widget/')({
         // Call the server fn (not an unwrapped helper): its handler — and the
         // ioredis-reaching presence import inside it — is stripped from the
         // client bundle. Server-side it runs inline and returns the verdict.
-        const { getChatPresenceFn } = await import('@/lib/server/functions/chat')
-        queryClient.setQueryData(CHAT_PRESENCE_QUERY_KEY, await getChatPresenceFn())
+        const { getConversationPresenceFn } = await import('@/lib/server/functions/conversation')
+        queryClient.setQueryData(CHAT_PRESENCE_QUERY_KEY, await getConversationPresenceFn())
       } catch {
         // A presence read failure must never break the whole widget load — leave
         // the seed empty and let the client query fetch presence on mount.

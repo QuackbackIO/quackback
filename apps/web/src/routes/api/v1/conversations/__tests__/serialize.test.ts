@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { serializeConversation, serializeMessage } from '../-serialize'
-import type { ConversationDTO, ConversationMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationDTO, ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 const convBase = {
   id: 'conversation_1',

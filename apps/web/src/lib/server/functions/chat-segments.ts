@@ -7,7 +7,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { listSegmentsWithConversationCounts } from '@/lib/server/domains/chat/chat-segment.service'
+import { listSegmentsWithConversationCounts } from '@/lib/server/domains/conversation/conversation-segment.service'
 
 /** Non-deleted segments with their open-conversation counts (drives the inbox nav). */
 export const fetchInboxSegmentsWithCountsFn = createServerFn({ method: 'GET' }).handler(

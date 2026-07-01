@@ -3,9 +3,9 @@ import { FormattedMessage } from 'react-intl'
 import { LightBulbIcon, ChatBubbleLeftRightIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/shared/utils'
-import { useChatSummary } from './use-chat-summary'
+import { useConversationSummary } from './use-chat-summary'
 import { useWidgetAuth } from './widget-auth-provider'
-import { firstNameOf } from '@/lib/shared/chat/personalize'
+import { firstNameOf } from '@/lib/shared/conversation/personalize'
 import { WidgetResumeCard } from './widget-resume-card'
 import { WidgetChangelogTeaser } from './widget-changelog-teaser'
 import { type EnabledTabs, supportEnabled } from './widget-nav'
@@ -45,7 +45,7 @@ export function WidgetOverview({
   // A recent-conversation resume card is a chat concept — only fetched/shown
   // when chat is part of the support surface. Presence now lives on the support
   // surface's message CTA, not here.
-  const { conversation, teamName, agentsOnline } = useChatSummary(!!tabs.chat)
+  const { conversation, teamName, agentsOnline } = useConversationSummary(!!tabs.chat)
 
   return (
     <div className="flex flex-col h-full">

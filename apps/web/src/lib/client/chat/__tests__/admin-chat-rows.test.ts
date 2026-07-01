@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ConversationMessageId } from '@quackback/ids'
-import type { AgentConversationMessageDTO } from '@/lib/shared/chat/types'
+import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { buildAdminChatRows } from '../admin-chat-rows'
 
 const msg = (id: string) => ({ id }) as unknown as AgentConversationMessageDTO

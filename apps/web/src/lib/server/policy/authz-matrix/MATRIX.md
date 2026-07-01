@@ -159,35 +159,6 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/changelog.ts`::listChangelogsFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::searchShippedPostsFn | changelog.manage |
 | `lib/server/functions/chat-segments.ts`::fetchInboxSegmentsWithCountsFn | conversation.view |
-| `lib/server/functions/chat.ts`::sendConversationMessageFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::listConversationMessagesFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::markChatReadFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::sendChatTypingFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::submitCsatFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::setAgentAvailabilityFn | conversation.view |
-| `lib/server/functions/chat.ts`::mintChatStreamTokenFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::deleteConversationMessageFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::getCannedRepliesFn | conversation.reply |
-| `lib/server/functions/chat.ts`::listConversationsFn | conversation.view |
-| `lib/server/functions/chat.ts`::listConversationsForUserFn | conversation.view |
-| `lib/server/functions/chat.ts`::getConversationFn | conversation.view |
-| `lib/server/functions/chat.ts`::sendAgentMessageFn | conversation.reply |
-| `lib/server/functions/chat.ts`::startAgentConversationFn | conversation.reply |
-| `lib/server/functions/chat.ts`::addChatNoteFn | conversation.note |
-| `lib/server/functions/chat.ts`::createPostFromConversationFn | post.create |
-| `lib/server/functions/chat.ts`::captureVisitorContactEmailFn | conversation.manage |
-| `lib/server/functions/chat.ts`::sharePostFn | conversation.reply |
-| `lib/server/functions/chat.ts`::setConversationStatusFn | conversation.set_status |
-| `lib/server/functions/chat.ts`::endConversationFn | conversation.set_status |
-| `lib/server/functions/chat.ts`::assignConversationFn | conversation.assign |
-| `lib/server/functions/chat.ts`::setConversationPriorityFn | conversation.set_status |
-| `lib/server/functions/chat.ts`::addMessageReactionFn | conversation.note |
-| `lib/server/functions/chat.ts`::removeMessageReactionFn | conversation.note |
-| `lib/server/functions/chat.ts`::setMessageFlagFn | conversation.note |
-| `lib/server/functions/chat.ts`::markConversationUnreadFromMessageFn | conversation.view |
-| `lib/server/functions/chat.ts`::listFlaggedMessagesFn | conversation.view |
-| `lib/server/functions/chat.ts`::getLinkedPostsForConversationFn | conversation.view |
-| `lib/server/functions/chat.ts`::getLinkedConversationsForPostFn | conversation.view |
 | `lib/server/functions/comments.ts`::createCommentFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::addReactionFn | END_USER (any authenticated) |
 | `lib/server/functions/comments.ts`::removeReactionFn | END_USER (any authenticated) |
@@ -203,6 +174,35 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/conversation-tags.ts`::deleteConversationTagFn | conversation.manage_tags |
 | `lib/server/functions/conversation-tags.ts`::addConversationTagFn | conversation.set_tags |
 | `lib/server/functions/conversation-tags.ts`::removeConversationTagFn | conversation.set_tags |
+| `lib/server/functions/conversation.ts`::sendConversationMessageFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::listConversationMessagesFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::markChatReadFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::sendChatTypingFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::submitCsatFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::setAgentAvailabilityFn | conversation.view |
+| `lib/server/functions/conversation.ts`::mintChatStreamTokenFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::deleteConversationMessageFn | END_USER (any authenticated) |
+| `lib/server/functions/conversation.ts`::getCannedRepliesFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::listConversationsFn | conversation.view |
+| `lib/server/functions/conversation.ts`::listConversationsForUserFn | conversation.view |
+| `lib/server/functions/conversation.ts`::getConversationFn | conversation.view |
+| `lib/server/functions/conversation.ts`::sendAgentMessageFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::startAgentConversationFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::addChatNoteFn | conversation.note |
+| `lib/server/functions/conversation.ts`::createPostFromConversationFn | post.create |
+| `lib/server/functions/conversation.ts`::captureVisitorContactEmailFn | conversation.manage |
+| `lib/server/functions/conversation.ts`::sharePostFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::setConversationStatusFn | conversation.set_status |
+| `lib/server/functions/conversation.ts`::endConversationFn | conversation.set_status |
+| `lib/server/functions/conversation.ts`::assignConversationFn | conversation.assign |
+| `lib/server/functions/conversation.ts`::setConversationPriorityFn | conversation.set_status |
+| `lib/server/functions/conversation.ts`::addMessageReactionFn | conversation.note |
+| `lib/server/functions/conversation.ts`::removeMessageReactionFn | conversation.note |
+| `lib/server/functions/conversation.ts`::setMessageFlagFn | conversation.note |
+| `lib/server/functions/conversation.ts`::markConversationUnreadFromMessageFn | conversation.view |
+| `lib/server/functions/conversation.ts`::listFlaggedMessagesFn | conversation.view |
+| `lib/server/functions/conversation.ts`::getLinkedPostsForConversationFn | conversation.view |
+| `lib/server/functions/conversation.ts`::getLinkedConversationsForPostFn | conversation.view |
 | `lib/server/functions/external-statuses.ts`::fetchExternalStatusesFn | integration.manage |
 | `lib/server/functions/feature-flags.ts`::updateFeatureFlagsFn | settings.manage |
 | `lib/server/functions/feedback.ts`::fetchSuggestions | suggestion.view |
@@ -585,11 +585,11 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/bootstrap.ts`::getBootstrapData | server-fn |
 | `lib/server/functions/changelog.ts`::getPublicChangelogFn | server-fn |
 | `lib/server/functions/changelog.ts`::listPublicChangelogsFn | server-fn |
-| `lib/server/functions/chat.ts`::getChatPresenceFn | server-fn |
-| `lib/server/functions/chat.ts`::getMyChatFn | server-fn |
-| `lib/server/functions/chat.ts`::getMyConversationsFn | server-fn |
 | `lib/server/functions/comments.ts`::canPinCommentFn | server-fn |
 | `lib/server/functions/comments.ts`::getCommentPermissionsFn | server-fn |
+| `lib/server/functions/conversation.ts`::getConversationPresenceFn | server-fn |
+| `lib/server/functions/conversation.ts`::getMyChatFn | server-fn |
+| `lib/server/functions/conversation.ts`::getMyConversationsFn | server-fn |
 | `lib/server/functions/embeds.ts`::getEmbedPreviewFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicArticleBySlugFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicCategoryBySlugFn | server-fn |

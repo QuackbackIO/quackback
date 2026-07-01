@@ -1,5 +1,5 @@
 import type { ConversationMessageId } from '@quackback/ids'
-import type { AgentConversationMessageDTO } from '@/lib/shared/chat/types'
+import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 /**
  * A single virtualized row in the admin message thread. Messages are keyed by

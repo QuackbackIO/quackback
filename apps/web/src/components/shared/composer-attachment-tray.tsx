@@ -1,6 +1,6 @@
 import { PaperClipIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { ZoomableImage } from '@/components/shared/zoomable-image'
-import type { ChatAttachment } from '@/lib/shared/chat/types'
+import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 
 /**
  * Pending-attachment tray for the chat composer. Image attachments render as
@@ -12,7 +12,7 @@ export function ComposerAttachmentTray({
   attachments,
   onRemove,
 }: {
-  attachments: ChatAttachment[]
+  attachments: ConversationAttachment[]
   onRemove: (index: number) => void
 }) {
   if (attachments.length === 0) return null

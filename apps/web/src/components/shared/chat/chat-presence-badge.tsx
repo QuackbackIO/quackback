@@ -7,7 +7,7 @@ import { cn } from '@/lib/shared/utils'
  * surface's message CTA so the two never drift. Pass the precomputed `available`
  * verdict (see chatAvailable); the caller owns the surrounding layout.
  */
-export function ChatPresenceBadge({
+export function ConversationPresenceBadge({
   available,
   className,
 }: {

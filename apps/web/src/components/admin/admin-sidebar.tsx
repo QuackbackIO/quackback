@@ -32,7 +32,7 @@ import { cn } from '@/lib/shared/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { LatestVersionResult } from '@/lib/server/functions/version'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
-import { setAgentAvailabilityFn } from '@/lib/server/functions/chat'
+import { setAgentAvailabilityFn } from '@/lib/server/functions/conversation'
 
 /** Availability toggle for the account menu (chat routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */

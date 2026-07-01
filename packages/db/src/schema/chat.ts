@@ -18,7 +18,7 @@ import {
   CHANNELS,
   CONVERSATION_PRIORITIES,
 } from '../types'
-import type { ChatAttachment, ConversationMessageMetadata, TiptapContent } from '../types'
+import type { ConversationAttachment, ConversationMessageMetadata, TiptapContent } from '../types'
 
 /**
  * Support-inbox conversations — one thread between a visitor (anonymous or
@@ -113,7 +113,7 @@ export const conversationMessages = pgTable(
     // Agent-only internal note — never sent to or visible to the visitor.
     isInternal: boolean('is_internal').notNull().default(false),
     // Image/file attachments (client-safe refs); null/empty for text-only messages.
-    attachments: jsonb('attachments').$type<ChatAttachment[]>(),
+    attachments: jsonb('attachments').$type<ConversationAttachment[]>(),
     // Channel provenance (e.g. inbound email message-id for retry dedupe); null
     // for ordinary in-app live-chat messages.
     metadata: jsonb('metadata').$type<ConversationMessageMetadata>(),

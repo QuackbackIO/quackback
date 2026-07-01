@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationId } from '@quackback/ids'
-import type { ConversationDTO } from '@/lib/shared/chat/types'
+import type { ConversationDTO } from '@/lib/shared/conversation/types'
 
 const publish = vi.fn()
 vi.mock('../pubsub', () => ({ publish: (...args: unknown[]) => publish(...args) }))

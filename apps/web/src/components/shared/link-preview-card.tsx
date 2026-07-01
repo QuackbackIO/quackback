@@ -10,7 +10,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import { extractPreviewableUrls } from '@/lib/shared/chat/extract-urls'
+import { extractPreviewableUrls } from '@/lib/shared/conversation/extract-urls'
 import { unfurlLinkFn } from '@/lib/server/functions/link-preview'
 
 interface LinkPreviewCardProps {

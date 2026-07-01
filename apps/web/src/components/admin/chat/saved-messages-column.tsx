@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { BookmarkIcon } from '@heroicons/react/24/solid'
 import type { ConversationId, ConversationMessageId } from '@quackback/ids'
-import { listFlaggedMessagesFn } from '@/lib/server/functions/chat'
+import { listFlaggedMessagesFn } from '@/lib/server/functions/conversation'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/shared/spinner'
 import { cn } from '@/lib/shared/utils'

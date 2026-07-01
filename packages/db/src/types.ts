@@ -340,7 +340,7 @@ export const MESSAGE_SENDER_TYPES = ['visitor', 'agent', 'system'] as const
 export type MessageSenderType = (typeof MESSAGE_SENDER_TYPES)[number]
 
 // A single attachment ref stored on a chat message (chat_messages.attachments).
-export interface ChatAttachment {
+export interface ConversationAttachment {
   url: string
   name: string
   contentType: string

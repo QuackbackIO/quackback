@@ -5,7 +5,7 @@ import { ChatBubbleLeftRightIcon, ArrowPathIcon } from '@heroicons/react/24/soli
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { CannedReply } from '@/lib/server/domains/settings/settings.types'
 import { DEFAULT_OFFICE_HOURS } from '@/lib/server/domains/settings/settings.types'
-import type { OfficeHoursConfig } from '@/lib/shared/chat/types'
+import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'

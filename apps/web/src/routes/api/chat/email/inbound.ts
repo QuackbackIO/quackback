@@ -5,7 +5,7 @@ export const Route = createFileRoute('/api/chat/email/inbound')({
     handlers: {
       POST: async ({ request }) => {
         const { handleInboundEmailWebhook } =
-          await import('@/lib/server/domains/chat/email-webhook-handler')
+          await import('@/lib/server/domains/conversation/email-webhook-handler')
         return handleInboundEmailWebhook(request)
       },
     },

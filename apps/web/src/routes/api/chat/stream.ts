@@ -29,7 +29,7 @@ import {
   toMessageDTO,
   fallbackAuthor,
   findBackfillCursor,
-} from '@/lib/server/domains/chat/chat.query'
+} from '@/lib/server/domains/conversation/conversation.query'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import type { Actor } from '@/lib/server/policy/types'
 import { logger } from '@/lib/server/logger'
@@ -223,7 +223,7 @@ export const Route = createFileRoute('/api/chat/stream')({
                 // live on another replica is not treated as offline here.
                 if (wentOffline && isAgentStream) {
                   const { requeueUnansweredOnAgentOffline } =
-                    await import('@/lib/server/domains/chat/chat.service')
+                    await import('@/lib/server/domains/conversation/conversation.service')
                   await requeueUnansweredOnAgentOffline(me.principalId)
                 }
               }

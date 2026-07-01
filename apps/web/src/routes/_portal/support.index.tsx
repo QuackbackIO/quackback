@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
-import { getMyConversationsFn } from '@/lib/server/functions/chat'
+import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
 
 export const Route = createFileRoute('/_portal/support/')({

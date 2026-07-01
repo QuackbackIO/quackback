@@ -4,10 +4,10 @@ import type {
   ConversationDTO,
   ConversationPriority,
   ConversationStatus,
-} from '@/lib/shared/chat/types'
+} from '@/lib/shared/conversation/types'
 import { ChevronDownIcon, PencilSquareIcon } from '@heroicons/react/24/solid'
 import { NewConversationDialog } from '@/components/admin/chat/new-conversation-dialog'
-import { priorityMeta } from '@/lib/shared/chat/priority-meta'
+import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { PriorityDot, PriorityMenuItems } from '@/components/admin/chat/priority-control'
 import { ChannelBadge } from '@/components/admin/chat/channel-badge'
 import { InboxScopeMenu, type InboxNavItem } from '@/components/admin/chat/inbox-nav-sidebar'

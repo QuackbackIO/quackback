@@ -13,9 +13,9 @@ import {
   UserCircleIcon,
 } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
-import type { Channel, ConversationDTO } from '@/lib/shared/chat/types'
-import { CONVERSATION_END_REASON_LABELS } from '@/lib/shared/chat/types'
-import { listConversationsForUserFn } from '@/lib/server/functions/chat'
+import type { Channel, ConversationDTO } from '@/lib/shared/conversation/types'
+import { CONVERSATION_END_REASON_LABELS } from '@/lib/shared/conversation/types'
+import { listConversationsForUserFn } from '@/lib/server/functions/conversation'
 import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { PriorityControl } from './priority-control'

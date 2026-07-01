@@ -10,8 +10,11 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { VisitorChatThread } from '@/components/shared/chat/visitor-chat-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
-import { getChatPresenceFn } from '@/lib/server/functions/chat'
-import { CHAT_PRESENCE_POLL_MS, type ChatPresence } from '@/lib/shared/chat/presence'
+import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
+import {
+  CHAT_PRESENCE_POLL_MS,
+  type ConversationPresence,
+} from '@/lib/shared/conversation/presence'
 import {
   PORTAL_CHAT_PRESENCE_QUERY_KEY,
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
@@ -21,7 +24,11 @@ export const Route = createFileRoute('/_portal/support/$conversationId')({
   component: SupportThreadPage,
 })
 
-const OFFLINE: ChatPresence = { agentsOnline: false, withinOfficeHours: null, nextOpenAt: null }
+const OFFLINE: ConversationPresence = {
+  agentsOnline: false,
+  withinOfficeHours: null,
+  nextOpenAt: null,
+}
 
 function SupportThreadPage() {
   const intl = useIntl()
@@ -42,7 +49,7 @@ function SupportThreadPage() {
   // shared presence query (cookie-authed, so no headers needed).
   const presenceQuery = useQuery({
     queryKey: PORTAL_CHAT_PRESENCE_QUERY_KEY,
-    queryFn: () => getChatPresenceFn(),
+    queryFn: () => getConversationPresenceFn(),
     enabled: supportEnabled && isLoggedIn,
     refetchInterval: CHAT_PRESENCE_POLL_MS,
     staleTime: CHAT_PRESENCE_POLL_MS,

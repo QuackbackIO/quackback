@@ -1,4 +1,4 @@
-import type { ConversationDTO, ConversationMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationDTO, ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 
 /** Public, stable conversation shape for the read API. */

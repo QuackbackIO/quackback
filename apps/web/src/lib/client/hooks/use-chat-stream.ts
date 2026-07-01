@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { ChatStreamEvent } from '@/lib/shared/chat/types'
+import type { ChatStreamEvent } from '@/lib/shared/conversation/types'
 
 interface UseChatStreamOptions {
   /**

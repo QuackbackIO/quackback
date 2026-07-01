@@ -54,7 +54,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
 
-vi.mock('@/lib/server/functions/chat', () => ({
+vi.mock('@/lib/server/functions/conversation', () => ({
   getMyConversationsFn: vi.fn(),
 }))
 

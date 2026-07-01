@@ -40,11 +40,11 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/shared/types'
-import type { ConversationDTO, ConversationStatus } from '@/lib/shared/chat/types'
+import type { ConversationDTO, ConversationStatus } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { UserSegmentBadges } from '@/components/admin/users/user-segments'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
-import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/chat'
+import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
 
 interface UserDetailProps {

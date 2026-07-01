@@ -821,7 +821,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { getEmailProvider } = await import('@quackback/email')
     const { isEmailInboundConfigured } =
-      await import('@/lib/server/domains/chat/chat.email-channel')
+      await import('@/lib/server/domains/conversation/conversation.email-channel')
     return {
       provider: getEmailProvider(),
       fromAddress: process.env.EMAIL_FROM ?? null,

@@ -11,7 +11,7 @@
  */
 import { queryOptions } from '@tanstack/react-query'
 import type { ConversationId } from '@quackback/ids'
-import { listConversationsFn, getConversationFn } from '@/lib/server/functions/chat'
+import { listConversationsFn, getConversationFn } from '@/lib/server/functions/conversation'
 import { fetchConversationTagsWithCountsFn } from '@/lib/server/functions/conversation-tags'
 import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/chat-segments'
 import {
@@ -20,7 +20,7 @@ import {
   type InboxNavItem,
   type StatusFilter,
 } from '@/lib/client/chat/inbox-scope'
-import type { ConversationPriority } from '@/lib/shared/chat/types'
+import type { ConversationPriority } from '@/lib/shared/conversation/types'
 
 export const chatInboxQueries = {
   /** The conversation list for a scope + status/priority/search refinement. */

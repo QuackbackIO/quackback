@@ -40,7 +40,7 @@ vi.mock('@/lib/client/auth-client', () => ({ signOut: vi.fn() }))
 
 vi.mock('@/components/notifications', () => ({ NotificationBell: () => null }))
 
-vi.mock('@/lib/server/functions/chat', () => ({ setAgentAvailabilityFn: vi.fn() }))
+vi.mock('@/lib/server/functions/conversation', () => ({ setAgentAvailabilityFn: vi.fn() }))
 
 import { AdminSidebar } from '../admin-sidebar'
 

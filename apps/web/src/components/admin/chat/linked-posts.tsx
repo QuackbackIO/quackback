@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import type { ConversationId } from '@quackback/ids'
-import { getLinkedPostsForConversationFn } from '@/lib/server/functions/chat'
+import { getLinkedPostsForConversationFn } from '@/lib/server/functions/conversation'
 
 /**
  * Posts this conversation was converted into (read-only). Renders nothing when

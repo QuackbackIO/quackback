@@ -1,0 +1,431 @@
+/**
+ * Pure DTO mappers + the small batch loader in chat.query. Covers the
+ * normalization/defaulting branches (attachments → [], visitorEmail → null,
+ * csatRating null-coalesce, ISO timestamps, null read-watermarks,
+ * displayName/avatarUrl null-coalesce) and the loader's dedupe / empty-input /
+ * map-building behavior against a thenable db-chain mock. The big
+ * listConversationsForAgent SQL builder is intentionally not exercised here.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ConversationId, ConversationMessageId, PrincipalId, SegmentId } from '@quackback/ids'
+import type { Conversation, ConversationMessage } from '@/lib/server/db'
+import type { ChatAuthorDTO } from '@/lib/shared/conversation/types'
+
+// Drives what the terminal db-chain promise resolves to per test.
+let principalRows: Array<{
+  id: PrincipalId
+  displayName: string | null
+  avatarUrl: string | null
+}> = []
+// Records the argument handed to inArray so we can assert dedupe behavior.
+const inArrayCalls: unknown[][] = []
+
+vi.mock('@/lib/server/db', () => {
+  // Thenable chain: every builder method returns the same chain, and the chain
+  // itself resolves (via .then) to the row set the active query expects. We
+  // pick principal rows off the table passed to .from().
+  function makeChain() {
+    let kind: 'principal' | 'unknown' = 'unknown'
+    const chain: Record<string, unknown> = {}
+    const passthrough = () => chain
+    chain.select = passthrough
+    chain.from = (t: { __name?: string }) => {
+      kind = t?.__name === 'principal' ? 'principal' : 'unknown'
+      return chain
+    }
+    chain.innerJoin = passthrough
+    chain.leftJoin = passthrough
+    chain.where = passthrough
+    chain.orderBy = passthrough
+    chain.limit = passthrough
+    chain.then = (resolve: (rows: unknown[]) => unknown) =>
+      resolve(kind === 'principal' ? principalRows : [])
+    return chain
+  }
+
+  return {
+    db: {
+      select: () => makeChain(),
+      selectDistinct: () => makeChain(),
+    },
+    // Tables — only __name matters for routing the chain.
+    principal: { __name: 'principal' },
+    user: { __name: 'user', id: 'id', image: 'image', imageKey: 'image_key' },
+    conversations: { __name: 'conversations' },
+    conversationMessages: { __name: 'chat_messages' },
+    conversationMessageMentions: { __name: 'chat_message_mentions' },
+    conversationMessageReactions: {
+      __name: 'chat_message_reactions',
+      conversationMessageId: 'chat_message_id',
+      emoji: 'emoji',
+      principalId: 'principal_id',
+    },
+    conversationMessageFlags: {
+      __name: 'chat_message_flags',
+      conversationMessageId: 'chat_message_id',
+      principalId: 'principal_id',
+      flaggedAt: 'flagged_at',
+    },
+    userSegments: { __name: 'user_segments' },
+    segments: { __name: 'segments' },
+    // SQL helpers — no-op stubs; inArray records its second arg for assertions.
+    eq: vi.fn(),
+    and: vi.fn(),
+    or: vi.fn(),
+    lt: vi.fn(),
+    isNull: vi.fn(),
+    desc: vi.fn(),
+    sql: vi.fn(),
+    inArray: vi.fn((_col: unknown, values: unknown[]) => {
+      inArrayCalls.push(values)
+      return {}
+    }),
+  }
+})
+
+import {
+  toMessageDTO,
+  toConversationDTO,
+  authorFromInput,
+  fallbackAuthor,
+  loadAuthors,
+  listConversationsForAgent,
+  resolveVisitorConversation,
+  enrichMessagesForAgent,
+} from '../conversation.query'
+import { isNull, eq } from '@/lib/server/db'
+
+const visitorId = 'principal_visitor' as PrincipalId
+const agentId = 'principal_agent' as PrincipalId
+const conversationId = 'conversation_1' as ConversationId
+const messageId = 'chat_msg_1' as ConversationMessageId
+
+const visitorAuthor: ChatAuthorDTO = {
+  principalId: visitorId,
+  displayName: 'Jane',
+  avatarUrl: null,
+}
+
+function makeMessage(extra: Partial<ConversationMessage> = {}): ConversationMessage {
+  return {
+    id: messageId,
+    conversationId,
+    principalId: visitorId,
+    senderType: 'visitor',
+    content: 'hello',
+    createdAt: new Date('2026-01-02T03:04:05.000Z'),
+    attachments: null,
+    isInternal: false,
+    deletedAt: null,
+    ...extra,
+  } as unknown as ConversationMessage
+}
+
+function makeConversation(extra: Partial<Conversation> = {}): Conversation {
+  return {
+    id: conversationId,
+    visitorPrincipalId: visitorId,
+    assignedAgentPrincipalId: null,
+    status: 'open',
+    subject: null,
+    lastMessagePreview: 'hi there',
+    lastMessageAt: new Date('2026-01-03T10:00:00.000Z'),
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    visitorLastReadAt: null,
+    agentLastReadAt: null,
+    csatRating: null,
+    visitorEmail: null,
+    ...extra,
+  } as unknown as Conversation
+}
+
+beforeEach(() => {
+  principalRows = []
+  inArrayCalls.length = 0
+  vi.clearAllMocks()
+})
+
+describe('toMessageDTO', () => {
+  it('defaults null attachments to an empty array and ISO-stringifies createdAt', () => {
+    const dto = toMessageDTO(makeMessage({ attachments: null }), visitorAuthor)
+    expect(dto.attachments).toEqual([])
+    expect(dto.createdAt).toBe('2026-01-02T03:04:05.000Z')
+    expect(dto.author).toBe(visitorAuthor)
+    expect(dto.isInternal).toBe(false)
+  })
+
+  it('passes attachments and isInternal through when present', () => {
+    const attachments = [
+      { url: 'https://x/a.png', name: 'a.png', contentType: 'image/png', size: 10 },
+    ]
+    const dto = toMessageDTO(
+      makeMessage({ attachments, isInternal: true, senderType: 'agent' }),
+      visitorAuthor
+    )
+    expect(dto.attachments).toBe(attachments)
+    expect(dto.isInternal).toBe(true)
+    expect(dto.senderType).toBe('agent')
+  })
+
+  it('carries a note rich doc through as contentJson, defaulting null for plain messages', () => {
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] }
+    const noteDto = toMessageDTO(
+      makeMessage({ isInternal: true, senderType: 'agent', contentJson: doc }),
+      visitorAuthor
+    )
+    expect(noteDto.contentJson).toEqual(doc)
+    // A plain visitor/agent message has no rich doc.
+    const plainDto = toMessageDTO(makeMessage({ contentJson: null }), visitorAuthor)
+    expect(plainDto.contentJson).toBeNull()
+  })
+
+  // LEAK GUARD (load-bearing): the shared mapper must NEVER carry the agent-only
+  // reaction/flag fields. Those are added exclusively by enrichMessagesForAgent,
+  // so every visitor path (which uses toMessageDTO) is clean by construction.
+  // If this breaks, agent reactions/flags can leak to the visitor's widget.
+  it('never carries the agent-only reactions / flaggedAt fields', () => {
+    const dto = toMessageDTO(makeMessage({}), visitorAuthor)
+    expect(dto).not.toHaveProperty('reactions')
+    expect(dto).not.toHaveProperty('flaggedAt')
+  })
+})
+
+describe('enrichMessagesForAgent', () => {
+  // The agent-only postSuggestion is threaded in-memory (built by listMessages
+  // from rows it already loaded). enrichMessagesForAgent must read it straight
+  // off the provided map — there is no second metadata SELECT to re-read it.
+  it('surfaces postSuggestion from the in-memory map without a second metadata query', async () => {
+    const noteId = 'chat_note_1' as ConversationMessageId
+    const note = toMessageDTO(
+      makeMessage({ id: noteId, isInternal: true, senderType: 'agent' }),
+      null
+    )
+    const suggestion = { boardId: 'board_1', title: 'Dark mode', content: 'wants a night theme' }
+    const [enriched] = await enrichMessagesForAgent(
+      [note],
+      agentId,
+      new Map([[noteId, suggestion]])
+    )
+    expect(enriched.postSuggestion).toEqual(suggestion)
+    // Reactions/flags resolve empty against the chain mock; the suggestion rode
+    // in on the provided map, so no extra query was issued to attach it.
+    expect(enriched.reactions).toEqual([])
+    expect(enriched.flaggedAt).toBeNull()
+  })
+
+  it('leaves postSuggestion null for messages absent from the map', async () => {
+    const plain = toMessageDTO(makeMessage({}), null)
+    const [enriched] = await enrichMessagesForAgent([plain], agentId, new Map())
+    expect(enriched.postSuggestion).toBeNull()
+  })
+})
+
+describe('toConversationDTO', () => {
+  it('defaults visitorEmail to null when omitted, and null-coalesces csatRating + read watermarks', () => {
+    const dto = toConversationDTO(makeConversation(), visitorAuthor, null, 3)
+    expect(dto.visitorEmail).toBeNull()
+    expect(dto.assignedAgent).toBeNull()
+    expect(dto.csatRating).toBeNull()
+    expect(dto.visitorLastReadAt).toBeNull()
+    expect(dto.agentLastReadAt).toBeNull()
+    expect(dto.unreadCount).toBe(3)
+    expect(dto.lastMessageAt).toBe('2026-01-03T10:00:00.000Z')
+    expect(dto.createdAt).toBe('2026-01-01T00:00:00.000Z')
+  })
+
+  it('passes visitorEmail through when provided', () => {
+    const agent: ChatAuthorDTO = { principalId: agentId, displayName: 'Ann', avatarUrl: null }
+    const dto = toConversationDTO(
+      makeConversation({ csatRating: 5 }),
+      visitorAuthor,
+      agent,
+      0,
+      'visitor@example.com'
+    )
+    expect(dto.visitorEmail).toBe('visitor@example.com')
+    expect(dto.assignedAgent).toBe(agent)
+    expect(dto.csatRating).toBe(5)
+  })
+
+  it('ISO-stringifies the read watermarks when they are dates', () => {
+    const dto = toConversationDTO(
+      makeConversation({
+        visitorLastReadAt: new Date('2026-02-01T00:00:00.000Z'),
+        agentLastReadAt: new Date('2026-02-02T00:00:00.000Z'),
+      }),
+      visitorAuthor,
+      null,
+      0
+    )
+    expect(dto.visitorLastReadAt).toBe('2026-02-01T00:00:00.000Z')
+    expect(dto.agentLastReadAt).toBe('2026-02-02T00:00:00.000Z')
+  })
+})
+
+describe('authorFromInput', () => {
+  it('null-coalesces missing displayName and avatarUrl', () => {
+    expect(authorFromInput({ principalId: visitorId })).toEqual({
+      principalId: visitorId,
+      displayName: null,
+      avatarUrl: null,
+    })
+  })
+
+  it('passes provided displayName and avatarUrl through', () => {
+    expect(
+      authorFromInput({ principalId: agentId, displayName: 'Ann', avatarUrl: 'https://x/a.png' })
+    ).toEqual({
+      principalId: agentId,
+      displayName: 'Ann',
+      avatarUrl: 'https://x/a.png',
+    })
+  })
+})
+
+describe('fallbackAuthor', () => {
+  it('returns a null-identity author for the given principal', () => {
+    expect(fallbackAuthor(visitorId)).toEqual({
+      principalId: visitorId,
+      displayName: null,
+      avatarUrl: null,
+    })
+  })
+})
+
+describe('loadAuthors', () => {
+  it('returns an empty map without querying when all ids are null/undefined', async () => {
+    const map = await loadAuthors([null, undefined])
+    expect(map.size).toBe(0)
+    expect(inArrayCalls).toHaveLength(0)
+  })
+
+  it('dedupes ids and builds a principalId → author map, null-coalescing fields', async () => {
+    principalRows = [
+      { id: visitorId, displayName: 'Jane', avatarUrl: null },
+      { id: agentId, displayName: null, avatarUrl: 'https://x/a.png' },
+    ]
+    const map = await loadAuthors([visitorId, visitorId, agentId, null])
+    // Duplicates + nulls collapsed before the IN query.
+    expect(inArrayCalls).toHaveLength(1)
+    expect(inArrayCalls[0]).toEqual([visitorId, agentId])
+    expect(map.get(visitorId)).toEqual({
+      principalId: visitorId,
+      displayName: 'Jane',
+      avatarUrl: null,
+    })
+    expect(map.get(agentId)).toEqual({
+      principalId: agentId,
+      displayName: null,
+      avatarUrl: 'https://x/a.png',
+    })
+  })
+})
+
+describe('listConversationsForAgent assignee filter', () => {
+  // isNull is used in this builder ONLY for the unassigned-queue filter; the
+  // empty result short-circuits before any author load, so a call to isNull
+  // unambiguously means the unassigned condition was applied.
+  it('adds an "assigned agent IS NULL" condition for the unassigned queue', async () => {
+    await listConversationsForAgent({ unassignedOnly: true })
+    expect(isNull).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not constrain the assignee by default', async () => {
+    await listConversationsForAgent({})
+    expect(isNull).not.toHaveBeenCalled()
+  })
+})
+
+describe('listConversationsForAgent segment filter', () => {
+  const segmentId = 'segment_eng' as SegmentId
+
+  it('restricts to conversations whose visitor is in the requested segments', async () => {
+    await listConversationsForAgent({ segmentIds: [segmentId] })
+    // The membership subquery pins conversations to visitors in these segments;
+    // the inner inArray carries the requested segment ids.
+    expect(inArrayCalls.some((c) => Array.isArray(c) && c.includes(segmentId))).toBe(true)
+  })
+
+  it('does not add the segment condition by default', async () => {
+    await listConversationsForAgent({})
+    expect(inArrayCalls).toHaveLength(0)
+  })
+
+  it('ignores an empty segmentIds array', async () => {
+    await listConversationsForAgent({ segmentIds: [] })
+    expect(inArrayCalls).toHaveLength(0)
+  })
+})
+
+describe('listConversationsForAgent mentions view', () => {
+  // The mock's table stubs carry no column props, so eq's first arg is
+  // undefined; assert on the principal id flowing into the subquery's WHERE.
+  const eqCalledWithPrincipal = () => vi.mocked(eq).mock.calls.some((c) => c[1] === agentId)
+
+  it('restricts to conversations whose notes mention the given principal', async () => {
+    const page = await listConversationsForAgent({ mentionedPrincipalId: agentId })
+    expect(page).toEqual({ conversations: [], hasMore: false, nextCursor: null })
+    // The mentions subquery pins the mention recipient to this principal.
+    expect(eqCalledWithPrincipal()).toBe(true)
+  })
+
+  it('does not add the mentions condition by default', async () => {
+    await listConversationsForAgent({})
+    expect(eqCalledWithPrincipal()).toBe(false)
+  })
+
+  it('excludes soft-deleted notes from the mentions subquery', async () => {
+    // Mention rows survive a note's soft-delete (the FK only cascades on hard
+    // delete), so the subquery must guard on deleted_at IS NULL or a deleted
+    // note keeps the conversation in Mentions forever.
+    await listConversationsForAgent({ mentionedPrincipalId: agentId })
+    expect(isNull).toHaveBeenCalled()
+  })
+})
+
+describe('listConversationsForAgent visitor filter', () => {
+  it('restricts to the given visitor', async () => {
+    await listConversationsForAgent({ visitorPrincipalId: visitorId })
+    expect(vi.mocked(eq).mock.calls.some((c) => c[1] === visitorId)).toBe(true)
+  })
+
+  it('does not constrain by visitor by default', async () => {
+    await listConversationsForAgent({})
+    expect(vi.mocked(eq).mock.calls.some((c) => c[1] === visitorId)).toBe(false)
+  })
+})
+
+describe('resolveVisitorConversation', () => {
+  it('returns the thread for its owner, read-only only when closed', () => {
+    const open = makeConversation({ status: 'open' })
+    expect(resolveVisitorConversation(open, visitorId)).toEqual({
+      conversation: open,
+      isReadOnly: false,
+    })
+    const closed = makeConversation({ status: 'closed' })
+    expect(resolveVisitorConversation(closed, visitorId)).toEqual({
+      conversation: closed,
+      isReadOnly: true,
+    })
+    const pending = makeConversation({ status: 'pending' })
+    expect(resolveVisitorConversation(pending, visitorId)).toEqual({
+      conversation: pending,
+      isReadOnly: false,
+    })
+  })
+
+  it('hides a thread the visitor does not own', () => {
+    const other = makeConversation({ visitorPrincipalId: 'principal_other' as PrincipalId })
+    expect(resolveVisitorConversation(other, visitorId)).toEqual({
+      conversation: null,
+      isReadOnly: false,
+    })
+  })
+
+  it('returns no conversation for a missing row', () => {
+    expect(resolveVisitorConversation(null, visitorId)).toEqual({
+      conversation: null,
+      isReadOnly: false,
+    })
+  })
+})

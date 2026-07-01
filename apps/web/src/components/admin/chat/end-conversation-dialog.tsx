@@ -7,8 +7,8 @@ import {
   CONVERSATION_END_REASONS,
   CONVERSATION_END_REASON_LABELS,
   type ConversationEndReason,
-} from '@/lib/shared/chat/types'
-import { endConversationFn } from '@/lib/server/functions/chat'
+} from '@/lib/shared/conversation/types'
+import { endConversationFn } from '@/lib/server/functions/conversation'
 import {
   Dialog,
   DialogContent,
