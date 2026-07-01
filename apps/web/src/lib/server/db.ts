@@ -259,6 +259,12 @@ export {
   // Schema tables - analytics
   analyticsDailyStats,
   analyticsTopPosts,
+  // Schema tables - visitor analytics
+  pageViews,
+  visitorStatsDaily,
+  visitorTopStats,
+  VISITOR_SURFACES,
+  VISITOR_TOP_DIMENSIONS,
   // Schema tables - help center
   helpCenterCategories,
   helpCenterCategoriesRelations,

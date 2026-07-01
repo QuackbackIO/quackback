@@ -960,6 +960,13 @@
       "when": 1784592000000,
       "tag": "0136_post_merge_suggestions_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1784678400000,
+      "tag": "0137_visitor_analytics",
+      "breakpoints": true
     }
   ]
 }

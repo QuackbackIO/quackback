@@ -133,6 +133,9 @@ export type PipelineLogId = TypeId<'plog'>
 /** Post activity log ID - e.g., post_activity_01h455vb4pex5vsknk084sn02q */
 export type PostActivityId = TypeId<'post_activity'>
 
+/** Visitor analytics pageview ID - e.g., pv_01h455vb4pex5vsknk084sn02q */
+export type PageViewId = TypeId<'pv'>
+
 // ============================================
 // Feedback Aggregation Entity IDs
 // ============================================
@@ -251,6 +254,7 @@ export interface EntityIdMap {
   ai_usage: AiUsageLogId
   pipeline_log: PipelineLogId
   post_activity: PostActivityId
+  page_view: PageViewId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId
   feedback_signal: FeedbackSignalId

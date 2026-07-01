@@ -81,6 +81,9 @@ export const ID_PREFIXES = {
   post_merge_suggestion: 'post_merge_sug',
   post_activity: 'post_activity',
 
+  // Visitor analytics
+  page_view: 'pv',
+
   // ============================================
   // Auth Entities (Better-auth, text primary keys)
   // ============================================
