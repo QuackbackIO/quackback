@@ -95,7 +95,7 @@ describe('autoAssignActiveStrategy', () => {
       { id: 'principal_amy', role: 'admin' },
       { id: 'principal_zoe', role: 'member' },
     ]
-    // Amy (lexicographically first) already carries 3 open chats; Zoe carries none.
+    // Amy (lexicographically first) already carries 3 open conversations; Zoe carries none.
     loadRows = [{ agent: 'principal_amy' }, { agent: 'principal_amy' }, { agent: 'principal_amy' }]
     expect((await autoAssignActiveStrategy.route(ctx)).assignedPrincipalId).toBe('principal_zoe')
   })

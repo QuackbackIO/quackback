@@ -1,5 +1,5 @@
 /**
- * Substitute supported placeholders in an admin-authored chat message (e.g. the
+ * Substitute supported placeholders in an admin-authored conversation message (e.g. the
  * welcome greeting). Shared by the widget render and tests; pure, no React.
  *
  * Today only {{first_name}} is supported. An anonymous/unknown visitor falls

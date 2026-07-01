@@ -8,7 +8,7 @@ describe('buildNavSections', () => {
     expect(labels).not.toContain('Support')
   })
 
-  it('has no Support section when both helpCenter and chat are false', () => {
+  it('has no Support section when both helpCenter and supportInbox are false', () => {
     const sections = buildNavSections({ helpCenter: false, supportInbox: false })
     const labels = sections.map((s) => s.label)
     expect(labels).not.toContain('Support')
@@ -20,7 +20,7 @@ describe('buildNavSections', () => {
     expect(labels).toContain('Support')
   })
 
-  it('includes a Support section when chat flag is true', () => {
+  it('includes a Support section when supportInbox flag is true', () => {
     const sections = buildNavSections({ supportInbox: true })
     const labels = sections.map((s) => s.label)
     expect(labels).toContain('Support')
@@ -48,7 +48,7 @@ describe('buildNavSections', () => {
     )
   })
 
-  it('Support contains only Help Center when chat is off', () => {
+  it('Support contains only Help Center when supportInbox is off', () => {
     const sections = buildNavSections({ helpCenter: true })
     const support = sections.find((s) => s.label === 'Support')!
     expect(support.items.map((i) => i.label)).toEqual(['Help Center'])
@@ -63,8 +63,8 @@ describe('buildNavSections', () => {
   it('does not place Conversations under Customization', () => {
     const sections = buildNavSections({ supportInbox: true })
     const customization = sections.find((s) => s.label === 'Customization')!
-    const chat = customization.items.find((i) => i.label === 'Conversations')
-    expect(chat).toBeUndefined()
+    const conversations = customization.items.find((i) => i.label === 'Conversations')
+    expect(conversations).toBeUndefined()
   })
 
   it('places Widget and Branding under Customization', () => {
@@ -109,7 +109,7 @@ describe('buildNavSections', () => {
     expect(labels).not.toContain('Developers')
   })
 
-  it('has the expected section order with helpCenter and chat on', () => {
+  it('has the expected section order with helpCenter and supportInbox on', () => {
     const sections = buildNavSections({ helpCenter: true, supportInbox: true })
     const labels = sections.map((s) => s.label)
     expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Support', 'Customers'])

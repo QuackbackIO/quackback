@@ -23,7 +23,7 @@ interface SharePostDialogProps {
   onShared?: () => void
 }
 
-/** Agent action: search existing posts and embed one as a card in the chat. */
+/** Agent action: search existing posts and embed one as a card in the conversation. */
 export function SharePostDialog({
   open,
   onOpenChange,
@@ -48,7 +48,7 @@ export function SharePostDialog({
   const share = useMutation({
     mutationFn: (postId: PostId) => sharePostFn({ data: { conversationId, postId } }),
     onSuccess: () => {
-      toast.success('Post shared in chat')
+      toast.success('Post shared in conversation')
       onOpenChange(false)
       onShared?.()
     },
@@ -60,7 +60,9 @@ export function SharePostDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Share a post</DialogTitle>
-          <DialogDescription>Search for an existing post to embed in this chat.</DialogDescription>
+          <DialogDescription>
+            Search for an existing post to embed in this conversation.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">

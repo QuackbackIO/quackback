@@ -16,7 +16,7 @@ import {
   type ConversationPresence,
 } from '@/lib/shared/conversation/presence'
 import {
-  PORTAL_CHAT_PRESENCE_QUERY_KEY,
+  PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
   PORTAL_MY_CONVERSATIONS_QUERY_KEY,
 } from '@/lib/client/queries/portal-support'
 
@@ -48,7 +48,7 @@ function SupportThreadPage() {
   // Team availability for the presence strip — portal twin of the widget's
   // shared presence query (cookie-authed, so no headers needed).
   const presenceQuery = useQuery({
-    queryKey: PORTAL_CHAT_PRESENCE_QUERY_KEY,
+    queryKey: PORTAL_CONVERSATION_PRESENCE_QUERY_KEY,
     queryFn: () => getConversationPresenceFn(),
     enabled: supportEnabled && isLoggedIn,
     refetchInterval: CONVERSATION_PRESENCE_POLL_MS,

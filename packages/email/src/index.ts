@@ -517,7 +517,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
 }
 
 // ============================================================================
-// Live Chat Email
+// Conversation Email
 // ============================================================================
 
 interface SendConversationMessageEmailParams {
@@ -538,7 +538,7 @@ interface SendConversationMessageEmailParams {
 }
 
 /**
- * Notify someone of a chat message when they're offline: an agent of a new
+ * Notify someone of a conversation message when they're offline: an agent of a new
  * visitor message, or a visitor of an agent reply.
  */
 export async function sendConversationMessageEmail(
@@ -562,7 +562,7 @@ export async function sendConversationMessageEmail(
     ? `New reply from ${workspaceName}`
     : isStarted
       ? `New message from ${workspaceName}`
-      : 'New chat message'
+      : 'New message'
   const intro = isReply
     ? `${senderName} replied to your conversation with ${workspaceName}.`
     : isStarted
@@ -578,7 +578,7 @@ export async function sendConversationMessageEmail(
     ? `New reply from ${workspaceName}`
     : isStarted
       ? `New message from ${workspaceName}`
-      : `New chat message in ${workspaceName}`
+      : `New message in ${workspaceName}`
 
   if (getProvider() === 'console') {
     log.debug(

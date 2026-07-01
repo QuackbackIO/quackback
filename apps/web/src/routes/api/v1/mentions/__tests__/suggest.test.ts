@@ -332,7 +332,7 @@ describe('GET /api/v1/mentions/suggest', () => {
   })
 
   it('restricts roles to admin/member when scope=team (no visitors)', async () => {
-    // Chat notes are team-internal, so the picker must not offer role:'user'
+    // Conversation notes are team-internal, so the picker must not offer role:'user'
     // principals (visitors) — the server would silently drop such a mention.
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(identifiedSession)
     vi.mocked(db.query.principal.findFirst).mockResolvedValueOnce(userPrincipal)

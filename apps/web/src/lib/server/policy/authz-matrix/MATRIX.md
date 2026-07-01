@@ -188,7 +188,7 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/conversation.ts`::getConversationFn | conversation.view |
 | `lib/server/functions/conversation.ts`::sendAgentMessageFn | conversation.reply |
 | `lib/server/functions/conversation.ts`::startAgentConversationFn | conversation.reply |
-| `lib/server/functions/conversation.ts`::addChatNoteFn | conversation.note |
+| `lib/server/functions/conversation.ts`::addConversationNoteFn | conversation.note |
 | `lib/server/functions/conversation.ts`::createPostFromConversationFn | post.create |
 | `lib/server/functions/conversation.ts`::captureVisitorContactEmailFn | conversation.manage |
 | `lib/server/functions/conversation.ts`::sharePostFn | conversation.reply |

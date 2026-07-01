@@ -55,7 +55,7 @@ function wireGracefulShutdown(): void {
           if (r.status === 'rejected') log.error({ err: r.reason }, 'queue close failed')
         }
 
-        // Drain the live-chat pub/sub subscriber connection before the
+        // Drain the conversation pub/sub subscriber connection before the
         // shared client closes — it's a separate long-lived socket.
         await import('./realtime/pubsub').then(({ closeSubscriber }) => closeSubscriber())
 

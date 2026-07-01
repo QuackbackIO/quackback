@@ -17,8 +17,8 @@ export async function isPortalSupportEnabled(): Promise<boolean> {
 }
 
 /**
- * Whether conversations are reachable from ANY visitor surface (widget chat or
- * portal Support tab). The shared visitor-facing chat paths gate on this, so
+ * Whether conversations are reachable from ANY visitor surface (widget messenger or
+ * portal Support tab). The shared visitor-facing conversation paths gate on this, so
  * disabling the widget no longer kills the portal surface and vice versa.
  */
 export async function isConversationsEnabled(): Promise<boolean> {

@@ -2,7 +2,7 @@
  * Inbound email parsing for the email channel, kept pure so it's unit-tested
  * directly. Resend posts an `email.received` event whose `data` carries the
  * parsed message; we normalize the shape we depend on and strip quoted reply
- * history so the ingested chat message is only what the visitor actually wrote.
+ * history so the ingested conversation message is only what the visitor actually wrote.
  */
 
 export interface ParsedInboundEmail {

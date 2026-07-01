@@ -13,12 +13,12 @@ vi.mock('@/lib/server/functions/conversation', () => ({
 import {
   useConversationPresence,
   markAgentPresentInCache,
-  CHAT_PRESENCE_QUERY_KEY,
+  CONVERSATION_PRESENCE_QUERY_KEY,
 } from '../use-messenger-presence'
 
 function seeded(seed?: unknown) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  if (seed !== undefined) qc.setQueryData(CHAT_PRESENCE_QUERY_KEY, seed)
+  if (seed !== undefined) qc.setQueryData(CONVERSATION_PRESENCE_QUERY_KEY, seed)
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   )
@@ -42,7 +42,7 @@ describe('useConversationPresence', () => {
     })
   })
 
-  it('reports offline when disabled (chat off)', () => {
+  it('reports offline when disabled (messenger off)', () => {
     const { wrapper } = seeded()
     const { result } = renderHook(() => useConversationPresence(false), { wrapper })
     expect(result.current.agentsOnline).toBe(false)
@@ -57,7 +57,7 @@ describe('markAgentPresentInCache', () => {
       nextOpenAt: '2026-01-01T09:00:00Z',
     })
     markAgentPresentInCache(qc)
-    expect(qc.getQueryData(CHAT_PRESENCE_QUERY_KEY)).toEqual({
+    expect(qc.getQueryData(CONVERSATION_PRESENCE_QUERY_KEY)).toEqual({
       agentsOnline: true,
       withinOfficeHours: false,
       nextOpenAt: '2026-01-01T09:00:00Z',
@@ -67,7 +67,7 @@ describe('markAgentPresentInCache', () => {
   it('seeds an online verdict when the cache is empty', () => {
     const { qc } = seeded()
     markAgentPresentInCache(qc)
-    expect(qc.getQueryData(CHAT_PRESENCE_QUERY_KEY)).toEqual({
+    expect(qc.getQueryData(CONVERSATION_PRESENCE_QUERY_KEY)).toEqual({
       agentsOnline: true,
       withinOfficeHours: null,
       nextOpenAt: null,

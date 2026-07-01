@@ -38,7 +38,7 @@ export function isEmojiOnly(text: string): boolean {
 }
 
 /**
- * A chat message that is only emoji (and carries no image/embed) renders large,
+ * A conversation message that is only emoji (and carries no image/embed) renders large,
  * the way Slack/iMessage enlarge a lone-emoji message. Drives the bubble render
  * on every surface (admin inbox + widget).
  */

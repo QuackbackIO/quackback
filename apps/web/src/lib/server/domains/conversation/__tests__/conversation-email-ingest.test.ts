@@ -8,13 +8,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { inboundReplyToAddress } from '../conversation.email-channel'
 
 // Inbound signing must be configured for the plus-address to verify (the real,
-// un-mocked chat.email-channel signs + checks the conversation id).
+// un-mocked conversation.email-channel signs + checks the conversation id).
 process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
 process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_dGVzdHNlY3JldA=='
 const REPLY_TO = inboundReplyToAddress('conversation_abc')!
 
 const sendVisitorMessage = vi.fn()
-const assertChatSendRate = vi.fn()
+const assertConversationSendRate = vi.fn()
 let conversationRow: Record<string, unknown> | undefined
 let principalRow: Record<string, unknown> | undefined
 let userRow: Record<string, unknown> | undefined
@@ -25,7 +25,7 @@ vi.mock('../conversation.service', () => ({
 }))
 
 vi.mock('../conversation.ratelimit', () => ({
-  assertChatSendRate: (...a: unknown[]) => assertChatSendRate(...a),
+  assertConversationSendRate: (...a: unknown[]) => assertConversationSendRate(...a),
   ConversationRateLimitError: class ConversationRateLimitError extends Error {
     readonly code = 'RATE_LIMITED'
     readonly retryAfter = 5
@@ -84,7 +84,7 @@ beforeEach(() => {
   userRow = undefined
   dupeRows = []
   sendVisitorMessage.mockResolvedValue({ created: false })
-  assertChatSendRate.mockResolvedValue(undefined)
+  assertConversationSendRate.mockResolvedValue(undefined)
 })
 
 describe('ingestInboundEmail', () => {
@@ -241,7 +241,7 @@ describe('ingestInboundEmail', () => {
 
   it('rate-limits the inbound path (acks without fanning out a message)', async () => {
     const { ConversationRateLimitError } = await import('../conversation.ratelimit')
-    assertChatSendRate.mockRejectedValueOnce(new ConversationRateLimitError(5))
+    assertConversationSendRate.mockRejectedValueOnce(new ConversationRateLimitError(5))
 
     const result = await ingestInboundEmail(baseEvent)
 

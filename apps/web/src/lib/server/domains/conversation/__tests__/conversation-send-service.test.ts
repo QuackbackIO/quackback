@@ -1,5 +1,5 @@
 /**
- * Service-level guards for live chat sends: content validation, server-decided
+ * Service-level guards for conversation message sends: content validation, server-decided
  * sender type, and conversation creation on first message.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -79,7 +79,7 @@ vi.mock('@/lib/server/db', () => {
     const c: Record<string, unknown> = {}
     c.values = vi.fn((row: Record<string, unknown>) => {
       if (label === 'conversations') insertedConversations.push(row)
-      if (label === 'chat_messages') insertedMessages.push(row)
+      if (label === 'conversation_messages') insertedMessages.push(row)
       return c
     })
     c.set = vi.fn(() => c)
@@ -105,7 +105,7 @@ vi.mock('@/lib/server/db', () => {
           },
         ]
       }
-      if (label === 'chat_messages') {
+      if (label === 'conversation_messages') {
         const last = insertedMessages.at(-1) ?? {}
         return [{ ...last, id: 'conversation_msg_new', createdAt: new Date() }]
       }
@@ -130,7 +130,7 @@ vi.mock('@/lib/server/db', () => {
     and: vi.fn(),
     isNull: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', displayName: 'display_name' },
   }
 })

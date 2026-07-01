@@ -98,12 +98,12 @@ function AdminLayout() {
   const { initialUserData, latestVersion, planNotice, currentUser } = Route.useLoaderData()
   const postId = usePostIdFromUrl()
 
-  // Mark team members online for chat routing across the whole admin (not just
+  // Mark team members online for conversation routing across the whole admin (not just
   // the inbox), but only when the support inbox feature is on.
   const { settings } = useRouteContext({ from: '__root__' })
-  const chatEnabled =
+  const conversationsEnabled =
     (settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false
-  useAdminPresence(Boolean(initialUserData) && chatEnabled)
+  useAdminPresence(Boolean(initialUserData) && conversationsEnabled)
 
   // For public routes (login, signup), render just the outlet without the admin layout
   if (!initialUserData) {

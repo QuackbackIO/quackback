@@ -64,7 +64,7 @@ export function NotificationItem({
     )
   }
 
-  // Chat mentions deep-link into the inbox conversation. Recipients are always
+  // Conversation mentions deep-link into the inbox conversation. Recipients are always
   // team members (the mention sync is admin/member-only), so /admin/inbox is
   // the correct target in both the dropdown and the full notifications page.
   if (notification.type === 'chat_mention' && notification.conversationId) {

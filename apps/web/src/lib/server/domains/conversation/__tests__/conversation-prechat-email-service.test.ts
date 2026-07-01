@@ -72,7 +72,8 @@ vi.mock('@/lib/server/db', () => {
       label === 'conversations' && existingConversation ? [existingConversation] : []
     c.returning = async () => {
       if (label === 'conversations') return [freshConversation()]
-      if (label === 'chat_messages') return [{ id: 'conversation_msg_new', createdAt: new Date() }]
+      if (label === 'conversation_messages')
+        return [{ id: 'conversation_msg_new', createdAt: new Date() }]
       return []
     }
     return c
@@ -90,7 +91,7 @@ vi.mock('@/lib/server/db', () => {
     and: vi.fn(),
     isNull: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', contactEmail: 'contact_email' },
   }
 })

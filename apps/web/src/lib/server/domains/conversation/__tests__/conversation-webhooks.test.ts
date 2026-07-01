@@ -75,7 +75,7 @@ const message = {
 
 beforeEach(() => Object.values(dispatch).forEach((m) => m.mockClear()))
 
-describe('chat.webhooks emit helpers', () => {
+describe('conversation.webhooks emit helpers', () => {
   it('emitConversationCreated sends a sanitized EventConversationData with a user actor', async () => {
     await emitConversationCreated(visitorActor, anonAuthor, baseConversation)
     expect(dispatch.dispatchConversationCreated).toHaveBeenCalledTimes(1)

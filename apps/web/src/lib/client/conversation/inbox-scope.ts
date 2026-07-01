@@ -28,7 +28,7 @@ export type StatusFilter = ConversationStatus | 'all'
 
 export const PRIORITY_VALUES = ['all', 'none', 'low', 'medium', 'high', 'urgent'] as const
 
-/** Inbox URL search params — the source of truth for the open chat + filters. */
+/** Inbox URL search params — the source of truth for the open conversation + filters. */
 export interface InboxSearch {
   c?: string
   /** Deep-link target message within `c` — scrolled to + flashed on open. */
@@ -40,7 +40,7 @@ export interface InboxSearch {
   priority?: ConversationPriority | 'all'
   q?: string
   /** Open post for the shared `?post=` modal (the whole admin layout mounts it).
-   *  Set when an embedded post card in a chat message is clicked; must be carried
+   *  Set when an embedded post card in a conversation message is clicked; must be carried
    *  here or this route's validateSearch would strip it before the modal sees it. */
   post?: string
 }

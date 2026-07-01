@@ -31,7 +31,7 @@ export function EmbedHydration({
   children: ReactNode
   className?: string
   /** How hydrated embed cards open their target — forwarded to every card. The
-   *  default (same-tab navigation) suits display surfaces; chat surfaces pass
+   *  default (same-tab navigation) suits display surfaces; conversation surfaces pass
    *  `newTab` (widget) or `modal` (admin). */
   openMode?: EmbedOpenMode
   /** Opens a post in place; required when `openMode` is `modal`. */

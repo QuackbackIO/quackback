@@ -13,11 +13,11 @@ export interface ConversationSummary {
 }
 
 /**
- * Lightweight read of the visitor's chat summary: the most-recent conversation
+ * Lightweight read of the visitor's conversation summary: the most-recent conversation
  * (+ team name) from getMyConversationFn, merged with the shared presence verdict from
  * useConversationPresence. Re-keyed on sessionVersion. Shared by the Home overview and
  * the Help Messages section so the resume card and presence stay consistent.
- * Pass `enabled=false` (e.g. when chat is off) to skip the fetch entirely.
+ * Pass `enabled=false` (e.g. when messenger is off) to skip the fetch entirely.
  *
  * Presence is NOT fetched here — it lives in the one shared useConversationPresence
  * query (SSR-seeded, polled once), so every surface reads the same value.

@@ -917,7 +917,7 @@ export async function requeueUnansweredOnAgentOffline(
 
     // Which of those threads have a real, visitor-facing agent reply (so they
     // stay assigned). Internal notes and soft-deleted messages don't count — a
-    // private note or a since-deleted reply must not mask an unanswered chat.
+    // private note or a since-deleted reply must not mask an unanswered conversation.
     const answered = await db
       .selectDistinct({ id: conversationMessages.conversationId })
       .from(conversationMessages)

@@ -53,9 +53,9 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn(),
     and: vi.fn(),
-    conversationMessages: { __name: 'chat_messages' },
-    conversationMessageReactions: { __name: 'chat_message_reactions' },
-    conversationMessageFlags: { __name: 'chat_message_flags' },
+    conversationMessages: { __name: 'conversation_messages' },
+    conversationMessageReactions: { __name: 'conversation_message_reactions' },
+    conversationMessageFlags: { __name: 'conversation_message_flags' },
   }
 })
 

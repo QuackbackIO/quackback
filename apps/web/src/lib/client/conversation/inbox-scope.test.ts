@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { ConversationTagId, SegmentId } from '@quackback/ids'
 import { navFromSearch, buildListParams, type InboxNavItem } from './inbox-scope'
 
-const tagId = 'chat_tag_x' as ConversationTagId
+const tagId = 'conversation_tag_x' as ConversationTagId
 const segId = 'segment_y' as SegmentId
 
 describe('navFromSearch', () => {

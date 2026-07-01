@@ -1,5 +1,5 @@
 /**
- * Client-safe live chat types, shared by the widget view, the admin inbox, and
+ * Client-safe conversation types, shared by the widget view, the admin inbox, and
  * the SSE transport. No server-only imports here — this module is bundled into
  * the browser.
  */
@@ -24,7 +24,7 @@ export type { ConversationStatus, ConversationSystemEvent, ConversationEndReason
 export { CONVERSATION_END_REASONS }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 // 'system' = a status event (e.g. assignment) shown to both sides, rendered as
-// a centered notice rather than a chat bubble.
+// a centered notice rather than a message bubble.
 export type MessageSenderType = 'visitor' | 'agent' | 'system'
 /** A human side of a conversation — who acts (types, reads); 'system' is neither. */
 export type ConversationSide = Exclude<MessageSenderType, 'system'>
@@ -75,7 +75,7 @@ export interface ConversationAttachment {
   size: number
 }
 
-/** A single rendered chat message. `createdAt` is an ISO-8601 string. */
+/** A single rendered conversation message. `createdAt` is an ISO-8601 string. */
 export interface ConversationMessageDTO {
   id: ConversationMessageId
   conversationId: ConversationId
@@ -89,7 +89,7 @@ export interface ConversationMessageDTO {
   isInternal: boolean
   /** Rich TipTap doc for messages that carry structured content: internal-note
    *  @-mention chips, and rich agent replies / visitor messages from the rich
-   *  composer (inline embeds + images). Null for plain live-chat/email messages,
+   *  composer (inline embeds + images). Null for plain messenger/email messages,
    *  which render from `content`. Sanitized on write. */
   contentJson: TiptapContent | null
   /** True when this message arrived via the email channel (inbound reply). */
@@ -111,7 +111,7 @@ export interface MessageReactionCount {
 }
 
 /**
- * A chat message as surfaced to an AGENT, extending the base DTO with
+ * A conversation message as surfaced to an AGENT, extending the base DTO with
  * agent-only fields. These MUST NOT reach the visitor: they are populated only
  * by `enrichMessagesForAgent` (never by the shared `toMessageDTO`), and the one
  * realtime event that carries them (`message_updated`) is published on the

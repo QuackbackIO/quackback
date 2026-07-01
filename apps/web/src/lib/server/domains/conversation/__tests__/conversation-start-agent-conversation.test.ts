@@ -87,7 +87,7 @@ vi.mock('@/lib/server/db', () => {
     const c: Record<string, unknown> = {}
     c.values = vi.fn((row: Record<string, unknown>) => {
       if (label === 'conversations') insertedConversations.push(row)
-      if (label === 'chat_messages') insertedMessages.push(row)
+      if (label === 'conversation_messages') insertedMessages.push(row)
       return c
     })
     c.set = vi.fn(() => c)
@@ -116,7 +116,7 @@ vi.mock('@/lib/server/db', () => {
           },
         ]
       }
-      if (label === 'chat_messages') {
+      if (label === 'conversation_messages') {
         const last = insertedMessages.at(-1) ?? {}
         return [{ ...last, id: 'conversation_msg_outbound', createdAt: new Date() }]
       }
@@ -143,7 +143,7 @@ vi.mock('@/lib/server/db', () => {
     isNull: vi.fn(),
     inArray: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', type: 'type', role: 'role' },
     user: { __name: 'user', id: 'id', email: 'email' },
   }

@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import type { ConversationMessageId } from '@quackback/ids'
 import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
-import { buildAdminChatRows } from '../admin-conversation-rows'
+import { buildAdminConversationRows } from '../admin-conversation-rows'
 
 const msg = (id: string) => ({ id }) as unknown as AgentConversationMessageDTO
 
-describe('buildAdminChatRows', () => {
+describe('buildAdminConversationRows', () => {
   it('returns an empty-state row when there are no messages', () => {
-    const rows = buildAdminChatRows({
+    const rows = buildAdminConversationRows({
       messages: [],
       hasMoreOlder: false,
       firstUnreadId: null,
@@ -18,7 +18,7 @@ describe('buildAdminChatRows', () => {
   })
 
   it('prepends load-older and keys messages by id, in order', () => {
-    const rows = buildAdminChatRows({
+    const rows = buildAdminConversationRows({
       messages: [msg('conversation_msg_a'), msg('conversation_msg_b')],
       hasMoreOlder: true,
       firstUnreadId: null,
@@ -33,7 +33,7 @@ describe('buildAdminChatRows', () => {
   })
 
   it('inserts the unread divider immediately before the first unread message', () => {
-    const rows = buildAdminChatRows({
+    const rows = buildAdminConversationRows({
       messages: [msg('m1'), msg('m2'), msg('m3')],
       hasMoreOlder: false,
       firstUnreadId: 'm2' as ConversationMessageId,
@@ -44,7 +44,7 @@ describe('buildAdminChatRows', () => {
   })
 
   it('orders the full set: load-older, unread, messages, seen, typing', () => {
-    const rows = buildAdminChatRows({
+    const rows = buildAdminConversationRows({
       messages: [msg('m1'), msg('m2')],
       hasMoreOlder: true,
       firstUnreadId: 'm1' as ConversationMessageId,

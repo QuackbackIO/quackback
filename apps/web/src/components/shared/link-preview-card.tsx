@@ -1,5 +1,5 @@
 /**
- * Link preview card rendered below a chat message bubble.
+ * Link preview card rendered below a conversation message bubble.
  *
  * - Fetches preview data via the `unfurlLinkFn` server fn (auth-gated,
  *   rate-limited, cached). Renders nothing while loading or when null.

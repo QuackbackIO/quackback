@@ -67,12 +67,12 @@ export type ConversationTagWithCount = {
   count: number
 }
 
-const CHAT_TAG_COUNTS_KEY = ['admin', 'inbox', 'chat-tags', 'counts'] as const
+const CONVERSATION_TAG_COUNTS_KEY = ['admin', 'inbox', 'conversation-tags', 'counts'] as const
 
 /** Shared (deduped) source of the labels + per-tag conversation counts. */
 export function useConversationTagsWithCounts() {
   return useQuery({
-    queryKey: CHAT_TAG_COUNTS_KEY,
+    queryKey: CONVERSATION_TAG_COUNTS_KEY,
     queryFn: () => fetchConversationTagsWithCountsFn() as Promise<ConversationTagWithCount[]>,
     staleTime: 60_000,
   })

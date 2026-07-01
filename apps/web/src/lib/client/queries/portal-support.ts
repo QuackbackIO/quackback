@@ -4,4 +4,4 @@
  */
 export const PORTAL_MY_CONVERSATIONS_QUERY_KEY = ['portal', 'my-conversations'] as const
 
-export const PORTAL_CHAT_PRESENCE_QUERY_KEY = ['portal', 'chat-presence'] as const
+export const PORTAL_CONVERSATION_PRESENCE_QUERY_KEY = ['portal', 'conversation-presence'] as const

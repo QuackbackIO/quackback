@@ -1,10 +1,10 @@
 /**
- * Chat → webhook event bridge. Maps conversation/message rows to sanitized
+ * Conversation → webhook event bridge. Maps conversation/message rows to sanitized
  * event payloads and dispatches them on the shared event bus. Fire-and-forget
- * from chat.service after a write commits: a dispatch failure must never break
- * sending a message (matches the chat.notify pattern).
+ * from conversation.service after a write commits: a dispatch failure must never break
+ * sending a message (matches the conversation.notify pattern).
  *
- * Chat authors carry no userId (ConversationAuthorInput), so the EventActor is built
+ * Conversation authors carry no userId (ConversationAuthorInput), so the EventActor is built
  * from actor.principalType rather than reusing buildEventActor (which keys on
  * userId). Synthetic anonymous emails are stripped via realEmail() everywhere
  * an email surfaces.
@@ -32,7 +32,7 @@ import {
 } from '@/lib/server/events/dispatch'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'chat-webhooks' })
+const log = logger.child({ component: 'conversation-webhooks' })
 
 function toEventActor(actor: Actor, author?: ConversationAuthorInput | null): EventActor {
   const principalId = actor.principalId ?? undefined

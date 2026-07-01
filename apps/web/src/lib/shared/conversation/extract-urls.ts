@@ -1,5 +1,5 @@
 /**
- * Extract previewable external URLs from a chat message.
+ * Extract previewable external URLs from a conversation message.
  *
  * Collects URLs from: link marks in a TipTap doc AND a regex over the plain
  * text. Excludes internal Quackback URLs (handled by quackbackEmbed). Dedupes

@@ -1,5 +1,5 @@
 /**
- * Live chat presence, backed by Redis so it works across replicas.
+ * Conversation presence, backed by Redis so it works across replicas.
  *
  * Used to gate offline notifications and offline re-queue: a principal is online
  * while any of their SSE streams is live. Each stream is a member of a
@@ -19,11 +19,11 @@ const log = logger.child({ component: 'presence' })
 /** TTL must comfortably exceed the SSE heartbeat interval (20s). */
 export const PRESENCE_TTL_SECONDS = 45
 
-const AGENTS_ZSET = 'chat:presence:agents'
+const AGENTS_ZSET = 'conversation:presence:agents'
 
 /** Per-principal set of live stream ids, each scored by its last-heartbeat ms. */
 function streamsKey(principalId: PrincipalId): string {
-  return `chat:presence:streams:${principalId}`
+  return `conversation:presence:streams:${principalId}`
 }
 
 /** Members older than this haven't heartbeat within the TTL → treat as gone. */
@@ -93,7 +93,7 @@ export async function refreshPresence(
 /**
  * Deregister a stream. Returns true when it was the principal's last live stream
  * cluster-wide (they just went offline), so callers can react (e.g. re-queue an
- * agent's unanswered chats). Stale members from a crashed replica are pruned
+ * agent's unanswered conversations). Stale members from a crashed replica are pruned
  * first, so a ghost stream can't keep the principal "online" beyond the TTL.
  * Returns false on a Redis error (don't report a clean offline we couldn't write).
  */

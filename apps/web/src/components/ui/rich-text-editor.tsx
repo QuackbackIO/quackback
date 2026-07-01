@@ -960,7 +960,7 @@ const EmojiSuggestionList = forwardRef<EmojiSuggestionListRef, EmojiSuggestionLi
 )
 EmojiSuggestionList.displayName = 'EmojiSuggestionList'
 
-/** The `:`-triggered inline emoji picker, shared with the chat composers so
+/** The `:`-triggered inline emoji picker, shared with the conversation composers so
  *  reply + note get the same emoji UX as posts. */
 export function createEmojiExtension() {
   return Emoji.configure({
@@ -2313,7 +2313,7 @@ export function generateContentHTML(content: JSONContent): string {
       }
 
       case 'chatImage': {
-        // Inline chat image. Bounded (max-w-xs) so it sits inside a chat bubble.
+        // Inline conversation image. Bounded (max-w-xs) so it sits inside a message bubble.
         // Renders nothing if the src is empty after sanitization.
         const src = escapeHtmlAttr(sanitizeImageUrl(String(node.attrs?.src ?? '')))
         const alt = escapeHtmlAttr(String(node.attrs?.alt ?? ''))

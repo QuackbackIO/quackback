@@ -91,7 +91,7 @@ vi.mock('@/lib/server/db', () => {
   function chain(label: string) {
     const c: Record<string, unknown> = {}
     c.values = vi.fn((row: Record<string, unknown>) => {
-      if (label === 'chat_messages') insertedMessages.push(row)
+      if (label === 'conversation_messages') insertedMessages.push(row)
       return c
     })
     c.set = vi.fn(() => c)
@@ -101,7 +101,7 @@ vi.mock('@/lib/server/db', () => {
     c.limit = vi.fn(async () => [conversationRow])
     c.orderBy = vi.fn(() => c)
     c.returning = vi.fn(async () => {
-      if (label === 'chat_messages') {
+      if (label === 'conversation_messages') {
         const last = insertedMessages.at(-1) ?? {}
         return [{ ...last, id: 'conversation_msg_new', createdAt: new Date() }]
       }
@@ -124,7 +124,7 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'chat_messages', id: 'id', isInternal: 'is_internal' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id', isInternal: 'is_internal' },
   }
 })
 

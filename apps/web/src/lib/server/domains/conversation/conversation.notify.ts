@@ -19,7 +19,7 @@ import { resolveReplyRecipient } from './conversation.recipient'
 import { inboundReplyToAddress, isEmailInboundConfigured } from './conversation.email-channel'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'chat-notify' })
+const log = logger.child({ component: 'conversation-notify' })
 
 const previewOf = (content: string) => truncate(content, 140)
 
@@ -69,7 +69,7 @@ export async function notifyVisitorMessage(opts: {
 
     if (team.length === 0) return
 
-    const title = `New chat message from ${opts.authorName}`
+    const title = `New message from ${opts.authorName}`
     const body = previewOf(opts.content)
 
     await createNotificationsBatch(
@@ -144,7 +144,7 @@ export async function notifyAgentReply(opts: {
     if (!ctx) return
     const { sendConversationMessageEmail } = await import('@quackback/email')
     // Deep-link to the visitor's conversation surface (portal Support thread
-    // when enabled, else the widget chat view). The thread is surfaced from
+    // when enabled, else the widget messenger view). The thread is surfaced from
     // the visitor's own session (or a re-identify in the host app), so the URL
     // only navigates — it carries no capability of its own.
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)

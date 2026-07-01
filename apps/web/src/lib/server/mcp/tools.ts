@@ -33,7 +33,7 @@
  * - get_conversation: Get a conversation and its messages
  * - reply_to_conversation: Send an agent reply in a conversation
  * - suggest_post: Nudge the team (agent-only) to track a resolved conversation as a post
- * - share_post: Embed an existing post as a card in the chat
+ * - share_post: Embed an existing post as a card in the conversation
  * - set_conversation_status: Change a conversation's status
  */
 
@@ -207,7 +207,7 @@ async function requireHelpCenterWrite(auth: McpAuthContext): Promise<CallToolRes
   return (await requireHelpCenter()) ?? requireScope(auth, 'write:article') ?? requireTeamRole(auth)
 }
 
-/** Build the agent-author object used by the chat write tools (reply, suggest, share). */
+/** Build the agent-author object used by the conversation write tools (reply, suggest, share). */
 function agentFromMcpAuth(auth: McpAuthContext) {
   return { principalId: auth.principalId, displayName: auth.name, email: auth.email }
 }
@@ -2241,7 +2241,7 @@ Example: suggest_post({ conversationId: "conversation_01...", boardId: "board_01
   // share_post
   server.tool(
     'share_post',
-    `Embed an EXISTING feedback post as a card in the chat so the visitor can view and upvote it. Find
+    `Embed an EXISTING feedback post as a card in the conversation so the visitor can view and upvote it. Find
 candidates first with the search tool. Use to surface related ideas / avoid duplicates.
 
 Example: share_post({ conversationId: "conversation_01...", postId: "post_01..." })`,

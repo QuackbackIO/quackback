@@ -4,7 +4,7 @@ const TYPING_THROTTLE_MS = 2500
 const REMOTE_TYPING_TTL_MS = 4000
 
 /**
- * Chat typing state. Throttles outbound "I'm typing" signals so we send at most
+ * Conversation typing state. Throttles outbound "I'm typing" signals so we send at most
  * one per window while the user types, and tracks whether the remote side is
  * currently typing (auto-clearing after a TTL so a dropped stop-signal can't
  * leave the indicator stuck on).

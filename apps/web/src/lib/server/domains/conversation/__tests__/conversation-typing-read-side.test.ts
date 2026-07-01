@@ -1,6 +1,6 @@
 /**
  * Typing/read side derivation: the side must follow the actor's relationship
- * to the CONVERSATION, not their global role. A team member chatting in a
+ * to the CONVERSATION, not their global role. A team member messaging in a
  * thread they own (their own portal/widget conversation) is the visitor there
  * — otherwise their own typing echoes back as "agent is typing" and their
  * read-marks stamp the wrong watermark.
@@ -106,7 +106,7 @@ vi.mock('@/lib/server/db', () => {
     isNull: vi.fn(),
     inArray: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id' },
     user: { __name: 'user', id: 'id' },
   }

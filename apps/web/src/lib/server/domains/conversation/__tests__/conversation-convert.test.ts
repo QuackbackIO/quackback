@@ -1,5 +1,5 @@
 /**
- * createPostFromConversation — turning a live-chat conversation into feedback.
+ * createPostFromConversation — turning a messenger conversation into feedback.
  * Covers the agent authorization guard, the not-found conversation chokepoint,
  * the create-new-post path (seeded from the transcript + visitor attribution),
  * the upvote-existing path (records a vote, no post created), the title

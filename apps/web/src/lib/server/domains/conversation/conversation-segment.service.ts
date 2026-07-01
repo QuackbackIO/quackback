@@ -4,8 +4,8 @@
  * visitor is a member of that segment (the membership tables themselves are
  * owned by the segments domain; this only reads them for the inbox).
  *
- * Deliberately a thin chat-side helper rather than living in the segments
- * domain, because the count it returns is chat-specific (open conversations),
+ * Deliberately a thin conversation-side helper rather than living in the segments
+ * domain, because the count it returns is conversation-specific (open conversations),
  * mirroring `listConversationTagsWithCounts` so the two nav groups read identically.
  * Authorization is enforced at the server-fn layer, not here.
  */

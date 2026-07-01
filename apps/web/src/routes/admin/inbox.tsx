@@ -17,7 +17,7 @@ import type { ConversationId, ConversationMessageId } from '@quackback/ids'
 import {
   listConversationMessagesFn,
   sendAgentMessageFn,
-  addChatNoteFn,
+  addConversationNoteFn,
   markConversationReadFn,
   sendConversationTypingFn,
   getCannedRepliesFn,
@@ -74,8 +74,8 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import {
-  buildAdminChatRows,
-  type AdminChatRow,
+  buildAdminConversationRows,
+  type AdminConversationRow,
 } from '@/lib/client/conversation/admin-conversation-rows'
 import type { JSONContent } from '@tiptap/core'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
@@ -101,7 +101,7 @@ export const Route = createFileRoute('/admin/inbox')({
   // restores the exact open conversation + filters, and links are shareable.
   validateSearch: (search: Record<string, unknown>): InboxSearch => ({
     c: typeof search.c === 'string' ? search.c : undefined,
-    // Only accept a well-formed chat-message id — a stray `?m=` is harmless
+    // Only accept a well-formed conversation-message id — a stray `?m=` is harmless
     // (the thread just won't find it), but validating keeps it tidy.
     m:
       typeof search.m === 'string' && isValidTypeId(search.m, 'conversation_msg')
@@ -110,7 +110,7 @@ export const Route = createFileRoute('/admin/inbox')({
     // Allowlist tracks CONVERSATION_VIEWS (incl. 'saved') so deep-links can't
     // silently drop a real view and fall back to the conversation list.
     view: isInboxView(search.view) ? search.view : undefined,
-    // Only accept a well-formed chat-tag id — a malformed `?tag=` would reach a
+    // Only accept a well-formed conversation-tag id — a malformed `?tag=` would reach a
     // uuid-backed query and 500 the conversation list.
     tag:
       typeof search.tag === 'string' && isValidTypeId(search.tag, 'conversation_tag')
@@ -134,7 +134,7 @@ export const Route = createFileRoute('/admin/inbox')({
       : undefined,
     q: typeof search.q === 'string' && search.q ? search.q : undefined,
     // Carries the shared `?post=` modal target (the admin layout mounts the
-    // modal) so clicking an embedded post in a chat opens it without leaving the
+    // modal) so clicking an embedded post in a conversation opens it without leaving the
     // inbox. Validated to a real post id; a junk value is dropped.
     post:
       typeof search.post === 'string' && isValidTypeId(search.post, 'post')
@@ -620,9 +620,9 @@ function ConversationThread({
   const linkPreviewsEnabled =
     (settings?.featureFlags as FeatureFlags | undefined)?.linkPreviews ?? false
 
-  // Open an embedded post (clicked in a chat message) in the in-place `?post=`
+  // Open an embedded post (clicked in a conversation message) in the in-place `?post=`
   // modal the admin layout mounts — route-bound + search-only, so it stays on
-  // /admin/inbox with `?c=` intact, and closing returns to the exact chat.
+  // /admin/inbox with `?c=` intact, and closing returns to the exact conversation.
   // Mirrors how the roadmap board opens a card; NOT `replace`, so the browser
   // back button closes the modal.
   const openPost = useCallback(
@@ -781,7 +781,7 @@ function ConversationThread({
   // grow a row (replacing the old one-shot scroll + ResizeObserver pinning).
   const rows = useMemo(
     () =>
-      buildAdminChatRows({
+      buildAdminConversationRows({
         messages,
         hasMoreOlder,
         firstUnreadId,
@@ -942,7 +942,7 @@ function ConversationThread({
       contentJson: JSONContent | null
       attachments?: ConversationAttachment[]
     }) =>
-      addChatNoteFn({
+      addConversationNoteFn({
         data: {
           conversationId,
           content: vars.content,
@@ -1126,7 +1126,7 @@ function ConversationThread({
 
   // Render one virtualized row. AdminBubble keeps all its behaviors (and its
   // data-message-id root); the affordance rows mirror the old inline markup.
-  const renderRow = (row: AdminChatRow) => {
+  const renderRow = (row: AdminConversationRow) => {
     switch (row.type) {
       case 'load-older':
         return (
@@ -1312,7 +1312,7 @@ function ConversationThread({
         )}
 
         {/* Messages — min-h-0 so this scrolls and the composer stays pinned. The
-            thread is virtualized (TanStack Virtual chat pattern): each row is
+            thread is virtualized (TanStack Virtual conversation pattern): each row is
             absolutely positioned at its measured offset within a spacer sized to
             the total height. The wrapper is `relative` so the scroll-to-bottom
             pill can float over the thread. */}

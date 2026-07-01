@@ -317,7 +317,10 @@ async function getIntegrationTargets(
         const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
         accessToken = secrets.accessToken
       } catch (error) {
-        log.error({ err: error, integration_type: m.integrationType }, 'failed to decrypt integration secrets')
+        log.error(
+          { err: error, integration_type: m.integrationType },
+          'failed to decrypt integration secrets'
+        )
         continue
       }
     }
@@ -853,7 +856,7 @@ async function getChangelogSubscriberTargets(
  * Whether a webhook subscription matches an event. The board filter applies
  * only to board-bearing events (post/comment); conversation/message events
  * have no board and match on event-type subscription alone, so a webhook with
- * a board filter still receives the chat events it subscribed to.
+ * a board filter still receives the conversation events it subscribed to.
  */
 export function webhookSubscriptionMatches(
   webhook: { events: string[]; boardIds: string[] | null },

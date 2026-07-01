@@ -64,7 +64,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
       // Serialize dates for JSON transport
       return {
         notifications: result.notifications.map((n) => {
-          // Chat notifications carry their target conversation in metadata so
+          // Conversation notifications carry their target conversation in metadata so
           // the client can deep-link into the inbox.
           const conversationId = n.metadata?.conversationId
           return {

@@ -4,8 +4,8 @@
  *
  * Scope: this module owns every principal INSERT and every role write. It does
  * NOT own a small set of cache-safe, column-scoped direct writes other domains
- * make (chat captures `contactEmail` with an overwrite-once guard; presence
- * writes `chatAvailability`) — those columns are never read by the principal
+ * make (the conversation flow captures `contactEmail` with an overwrite-once guard;
+ * presence writes `chatAvailability`) — those columns are never read by the principal
  * role/type cache, so they stay where they are.
  *
  * The role write goes through one private helper (`writeRole`) so that when role

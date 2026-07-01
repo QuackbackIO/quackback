@@ -1,5 +1,5 @@
 /**
- * Pure DTO mappers + the small batch loader in chat.query. Covers the
+ * Pure DTO mappers + the small batch loader in conversation.query. Covers the
  * normalization/defaulting branches (attachments → [], visitorEmail → null,
  * csatRating null-coalesce, ISO timestamps, null read-watermarks,
  * displayName/avatarUrl null-coalesce) and the loader's dedupe / empty-input /
@@ -52,17 +52,17 @@ vi.mock('@/lib/server/db', () => {
     principal: { __name: 'principal' },
     user: { __name: 'user', id: 'id', image: 'image', imageKey: 'image_key' },
     conversations: { __name: 'conversations' },
-    conversationMessages: { __name: 'chat_messages' },
-    conversationMessageMentions: { __name: 'chat_message_mentions' },
+    conversationMessages: { __name: 'conversation_messages' },
+    conversationMessageMentions: { __name: 'conversation_message_mentions' },
     conversationMessageReactions: {
-      __name: 'chat_message_reactions',
-      conversationMessageId: 'chat_message_id',
+      __name: 'conversation_message_reactions',
+      conversationMessageId: 'conversation_message_id',
       emoji: 'emoji',
       principalId: 'principal_id',
     },
     conversationMessageFlags: {
-      __name: 'chat_message_flags',
-      conversationMessageId: 'chat_message_id',
+      __name: 'conversation_message_flags',
+      conversationMessageId: 'conversation_message_id',
       principalId: 'principal_id',
       flaggedAt: 'flagged_at',
     },
@@ -195,7 +195,7 @@ describe('enrichMessagesForAgent', () => {
   // from rows it already loaded). enrichMessagesForAgent must read it straight
   // off the provided map — there is no second metadata SELECT to re-read it.
   it('surfaces postSuggestion from the in-memory map without a second metadata query', async () => {
-    const noteId = 'chat_note_1' as ConversationMessageId
+    const noteId = 'note_1' as ConversationMessageId
     const note = toMessageDTO(
       makeMessage({ id: noteId, isInternal: true, senderType: 'agent' }),
       null

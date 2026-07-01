@@ -1,6 +1,6 @@
 /**
  * Server functions for conversation tags ("labels"). Separate from the feedback
- * tag functions — these operate on the support-inbox chat_tags taxonomy.
+ * tag functions — these operate on the support-inbox conversation_tags taxonomy.
  * Applying/removing a label needs conversation.set_tags; defining the taxonomy
  * (create/update/delete, and inline-create) needs conversation.manage_tags.
  */

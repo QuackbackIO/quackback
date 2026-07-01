@@ -10,7 +10,7 @@ import { verifyResendWebhookSignature } from './email-webhook-verify'
 import { ingestInboundEmail } from './conversation.email-inbound.service'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'chat-email-inbound' })
+const log = logger.child({ component: 'conversation-email-inbound' })
 
 /** Svix sends both `webhook-*` and `svix-*` aliases; accept either. */
 function header(request: Request, base: string): string | null {
@@ -44,7 +44,7 @@ export async function handleInboundEmailWebhook(request: Request): Promise<Respo
     return new Response('', { status: 200 })
   }
 
-  // Conversations gate: when no visitor surface (widget chat or portal
+  // Conversations gate: when no visitor surface (widget messenger or portal
   // Support) is enabled, replies have nowhere to land. Ack-and-drop like any
   // other unroutable payload so the provider stops retrying.
   const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')

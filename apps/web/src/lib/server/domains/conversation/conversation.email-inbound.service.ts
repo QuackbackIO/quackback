@@ -21,7 +21,7 @@ import {
   extractEmailAddress,
 } from './conversation.email-inbound'
 import { conversationIdFromInboundAddress } from './conversation.email-channel'
-import { assertChatSendRate, ConversationRateLimitError } from './conversation.ratelimit'
+import { assertConversationSendRate, ConversationRateLimitError } from './conversation.ratelimit'
 import { sendVisitorMessage } from './conversation.service'
 
 export type IngestInboundResult =
@@ -100,7 +100,7 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
   // fanout (a visitor mail-looping replies, or a client retrying with fresh
   // Message-IDs). Fails open on Redis errors. Ack (200) so the provider stops.
   try {
-    await assertChatSendRate(visitorPrincipalId)
+    await assertConversationSendRate(visitorPrincipalId)
   } catch (err) {
     if (err instanceof ConversationRateLimitError) return { status: 'rate_limited' }
     throw err

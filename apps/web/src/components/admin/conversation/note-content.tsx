@@ -15,7 +15,7 @@ interface NoteContentProps {
 
 /**
  * Renders an internal note body. Mirrors public/comment-content so an
- * @-mention reads identically across feedback and chat — a styled chip with a
+ * @-mention reads identically across feedback and conversations — a styled chip with a
  * hover card — instead of bare `@name` text.
  */
 export function NoteContent({ content, contentJson, className }: NoteContentProps) {

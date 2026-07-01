@@ -46,7 +46,7 @@ export interface ConversationRichComposerHandle {
 }
 
 /**
- * A reusable, visitor-facing TipTap composer for chat. Modeled on the
+ * A reusable, visitor-facing TipTap composer for conversations. Modeled on the
  * internal-note editor but with team @-mentions removed (visitors can't mention
  * teammates) and inline images added: pasting/dropping an image uploads it and
  * inserts a removable {@link ConversationImage} node, and pasting a Quackback link

@@ -1,5 +1,5 @@
 /**
- * Server functions for the support inbox: the live-chat widget channel plus agent-side inbox operations.
+ * Server functions for the support inbox: the messenger widget channel plus agent-side inbox operations.
  *
  * Visitor-facing functions (send / read own thread) accept either the portal
  * cookie or the widget Bearer token — the better-auth bearer plugin resolves
@@ -165,17 +165,17 @@ const markUnreadFromMessageSchema = z.object({
 async function assertConversationsEnabled(): Promise<void> {
   const { isConversationsEnabled } = await import('@/lib/server/domains/settings/settings.support')
   if (!(await isConversationsEnabled())) {
-    throw new Error('Chat is not enabled')
+    throw new Error('Conversations are not enabled')
   }
 }
 
 /**
- * Shared gate for every visitor-facing chat endpoint: conversations must be
- * reachable from some surface (widget chat or portal Support tab) AND the
+ * Shared gate for every visitor-facing conversation endpoint: conversations must be
+ * reachable from some surface (widget messenger or portal Support tab) AND the
  * caller must have portal access. Team members (agents) bypass the portal
  * check — they reach these endpoints from the admin inbox. Throws on failure.
  */
-async function assertVisitorChatAccess(role: string | null): Promise<void> {
+async function assertVisitorConversationAccess(role: string | null): Promise<void> {
   await assertConversationsEnabled()
   if (isTeamMember(role)) return
   const { resolvePortalAccessForRequest } = await import('./portal-access')
@@ -191,14 +191,14 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth()
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorConversationAccess(ctx.principal.role)
 
       // Throttle per principal: bounds write/notify fanout and runaway
       // conversation creation. Agents (team) send via sendAgentMessageFn.
       if (!isTeamMember(ctx.principal.role)) {
-        const { assertChatSendRate } =
+        const { assertConversationSendRate } =
           await import('@/lib/server/domains/conversation/conversation.ratelimit')
-        await assertChatSendRate(ctx.principal.id)
+        await assertConversationSendRate(ctx.principal.id)
 
         // Enforce required pre-chat email server-side (the widget gates the
         // button, but a direct call must not bypass it): only on the first
@@ -234,7 +234,7 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
         (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
       )
     } catch (error) {
-      log.error({ err: error }, 'send chat message failed')
+      log.error({ err: error }, 'send conversation message failed')
       throw error
     }
   })
@@ -267,15 +267,15 @@ export const getConversationPresenceFn = createServerFn({ method: 'GET' }).handl
   }
 )
 
-// getMyChat optionally targets a specific conversation:
+// getMyConversationFn optionally targets a specific conversation:
 //  - omitted        → the visitor's active/most-recent thread (default)
 //  - a conversation → that thread, if the caller owns it (else greeting state)
 //  - null           → "new": config + greeting with no thread
-const myChatSchema = z.object({ conversationId: z.string().nullish() }).optional()
+const myConversationSchema = z.object({ conversationId: z.string().nullish() }).optional()
 
 /** The current visitor's active conversation + first page of messages. */
 export const getMyConversationFn = createServerFn({ method: 'GET' })
-  .validator(myChatSchema)
+  .validator(myConversationSchema)
   .handler(async ({ data }) => {
     try {
       const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
@@ -390,7 +390,7 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         hasMore: page.hasMore,
       }
     } catch (error) {
-      log.error({ err: error }, 'get my chat failed')
+      log.error({ err: error }, 'get my conversation failed')
       throw error
     }
   })
@@ -432,7 +432,7 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth()
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       const { assertConversationViewable } =
         await import('@/lib/server/domains/conversation/conversation.service')
@@ -457,7 +457,7 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
       }
       return page
     } catch (error) {
-      log.error({ err: error }, 'list chat messages failed')
+      log.error({ err: error }, 'list conversation messages failed')
       throw error
     }
   })
@@ -468,7 +468,7 @@ export const markConversationReadFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth()
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       // The service derives the side from the actor's relationship to the
       // conversation (a team member in a thread they own is the visitor).
@@ -477,7 +477,7 @@ export const markConversationReadFn = createServerFn({ method: 'POST' })
       await markConversationRead(data.conversationId as ConversationId, actor)
       return { ok: true }
     } catch (error) {
-      log.error({ err: error }, 'mark chat read failed')
+      log.error({ err: error }, 'mark conversation read failed')
       throw error
     }
   })
@@ -488,7 +488,7 @@ export const sendConversationTypingFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth()
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       // Side derived in the service from conversation ownership, not role.
       const { signalTyping } =
@@ -496,7 +496,7 @@ export const sendConversationTypingFn = createServerFn({ method: 'POST' })
       await signalTyping(data.conversationId as ConversationId, actor)
       return { ok: true }
     } catch (error) {
-      log.error({ err: error }, 'send chat typing failed')
+      log.error({ err: error }, 'send conversation typing failed')
       throw error
     }
   })
@@ -507,7 +507,7 @@ export const submitCsatFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth()
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       const { recordCsat } = await import('@/lib/server/domains/conversation/conversation.service')
       await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
@@ -539,11 +539,11 @@ export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
 export const mintConversationStreamTokenFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {
     const ctx = await requireAuth()
-    await assertVisitorChatAccess(ctx.principal.role)
+    await assertVisitorConversationAccess(ctx.principal.role)
     const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
     return { token: mintStreamToken(ctx.principal.id) }
   } catch (error) {
-    log.error({ err: error }, 'mint chat stream token failed')
+    log.error({ err: error }, 'mint conversation stream token failed')
     throw error
   }
 })
@@ -554,19 +554,19 @@ export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth()
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       const { deleteConversationMessage } =
         await import('@/lib/server/domains/conversation/conversation.service')
       await deleteConversationMessage(data.messageId as ConversationMessageId, actor)
       return { ok: true }
     } catch (error) {
-      log.error({ err: error }, 'delete chat message failed')
+      log.error({ err: error }, 'delete conversation message failed')
       throw error
     }
   })
 
-/** Build the agent-author object used by chat convert/share operations. */
+/** Build the agent-author object used by conversation convert/share operations. */
 function agentFromCtx(ctx: AuthContext) {
   return {
     principalId: ctx.principal.id,
@@ -623,7 +623,7 @@ const userConversationsSchema = z.object({
   before: z.string().optional(),
 })
 
-/** A single visitor's chat history (status-filterable, paginated) — admin user profile. */
+/** A single visitor's conversation history (status-filterable, paginated) — admin user profile. */
 export const listConversationsForUserFn = createServerFn({ method: 'GET' })
   .validator(userConversationsSchema)
   .handler(async ({ data }) => {
@@ -741,7 +741,7 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
   })
 
 /** Add an agent-only internal note (never sent to the visitor). */
-export const addChatNoteFn = createServerFn({ method: 'POST' })
+export const addConversationNoteFn = createServerFn({ method: 'POST' })
   .validator(agentNoteSchema)
   .handler(async ({ data }) => {
     try {
@@ -762,7 +762,7 @@ export const addChatNoteFn = createServerFn({ method: 'POST' })
         data.attachments as ConversationAttachment[] | undefined
       )
     } catch (error) {
-      log.error({ err: error }, 'add chat note failed')
+      log.error({ err: error }, 'add conversation note failed')
       throw error
     }
   })

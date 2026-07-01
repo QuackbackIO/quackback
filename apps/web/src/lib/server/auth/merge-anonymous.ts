@@ -6,7 +6,7 @@
  * - Widget identify: previousToken merge (anonymous → SDK re-identify)
  *
  * Transfers: votes, comments, posts, postSubscriptions, inAppNotifications,
- * chat conversations + messages.
+ * conversations + messages.
  * Cleans up: anonymous principal, sessions, user record.
  */
 import type { PrincipalId, UserId } from '@quackback/ids'
@@ -70,8 +70,8 @@ export async function mergeAnonymousToIdentified(params: MergeAnonymousParams): 
       .from(postComments)
       .where(eq(postComments.principalId, anonPrincipalId))
 
-    // 3. Transfer votes, comments, posts, and chat history to target principal.
-    // Chat rows use onDelete:'restrict', so re-pointing them here is mandatory —
+    // 3. Transfer votes, comments, posts, and conversation history to target principal.
+    // Conversation rows use onDelete:'restrict', so re-pointing them here is mandatory —
     // otherwise the anon-principal delete in step 6 throws and breaks the merge.
     await Promise.all([
       tx

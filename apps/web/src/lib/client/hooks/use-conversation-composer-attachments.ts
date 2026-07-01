@@ -3,7 +3,7 @@ import type { ConversationAttachment } from '@/lib/shared/conversation/types'
 import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 
 /**
- * Manages pending attachments for a chat composer: uploads picked files via the
+ * Manages pending attachments for a conversation composer: uploads picked files via the
  * provided upload fn (which returns a public URL), tracks them with their
  * name/type/size for the send payload, and exposes add/remove/clear + an
  * uploading flag.

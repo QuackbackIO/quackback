@@ -1,7 +1,7 @@
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 /**
- * A single virtualized row in the chat thread. Messages are keyed by their id
+ * A single virtualized row in the conversation thread. Messages are keyed by their id
  * (stable across prepend, so the virtualizer can anchor the viewport when older
  * history loads); the surrounding affordances use fixed keys.
  */
@@ -32,7 +32,7 @@ export interface ConversationRowsInput {
 }
 
 /**
- * Flatten the chat thread into an ordered, stable-keyed row list for the
+ * Flatten the conversation thread into an ordered, stable-keyed row list for the
  * virtualizer: load-older → greeting → messages → seen → typing → csat. Pure so
  * the ordering/keying is unit-tested directly.
  */

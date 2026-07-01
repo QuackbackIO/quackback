@@ -37,7 +37,7 @@ export const Route = createFileRoute('/admin/settings/conversations')({
 })
 
 /**
- * Gate the live chat settings page behind the experimental `supportInbox` flag
+ * Gate the messenger settings page behind the experimental `supportInbox` flag
  * (off by default), mirroring the help-center route. Wrapping keeps the flag
  * check above the page's hooks so they aren't conditionally called.
  */
@@ -162,7 +162,7 @@ function ConversationsSettingsPage() {
       <PageHeader
         icon={ChatBubbleLeftRightIcon}
         title="Conversations"
-        description="How support conversations work: the Messenger chat in the widget and how new conversations are routed to your team."
+        description="How support conversations work: Messenger in the widget and how new conversations are routed to your team."
       />
 
       {!widgetEnabled && (
@@ -265,7 +265,7 @@ function ConversationsSettingsPage() {
               disabled={isBusy || !enabled}
             />
             <p className="text-xs text-muted-foreground">
-              The first thing visitors see when they open chat. Use{' '}
+              The first thing visitors see when they open Messenger. Use{' '}
               <code className="rounded bg-muted px-1 py-0.5 text-[11px]">{'{{first_name}}'}</code>{' '}
               to greet known visitors by name.
             </p>
@@ -305,7 +305,7 @@ function ConversationsSettingsPage() {
             >
               <option value="off">Don&apos;t ask</option>
               <option value="optional">Optional</option>
-              <option value="required">Required before chatting</option>
+              <option value="required">Required before messaging</option>
             </select>
             <p className="text-xs text-muted-foreground">
               Capture an email from anonymous visitors so you can follow up by email when offline.

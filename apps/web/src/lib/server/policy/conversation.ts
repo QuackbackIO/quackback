@@ -1,5 +1,5 @@
 /**
- * Live chat authorization.
+ * Conversation authorization.
  *
  * Mirrors the policy module contract (see policy/types.ts): pure functions
  * returning an explicit Decision so every deny carries a machine-readable
@@ -34,9 +34,9 @@ export function canViewConversation(actor: Actor, conv: ConversationShape): Deci
  * principals (API keys/integrations) can never post as a visitor.
  */
 export function canSendVisitorMessage(actor: Actor, conv: ConversationShape): Decision {
-  if (!actor.principalId) return denyDecision('A chat session is required to send a message')
+  if (!actor.principalId) return denyDecision('A session is required to send a message')
   if (actor.principalType === 'service')
-    return denyDecision('Service principals cannot send chat messages')
+    return denyDecision('Service principals cannot send messages')
   if (actor.principalId !== conv.visitorPrincipalId)
     return denyDecision('You do not have access to this conversation')
   return allowDecision()
@@ -45,7 +45,7 @@ export function canSendVisitorMessage(actor: Actor, conv: ConversationShape): De
 /** Who may start a new conversation: any visitor (anonymous or identified) that
  * has a resolved principal. Service principals are excluded. */
 export function canStartConversation(actor: Actor): Decision {
-  if (!actor.principalId) return denyDecision('A chat session is required to start a conversation')
+  if (!actor.principalId) return denyDecision('A session is required to start a conversation')
   if (actor.principalType === 'service')
     return denyDecision('Service principals cannot start a conversation')
   return allowDecision()

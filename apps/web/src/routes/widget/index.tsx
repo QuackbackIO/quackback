@@ -31,7 +31,7 @@ import { portalQueries } from '@/lib/client/queries/portal'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
-import { CHAT_PRESENCE_QUERY_KEY } from '@/components/widget/use-messenger-presence'
+import { CONVERSATION_PRESENCE_QUERY_KEY } from '@/components/widget/use-messenger-presence'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -80,7 +80,7 @@ export const Route = createFileRoute('/widget/')({
         // ioredis-reaching presence import inside it — is stripped from the
         // client bundle. Server-side it runs inline and returns the verdict.
         const { getConversationPresenceFn } = await import('@/lib/server/functions/conversation')
-        queryClient.setQueryData(CHAT_PRESENCE_QUERY_KEY, await getConversationPresenceFn())
+        queryClient.setQueryData(CONVERSATION_PRESENCE_QUERY_KEY, await getConversationPresenceFn())
       } catch {
         // A presence read failure must never break the whole widget load — leave
         // the seed empty and let the client query fetch presence on mount.

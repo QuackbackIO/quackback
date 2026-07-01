@@ -3,7 +3,7 @@ import { toMessageDTO } from '../conversation.query'
 
 function msg(overrides: any) {
   return {
-    id: 'chatmsg_1',
+    id: 'msg_1',
     conversationId: 'conversation_1',
     senderType: 'agent',
     content: 'I drafted this',

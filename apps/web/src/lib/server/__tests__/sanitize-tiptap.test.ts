@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 // The sanitizer now resolves `chatImage` src against the app base (trusted-upload
 // check), which reads `config` — provide a valid base (the full env isn't loaded
-// in unit tests). Mirrors the chat-send-service test's config mock.
+// in unit tests). Mirrors the conversation-send-service test's config mock.
 vi.mock('@/lib/server/config', () => ({
   config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
 }))
@@ -679,7 +679,7 @@ describe('sanitizeTiptapContent', () => {
   })
 
   // ============================================
-  // Inline chat image sanitization
+  // Inline conversation image sanitization
   // ============================================
 
   it('preserves a chatImage with a same-origin upload src', () => {

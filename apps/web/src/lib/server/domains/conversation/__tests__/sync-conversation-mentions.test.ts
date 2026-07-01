@@ -1,6 +1,6 @@
 /**
  * Tests for syncConversationMessageMentions — server-side persistence + in-app
- * notification of @-mentions inside an internal chat note.
+ * notification of @-mentions inside an internal conversation note.
  *
  * Mirrors syncPostMentions but: notes are immutable (no delete/diff path),
  * mentions are TEAM-ONLY (admin/member; visitors and service principals are
@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ConversationMessageId, ConversationId, PrincipalId } from '@quackback/ids'
 
 const PRINCIPAL_TABLE = { __tag: 'principal' } as const
-const CHAT_MENTIONS_TABLE = { __tag: 'conversationMessageMentions' } as const
+const CONVERSATION_MENTIONS_TABLE = { __tag: 'conversationMessageMentions' } as const
 
 // Per-test state.
 let eligibilityRows: Array<{ id: string; type: string; role: string | null }> = []
@@ -63,7 +63,7 @@ vi.mock('@/lib/server/db', () => ({
     update: (_table: unknown) => makeUpdateChain(),
   },
   principal: PRINCIPAL_TABLE,
-  conversationMessageMentions: CHAT_MENTIONS_TABLE,
+  conversationMessageMentions: CONVERSATION_MENTIONS_TABLE,
   eq: vi.fn((col: unknown, val: unknown) => ({ __eq: { col, val } })),
   and: vi.fn((...args: Array<{ __principalIds?: string[] }>) => {
     let principalIds: string[] | undefined

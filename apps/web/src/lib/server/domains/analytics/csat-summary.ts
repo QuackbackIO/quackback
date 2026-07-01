@@ -1,7 +1,7 @@
 /**
  * Pure CSAT aggregation for the support analytics panel. Kept separate from the
  * SQL so the math (mean, distribution, daily trend) is unit-tested directly.
- * Chat/CSAT volume is low, so the caller selects the rated rows for a period
+ * Conversation/CSAT volume is low, so the caller selects the rated rows for a period
  * with a plain query and hands them here — no materialized view needed.
  */
 

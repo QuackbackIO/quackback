@@ -58,7 +58,7 @@ interface AdminBubbleProps {
   onToggleFlag: (next: boolean) => void
   /** Mark the conversation unread from this message. */
   onMarkUnread: () => void
-  /** Visitor-only: open the picker to share an existing post in the chat. */
+  /** Visitor-only: open the picker to share an existing post in the conversation. */
   onSharePost?: () => void
   /** Visitor-only: open the full dialog prefilled from this message. */
   onTrackAsPost?: () => void

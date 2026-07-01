@@ -34,7 +34,7 @@ import type { LatestVersionResult } from '@/lib/server/functions/version'
 import type { SettingsBrandingData } from '@/lib/server/domains/settings/settings.types'
 import { setAgentAvailabilityFn } from '@/lib/server/functions/conversation'
 
-/** Availability toggle for the account menu (chat routing). The label shows the
+/** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
 function AvailabilityMenuItems({
   availability,
@@ -139,8 +139,8 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   const email = user?.email ?? initialUserData?.email ?? null
   const avatarUrl = user?.image ?? initialUserData?.avatarUrl ?? null
 
-  // Agent chat availability (only meaningful when the support inbox is enabled).
-  const chatEnabled = flags?.supportInbox ?? false
+  // Agent conversation availability (only meaningful when the support inbox is enabled).
+  const conversationsEnabled = flags?.supportInbox ?? false
   const [availability, setAvailability] = useState<'online' | 'away'>(
     initialUserData?.chatAvailability ?? 'online'
   )
@@ -290,7 +290,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                     <DropdownMenuTrigger asChild>
                       <button className="relative flex items-center justify-center w-10 h-10 rounded-full hover:bg-muted/50 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                         <Avatar className="h-9 w-9" src={avatarUrl} name={name} />
-                        {chatEnabled && (
+                        {conversationsEnabled && (
                           <span
                             className={cn(
                               'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
@@ -319,7 +319,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {chatEnabled && (
+                  {conversationsEnabled && (
                     <AvailabilityMenuItems availability={availability} onSet={setAvail} />
                   )}
                   <DropdownMenuItem asChild>
@@ -454,7 +454,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
             <DropdownMenuTrigger asChild>
               <button className="relative h-9 w-9 rounded-full flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <Avatar className="h-8 w-8" src={avatarUrl} name={name} />
-                {chatEnabled && (
+                {conversationsEnabled && (
                   <span
                     className={cn(
                       'absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-background',
@@ -478,7 +478,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {chatEnabled && (
+              {conversationsEnabled && (
                 <AvailabilityMenuItems availability={availability} onSet={setAvail} />
               )}
               <DropdownMenuItem asChild>

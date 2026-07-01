@@ -1,7 +1,7 @@
 export type DraftFromMessage = { ok: true; title: string; boardId: string } | { ok: false }
 
 /**
- * Build a one-click draft-post suggestion from a chat message. Returns the
+ * Build a one-click draft-post suggestion from a conversation message. Returns the
  * board + capped title when the message is usable as a post title, else
  * `{ ok: false }` so the caller can fall back to the full dialog.
  */

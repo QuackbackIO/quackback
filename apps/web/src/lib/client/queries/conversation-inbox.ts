@@ -6,7 +6,7 @@
  * read instead of triggering a second client-side fetch.
  *
  * The keys are deliberately identical to the inline ones the inbox shipped with
- * (chat-inbox.test.ts pins them) so SSE cache writes, invalidations, and the
+ * (conversation-inbox.test.ts pins them) so SSE cache writes, invalidations, and the
  * per-scope conversation memory keep matching.
  */
 import { queryOptions } from '@tanstack/react-query'
@@ -45,7 +45,7 @@ export const conversationInboxQueries = {
   /** Labels + per-tag open-conversation counts (drives the nav Tags group). */
   tagCounts: () =>
     queryOptions({
-      queryKey: ['admin', 'inbox', 'chat-tags', 'counts'],
+      queryKey: ['admin', 'inbox', 'conversation-tags', 'counts'],
       queryFn: () => fetchConversationTagsWithCountsFn(),
       staleTime: 60_000,
     }),

@@ -60,13 +60,13 @@ function docHasContentNode(doc: JSONContent | null): boolean {
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
 
-export interface VisitorChatThreadPresence {
+export interface VisitorConversationThreadPresence {
   agentsOnline: boolean
   withinOfficeHours: boolean | null
   nextOpenAt: string | null
 }
 
-export interface VisitorChatThreadProps {
+export interface VisitorConversationThreadProps {
   /** Which thread to open: an id opens that thread, 'new' starts a fresh one,
    *  undefined resumes the visitor's active/most-recent thread. */
   conversationTarget?: ConversationId | 'new'
@@ -87,7 +87,7 @@ export interface VisitorChatThreadProps {
   uploadImage: (file: File) => Promise<string>
   /** Team availability (online agents / office hours), owned by the surface so
    *  every sibling view shares one poll. */
-  presence: VisitorChatThreadPresence
+  presence: VisitorConversationThreadPresence
   /** Live agent activity observed on the stream (message/typing) — lets the
    *  surface mark agents present in its own presence cache. */
   onAgentActivity?: () => void
@@ -107,7 +107,7 @@ export interface VisitorChatThreadProps {
  * composer (rich text + image attachments + emoji), pre-chat email capture,
  * presence strip, offline hints, and the post-conversation CSAT prompt.
  *
- * Shared by the widget chat tab and the portal Support tab — every
+ * Shared by the widget messenger tab and the portal Support tab — every
  * surface-specific dependency (auth headers, session minting, presence,
  * uploads, help search) comes in through props.
  */
@@ -124,7 +124,7 @@ export function VisitorConversationThread({
   helpSearch,
   embedOpenMode = 'newTab',
   onConversationStarted,
-}: VisitorChatThreadProps) {
+}: VisitorConversationThreadProps) {
   const intl = useIntl()
   const firstName = firstNameOf(currentUser?.name)
 
@@ -235,7 +235,7 @@ export function VisitorConversationThread({
   const composerRef = useRef<ConversationRichComposerHandle>(null)
 
   // Initial load — resumes an existing conversation for the current principal
-  // (works without forcing a session: getMyChat returns just the greeting when
+  // (works without forcing a session: getMyConversationFn returns just the greeting when
   // there's no session yet). Re-keyed on sessionVersion so it reloads after
   // identify swaps the actor.
   useEffect(() => {
@@ -891,7 +891,7 @@ export function VisitorConversationThread({
         {needsEmail && (
           <div className="px-1 pb-2">
             <label
-              htmlFor="visitor-chat-email"
+              htmlFor="visitor-conversation-email"
               className="mb-1 block text-[11px] font-medium text-muted-foreground"
             >
               {preChatMode === 'required' ? (
@@ -907,7 +907,7 @@ export function VisitorConversationThread({
               )}
             </label>
             <input
-              id="visitor-chat-email"
+              id="visitor-conversation-email"
               type="email"
               value={emailInput}
               onChange={(e) => setEmailInput(e.target.value)}
@@ -1029,7 +1029,7 @@ interface ChatBubbleProps {
 }
 
 /**
- * A single chat row in the threaded layout: the author's avatar on the left,
+ * A single message row in the threaded layout: the author's avatar on the left,
  * their name (and time) on top, and the message content below. Visitor and
  * agent messages render identically — the avatar + name carry the "who".
  */

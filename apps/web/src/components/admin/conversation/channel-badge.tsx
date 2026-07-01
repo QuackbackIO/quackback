@@ -6,7 +6,7 @@ const LABELS: Partial<Record<Channel, string>> = {
   web_form: 'Web form',
 }
 
-/** Badge showing a non-default arrival channel; renders nothing for live chat. */
+/** Badge showing a non-default arrival channel; renders nothing for messenger. */
 export function ChannelBadge({ channel }: { channel: Channel }) {
   const label = LABELS[channel]
   if (!label) return null

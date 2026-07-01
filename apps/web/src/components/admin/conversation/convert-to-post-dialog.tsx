@@ -131,7 +131,7 @@ export function ConvertToPostDialog({
   const share = useMutation({
     mutationFn: (postId: PostId) => sharePostFn({ data: { conversationId, postId } }),
     onSuccess: () => {
-      toast.success('Post shared in chat')
+      toast.success('Post shared in conversation')
       setOpen(false)
       onConverted?.()
     },
@@ -174,7 +174,7 @@ export function ConvertToPostDialog({
           <DialogTitle>Track as a feedback post</DialogTitle>
           <DialogDescription>
             Create a post from this conversation, attributed to the customer — they'll see it in the
-            chat and get status updates.
+            conversation and get status updates.
           </DialogDescription>
         </DialogHeader>
 

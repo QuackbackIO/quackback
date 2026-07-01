@@ -33,7 +33,7 @@ export interface SerializedNotification {
   body: string | null
   postId: string | null
   commentId: string | null
-  /** Target conversation for chat notifications (from metadata); null otherwise. */
+  /** Target conversation for conversation notifications (from metadata); null otherwise. */
   conversationId: string | null
   readAt: string | null
   archivedAt: string | null

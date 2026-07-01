@@ -1,5 +1,5 @@
 /**
- * Authorization matrix for live chat. Pure-function policy: who may read a
+ * Authorization matrix for conversations. Pure-function policy: who may read a
  * conversation, post as the visitor, start a conversation, or act as an agent.
  */
 import { describe, it, expect } from 'vitest'

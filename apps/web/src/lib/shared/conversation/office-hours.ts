@@ -175,9 +175,9 @@ export function nextOpenAt(config: OfficeHoursConfig | null | undefined, now: Da
 }
 
 /**
- * The schedule's view for a chat payload: whether we're open right now, and
+ * The schedule's view for a conversation payload: whether we're open right now, and
  * (only when the schedule says we're closed) the ISO instant we're next back.
- * Shared by the presence + chat server fns so the two payloads can't drift.
+ * Shared by the presence + conversation server fns so the two payloads can't drift.
  */
 export function officeHoursSnapshot(
   config: OfficeHoursConfig | null | undefined,

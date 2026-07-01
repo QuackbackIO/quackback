@@ -49,7 +49,7 @@ export const autoAssignActiveStrategy: RoutingStrategy = {
       return { assignedPrincipalId: null, strategyId: AUTO_ASSIGN_ACTIVE }
     }
     // Current open-conversation load per candidate (rows counted in app code;
-    // chat volume is low). A candidate with no open conversations is absent → 0.
+    // conversation volume is low). A candidate with no open conversations is absent → 0.
     const loadRows = await db
       .select({ agent: conversations.assignedAgentPrincipalId })
       .from(conversations)

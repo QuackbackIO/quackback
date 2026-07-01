@@ -1,5 +1,5 @@
 /**
- * Key-parity guard for the chat-inbox query factory. These keys MUST stay
+ * Key-parity guard for the conversation-inbox query factory. These keys MUST stay
  * byte-identical to the inline keys the inbox components and SSE cache writes
  * already use — a drift silently disables SSR hydration AND breaks
  * invalidation/optimistic writes, with no type error to catch it.
@@ -22,7 +22,7 @@ vi.mock('@/lib/server/functions/conversation-segments', () => ({
 
 import { conversationInboxQueries } from './conversation-inbox'
 
-const tagId = 'chat_tag_x' as ConversationTagId
+const tagId = 'conversation_tag_x' as ConversationTagId
 const segId = 'segment_y' as SegmentId
 const convId = 'conversation_z' as ConversationId
 
@@ -55,11 +55,11 @@ describe('conversationInboxQueries key parity', () => {
     ])
   })
 
-  it('tagCounts key matches CHAT_TAG_COUNTS_KEY', () => {
+  it('tagCounts key matches CONVERSATION_TAG_COUNTS_KEY', () => {
     expect(conversationInboxQueries.tagCounts().queryKey).toEqual([
       'admin',
       'inbox',
-      'chat-tags',
+      'conversation-tags',
       'counts',
     ])
   })

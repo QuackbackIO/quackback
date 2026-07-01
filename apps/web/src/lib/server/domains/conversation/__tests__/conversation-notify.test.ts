@@ -1,5 +1,5 @@
 /**
- * Offline chat notifications (chat.notify): who gets pinged and emailed when a
+ * Offline conversation notifications (conversation.notify): who gets pinged and emailed when a
  * visitor messages, when a note @-mentions a teammate, and when an agent replies
  * to an offline visitor. All three paths are fire-and-forget and must swallow
  * dependency errors rather than reject.
@@ -128,7 +128,7 @@ describe('notifyVisitorMessage', () => {
     expect(batch[0]).toMatchObject({
       principalId: 'principal_admin',
       type: 'chat_message',
-      title: 'New chat message from Visitor',
+      title: 'New message from Visitor',
       metadata: { conversationId },
     })
     expect(sendConversationMessageEmail).not.toHaveBeenCalled()
@@ -226,7 +226,7 @@ describe('notifyAgentReply', () => {
       to: 'account@x.com',
       direction: 'agent_reply',
       senderName: 'Agent',
-      // Token-free deep link straight to the widget's chat view.
+      // Token-free deep link straight to the widget's messenger view.
       ctaUrl: expect.stringContaining('https://acme.example.com/widget/?c='),
       workspaceName: 'Acme',
     })

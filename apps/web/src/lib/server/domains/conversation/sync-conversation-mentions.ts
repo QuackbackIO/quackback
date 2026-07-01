@@ -1,5 +1,5 @@
 /**
- * Persist @-mentions inside an internal chat note and alert the mentioned
+ * Persist @-mentions inside an internal conversation note and alert the mentioned
  * teammates in-app.
  *
  * Mirrors domains/posts/sync-post-mentions.ts but deliberately narrower:
@@ -8,7 +8,7 @@
  *    principals are eligible. Visitors (role 'user') and service principals are
  *    dropped server-side, defending against a tampered client.
  *  - Alerts are in-app only (a `chat_mention` notification); no email/event
- *    fan-out, matching the rest of the chat-notify surface.
+ *    fan-out, matching the rest of the conversation-notify surface.
  *
  * The inserted rows power the inbox "Mentions" view; the notifications power the
  * notification bell.
@@ -22,9 +22,9 @@ import { truncate } from '@/lib/shared/utils/string'
 import type { ConversationMessageId, ConversationId, PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
-const log = logger.child({ component: 'chat-mentions' })
+const log = logger.child({ component: 'conversation-mentions' })
 
-export interface SyncChatMentionsInput {
+export interface SyncConversationMentionsInput {
   conversationMessageId: ConversationMessageId
   conversationId: ConversationId
   /** Principal ids extracted from the note's TipTap doc. */
@@ -37,7 +37,9 @@ export interface SyncChatMentionsInput {
 
 const NOTE_PREVIEW_MAX = 140
 
-export async function syncConversationMessageMentions(input: SyncChatMentionsInput): Promise<void> {
+export async function syncConversationMessageMentions(
+  input: SyncConversationMentionsInput
+): Promise<void> {
   const { conversationMessageId, conversationId, mentionedIds, authorPrincipalId, authorName } =
     input
   if (mentionedIds.size === 0) return
@@ -79,7 +81,7 @@ export async function syncConversationMessageMentions(input: SyncChatMentionsInp
       toNotify.map((principalId) => ({
         principalId,
         type: 'chat_mention' as const,
-        title: `${authorName} mentioned you in a chat`,
+        title: `${authorName} mentioned you in a conversation`,
         body: truncate(input.content, NOTE_PREVIEW_MAX),
         metadata: { conversationId },
       }))
@@ -98,6 +100,6 @@ export async function syncConversationMessageMentions(input: SyncChatMentionsInp
         )
       )
   } catch (err) {
-    log.warn({ err }, 'sync chat message mentions failed')
+    log.warn({ err }, 'sync conversation message mentions failed')
   }
 }

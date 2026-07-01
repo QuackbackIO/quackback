@@ -4,7 +4,7 @@ import { XMarkIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 
 /**
- * In-editor render for an inline chat image. Reads the `{ src, alt }` off the
+ * In-editor render for an inline conversation image. Reads the `{ src, alt }` off the
  * node and shows a bounded preview while composing. The wrapper is always
  * mounted (ProseMirror needs a DOM host) and stays non-editable; a node with no
  * src simply renders nothing inside it.
@@ -35,7 +35,7 @@ function ConversationImageNodeView({ node, selected, deleteNode }: ReactNodeView
 }
 
 /**
- * A first-party TipTap node for an inline, removable chat image. An atom block
+ * A first-party TipTap node for an inline, removable conversation image. An atom block
  * (no editable children) inserted after a paste/drop upload resolves. Serializes
  * to a plain `<img data-chat-image>` so a sent message's image round-trips
  * through any editor that has this node in its schema and renders on display

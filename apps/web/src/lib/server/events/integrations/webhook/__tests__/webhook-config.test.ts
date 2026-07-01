@@ -3,12 +3,12 @@ import { EVENT_TYPES } from '../../../types'
 import { WEBHOOK_EVENT_CONFIG } from '../constants'
 
 describe('WEBHOOK_EVENT_CONFIG', () => {
-  it('exposes every conversation/message event type (no drift on the chat family)', () => {
+  it('exposes every conversation/message event type (no drift on the conversation family)', () => {
     const configIds = new Set<string>(WEBHOOK_EVENT_CONFIG.map((c) => c.id))
-    const chatTypes = EVENT_TYPES.filter(
+    const conversationTypes = EVENT_TYPES.filter(
       (t) => t.startsWith('conversation.') || t.startsWith('message.')
     )
-    for (const t of chatTypes) expect(configIds.has(t)).toBe(true)
+    for (const t of conversationTypes) expect(configIds.has(t)).toBe(true)
   })
 
   it('only references valid event types', () => {

@@ -11,7 +11,7 @@ import {
  * it is NOT keyed by session. The widget loader seeds this via
  * `queryClient.setQueryData` for an SSR-correct first paint (see widget/index).
  */
-export const CHAT_PRESENCE_QUERY_KEY = ['widget', 'chat-presence'] as const
+export const CONVERSATION_PRESENCE_QUERY_KEY = ['widget', 'conversation-presence'] as const
 
 const OFFLINE: ConversationPresence = {
   agentsOnline: false,
@@ -21,16 +21,16 @@ const OFFLINE: ConversationPresence = {
 
 /**
  * The single source of truth for the widget's team-availability verdict. Every
- * presence surface (Home overview, the Messages CTA, the chat thread) reads from
+ * presence surface (Home overview, the Messages CTA, the conversation thread) reads from
  * this one query, so they can never disagree and only ONE poll runs no matter
  * how many surfaces are mounted (React Query dedupes by key).
  *
  * SSR-seeded by the loader, then polled every CONVERSATION_PRESENCE_POLL_MS while the
- * widget is open. Pass `enabled=false` (chat off) to skip the query entirely.
+ * widget is open. Pass `enabled=false` (messenger off) to skip the query entirely.
  */
 export function useConversationPresence(enabled: boolean): ConversationPresence {
   const { data } = useQuery({
-    queryKey: CHAT_PRESENCE_QUERY_KEY,
+    queryKey: CONVERSATION_PRESENCE_QUERY_KEY,
     queryFn: () => getConversationPresenceFn({ headers: getWidgetAuthHeaders() }),
     enabled,
     refetchInterval: CONVERSATION_PRESENCE_POLL_MS,
@@ -46,14 +46,14 @@ export function useConversationPresence(enabled: boolean): ConversationPresence 
 
 /**
  * Optimistically mark the team online in the shared presence cache — used when
- * the chat SSE delivers agent activity ("an agent is clearly here right now").
+ * the conversation SSE delivers agent activity ("an agent is clearly here right now").
  * Writing to the cache (not local state) means every presence surface updates,
  * and the next poll re-syncs to the authoritative value. (The write also resets
  * the query's refetch timer, deferring that re-sync while activity continues —
  * harmless, since an actively-messaging agent already reads as available.)
  */
 export function markAgentPresentInCache(queryClient: QueryClient): void {
-  queryClient.setQueryData<ConversationPresence>(CHAT_PRESENCE_QUERY_KEY, (prev) =>
+  queryClient.setQueryData<ConversationPresence>(CONVERSATION_PRESENCE_QUERY_KEY, (prev) =>
     prev ? { ...prev, agentsOnline: true } : { ...OFFLINE, agentsOnline: true }
   )
 }

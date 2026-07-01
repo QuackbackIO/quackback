@@ -1,5 +1,5 @@
 /**
- * Real-time fan-out bus for live chat.
+ * Real-time fan-out bus for conversations.
  *
  * Postgres is the durable source of truth; this layer is fire-and-forget
  * delivery only. A message written on one app replica must reach an SSE

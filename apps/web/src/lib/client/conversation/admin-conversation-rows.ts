@@ -7,7 +7,7 @@ import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/type
  * older history loads); the surrounding affordances use fixed keys. System
  * events stay as `message` rows — AdminBubble renders them as a centered notice.
  */
-export type AdminChatRow =
+export type AdminConversationRow =
   | { type: 'load-older'; key: 'load-older' }
   | { type: 'unread'; key: 'unread' }
   | { type: 'message'; key: string; message: AgentConversationMessageDTO }
@@ -15,7 +15,7 @@ export type AdminChatRow =
   | { type: 'seen'; key: 'seen' }
   | { type: 'typing'; key: 'typing' }
 
-export interface AdminChatRowsInput {
+export interface AdminConversationRowsInput {
   messages: AgentConversationMessageDTO[]
   /** A "load earlier messages" affordance sits above the thread. */
   hasMoreOlder: boolean
@@ -32,8 +32,10 @@ export interface AdminChatRowsInput {
  * virtualizer: load-older → [unread divider +] messages → empty → seen →
  * typing. Pure so the ordering/keying is unit-testable directly.
  */
-export function buildAdminChatRows(input: AdminChatRowsInput): AdminChatRow[] {
-  const rows: AdminChatRow[] = []
+export function buildAdminConversationRows(
+  input: AdminConversationRowsInput
+): AdminConversationRow[] {
+  const rows: AdminConversationRow[] = []
   if (input.hasMoreOlder) rows.push({ type: 'load-older', key: 'load-older' })
   for (const message of input.messages) {
     // The unread divider sits immediately above the first unread message.

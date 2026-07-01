@@ -1,6 +1,6 @@
 /**
  * Read-side queries + DTO mappers for support-inbox conversations. Keyset pagination on
- * (created_at, id); chat is flat, so no comment-tree reconstruction.
+ * (created_at, id); a conversation is flat, so no comment-tree reconstruction.
  */
 import {
   db,
@@ -458,7 +458,7 @@ export interface LinkedPostSummary {
   boardSlug: string
 }
 
-/** Posts this conversation was converted into (chat.convert writes the link). */
+/** Posts this conversation was converted into (conversation.convert writes the link). */
 export async function getLinkedPostsForConversation(
   conversationId: ConversationId
 ): Promise<LinkedPostSummary[]> {
@@ -484,7 +484,7 @@ export interface LinkedConversationSummary {
   status: ConversationStatus
 }
 
-/** Conversations linked to a post (the other direction of chat.convert). */
+/** Conversations linked to a post (the other direction of conversation.convert). */
 export async function getLinkedConversationsForPost(
   postId: PostId
 ): Promise<LinkedConversationSummary[]> {
@@ -496,7 +496,7 @@ export async function getLinkedConversationsForPost(
     })
     .from(postExternalLinks)
     // Deliberately NO innerJoin(integrations): a 'live_chat' link has a null
-    // integrationId, so joining integrations would silently drop every chat
+    // integrationId, so joining integrations would silently drop every conversation
     // link. The externalId IS the conversation id for these rows.
     .innerJoin(conversations, eq(postExternalLinks.externalId, conversations.id))
     .where(
@@ -806,8 +806,8 @@ export async function listConversationsForAgent(
             )
           : undefined,
         // Mentions view: conversations carrying an internal note that @-mentions
-        // this principal. A DISTINCT subquery over chat_message_mentions →
-        // chat_messages keeps the outer select shape (conversations only). Guard
+        // this principal. A DISTINCT subquery over conversation_message_mentions →
+        // conversation_messages keeps the outer select shape (conversations only). Guard
         // on deleted_at IS NULL — mention rows outlive a note's soft-delete (the
         // FK only cascades on hard delete) — and isInternal as defense-in-depth.
         filter.mentionedPrincipalId

@@ -16,7 +16,7 @@ import {
 } from '@/lib/server/functions/conversation-tags'
 import { cn } from '@/lib/shared/utils'
 
-const CHAT_TAGS_KEY = ['admin', 'inbox', 'chat-tags'] as const
+const CONVERSATION_TAGS_KEY = ['admin', 'inbox', 'conversation-tags'] as const
 
 // The palette offered when creating / recoloring a label. The first entry is the
 // service-side default, so "no choice" matches what the server would pick anyway.
@@ -96,7 +96,7 @@ export function ConversationTagsEditor({
 
   // Only fetch the full label list when the picker is open.
   const { data: allTags } = useQuery({
-    queryKey: CHAT_TAGS_KEY,
+    queryKey: CONVERSATION_TAGS_KEY,
     queryFn: () => fetchConversationTagsFn(),
     enabled: open,
     staleTime: 60_000,
@@ -111,11 +111,11 @@ export function ConversationTagsEditor({
         ? { ...prev, conversation: { ...prev.conversation, tags: fn(prev.conversation.tags) } }
         : prev
     )
-  // The inbox list rows + the nav per-tag counts (chat-tags prefix also covers
-  // the picker list and the '…chat-tags','counts' nav query).
+  // The inbox list rows + the nav per-tag counts (conversation-tags prefix also covers
+  // the picker list and the '…conversation-tags','counts' nav query).
   const invalidateLists = () => {
     void queryClient.invalidateQueries({ queryKey: ['admin', 'inbox', 'conversations'] })
-    void queryClient.invalidateQueries({ queryKey: CHAT_TAGS_KEY })
+    void queryClient.invalidateQueries({ queryKey: CONVERSATION_TAGS_KEY })
   }
 
   const addMut = useMutation({

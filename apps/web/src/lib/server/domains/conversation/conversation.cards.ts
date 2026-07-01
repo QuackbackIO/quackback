@@ -1,5 +1,5 @@
 /**
- * In-chat card sends. An agent can surface existing content inside a conversation:
+ * In-conversation card sends. An agent can surface existing content inside a conversation:
  *   - sharePost: send an agent message whose body is a quackbackEmbed of the post,
  *     which renders the live embed card the visitor can view and upvote.
  *

@@ -2273,10 +2273,10 @@ describe('MCP HTTP Handler', () => {
   })
 
   // ===========================================================================
-  // Chat tools
+  // Conversation tools
   // ===========================================================================
 
-  describe('chat tools', () => {
+  describe('conversation tools', () => {
     it('list_conversations returns conversations for a team API key', async () => {
       const handle = await initializeSession()
       const { listConversationsForAgent } =

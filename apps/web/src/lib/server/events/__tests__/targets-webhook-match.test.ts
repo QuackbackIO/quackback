@@ -113,7 +113,7 @@ const postEvent = {
   },
 } as EventData
 
-const chatEvent = {
+const conversationEvent = {
   ...base,
   type: 'conversation.created' as const,
   data: {
@@ -152,18 +152,24 @@ describe('webhookSubscriptionMatches', () => {
     ).toBe(false)
   })
 
-  it('ignores the board filter for chat events (board-agnostic)', () => {
+  it('ignores the board filter for conversation events (board-agnostic)', () => {
     expect(
       webhookSubscriptionMatches(
         { events: ['conversation.created'], boardIds: ['board_A'] },
-        chatEvent
+        conversationEvent
       )
     ).toBe(true)
     expect(
-      webhookSubscriptionMatches({ events: ['conversation.created'], boardIds: null }, chatEvent)
+      webhookSubscriptionMatches(
+        { events: ['conversation.created'], boardIds: null },
+        conversationEvent
+      )
     ).toBe(true)
     expect(
-      webhookSubscriptionMatches({ events: ['message.created'], boardIds: ['board_A'] }, chatEvent)
+      webhookSubscriptionMatches(
+        { events: ['message.created'], boardIds: ['board_A'] },
+        conversationEvent
+      )
     ).toBe(false)
   })
 })

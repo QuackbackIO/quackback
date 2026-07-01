@@ -46,7 +46,7 @@ vi.mock('@/lib/server/db', () => {
     c.set = () => c
     c.where = () => c
     c.limit = async () =>
-      label === 'chat_messages'
+      label === 'conversation_messages'
         ? messageRow
           ? [messageRow]
           : []
@@ -63,7 +63,7 @@ vi.mock('@/lib/server/db', () => {
     isNull: vi.fn(),
     inArray: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'chat_messages', id: 'id', createdAt: 'created_at' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id', createdAt: 'created_at' },
     principal: { __name: 'principal' },
   }
 })

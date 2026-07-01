@@ -63,7 +63,7 @@ vi.mock('@/lib/server/db', () => {
     c.set = () => c
     c.where = () => c
     c.limit = async () =>
-      label === 'chat_messages' ? (messageRow ? [messageRow] : []) : [conversationRow]
+      label === 'conversation_messages' ? (messageRow ? [messageRow] : []) : [conversationRow]
     return c
   }
 
@@ -76,7 +76,7 @@ vi.mock('@/lib/server/db', () => {
     and: vi.fn(),
     isNull: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    conversationMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'conversation_messages', id: 'id' },
   }
 })
 

@@ -175,7 +175,7 @@ export function ConversationDetailPanel({
                   <p className="truncate text-xs text-muted-foreground">
                     {email}
                     {!detail?.email && conversation.visitorEmail && (
-                      <span className="ml-1 text-muted-foreground/50">(in chat)</span>
+                      <span className="ml-1 text-muted-foreground/50">(in conversation)</span>
                     )}
                   </p>
                 ) : (

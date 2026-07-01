@@ -42,7 +42,7 @@ const agentDto = {
   resolvedAt: null,
   endReason: null,
   endNote: 'internal end note',
-  tags: [{ id: 'chat_tag_1', name: 'VIP', color: '#ff0000' }],
+  tags: [{ id: 'conversation_tag_1', name: 'VIP', color: '#ff0000' }],
 } as unknown as ConversationDTO
 
 beforeEach(() => vi.clearAllMocks())

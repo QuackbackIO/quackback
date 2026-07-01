@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { ConversationStreamEvent } from '@/lib/shared/conversation/types'
 
-interface UseChatStreamOptions {
+interface UseConversationStreamOptions {
   /**
    * Build the full SSE URL, including any auth token. Return null to skip
    * connecting (e.g. no conversation yet, or token mint failed). Re-invoked on
@@ -34,7 +34,7 @@ const NAMED_EVENTS = [
 ] as const
 
 /**
- * Subscribe to the chat SSE stream with automatic, token-refreshing reconnect.
+ * Subscribe to the conversation SSE stream with automatic, token-refreshing reconnect.
  * Browser-only; a no-op during SSR.
  */
 export function useConversationStream({
@@ -43,7 +43,7 @@ export function useConversationStream({
   onEvent,
   onReconnect,
   resetKey,
-}: UseChatStreamOptions): void {
+}: UseConversationStreamOptions): void {
   const onEventRef = useRef(onEvent)
   onEventRef.current = onEvent
   const onReconnectRef = useRef(onReconnect)

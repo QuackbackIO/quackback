@@ -1,5 +1,5 @@
 /**
- * isTrustedAttachmentUrl gates which URLs may appear as chat attachments and
+ * isTrustedAttachmentUrl gates which URLs may appear as conversation attachments and
  * inline chatImage srcs — anything else becomes a third-party fetch fired from
  * an agent's browser. The path-boundary cases matter most: on a path-style
  * object store, `/bucket` must not admit `/bucket-evil/...` (a sibling bucket

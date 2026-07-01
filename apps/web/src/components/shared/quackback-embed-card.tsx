@@ -78,9 +78,9 @@ const shellCls =
  * - `navigate` (default): same-tab `<a href>` to the relative portal path. Used
  *   by post bodies / changelog / comments display.
  * - `newTab`: `<a target="_blank">` to the absolute portal URL. Used by the
- *   widget chat, whose iframe origin may differ from the portal's.
+ *   widget messenger, whose iframe origin may differ from the portal's.
  * - `modal`: a clickable region that calls `onOpenInModal(postId)` instead of
- *   navigating. Used by the admin chat so a shared post opens in place (like
+ *   navigating. Used by the admin conversation view so a shared post opens in place (like
  *   clicking a roadmap item) rather than leaving the inbox.
  */
 export type EmbedOpenMode = 'navigate' | 'newTab' | 'modal'
@@ -158,7 +158,7 @@ export function QuackbackEmbedCard({
    *  in-editor preview passes `false` for an inert, non-navigating card. */
   interactive?: boolean
   /** How a click opens the target — see {@link EmbedOpenMode}. Defaults to
-   *  same-tab navigation; chat surfaces override (widget → newTab, admin →
+   *  same-tab navigation; conversation surfaces override (widget → newTab, admin →
    *  modal). Ignored when `interactive` is false. */
   openMode?: EmbedOpenMode
   /** Required for `modal` mode: opens the referenced post in place. */
@@ -322,7 +322,7 @@ export function QuackbackEmbedCard({
   )
   if (!interactive) return <div className={shellCls}>{changelogInner}</div>
   // A changelog entry has no post to open in place, so modal surfaces (admin
-  // chat) open it in a new tab rather than navigating away from the inbox.
+  // conversation view) open it in a new tab rather than navigating away from the inbox.
   const clOpenMode = openMode === 'modal' ? 'newTab' : openMode
   const clHref = clOpenMode === 'newTab' ? data.url : `/changelog/${data.entryId}`
   return (

@@ -72,13 +72,13 @@ const DYNAMIC_PERMISSION = (
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
-  // Visitor chat (widget + portal): any authenticated principal; team-vs-visitor
+  // Visitor conversations (widget + portal): any authenticated principal; team-vs-visitor
   // scope is refined inside each handler (see NOT_A_GATE entries below).
   'lib/server/functions/conversation.ts::sendConversationMessageFn': END_USER(
-    'visitor sends a chat message'
+    'visitor sends a conversation message'
   ),
   'lib/server/functions/conversation.ts::listConversationMessagesFn': END_USER(
-    'visitor pages their own chat'
+    'visitor pages their own conversation'
   ),
   'lib/server/functions/conversation.ts::markConversationReadFn': END_USER(
     'visitor marks their conversation read'
@@ -91,7 +91,7 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'visitor mints their SSE stream token'
   ),
   'lib/server/functions/conversation.ts::deleteConversationMessageFn': END_USER(
-    'author deletes their own chat message'
+    'author deletes their own conversation message'
   ),
 
   // Comments / reactions: end-user create + own-edit/delete.
@@ -208,7 +208,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/onboarding.ts::ensureAdminPrincipal::isAdmin': NOT_A_GATE(
     'promotes an existing non-admin principal during bootstrap — not an access check'
   ),
-  'lib/server/functions/conversation.ts::assertVisitorChatAccess::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/conversation.ts::assertVisitorConversationAccess::isTeamMember': NOT_A_GATE(
     'team bypasses the portal-access check; entry is the bare requireAuth on each caller'
   ),
   'lib/server/functions/conversation.ts::sendConversationMessageFn::isTeamMember': NOT_A_GATE(

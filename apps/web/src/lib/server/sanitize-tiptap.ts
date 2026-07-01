@@ -139,7 +139,7 @@ function sanitizeAttrs(
     }
 
     case 'chatImage': {
-      // Inline chat image. Unlike the post/comment `image` node, a chat image
+      // Inline conversation image. Unlike the post/comment `image` node, a conversation image
       // may ONLY point at our own upload pipeline (mirrors the attachment URL
       // guard) — a visitor must not be able to embed a third-party tracking
       // pixel that fires against an agent's browser. An untrusted/empty/unsafe

@@ -32,7 +32,7 @@ const ConversationSchema = z.object({
     example: 'none',
   }),
   subject: z.string().nullable().meta({
-    description: 'Conversation subject line, null for live-chat threads',
+    description: 'Conversation subject line, null for messenger threads',
     example: null,
   }),
   visitorPrincipalId: TypeIdSchema.meta({

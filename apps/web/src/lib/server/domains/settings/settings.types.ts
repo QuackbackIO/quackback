@@ -262,7 +262,7 @@ export interface PortalConfig {
 
 /**
  * Portal Support tab configuration. Gated (with the `supportInbox` feature
- * flag) by `isPortalSupportEnabled`; independent of the widget chat toggles.
+ * flag) by `isPortalSupportEnabled`; independent of the widget messenger toggles.
  */
 export interface PortalSupportConfig {
   enabled: boolean
@@ -735,9 +735,9 @@ export interface FeatureFlags {
   helpCenter: boolean
   /** AI-powered feedback extraction from external sources */
   aiFeedbackExtraction: boolean
-  /** Support inbox: live-chat widget channel + unified admin inbox */
+  /** Support inbox: messenger widget channel + unified admin inbox */
   supportInbox: boolean
-  /** External link preview cards in chat (OG unfurling) */
+  /** External link preview cards in conversations (OG unfurling) */
   linkPreviews: boolean
 }
 
@@ -766,11 +766,11 @@ export const FEATURE_FLAG_REGISTRY: Record<
   supportInbox: {
     label: 'Conversations',
     description:
-      'Let visitors start a Messenger chat from the widget; messages land in a shared inbox your team works from.',
+      'Let visitors start a conversation with Messenger from the widget; messages land in a shared inbox your team works from.',
   },
   linkPreviews: {
     label: 'Link Previews',
-    description: 'Show Open Graph preview cards below external links shared in chat.',
+    description: 'Show Open Graph preview cards below external links shared in conversations.',
   },
 }
 

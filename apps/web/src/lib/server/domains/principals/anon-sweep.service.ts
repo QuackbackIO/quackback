@@ -10,7 +10,7 @@
  * principal that authored anything is left untouched.
  *
  * The NOT EXISTS list must cover every table where an anon actor can author
- * content, because the FKs are a mix: chat FKs are onDelete:restrict (a missed
+ * content, because the FKs are a mix: conversation FKs are onDelete:restrict (a missed
  * one would throw and be caught), but content like comment_reactions is
  * onDelete:CASCADE — a missing guard there would NOT throw; it would silently
  * cascade-delete real content. So the guard, not the catch block, is the

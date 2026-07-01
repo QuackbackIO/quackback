@@ -28,7 +28,7 @@ import {
 import type { MessageReactionCount } from '@/lib/shared/conversation/types'
 
 /** Resolve the acting agent's principal id, or refuse. Mirrors the gate used by
- *  every other agent-side chat service (sendAgentMessage, assign, …). */
+ *  every other agent-side conversation service (sendAgentMessage, assign, …). */
 function requireAgent(actor: Actor): PrincipalId {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)

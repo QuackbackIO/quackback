@@ -19,11 +19,11 @@ vi.mock('@/lib/server/functions/conversation', () => ({
 }))
 
 import { useConversationSummary } from '../use-messenger-summary'
-import { CHAT_PRESENCE_QUERY_KEY } from '../use-messenger-presence'
+import { CONVERSATION_PRESENCE_QUERY_KEY } from '../use-messenger-presence'
 
 function seeded(seed?: unknown) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  if (seed !== undefined) qc.setQueryData(CHAT_PRESENCE_QUERY_KEY, seed)
+  if (seed !== undefined) qc.setQueryData(CONVERSATION_PRESENCE_QUERY_KEY, seed)
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   )
