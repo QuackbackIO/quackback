@@ -7,8 +7,14 @@
  * leaves an INTERNAL note nudging the team to track a resolved conversation as a
  * post — never broadcast to the visitor.
  */
-import { db, conversations, chatMessages, eq } from '@/lib/server/db'
-import type { ConversationId, PostId, BoardId, PrincipalId, ChatMessageId } from '@quackback/ids'
+import { db, conversations, conversationMessages, eq } from '@/lib/server/db'
+import type {
+  ConversationId,
+  PostId,
+  BoardId,
+  PrincipalId,
+  ConversationMessageId,
+} from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
 import { canActAsAgent } from '@/lib/server/policy/chat'
@@ -63,7 +69,7 @@ export async function sharePost(
 export async function suggestPost(
   input: { conversationId: ConversationId; boardId: BoardId; title: string; content: string },
   ctx: CardAgentCtx
-): Promise<{ messageId: ChatMessageId }> {
+): Promise<{ messageId: ConversationMessageId }> {
   const decision = canActAsAgent(ctx.agentActor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 
@@ -88,7 +94,7 @@ export async function suggestPost(
     }
 
     const [inserted] = await tx
-      .insert(chatMessages)
+      .insert(conversationMessages)
       .values({
         conversationId: input.conversationId,
         principalId: ctx.agent.principalId,

@@ -11,7 +11,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type {
   ConversationId,
-  ChatMessageId,
+  ConversationMessageId,
   PrincipalId,
   PostId,
   BoardId,
@@ -186,7 +186,7 @@ async function assertVisitorChatAccess(role: string | null): Promise<void> {
 // ── Visitor functions ────────────────────────────────────────────────────
 
 /** Send a visitor message; creates the conversation on the first message. */
-export const sendChatMessageFn = createServerFn({ method: 'POST' })
+export const sendConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(sendMessageSchema)
   .handler(async ({ data }) => {
     try {
@@ -424,7 +424,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
 })
 
 /** Older messages for a conversation the caller can view (keyset pagination). */
-export const listChatMessagesFn = createServerFn({ method: 'GET' })
+export const listConversationMessagesFn = createServerFn({ method: 'GET' })
   .validator(listMessagesSchema)
   .handler(async ({ data }) => {
     try {
@@ -543,15 +543,15 @@ export const mintChatStreamTokenFn = createServerFn({ method: 'GET' }).handler(a
 })
 
 /** Soft-delete a message (team members; or a visitor deleting their own). */
-export const deleteChatMessageFn = createServerFn({ method: 'POST' })
+export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(messageIdSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth()
       await assertVisitorChatAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
-      const { deleteChatMessage } = await import('@/lib/server/domains/chat/chat.service')
-      await deleteChatMessage(data.messageId as ChatMessageId, actor)
+      const { deleteConversationMessage } = await import('@/lib/server/domains/chat/chat.service')
+      await deleteConversationMessage(data.messageId as ConversationMessageId, actor)
       return { ok: true }
     } catch (error) {
       log.error({ err: error }, 'delete chat message failed')
@@ -652,7 +652,7 @@ export const getConversationFn = createServerFn({ method: 'GET' })
         // Agents see internal notes inline.
         listMessages(conversation.id, { before: data.before, includeInternal: true }),
       ])
-      // Upgrade to AgentChatMessageDTO[] by attaching the agent-only reaction +
+      // Upgrade to AgentConversationMessageDTO[] by attaching the agent-only reaction +
       // flag + post-suggestion fields. This enrichment runs ONLY on the agent
       // thread path; no visitor path calls it, so those fields can't reach the
       // widget. The suggestion map rides in-memory off `listMessages` (no re-read).
@@ -921,7 +921,7 @@ export const addMessageReactionFn = createServerFn({ method: 'POST' })
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { addMessageReaction } = await import('@/lib/server/domains/chat/message.actions')
-      return await addMessageReaction(data.messageId as ChatMessageId, data.emoji, actor)
+      return await addMessageReaction(data.messageId as ConversationMessageId, data.emoji, actor)
     } catch (error) {
       log.error({ err: error }, 'add message reaction failed')
       throw error
@@ -936,7 +936,7 @@ export const removeMessageReactionFn = createServerFn({ method: 'POST' })
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { removeMessageReaction } = await import('@/lib/server/domains/chat/message.actions')
-      return await removeMessageReaction(data.messageId as ChatMessageId, data.emoji, actor)
+      return await removeMessageReaction(data.messageId as ConversationMessageId, data.emoji, actor)
     } catch (error) {
       log.error({ err: error }, 'remove message reaction failed')
       throw error
@@ -951,7 +951,7 @@ export const setMessageFlagFn = createServerFn({ method: 'POST' })
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { setMessageFlag } = await import('@/lib/server/domains/chat/message.actions')
-      return await setMessageFlag(data.messageId as ChatMessageId, data.flagged, actor)
+      return await setMessageFlag(data.messageId as ConversationMessageId, data.flagged, actor)
     } catch (error) {
       log.error({ err: error }, 'set message flag failed')
       throw error
@@ -969,7 +969,7 @@ export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POS
         await import('@/lib/server/domains/chat/chat.service')
       await markConversationUnreadFromMessage(
         data.conversationId as ConversationId,
-        data.messageId as ChatMessageId,
+        data.messageId as ConversationMessageId,
         actor
       )
       return { ok: true }

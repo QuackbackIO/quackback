@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { BookmarkIcon } from '@heroicons/react/24/solid'
-import type { ConversationId, ChatMessageId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId } from '@quackback/ids'
 import { listFlaggedMessagesFn } from '@/lib/server/functions/chat'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/shared/spinner'
@@ -27,7 +27,7 @@ export function SavedMessagesColumn({
 }: {
   selectedConversationId: ConversationId | null
   /** Open the conversation and deep-link the flagged message within it. */
-  onSelect: (conversationId: ConversationId, messageId: ChatMessageId) => void
+  onSelect: (conversationId: ConversationId, messageId: ConversationMessageId) => void
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'inbox', 'flagged'],

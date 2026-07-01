@@ -16,16 +16,16 @@
 
 // Per eslint.config.js — app files import schema via @/lib/server/db, never
 // directly from @quackback/db.
-import { db, chatMessageMentions, principal, and, eq, inArray } from '@/lib/server/db'
+import { db, conversationMessageMentions, principal, and, eq, inArray } from '@/lib/server/db'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
 import { truncate } from '@/lib/shared/utils/string'
-import type { ChatMessageId, ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationMessageId, ConversationId, PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'chat-mentions' })
 
 export interface SyncChatMentionsInput {
-  chatMessageId: ChatMessageId
+  conversationMessageId: ConversationMessageId
   conversationId: ConversationId
   /** Principal ids extracted from the note's TipTap doc. */
   mentionedIds: Set<PrincipalId>
@@ -37,8 +37,9 @@ export interface SyncChatMentionsInput {
 
 const NOTE_PREVIEW_MAX = 140
 
-export async function syncChatMessageMentions(input: SyncChatMentionsInput): Promise<void> {
-  const { chatMessageId, conversationId, mentionedIds, authorPrincipalId, authorName } = input
+export async function syncConversationMessageMentions(input: SyncChatMentionsInput): Promise<void> {
+  const { conversationMessageId, conversationId, mentionedIds, authorPrincipalId, authorName } =
+    input
   if (mentionedIds.size === 0) return
 
   // The note is already committed by the caller, so a failure here must never
@@ -61,10 +62,10 @@ export async function syncChatMessageMentions(input: SyncChatMentionsInput): Pro
     if (eligibleIds.length === 0) return
 
     const inserted = (await db
-      .insert(chatMessageMentions)
-      .values(eligibleIds.map((principalId) => ({ chatMessageId, principalId })))
+      .insert(conversationMessageMentions)
+      .values(eligibleIds.map((principalId) => ({ conversationMessageId, principalId })))
       .onConflictDoNothing()
-      .returning({ principalId: chatMessageMentions.principalId })) as Array<{
+      .returning({ principalId: conversationMessageMentions.principalId })) as Array<{
       principalId: PrincipalId
     }>
 
@@ -88,12 +89,12 @@ export async function syncChatMessageMentions(input: SyncChatMentionsInput): Pro
     // catch leaves these rows un-watermarked, so the field never claims an
     // alert that didn't happen.
     await db
-      .update(chatMessageMentions)
+      .update(conversationMessageMentions)
       .set({ notifiedAt: new Date() })
       .where(
         and(
-          eq(chatMessageMentions.chatMessageId, chatMessageId),
-          inArray(chatMessageMentions.principalId, toNotify)
+          eq(conversationMessageMentions.conversationMessageId, conversationMessageId),
+          inArray(conversationMessageMentions.principalId, toNotify)
         )
       )
   } catch (err) {

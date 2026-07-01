@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { serializeConversation, serializeMessage } from '../-serialize'
-import type { ConversationDTO, ChatMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationDTO, ConversationMessageDTO } from '@/lib/shared/chat/types'
 
 const convBase = {
   id: 'conversation_1',
@@ -66,7 +66,7 @@ describe('serializeMessage', () => {
       contentJson: null,
       viaEmail: false,
       systemEvent: null,
-    } as unknown as ChatMessageDTO
+    } as unknown as ConversationMessageDTO
     expect(serializeMessage(m)).toEqual({
       id: 'chat_msg_1',
       conversationId: 'conversation_1',
@@ -92,7 +92,7 @@ describe('serializeMessage', () => {
       contentJson: null,
       viaEmail: false,
       systemEvent: { kind: 'chat_ended' },
-    } as unknown as ChatMessageDTO
+    } as unknown as ConversationMessageDTO
     const out = serializeMessage(m)
     expect(out.authorPrincipalId).toBeNull()
     expect(out.authorName).toBeNull()

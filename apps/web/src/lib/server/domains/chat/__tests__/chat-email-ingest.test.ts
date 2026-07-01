@@ -49,7 +49,7 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn(),
     sql: Object.assign(() => ({}), { raw: () => ({}) }),
-    chatMessages: { metadata: 'metadata' },
+    conversationMessages: { metadata: 'metadata' },
     conversations: { id: 'id' },
     principal: { id: 'id' },
     user: { id: 'id' },

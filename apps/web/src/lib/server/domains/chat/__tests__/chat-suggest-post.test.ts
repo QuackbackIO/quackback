@@ -152,7 +152,7 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    chatMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'chat_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', role: 'role', type: 'type' },
     posts: { __name: 'posts', id: 'id', voteCount: 'vote_count' },
   }

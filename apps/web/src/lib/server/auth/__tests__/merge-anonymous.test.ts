@@ -48,7 +48,7 @@ vi.mock('@/lib/server/db', () => ({
     visitorPrincipalId: 'visitorPrincipalId',
     __name: 'conversations',
   },
-  chatMessages: { principalId: 'principalId', __name: 'chatMessages' },
+  conversationMessages: { principalId: 'principalId', __name: 'conversationMessages' },
   postSubscriptions: { principalId: 'principalId', postId: 'postId', __name: 'postSubscriptions' },
   inAppNotifications: {
     principalId: 'principalId',
@@ -143,11 +143,11 @@ describe('mergeAnonymousToIdentified', () => {
     await mergeAnonymousToIdentified(defaultParams)
 
     expect(operations).toContain('update:conversations')
-    expect(operations).toContain('update:chatMessages')
+    expect(operations).toContain('update:conversationMessages')
 
     const principalIdx = operations.indexOf('delete:principal')
     expect(operations.indexOf('update:conversations')).toBeLessThan(principalIdx)
-    expect(operations.indexOf('update:chatMessages')).toBeLessThan(principalIdx)
+    expect(operations.indexOf('update:conversationMessages')).toBeLessThan(principalIdx)
   })
 
   it('transfers post subscriptions with conflict handling', async () => {

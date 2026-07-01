@@ -1,5 +1,5 @@
 /**
- * Tests for syncChatMessageMentions — server-side persistence + in-app
+ * Tests for syncConversationMessageMentions — server-side persistence + in-app
  * notification of @-mentions inside an internal chat note.
  *
  * Mirrors syncPostMentions but: notes are immutable (no delete/diff path),
@@ -12,15 +12,15 @@
  * assert exactly who gets alerted.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { ChatMessageId, ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationMessageId, ConversationId, PrincipalId } from '@quackback/ids'
 
 const PRINCIPAL_TABLE = { __tag: 'principal' } as const
-const CHAT_MENTIONS_TABLE = { __tag: 'chatMessageMentions' } as const
+const CHAT_MENTIONS_TABLE = { __tag: 'conversationMessageMentions' } as const
 
 // Per-test state.
 let eligibilityRows: Array<{ id: string; type: string; role: string | null }> = []
 let insertReturning: Array<{ principalId: string }> = []
-const insertCalls: { rows: Array<{ chatMessageId: string; principalId: string }> }[] = []
+const insertCalls: { rows: Array<{ conversationMessageId: string; principalId: string }> }[] = []
 const updateNotifiedCalls: { principalIds: string[] }[] = []
 
 function makeSelect() {
@@ -33,7 +33,7 @@ function makeSelect() {
 
 function makeInsertChain() {
   const chain = {
-    values: (rows: Array<{ chatMessageId: string; principalId: string }>) => {
+    values: (rows: Array<{ conversationMessageId: string; principalId: string }>) => {
       insertCalls.push({ rows })
       return chain
     },
@@ -63,7 +63,7 @@ vi.mock('@/lib/server/db', () => ({
     update: (_table: unknown) => makeUpdateChain(),
   },
   principal: PRINCIPAL_TABLE,
-  chatMessageMentions: CHAT_MENTIONS_TABLE,
+  conversationMessageMentions: CHAT_MENTIONS_TABLE,
   eq: vi.fn((col: unknown, val: unknown) => ({ __eq: { col, val } })),
   and: vi.fn((...args: Array<{ __principalIds?: string[] }>) => {
     let principalIds: string[] | undefined
@@ -78,9 +78,9 @@ vi.mock('@/lib/server/domains/notifications/notification.service', () => ({
   createNotificationsBatch: (...args: unknown[]) => createNotificationsBatch(...args),
 }))
 
-const { syncChatMessageMentions } = await import('../sync-chat-mentions')
+const { syncConversationMessageMentions } = await import('../sync-chat-mentions')
 
-const MESSAGE_ID = 'chat_msg_test' as ChatMessageId
+const MESSAGE_ID = 'chat_msg_test' as ConversationMessageId
 const CONVERSATION_ID = 'conversation_test' as ConversationId
 const AUTHOR = 'principal_author' as PrincipalId
 const P1 = 'principal_one' as PrincipalId
@@ -92,9 +92,11 @@ function teamRow(id: string) {
   return { id, type: 'user', role: 'member' }
 }
 
-function defaultInput(overrides: Partial<Parameters<typeof syncChatMessageMentions>[0]> = {}) {
+function defaultInput(
+  overrides: Partial<Parameters<typeof syncConversationMessageMentions>[0]> = {}
+) {
   return {
-    chatMessageId: MESSAGE_ID,
+    conversationMessageId: MESSAGE_ID,
     conversationId: CONVERSATION_ID,
     mentionedIds: new Set<PrincipalId>(),
     authorPrincipalId: AUTHOR,
@@ -104,7 +106,7 @@ function defaultInput(overrides: Partial<Parameters<typeof syncChatMessageMentio
   }
 }
 
-describe('syncChatMessageMentions', () => {
+describe('syncConversationMessageMentions', () => {
   beforeEach(() => {
     eligibilityRows = []
     insertReturning = []
@@ -117,13 +119,13 @@ describe('syncChatMessageMentions', () => {
     eligibilityRows = [teamRow(P1), teamRow(P2)]
     insertReturning = [{ principalId: P1 }, { principalId: P2 }]
 
-    await syncChatMessageMentions(defaultInput({ mentionedIds: new Set([P1, P2]) }))
+    await syncConversationMessageMentions(defaultInput({ mentionedIds: new Set([P1, P2]) }))
 
     // One insert carrying both mentions, keyed to the message.
     expect(insertCalls).toHaveLength(1)
     expect(insertCalls[0].rows).toEqual([
-      { chatMessageId: MESSAGE_ID, principalId: P1 },
-      { chatMessageId: MESSAGE_ID, principalId: P2 },
+      { conversationMessageId: MESSAGE_ID, principalId: P1 },
+      { conversationMessageId: MESSAGE_ID, principalId: P2 },
     ])
     // Both teammates alerted, with a chat_mention pointing at the conversation.
     expect(createNotificationsBatch).toHaveBeenCalledTimes(1)
@@ -147,9 +149,11 @@ describe('syncChatMessageMentions', () => {
     ]
     insertReturning = [{ principalId: P1 }]
 
-    await syncChatMessageMentions(defaultInput({ mentionedIds: new Set([P1, VISITOR, SERVICE]) }))
+    await syncConversationMessageMentions(
+      defaultInput({ mentionedIds: new Set([P1, VISITOR, SERVICE]) })
+    )
 
-    expect(insertCalls[0].rows).toEqual([{ chatMessageId: MESSAGE_ID, principalId: P1 }])
+    expect(insertCalls[0].rows).toEqual([{ conversationMessageId: MESSAGE_ID, principalId: P1 }])
     const batch = createNotificationsBatch.mock.calls[0][0] as Array<Record<string, unknown>>
     expect(batch.map((n) => n.principalId)).toEqual([P1])
   })
@@ -158,7 +162,7 @@ describe('syncChatMessageMentions', () => {
     eligibilityRows = [teamRow(AUTHOR), teamRow(P1)]
     insertReturning = [{ principalId: AUTHOR }, { principalId: P1 }]
 
-    await syncChatMessageMentions(defaultInput({ mentionedIds: new Set([AUTHOR, P1]) }))
+    await syncConversationMessageMentions(defaultInput({ mentionedIds: new Set([AUTHOR, P1]) }))
 
     // Both rows persist (the author can mention themselves in a note)…
     expect(insertCalls[0].rows.map((r) => r.principalId)).toEqual([AUTHOR, P1])
@@ -168,7 +172,7 @@ describe('syncChatMessageMentions', () => {
   })
 
   it('does nothing when no one is mentioned', async () => {
-    await syncChatMessageMentions(defaultInput({ mentionedIds: new Set() }))
+    await syncConversationMessageMentions(defaultInput({ mentionedIds: new Set() }))
     expect(insertCalls).toHaveLength(0)
     expect(createNotificationsBatch).not.toHaveBeenCalled()
   })
@@ -177,7 +181,7 @@ describe('syncChatMessageMentions', () => {
     eligibilityRows = [teamRow(P1)]
     insertReturning = [] // onConflictDoNothing inserted nothing — already present.
 
-    await syncChatMessageMentions(defaultInput({ mentionedIds: new Set([P1]) }))
+    await syncConversationMessageMentions(defaultInput({ mentionedIds: new Set([P1]) }))
 
     // Insert was attempted, but since nothing was newly inserted, no alert.
     expect(insertCalls).toHaveLength(1)
@@ -192,7 +196,7 @@ describe('syncChatMessageMentions', () => {
     createNotificationsBatch.mockRejectedValueOnce(new Error('db down'))
 
     await expect(
-      syncChatMessageMentions(defaultInput({ mentionedIds: new Set([P1]) }))
+      syncConversationMessageMentions(defaultInput({ mentionedIds: new Set([P1]) }))
     ).resolves.toBeUndefined()
     // notifiedAt is stamped only after delivery, so a failed batch leaves the
     // rows un-watermarked rather than claiming an alert that never landed.

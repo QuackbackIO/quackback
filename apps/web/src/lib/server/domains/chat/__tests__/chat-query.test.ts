@@ -7,8 +7,8 @@
  * listConversationsForAgent SQL builder is intentionally not exercised here.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationId, ChatMessageId, PrincipalId, SegmentId } from '@quackback/ids'
-import type { Conversation, ChatMessage } from '@/lib/server/db'
+import type { ConversationId, ConversationMessageId, PrincipalId, SegmentId } from '@quackback/ids'
+import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { ChatAuthorDTO } from '@/lib/shared/chat/types'
 
 // Drives what the terminal db-chain promise resolves to per test.
@@ -52,17 +52,17 @@ vi.mock('@/lib/server/db', () => {
     principal: { __name: 'principal' },
     user: { __name: 'user', id: 'id', image: 'image', imageKey: 'image_key' },
     conversations: { __name: 'conversations' },
-    chatMessages: { __name: 'chat_messages' },
-    chatMessageMentions: { __name: 'chat_message_mentions' },
-    chatMessageReactions: {
+    conversationMessages: { __name: 'chat_messages' },
+    conversationMessageMentions: { __name: 'chat_message_mentions' },
+    conversationMessageReactions: {
       __name: 'chat_message_reactions',
-      chatMessageId: 'chat_message_id',
+      conversationMessageId: 'chat_message_id',
       emoji: 'emoji',
       principalId: 'principal_id',
     },
-    chatMessageFlags: {
+    conversationMessageFlags: {
       __name: 'chat_message_flags',
-      chatMessageId: 'chat_message_id',
+      conversationMessageId: 'chat_message_id',
       principalId: 'principal_id',
       flaggedAt: 'flagged_at',
     },
@@ -98,7 +98,7 @@ import { isNull, eq } from '@/lib/server/db'
 const visitorId = 'principal_visitor' as PrincipalId
 const agentId = 'principal_agent' as PrincipalId
 const conversationId = 'conversation_1' as ConversationId
-const messageId = 'chat_msg_1' as ChatMessageId
+const messageId = 'chat_msg_1' as ConversationMessageId
 
 const visitorAuthor: ChatAuthorDTO = {
   principalId: visitorId,
@@ -106,7 +106,7 @@ const visitorAuthor: ChatAuthorDTO = {
   avatarUrl: null,
 }
 
-function makeMessage(extra: Partial<ChatMessage> = {}): ChatMessage {
+function makeMessage(extra: Partial<ConversationMessage> = {}): ConversationMessage {
   return {
     id: messageId,
     conversationId,
@@ -118,7 +118,7 @@ function makeMessage(extra: Partial<ChatMessage> = {}): ChatMessage {
     isInternal: false,
     deletedAt: null,
     ...extra,
-  } as unknown as ChatMessage
+  } as unknown as ConversationMessage
 }
 
 function makeConversation(extra: Partial<Conversation> = {}): Conversation {
@@ -195,7 +195,7 @@ describe('enrichMessagesForAgent', () => {
   // from rows it already loaded). enrichMessagesForAgent must read it straight
   // off the provided map — there is no second metadata SELECT to re-read it.
   it('surfaces postSuggestion from the in-memory map without a second metadata query', async () => {
-    const noteId = 'chat_note_1' as ChatMessageId
+    const noteId = 'chat_note_1' as ConversationMessageId
     const note = toMessageDTO(
       makeMessage({ id: noteId, isInternal: true, senderType: 'agent' }),
       null

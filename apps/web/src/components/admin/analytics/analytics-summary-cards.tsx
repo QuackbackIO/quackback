@@ -1,12 +1,12 @@
 import { cn } from '@/lib/shared/utils'
 import { TrendDelta } from './analytics-trend'
 
-export type MetricKey = 'posts' | 'votes' | 'comments' | 'users'
+export type MetricKey = 'posts' | 'votes' | 'postComments' | 'users'
 
 export const METRICS: Array<{ key: MetricKey; label: string; color: string }> = [
   { key: 'posts', label: 'Posts', color: 'var(--metric-posts)' },
   { key: 'votes', label: 'Votes', color: 'var(--metric-votes)' },
-  { key: 'comments', label: 'Comments', color: 'var(--metric-comments)' },
+  { key: 'postComments', label: 'Comments', color: 'var(--metric-comments)' },
   { key: 'users', label: 'Users', color: 'var(--metric-users)' },
 ]
 

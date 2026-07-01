@@ -7,7 +7,7 @@ import {
   gt,
   isNull,
   conversations,
-  chatMessages,
+  conversationMessages,
   principal,
 } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
@@ -301,26 +301,28 @@ export const Route = createFileRoute('/api/chat/stream')({
                   if (cursor) {
                     const missed = await db
                       .select()
-                      .from(chatMessages)
+                      .from(conversationMessages)
                       .where(
                         and(
-                          eq(chatMessages.conversationId, backfillConversationId),
-                          isNull(chatMessages.deletedAt),
+                          eq(conversationMessages.conversationId, backfillConversationId),
+                          isNull(conversationMessages.deletedAt),
                           // Mirror listMessages: internal notes are agent-only.
                           // Visitor (non-team) reconnect backfill must exclude
                           // them — publish-time channel separation doesn't cover
                           // this DB read path.
-                          isTeamMember(me.role) ? undefined : eq(chatMessages.isInternal, false),
+                          isTeamMember(me.role)
+                            ? undefined
+                            : eq(conversationMessages.isInternal, false),
                           or(
-                            gt(chatMessages.createdAt, cursor.createdAt),
+                            gt(conversationMessages.createdAt, cursor.createdAt),
                             and(
-                              eq(chatMessages.createdAt, cursor.createdAt),
-                              gt(chatMessages.id, cursor.id)
+                              eq(conversationMessages.createdAt, cursor.createdAt),
+                              gt(conversationMessages.id, cursor.id)
                             )
                           )
                         )
                       )
-                      .orderBy(chatMessages.createdAt, chatMessages.id)
+                      .orderBy(conversationMessages.createdAt, conversationMessages.id)
                     const authors = await loadAuthors(missed.map((m) => m.principalId))
                     for (const m of missed) {
                       const dto = toMessageDTO(

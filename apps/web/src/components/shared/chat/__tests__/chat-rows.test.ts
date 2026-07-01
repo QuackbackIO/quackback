@@ -1,15 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { buildChatRows } from '../chat-rows'
-import type { ChatMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationMessageDTO } from '@/lib/shared/chat/types'
 
 // Only `id` matters for row keys; cast minimal stand-ins.
-const msg = (idOrOpts: string | (Partial<ChatMessageDTO> & { id?: string })): ChatMessageDTO => {
-  if (typeof idOrOpts === 'string') return { id: idOrOpts } as unknown as ChatMessageDTO
-  return { id: 'msg-1', ...idOrOpts } as unknown as ChatMessageDTO
+const msg = (
+  idOrOpts: string | (Partial<ConversationMessageDTO> & { id?: string })
+): ConversationMessageDTO => {
+  if (typeof idOrOpts === 'string') return { id: idOrOpts } as unknown as ConversationMessageDTO
+  return { id: 'msg-1', ...idOrOpts } as unknown as ConversationMessageDTO
 }
 
 const base = {
-  messages: [] as ChatMessageDTO[],
+  messages: [] as ConversationMessageDTO[],
   hasMoreOlder: false,
   hasGreeting: false,
   showEmpty: false,
@@ -54,7 +56,7 @@ describe('buildChatRows', () => {
       id: 's1',
       senderType: 'system',
       content: 'Conversation assigned to Jane',
-    } as unknown as ChatMessageDTO
+    } as unknown as ConversationMessageDTO
     const rows = buildChatRows({ ...base, messages: [msg('a'), sys] })
     expect(rows.map((r) => [r.type, r.key])).toEqual([
       ['message', 'a'],

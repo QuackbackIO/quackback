@@ -1,5 +1,5 @@
-import type { ChatMessageId } from '@quackback/ids'
-import type { AgentChatMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationMessageId } from '@quackback/ids'
+import type { AgentConversationMessageDTO } from '@/lib/shared/chat/types'
 
 /**
  * A single virtualized row in the admin message thread. Messages are keyed by
@@ -10,17 +10,17 @@ import type { AgentChatMessageDTO } from '@/lib/shared/chat/types'
 export type AdminChatRow =
   | { type: 'load-older'; key: 'load-older' }
   | { type: 'unread'; key: 'unread' }
-  | { type: 'message'; key: string; message: AgentChatMessageDTO }
+  | { type: 'message'; key: string; message: AgentConversationMessageDTO }
   | { type: 'empty'; key: 'empty' }
   | { type: 'seen'; key: 'seen' }
   | { type: 'typing'; key: 'typing' }
 
 export interface AdminChatRowsInput {
-  messages: AgentChatMessageDTO[]
+  messages: AgentConversationMessageDTO[]
   /** A "load earlier messages" affordance sits above the thread. */
   hasMoreOlder: boolean
   /** First message past the agent's read watermark — gets the "New" divider. */
-  firstUnreadId: ChatMessageId | null
+  firstUnreadId: ConversationMessageId | null
   /** "Seen" watermark on the agent's latest reply. */
   showSeen: boolean
   /** Visitor typing indicator. */

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
 import { getTableConfig } from 'drizzle-orm/pg-core'
-import { conversations, chatMessages } from '../schema/chat'
+import { conversations, conversationMessages } from '../schema/chat'
 import {
   CONVERSATION_STATUSES,
   MESSAGE_SENDER_TYPES,
@@ -74,13 +74,13 @@ describe('conversations schema', () => {
   })
 })
 
-describe('chat_messages schema', () => {
+describe('conversation_messages schema', () => {
   it('has correct table name', () => {
-    expect(getTableName(chatMessages)).toBe('chat_messages')
+    expect(getTableName(conversationMessages)).toBe('conversation_messages')
   })
 
   it('exposes the expected columns', () => {
-    const columns = Object.keys(getTableColumns(chatMessages))
+    const columns = Object.keys(getTableColumns(conversationMessages))
     expect(columns).toEqual(
       expect.arrayContaining([
         'id',
@@ -97,31 +97,31 @@ describe('chat_messages schema', () => {
   })
 
   it('conversationId, senderType, content are not null', () => {
-    const cols = getTableColumns(chatMessages)
+    const cols = getTableColumns(conversationMessages)
     expect(cols.conversationId.notNull).toBe(true)
     expect(cols.senderType.notNull).toBe(true)
     expect(cols.content.notNull).toBe(true)
   })
 
   it('principalId is nullable (system events have no human author)', () => {
-    const cols = getTableColumns(chatMessages)
+    const cols = getTableColumns(conversationMessages)
     expect(cols.principalId.notNull).toBe(false)
   })
 
   it('contentJson is a nullable jsonb (rich note bodies; null for plain messages)', () => {
-    const cols = getTableColumns(chatMessages)
+    const cols = getTableColumns(conversationMessages)
     expect(cols.contentJson).toBeDefined()
     expect(cols.contentJson.notNull).toBe(false)
     expect(cols.contentJson.columnType).toBe('PgJsonb')
   })
 
   it('senderType enum matches MESSAGE_SENDER_TYPES', () => {
-    const cols = getTableColumns(chatMessages)
+    const cols = getTableColumns(conversationMessages)
     expect(cols.senderType.enumValues).toEqual([...MESSAGE_SENDER_TYPES])
   })
 
   it('cascades delete from the parent conversation', () => {
-    const cfg = getTableConfig(chatMessages)
+    const cfg = getTableConfig(conversationMessages)
     const fk = cfg.foreignKeys.find((f) => {
       const ref = f.reference()
       return getTableName(ref.foreignTable) === 'conversations'
@@ -130,7 +130,7 @@ describe('chat_messages schema', () => {
   })
 
   it('restricts delete of the author principal (merge must re-point first)', () => {
-    const cfg = getTableConfig(chatMessages)
+    const cfg = getTableConfig(conversationMessages)
     const fk = cfg.foreignKeys.find((f) => {
       const ref = f.reference()
       return ref.columns.some((c) => c.name === 'principal_id')

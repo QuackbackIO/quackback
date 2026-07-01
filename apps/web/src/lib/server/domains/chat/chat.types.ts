@@ -1,6 +1,10 @@
 import type { ConversationId, PrincipalId } from '@quackback/ids'
-import type { ChatMessageMetadata } from '@/lib/server/db'
-import type { ChatAttachment, ChatMessageDTO, ConversationDTO } from '@/lib/shared/chat/types'
+import type { ConversationMessageMetadata } from '@/lib/server/db'
+import type {
+  ChatAttachment,
+  ConversationMessageDTO,
+  ConversationDTO,
+} from '@/lib/shared/chat/types'
 
 /** Author identity passed into a send call (resolved from the auth context). */
 export interface ChatAuthorInput {
@@ -19,17 +23,17 @@ export interface SendVisitorMessageInput {
   /** Optional pre-chat email; stored on the conversation if not already set. */
   visitorEmail?: string
   /** Channel provenance (e.g. inbound email message-id) persisted on the message. */
-  metadata?: ChatMessageMetadata
+  metadata?: ConversationMessageMetadata
 }
 
 export interface SendVisitorMessageResult {
   conversation: ConversationDTO
-  message: ChatMessageDTO
+  message: ConversationMessageDTO
   /** True when this send created the conversation (first message). */
   created: boolean
 }
 
 export interface SendAgentMessageResult {
   conversation: ConversationDTO
-  message: ChatMessageDTO
+  message: ConversationMessageDTO
 }

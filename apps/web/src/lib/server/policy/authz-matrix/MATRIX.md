@@ -159,14 +159,14 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/changelog.ts`::listChangelogsFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::searchShippedPostsFn | changelog.manage |
 | `lib/server/functions/chat-segments.ts`::fetchInboxSegmentsWithCountsFn | conversation.view |
-| `lib/server/functions/chat.ts`::sendChatMessageFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::listChatMessagesFn | END_USER (any authenticated) |
+| `lib/server/functions/chat.ts`::sendConversationMessageFn | END_USER (any authenticated) |
+| `lib/server/functions/chat.ts`::listConversationMessagesFn | END_USER (any authenticated) |
 | `lib/server/functions/chat.ts`::markChatReadFn | END_USER (any authenticated) |
 | `lib/server/functions/chat.ts`::sendChatTypingFn | END_USER (any authenticated) |
 | `lib/server/functions/chat.ts`::submitCsatFn | END_USER (any authenticated) |
 | `lib/server/functions/chat.ts`::setAgentAvailabilityFn | conversation.view |
 | `lib/server/functions/chat.ts`::mintChatStreamTokenFn | END_USER (any authenticated) |
-| `lib/server/functions/chat.ts`::deleteChatMessageFn | END_USER (any authenticated) |
+| `lib/server/functions/chat.ts`::deleteConversationMessageFn | END_USER (any authenticated) |
 | `lib/server/functions/chat.ts`::getCannedRepliesFn | conversation.reply |
 | `lib/server/functions/chat.ts`::listConversationsFn | conversation.view |
 | `lib/server/functions/chat.ts`::listConversationsForUserFn | conversation.view |

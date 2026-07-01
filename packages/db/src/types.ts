@@ -15,11 +15,11 @@ import type { integrations } from './schema/integrations'
 import type { changelogEntries, changelogEntryPosts } from './schema/changelog'
 import type {
   conversations,
-  chatMessages,
+  conversationMessages,
   conversationTags,
-  chatMessageMentions,
-  chatMessageReactions,
-  chatMessageFlags,
+  conversationMessageMentions,
+  conversationMessageReactions,
+  conversationMessageFlags,
 } from './schema/chat'
 import type { principal } from './schema/auth'
 
@@ -368,7 +368,7 @@ export interface PostSuggestion {
   content: string
 }
 
-export interface ChatMessageMetadata {
+export interface ConversationMessageMetadata {
   /** The channel this message arrived through, when not in-app live chat. */
   source?: 'email'
   /** Provider Message-ID for an inbound email, used to dedupe webhook retries. */
@@ -384,16 +384,16 @@ export interface ChatMessageMetadata {
 // Support-inbox conversation row types
 export type Conversation = InferSelectModel<typeof conversations>
 export type NewConversation = InferInsertModel<typeof conversations>
-export type ChatMessage = InferSelectModel<typeof chatMessages>
-export type NewChatMessage = InferInsertModel<typeof chatMessages>
+export type ConversationMessage = InferSelectModel<typeof conversationMessages>
+export type NewConversationMessage = InferInsertModel<typeof conversationMessages>
 export type ConversationTag = InferSelectModel<typeof conversationTags>
 export type NewConversationTag = InferInsertModel<typeof conversationTags>
-export type ChatMessageMention = InferSelectModel<typeof chatMessageMentions>
-export type NewChatMessageMention = InferInsertModel<typeof chatMessageMentions>
-export type ChatMessageReaction = InferSelectModel<typeof chatMessageReactions>
-export type NewChatMessageReaction = InferInsertModel<typeof chatMessageReactions>
-export type ChatMessageFlag = InferSelectModel<typeof chatMessageFlags>
-export type NewChatMessageFlag = InferInsertModel<typeof chatMessageFlags>
+export type ConversationMessageMention = InferSelectModel<typeof conversationMessageMentions>
+export type NewConversationMessageMention = InferInsertModel<typeof conversationMessageMentions>
+export type ConversationMessageReaction = InferSelectModel<typeof conversationMessageReactions>
+export type NewConversationMessageReaction = InferInsertModel<typeof conversationMessageReactions>
+export type ConversationMessageFlag = InferSelectModel<typeof conversationMessageFlags>
+export type NewConversationMessageFlag = InferInsertModel<typeof conversationMessageFlags>
 
 // Reaction emoji constants (client-safe)
 export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const

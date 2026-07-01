@@ -10,7 +10,7 @@
  * the route maps to a 200 (so the provider stops retrying a message we can't
  * place) and logs the reason.
  */
-import { db, eq, sql, chatMessages, conversations, principal, user } from '@/lib/server/db'
+import { db, eq, sql, conversationMessages, conversations, principal, user } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
@@ -51,9 +51,9 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
   // graceful no-op instead of a unique-violation.
   if (parsed.messageId) {
     const [dupe] = await db
-      .select({ id: chatMessages.id })
-      .from(chatMessages)
-      .where(sql`${chatMessages.metadata} ->> 'emailMessageId' = ${parsed.messageId}`)
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(sql`${conversationMessages.metadata} ->> 'emailMessageId' = ${parsed.messageId}`)
       .limit(1)
     if (dupe) return { status: 'duplicate' }
   }

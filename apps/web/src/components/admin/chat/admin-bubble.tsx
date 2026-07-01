@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
-import type { AgentChatMessageDTO } from '@/lib/shared/chat/types'
+import type { AgentConversationMessageDTO } from '@/lib/shared/chat/types'
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -50,7 +50,7 @@ export function UnreadDivider() {
 }
 
 interface AdminBubbleProps {
-  message: AgentChatMessageDTO
+  message: AgentConversationMessageDTO
   onDelete: () => void
   /** Toggle the caller's reaction with `emoji` (hasReacted = current state). */
   onToggleReaction: (emoji: string, hasReacted: boolean) => void

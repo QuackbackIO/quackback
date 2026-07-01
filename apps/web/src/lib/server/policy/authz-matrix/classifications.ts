@@ -74,15 +74,19 @@ const DYNAMIC_PERMISSION = (
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // Visitor chat (widget + portal): any authenticated principal; team-vs-visitor
   // scope is refined inside each handler (see NOT_A_GATE entries below).
-  'lib/server/functions/chat.ts::sendChatMessageFn': END_USER('visitor sends a chat message'),
-  'lib/server/functions/chat.ts::listChatMessagesFn': END_USER('visitor pages their own chat'),
+  'lib/server/functions/chat.ts::sendConversationMessageFn': END_USER(
+    'visitor sends a chat message'
+  ),
+  'lib/server/functions/chat.ts::listConversationMessagesFn': END_USER(
+    'visitor pages their own chat'
+  ),
   'lib/server/functions/chat.ts::markChatReadFn': END_USER('visitor marks their chat read'),
   'lib/server/functions/chat.ts::sendChatTypingFn': END_USER('visitor typing indicator'),
   'lib/server/functions/chat.ts::submitCsatFn': END_USER('visitor submits a CSAT rating'),
   'lib/server/functions/chat.ts::mintChatStreamTokenFn': END_USER(
     'visitor mints their SSE stream token'
   ),
-  'lib/server/functions/chat.ts::deleteChatMessageFn': END_USER(
+  'lib/server/functions/chat.ts::deleteConversationMessageFn': END_USER(
     'author deletes their own chat message'
   ),
 
@@ -203,7 +207,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/chat.ts::assertVisitorChatAccess::isTeamMember': NOT_A_GATE(
     'team bypasses the portal-access check; entry is the bare requireAuth on each caller'
   ),
-  'lib/server/functions/chat.ts::sendChatMessageFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/chat.ts::sendConversationMessageFn::isTeamMember': NOT_A_GATE(
     'team skips the per-visitor send-rate throttle'
   ),
   'lib/server/functions/chat.ts::getMyChatFn::isTeamMember': NOT_A_GATE(
@@ -212,7 +216,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/chat.ts::getMyConversationsFn::isTeamMember': NOT_A_GATE(
     'non-team callers gated behind portal access; team reads from the admin inbox'
   ),
-  'lib/server/functions/chat.ts::listChatMessagesFn::isTeamMember': NOT_A_GATE(
+  'lib/server/functions/chat.ts::listConversationMessagesFn::isTeamMember': NOT_A_GATE(
     'internal notes are agent-only; visitors never see them'
   ),
   'lib/server/functions/link-preview.ts::unfurlLinkFn::isTeamMember': NOT_A_GATE(

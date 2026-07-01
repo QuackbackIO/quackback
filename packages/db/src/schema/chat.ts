@@ -18,7 +18,7 @@ import {
   CHANNELS,
   CONVERSATION_PRIORITIES,
 } from '../types'
-import type { ChatAttachment, ChatMessageMetadata, TiptapContent } from '../types'
+import type { ChatAttachment, ConversationMessageMetadata, TiptapContent } from '../types'
 
 /**
  * Support-inbox conversations — one thread between a visitor (anonymous or
@@ -91,8 +91,8 @@ export const conversations = pgTable(
  * always a real principal; the visitor-facing welcome message is rendered from
  * settings, not stored, so there are no author-less rows.
  */
-export const chatMessages = pgTable(
-  'chat_messages',
+export const conversationMessages = pgTable(
+  'conversation_messages',
   {
     id: typeIdWithDefault('chat_msg')('id').primaryKey(),
     conversationId: typeIdColumn('conversation')('conversation_id')
@@ -116,7 +116,7 @@ export const chatMessages = pgTable(
     attachments: jsonb('attachments').$type<ChatAttachment[]>(),
     // Channel provenance (e.g. inbound email message-id for retry dedupe); null
     // for ordinary in-app live-chat messages.
-    metadata: jsonb('metadata').$type<ChatMessageMetadata>(),
+    metadata: jsonb('metadata').$type<ConversationMessageMetadata>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
     // Soft delete support, mirroring comments.
@@ -129,13 +129,13 @@ export const chatMessages = pgTable(
   (table) => [
     // Live feed + keyset pagination on the composite (conversationId, createdAt, id);
     // id is the tie-break so same-microsecond siblings page deterministically.
-    index('chat_messages_conversation_created_idx').on(
+    index('conversation_messages_conversation_created_idx').on(
       table.conversationId,
       table.createdAt,
       table.id
     ),
-    index('chat_messages_principal_idx').on(table.principalId),
-    index('chat_messages_created_at_idx').on(table.createdAt),
+    index('conversation_messages_principal_idx').on(table.principalId),
+    index('conversation_messages_created_at_idx').on(table.createdAt),
   ]
 )
 
@@ -190,13 +190,13 @@ export const conversationTagAssignments = pgTable(
  * re-notify, and (principal_id, created_at DESC) serves the "mentions of me"
  * inbox view straight from the index.
  */
-export const chatMessageMentions = pgTable(
-  'chat_message_mentions',
+export const conversationMessageMentions = pgTable(
+  'conversation_message_mentions',
   {
     id: typeIdWithDefault('chat_msg_mention')('id').primaryKey(),
-    chatMessageId: typeIdColumn('chat_msg')('chat_message_id')
+    conversationMessageId: typeIdColumn('chat_msg')('conversation_message_id')
       .notNull()
-      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+      .references(() => conversationMessages.id, { onDelete: 'cascade' }),
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'cascade' }),
@@ -204,11 +204,14 @@ export const chatMessageMentions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('chat_message_mentions_message_principal_uq').on(
-      table.chatMessageId,
+    uniqueIndex('conversation_message_mentions_message_principal_uq').on(
+      table.conversationMessageId,
       table.principalId
     ),
-    index('chat_message_mentions_principal_idx').on(table.principalId, table.createdAt.desc()),
+    index('conversation_message_mentions_principal_idx').on(
+      table.principalId,
+      table.createdAt.desc()
+    ),
   ]
 )
 
@@ -218,13 +221,13 @@ export const chatMessageMentions = pgTable(
  * reaction idempotent. Both FKs cascade. Never exposed to the visitor: loaded
  * only on the agent enrichment path and broadcast only on the inbox channel.
  */
-export const chatMessageReactions = pgTable(
-  'chat_message_reactions',
+export const conversationMessageReactions = pgTable(
+  'conversation_message_reactions',
   {
     id: typeIdWithDefault('reaction')('id').primaryKey(),
-    chatMessageId: typeIdColumn('chat_msg')('chat_message_id')
+    conversationMessageId: typeIdColumn('chat_msg')('conversation_message_id')
       .notNull()
-      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+      .references(() => conversationMessages.id, { onDelete: 'cascade' }),
     // Required — only authenticated team members can react.
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
@@ -233,10 +236,10 @@ export const chatMessageReactions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('chat_message_reactions_message_idx').on(table.chatMessageId),
-    index('chat_message_reactions_principal_idx').on(table.principalId),
-    uniqueIndex('chat_message_reactions_unique_idx').on(
-      table.chatMessageId,
+    index('conversation_message_reactions_message_idx').on(table.conversationMessageId),
+    index('conversation_message_reactions_principal_idx').on(table.principalId),
+    uniqueIndex('conversation_message_reactions_unique_idx').on(
+      table.conversationMessageId,
       table.principalId,
       table.emoji
     ),
@@ -249,25 +252,25 @@ export const chatMessageReactions = pgTable(
  * is a personal triage marker, not a shared team signal. Both FKs cascade.
  * Agent-only. The (principal, flagged_at DESC) index serves the per-agent feed.
  */
-export const chatMessageFlags = pgTable(
-  'chat_message_flags',
+export const conversationMessageFlags = pgTable(
+  'conversation_message_flags',
   {
-    chatMessageId: typeIdColumn('chat_msg')('chat_message_id')
+    conversationMessageId: typeIdColumn('chat_msg')('conversation_message_id')
       .notNull()
-      .references(() => chatMessages.id, { onDelete: 'cascade' }),
+      .references(() => conversationMessages.id, { onDelete: 'cascade' }),
     principalId: typeIdColumn('principal')('principal_id')
       .notNull()
       .references(() => principal.id, { onDelete: 'cascade' }),
     flaggedAt: timestamp('flagged_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.chatMessageId, table.principalId] }),
-    index('chat_message_flags_principal_idx').on(table.principalId, table.flaggedAt.desc()),
+    primaryKey({ columns: [table.conversationMessageId, table.principalId] }),
+    index('conversation_message_flags_principal_idx').on(table.principalId, table.flaggedAt.desc()),
   ]
 )
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({
-  messages: many(chatMessages),
+  messages: many(conversationMessages),
   tags: many(conversationTagAssignments),
 }))
 
@@ -289,45 +292,51 @@ export const conversationTagAssignmentsRelations = relations(
   })
 )
 
-export const chatMessageMentionsRelations = relations(chatMessageMentions, ({ one }) => ({
-  message: one(chatMessages, {
-    fields: [chatMessageMentions.chatMessageId],
-    references: [chatMessages.id],
+export const conversationMessageMentionsRelations = relations(
+  conversationMessageMentions,
+  ({ one }) => ({
+    message: one(conversationMessages, {
+      fields: [conversationMessageMentions.conversationMessageId],
+      references: [conversationMessages.id],
+    }),
+    principal: one(principal, {
+      fields: [conversationMessageMentions.principalId],
+      references: [principal.id],
+    }),
+  })
+)
+
+export const conversationMessageReactionsRelations = relations(
+  conversationMessageReactions,
+  ({ one }) => ({
+    message: one(conversationMessages, {
+      fields: [conversationMessageReactions.conversationMessageId],
+      references: [conversationMessages.id],
+    }),
+    principal: one(principal, {
+      fields: [conversationMessageReactions.principalId],
+      references: [principal.id],
+    }),
+  })
+)
+
+export const conversationMessageFlagsRelations = relations(conversationMessageFlags, ({ one }) => ({
+  message: one(conversationMessages, {
+    fields: [conversationMessageFlags.conversationMessageId],
+    references: [conversationMessages.id],
   }),
   principal: one(principal, {
-    fields: [chatMessageMentions.principalId],
+    fields: [conversationMessageFlags.principalId],
     references: [principal.id],
   }),
 }))
 
-export const chatMessageReactionsRelations = relations(chatMessageReactions, ({ one }) => ({
-  message: one(chatMessages, {
-    fields: [chatMessageReactions.chatMessageId],
-    references: [chatMessages.id],
-  }),
-  principal: one(principal, {
-    fields: [chatMessageReactions.principalId],
-    references: [principal.id],
-  }),
-}))
-
-export const chatMessageFlagsRelations = relations(chatMessageFlags, ({ one }) => ({
-  message: one(chatMessages, {
-    fields: [chatMessageFlags.chatMessageId],
-    references: [chatMessages.id],
-  }),
-  principal: one(principal, {
-    fields: [chatMessageFlags.principalId],
-    references: [principal.id],
-  }),
-}))
-
-export const chatMessagesRelations = relations(chatMessages, ({ one, many }) => ({
+export const conversationMessagesRelations = relations(conversationMessages, ({ one, many }) => ({
   conversation: one(conversations, {
-    fields: [chatMessages.conversationId],
+    fields: [conversationMessages.conversationId],
     references: [conversations.id],
   }),
-  mentions: many(chatMessageMentions),
-  reactions: many(chatMessageReactions),
-  flags: many(chatMessageFlags),
+  mentions: many(conversationMessageMentions),
+  reactions: many(conversationMessageReactions),
+  flags: many(conversationMessageFlags),
 }))

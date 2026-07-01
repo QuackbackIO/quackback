@@ -5,7 +5,7 @@
  * agent gate and the system/deleted-message guards are exercised too.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PrincipalId, ChatMessageId } from '@quackback/ids'
+import type { PrincipalId, ConversationMessageId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const publishChatEvent = vi.fn()
@@ -53,9 +53,9 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn(),
     and: vi.fn(),
-    chatMessages: { __name: 'chat_messages' },
-    chatMessageReactions: { __name: 'chat_message_reactions' },
-    chatMessageFlags: { __name: 'chat_message_flags' },
+    conversationMessages: { __name: 'chat_messages' },
+    conversationMessageReactions: { __name: 'chat_message_reactions' },
+    conversationMessageFlags: { __name: 'chat_message_flags' },
   }
 })
 
@@ -93,21 +93,21 @@ beforeEach(() => {
 
 describe('message reaction/flag publish routing', () => {
   it('adds a reaction on the inbox channel only', async () => {
-    await addMessageReaction('chat_msg_1' as ChatMessageId, '👍', agent)
+    await addMessageReaction('chat_msg_1' as ConversationMessageId, '👍', agent)
     expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
     expect(publishAgentChatEvent.mock.calls[0][0]).toMatchObject({ kind: 'message_updated' })
     expect(publishChatEvent).not.toHaveBeenCalled()
   })
 
   it('removes a reaction on the inbox channel only', async () => {
-    await removeMessageReaction('chat_msg_1' as ChatMessageId, '👍', agent)
+    await removeMessageReaction('chat_msg_1' as ConversationMessageId, '👍', agent)
     expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
     expect(publishChatEvent).not.toHaveBeenCalled()
   })
 
   it('flags and unflags without broadcasting (a flag is personal)', async () => {
-    await setMessageFlag('chat_msg_1' as ChatMessageId, true, agent)
-    await setMessageFlag('chat_msg_1' as ChatMessageId, false, agent)
+    await setMessageFlag('chat_msg_1' as ConversationMessageId, true, agent)
+    await setMessageFlag('chat_msg_1' as ConversationMessageId, false, agent)
     expect(publishAgentChatEvent).not.toHaveBeenCalled()
     expect(publishChatEvent).not.toHaveBeenCalled()
   })
@@ -115,20 +115,26 @@ describe('message reaction/flag publish routing', () => {
 
 describe('message reaction/flag guards', () => {
   it('refuses a non-team actor and publishes nothing', async () => {
-    await expect(addMessageReaction('chat_msg_1' as ChatMessageId, '👍', visitor)).rejects.toThrow()
+    await expect(
+      addMessageReaction('chat_msg_1' as ConversationMessageId, '👍', visitor)
+    ).rejects.toThrow()
     expect(publishAgentChatEvent).not.toHaveBeenCalled()
     expect(publishChatEvent).not.toHaveBeenCalled()
   })
 
   it('refuses reacting to a system message', async () => {
     messageRow = { ...publicMessage, senderType: 'system', principalId: null }
-    await expect(setMessageFlag('chat_msg_1' as ChatMessageId, true, agent)).rejects.toThrow()
+    await expect(
+      setMessageFlag('chat_msg_1' as ConversationMessageId, true, agent)
+    ).rejects.toThrow()
     expect(publishAgentChatEvent).not.toHaveBeenCalled()
   })
 
   it('refuses reacting to a soft-deleted message', async () => {
     messageRow = { ...publicMessage, deletedAt: new Date() }
-    await expect(addMessageReaction('chat_msg_1' as ChatMessageId, '👍', agent)).rejects.toThrow()
+    await expect(
+      addMessageReaction('chat_msg_1' as ConversationMessageId, '👍', agent)
+    ).rejects.toThrow()
     expect(publishAgentChatEvent).not.toHaveBeenCalled()
   })
 })

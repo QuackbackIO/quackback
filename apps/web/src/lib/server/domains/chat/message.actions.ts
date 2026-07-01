@@ -1,7 +1,7 @@
 /**
  * Agent-only, per-message actions in the support inbox: emoji reactions and the
  * team-wide flag. Both are invisible to the visitor — they live in their own
- * tables (so they never appear in a `chatMessages` select), they are gated to
+ * tables (so they never appear in a `conversationMessages` select), they are gated to
  * team members, and the realtime update they emit (`message_updated`) is
  * published on the inbox channel ONLY, never the visitor's conversation channel.
  */
@@ -9,12 +9,12 @@ import {
   db,
   eq,
   and,
-  chatMessages,
-  chatMessageReactions,
-  chatMessageFlags,
-  type ChatMessage,
+  conversationMessages,
+  conversationMessageReactions,
+  conversationMessageFlags,
+  type ConversationMessage,
 } from '@/lib/server/db'
-import type { ChatMessageId, PrincipalId } from '@quackback/ids'
+import type { ConversationMessageId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { canActAsAgent } from '@/lib/server/policy/chat'
 import type { Actor } from '@/lib/server/policy/types'
@@ -33,11 +33,13 @@ function requireAgent(actor: Actor): PrincipalId {
 
 /** Load a message that an agent may react to / flag: it must exist, not be
  *  soft-deleted, and not be a system event (status notices aren't content). */
-async function loadActionableMessageOr404(messageId: ChatMessageId): Promise<ChatMessage> {
+async function loadActionableMessageOr404(
+  messageId: ConversationMessageId
+): Promise<ConversationMessage> {
   const [message] = await db
     .select()
-    .from(chatMessages)
-    .where(eq(chatMessages.id, messageId))
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, messageId))
     .limit(1)
   if (!message || message.deletedAt) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
@@ -51,7 +53,7 @@ async function loadActionableMessageOr404(messageId: ChatMessageId): Promise<Cha
 /** Rebuild the enriched agent DTO for a message and fan it out to the inbox
  *  channel only (never the visitor) so every agent's open thread updates live. */
 async function publishMessageUpdated(
-  message: ChatMessage,
+  message: ConversationMessage,
   viewerPrincipalId: PrincipalId
 ): Promise<{ reactions: MessageReactionCount[]; flaggedAt: string | null }> {
   const author = message.principalId
@@ -75,15 +77,15 @@ async function publishMessageUpdated(
 
 /** Add an emoji reaction (idempotent via the unique index). */
 export async function addMessageReaction(
-  messageId: ChatMessageId,
+  messageId: ConversationMessageId,
   emoji: string,
   actor: Actor
 ): Promise<{ reactions: MessageReactionCount[] }> {
   const agentId = requireAgent(actor)
   const message = await loadActionableMessageOr404(messageId)
   await db
-    .insert(chatMessageReactions)
-    .values({ chatMessageId: messageId, principalId: agentId, emoji })
+    .insert(conversationMessageReactions)
+    .values({ conversationMessageId: messageId, principalId: agentId, emoji })
     .onConflictDoNothing()
   const { reactions } = await publishMessageUpdated(message, agentId)
   return { reactions }
@@ -91,19 +93,19 @@ export async function addMessageReaction(
 
 /** Remove the actor's own reaction (idempotent — a no-op if absent). */
 export async function removeMessageReaction(
-  messageId: ChatMessageId,
+  messageId: ConversationMessageId,
   emoji: string,
   actor: Actor
 ): Promise<{ reactions: MessageReactionCount[] }> {
   const agentId = requireAgent(actor)
   const message = await loadActionableMessageOr404(messageId)
   await db
-    .delete(chatMessageReactions)
+    .delete(conversationMessageReactions)
     .where(
       and(
-        eq(chatMessageReactions.chatMessageId, messageId),
-        eq(chatMessageReactions.principalId, agentId),
-        eq(chatMessageReactions.emoji, emoji)
+        eq(conversationMessageReactions.conversationMessageId, messageId),
+        eq(conversationMessageReactions.principalId, agentId),
+        eq(conversationMessageReactions.emoji, emoji)
       )
     )
   const { reactions } = await publishMessageUpdated(message, agentId)
@@ -117,7 +119,7 @@ export async function removeMessageReaction(
  * from the returned flag state.
  */
 export async function setMessageFlag(
-  messageId: ChatMessageId,
+  messageId: ConversationMessageId,
   flagged: boolean,
   actor: Actor
 ): Promise<{ flaggedAt: string | null }> {
@@ -125,24 +127,27 @@ export async function setMessageFlag(
   await loadActionableMessageOr404(messageId)
   if (flagged) {
     await db
-      .insert(chatMessageFlags)
-      .values({ chatMessageId: messageId, principalId: agentId })
+      .insert(conversationMessageFlags)
+      .values({ conversationMessageId: messageId, principalId: agentId })
       .onConflictDoNothing()
   } else {
     await db
-      .delete(chatMessageFlags)
+      .delete(conversationMessageFlags)
       .where(
         and(
-          eq(chatMessageFlags.chatMessageId, messageId),
-          eq(chatMessageFlags.principalId, agentId)
+          eq(conversationMessageFlags.conversationMessageId, messageId),
+          eq(conversationMessageFlags.principalId, agentId)
         )
       )
   }
   const [flag] = await db
-    .select({ flaggedAt: chatMessageFlags.flaggedAt })
-    .from(chatMessageFlags)
+    .select({ flaggedAt: conversationMessageFlags.flaggedAt })
+    .from(conversationMessageFlags)
     .where(
-      and(eq(chatMessageFlags.chatMessageId, messageId), eq(chatMessageFlags.principalId, agentId))
+      and(
+        eq(conversationMessageFlags.conversationMessageId, messageId),
+        eq(conversationMessageFlags.principalId, agentId)
+      )
     )
     .limit(1)
   return { flaggedAt: flag ? flag.flaggedAt.toISOString() : null }

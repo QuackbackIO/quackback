@@ -5,7 +5,7 @@
 import {
   db,
   conversations,
-  chatMessages,
+  conversationMessages,
   principal,
   user,
   eq,
@@ -23,13 +23,13 @@ import {
   postExternalLinks,
   conversationTags,
   conversationTagAssignments,
-  chatMessageMentions,
-  chatMessageReactions,
-  chatMessageFlags,
+  conversationMessageMentions,
+  conversationMessageReactions,
+  conversationMessageFlags,
   userSegments,
   segments,
   type Conversation,
-  type ChatMessage,
+  type ConversationMessage,
   type PostSuggestion,
 } from '@/lib/server/db'
 import type {
@@ -37,7 +37,7 @@ import type {
   PrincipalId,
   PostId,
   ConversationTagId,
-  ChatMessageId,
+  ConversationMessageId,
   SegmentId,
 } from '@quackback/ids'
 import { aggregateReactions } from '@/lib/shared'
@@ -45,8 +45,8 @@ import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { truncate } from '@/lib/shared/utils/string'
 import type {
   ChatAuthorDTO,
-  ChatMessageDTO,
-  AgentChatMessageDTO,
+  ConversationMessageDTO,
+  AgentConversationMessageDTO,
   MessageReactionCount,
   FlaggedMessageDTO,
   ConversationDTO,
@@ -131,7 +131,10 @@ export async function resolveAuthor(input: {
   }
 }
 
-export function toMessageDTO(message: ChatMessage, author: ChatAuthorDTO | null): ChatMessageDTO {
+export function toMessageDTO(
+  message: ConversationMessage,
+  author: ChatAuthorDTO | null
+): ConversationMessageDTO {
   return {
     id: message.id,
     conversationId: message.conversationId,
@@ -150,29 +153,29 @@ export function toMessageDTO(message: ChatMessage, author: ChatAuthorDTO | null)
 /** Batch-load reactions for a page of messages, aggregated per message with the
  *  viewing agent's `hasReacted`. Agent-only — never called on a visitor path. */
 async function loadReactionsForMessages(
-  messageIds: ChatMessageId[],
+  messageIds: ConversationMessageId[],
   viewerPrincipalId: PrincipalId
-): Promise<Map<ChatMessageId, MessageReactionCount[]>> {
-  const map = new Map<ChatMessageId, MessageReactionCount[]>()
+): Promise<Map<ConversationMessageId, MessageReactionCount[]>> {
+  const map = new Map<ConversationMessageId, MessageReactionCount[]>()
   if (messageIds.length === 0) return map
   const rows = await db
     .select({
-      chatMessageId: chatMessageReactions.chatMessageId,
-      emoji: chatMessageReactions.emoji,
-      principalId: chatMessageReactions.principalId,
+      conversationMessageId: conversationMessageReactions.conversationMessageId,
+      emoji: conversationMessageReactions.emoji,
+      principalId: conversationMessageReactions.principalId,
       displayName: principal.displayName,
     })
-    .from(chatMessageReactions)
-    .leftJoin(principal, eq(principal.id, chatMessageReactions.principalId))
-    .where(inArray(chatMessageReactions.chatMessageId, messageIds))
+    .from(conversationMessageReactions)
+    .leftJoin(principal, eq(principal.id, conversationMessageReactions.principalId))
+    .where(inArray(conversationMessageReactions.conversationMessageId, messageIds))
   const byMessage = new Map<
-    ChatMessageId,
+    ConversationMessageId,
     Array<{ emoji: string; principalId: string; displayName: string | null }>
   >()
   for (const row of rows) {
-    const list = byMessage.get(row.chatMessageId) ?? []
+    const list = byMessage.get(row.conversationMessageId) ?? []
     list.push({ emoji: row.emoji, principalId: row.principalId, displayName: row.displayName })
-    byMessage.set(row.chatMessageId, list)
+    byMessage.set(row.conversationMessageId, list)
   }
   for (const [id, list] of byMessage) {
     map.set(id, aggregateReactions(list, viewerPrincipalId))
@@ -183,25 +186,25 @@ async function loadReactionsForMessages(
 /** Batch-load the VIEWING agent's personal flag (flaggedAt ISO) for a page of
  *  messages — flags are per-agent ("Saved for later"). */
 async function loadFlagsForMessages(
-  messageIds: ChatMessageId[],
+  messageIds: ConversationMessageId[],
   viewerPrincipalId: PrincipalId
-): Promise<Map<ChatMessageId, string>> {
-  const map = new Map<ChatMessageId, string>()
+): Promise<Map<ConversationMessageId, string>> {
+  const map = new Map<ConversationMessageId, string>()
   if (messageIds.length === 0) return map
   const rows = await db
     .select({
-      chatMessageId: chatMessageFlags.chatMessageId,
-      flaggedAt: chatMessageFlags.flaggedAt,
+      conversationMessageId: conversationMessageFlags.conversationMessageId,
+      flaggedAt: conversationMessageFlags.flaggedAt,
     })
-    .from(chatMessageFlags)
+    .from(conversationMessageFlags)
     .where(
       and(
-        inArray(chatMessageFlags.chatMessageId, messageIds),
-        eq(chatMessageFlags.principalId, viewerPrincipalId)
+        inArray(conversationMessageFlags.conversationMessageId, messageIds),
+        eq(conversationMessageFlags.principalId, viewerPrincipalId)
       )
     )
   for (const row of rows) {
-    map.set(row.chatMessageId, row.flaggedAt.toISOString())
+    map.set(row.conversationMessageId, row.flaggedAt.toISOString())
   }
   return map
 }
@@ -210,8 +213,8 @@ async function loadFlagsForMessages(
  * Attach the agent-only reaction + flag + post-suggestion fields to a page of
  * base message DTOs. This is the ONLY place those fields are added — the shared
  * `toMessageDTO` stays clean, so no visitor-facing path can leak them (a visitor
- * function returning ChatMessageDTO[] simply never has them). Agent paths call
- * this after listMessages to upgrade to AgentChatMessageDTO[].
+ * function returning ConversationMessageDTO[] simply never has them). Agent paths call
+ * this after listMessages to upgrade to AgentConversationMessageDTO[].
  *
  * The post suggestion is supplied in-memory via `postSuggestions` (built by
  * `listMessages` from the rows it already loaded) — it is NOT re-read here, so
@@ -219,10 +222,10 @@ async function loadFlagsForMessages(
  * and only ever carries internal-note suggestions.
  */
 export async function enrichMessagesForAgent(
-  messages: ChatMessageDTO[],
+  messages: ConversationMessageDTO[],
   viewerPrincipalId: PrincipalId,
-  postSuggestions: Map<ChatMessageId, PostSuggestion>
-): Promise<AgentChatMessageDTO[]> {
+  postSuggestions: Map<ConversationMessageId, PostSuggestion>
+): Promise<AgentConversationMessageDTO[]> {
   const ids = messages.map((m) => m.id)
   const [reactions, flags] = await Promise.all([
     loadReactionsForMessages(ids, viewerPrincipalId),
@@ -241,11 +244,11 @@ export async function enrichMessagesForAgent(
  *  in-memory `postSuggestion` (already known to the caller) is threaded straight
  *  through, never re-read from the DB. */
 export async function enrichMessageForAgent(
-  message: ChatMessageDTO,
+  message: ConversationMessageDTO,
   viewerPrincipalId: PrincipalId,
   postSuggestion: PostSuggestion | null = null
-): Promise<AgentChatMessageDTO> {
-  const suggestions = new Map<ChatMessageId, PostSuggestion>()
+): Promise<AgentConversationMessageDTO> {
+  const suggestions = new Map<ConversationMessageId, PostSuggestion>()
   if (postSuggestion) suggestions.set(message.id, postSuggestion)
   const [one] = await enrichMessagesForAgent([message], viewerPrincipalId, suggestions)
   return one
@@ -261,23 +264,26 @@ export async function listFlaggedMessages(
 ): Promise<FlaggedMessageDTO[]> {
   const rows = await db
     .select({
-      messageId: chatMessages.id,
-      conversationId: chatMessages.conversationId,
-      content: chatMessages.content,
-      senderType: chatMessages.senderType,
+      messageId: conversationMessages.id,
+      conversationId: conversationMessages.conversationId,
+      content: conversationMessages.content,
+      senderType: conversationMessages.senderType,
       authorName: principal.displayName,
       visitorPrincipalId: conversations.visitorPrincipalId,
-      flaggedAt: chatMessageFlags.flaggedAt,
+      flaggedAt: conversationMessageFlags.flaggedAt,
     })
-    .from(chatMessageFlags)
+    .from(conversationMessageFlags)
     .innerJoin(
-      chatMessages,
-      and(eq(chatMessages.id, chatMessageFlags.chatMessageId), isNull(chatMessages.deletedAt))
+      conversationMessages,
+      and(
+        eq(conversationMessages.id, conversationMessageFlags.conversationMessageId),
+        isNull(conversationMessages.deletedAt)
+      )
     )
-    .innerJoin(conversations, eq(conversations.id, chatMessages.conversationId))
-    .leftJoin(principal, eq(principal.id, chatMessages.principalId))
-    .where(eq(chatMessageFlags.principalId, viewerPrincipalId))
-    .orderBy(desc(chatMessageFlags.flaggedAt))
+    .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
+    .leftJoin(principal, eq(principal.id, conversationMessages.principalId))
+    .where(eq(conversationMessageFlags.principalId, viewerPrincipalId))
+    .orderBy(desc(conversationMessageFlags.flaggedAt))
     .limit(100)
 
   const visitorNames = await loadAuthors(rows.map((r) => r.visitorPrincipalId))
@@ -375,19 +381,19 @@ async function unreadCountFor(
   const readAt = side === 'agent' ? conversation.agentLastReadAt : conversation.visitorLastReadAt
   const [row] = await db
     .select({ c: sql<number>`count(*)::int` })
-    .from(chatMessages)
+    .from(conversationMessages)
     .where(
       and(
-        eq(chatMessages.conversationId, conversation.id),
-        eq(chatMessages.senderType, otherSide),
-        isNull(chatMessages.deletedAt),
+        eq(conversationMessages.conversationId, conversation.id),
+        eq(conversationMessages.senderType, otherSide),
+        isNull(conversationMessages.deletedAt),
         // Internal notes never count toward unread (esp. for the visitor side).
-        eq(chatMessages.isInternal, false),
+        eq(conversationMessages.isInternal, false),
         // Use the gt() operator (not a raw sql template) so the Date watermark
         // is bound through Drizzle's timestamp encoder — embedding a Date in a
         // raw sql fragment makes the driver reject it ("expected string, got
         // Date") and aborts the whole send.
-        readAt ? gt(chatMessages.createdAt, readAt) : undefined
+        readAt ? gt(conversationMessages.createdAt, readAt) : undefined
       )
     )
   return row?.c ?? 0
@@ -571,7 +577,7 @@ export async function listConversationsForVisitor(
 }
 
 export interface MessagePage {
-  messages: ChatMessageDTO[]
+  messages: ConversationMessageDTO[]
   hasMore: boolean
   /** Cursor for the next (older) page — the oldest message id returned. */
   nextCursor: string | null
@@ -580,7 +586,7 @@ export interface MessagePage {
    *  is consumed by `enrichMessagesForAgent` and MUST NOT be serialized to a
    *  client response — the suggestion is agent-only. Empty whenever internal
    *  notes aren't loaded (every visitor path). */
-  postSuggestions: Map<ChatMessageId, PostSuggestion>
+  postSuggestions: Map<ConversationMessageId, PostSuggestion>
 }
 
 /**
@@ -592,14 +598,14 @@ export interface MessagePage {
 export async function findBackfillCursor(
   conversationId: ConversationId,
   messageId: string
-): Promise<{ createdAt: Date; id: ChatMessage['id'] } | null> {
+): Promise<{ createdAt: Date; id: ConversationMessage['id'] } | null> {
   const [row] = await db
-    .select({ createdAt: chatMessages.createdAt, id: chatMessages.id })
-    .from(chatMessages)
+    .select({ createdAt: conversationMessages.createdAt, id: conversationMessages.id })
+    .from(conversationMessages)
     .where(
       and(
-        eq(chatMessages.id, messageId as ChatMessage['id']),
-        eq(chatMessages.conversationId, conversationId)
+        eq(conversationMessages.id, messageId as ConversationMessage['id']),
+        eq(conversationMessages.conversationId, conversationId)
       )
     )
     .limit(1)
@@ -624,22 +630,25 @@ export async function listMessages(
 
   const rows = await db
     .select()
-    .from(chatMessages)
+    .from(conversationMessages)
     .where(
       and(
-        eq(chatMessages.conversationId, conversationId),
-        isNull(chatMessages.deletedAt),
+        eq(conversationMessages.conversationId, conversationId),
+        isNull(conversationMessages.deletedAt),
         // Visitors never see internal notes; agents pass includeInternal.
-        opts?.includeInternal ? undefined : eq(chatMessages.isInternal, false),
+        opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
         cursor
           ? or(
-              lt(chatMessages.createdAt, cursor.createdAt),
-              and(eq(chatMessages.createdAt, cursor.createdAt), lt(chatMessages.id, cursor.id))
+              lt(conversationMessages.createdAt, cursor.createdAt),
+              and(
+                eq(conversationMessages.createdAt, cursor.createdAt),
+                lt(conversationMessages.id, cursor.id)
+              )
             )
           : undefined
       )
     )
-    .orderBy(desc(chatMessages.createdAt), desc(chatMessages.id))
+    .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
     .limit(limit + 1)
 
   const hasMore = rows.length > limit
@@ -650,7 +659,7 @@ export async function listMessages(
   // still have the raw rows, so the agent enrichment can attach it without a
   // second `SELECT metadata` round-trip. `toMessageDTO` deliberately drops the
   // metadata, so this map is the only carrier — and it never leaves the server.
-  const postSuggestions = new Map<ChatMessageId, PostSuggestion>()
+  const postSuggestions = new Map<ConversationMessageId, PostSuggestion>()
   for (const m of page) {
     const suggestion = m.metadata?.postSuggestion
     if (m.isInternal && suggestion) postSuggestions.set(m.id, suggestion)
@@ -731,7 +740,7 @@ export async function listConversationsForAgent(
               AND p.display_name ILIKE ${'%' + search + '%'}
           )
           OR EXISTS (
-            SELECT 1 FROM ${chatMessages} m
+            SELECT 1 FROM ${conversationMessages} m
             WHERE m.conversation_id = ${conversations.id}
               AND m.deleted_at IS NULL
               AND m.content ILIKE ${'%' + search + '%'}
@@ -805,14 +814,17 @@ export async function listConversationsForAgent(
           ? inArray(
               conversations.id,
               db
-                .selectDistinct({ id: chatMessages.conversationId })
-                .from(chatMessageMentions)
-                .innerJoin(chatMessages, eq(chatMessageMentions.chatMessageId, chatMessages.id))
+                .selectDistinct({ id: conversationMessages.conversationId })
+                .from(conversationMessageMentions)
+                .innerJoin(
+                  conversationMessages,
+                  eq(conversationMessageMentions.conversationMessageId, conversationMessages.id)
+                )
                 .where(
                   and(
-                    eq(chatMessageMentions.principalId, filter.mentionedPrincipalId),
-                    isNull(chatMessages.deletedAt),
-                    eq(chatMessages.isInternal, true)
+                    eq(conversationMessageMentions.principalId, filter.mentionedPrincipalId),
+                    isNull(conversationMessages.deletedAt),
+                    eq(conversationMessages.isInternal, true)
                   )
                 )
             )
@@ -846,26 +858,26 @@ export async function listConversationsForAgent(
   const ids = page.map((c) => c.id)
   const unreadRows = await db
     .select({
-      conversationId: chatMessages.conversationId,
+      conversationId: conversationMessages.conversationId,
       c: sql<number>`count(*)::int`,
     })
-    .from(chatMessages)
-    .innerJoin(conversations, eq(conversations.id, chatMessages.conversationId))
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
     .where(
       and(
-        inArray(chatMessages.conversationId, ids),
-        eq(chatMessages.senderType, 'visitor'),
-        isNull(chatMessages.deletedAt),
+        inArray(conversationMessages.conversationId, ids),
+        eq(conversationMessages.senderType, 'visitor'),
+        isNull(conversationMessages.deletedAt),
         // Internal notes never count toward unread — defense-in-depth mirroring
         // unreadCountFor (visitor messages are never internal, but keep it explicit).
-        eq(chatMessages.isInternal, false),
+        eq(conversationMessages.isInternal, false),
         or(
           isNull(conversations.agentLastReadAt),
-          sql`${chatMessages.createdAt} > ${conversations.agentLastReadAt}`
+          sql`${conversationMessages.createdAt} > ${conversations.agentLastReadAt}`
         )
       )
     )
-    .groupBy(chatMessages.conversationId)
+    .groupBy(conversationMessages.conversationId)
   const unreadMap = new Map<string, number>()
   for (const row of unreadRows) unreadMap.set(row.conversationId, row.c)
 

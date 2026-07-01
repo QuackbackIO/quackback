@@ -28,12 +28,12 @@ import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import type { JSONContent } from '@tiptap/core'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import type { ChatAttachment, ChatMessageDTO } from '@/lib/shared/chat/types'
+import type { ChatAttachment, ConversationMessageDTO } from '@/lib/shared/chat/types'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/chat/jumbo-emoji'
 import {
   getMyChatFn,
-  sendChatMessageFn,
-  listChatMessagesFn,
+  sendConversationMessageFn,
+  listConversationMessagesFn,
   markChatReadFn,
   mintChatStreamTokenFn,
   sendChatTypingFn,
@@ -127,7 +127,7 @@ export function VisitorChatThread({
 
   const [loading, setLoading] = useState(true)
   const [conversationId, setConversationId] = useState<ConversationId | null>(null)
-  const [messages, setMessages] = useState<ChatMessageDTO[]>([])
+  const [messages, setMessages] = useState<ConversationMessageDTO[]>([])
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null)
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
@@ -165,7 +165,7 @@ export function VisitorChatThread({
   // rating-request failure can't roll back state the visitor has moved past.
   const csatSubmitGenRef = useRef(0)
 
-  const appendMessage = useCallback((msg: ChatMessageDTO) => {
+  const appendMessage = useCallback((msg: ConversationMessageDTO) => {
     setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
   }, [])
 
@@ -275,7 +275,7 @@ export function VisitorChatThread({
   const refreshMessages = useCallback(async () => {
     if (!conversationId) return
     try {
-      const page = await listChatMessagesFn({
+      const page = await listConversationMessagesFn({
         data: { conversationId },
         headers: getAuthHeaders(),
       })
@@ -291,7 +291,7 @@ export function VisitorChatThread({
     if (!conversationId || loadingOlder || messages.length === 0) return
     setLoadingOlder(true)
     try {
-      const page = await listChatMessagesFn({
+      const page = await listConversationMessagesFn({
         data: { conversationId, before: messages[0].id },
         headers: getAuthHeaders(),
       })
@@ -528,7 +528,7 @@ export function VisitorChatThread({
       return
     }
     try {
-      const res = await sendChatMessageFn({
+      const res = await sendConversationMessageFn({
         data: {
           conversationId: conversationId ?? undefined,
           content: text,

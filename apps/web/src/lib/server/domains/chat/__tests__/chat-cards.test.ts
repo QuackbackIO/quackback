@@ -127,7 +127,7 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    chatMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'chat_messages', id: 'id' },
   }
 })
 

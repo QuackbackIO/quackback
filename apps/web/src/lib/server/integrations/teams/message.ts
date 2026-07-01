@@ -1,6 +1,6 @@
 /**
  * Teams message building utilities.
- * Creates Adaptive Card formatted messages for the Graph API chatMessage resource.
+ * Creates Adaptive Card formatted messages for the Graph API conversationMessage resource.
  *
  * Graph API requires:
  * - body.contentType = "html" with <attachment id="..."></attachment> references

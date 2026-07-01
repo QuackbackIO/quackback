@@ -143,7 +143,7 @@ vi.mock('@/lib/server/db', () => {
     isNull: vi.fn(),
     inArray: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    chatMessages: { __name: 'chat_messages', id: 'id' },
+    conversationMessages: { __name: 'chat_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', type: 'type', role: 'role' },
     user: { __name: 'user', id: 'id', email: 'email' },
   }

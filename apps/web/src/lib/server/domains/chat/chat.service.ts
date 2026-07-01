@@ -15,7 +15,7 @@ import {
   isNull,
   inArray,
   conversations,
-  chatMessages,
+  conversationMessages,
   principal,
   user,
   type Conversation,
@@ -23,7 +23,7 @@ import {
 } from '@/lib/server/db'
 import { isTeamMember } from '@/lib/shared/roles'
 import type { ChatAttachment } from '@/lib/server/db'
-import type { ConversationId, ChatMessageId, PrincipalId, SegmentId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId, PrincipalId, SegmentId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTrustedAttachmentUrl } from '@/lib/server/storage/trusted-url'
 import {
@@ -73,7 +73,7 @@ import {
   emitConversationCsatCommentAdded,
 } from './chat.webhooks'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
-import { syncChatMessageMentions } from './sync-chat-mentions'
+import { syncConversationMessageMentions } from './sync-chat-mentions'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type {
@@ -271,7 +271,7 @@ export async function sendVisitorMessage(
     }
 
     const [message] = await tx
-      .insert(chatMessages)
+      .insert(conversationMessages)
       .values({
         conversationId: conversation.id,
         principalId: author.principalId,
@@ -449,7 +449,7 @@ export async function startAgentConversation(
       .returning()
 
     const [message] = await tx
-      .insert(chatMessages)
+      .insert(conversationMessages)
       .values({
         conversationId: createdConv.id,
         principalId: agent.principalId,
@@ -534,7 +534,7 @@ export async function sendAgentMessage(
     }
 
     const [message] = await tx
-      .insert(chatMessages)
+      .insert(conversationMessages)
       .values({
         conversationId,
         principalId: agent.principalId,
@@ -631,7 +631,7 @@ export async function addAgentNote(
   // updatedAt bump.
   const message = await db.transaction(async (tx) => {
     const [inserted] = await tx
-      .insert(chatMessages)
+      .insert(conversationMessages)
       .values({
         conversationId,
         principalId: agent.principalId,
@@ -662,8 +662,8 @@ export async function addAgentNote(
   // (the picker writes principal ids into mention nodes), validated server-side
   // in the sync. The sync is DB-only + non-throwing, so awaiting it can't fail
   // the note send and adds only a few ms (no email/network like the reply path).
-  await syncChatMessageMentions({
-    chatMessageId: message.id,
+  await syncConversationMessageMentions({
+    conversationMessageId: message.id,
     conversationId,
     mentionedIds: extractMentions(safeContentJson),
     authorPrincipalId: agent.principalId,
@@ -778,7 +778,7 @@ async function emitSystemMessage(
 ): Promise<void> {
   try {
     const [message] = await db
-      .insert(chatMessages)
+      .insert(conversationMessages)
       .values({
         conversationId,
         // Author-less: a system event isn't sent by a person.
@@ -904,17 +904,17 @@ export async function requeueUnansweredOnAgentOffline(
     // stay assigned). Internal notes and soft-deleted messages don't count — a
     // private note or a since-deleted reply must not mask an unanswered chat.
     const answered = await db
-      .selectDistinct({ id: chatMessages.conversationId })
-      .from(chatMessages)
+      .selectDistinct({ id: conversationMessages.conversationId })
+      .from(conversationMessages)
       .where(
         and(
           inArray(
-            chatMessages.conversationId,
+            conversationMessages.conversationId,
             assigned.map((c) => c.id)
           ),
-          eq(chatMessages.senderType, 'agent'),
-          eq(chatMessages.isInternal, false),
-          isNull(chatMessages.deletedAt)
+          eq(conversationMessages.senderType, 'agent'),
+          eq(conversationMessages.isInternal, false),
+          isNull(conversationMessages.deletedAt)
         )
       )
     const answeredIds = new Set(answered.map((r) => r.id))
@@ -985,11 +985,14 @@ export async function setConversationPriority(
 /** Soft-delete a message. Team members may delete any message; a visitor may
  * delete only their own. Broadcasts a message_deleted event so open clients
  * drop the bubble. Idempotent. */
-export async function deleteChatMessage(messageId: ChatMessageId, actor: Actor): Promise<void> {
+export async function deleteConversationMessage(
+  messageId: ConversationMessageId,
+  actor: Actor
+): Promise<void> {
   const [message] = await db
     .select()
-    .from(chatMessages)
-    .where(eq(chatMessages.id, messageId))
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, messageId))
     .limit(1)
   if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
 
@@ -1015,9 +1018,9 @@ export async function deleteChatMessage(messageId: ChatMessageId, actor: Actor):
   }
 
   await db
-    .update(chatMessages)
+    .update(conversationMessages)
     .set({ deletedAt: new Date(), deletedByPrincipalId: actor.principalId, updatedAt: new Date() })
-    .where(and(eq(chatMessages.id, messageId), isNull(chatMessages.deletedAt)))
+    .where(and(eq(conversationMessages.id, messageId), isNull(conversationMessages.deletedAt)))
 
   const deletedEvent = {
     kind: 'message_deleted' as const,
@@ -1154,7 +1157,7 @@ export async function markConversationRead(
  */
 export async function markConversationUnreadFromMessage(
   conversationId: ConversationId,
-  messageId: ChatMessageId,
+  messageId: ConversationMessageId,
   actor: Actor
 ): Promise<void> {
   const decision = canActAsAgent(actor)
@@ -1162,9 +1165,17 @@ export async function markConversationUnreadFromMessage(
   const conversation = await loadConversationOr404(conversationId)
   // The anchor must belong to this conversation and not be soft-deleted.
   const [message] = await db
-    .select({ createdAt: chatMessages.createdAt, deletedAt: chatMessages.deletedAt })
-    .from(chatMessages)
-    .where(and(eq(chatMessages.id, messageId), eq(chatMessages.conversationId, conversationId)))
+    .select({
+      createdAt: conversationMessages.createdAt,
+      deletedAt: conversationMessages.deletedAt,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.id, messageId),
+        eq(conversationMessages.conversationId, conversationId)
+      )
+    )
     .limit(1)
   if (!message || message.deletedAt) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')

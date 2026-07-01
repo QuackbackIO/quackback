@@ -3,7 +3,12 @@
  * the SSE transport. No server-only imports here — this module is bundled into
  * the browser.
  */
-import type { ConversationId, ChatMessageId, ConversationTagId, PrincipalId } from '@quackback/ids'
+import type {
+  ConversationId,
+  ConversationMessageId,
+  ConversationTagId,
+  PrincipalId,
+} from '@quackback/ids'
 
 // Sourced from the DB enum (CONVERSATION_STATUSES) via the browser-safe bridge,
 // so the client type can never drift from the column's allowed values. Imported
@@ -71,8 +76,8 @@ export interface ChatAttachment {
 }
 
 /** A single rendered chat message. `createdAt` is an ISO-8601 string. */
-export interface ChatMessageDTO {
-  id: ChatMessageId
+export interface ConversationMessageDTO {
+  id: ConversationMessageId
   conversationId: ConversationId
   senderType: MessageSenderType
   content: string
@@ -110,11 +115,11 @@ export interface MessageReactionCount {
  * agent-only fields. These MUST NOT reach the visitor: they are populated only
  * by `enrichMessagesForAgent` (never by the shared `toMessageDTO`), and the one
  * realtime event that carries them (`message_updated`) is published on the
- * inbox channel only. Keeping them off `ChatMessageDTO` means any visitor-facing
- * function returning `ChatMessageDTO[]` fails to compile if it tries to expose
+ * inbox channel only. Keeping them off `ConversationMessageDTO` means any visitor-facing
+ * function returning `ConversationMessageDTO[]` fails to compile if it tries to expose
  * them.
  */
-export interface AgentChatMessageDTO extends ChatMessageDTO {
+export interface AgentConversationMessageDTO extends ConversationMessageDTO {
   /** Emoji reactions, aggregated with the requesting agent's `hasReacted`. */
   reactions: MessageReactionCount[]
   /** ISO timestamp when this message was flagged for the team, or null. */
@@ -127,7 +132,7 @@ export interface AgentChatMessageDTO extends ChatMessageDTO {
 /** A flagged ("Saved for later") message for the per-agent saved feed: enough
  *  to preview it and jump to its conversation. */
 export interface FlaggedMessageDTO {
-  messageId: ChatMessageId
+  messageId: ConversationMessageId
   conversationId: ConversationId
   /** Plain-text preview of the flagged message. */
   preview: string
@@ -191,7 +196,7 @@ export const CONVERSATION_END_REASON_LABELS: Record<ConversationEndReason, strin
  * `id:` line equal to the message id for Last-Event-ID backfill.
  */
 export type ChatStreamEvent =
-  | { kind: 'message'; conversationId: ConversationId; message: ChatMessageDTO }
+  | { kind: 'message'; conversationId: ConversationId; message: ConversationMessageDTO }
   | { kind: 'conversation'; conversation: ConversationDTO }
   | {
       kind: 'read'
@@ -212,11 +217,15 @@ export type ChatStreamEvent =
        *  agent's typing from their own collisions. */
       typistPrincipalId?: PrincipalId
     }
-  | { kind: 'message_deleted'; conversationId: ConversationId; messageId: ChatMessageId }
+  | { kind: 'message_deleted'; conversationId: ConversationId; messageId: ConversationMessageId }
   // An existing message changed in an agent-only way (reaction or flag toggled).
-  // Carries the enriched AgentChatMessageDTO and is published on the inbox
+  // Carries the enriched AgentConversationMessageDTO and is published on the inbox
   // channel ONLY (publishAgentChatEvent) — it never reaches the visitor.
-  | { kind: 'message_updated'; conversationId: ConversationId; message: AgentChatMessageDTO }
+  | {
+      kind: 'message_updated'
+      conversationId: ConversationId
+      message: AgentConversationMessageDTO
+    }
 
 /** Hard caps shared by client + server validation. */
 export const MAX_CHAT_MESSAGE_LENGTH = 4000

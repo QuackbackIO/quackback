@@ -9,7 +9,7 @@
  * userId). Synthetic anonymous emails are stripped via realEmail() everywhere
  * an email surfaces.
  */
-import type { Conversation, ChatMessage } from '@/lib/server/db'
+import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ChatAuthorInput } from './chat.types'
 import type {
@@ -68,7 +68,7 @@ function conversationRef(c: Conversation): EventConversationRef {
   return { id: c.id, status: c.status, channel: c.channel, priority: c.priority }
 }
 
-function messageData(m: ChatMessage, author: ChatAuthorInput): EventMessageData {
+function messageData(m: ConversationMessage, author: ChatAuthorInput): EventMessageData {
   return {
     id: m.id,
     conversationId: m.conversationId,
@@ -102,7 +102,7 @@ export async function emitConversationCreated(
 export async function emitMessageCreated(
   actor: Actor,
   author: ChatAuthorInput,
-  message: ChatMessage,
+  message: ConversationMessage,
   conversation: Conversation
 ): Promise<void> {
   await safe('message.created', () =>
@@ -117,7 +117,7 @@ export async function emitMessageCreated(
 export async function emitMessageNoteCreated(
   actor: Actor,
   author: ChatAuthorInput,
-  message: ChatMessage,
+  message: ConversationMessage,
   conversation: Conversation
 ): Promise<void> {
   await safe('message.note_created', () =>
@@ -131,7 +131,7 @@ export async function emitMessageNoteCreated(
 
 export async function emitMessageDeleted(
   actor: Actor,
-  message: ChatMessage,
+  message: ConversationMessage,
   conversation: Conversation
 ): Promise<void> {
   await safe('message.deleted', () =>

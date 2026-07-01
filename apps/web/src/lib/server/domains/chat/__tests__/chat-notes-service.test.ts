@@ -12,7 +12,7 @@ import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 const insertedMessages: Record<string, unknown>[] = []
 const publishChatEvent = vi.fn()
 const publishAgentChatEvent = vi.fn()
-const syncChatMessageMentions = vi.fn()
+const syncConversationMessageMentions = vi.fn()
 
 // Hoisted so the (also-hoisted) vi.mock factory can reference the spy bag.
 const emit = vi.hoisted(() => ({
@@ -44,7 +44,7 @@ vi.mock('../chat.notify', () => ({
 }))
 
 vi.mock('../sync-chat-mentions', () => ({
-  syncChatMessageMentions: (...args: unknown[]) => syncChatMessageMentions(...args),
+  syncConversationMessageMentions: (...args: unknown[]) => syncConversationMessageMentions(...args),
 }))
 
 vi.mock('../chat.query', () => ({
@@ -124,7 +124,7 @@ vi.mock('@/lib/server/db', () => {
     },
     eq: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    chatMessages: { __name: 'chat_messages', id: 'id', isInternal: 'is_internal' },
+    conversationMessages: { __name: 'chat_messages', id: 'id', isInternal: 'is_internal' },
   }
 })
 
@@ -195,15 +195,15 @@ describe('addAgentNote', () => {
       ],
     }
     await addAgentNote(conversationId, 'ping @Pat', agent, agentActor, doc)
-    expect(syncChatMessageMentions).toHaveBeenCalledTimes(1)
-    const arg = syncChatMessageMentions.mock.calls[0][0] as {
-      chatMessageId: string
+    expect(syncConversationMessageMentions).toHaveBeenCalledTimes(1)
+    const arg = syncConversationMessageMentions.mock.calls[0][0] as {
+      conversationMessageId: string
       conversationId: string
       mentionedIds: Set<string>
       authorPrincipalId: string
     }
     expect(arg.mentionedIds).toEqual(new Set(['principal_p1']))
-    expect(arg.chatMessageId).toBe('chat_msg_new')
+    expect(arg.conversationMessageId).toBe('chat_msg_new')
     expect(arg.conversationId).toBe(conversationId)
     expect(arg.authorPrincipalId).toBe(agent.principalId)
   })
@@ -216,9 +216,9 @@ describe('addAgentNote', () => {
       type: 'doc',
       content: [{ type: 'paragraph' }],
     })
-    expect(syncChatMessageMentions).toHaveBeenCalled()
+    expect(syncConversationMessageMentions).toHaveBeenCalled()
     expect(publishAgentChatEvent).toHaveBeenCalled()
-    expect(syncChatMessageMentions.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(syncConversationMessageMentions.mock.invocationCallOrder[0]).toBeLessThan(
       publishAgentChatEvent.mock.invocationCallOrder[0]
     )
   })

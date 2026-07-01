@@ -13,15 +13,15 @@ import {
 } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { isValidTypeId } from '@quackback/ids'
-import type { ConversationId, ChatMessageId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId } from '@quackback/ids'
 import {
-  listChatMessagesFn,
+  listConversationMessagesFn,
   sendAgentMessageFn,
   addChatNoteFn,
   markChatReadFn,
   sendChatTypingFn,
   getCannedRepliesFn,
-  deleteChatMessageFn,
+  deleteConversationMessageFn,
   addMessageReactionFn,
   removeMessageReactionFn,
   setMessageFlagFn,
@@ -29,8 +29,8 @@ import {
 } from '@/lib/server/functions/chat'
 import type {
   ChatAttachment,
-  ChatMessageDTO,
-  AgentChatMessageDTO,
+  ConversationMessageDTO,
+  AgentConversationMessageDTO,
   MessageReactionCount,
   ConversationDTO,
   ConversationPriority,
@@ -273,9 +273,9 @@ function InboxPage() {
   )
   // Open a conversation AND deep-link a specific message (the "Saved for later"
   // feed): the thread scrolls to it and flashes it on arrival.
-  const targetMessageId = (urlM as ChatMessageId | undefined) ?? null
+  const targetMessageId = (urlM as ConversationMessageId | undefined) ?? null
   const selectSavedMessage = useCallback(
-    (conversationId: ConversationId, messageId: ChatMessageId) =>
+    (conversationId: ConversationId, messageId: ConversationMessageId) =>
       updateSearch({ c: conversationId, m: messageId }),
     [updateSearch]
   )
@@ -489,16 +489,18 @@ function InboxPage() {
   )
 }
 
-/** The agent thread cache: messages are AgentChatMessageDTO (reactions + flag). */
+/** The agent thread cache: messages are AgentConversationMessageDTO (reactions + flag). */
 type ThreadCache = {
   conversation: ConversationDTO
-  messages: AgentChatMessageDTO[]
+  messages: AgentConversationMessageDTO[]
   hasMore?: boolean
 }
 
 /** Coerce a base/partial message DTO to an agent one, preserving any reaction /
  *  flag fields it already carries (a fresh message has neither yet). */
-function asAgentMessage(m: ChatMessageDTO | AgentChatMessageDTO): AgentChatMessageDTO {
+function asAgentMessage(
+  m: ConversationMessageDTO | AgentConversationMessageDTO
+): AgentConversationMessageDTO {
   return {
     ...m,
     reactions: 'reactions' in m ? m.reactions : [],
@@ -512,9 +514,9 @@ function asAgentMessage(m: ChatMessageDTO | AgentChatMessageDTO): AgentChatMessa
  *  (reactions per-user, flags per-agent), so the broadcaster's values are not
  *  ours to apply. */
 function mergeAgentMessage(
-  local: AgentChatMessageDTO,
-  incoming: AgentChatMessageDTO
-): AgentChatMessageDTO {
+  local: AgentConversationMessageDTO,
+  incoming: AgentConversationMessageDTO
+): AgentConversationMessageDTO {
   const localReacted = new Set(local.reactions.filter((r) => r.hasReacted).map((r) => r.emoji))
   return {
     ...incoming,
@@ -537,11 +539,11 @@ function replyDocHasContentNode(doc: JSONContent | null): boolean {
  *  attributing it to `myName` so the chip's hover tooltip is right immediately
  *  (the mutation's onSuccess then reconciles to the server's canonical list). */
 function toggleReactionLocal(
-  m: AgentChatMessageDTO,
+  m: AgentConversationMessageDTO,
   emoji: string,
   hadReacted: boolean,
   myName: string
-): AgentChatMessageDTO {
+): AgentConversationMessageDTO {
   let reactions: MessageReactionCount[]
   if (hadReacted) {
     reactions = m.reactions
@@ -585,7 +587,7 @@ function ChatThread({
 }: {
   conversationId: ConversationId
   /** Deep-link target: scroll to + flash this message once it's loaded. */
-  targetMessageId: ChatMessageId | null
+  targetMessageId: ConversationMessageId | null
   onChanged: () => void
   /** Mobile-only: return to the conversation list (single-column layout). */
   onBack: () => void
@@ -637,8 +639,8 @@ function ChatThread({
 
   // Per-message "Track as feedback" quick actions: the message driving the
   // (controlled) track dialog and the share-post picker, respectively.
-  const [suggestMsg, setSuggestMsg] = useState<AgentChatMessageDTO | null>(null)
-  const [shareMsg, setShareMsg] = useState<AgentChatMessageDTO | null>(null)
+  const [suggestMsg, setSuggestMsg] = useState<AgentConversationMessageDTO | null>(null)
+  const [shareMsg, setShareMsg] = useState<AgentConversationMessageDTO | null>(null)
   // Conversation-level "Track as feedback" (from the detail panel): opens the
   // same convert dialog seeded with the conversation subject + first visitor
   // message, alongside the per-message `suggestMsg` path.
@@ -658,9 +660,9 @@ function ChatThread({
   // flashing. pendingTargetRef mirrors pendingTarget so the auto-scroll-to-
   // bottom effect can read it without listing it as a dep (which would re-fire
   // a bottom-scroll the instant the jump resolves).
-  const [pendingTarget, setPendingTarget] = useState<ChatMessageId | null>(targetMessageId)
-  const [highlightId, setHighlightId] = useState<ChatMessageId | null>(null)
-  const pendingTargetRef = useRef<ChatMessageId | null>(targetMessageId)
+  const [pendingTarget, setPendingTarget] = useState<ConversationMessageId | null>(targetMessageId)
+  const [highlightId, setHighlightId] = useState<ConversationMessageId | null>(null)
+  const pendingTargetRef = useRef<ConversationMessageId | null>(targetMessageId)
   pendingTargetRef.current = pendingTarget
   const jumpPagesRef = useRef(0)
 
@@ -704,12 +706,12 @@ function ChatThread({
   const [loadingOlder, setLoadingOlder] = useState(false)
 
   // Prepend an older page (keyset cursor = oldest loaded message id). Agents see
-  // internal notes here too (listChatMessagesFn includes them by role).
+  // internal notes here too (listConversationMessagesFn includes them by role).
   const loadOlder = async () => {
     if (loadingOlder || messages.length === 0) return
     setLoadingOlder(true)
     try {
-      const page = await listChatMessagesFn({
+      const page = await listConversationMessagesFn({
         data: { conversationId, before: messages[0].id },
       })
       queryClient.setQueryData(threadKey, (prev: ThreadCache | undefined) => {
@@ -879,7 +881,10 @@ function ChatThread({
   }, [conversationId, lastMessageId, isLoading, onChanged])
 
   // Merge a freshly-sent message into the thread cache (dedup by id).
-  const appendToThread = (res: { conversation: ConversationDTO; message: ChatMessageDTO }) => {
+  const appendToThread = (res: {
+    conversation: ConversationDTO
+    message: ConversationMessageDTO
+  }) => {
     queryClient.setQueryData(threadKey, (prev: ThreadCache | undefined) =>
       prev && !prev.messages.some((m) => m.id === res.message.id)
         ? {
@@ -949,7 +954,8 @@ function ChatThread({
   }, [queryClient, conversationId, onChanged])
 
   const deleteMutation = useMutation({
-    mutationFn: (messageId: ChatMessageId) => deleteChatMessageFn({ data: { messageId } }),
+    mutationFn: (messageId: ConversationMessageId) =>
+      deleteConversationMessageFn({ data: { messageId } }),
     onSuccess: (_r, messageId) => {
       queryClient.setQueryData(threadKey, (prev: ThreadCache | undefined) =>
         prev ? { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) } : prev
@@ -961,7 +967,7 @@ function ChatThread({
   // Toggle the caller's emoji reaction on a message (optimistic; the SSE
   // message_updated reconciles counts across agents).
   const reactionMutation = useMutation({
-    mutationFn: (vars: { messageId: ChatMessageId; emoji: string; hasReacted: boolean }) =>
+    mutationFn: (vars: { messageId: ConversationMessageId; emoji: string; hasReacted: boolean }) =>
       (vars.hasReacted ? removeMessageReactionFn : addMessageReactionFn)({
         data: { messageId: vars.messageId, emoji: vars.emoji },
       }),
@@ -1003,7 +1009,7 @@ function ChatThread({
   // Toggle the caller's personal "Saved for later" flag on a message
   // (optimistic; reconciled to the server's flaggedAt; refreshes the saved feed).
   const flagMutation = useMutation({
-    mutationFn: (vars: { messageId: ChatMessageId; flagged: boolean }) =>
+    mutationFn: (vars: { messageId: ConversationMessageId; flagged: boolean }) =>
       setMessageFlagFn({ data: { messageId: vars.messageId, flagged: vars.flagged } }),
     onMutate: (vars) => {
       queryClient.setQueryData(threadKey, (prev: ThreadCache | undefined) =>
@@ -1046,7 +1052,7 @@ function ChatThread({
   // badge; the thread stays open (the auto-read effect's deps are stable, so it
   // won't immediately re-mark read).
   const markUnreadMutation = useMutation({
-    mutationFn: (messageId: ChatMessageId) =>
+    mutationFn: (messageId: ConversationMessageId) =>
       markConversationUnreadFromMessageFn({ data: { conversationId, messageId } }),
     onSuccess: () => onChanged(),
     onError: () => toast.error('Failed to mark unread'),

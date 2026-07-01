@@ -1,4 +1,4 @@
-import type { ChatMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationMessageDTO } from '@/lib/shared/chat/types'
 
 /**
  * A single virtualized row in the chat thread. Messages are keyed by their id
@@ -8,15 +8,15 @@ import type { ChatMessageDTO } from '@/lib/shared/chat/types'
 export type ChatRow =
   | { type: 'load-older'; key: 'load-older' }
   | { type: 'greeting'; key: 'greeting' }
-  | { type: 'message'; key: string; message: ChatMessageDTO }
-  | { type: 'system'; key: string; message: ChatMessageDTO }
+  | { type: 'message'; key: string; message: ConversationMessageDTO }
+  | { type: 'system'; key: string; message: ConversationMessageDTO }
   | { type: 'empty'; key: 'empty' }
   | { type: 'seen'; key: 'seen' }
   | { type: 'typing'; key: 'typing' }
   | { type: 'csat'; key: 'csat' }
 
 export interface ChatRowsInput {
-  messages: ChatMessageDTO[]
+  messages: ConversationMessageDTO[]
   /** A "load earlier messages" affordance sits above the thread. */
   hasMoreOlder: boolean
   /** The settings-driven welcome bubble (only once the thread start is reached). */

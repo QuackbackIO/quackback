@@ -87,12 +87,12 @@ export async function notifyVisitorMessage(opts: {
       const ctx = await buildHookContext()
       if (!ctx) return
       const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?c=${opts.conversation.id}`
-      const { sendChatMessageEmail } = await import('@quackback/email')
+      const { sendConversationMessageEmail } = await import('@quackback/email')
       await Promise.allSettled(
         team
           .filter((t) => t.email)
           .map((t) =>
-            sendChatMessageEmail({
+            sendConversationMessageEmail({
               to: t.email!,
               direction: 'visitor_message',
               senderName: opts.authorName,
@@ -136,16 +136,13 @@ export async function notifyAgentReply(opts: {
     if (!recipient) {
       // The visitor is offline and unreachable — surface it instead of dropping
       // silently (the inbox can flag conversations with no reply-to address).
-      log.warn(
-        { conversation_id: opts.conversationId },
-        'agent reply undeliverable (no email)'
-      )
+      log.warn({ conversation_id: opts.conversationId }, 'agent reply undeliverable (no email)')
       return
     }
 
     const ctx = await buildHookContext()
     if (!ctx) return
-    const { sendChatMessageEmail } = await import('@quackback/email')
+    const { sendConversationMessageEmail } = await import('@quackback/email')
     // Deep-link to the visitor's conversation surface (portal Support thread
     // when enabled, else the widget chat view). The thread is surfaced from
     // the visitor's own session (or a re-identify in the host app), so the URL
@@ -156,7 +153,7 @@ export async function notifyAgentReply(opts: {
     const replyTo = isEmailInboundConfigured()
       ? (inboundReplyToAddress(opts.conversationId) ?? undefined)
       : undefined
-    const result = await sendChatMessageEmail({
+    const result = await sendConversationMessageEmail({
       to: recipient,
       direction: 'agent_reply',
       senderName: opts.agentName,
@@ -209,12 +206,12 @@ export async function notifyConversationStarted(opts: {
 
     const ctx = await buildHookContext()
     if (!ctx) return
-    const { sendChatMessageEmail } = await import('@quackback/email')
+    const { sendConversationMessageEmail } = await import('@quackback/email')
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
     const replyTo = isEmailInboundConfigured()
       ? (inboundReplyToAddress(opts.conversationId) ?? undefined)
       : undefined
-    const result = await sendChatMessageEmail({
+    const result = await sendConversationMessageEmail({
       to: recipient,
       direction: 'agent_started',
       senderName: opts.agentName,

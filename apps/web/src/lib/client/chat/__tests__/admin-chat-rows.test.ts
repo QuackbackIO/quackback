@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import type { ChatMessageId } from '@quackback/ids'
-import type { AgentChatMessageDTO } from '@/lib/shared/chat/types'
+import type { ConversationMessageId } from '@quackback/ids'
+import type { AgentConversationMessageDTO } from '@/lib/shared/chat/types'
 import { buildAdminChatRows } from '../admin-chat-rows'
 
-const msg = (id: string) => ({ id }) as unknown as AgentChatMessageDTO
+const msg = (id: string) => ({ id }) as unknown as AgentConversationMessageDTO
 
 describe('buildAdminChatRows', () => {
   it('returns an empty-state row when there are no messages', () => {
@@ -32,7 +32,7 @@ describe('buildAdminChatRows', () => {
     const rows = buildAdminChatRows({
       messages: [msg('m1'), msg('m2'), msg('m3')],
       hasMoreOlder: false,
-      firstUnreadId: 'm2' as ChatMessageId,
+      firstUnreadId: 'm2' as ConversationMessageId,
       showSeen: false,
       showTyping: false,
     })
@@ -43,7 +43,7 @@ describe('buildAdminChatRows', () => {
     const rows = buildAdminChatRows({
       messages: [msg('m1'), msg('m2')],
       hasMoreOlder: true,
-      firstUnreadId: 'm1' as ChatMessageId,
+      firstUnreadId: 'm1' as ConversationMessageId,
       showSeen: true,
       showTyping: true,
     })

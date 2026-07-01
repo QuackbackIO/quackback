@@ -21,7 +21,7 @@ const buildHookContext =
   vi.fn<
     () => Promise<{ workspaceName: string; portalBaseUrl: string; logoUrl: string | null } | null>
   >()
-const sendChatMessageEmail = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>()
+const sendConversationMessageEmail = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>()
 
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: (...a: []) => isAnyAgentOnline(...a),
@@ -38,7 +38,8 @@ vi.mock('@/lib/server/events/hook-context', () => ({
 
 // notify.ts imports this dynamically inside the email branches.
 vi.mock('@quackback/email', () => ({
-  sendChatMessageEmail: (...a: [Record<string, unknown>]) => sendChatMessageEmail(...a),
+  sendConversationMessageEmail: (...a: [Record<string, unknown>]) =>
+    sendConversationMessageEmail(...a),
 }))
 
 // Visitor deep links consult the portal-support gate; default to the widget
@@ -88,7 +89,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   buildHookContext.mockResolvedValue(ctx)
   createNotificationsBatch.mockResolvedValue(undefined)
-  sendChatMessageEmail.mockResolvedValue(undefined)
+  sendConversationMessageEmail.mockResolvedValue(undefined)
 })
 
 describe('notifyVisitorMessage', () => {
@@ -104,7 +105,7 @@ describe('notifyVisitorMessage', () => {
     })
 
     expect(createNotificationsBatch).not.toHaveBeenCalled()
-    expect(sendChatMessageEmail).not.toHaveBeenCalled()
+    expect(sendConversationMessageEmail).not.toHaveBeenCalled()
   })
 
   it('creates an in-app batch but sends NO email on the first message while an agent is online', async () => {
@@ -130,7 +131,7 @@ describe('notifyVisitorMessage', () => {
       title: 'New chat message from Visitor',
       metadata: { conversationId },
     })
-    expect(sendChatMessageEmail).not.toHaveBeenCalled()
+    expect(sendConversationMessageEmail).not.toHaveBeenCalled()
   })
 
   it('emails every team member with an address when no agent is online', async () => {
@@ -150,8 +151,8 @@ describe('notifyVisitorMessage', () => {
 
     expect(createNotificationsBatch).toHaveBeenCalledTimes(1)
     // The null-email teammate is filtered out of the email fan-out.
-    expect(sendChatMessageEmail).toHaveBeenCalledTimes(2)
-    const firstEmail = sendChatMessageEmail.mock.calls[0][0]
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(2)
+    const firstEmail = sendConversationMessageEmail.mock.calls[0][0]
     expect(firstEmail).toMatchObject({
       to: 'a@x.com',
       direction: 'visitor_message',
@@ -173,7 +174,7 @@ describe('notifyVisitorMessage', () => {
     })
 
     expect(createNotificationsBatch).not.toHaveBeenCalled()
-    expect(sendChatMessageEmail).not.toHaveBeenCalled()
+    expect(sendConversationMessageEmail).not.toHaveBeenCalled()
   })
 
   it('swallows a thrown dependency (does not reject)', async () => {
@@ -205,7 +206,7 @@ describe('notifyAgentReply', () => {
       agentName: 'Agent',
     })
 
-    expect(sendChatMessageEmail).not.toHaveBeenCalled()
+    expect(sendConversationMessageEmail).not.toHaveBeenCalled()
   })
 
   it('prefers an identified visitor account email', async () => {
@@ -220,8 +221,8 @@ describe('notifyAgentReply', () => {
       capturedEmail: 'prechat@x.com',
     })
 
-    expect(sendChatMessageEmail).toHaveBeenCalledTimes(1)
-    expect(sendChatMessageEmail.mock.calls[0][0]).toMatchObject({
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationMessageEmail.mock.calls[0][0]).toMatchObject({
       to: 'account@x.com',
       direction: 'agent_reply',
       senderName: 'Agent',
@@ -244,8 +245,8 @@ describe('notifyAgentReply', () => {
       capturedEmail: 'prechat@x.com',
     })
 
-    expect(sendChatMessageEmail).toHaveBeenCalledTimes(1)
-    expect(sendChatMessageEmail.mock.calls[0][0]).toMatchObject({ to: 'prechat@x.com' })
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationMessageEmail.mock.calls[0][0]).toMatchObject({ to: 'prechat@x.com' })
   })
 
   it('sends nothing when an anonymous visitor has neither an account email nor a captured email', async () => {
@@ -260,7 +261,7 @@ describe('notifyAgentReply', () => {
       capturedEmail: null,
     })
 
-    expect(sendChatMessageEmail).not.toHaveBeenCalled()
+    expect(sendConversationMessageEmail).not.toHaveBeenCalled()
   })
 
   it('swallows a thrown dependency (does not reject)', async () => {
@@ -275,7 +276,7 @@ describe('notifyAgentReply', () => {
         capturedEmail: 'prechat@x.com',
       })
     ).resolves.toBeUndefined()
-    expect(sendChatMessageEmail).not.toHaveBeenCalled()
+    expect(sendConversationMessageEmail).not.toHaveBeenCalled()
   })
 
   describe('inbound-email Reply-To', () => {
@@ -305,7 +306,7 @@ describe('notifyAgentReply', () => {
       // Signed plus-address: reply+<id-suffix>.<hmac>@domain (unforgeable; the
       // `conversation_` prefix is dropped to stay under the 64-char local part).
       const suffix = conversationId.replace(/^conversation_/, '')
-      expect(sendChatMessageEmail.mock.calls[0][0].replyTo).toMatch(
+      expect(sendConversationMessageEmail.mock.calls[0][0].replyTo).toMatch(
         new RegExp(`^reply\\+${suffix}\\.[A-Za-z0-9_-]+@tenaevexeo\\.resend\\.app$`)
       )
     })
@@ -323,7 +324,7 @@ describe('notifyAgentReply', () => {
         agentName: 'Agent',
       })
 
-      expect(sendChatMessageEmail.mock.calls[0][0].replyTo).toBeUndefined()
+      expect(sendConversationMessageEmail.mock.calls[0][0].replyTo).toBeUndefined()
     })
   })
 })

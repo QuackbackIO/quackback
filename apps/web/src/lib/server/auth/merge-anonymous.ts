@@ -18,7 +18,7 @@ import {
   postSubscriptions,
   inAppNotifications,
   conversations,
-  chatMessages,
+  conversationMessages,
   principal,
   session,
   user,
@@ -91,9 +91,9 @@ export async function mergeAnonymousToIdentified(params: MergeAnonymousParams): 
         .set({ visitorPrincipalId: targetPrincipalId })
         .where(eq(conversations.visitorPrincipalId, anonPrincipalId)),
       tx
-        .update(chatMessages)
+        .update(conversationMessages)
         .set({ principalId: targetPrincipalId })
-        .where(eq(chatMessages.principalId, anonPrincipalId)),
+        .where(eq(conversationMessages.principalId, anonPrincipalId)),
     ])
 
     // 4. Fix notifications for transferred comments

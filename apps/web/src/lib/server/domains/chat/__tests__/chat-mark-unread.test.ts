@@ -5,7 +5,7 @@
  * gate and the backwards-only watermark.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PrincipalId, ChatMessageId, ConversationId } from '@quackback/ids'
+import type { PrincipalId, ConversationMessageId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const publishChatEvent = vi.fn()
@@ -63,7 +63,7 @@ vi.mock('@/lib/server/db', () => {
     isNull: vi.fn(),
     inArray: vi.fn(),
     conversations: { __name: 'conversations', id: 'id' },
-    chatMessages: { __name: 'chat_messages', id: 'id', createdAt: 'created_at' },
+    conversationMessages: { __name: 'chat_messages', id: 'id', createdAt: 'created_at' },
     principal: { __name: 'principal' },
   }
 })
@@ -95,7 +95,7 @@ describe('markConversationUnreadFromMessage', () => {
   it('publishes the backward read watermark on the inbox channel only', async () => {
     await markConversationUnreadFromMessage(
       'conversation_1' as ConversationId,
-      'chat_msg_1' as ChatMessageId,
+      'chat_msg_1' as ConversationMessageId,
       agent
     )
     expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
@@ -111,7 +111,7 @@ describe('markConversationUnreadFromMessage', () => {
     await expect(
       markConversationUnreadFromMessage(
         'conversation_1' as ConversationId,
-        'chat_msg_1' as ChatMessageId,
+        'chat_msg_1' as ConversationMessageId,
         visitor
       )
     ).rejects.toThrow()
@@ -123,7 +123,7 @@ describe('markConversationUnreadFromMessage', () => {
     await expect(
       markConversationUnreadFromMessage(
         'conversation_1' as ConversationId,
-        'chat_msg_missing' as ChatMessageId,
+        'chat_msg_missing' as ConversationMessageId,
         agent
       )
     ).rejects.toThrow()

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { Conversation, ChatMessage } from '@/lib/server/db'
+import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ChatAuthorInput } from '../chat.types'
 
@@ -71,7 +71,7 @@ const message = {
   content: 'hi there',
   isInternal: false,
   createdAt: now,
-} as unknown as ChatMessage
+} as unknown as ConversationMessage
 
 beforeEach(() => Object.values(dispatch).forEach((m) => m.mockClear()))
 
@@ -117,7 +117,11 @@ describe('chat.webhooks emit helpers', () => {
   })
 
   it('emitMessageNoteCreated routes to the note topic, not message.created', async () => {
-    const note = { ...message, senderType: 'agent', isInternal: true } as unknown as ChatMessage
+    const note = {
+      ...message,
+      senderType: 'agent',
+      isInternal: true,
+    } as unknown as ConversationMessage
     const agent: ChatAuthorInput = {
       principalId: 'principal_a',
       displayName: 'Agent',

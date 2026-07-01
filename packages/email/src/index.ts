@@ -541,7 +541,7 @@ interface SendChatMessageEmailParams {
  * Notify someone of a chat message when they're offline: an agent of a new
  * visitor message, or a visitor of an agent reply.
  */
-export async function sendChatMessageEmail(
+export async function sendConversationMessageEmail(
   params: SendChatMessageEmailParams
 ): Promise<EmailResult> {
   const {
