@@ -22,7 +22,7 @@ import type { ConversationAttachment, ConversationMessageMetadata, TiptapContent
 
 /**
  * Support-inbox conversations — one thread between a visitor (anonymous or
- * identified) and the team, arriving via any channel (live chat, email, ...).
+ * identified) and the team, arriving via any channel (messenger, email, ...).
  * Scoped to the tenant by the database connection (database-per-tenant); no
  * workspace column.
  */
@@ -107,7 +107,7 @@ export const conversationMessages = pgTable(
     senderType: text('sender_type', { enum: MESSAGE_SENDER_TYPES }).notNull(),
     content: text('content').notNull(),
     // Rich TipTap doc for messages that carry structured content (agent notes
-    // with @-mentions). Null for plain live-chat/email messages, which render
+    // with @-mentions). Null for plain messenger/email messages, which render
     // from `content`. Mirrors comments/posts `content_json`.
     contentJson: jsonb('content_json').$type<TiptapContent>(),
     // Agent-only internal note — never sent to or visible to the visitor.
@@ -115,7 +115,7 @@ export const conversationMessages = pgTable(
     // Image/file attachments (client-safe refs); null/empty for text-only messages.
     attachments: jsonb('attachments').$type<ConversationAttachment[]>(),
     // Channel provenance (e.g. inbound email message-id for retry dedupe); null
-    // for ordinary in-app live-chat messages.
+    // for ordinary in-app messenger messages.
     metadata: jsonb('metadata').$type<ConversationMessageMetadata>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),

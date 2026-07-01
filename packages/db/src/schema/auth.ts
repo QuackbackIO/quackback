@@ -497,7 +497,7 @@ export const principal = pgTable(
      * /oauth2/callback/:providerId hooks.after middleware.
      */
     lastSsoSignInAt: timestamp('last_sso_sign_in_at', { withTimezone: true }),
-    // Contact email for an anonymous visitor (captured in live chat) so an
+    // Contact email for an anonymous visitor (captured in the messenger) so an
     // offline reply can reach them across conversations. Agent-only — the
     // principal stays anonymous; never exposed to the visitor.
     contactEmail: text('contact_email'),

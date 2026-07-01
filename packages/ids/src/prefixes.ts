@@ -28,7 +28,7 @@ export const ID_PREFIXES = {
   roadmap: 'roadmap',
   changelog: 'changelog',
 
-  // Live chat
+  // Conversations (support inbox)
   conversation: 'conversation',
   conversation_message: 'conversation_msg',
   conversation_tag: 'conversation_tag',

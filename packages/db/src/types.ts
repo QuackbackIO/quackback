@@ -321,9 +321,9 @@ export const AGENT_AVAILABILITY_VALUES = ['online', 'away'] as const
 export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 
 // The inbound channel a conversation arrived on — kept in sync with the
-// conversations.channel column enum. Existing live-chat threads default to
-// 'messenger'; 'email' and 'web_form' are wired up in later phases. This turns
-// "live chat vs ticket" into one polymorphic conversation with a channel field.
+// conversations.channel column enum. Pre-rename widget threads default to
+// 'messenger'; 'email' and 'web_form' are wired up in later phases. This keeps
+// one polymorphic conversation object with a channel field, not a per-channel table.
 export const CHANNELS = ['messenger', 'email', 'web_form'] as const
 export type Channel = (typeof CHANNELS)[number]
 
@@ -371,7 +371,7 @@ export interface PostSuggestion {
 }
 
 export interface ConversationMessageMetadata {
-  /** The channel this message arrived through, when not in-app live chat. */
+  /** The channel this message arrived through, when not the in-app messenger. */
   source?: 'email'
   /** Provider Message-ID for an inbound email, used to dedupe webhook retries. */
   emailMessageId?: string
