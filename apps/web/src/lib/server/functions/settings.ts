@@ -330,7 +330,7 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('update theme')
     try {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
     } catch (error) {
       log.error({ err: error }, 'update theme failed')
@@ -548,7 +548,7 @@ export const saveLogoKeyFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save logo key')
     try {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await saveLogoKey(data.key)
     } catch (error) {
       log.error({ err: error }, 'save logo key failed')
@@ -559,7 +559,7 @@ export const saveLogoKeyFn = createServerFn({ method: 'POST' })
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete logo')
   try {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
     return await deleteLogoKey()
   } catch (error) {
     log.error({ err: error }, 'delete logo failed')
@@ -572,7 +572,7 @@ export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save header logo key')
     try {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await saveHeaderLogoKey(data.key)
     } catch (error) {
       log.error({ err: error }, 'save header logo key failed')
@@ -583,7 +583,7 @@ export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
 export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete header logo')
   try {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
     return await deleteHeaderLogoKey()
   } catch (error) {
     log.error({ err: error }, 'delete header logo failed')
@@ -596,7 +596,7 @@ export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ mode: data.mode }, 'update header display mode')
     try {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateHeaderDisplayMode(data.mode)
     } catch (error) {
       log.error({ err: error }, 'update header display mode failed')
@@ -609,7 +609,7 @@ export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update header display name')
     try {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateHeaderDisplayName(data.name)
     } catch (error) {
       log.error({ err: error }, 'update header display name failed')
@@ -628,7 +628,7 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update workspace name')
     try {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateWorkspaceName(data.name)
     } catch (error) {
       log.error({ err: error }, 'update workspace name failed')
@@ -663,7 +663,7 @@ export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ css_length: data.customCss.length }, 'update custom css')
     try {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateCustomCss(data.customCss)
     } catch (error) {
       log.error({ err: error }, 'update custom css failed')
@@ -838,7 +838,7 @@ export const updateModerationDefaultFn = createServerFn({ method: 'POST' })
   .validator(moderationDefaultSchema.parse)
   .handler(async ({ data }) => {
     log.info({ require_approval: data.requireApproval }, 'update moderation default')
-    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MODERATION })
     const before = await getPortalConfig()
     const updated = await updatePortalConfig({ moderationDefault: data })
     await recordAuditEvent({
