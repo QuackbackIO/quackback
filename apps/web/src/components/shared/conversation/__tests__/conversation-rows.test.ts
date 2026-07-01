@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildChatRows } from '../chat-rows'
+import { buildChatRows } from '../conversation-rows'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 
 // Only `id` matters for row keys; cast minimal stand-ins.

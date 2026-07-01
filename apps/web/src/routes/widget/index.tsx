@@ -23,7 +23,7 @@ import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-deta
 import { WidgetHelp } from '@/components/widget/widget-help'
 import { WidgetHelpCategory } from '@/components/widget/widget-help-category'
 import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
-import { WidgetLiveChat } from '@/components/widget/widget-live-chat'
+import { WidgetMessenger } from '@/components/widget/widget-messenger'
 import type { ConversationId } from '@quackback/ids'
 import { WidgetMessagesSection } from '@/components/widget/widget-messages-section'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
@@ -31,7 +31,7 @@ import { portalQueries } from '@/lib/client/queries/portal'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
-import { CHAT_PRESENCE_QUERY_KEY } from '@/components/widget/use-chat-presence'
+import { CHAT_PRESENCE_QUERY_KEY } from '@/components/widget/use-messenger-presence'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -386,7 +386,7 @@ function WidgetPage() {
       {view === 'changelog' && <WidgetChangelog onEntrySelect={handleChangelogEntrySelect} />}
 
       {view === 'chat' && (
-        <WidgetLiveChat
+        <WidgetMessenger
           key={chatTarget ?? 'active'}
           helpEnabled={tabs.help}
           onArticleSelect={handleHelpArticleSelect}

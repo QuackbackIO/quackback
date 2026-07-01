@@ -7,7 +7,7 @@ import type { ConversationId } from '@quackback/ids'
 import { Button } from '@/components/ui/button'
 import { BackLink } from '@/components/ui/back-link'
 import { EmptyState } from '@/components/shared/empty-state'
-import { VisitorChatThread } from '@/components/shared/chat/visitor-chat-thread'
+import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
@@ -104,7 +104,7 @@ function SupportThreadPage() {
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
-          <VisitorChatThread
+          <VisitorConversationThread
             // Remount when switching threads so per-thread state never bleeds.
             key={conversationId}
             conversationTarget={

@@ -1,10 +1,10 @@
 import { useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ConversationId } from '@quackback/ids'
-import { VisitorChatThread } from '@/components/shared/chat/visitor-chat-thread'
+import { VisitorConversationThread } from '@/components/shared/conversation/visitor-conversation-thread'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
-import { useConversationPresence, markAgentPresentInCache } from './use-chat-presence'
+import { useConversationPresence, markAgentPresentInCache } from './use-messenger-presence'
 import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
 
 interface WidgetLiveChatProps {
@@ -25,7 +25,7 @@ interface WidgetLiveChatProps {
  * upload endpoint, the shared presence query, and help-center deflection via
  * the widget KB search API.
  */
-export function WidgetLiveChat({
+export function WidgetMessenger({
   helpEnabled,
   onArticleSelect,
   conversationTarget,
@@ -58,7 +58,7 @@ export function WidgetLiveChat({
   }, [helpEnabled, onArticleSelect])
 
   return (
-    <VisitorChatThread
+    <VisitorConversationThread
       conversationTarget={conversationTarget}
       linkPreviews={linkPreviews}
       getAuthHeaders={getWidgetAuthHeaders}

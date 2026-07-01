@@ -2,10 +2,10 @@ import { FormattedMessage } from 'react-intl'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
 import { chatAvailable } from '@/lib/shared/conversation/presence'
-import { useConversationSummary } from './use-chat-summary'
+import { useConversationSummary } from './use-messenger-summary'
 import { WidgetResumeCard } from './widget-resume-card'
 import { WidgetConversationHistory } from './widget-conversation-history'
-import { ConversationPresenceBadge } from '@/components/shared/chat/chat-presence-badge'
+import { ConversationPresenceBadge } from '@/components/shared/conversation/conversation-presence-badge'
 
 interface WidgetMessagesSectionProps {
   /** Open a conversation: an id opens that thread, 'new' starts a fresh one,

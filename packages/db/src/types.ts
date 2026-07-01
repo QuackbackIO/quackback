@@ -20,7 +20,7 @@ import type {
   conversationMessageMentions,
   conversationMessageReactions,
   conversationMessageFlags,
-} from './schema/chat'
+} from './schema/conversation'
 import type { principal } from './schema/auth'
 
 // Status categories (defined here to avoid circular imports in tests)

@@ -8,7 +8,7 @@ import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
  * name/type/size for the send payload, and exposes add/remove/clear + an
  * uploading flag.
  */
-export function useChatComposerAttachments(upload: (file: File) => Promise<string>) {
+export function useConversationComposerAttachments(upload: (file: File) => Promise<string>) {
   const [pending, setPending] = useState<ConversationAttachment[]>([])
   const [uploading, setUploading] = useState(false)
   // Mirror pending in a ref so addFiles reads the live count (for the remaining

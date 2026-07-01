@@ -3,7 +3,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { getMyChatFn } from '@/lib/server/functions/conversation'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
-import { useConversationPresence } from './use-chat-presence'
+import { useConversationPresence } from './use-messenger-presence'
 
 export interface ConversationSummary {
   conversation: ConversationDTO | null

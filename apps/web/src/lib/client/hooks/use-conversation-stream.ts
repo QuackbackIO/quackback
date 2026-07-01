@@ -37,7 +37,7 @@ const NAMED_EVENTS = [
  * Subscribe to the chat SSE stream with automatic, token-refreshing reconnect.
  * Browser-only; a no-op during SSR.
  */
-export function useChatStream({
+export function useConversationStream({
   buildUrl,
   enabled,
   onEvent,

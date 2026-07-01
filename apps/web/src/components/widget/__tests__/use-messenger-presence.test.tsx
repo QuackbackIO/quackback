@@ -14,7 +14,7 @@ import {
   useConversationPresence,
   markAgentPresentInCache,
   CHAT_PRESENCE_QUERY_KEY,
-} from '../use-chat-presence'
+} from '../use-messenger-presence'
 
 function seeded(seed?: unknown) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })

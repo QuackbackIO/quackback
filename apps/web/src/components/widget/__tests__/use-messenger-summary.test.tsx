@@ -18,8 +18,8 @@ vi.mock('@/lib/server/functions/conversation', () => ({
   getConversationPresenceFn: () => new Promise(() => {}),
 }))
 
-import { useConversationSummary } from '../use-chat-summary'
-import { CHAT_PRESENCE_QUERY_KEY } from '../use-chat-presence'
+import { useConversationSummary } from '../use-messenger-summary'
+import { CHAT_PRESENCE_QUERY_KEY } from '../use-messenger-presence'
 
 function seeded(seed?: unknown) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })

@@ -13,7 +13,7 @@ import {
 } from '@heroicons/react/24/solid'
 import { BookmarkIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
-import { ConversationAttachmentList } from '@/components/shared/chat-attachments'
+import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { NoteContent } from './note-content'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'

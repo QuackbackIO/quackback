@@ -9,7 +9,7 @@ const REMOTE_TYPING_TTL_MS = 4000
  * currently typing (auto-clearing after a TTL so a dropped stop-signal can't
  * leave the indicator stuck on).
  */
-export function useChatTyping(sendTyping: () => void) {
+export function useConversationTyping(sendTyping: () => void) {
   const [remoteTyping, setRemoteTyping] = useState(false)
   const lastSentRef = useRef(0)
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

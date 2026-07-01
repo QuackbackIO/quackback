@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
 import { getTableConfig } from 'drizzle-orm/pg-core'
-import { conversations, conversationMessages } from '../schema/chat'
+import { conversations, conversationMessages } from '../schema/conversation'
 import {
   CONVERSATION_STATUSES,
   MESSAGE_SENDER_TYPES,

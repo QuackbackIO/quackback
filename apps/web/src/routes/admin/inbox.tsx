@@ -78,10 +78,10 @@ import {
   type AdminChatRow,
 } from '@/lib/client/conversation/admin-conversation-rows'
 import type { JSONContent } from '@tiptap/core'
-import { useChatStream } from '@/lib/client/hooks/use-chat-stream'
-import { useChatTyping } from '@/lib/client/hooks/use-chat-typing'
+import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
+import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
-import { useChatComposerAttachments } from '@/lib/client/hooks/use-chat-composer-attachments'
+import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
@@ -351,16 +351,20 @@ function InboxPage() {
   }, [queryClient])
 
   // Track whether the visitor of the selected conversation is currently typing.
-  const { remoteTyping: visitorTyping, onRemoteTyping, clearRemoteTyping } = useChatTyping(() => {})
+  const {
+    remoteTyping: visitorTyping,
+    onRemoteTyping,
+    clearRemoteTyping,
+  } = useConversationTyping(() => {})
   // Collision detection: another agent typing in the same thread (self-echo is
   // filtered server-side, so any agent-typing here is a different agent).
   const {
     remoteTyping: otherAgentTyping,
     onRemoteTyping: onOtherAgentTyping,
     clearRemoteTyping: clearOtherAgentTyping,
-  } = useChatTyping(() => {})
+  } = useConversationTyping(() => {})
 
-  useChatStream({
+  useConversationStream({
     enabled: true,
     buildUrl: async () => '/api/chat/stream?scope=inbox',
     onReconnect: refreshInbox,
@@ -677,7 +681,7 @@ function ChatThread({
   const sendTyping = useCallback(() => {
     void sendChatTypingFn({ data: { conversationId } }).catch(() => {})
   }, [conversationId])
-  const { onLocalInput } = useChatTyping(sendTyping)
+  const { onLocalInput } = useConversationTyping(sendTyping)
 
   const { upload } = useImageUpload({ endpoint: '/api/upload/image', prefix: 'chat-images' })
   const {
@@ -686,7 +690,7 @@ function ChatThread({
     remove: removeAttachment,
     clear: clearAttachments,
     uploading,
-  } = useChatComposerAttachments(upload)
+  } = useConversationComposerAttachments(upload)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const replyComposerRef = useRef<ChatRichComposerHandle>(null)
   const noteEditorRef = useRef<ChatNoteEditorHandle>(null)

@@ -1,4 +1,4 @@
-import { useChatStream } from './use-chat-stream'
+import { useConversationStream } from './use-conversation-stream'
 
 /**
  * Keep a team member marked "online" for chat routing on ANY admin page (not
@@ -8,7 +8,7 @@ import { useChatStream } from './use-chat-stream'
  * (public routes, or when the support inbox feature is off).
  */
 export function useAdminPresence(enabled: boolean): void {
-  useChatStream({
+  useConversationStream({
     enabled,
     buildUrl: async () => '/api/chat/stream?scope=presence',
     onEvent: () => {},

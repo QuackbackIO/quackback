@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { buildChatRows, type ChatRow } from './chat-rows'
-import { ConversationPresenceBadge } from './chat-presence-badge'
+import { buildChatRows, type ChatRow } from './conversation-rows'
+import { ConversationPresenceBadge } from './conversation-presence-badge'
 import { chatAvailable } from '@/lib/shared/conversation/presence'
 import { PaperAirplaneIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftRightIcon, PaperClipIcon, BookOpenIcon } from '@heroicons/react/24/outline'
@@ -10,12 +10,12 @@ import type { ConversationId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { TypingDots } from '@/components/shared/typing-dots'
-import { ConversationAttachmentList } from '@/components/shared/chat-attachments'
+import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
-import { useChatStream } from '@/lib/client/hooks/use-chat-stream'
-import { useChatTyping } from '@/lib/client/hooks/use-chat-typing'
-import { useChatComposerAttachments } from '@/lib/client/hooks/use-chat-composer-attachments'
+import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
+import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
+import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import {
@@ -111,7 +111,7 @@ export interface VisitorChatThreadProps {
  * surface-specific dependency (auth headers, session minting, presence,
  * uploads, help search) comes in through props.
  */
-export function VisitorChatThread({
+export function VisitorConversationThread({
   conversationTarget,
   linkPreviews = false,
   getAuthHeaders = NO_HEADERS,
@@ -180,7 +180,7 @@ export function VisitorChatThread({
     }).catch(() => {})
   }, [conversationId, getAuthHeaders])
   const { remoteTyping, onLocalInput, onRemoteTyping, clearRemoteTyping } =
-    useChatTyping(sendTyping)
+    useConversationTyping(sendTyping)
 
   // No toast on visitor surfaces, so upload failures render as inline composer
   // text. uploadImage rejects on failure; the wrapper records the message.
@@ -203,7 +203,7 @@ export function VisitorChatThread({
     remove: removeAttachment,
     clear: clearAttachments,
     uploading,
-  } = useChatComposerAttachments(upload)
+  } = useConversationComposerAttachments(upload)
   // Attaching/pasting an image fires before the visitor has ever sent a message,
   // so there may be no session yet — mint one first (anonymous is fine) or the
   // upload goes out with no Bearer and 401s silently.
@@ -310,7 +310,7 @@ export function VisitorChatThread({
     }
   }, [conversationId, loadingOlder, messages, getAuthHeaders])
 
-  useChatStream({
+  useConversationStream({
     enabled: conversationId != null,
     resetKey: conversationId ?? '',
     buildUrl: async () => {
