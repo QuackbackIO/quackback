@@ -159,8 +159,8 @@ export {
   postRoadmapsRelations,
   posts,
   postsRelations,
-  postTags,
-  postTagsRelations,
+  postTagAssignments,
+  postTagAssignmentsRelations,
   votes,
   votesRelations,
   // Schema tables - integrations

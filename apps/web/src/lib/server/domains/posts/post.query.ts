@@ -10,7 +10,7 @@ import {
   db,
   posts,
   boards,
-  postTags,
+  postTagAssignments,
   postRoadmaps,
   tags,
   comments,
@@ -96,9 +96,9 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
         name: tags.name,
         color: tags.color,
       })
-      .from(postTags)
-      .innerJoin(tags, eq(tags.id, postTags.tagId))
-      .where(eq(postTags.postId, postId)),
+      .from(postTagAssignments)
+      .innerJoin(tags, eq(tags.id, postTagAssignments.tagId))
+      .where(eq(postTagAssignments.postId, postId)),
     db
       .select({ roadmapId: postRoadmaps.roadmapId })
       .from(postRoadmaps)

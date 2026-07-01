@@ -6,7 +6,7 @@
 
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { db, posts, tags, postTags, postStatuses, eq } from '@/lib/server/db'
+import { db, posts, tags, postTagAssignments, postStatuses, eq } from '@/lib/server/db'
 import {
   boardIdSchema,
   createId,
@@ -314,7 +314,7 @@ export async function processBatch(
 
   // Insert post-tag relationships
   if (postTagsToInsert.length > 0) {
-    await db.insert(postTags).values(postTagsToInsert).onConflictDoNothing()
+    await db.insert(postTagAssignments).values(postTagsToInsert).onConflictDoNothing()
   }
 
   return result

@@ -25,7 +25,7 @@ import type {
 } from '@quackback/ids'
 import { user, account, settings, principal } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
-import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
+import { posts, postTagAssignments, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
 import { changelogEntries, changelogEntryPosts } from './schema/changelog'
 import { segments } from './schema/segments'
@@ -462,7 +462,7 @@ async function seed() {
     const postRecords: Array<{ id: PostId; voteCount: number; statusSlug: string }> = []
 
     const postInserts: (typeof posts.$inferInsert)[] = []
-    const postTagInserts: (typeof postTags.$inferInsert)[] = []
+    const postTagInserts: (typeof postTagAssignments.$inferInsert)[] = []
 
     for (let i = 0; i < CONFIG.posts; i++) {
       const postId = generateId('post')
@@ -510,7 +510,7 @@ async function seed() {
     }
     for (let i = 0; i < postTagInserts.length; i += BATCH_SIZE) {
       await db
-        .insert(postTags)
+        .insert(postTagAssignments)
         .values(postTagInserts.slice(i, i + BATCH_SIZE))
         .onConflictDoNothing()
     }

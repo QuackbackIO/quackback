@@ -28,7 +28,7 @@ const dbInsert = vi.fn(() => ({ values: insertValues }))
 vi.mock('@/lib/server/db', async () => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
 
-  const postTagsTable = { postId: 'post_id', tagId: 'tag_id', __name: 'postTags' }
+  const postTagsTable = { postId: 'post_id', tagId: 'tag_id', __name: 'postTagAssignments' }
   const tagsTable = { id: 'tag_id', name: 'tag_name', __name: 'tags' }
 
   return {
@@ -49,7 +49,7 @@ vi.mock('@/lib/server/db', async () => {
     inArray: vi.fn(),
     postStatuses: { id: 'status_id' },
     posts: { id: 'post_id' },
-    postTags: postTagsTable,
+    postTagAssignments: postTagsTable,
     tags: tagsTable,
     principal: { id: 'principal_id' },
     sql: realSql,

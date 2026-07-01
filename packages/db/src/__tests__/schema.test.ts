@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
-import { posts, votes, comments, postTags, postRoadmaps, commentReactions } from '../schema/posts'
+import {
+  posts,
+  votes,
+  comments,
+  postTagAssignments,
+  postRoadmaps,
+  commentReactions,
+} from '../schema/posts'
 import { REACTION_EMOJIS, MODERATION_STATES } from '../types'
 import { boards, roadmaps, tags } from '../schema/boards'
 import { integrations } from '../schema/integrations'
@@ -103,13 +110,13 @@ describe('Schema definitions', () => {
     })
   })
 
-  describe('postTags schema', () => {
+  describe('postTagAssignments schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(postTags)).toBe('post_tags')
+      expect(getTableName(postTagAssignments)).toBe('post_tag_assignments')
     })
 
     it('has junction table columns', () => {
-      const columns = Object.keys(getTableColumns(postTags))
+      const columns = Object.keys(getTableColumns(postTagAssignments))
       expect(columns).toContain('postId')
       expect(columns).toContain('tagId')
       expect(columns.length).toBe(2)

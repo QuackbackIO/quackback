@@ -48,7 +48,7 @@ vi.mock('@/lib/server/db', () => ({
     searchVector: 'posts.searchVector',
   },
   postRoadmaps: { roadmapId: 'postRoadmaps.roadmapId', postId: 'postRoadmaps.postId' },
-  postTags: { postId: 'postTags.postId', tagId: 'postTags.tagId' },
+  postTagAssignments: { postId: 'postTagAssignments.postId', tagId: 'postTagAssignments.tagId' },
   boards: { id: 'boards.id', name: 'boards.name', slug: 'boards.slug' },
   userSegments: { principalId: 'userSegments.principalId', segmentId: 'userSegments.segmentId' },
 }))

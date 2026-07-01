@@ -8,7 +8,7 @@ import {
   db,
   posts,
   postStatuses,
-  postTags,
+  postTagAssignments,
   userSegments,
   eq,
   and,
@@ -121,9 +121,9 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   // Tag filter - use subquery to find posts with at least one of the selected tags
   if (tagIds && tagIds.length > 0) {
     const postIdsWithTagsSubquery = db
-      .selectDistinct({ postId: postTags.postId })
-      .from(postTags)
-      .where(inArray(postTags.tagId, tagIds))
+      .selectDistinct({ postId: postTagAssignments.postId })
+      .from(postTagAssignments)
+      .where(inArray(postTagAssignments.tagId, tagIds))
     conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
   }
 

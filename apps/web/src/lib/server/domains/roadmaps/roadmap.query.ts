@@ -10,7 +10,7 @@ import {
   roadmaps,
   posts,
   postRoadmaps,
-  postTags,
+  postTagAssignments,
   boards,
   userSegments,
   type Roadmap,
@@ -43,9 +43,9 @@ function buildRoadmapFilterConditions(
       inArray(
         posts.id,
         db
-          .selectDistinct({ postId: postTags.postId })
-          .from(postTags)
-          .where(inArray(postTags.tagId, options.tagIds))
+          .selectDistinct({ postId: postTagAssignments.postId })
+          .from(postTagAssignments)
+          .where(inArray(postTagAssignments.tagId, options.tagIds))
       )
     )
   }

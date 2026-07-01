@@ -159,8 +159,8 @@ export const posts = pgTable(
   ]
 )
 
-export const postTags = pgTable(
-  'post_tags',
+export const postTagAssignments = pgTable(
+  'post_tag_assignments',
   {
     postId: typeIdColumn('post')('post_id')
       .notNull()
@@ -170,9 +170,9 @@ export const postTags = pgTable(
       .references(() => tags.id, { onDelete: 'cascade' }),
   },
   (table) => [
-    uniqueIndex('post_tags_pk').on(table.postId, table.tagId),
-    index('post_tags_post_id_idx').on(table.postId),
-    index('post_tags_tag_id_idx').on(table.tagId),
+    uniqueIndex('post_tag_assignments_pk').on(table.postId, table.tagId),
+    index('post_tag_assignments_post_id_idx').on(table.postId),
+    index('post_tag_assignments_tag_id_idx').on(table.tagId),
   ]
 )
 
@@ -420,7 +420,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   }),
   votes: many(votes),
   comments: many(comments),
-  tags: many(postTags),
+  tags: many(postTagAssignments),
   roadmaps: many(postRoadmaps),
   notes: many(postNotes),
   externalLinks: many(postExternalLinks),
@@ -493,13 +493,13 @@ export const commentReactionsRelations = relations(commentReactions, ({ one }) =
   }),
 }))
 
-export const postTagsRelations = relations(postTags, ({ one }) => ({
+export const postTagAssignmentsRelations = relations(postTagAssignments, ({ one }) => ({
   post: one(posts, {
-    fields: [postTags.postId],
+    fields: [postTagAssignments.postId],
     references: [posts.id],
   }),
   tag: one(tags, {
-    fields: [postTags.tagId],
+    fields: [postTagAssignments.tagId],
     references: [tags.id],
   }),
 }))

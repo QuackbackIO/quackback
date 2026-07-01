@@ -10,7 +10,7 @@ import {
   gte,
   posts,
   boards,
-  postTags,
+  postTagAssignments,
   tags,
   votes,
   postStatuses,
@@ -134,9 +134,9 @@ function buildPostFilterConditions(params: PostListParams, actor: Actor) {
 
   if (tagIds && tagIds.length > 0) {
     const postIdsWithTagsSubquery = db
-      .selectDistinct({ postId: postTags.postId })
-      .from(postTags)
-      .where(inArray(postTags.tagId, tagIds))
+      .selectDistinct({ postId: postTagAssignments.postId })
+      .from(postTagAssignments)
+      .where(inArray(postTagAssignments.tagId, tagIds))
     conditions.push(inArray(posts.id, postIdsWithTagsSubquery))
   }
 
@@ -202,7 +202,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       boardSlug: boards.slug,
       tagsJson: sql<string>`COALESCE(
         (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
-         FROM ${postTags} pt
+         FROM ${postTagAssignments} pt
          INNER JOIN ${tags} t ON t.id = pt.tag_id
          WHERE pt.post_id = ${posts.id}),
         '[]'
@@ -276,7 +276,7 @@ export async function listPublicPosts(
       boardSlug: boards.slug,
       tagsJson: sql<string>`COALESCE(
         (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
-         FROM ${postTags} pt
+         FROM ${postTagAssignments} pt
          INNER JOIN ${tags} t ON t.id = pt.tag_id
          WHERE pt.post_id = ${posts.id}),
         '[]'

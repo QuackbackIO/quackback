@@ -10,7 +10,18 @@
  * Note: Authorization is handled at the action/API layer, not in services.
  */
 
-import { db, eq, and, isNull, asc, type Tag, tags, boards, postTags, posts } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  isNull,
+  asc,
+  type Tag,
+  tags,
+  boards,
+  postTagAssignments,
+  posts,
+} from '@/lib/server/db'
 import type { TagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './tag.types'
@@ -209,8 +220,8 @@ export async function getTagsByBoard(boardId: BoardId): Promise<Tag[]> {
   const tagResults = await db
     .selectDistinct({ id: tags.id })
     .from(tags)
-    .innerJoin(postTags, eq(tags.id, postTags.tagId))
-    .innerJoin(posts, eq(postTags.postId, posts.id))
+    .innerJoin(postTagAssignments, eq(tags.id, postTagAssignments.tagId))
+    .innerJoin(posts, eq(postTagAssignments.postId, posts.id))
     .where(and(eq(posts.boardId, boardId), isNull(posts.deletedAt)))
 
   if (tagResults.length === 0) {

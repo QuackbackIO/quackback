@@ -76,7 +76,7 @@ export const roadmapsRelations = relations(roadmaps, ({ many }) => ({
 }))
 
 export const tagsRelations = relations(tags, ({ many }) => ({
-  postTags: many(postTags),
+  postTagAssignments: many(postTagAssignments),
 }))
 
-import { postTags } from './posts'
+import { postTagAssignments } from './posts'

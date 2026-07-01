@@ -32,7 +32,7 @@ vi.mock('@/lib/server/db', async () => {
     boards: { id: 'board_id' },
     posts: { id: 'post_id', deletedAt: 'deleted_at' },
     postStatuses: { id: 'status_id', slug: 'slug' },
-    postTags: { postId: 'post_id', tagId: 'tag_id' },
+    postTagAssignments: { postId: 'post_id', tagId: 'tag_id' },
     tags: { id: 'tag_id' },
     votes: { id: 'votes_id' },
     principal: { id: 'principal_id' },

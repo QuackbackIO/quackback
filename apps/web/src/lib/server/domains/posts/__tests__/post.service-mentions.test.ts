@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
 import type { BoardId, PrincipalId, StatusId } from '@quackback/ids'
 
-const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTags: [] }
+const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTagAssignments: [] }
 const subscribeToPost = vi.fn()
 const syncPostMentions = vi.fn().mockResolvedValue(undefined)
 
@@ -163,7 +163,7 @@ vi.mock('@/lib/server/db', async () => {
     boards: { id: 'board_id' },
     posts: { __name: 'posts', id: 'post_id' },
     postStatuses: { id: 'status_id' },
-    postTags: { __name: 'postTags' },
+    postTagAssignments: { __name: 'postTagAssignments' },
     tags: { __name: 'tags', id: 'tag_id' },
     votes: { __name: 'votes' },
     principal: { id: 'principal_id' },
@@ -249,7 +249,7 @@ describe('createPost mention dispatch', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
     insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     syncPostMentions.mockClear()
   })

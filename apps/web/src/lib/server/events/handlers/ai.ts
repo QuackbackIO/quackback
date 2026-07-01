@@ -10,7 +10,7 @@ import type { EventData } from '../types'
 import { analyzeSentiment, saveSentiment } from '@/lib/server/domains/sentiment/sentiment.service'
 import { generatePostEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import type { PostId } from '@quackback/ids'
-import { db, postTags, tags, eq } from '@/lib/server/db'
+import { db, postTagAssignments, tags, eq } from '@/lib/server/db'
 import { claimHookDelivery } from '../hook-idempotency'
 import { logger } from '@/lib/server/logger'
 
@@ -88,9 +88,9 @@ async function getPostTagNames(postId: PostId): Promise<string[]> {
   try {
     const result = await db
       .select({ name: tags.name })
-      .from(postTags)
-      .innerJoin(tags, eq(postTags.tagId, tags.id))
-      .where(eq(postTags.postId, postId))
+      .from(postTagAssignments)
+      .innerJoin(tags, eq(postTagAssignments.tagId, tags.id))
+      .where(eq(postTagAssignments.postId, postId))
 
     return result.map((r) => r.name)
   } catch (error) {
@@ -106,7 +106,10 @@ async function processEmbedding(postId: PostId, title: string, content: string):
   // Fetch tags to include in embedding for better semantic matching
   const tagNames = await getPostTagNames(postId)
   if (tagNames.length > 0) {
-    log.debug({ post_id: postId, tag_count: tagNames.length, tags: tagNames }, 'including tags in embedding')
+    log.debug(
+      { post_id: postId, tag_count: tagNames.length, tags: tagNames },
+      'including tags in embedding'
+    )
   }
 
   const success = await generatePostEmbedding(postId, title, content, tagNames)

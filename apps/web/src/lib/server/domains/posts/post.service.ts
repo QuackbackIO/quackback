@@ -24,7 +24,7 @@ import {
   inArray,
   postStatuses,
   posts,
-  postTags,
+  postTagAssignments,
   tags,
   votes,
   principal as principalTable,
@@ -232,7 +232,9 @@ export async function createPost(
 
     // Add tags if provided
     if (input.tagIds && input.tagIds.length > 0) {
-      await tx.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: newPost.id, tagId })))
+      await tx
+        .insert(postTagAssignments)
+        .values(input.tagIds.map((tagId) => ({ postId: newPost.id, tagId })))
     }
 
     // Auto-upvote by the author
@@ -368,9 +370,9 @@ export async function updatePost(
   let currentTagIds: string[] = []
   if (input.tagIds !== undefined) {
     const currentTags = await db
-      .select({ tagId: postTags.tagId })
-      .from(postTags)
-      .where(eq(postTags.postId, id))
+      .select({ tagId: postTagAssignments.tagId })
+      .from(postTagAssignments)
+      .where(eq(postTagAssignments.postId, id))
     currentTagIds = currentTags.map((t) => t.tagId)
   }
 
@@ -420,9 +422,11 @@ export async function updatePost(
   // Update tags if provided
   if (input.tagIds !== undefined) {
     // Remove all existing tags then add new ones if any
-    await db.delete(postTags).where(eq(postTags.postId, id))
+    await db.delete(postTagAssignments).where(eq(postTagAssignments.postId, id))
     if (input.tagIds.length > 0) {
-      await db.insert(postTags).values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
+      await db
+        .insert(postTagAssignments)
+        .values(input.tagIds.map((tagId) => ({ postId: id, tagId })))
     }
   }
 

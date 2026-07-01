@@ -897,6 +897,13 @@
       "when": 1783814400000,
       "tag": "0127_conversation_tags_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1783900800000,
+      "tag": "0128_post_tag_assignments_rename",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,7 @@ import type { BoardId, PrincipalId, StatusId } from '@quackback/ids'
 const recordAuditEvent = vi.fn()
 const rehostExternalImages = vi.fn(async (json: unknown) => json)
 
-const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTags: [] }
+const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTagAssignments: [] }
 const subscribeToPost = vi.fn()
 const dispatchPostCreated = vi.fn().mockResolvedValue(undefined)
 const syncPostMentions = vi.fn().mockResolvedValue(undefined)
@@ -116,7 +116,7 @@ vi.mock('@/lib/server/db', async () => {
     boards: { id: 'board_id' },
     posts: { __name: 'posts', id: 'post_id' },
     postStatuses: { id: 'status_id' },
-    postTags: { __name: 'postTags' },
+    postTagAssignments: { __name: 'postTagAssignments' },
     votes: { __name: 'votes' },
     eq: vi.fn(),
     and: vi.fn((...args: unknown[]) => args),
@@ -169,7 +169,7 @@ describe('createPost author attribution', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
     insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     txLockedBoardRows.value = [{ deletedAt: null, access: LOCKED_ANON_ACCESS }]
   })
@@ -200,7 +200,7 @@ describe('createPost held audit event', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
     insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     recordAuditEvent.mockClear()
     txLockedBoardRows.value = [{ deletedAt: null, access: LOCKED_ANON_ACCESS }]
@@ -298,7 +298,7 @@ describe('createPost dispatch guard (moderation)', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
     insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     recordAuditEvent.mockClear()
     dispatchPostCreated.mockClear()
@@ -428,7 +428,7 @@ describe('createPost TOCTOU board re-check', () => {
   beforeEach(() => {
     insertedRows.posts.length = 0
     insertedRows.votes.length = 0
-    insertedRows.postTags.length = 0
+    insertedRows.postTagAssignments.length = 0
     subscribeToPost.mockClear()
     rehostExternalImages.mockClear()
     txLockedBoardRows.value = [{ deletedAt: null, access: LOCKED_ANON_ACCESS }]

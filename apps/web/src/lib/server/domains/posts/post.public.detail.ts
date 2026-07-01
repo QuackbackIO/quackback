@@ -6,7 +6,7 @@ import {
   isNull,
   posts,
   boards,
-  postTags,
+  postTagAssignments,
   tags,
   comments,
   commentReactions,
@@ -134,7 +134,7 @@ export async function getPublicPostDetail(
         postPrincipalId: posts.principalId,
         tagsJson: sql<string>`COALESCE(
           (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
-           FROM ${postTags} pt
+           FROM ${postTagAssignments} pt
            INNER JOIN ${tags} t ON t.id = pt.tag_id
            WHERE pt.post_id = ${posts.id}),
           '[]'
