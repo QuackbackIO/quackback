@@ -73,7 +73,7 @@ export type {
   StatusId,
   ReactionId,
   PostEditId,
-  CommentEditId,
+  PostCommentEditId,
   PostMentionId,
   NoteId,
   RoadmapId,

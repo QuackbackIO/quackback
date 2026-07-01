@@ -20,7 +20,7 @@ export const ID_PREFIXES = {
   status: 'status',
   reaction: 'reaction',
   post_edit: 'post_edit',
-  comment_edit: 'comment_edit',
+  post_comment_edit: 'post_comment_edit',
   note: 'note', // Internal staff notes on posts
   post_mention: 'post_mention',
 

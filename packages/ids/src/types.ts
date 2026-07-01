@@ -96,8 +96,8 @@ export type PushDeviceId = TypeId<'push_device'>
 /** Post edit history ID - e.g., post_edit_01h455vb4pex5vsknk084sn02q */
 export type PostEditId = TypeId<'post_edit'>
 
-/** Comment edit history ID - e.g., comment_edit_01h455vb4pex5vsknk084sn02q */
-export type CommentEditId = TypeId<'comment_edit'>
+/** Comment edit history ID - e.g., post_comment_edit_01h455vb4pex5vsknk084sn02q */
+export type PostCommentEditId = TypeId<'post_comment_edit'>
 
 /** Post mention ID - e.g., post_mention_01h455vb4pex5vsknk084sn02q */
 export type PostMentionId = TypeId<'post_mention'>
@@ -248,7 +248,7 @@ export interface EntityIdMap {
   status: StatusId
   reaction: ReactionId
   post_edit: PostEditId
-  comment_edit: CommentEditId
+  post_comment_edit: PostCommentEditId
   post_mention: PostMentionId
   note: NoteId
   segment: SegmentId
