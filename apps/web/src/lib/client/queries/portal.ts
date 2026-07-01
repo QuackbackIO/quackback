@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PrincipalId, RoadmapId, StatusId, BoardId } from '@quackback/ids'
+import type { PrincipalId, RoadmapId, PostStatusId, BoardId } from '@quackback/ids'
 import type { RespondedFilter } from '@/lib/shared/types/filters'
 import {
   fetchPublicBoards,
@@ -130,7 +130,7 @@ export const portalQueries = {
    */
   roadmapPosts: (params: {
     roadmapId: RoadmapId
-    statusId: StatusId
+    statusId: PostStatusId
     limit?: number
     offset?: number
   }) =>

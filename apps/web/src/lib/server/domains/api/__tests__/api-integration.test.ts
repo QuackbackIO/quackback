@@ -300,7 +300,7 @@ describe.skipIf(SKIP_INTEGRATION)('API Integration Tests', () => {
       if (skipIfNoServer() || !state.testBoardId) return
 
       const { createId } = await import('@quackback/ids')
-      const fakeStatusId = createId('status')
+      const fakeStatusId = createId('post_status')
       const { status } = await api('POST', '/posts', {
         boardId: state.testBoardId,
         title: 'Test',

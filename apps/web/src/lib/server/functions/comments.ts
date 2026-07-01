@@ -5,7 +5,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders } from '@tanstack/react-start/server'
-import { type PostCommentId, type PostId, type StatusId, type UserId } from '@quackback/ids'
+import { type PostCommentId, type PostId, type PostStatusId, type UserId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -121,7 +121,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
             | import('@/lib/shared/db-types').TiptapContent
             | undefined,
           parentId: data.parentId as PostCommentId | undefined,
-          statusId: data.statusId as StatusId | undefined,
+          statusId: data.statusId as PostStatusId | undefined,
           isPrivate: data.isPrivate,
         },
         {

@@ -173,7 +173,7 @@ export const boardIdSchema = typeIdSchema(ID_PREFIXES.board)
 export const commentIdSchema = typeIdSchema(ID_PREFIXES.post_comment)
 export const voteIdSchema = typeIdSchema(ID_PREFIXES.post_vote)
 export const tagIdSchema = typeIdSchema(ID_PREFIXES.post_tag)
-export const statusIdSchema = typeIdSchema(ID_PREFIXES.status)
+export const postStatusIdSchema = typeIdSchema(ID_PREFIXES.post_status)
 export const postCommentReactionIdSchema = typeIdSchema(ID_PREFIXES.post_comment_reaction)
 export const conversationMessageReactionIdSchema = typeIdSchema(
   ID_PREFIXES.conversation_message_reaction
@@ -206,7 +206,7 @@ export const flexibleBoardIdSchema = flexibleIdSchema(ID_PREFIXES.board)
 export const flexibleCommentIdSchema = flexibleIdSchema(ID_PREFIXES.post_comment)
 export const flexibleVoteIdSchema = flexibleIdSchema(ID_PREFIXES.post_vote)
 export const flexibleTagIdSchema = flexibleIdSchema(ID_PREFIXES.post_tag)
-export const flexibleStatusIdSchema = flexibleIdSchema(ID_PREFIXES.status)
+export const flexiblePostStatusIdSchema = flexibleIdSchema(ID_PREFIXES.post_status)
 export const flexiblePostCommentReactionIdSchema = flexibleIdSchema(
   ID_PREFIXES.post_comment_reaction
 )

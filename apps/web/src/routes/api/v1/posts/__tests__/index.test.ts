@@ -81,7 +81,7 @@ describe('POST /api/v1/posts authorPrincipalId override', () => {
       content: 'C',
       voteCount: 1,
       boardId: BOARD_ID,
-      statusId: 'status_open',
+      statusId: 'post_status_open',
       createdAt: new Date(),
       updatedAt: new Date(),
     })

@@ -21,7 +21,7 @@ import {
 
 // Status schema
 const StatusSchema = z.object({
-  id: TypeIdSchema.meta({ example: 'status_01h455vb4pex5vsknk084sn02q' }),
+  id: TypeIdSchema.meta({ example: 'post_status_01h455vb4pex5vsknk084sn02q' }),
   name: z.string().meta({ example: 'In Progress' }),
   slug: SlugSchema.meta({ example: 'in_progress' }),
   color: HexColorSchema.meta({ example: '#f97316' }),

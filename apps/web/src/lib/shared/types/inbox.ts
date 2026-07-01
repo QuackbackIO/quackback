@@ -6,7 +6,7 @@
  */
 
 import type { Board, PostTag } from '@/lib/shared/db-types'
-import type { PostId, StatusId, PostCommentId, PrincipalId } from '@quackback/ids'
+import type { PostId, PostStatusId, PostCommentId, PrincipalId } from '@quackback/ids'
 import type { CommentTreeNode, CommentReactionCount } from '@/lib/shared'
 
 export interface PinnedComment {
@@ -37,7 +37,7 @@ export interface PostDetails {
   title: string
   content: string
   contentJson?: unknown
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   hasVoted: boolean
   // Principal-scoped identity (Hub-and-Spoke model)

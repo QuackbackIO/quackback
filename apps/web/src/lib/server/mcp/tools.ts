@@ -102,7 +102,7 @@ import type {
   PostId,
   BoardId,
   PostTagId,
-  StatusId,
+  PostStatusId,
   PrincipalId,
   PostCommentId,
   ChangelogId,
@@ -936,7 +936,7 @@ Examples:
     `Update a post: set status, tags, and/or owner. All fields optional — only provided fields are updated.
 
 Examples:
-- Change status: triage_post({ postId: "post_01abc...", statusId: "status_01xyz..." })
+- Change status: triage_post({ postId: "post_01abc...", statusId: "post_status_01xyz..." })
 - Assign owner: triage_post({ postId: "post_01abc...", ownerPrincipalId: "principal_01xyz..." })
 - Replace tags: triage_post({ postId: "post_01abc...", tagIds: ["tag_01a...", "tag_01b..."] })`,
     triagePostSchema,
@@ -950,7 +950,7 @@ Examples:
         const result = await updatePost(
           args.postId as PostId,
           {
-            statusId: args.statusId as StatusId | undefined,
+            statusId: args.statusId as PostStatusId | undefined,
             tagIds: args.tagIds as PostTagId[] | undefined,
             ownerPrincipalId: args.ownerPrincipalId as PrincipalId | null | undefined,
           },
@@ -1157,7 +1157,7 @@ Examples:
 
 Examples:
 - Minimal: create_post({ boardId: "board_01abc...", title: "Add dark mode" })
-- Full: create_post({ boardId: "board_01abc...", title: "Add dark mode", content: "Would love a dark theme option.", statusId: "status_01xyz...", tagIds: ["tag_01a..."] })${CONTENT_FORMAT_BLOCK}`,
+- Full: create_post({ boardId: "board_01abc...", title: "Add dark mode", content: "Would love a dark theme option.", statusId: "post_status_01xyz...", tagIds: ["tag_01a..."] })${CONTENT_FORMAT_BLOCK}`,
     createPostSchema,
     WRITE,
     async (args: CreatePostArgs): Promise<CallToolResult> => {
@@ -1182,7 +1182,7 @@ Examples:
             boardId: args.boardId as BoardId,
             title: args.title,
             content: args.content ?? '',
-            statusId: args.statusId as StatusId | undefined,
+            statusId: args.statusId as PostStatusId | undefined,
             tagIds: args.tagIds as PostTagId[] | undefined,
           },
           {

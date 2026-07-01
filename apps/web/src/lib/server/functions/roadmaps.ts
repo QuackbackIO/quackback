@@ -7,7 +7,7 @@ import { createServerFn } from '@tanstack/react-start'
 import {
   type RoadmapId,
   type PostId,
-  type StatusId,
+  type PostStatusId,
   type BoardId,
   type PostTagId,
   type SegmentId,
@@ -317,7 +317,7 @@ export const getRoadmapPostsFn = createServerFn({ method: 'GET' })
       await requireAuth({ permission: PERMISSIONS.ROADMAP_MANAGE })
 
       const result = await getRoadmapPosts(data.roadmapId as RoadmapId, {
-        statusId: data.statusId as StatusId | undefined,
+        statusId: data.statusId as PostStatusId | undefined,
         limit: data.limit,
         offset: data.offset,
         search: data.search,

@@ -66,7 +66,7 @@ vi.mock('@/lib/server/db', async () => {
             id: 'post_p',
             title: 'P',
             boardId: 'board_b',
-            statusId: 'status_open',
+            statusId: 'post_status_open',
             isCommentsLocked: false,
             moderationState: 'published',
             principalId: null,
@@ -99,7 +99,7 @@ vi.mock('@/lib/server/db', async () => {
           findMany: vi.fn().mockResolvedValue([]),
         },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(tx)),

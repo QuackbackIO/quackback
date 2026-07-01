@@ -52,7 +52,7 @@ export const posts = pgTable(
       .notNull()
       .references(() => principal.id, { onDelete: 'restrict' }),
     // Status reference to post_statuses table
-    statusId: typeIdColumn('status')('status_id').references(() => postStatuses.id, {
+    statusId: typeIdColumn('post_status')('status_id').references(() => postStatuses.id, {
       onDelete: 'set null',
     }),
     // Owner is also principal-scoped (team member assigned to this post)
@@ -250,11 +250,11 @@ export const postComments = pgTable(
     isTeamMember: boolean('is_team_member').default(false).notNull(),
     isPrivate: boolean('is_private').default(false).notNull(),
     // Status change tracking: records which status transition occurred with this comment
-    statusChangeFromId: typeIdColumnNullable('status')('status_change_from_id').references(
+    statusChangeFromId: typeIdColumnNullable('post_status')('status_change_from_id').references(
       () => postStatuses.id,
       { onDelete: 'set null' }
     ),
-    statusChangeToId: typeIdColumnNullable('status')('status_change_to_id').references(
+    statusChangeToId: typeIdColumnNullable('post_status')('status_change_to_id').references(
       () => postStatuses.id,
       { onDelete: 'set null' }
     ),

@@ -5,7 +5,7 @@ import type {
   RoadmapPostsListResult,
   RoadmapPostEntry,
 } from '@/lib/shared/types'
-import type { RoadmapId, StatusId } from '@quackback/ids'
+import type { RoadmapId, PostStatusId } from '@quackback/ids'
 import type { RoadmapFilters } from '@/lib/shared/types'
 import { getRoadmapPostsFn } from '@/lib/server/functions/roadmaps'
 import { getRoadmapPostsByStatusFn } from '@/lib/server/functions/public-posts'
@@ -15,20 +15,20 @@ import { getRoadmapPostsByStatusFn } from '@/lib/server/functions/public-posts'
 // ============================================================================
 
 interface UseRoadmapPostsOptions {
-  statusId: StatusId
+  statusId: PostStatusId
   initialData?: RoadmapPostListResult
 }
 
 interface UseRoadmapPostsByRoadmapOptions {
   roadmapId: RoadmapId
-  statusId?: StatusId
+  statusId?: PostStatusId
   filters?: RoadmapFilters
   enabled?: boolean
 }
 
 interface UsePublicRoadmapPostsOptions {
   roadmapId: RoadmapId
-  statusId?: StatusId
+  statusId?: PostStatusId
   filters?: RoadmapFilters
   enabled?: boolean
 }
@@ -40,10 +40,10 @@ interface UsePublicRoadmapPostsOptions {
 export const roadmapPostsKeys = {
   all: ['roadmapPosts'] as const,
   lists: () => [...roadmapPostsKeys.all, 'list'] as const,
-  list: (statusId: StatusId) => [...roadmapPostsKeys.lists(), statusId] as const,
-  byRoadmap: (roadmapId: RoadmapId, statusId?: StatusId, filters?: RoadmapFilters) =>
+  list: (statusId: PostStatusId) => [...roadmapPostsKeys.lists(), statusId] as const,
+  byRoadmap: (roadmapId: RoadmapId, statusId?: PostStatusId, filters?: RoadmapFilters) =>
     [...roadmapPostsKeys.all, 'roadmap', roadmapId, statusId ?? 'all', filters ?? {}] as const,
-  portal: (roadmapId: RoadmapId, statusId?: StatusId, filters?: RoadmapFilters) =>
+  portal: (roadmapId: RoadmapId, statusId?: PostStatusId, filters?: RoadmapFilters) =>
     ['portal', 'roadmapPosts', roadmapId, statusId, filters ?? {}] as const,
 }
 

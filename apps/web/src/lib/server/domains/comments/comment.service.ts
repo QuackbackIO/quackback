@@ -10,7 +10,12 @@ import {
   type PostComment,
   type ModerationState,
 } from '@/lib/server/db'
-import { type PostCommentId, type PrincipalId, type StatusId, type UserId } from '@quackback/ids'
+import {
+  type PostCommentId,
+  type PrincipalId,
+  type PostStatusId,
+  type UserId,
+} from '@quackback/ids'
 import { NotFoundError, ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
@@ -162,7 +167,9 @@ export async function createComment(
   if (shouldChangeStatus) {
     // Fetch new status and current post status in parallel
     const [newStatus, prevStatus] = await Promise.all([
-      db.query.postStatuses.findFirst({ where: eq(postStatuses.id, input.statusId as StatusId) }),
+      db.query.postStatuses.findFirst({
+        where: eq(postStatuses.id, input.statusId as PostStatusId),
+      }),
       post.statusId
         ? db.query.postStatuses.findFirst({ where: eq(postStatuses.id, post.statusId) })
         : null,
@@ -197,7 +204,7 @@ export async function createComment(
       await tx
         .update(posts)
         .set({
-          statusId: input.statusId as StatusId,
+          statusId: input.statusId as PostStatusId,
           // Private and pending comments don't count toward the public
           // commentCount. Pending comments are held back from public reads
           // (see post.public.detail.ts) — `approveCommentFn` re-increments

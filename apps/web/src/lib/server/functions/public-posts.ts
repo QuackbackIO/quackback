@@ -7,7 +7,7 @@ import { createServerFn } from '@tanstack/react-start'
 import {
   type PostId,
   type BoardId,
-  type StatusId,
+  type PostStatusId,
   type PostTagId,
   type PrincipalId,
   type RoadmapId,
@@ -160,7 +160,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
       const result = await listPublicPosts({
         boardSlug: data.boardSlug,
         search: data.search,
-        statusIds: data.statusIds as StatusId[] | undefined,
+        statusIds: data.statusIds as PostStatusId[] | undefined,
         statusSlugs: data.statusSlugs,
         tagIds: data.tagIds as PostTagId[] | undefined,
         sort: data.sort,
@@ -604,7 +604,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
       const result = await getPublicRoadmapPosts(
         roadmapId as RoadmapId,
         {
-          statusId: statusId as StatusId | undefined,
+          statusId: statusId as PostStatusId | undefined,
           limit,
           offset,
         },
@@ -666,7 +666,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
       const { statusId, page, limit } = data
 
       const result = await getPublicRoadmapPostsPaginated({
-        statusId: statusId as StatusId,
+        statusId: statusId as PostStatusId,
         page,
         limit,
         actor,
@@ -864,7 +864,7 @@ function toRawResult(row: {
   id: PostId | string
   title: string
   voteCount: number
-  statusId: StatusId | string | null
+  statusId: PostStatusId | string | null
   boardId: BoardId | string
   score: number
 }): RawSearchResult {
@@ -1041,7 +1041,7 @@ export const findSimilarPostsFn = createServerFn({ method: 'GET' })
       // Fetch status and board info for matched posts
       const statusIds = [
         ...new Set(merged.filter((r) => r.statusId).map((r) => r.statusId!)),
-      ] as StatusId[]
+      ] as PostStatusId[]
       const boardIds = [...new Set(merged.map((r) => r.boardId))] as BoardId[]
 
       const [statusesResult, boardsResult] = await Promise.all([

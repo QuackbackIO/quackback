@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 
 // `createServerFn` needs the TanStack Start build transform; stub it so importing
 // the module under test only registers the (never-run) handler. The viewer-gated
@@ -20,14 +20,14 @@ import {
 } from '../embeds'
 import type { EmbedResolverDeps } from '../embeds'
 
-const sid = (s: string) => s as StatusId
+const sid = (s: string) => s as PostStatusId
 
 const POST_DETAIL = {
   id: 'post_01ktjwt5tyf6br9mw521h13n6n',
   title: 'Dark mode',
   content: 'A native solution would be much appreciated.',
   voteCount: 42,
-  statusId: sid('status_01abc'),
+  statusId: sid('post_status_01abc'),
   board: { name: 'Features', slug: 'features' },
   tags: [{ id: 'tag_1', name: 'Feature', color: '#6366f1' }],
   authorName: 'Marcus Garcia',
@@ -35,8 +35,8 @@ const POST_DETAIL = {
   createdAt: new Date('2026-01-02T03:04:05.000Z'),
 }
 const STATUSES = [
-  { id: sid('status_01abc'), name: 'Planned', color: '#3b82f6' },
-  { id: sid('status_01xyz'), name: 'Shipped', color: '#22c55e' },
+  { id: sid('post_status_01abc'), name: 'Planned', color: '#3b82f6' },
+  { id: sid('post_status_01xyz'), name: 'Shipped', color: '#22c55e' },
 ]
 
 // Canonical portal base injected into the projections (the server fn passes
@@ -69,7 +69,11 @@ describe('projectPostPreview', () => {
     expect(r.statusColor).toBeNull()
   })
   it('nulls the status fields when the status id is not in the taxonomy', () => {
-    const r = projectPostPreview({ ...POST_DETAIL, statusId: sid('status_gone') }, STATUSES, BASE)
+    const r = projectPostPreview(
+      { ...POST_DETAIL, statusId: sid('post_status_gone') },
+      STATUSES,
+      BASE
+    )
     expect(r.statusName).toBeNull()
     expect(r.statusColor).toBeNull()
   })

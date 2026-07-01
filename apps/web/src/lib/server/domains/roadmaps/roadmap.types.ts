@@ -3,7 +3,7 @@
  */
 
 import type { PostRoadmap } from '@/lib/server/db'
-import type { PostId, RoadmapId, StatusId, BoardId, PostTagId, SegmentId } from '@quackback/ids'
+import type { PostId, RoadmapId, PostStatusId, BoardId, PostTagId, SegmentId } from '@quackback/ids'
 
 /**
  * Input for creating a new roadmap
@@ -47,7 +47,7 @@ export interface RoadmapPostEntry {
   id: PostId
   title: string
   voteCount: number
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   board: {
     id: BoardId
     name: string
@@ -69,7 +69,7 @@ export interface RoadmapPostsListResult {
  * Query options for listing roadmap posts
  */
 export interface RoadmapPostsQueryOptions {
-  statusId?: StatusId
+  statusId?: PostStatusId
   limit?: number
   offset?: number
   search?: string

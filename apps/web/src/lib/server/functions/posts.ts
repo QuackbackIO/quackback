@@ -8,7 +8,7 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
   type PostId,
   type BoardId,
-  type StatusId,
+  type PostStatusId,
   type PostTagId,
   type SegmentId,
   type PrincipalId,
@@ -182,7 +182,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
 
       const result = await listInboxPosts({
         boardIds: data.boardIds as BoardId[] | undefined,
-        statusIds: data.statusIds as StatusId[] | undefined,
+        statusIds: data.statusIds as PostStatusId[] | undefined,
         statusSlugs: data.statusSlugs,
         tagIds: data.tagIds as PostTagId[] | undefined,
         segmentIds: data.segmentIds as SegmentId[] | undefined,
@@ -381,7 +381,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
           content: data.content,
           contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
           boardId: data.boardId as BoardId,
-          statusId: data.statusId as StatusId | undefined,
+          statusId: data.statusId as PostStatusId | undefined,
           tagIds: data.tagIds as PostTagId[] | undefined,
         },
         author,
@@ -537,7 +537,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_STATUS })
 
-      const result = await changeStatus(data.id as PostId, data.statusId as StatusId, {
+      const result = await changeStatus(data.id as PostId, data.statusId as PostStatusId, {
         principalId: auth.principal.id,
         userId: auth.user.id as UserId,
         email: auth.user.email,

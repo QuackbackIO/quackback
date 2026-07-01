@@ -84,7 +84,7 @@ export function useUpdateBoard() {
       const previousDetail = queryClient.getQueryData<Board>(boardKeys.detail(input.id as BoardId))
 
       // Optimistic update for list
-      // Cast settings to BoardSettings since input uses string[] but Board expects StatusId[]
+      // Cast settings to BoardSettings since input uses string[] but Board expects PostStatusId[]
       const optimisticSettings = input.settings as Board['settings'] | undefined
       queryClient.setQueryData<Board[]>(boardKeys.lists(), (old) =>
         old?.map((board) => {

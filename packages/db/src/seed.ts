@@ -14,7 +14,7 @@ import { generateId } from '@quackback/ids'
 import type {
   PostTagId,
   BoardId,
-  StatusId,
+  PostStatusId,
   PrincipalId,
   PostId,
   RoadmapId,
@@ -302,7 +302,7 @@ async function seed() {
   }
 
   // Create statuses - use existing or create new
-  const statusMap = new Map<string, StatusId>()
+  const statusMap = new Map<string, PostStatusId>()
   const existingStatuses = await db.select().from(postStatuses)
   if (existingStatuses.length > 0) {
     for (const status of existingStatuses) {

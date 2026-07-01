@@ -67,7 +67,7 @@ vi.mock('@/lib/server/db', () => ({
         findFirst: (...args: unknown[]) => mockSuggestionFindFirst(...args),
       },
       postStatuses: {
-        findFirst: vi.fn().mockResolvedValue({ id: 'status_default' }),
+        findFirst: vi.fn().mockResolvedValue({ id: 'post_status_default' }),
       },
       boards: {
         findFirst: (...args: unknown[]) => mockBoardsFindFirst(...args),

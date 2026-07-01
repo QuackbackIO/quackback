@@ -14,7 +14,7 @@ import {
   type PrincipalId,
   type PostId,
   type PostTagId,
-  type StatusId,
+  type PostStatusId,
 } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
 import type { ImportInput, ImportResult, ImportRowError } from './types'
@@ -67,7 +67,7 @@ interface ProcessedRow {
   title: string
   content: string
   boardId: BoardId
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   status: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
   authorName: string | null
   authorEmail: string | null
@@ -189,14 +189,14 @@ export async function processBatch(
     const row = parseResult.data
 
     // Resolve status
-    let statusId: StatusId | null = (defaultStatus?.id ?? null) as StatusId | null
+    let statusId: PostStatusId | null = (defaultStatus?.id ?? null) as PostStatusId | null
     let legacyStatus: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed' =
       'open'
 
     if (row.status) {
       const status = statusMap.get(row.status.toLowerCase())
       if (status) {
-        statusId = status.id as StatusId
+        statusId = status.id as PostStatusId
         // Map to legacy status based on category
         if (status.category === 'complete') legacyStatus = 'complete'
         else if (status.category === 'closed') legacyStatus = 'closed'

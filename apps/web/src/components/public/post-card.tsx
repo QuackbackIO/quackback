@@ -29,13 +29,13 @@ import type { PostStatusEntity } from '@/lib/shared/db-types'
 import { usePostVote } from '@/lib/client/hooks/use-post-vote'
 import { cn, getInitials } from '@/lib/shared/utils'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
-import type { PostId, StatusId } from '@quackback/ids'
+import type { PostId, PostStatusId } from '@quackback/ids'
 
 interface PostCardProps {
   id: PostId
   title: string
   content: string | null
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   statuses: PostStatusEntity[]
   voteCount: number
   commentCount: number
@@ -73,7 +73,7 @@ interface PostCardProps {
   /** Enable admin mode with editable status */
   canChangeStatus?: boolean
   /** Callback when status changes (required if canChangeStatus) */
-  onStatusChange?: (statusId: StatusId) => void
+  onStatusChange?: (statusId: PostStatusId) => void
   /** Whether status update is in progress */
   isUpdatingStatus?: boolean
   /** Use onClick instead of Link navigation */

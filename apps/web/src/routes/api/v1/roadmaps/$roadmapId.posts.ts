@@ -8,7 +8,7 @@ import {
   handleDomainError,
 } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
-import type { RoadmapId, PostId, StatusId } from '@quackback/ids'
+import type { RoadmapId, PostId, PostStatusId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 
 // Input validation schema
@@ -30,7 +30,7 @@ export const Route = createFileRoute('/api/v1/roadmaps/$roadmapId/posts')({
           const roadmapId = parseTypeId<RoadmapId>(params.roadmapId, 'roadmap', 'roadmap ID')
 
           const url = new URL(request.url)
-          const statusId = url.searchParams.get('statusId') as StatusId | null
+          const statusId = url.searchParams.get('statusId') as PostStatusId | null
           const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100)
           const offset = parseInt(url.searchParams.get('offset') || '0', 10)
 

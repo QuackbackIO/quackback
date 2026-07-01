@@ -1,5 +1,5 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 import type { boards, roadmaps, postTags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
 import type {
@@ -45,7 +45,7 @@ export type NewBoard = InferInsertModel<typeof boards>
 
 // Board settings (stored in boards.settings JSONB column)
 export interface BoardSettings {
-  roadmapStatusIds?: StatusId[] // Status IDs to show on roadmap
+  roadmapStatusIds?: PostStatusId[] // Status IDs to show on roadmap
 }
 
 // ----------------------------------------------------------------------

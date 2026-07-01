@@ -6,7 +6,7 @@ import {
   type BoardId,
   type RoadmapId,
   type SegmentId,
-  type StatusId,
+  type PostStatusId,
   type PostTagId,
   type UserId,
 } from '@quackback/ids'
@@ -596,7 +596,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
       const result = await getPublicRoadmapPosts(
         data.roadmapId as RoadmapId,
         {
-          statusId: data.statusId as StatusId | undefined,
+          statusId: data.statusId as PostStatusId | undefined,
           limit: data.limit ?? 20,
           offset: data.offset ?? 0,
           search: data.search,

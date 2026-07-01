@@ -37,8 +37,8 @@ export type PostVoteId = TypeId<'post_vote'>
 /** PostTag ID - e.g., tag_01h455vb4pex5vsknk084sn02q */
 export type PostTagId = TypeId<'post_tag'>
 
-/** Post status ID - e.g., status_01h455vb4pex5vsknk084sn02q */
-export type StatusId = TypeId<'status'>
+/** Post status ID - e.g., post_status_01h455vb4pex5vsknk084sn02q */
+export type PostStatusId = TypeId<'post_status'>
 
 /** Post comment reaction ID - e.g., post_comment_reaction_01h455vb4pex5vsknk084sn02q */
 export type PostCommentReactionId = TypeId<'post_comment_reaction'>
@@ -248,7 +248,7 @@ export interface EntityIdMap {
   post_comment: PostCommentId
   post_vote: PostVoteId
   post_tag: PostTagId
-  status: StatusId
+  post_status: PostStatusId
   post_comment_reaction: PostCommentReactionId
   post_edit: PostEditId
   post_comment_edit: PostCommentEditId

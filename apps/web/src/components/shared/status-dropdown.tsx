@@ -4,12 +4,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 
 interface StatusDropdownProps {
   currentStatus: PostStatusEntity | undefined
   statuses: PostStatusEntity[]
-  onStatusChange: (statusId: StatusId) => void
+  onStatusChange: (statusId: PostStatusId) => void
   disabled?: boolean
   /** Style variant: 'badge' (inline status badge) or 'button' (quick actions style) */
   variant?: 'badge' | 'button'
@@ -30,7 +30,7 @@ export function StatusDropdown({
 }: StatusDropdownProps): React.ReactElement {
   const [open, setOpen] = useState(false)
 
-  const handleStatusChange = (statusId: StatusId) => {
+  const handleStatusChange = (statusId: PostStatusId) => {
     onStatusChange(statusId)
     setOpen(false)
   }

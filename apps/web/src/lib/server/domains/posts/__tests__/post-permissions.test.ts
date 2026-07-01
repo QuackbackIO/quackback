@@ -43,7 +43,7 @@ vi.mock('@/lib/server/db', async () => {
       query: {
         posts: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_mock', isDefault: true }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_mock', isDefault: true }),
         },
         postComments: { findFirst: vi.fn().mockResolvedValue(null) },
         settings: { findFirst: vi.fn().mockResolvedValue(null) },

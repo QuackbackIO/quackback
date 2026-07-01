@@ -16,7 +16,7 @@ import {
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { ChangelogId, StatusId } from '@quackback/ids'
+import type { ChangelogId, PostStatusId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
@@ -121,15 +121,15 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     )
 
   // Get status info for linked posts
-  const statusIds = new Set<StatusId>()
+  const statusIds = new Set<PostStatusId>()
   linkedPostRows.forEach((lp) => {
     if (lp.postStatusId) statusIds.add(lp.postStatusId)
   })
 
-  const statusMap = new Map<StatusId, { name: string; color: string }>()
+  const statusMap = new Map<PostStatusId, { name: string; color: string }>()
   if (statusIds.size > 0) {
     const statuses = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.id, Array.from(statusIds) as StatusId[]),
+      where: inArray(postStatuses.id, Array.from(statusIds) as PostStatusId[]),
       columns: { id: true, name: true, color: true },
     })
     statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))
@@ -242,15 +242,15 @@ export async function listPublicChangelogs(params: {
   }
 
   // Get status info for all linked posts
-  const publicStatusIds = new Set<StatusId>()
+  const publicStatusIds = new Set<PostStatusId>()
   allLinkedPosts.forEach((lp) => {
     if (lp.postStatusId) publicStatusIds.add(lp.postStatusId)
   })
 
-  const publicStatusMap = new Map<StatusId, { name: string; color: string }>()
+  const publicStatusMap = new Map<PostStatusId, { name: string; color: string }>()
   if (publicStatusIds.size > 0) {
     const statuses = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.id, Array.from(publicStatusIds) as StatusId[]),
+      where: inArray(postStatuses.id, Array.from(publicStatusIds) as PostStatusId[]),
       columns: { id: true, name: true, color: true },
     })
     statuses.forEach((s) => publicStatusMap.set(s.id, { name: s.name, color: s.color }))

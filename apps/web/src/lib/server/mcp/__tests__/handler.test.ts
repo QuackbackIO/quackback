@@ -73,7 +73,7 @@ vi.mock('@/lib/server/domains/posts/post.query', () => ({
     commentCount: 0,
     boardId: 'board_test',
     board: { id: 'board_test', name: 'Bugs', slug: 'bugs' },
-    statusId: 'status_test',
+    statusId: 'post_status_test',
     authorName: 'Jane',
     authorEmail: 'jane@example.com',
     ownerPrincipalId: null,
@@ -100,13 +100,13 @@ vi.mock('@/lib/server/domains/posts/post.service', () => ({
     id: 'post_new',
     title: 'New Post',
     boardId: 'board_test',
-    statusId: 'status_test',
+    statusId: 'post_status_test',
     createdAt: new Date('2026-01-01'),
   }),
   updatePost: vi.fn().mockResolvedValue({
     id: 'post_test',
     title: 'Test Post',
-    statusId: 'status_updated',
+    statusId: 'post_status_updated',
     ownerPrincipalId: null,
     updatedAt: new Date('2026-01-01'),
   }),
@@ -261,7 +261,7 @@ vi.mock('@/lib/server/domains/boards/board.service', () => ({
 vi.mock('@/lib/server/domains/statuses/status.service', () => ({
   listStatuses: vi
     .fn()
-    .mockResolvedValue([{ id: 'status_test', name: 'Open', slug: 'open', color: '#22c55e' }]),
+    .mockResolvedValue([{ id: 'post_status_test', name: 'Open', slug: 'open', color: '#22c55e' }]),
 }))
 
 vi.mock('@/lib/server/domains/post-tags/post-tag.service', () => ({
@@ -881,7 +881,7 @@ describe('MCP HTTP Handler', () => {
         mcpRequest(
           jsonRpcRequest('tools/call', {
             name: 'triage_post',
-            arguments: { postId: 'post_test', statusId: 'status_updated' },
+            arguments: { postId: 'post_test', statusId: 'post_status_updated' },
           })
         )
       )
@@ -892,7 +892,7 @@ describe('MCP HTTP Handler', () => {
       }
       const text = JSON.parse(body.result.content[0].text)
       expect(text.id).toBe('post_test')
-      expect(text.statusId).toBe('status_updated')
+      expect(text.statusId).toBe('post_status_updated')
     })
 
     // ── vote_post tool ──────────────────────────────────────────────────
@@ -1729,7 +1729,7 @@ describe('MCP HTTP Handler', () => {
         oauthRequest(
           jsonRpcRequest('tools/call', {
             name: 'triage_post',
-            arguments: { postId: 'post_test', statusId: 'status_updated' },
+            arguments: { postId: 'post_test', statusId: 'post_status_updated' },
           })
         )
       )

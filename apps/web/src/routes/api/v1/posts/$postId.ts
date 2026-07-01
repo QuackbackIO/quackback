@@ -15,7 +15,7 @@ import {
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { PostId, StatusId, PostTagId, PrincipalId } from '@quackback/ids'
+import type { PostId, PostStatusId, PostTagId, PrincipalId } from '@quackback/ids'
 import type { MergedPostSummary } from '@/lib/server/domains/posts/post.types'
 
 // Input validation schema
@@ -127,7 +127,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           // granular permission for each field actually present.
           assertApiPermissions(auth, permissionsForPostPatch(parsed.data))
 
-          const statusId = parseOptionalTypeId<StatusId>(
+          const statusId = parseOptionalTypeId<PostStatusId>(
             parsed.data.statusId,
             'status',
             'status ID'

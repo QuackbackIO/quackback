@@ -99,7 +99,7 @@ const POSTS_RESULT = {
       id: 'post_secret1',
       title: 'Private roadmap idea',
       content: 'sensitive',
-      statusId: 'status_1',
+      statusId: 'post_status_1',
       voteCount: 9,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       commentCount: 2,

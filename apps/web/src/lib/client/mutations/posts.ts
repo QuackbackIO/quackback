@@ -24,7 +24,7 @@ import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { votedPostsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import type { PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult, PostTag } from '@/lib/shared/db-types'
-import type { PrincipalId, PostId, StatusId, PostTagId, BoardId } from '@quackback/ids'
+import type { PrincipalId, PostId, PostStatusId, PostTagId, BoardId } from '@quackback/ids'
 import type { CreatePostInput } from '@/lib/shared/types'
 
 // ============================================================================
@@ -42,7 +42,7 @@ interface UpdatePostInput {
   title: string
   content: string
   contentJson: unknown
-  statusId?: StatusId | null
+  statusId?: PostStatusId | null
   boardId?: string
   tagIds?: string[]
   allTags?: PostTag[]
@@ -53,7 +53,7 @@ interface UpdatePostResponse {
   title: string
   content: string
   contentJson: unknown
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   boardId: string
 }
 
@@ -119,7 +119,7 @@ export function useChangePostStatusId() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ postId, statusId }: { postId: PostId; statusId: StatusId }) =>
+    mutationFn: ({ postId, statusId }: { postId: PostId; statusId: PostStatusId }) =>
       changePostStatusFn({ data: { id: postId, statusId } }),
     onSuccess: (_data, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })

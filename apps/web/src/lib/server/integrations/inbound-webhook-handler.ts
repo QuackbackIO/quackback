@@ -13,7 +13,7 @@ import { getIntegration } from './index'
 import { decryptSecrets } from './encryption'
 import { resolveStatusMapping, type StatusMappings } from './status-mapping'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
-import type { PostId, StatusId, PrincipalId } from '@quackback/ids'
+import type { PostId, PostStatusId, PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'inbound-webhook' })
@@ -113,7 +113,7 @@ export async function handleInboundWebhook(
       return new Response('OK', { status: 200 })
     }
 
-    await changeStatus(link.postId as PostId, statusId as StatusId, {
+    await changeStatus(link.postId as PostId, statusId as PostStatusId, {
       principalId: integration.principalId as PrincipalId,
       displayName: `${integrationType} Integration`,
     })

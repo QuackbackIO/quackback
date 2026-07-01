@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PostId, PrincipalId, StatusId, PostTagId } from '@quackback/ids'
+import type { PostId, PrincipalId, PostStatusId, PostTagId } from '@quackback/ids'
 
 const createActivity = vi.fn()
 const dispatchPostStatusChanged = vi.fn()
@@ -91,7 +91,7 @@ describe('post.service updatePost', () => {
       content: 'Original content',
       contentJson: null,
       boardId: 'board_123',
-      statusId: 'status_open',
+      statusId: 'post_status_open',
       ownerPrincipalId: 'principal_prev',
       updatedAt: new Date(),
     })
@@ -101,12 +101,12 @@ describe('post.service updatePost', () => {
     })
     mockPostStatusesFindFirst
       .mockResolvedValueOnce({
-        id: 'status_open',
+        id: 'post_status_open',
         name: 'Open',
         color: '#888888',
       })
       .mockResolvedValueOnce({
-        id: 'status_closed',
+        id: 'post_status_closed',
         name: 'Closed',
         color: '#111111',
       })
@@ -121,7 +121,7 @@ describe('post.service updatePost', () => {
         content: 'Original content',
         contentJson: null,
         boardId: 'board_123',
-        statusId: 'status_closed' as StatusId,
+        statusId: 'post_status_closed' as PostStatusId,
         ownerPrincipalId: 'principal_next' as PrincipalId,
         updatedAt: new Date(),
       },
@@ -145,7 +145,7 @@ describe('post.service updatePost', () => {
     await updatePost(
       'post_123' as PostId,
       {
-        statusId: 'status_closed' as StatusId,
+        statusId: 'post_status_closed' as PostStatusId,
         ownerPrincipalId: 'principal_next' as PrincipalId,
         tagIds: ['tag_new' as PostTagId],
       },

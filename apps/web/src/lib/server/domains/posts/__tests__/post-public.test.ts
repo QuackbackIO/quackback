@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 
 const mockEq = vi.fn((col, val) => ({ _tag: 'eq', col, val }))
 const mockOr = vi.fn((...args) => ({ _tag: 'or', args }))
@@ -120,14 +120,14 @@ describe('listPublicPostsWithVotesAndAvatars — default status filtering', () =
   it('does not apply the default category filter when statusIds are provided', async () => {
     const { listPublicPostsWithVotesAndAvatars } = await import('../post.public')
 
-    await listPublicPostsWithVotesAndAvatars({ statusIds: ['status_1' as StatusId] })
+    await listPublicPostsWithVotesAndAvatars({ statusIds: ['post_status_1' as PostStatusId] })
 
     const activeFilterApplied = mockEq.mock.calls.some(
       ([col, val]) => col === mockPostStatuses.category && val === 'active'
     )
     expect(activeFilterApplied).toBe(false)
     expect(mockOr).not.toHaveBeenCalled()
-    expect(mockInArray).toHaveBeenCalledWith(mockPosts.statusId, ['status_1'])
+    expect(mockInArray).toHaveBeenCalledWith(mockPosts.statusId, ['post_status_1'])
   })
 })
 

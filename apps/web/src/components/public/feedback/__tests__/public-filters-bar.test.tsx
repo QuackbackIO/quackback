@@ -11,14 +11,14 @@ import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 
 const statuses: PostStatusEntity[] = [
   {
-    id: 'status_1' as PostStatusEntity['id'],
+    id: 'post_status_1' as PostStatusEntity['id'],
     slug: 'open',
     name: 'Open',
     color: '#3b82f6',
     category: 'active',
   } as PostStatusEntity,
   {
-    id: 'status_2' as PostStatusEntity['id'],
+    id: 'post_status_2' as PostStatusEntity['id'],
     slug: 'complete',
     name: 'Complete',
     color: '#10b981',

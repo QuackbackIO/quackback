@@ -11,13 +11,13 @@ import {
   postVotes,
   postSubscriptions,
 } from '@/lib/server/db'
-import { toUuid, type PostId, type StatusId, type PrincipalId } from '@quackback/ids'
+import { toUuid, type PostId, type PostStatusId, type PrincipalId } from '@quackback/ids'
 import type { RoadmapPostListResult } from './post.types'
 import { getExecuteRows } from '@/lib/server/utils'
 import { postViewFilter, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 
 export async function getPublicRoadmapPostsPaginated(params: {
-  statusId: StatusId
+  statusId: PostStatusId
   page?: number
   limit?: number
   /**

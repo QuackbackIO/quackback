@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { PostId, StatusId, PostCommentId, PrincipalId } from '@quackback/ids'
+import type { PostId, PostStatusId, PostCommentId, PrincipalId } from '@quackback/ids'
 import {
   fetchPublicBoardBySlug,
   fetchPublicPostDetail,
@@ -53,7 +53,7 @@ export interface PublicPostDetailView {
   title: string
   content: string
   contentJson: unknown
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   principalId: PrincipalId | null

@@ -2,7 +2,7 @@
  * Input/Output types for CommentService operations
  */
 
-import type { PostId, PostCommentId, BoardId, PrincipalId, StatusId } from '@quackback/ids'
+import type { PostId, PostCommentId, BoardId, PrincipalId, PostStatusId } from '@quackback/ids'
 import type { CommentStatusChange } from '@/lib/shared'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
@@ -18,7 +18,7 @@ export interface CreateCommentInput {
   contentJson?: TiptapContent | null
   parentId?: PostCommentId | null
   /** Optional status change to apply atomically with the comment */
-  statusId?: StatusId | null
+  statusId?: PostStatusId | null
   /** Whether this comment is only visible to team members */
   isPrivate?: boolean
   /** Override creation timestamp (admin-only, for imports) */
@@ -46,8 +46,8 @@ export interface CreateCommentResult {
     isTeamMember: boolean
     isPrivate: boolean
     createdAt: Date
-    statusChangeFromId: StatusId | null
-    statusChangeToId: StatusId | null
+    statusChangeFromId: PostStatusId | null
+    statusChangeToId: PostStatusId | null
   }
   post: {
     id: PostId

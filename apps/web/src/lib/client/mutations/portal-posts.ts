@@ -18,7 +18,7 @@ import {
 } from '@/lib/client/hooks/use-portal-posts-query'
 import { portalDetailQueries, type PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import type { PublicPostListItem } from '@/lib/shared/types'
-import type { PostId, BoardId, StatusId } from '@quackback/ids'
+import type { PostId, BoardId, PostStatusId } from '@quackback/ids'
 
 // ============================================================================
 // Types
@@ -223,7 +223,7 @@ export function useCreatePublicPost() {
             id: newPost.id as PostId,
             title: newPost.title,
             content: newPost.content,
-            statusId: newPost.statusId as StatusId | null,
+            statusId: newPost.statusId as PostStatusId | null,
             voteCount: newPost.voteCount,
             authorName: null, // Will be filled by server on refetch
             principalId: null,

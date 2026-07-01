@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
@@ -104,7 +104,7 @@ export const fetchStatusFn = createServerFn({ method: 'GET' })
     try {
       await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
-      const status = await getStatusById(data.id as StatusId)
+      const status = await getStatusById(data.id as PostStatusId)
       log.debug({ found: !!status }, 'fetch status result')
       return status
     } catch (error) {
@@ -146,7 +146,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
-      const status = await updateStatus(data.id as StatusId, {
+      const status = await updateStatus(data.id as PostStatusId, {
         name: data.name,
         color: data.color,
         showOnRoadmap: data.showOnRoadmap,
@@ -170,9 +170,9 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
-      await deleteStatus(data.id as StatusId)
+      await deleteStatus(data.id as PostStatusId)
       log.info({ status_id: data.id }, 'status deleted')
-      return { id: data.id as StatusId }
+      return { id: data.id as PostStatusId }
     } catch (error) {
       log.error({ err: error }, 'delete status failed')
       throw error
@@ -189,7 +189,7 @@ export const reorderStatusesFn = createServerFn({ method: 'POST' })
     try {
       await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
-      await reorderStatuses(data.statusIds as StatusId[])
+      await reorderStatuses(data.statusIds as PostStatusId[])
       log.info({ count: data.statusIds.length }, 'statuses reordered')
       return { success: true }
     } catch (error) {

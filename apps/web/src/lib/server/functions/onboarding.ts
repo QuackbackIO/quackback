@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { UserId, StatusId } from '@quackback/ids'
+import type { UserId, PostStatusId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { USE_CASE_TYPES, type SetupState, type UseCaseType } from '@/lib/server/db'
 import { isAdmin } from '@/lib/shared/roles'
@@ -256,7 +256,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
       const existingStatuses = await db.query.postStatuses.findFirst()
       if (!existingStatuses) {
         const statusValues = DEFAULT_STATUSES.map((status) => ({
-          id: generateId('status') as StatusId,
+          id: generateId('post_status') as PostStatusId,
           ...status,
           createdAt: new Date(),
         }))

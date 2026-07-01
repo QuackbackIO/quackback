@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JSONContent } from '@tiptap/core'
-import type { BoardId, PrincipalId, StatusId } from '@quackback/ids'
+import type { BoardId, PrincipalId, PostStatusId } from '@quackback/ids'
 
 const insertedRows: Record<string, unknown[]> = { posts: [], votes: [], postTagAssignments: [] }
 const subscribeToPost = vi.fn()
@@ -49,7 +49,7 @@ vi.mock('@/lib/server/db', async () => {
           {
             id: 'post_new' as unknown,
             boardId: 'board_b' as unknown,
-            statusId: 'status_open' as unknown,
+            statusId: 'post_status_open' as unknown,
             title: inserted.title,
             content: 'Body',
             contentJson: inserted.contentJson,
@@ -85,7 +85,7 @@ vi.mock('@/lib/server/db', async () => {
           }),
         },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
         posts: {
           findFirst: vi.fn(async () => updatePostsFindFirstResult),
@@ -142,7 +142,7 @@ vi.mock('@/lib/server/db', async () => {
               {
                 id: 'post_update' as unknown,
                 boardId: 'board_b' as unknown,
-                statusId: 'status_open' as unknown,
+                statusId: 'post_status_open' as unknown,
                 title: updateReturningTitle,
                 content: 'Body',
                 contentJson: updateReturningContentJson,
@@ -264,7 +264,7 @@ describe('createPost mention dispatch', () => {
         title: 'New post',
         content: 'Body',
         contentJson: docWithMention() as unknown as import('@/lib/server/db').TiptapContent,
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       { principalId: authorPrincipal, email: 'author@example.com', displayName: 'Author' }
     )
@@ -295,7 +295,7 @@ describe('createPost mention dispatch', () => {
         title: 'No mentions',
         content: 'Body',
         contentJson: docWithoutMention() as unknown as import('@/lib/server/db').TiptapContent,
-        statusId: 'status_open' as unknown as StatusId,
+        statusId: 'post_status_open' as unknown as PostStatusId,
       },
       { principalId: authorPrincipal }
     )
@@ -313,7 +313,7 @@ describe('updatePost mention dispatch', () => {
       content: 'Original body',
       contentJson: null,
       boardId: 'board_b',
-      statusId: 'status_open',
+      statusId: 'post_status_open',
       principalId: 'principal_author',
       ownerPrincipalId: null,
     }

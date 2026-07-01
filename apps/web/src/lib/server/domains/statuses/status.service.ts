@@ -10,7 +10,7 @@
  */
 
 import { db, eq, and, isNull, inArray, sql, posts, postStatuses, asc } from '@/lib/server/db'
-import { toUuid, type StatusId } from '@quackback/ids'
+import { toUuid, type PostStatusId } from '@quackback/ids'
 import {
   NotFoundError,
   ValidationError,
@@ -28,7 +28,7 @@ const log = logger.child({ component: 'statuses' })
  * This prevents race conditions where concurrent requests could result in
  * multiple defaults or no defaults.
  */
-async function setStatusAsDefaultAtomic(statusId: StatusId): Promise<void> {
+async function setStatusAsDefaultAtomic(statusId: PostStatusId): Promise<void> {
   const statusUuid = toUuid(statusId)
   await db.execute(sql`
     UPDATE post_statuses
@@ -98,7 +98,7 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
 /**
  * Update an existing status
  */
-export async function updateStatus(id: StatusId, input: UpdateStatusInput): Promise<Status> {
+export async function updateStatus(id: PostStatusId, input: UpdateStatusInput): Promise<Status> {
   log.debug({ status_id: id }, 'update status')
   // Get existing status (moved outside transaction for neon-http compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
@@ -157,7 +157,7 @@ export async function updateStatus(id: StatusId, input: UpdateStatusInput): Prom
  *
  * Sets deletedAt timestamp instead of removing the row.
  */
-export async function deleteStatus(id: StatusId): Promise<void> {
+export async function deleteStatus(id: PostStatusId): Promise<void> {
   log.debug({ status_id: id }, 'delete status')
   // Get existing status (moved outside transaction for neon-http compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({
@@ -204,7 +204,7 @@ export async function deleteStatus(id: StatusId): Promise<void> {
 /**
  * Get a status by ID
  */
-export async function getStatusById(id: StatusId): Promise<Status> {
+export async function getStatusById(id: PostStatusId): Promise<Status> {
   const status = await db.query.postStatuses.findFirst({
     where: eq(postStatuses.id, id),
   })
@@ -239,7 +239,7 @@ export async function listStatuses(): Promise<Status[]> {
  * Reorder statuses within a category
  * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
-export async function reorderStatuses(ids: StatusId[]): Promise<void> {
+export async function reorderStatuses(ids: PostStatusId[]): Promise<void> {
   log.debug({ count: ids?.length ?? 0 }, 'reorder statuses')
   // Validate input
   if (!ids || ids.length === 0) {
@@ -263,7 +263,7 @@ export async function reorderStatuses(ids: StatusId[]): Promise<void> {
 /**
  * Set a status as the default for new posts
  */
-export async function setDefaultStatus(id: StatusId): Promise<Status> {
+export async function setDefaultStatus(id: PostStatusId): Promise<Status> {
   log.debug({ status_id: id }, 'set default status')
   // Get existing status to verify it exists (moved outside transaction for neon-http compatibility)
   const existingStatus = await db.query.postStatuses.findFirst({

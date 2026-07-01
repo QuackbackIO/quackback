@@ -38,7 +38,7 @@ import { VotersAvatarStack } from '@/components/admin/feedback/voters-avatar-sta
 import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
 import { cn, getInitials } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
-import type { PostId, StatusId, PostTagId, RoadmapId, BoardId } from '@quackback/ids'
+import type { PostId, PostStatusId, PostTagId, RoadmapId, BoardId } from '@quackback/ids'
 
 export function MetadataSidebarSkeleton({
   variant = 'column',
@@ -259,7 +259,7 @@ interface MetadataSidebarProps {
   /** All available roadmaps for selection */
   allRoadmaps?: Array<{ id: string; name: string; slug: string }>
   /** Callback when status changes */
-  onStatusChange?: (statusId: StatusId) => Promise<void>
+  onStatusChange?: (statusId: PostStatusId) => Promise<void>
   /** Callback when tags change */
   onTagsChange?: (tagIds: PostTagId[]) => Promise<void>
   /** Callback when roadmap added */

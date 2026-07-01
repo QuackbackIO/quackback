@@ -26,7 +26,7 @@ import { adminQueries } from '@/lib/client/queries/admin'
 import { Route } from '@/routes/admin/roadmap'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { RoadmapPostEntry } from '@/lib/shared/types'
-import type { StatusId, PostId, RoadmapId } from '@quackback/ids'
+import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
 
 interface RoadmapAdminProps {
   statuses: PostStatusEntity[]
@@ -87,8 +87,8 @@ export function RoadmapAdmin({ statuses }: RoadmapAdminProps) {
     const { active, over } = event
     if (!over || over.data.current?.type !== 'Column') return
 
-    const sourceStatusId = active.data.current?.statusId as StatusId
-    const targetStatusId = over.data.current.statusId as StatusId
+    const sourceStatusId = active.data.current?.statusId as PostStatusId
+    const targetStatusId = over.data.current.statusId as PostStatusId
 
     if (sourceStatusId !== targetStatusId) {
       await changeStatus.mutateAsync({

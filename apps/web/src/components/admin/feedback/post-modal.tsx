@@ -56,7 +56,7 @@ import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functi
 import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
-  type StatusId,
+  type PostStatusId,
   type PostTagId,
   type RoadmapId,
   type PostCommentId,
@@ -179,7 +179,7 @@ function PostModalContent({
   })
 
   // Handlers
-  const handleStatusChange = async (statusId: StatusId) => {
+  const handleStatusChange = async (statusId: PostStatusId) => {
     setIsUpdating(true)
     try {
       await updateStatus.mutateAsync({ postId: post.id as PostId, statusId })

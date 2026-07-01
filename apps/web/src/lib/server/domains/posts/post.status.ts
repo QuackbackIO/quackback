@@ -5,7 +5,7 @@
  */
 
 import { db, posts, boards, postStatuses, eq } from '@/lib/server/db'
-import { type PostId, type StatusId, type UserId, type PrincipalId } from '@quackback/ids'
+import { type PostId, type PostStatusId, type UserId, type PrincipalId } from '@quackback/ids'
 import { dispatchPostStatusChanged, buildEventActor } from '@/lib/server/events/dispatch'
 import { NotFoundError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -29,7 +29,7 @@ import type { ChangeStatusResult } from './post.types'
  */
 export async function changeStatus(
   postId: PostId,
-  statusId: StatusId,
+  statusId: PostStatusId,
   actor: {
     principalId: PrincipalId
     userId?: UserId

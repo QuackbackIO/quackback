@@ -19,7 +19,7 @@ import {
 import {
   toUuid,
   type PostId,
-  type StatusId,
+  type PostStatusId,
   type PostTagId,
   type PrincipalId,
 } from '@quackback/ids'
@@ -72,7 +72,7 @@ export interface PostWithVotesAndAvatars {
   id: PostId
   title: string
   content: string | null
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   commentCount: number
   authorName: string | null
@@ -87,7 +87,7 @@ export interface PostWithVotesAndAvatars {
 interface PostListParams {
   boardSlug?: string
   search?: string
-  statusIds?: StatusId[]
+  statusIds?: PostStatusId[]
   statusSlugs?: string[]
   tagIds?: PostTagId[]
   sort?: SortOrder

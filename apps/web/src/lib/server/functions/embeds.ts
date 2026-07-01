@@ -12,7 +12,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { PostId, ChangelogId, StatusId } from '@quackback/ids'
+import type { PostId, ChangelogId, PostStatusId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy'
 import type {
   EmbedPreview,
@@ -33,7 +33,7 @@ type PostDetailInput = {
   title: string
   content: string | null
   voteCount: number
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   board: { name: string; slug: string }
   tags: { id: string; name: string; color: string | null }[]
   authorName: string | null
@@ -42,7 +42,7 @@ type PostDetailInput = {
 }
 
 /** Minimal slice of a public status (the post carries only `statusId`). */
-type StatusInput = { id: StatusId; name: string; color: string }
+type StatusInput = { id: PostStatusId; name: string; color: string }
 
 /** Minimal slice of a published changelog entry the changelog card needs. */
 type ChangelogInput = { id: string; title: string; publishedAt: Date | string | null }

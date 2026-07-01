@@ -19,7 +19,7 @@ import {
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { BoardId, ChangelogId, PrincipalId, PostId, StatusId } from '@quackback/ids'
+import type { BoardId, ChangelogId, PrincipalId, PostId, PostStatusId } from '@quackback/ids'
 import { computeStatus } from './changelog.service'
 import type {
   ListChangelogParams,
@@ -131,15 +131,15 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
   }
 
   // Get status info for all linked posts
-  const statusIds = new Set<StatusId>()
+  const statusIds = new Set<PostStatusId>()
   allLinkedPosts.forEach((lp) => {
     if (lp.post.statusId) statusIds.add(lp.post.statusId)
   })
 
-  const statusMap = new Map<StatusId, { name: string; color: string }>()
+  const statusMap = new Map<PostStatusId, { name: string; color: string }>()
   if (statusIds.size > 0) {
     const statuses = await db.query.postStatuses.findMany({
-      where: inArray(postStatuses.id, Array.from(statusIds) as StatusId[]),
+      where: inArray(postStatuses.id, Array.from(statusIds) as PostStatusId[]),
       columns: { id: true, name: true, color: true },
     })
     statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))

@@ -295,12 +295,12 @@ describe('createPublicPostFn anonymous feature flag', () => {
     name: 'General',
     slug: 'general',
   }
-  const MOCK_STATUS = { id: 'status_123' }
+  const MOCK_STATUS = { id: 'post_status_123' }
   const MOCK_POST = {
     id: 'post_new',
     title: 'Test Post',
     content: 'Some content',
-    statusId: 'status_123',
+    statusId: 'post_status_123',
     voteCount: 0,
     createdAt: new Date(),
     updatedAt: new Date(),

@@ -7,7 +7,7 @@
  */
 
 import { db, posts, postComments, eq, and, sql, isNull } from '@/lib/server/db'
-import { toUuid, type PostId, type PrincipalId, type StatusId } from '@quackback/ids'
+import { toUuid, type PostId, type PrincipalId, type PostStatusId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember, Role } from '@/lib/shared/roles'
@@ -278,7 +278,7 @@ export async function getPostPermissions(
 /**
  * Check if a status is the default "open" status
  */
-async function isDefaultStatus(statusId: StatusId | null): Promise<boolean> {
+async function isDefaultStatus(statusId: PostStatusId | null): Promise<boolean> {
   if (!statusId) return true // No status = treat as default
 
   const { postStatuses, eq, and } = await import('@/lib/server/db')

@@ -3,7 +3,7 @@
  * The import handler's override flips this when authorPrincipalId is given.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PostCommentId, PostId, PrincipalId, SegmentId, StatusId } from '@quackback/ids'
+import type { PostCommentId, PostId, PrincipalId, SegmentId, PostStatusId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const insertedComments: Record<string, unknown>[] = []
@@ -57,7 +57,7 @@ vi.mock('@/lib/server/db', async () => {
             id: 'post_p',
             title: 'P',
             boardId: 'board_b',
-            statusId: 'status_open',
+            statusId: 'post_status_open',
             isCommentsLocked: false,
             moderationState: 'published',
             principalId: null,
@@ -78,7 +78,7 @@ vi.mock('@/lib/server/db', async () => {
         },
         postComments: { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
         postStatuses: {
-          findFirst: vi.fn().mockResolvedValue({ id: 'status_open', name: 'Open' }),
+          findFirst: vi.fn().mockResolvedValue({ id: 'post_status_open', name: 'Open' }),
         },
       },
       transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(tx)),
@@ -186,7 +186,7 @@ async function mockPostWithApproval(approvalComments: boolean) {
     id: 'post_p',
     title: 'P',
     boardId: 'board_b',
-    statusId: 'status_open',
+    statusId: 'post_status_open',
     isCommentsLocked: false,
     moderationState: 'published',
     principalId: null,
@@ -323,7 +323,7 @@ describe('createComment — records a status.changed activity for the audit log'
     // Promise.all fetches new status first, then the post's current status.
     vi.mocked(db.query.postStatuses.findFirst)
       .mockResolvedValueOnce({
-        id: 'status_closed',
+        id: 'post_status_closed',
         name: 'Closed',
         slug: 'closed',
         color: '#111',
@@ -335,7 +335,7 @@ describe('createComment — records a status.changed activity for the audit log'
         deletedAt: null,
       })
       .mockResolvedValueOnce({
-        id: 'status_open',
+        id: 'post_status_open',
         name: 'Open',
         slug: 'open',
         color: '#888',
@@ -353,7 +353,7 @@ describe('createComment — records a status.changed activity for the audit log'
       {
         postId: 'post_p' as unknown as PostId,
         content: 'Closing this out',
-        statusId: 'status_closed' as unknown as StatusId,
+        statusId: 'post_status_closed' as unknown as PostStatusId,
       },
       { principalId: 'principal_admin' as unknown as PrincipalId, role: 'admin' },
       teamActor,
@@ -402,7 +402,7 @@ describe('createComment — soft-deleted board is rejected as POST_NOT_FOUND', (
       id: 'post_p',
       title: 'P',
       boardId: 'board_b',
-      statusId: 'status_open',
+      statusId: 'post_status_open',
       isCommentsLocked: false,
       moderationState: 'published',
       principalId: null,

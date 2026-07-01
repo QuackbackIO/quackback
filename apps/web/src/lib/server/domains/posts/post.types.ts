@@ -7,7 +7,7 @@ import type {
   PostId,
   BoardId,
   PostTagId,
-  StatusId,
+  PostStatusId,
   PrincipalId,
   PostCommentId,
 } from '@quackback/ids'
@@ -21,7 +21,7 @@ export interface CreatePostInput {
   title: string
   content?: string
   contentJson?: TiptapContent | null
-  statusId?: StatusId
+  statusId?: PostStatusId
   tagIds?: PostTagId[]
   widgetMetadata?: Record<string, string>
   /** Override creation timestamp (admin-only, for imports) */
@@ -37,7 +37,7 @@ export interface UpdatePostInput {
   title?: string
   content?: string
   contentJson?: TiptapContent | null
-  statusId?: StatusId
+  statusId?: PostStatusId
   tagIds?: PostTagId[]
   ownerPrincipalId?: PrincipalId | null
 }
@@ -57,7 +57,7 @@ export interface VoteResult {
  */
 export interface ChangeStatusInput {
   postId: PostId
-  statusId: StatusId
+  statusId: PostStatusId
 }
 
 /**
@@ -91,7 +91,7 @@ export interface PublicPostListItem {
   id: PostId
   title: string
   content: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   principalId: PrincipalId | null
@@ -116,7 +116,7 @@ export interface PublicPostListResult {
 export interface InboxPostListParams {
   boardIds?: BoardId[]
   /** Filter by status IDs (legacy, prefer statusSlugs) */
-  statusIds?: StatusId[]
+  statusIds?: PostStatusId[]
   /** Filter by status slugs - uses indexed lookup */
   statusSlugs?: string[]
   tagIds?: PostTagId[]
@@ -165,7 +165,7 @@ export interface PostForExport {
   id: string
   title: string
   content: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   authorEmail: string | null
@@ -185,7 +185,7 @@ export interface PostForExport {
 export interface RoadmapPost {
   id: string
   title: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   board: { id: string; name: string; slug: string }
 }
@@ -243,7 +243,7 @@ export interface PublicPostDetail {
   title: string
   content: string
   contentJson: TiptapContent | null
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   voteCount: number
   authorName: string | null
   principalId: PrincipalId | null
@@ -292,7 +292,7 @@ export interface AdminEditPostInput {
   title: string
   content: string
   contentJson?: TiptapContent | null
-  statusId?: StatusId
+  statusId?: PostStatusId
   tagIds: PostTagId[]
 }
 

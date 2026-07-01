@@ -1,5 +1,5 @@
 import type { PostListItem, PostStatusEntity } from '@/lib/shared/db-types'
-import type { StatusId } from '@quackback/ids'
+import type { PostStatusId } from '@quackback/ids'
 
 export interface StatusGroup {
   status: PostStatusEntity
@@ -13,8 +13,8 @@ export interface StatusGroup {
 export function groupPostsByStatus(
   posts: PostListItem[],
   statuses: PostStatusEntity[]
-): Map<StatusId | 'none', StatusGroup> {
-  const groups = new Map<StatusId | 'none', StatusGroup>()
+): Map<PostStatusId | 'none', StatusGroup> {
+  const groups = new Map<PostStatusId | 'none', StatusGroup>()
 
   // Initialize status groups in order
   for (const status of statuses) {
@@ -23,7 +23,7 @@ export function groupPostsByStatus(
 
   // Group posts by status
   for (const post of posts) {
-    const statusId = post.statusId as StatusId | null
+    const statusId = post.statusId as PostStatusId | null
     const group = statusId ? groups.get(statusId) : undefined
     if (group) {
       group.posts.push(post)
@@ -33,7 +33,7 @@ export function groupPostsByStatus(
       if (!noneGroup) {
         noneGroup = {
           status: {
-            id: 'none' as StatusId,
+            id: 'none' as PostStatusId,
             name: 'No Status',
             slug: 'no-status',
             color: '#94a3b8',

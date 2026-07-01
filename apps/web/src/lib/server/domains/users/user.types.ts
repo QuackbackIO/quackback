@@ -4,7 +4,7 @@
  * Types for portal user management operations.
  */
 
-import type { PrincipalId, StatusId, SegmentId } from '@quackback/ids'
+import type { PrincipalId, PostStatusId, SegmentId } from '@quackback/ids'
 
 // ============================================
 // Segment summary (embedded in user records)
@@ -136,7 +136,7 @@ export interface EngagedPost {
   id: string
   title: string
   content: string
-  statusId: StatusId | null
+  statusId: PostStatusId | null
   statusName: string | null
   statusColor: string
   voteCount: number

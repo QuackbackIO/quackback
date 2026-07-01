@@ -30,7 +30,7 @@ import type {
   PrincipalId,
   RawFeedbackItemId,
   FeedbackSignalId,
-  StatusId,
+  PostStatusId,
 } from '@quackback/ids'
 
 type SimilarPostEntry = { postId: string; title: string; similarity: number; voteCount: number }
@@ -171,7 +171,7 @@ export async function acceptCreateSuggestion(
     resolvedByPrincipalId) as PrincipalId
 
   // Use explicit statusId override or fall back to default
-  const statusId = (edits?.statusId ?? defaultStatus?.id) as StatusId | undefined
+  const statusId = (edits?.statusId ?? defaultStatus?.id) as PostStatusId | undefined
 
   // Lock the board row inside a transaction and re-check deletedAt before insert.
   // An admin could soft-delete the board between the precheck above and the

@@ -15,7 +15,7 @@ import {
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
-import type { BoardId, PrincipalId, StatusId, PostTagId } from '@quackback/ids'
+import type { BoardId, PrincipalId, PostStatusId, PostTagId } from '@quackback/ids'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
 // Input validation schemas
@@ -143,7 +143,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
           }
 
           const boardId = parseTypeId<BoardId>(parsed.data.boardId, 'board', 'board ID')
-          const statusId = parseOptionalTypeId<StatusId>(
+          const statusId = parseOptionalTypeId<PostStatusId>(
             parsed.data.statusId,
             'status',
             'status ID'
