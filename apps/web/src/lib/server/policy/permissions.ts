@@ -13,10 +13,22 @@ import type { Role } from '@/lib/shared/roles'
  * cached role, so this needs no DB read and is provably equivalent to the legacy
  * role check it shadows (the same role string drives both). Phase C grows this
  * into the assignment-derived resolution; the call sites stay identical.
+ *
+ * The result is memoised per role — the preset bundles are compile-time
+ * constants and this runs on every request (requireAuth / withApiKeyAuth /
+ * policyActorFromAuth) and every unpopulated-actor `can()`, so a fresh
+ * ~50-element Set per call is pure waste. The returned set is treated read-only.
  */
+const SET_BY_ROLE = new Map<Role, ReadonlySet<PermissionKey>>()
+
 export function permissionsForLegacyRole(role: Role): ReadonlySet<PermissionKey> {
-  const preset = presetForLegacyRole(role)
-  return new Set(preset ? SYSTEM_ROLE_PERMISSIONS[preset] : [])
+  let set = SET_BY_ROLE.get(role)
+  if (!set) {
+    const preset = presetForLegacyRole(role)
+    set = new Set(preset ? SYSTEM_ROLE_PERMISSIONS[preset] : [])
+    SET_BY_ROLE.set(role, set)
+  }
+  return set
 }
 
 /**
