@@ -333,8 +333,8 @@ export type ConversationPriority = (typeof CONVERSATION_PRIORITIES)[number]
 // chat_messages.sender_type column enum. 'system' rows are status events (e.g.
 // assignment) shown to both sides; attributed to the relevant agent's principal
 // and never counted as unread.
-export const CHAT_SENDER_TYPES = ['visitor', 'agent', 'system'] as const
-export type ChatSenderType = (typeof CHAT_SENDER_TYPES)[number]
+export const MESSAGE_SENDER_TYPES = ['visitor', 'agent', 'system'] as const
+export type MessageSenderType = (typeof MESSAGE_SENDER_TYPES)[number]
 
 // A single attachment ref stored on a chat message (chat_messages.attachments).
 export interface ChatAttachment {

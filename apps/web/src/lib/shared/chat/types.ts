@@ -20,9 +20,9 @@ export { CONVERSATION_END_REASONS }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 // 'system' = a status event (e.g. assignment) shown to both sides, rendered as
 // a centered notice rather than a chat bubble.
-export type ChatSenderType = 'visitor' | 'agent' | 'system'
+export type MessageSenderType = 'visitor' | 'agent' | 'system'
 /** A human side of a conversation — who acts (types, reads); 'system' is neither. */
-export type ConversationSide = Exclude<ChatSenderType, 'system'>
+export type ConversationSide = Exclude<MessageSenderType, 'system'>
 /** How a conversation arrived — mirrors the conversations.channel column enum. */
 export type Channel = 'messenger' | 'email' | 'web_form'
 
@@ -74,7 +74,7 @@ export interface ChatAttachment {
 export interface ChatMessageDTO {
   id: ChatMessageId
   conversationId: ConversationId
-  senderType: ChatSenderType
+  senderType: MessageSenderType
   content: string
   createdAt: string
   /** Null for system events, which have no human author. */
@@ -196,14 +196,14 @@ export type ChatStreamEvent =
   | {
       kind: 'read'
       conversationId: ConversationId
-      side: ChatSenderType
+      side: MessageSenderType
       at: string
     }
   | {
       // Ephemeral typing signal — never persisted, just fanned out over pub/sub.
       kind: 'typing'
       conversationId: ConversationId
-      side: ChatSenderType
+      side: MessageSenderType
       at: string
       /** Who is typing. Set everywhere EXCEPT the conversation-channel copy of
        *  agent typing (never leak team identities to the visitor). The stream

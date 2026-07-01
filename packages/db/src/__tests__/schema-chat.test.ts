@@ -4,7 +4,7 @@ import { getTableConfig } from 'drizzle-orm/pg-core'
 import { conversations, chatMessages } from '../schema/chat'
 import {
   CONVERSATION_STATUSES,
-  CHAT_SENDER_TYPES,
+  MESSAGE_SENDER_TYPES,
   CHANNELS,
   CONVERSATION_PRIORITIES,
 } from '../types'
@@ -115,9 +115,9 @@ describe('chat_messages schema', () => {
     expect(cols.contentJson.columnType).toBe('PgJsonb')
   })
 
-  it('senderType enum matches CHAT_SENDER_TYPES', () => {
+  it('senderType enum matches MESSAGE_SENDER_TYPES', () => {
     const cols = getTableColumns(chatMessages)
-    expect(cols.senderType.enumValues).toEqual([...CHAT_SENDER_TYPES])
+    expect(cols.senderType.enumValues).toEqual([...MESSAGE_SENDER_TYPES])
   })
 
   it('cascades delete from the parent conversation', () => {

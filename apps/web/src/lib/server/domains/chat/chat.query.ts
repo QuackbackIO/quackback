@@ -51,7 +51,7 @@ import type {
   FlaggedMessageDTO,
   ConversationDTO,
   ChatTagDTO,
-  ChatSenderType,
+  MessageSenderType,
   ConversationStatus,
   ConversationEndReason,
 } from '@/lib/shared/chat/types'
@@ -135,7 +135,7 @@ export function toMessageDTO(message: ChatMessage, author: ChatAuthorDTO | null)
   return {
     id: message.id,
     conversationId: message.conversationId,
-    senderType: message.senderType as ChatSenderType,
+    senderType: message.senderType as MessageSenderType,
     content: message.content,
     createdAt: message.createdAt.toISOString(),
     author,
@@ -361,8 +361,11 @@ export async function loadChatTagsForConversations(
 }
 
 /** Count messages on the other side that arrived after this side last read. */
-async function unreadCountFor(conversation: Conversation, side: ChatSenderType): Promise<number> {
-  const otherSide: ChatSenderType = side === 'agent' ? 'visitor' : 'agent'
+async function unreadCountFor(
+  conversation: Conversation,
+  side: MessageSenderType
+): Promise<number> {
+  const otherSide: MessageSenderType = side === 'agent' ? 'visitor' : 'agent'
   const readAt = side === 'agent' ? conversation.agentLastReadAt : conversation.visitorLastReadAt
   const [row] = await db
     .select({ c: sql<number>`count(*)::int` })
@@ -387,7 +390,7 @@ async function unreadCountFor(conversation: Conversation, side: ChatSenderType):
 /** Build a single conversation DTO with author info + unread count for a side. */
 export async function conversationToDTO(
   conversation: Conversation,
-  side: ChatSenderType
+  side: MessageSenderType
 ): Promise<ConversationDTO> {
   // Independent queries (principal info, message count, labels) run
   // concurrently; this is on the send hot path for every message. Labels are
@@ -549,7 +552,7 @@ export async function getConversationForVisitor(
 export async function listConversationsForVisitor(
   visitorPrincipalId: PrincipalId,
   limit = 50,
-  side: ChatSenderType = 'agent'
+  side: MessageSenderType = 'agent'
 ): Promise<ConversationDTO[]> {
   const rows = await db
     .select()

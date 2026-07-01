@@ -14,7 +14,7 @@ import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackbac
 import { principal } from './auth'
 import {
   CONVERSATION_STATUSES,
-  CHAT_SENDER_TYPES,
+  MESSAGE_SENDER_TYPES,
   CHANNELS,
   CONVERSATION_PRIORITIES,
 } from '../types'
@@ -104,7 +104,7 @@ export const chatMessages = pgTable(
     }),
     // Explicit sender side for rendering + authorization, independent of the
     // principal's current role (a team member could also be a visitor).
-    senderType: text('sender_type', { enum: CHAT_SENDER_TYPES }).notNull(),
+    senderType: text('sender_type', { enum: MESSAGE_SENDER_TYPES }).notNull(),
     content: text('content').notNull(),
     // Rich TipTap doc for messages that carry structured content (agent notes
     // with @-mentions). Null for plain live-chat/email messages, which render
