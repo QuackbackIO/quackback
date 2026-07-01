@@ -1,6 +1,7 @@
 -- Post-child object symmetry: comments -> post_comments (posts -> comments).
--- Uniform `post*` naming for all post-child tables. Metadata-only rename; the
--- `comment` TypeID prefix is unchanged (later stored-id pass).
+-- Uniform `post*` naming for all post-child tables. Metadata-only rename. The
+-- `comment` TypeID prefix was later flipped code-only to post_comment with NO
+-- stored-id pass (TypeIDs persist as native uuid, prefix is app-layer only).
 
 ALTER TABLE "comments" RENAME TO "post_comments";
 ALTER INDEX "comments_post_id_idx" RENAME TO "post_comments_post_id_idx";

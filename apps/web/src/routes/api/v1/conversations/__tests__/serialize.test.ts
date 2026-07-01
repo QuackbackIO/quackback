@@ -84,7 +84,7 @@ describe('serializeMessage', () => {
       id: 'conversation_msg_2',
       conversationId: 'conversation_1',
       senderType: 'system',
-      content: 'Chat ended',
+      content: 'Conversation ended',
       createdAt: '2026-06-05T00:00:00.000Z',
       author: null,
       attachments: [],

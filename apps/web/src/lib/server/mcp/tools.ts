@@ -1100,7 +1100,7 @@ Examples:
 
 Examples:
 - Top-level comment: add_comment({ postId: "post_01abc...", content: "Thanks for the feedback!" })
-- Threaded reply: add_comment({ postId: "post_01abc...", content: "Good point.", parentId: "comment_01xyz..." })
+- Threaded reply: add_comment({ postId: "post_01abc...", content: "Good point.", parentId: "post_comment_01xyz..." })
 - Internal note: add_comment({ postId: "post_01abc...", content: "Discussed in standup, prioritizing for Q3.", isPrivate: true })`,
     addCommentSchema,
     WRITE,
@@ -1332,7 +1332,7 @@ Examples:
     `Edit a comment's content. Team members can edit any comment; authors can edit their own.
 
 Examples:
-- Edit: update_comment({ commentId: "comment_01abc...", content: "Updated feedback response." })`,
+- Edit: update_comment({ commentId: "post_comment_01abc...", content: "Updated feedback response." })`,
     updateCommentSchema,
     WRITE,
     async (args: UpdateCommentArgs): Promise<CallToolResult> => {
@@ -1374,7 +1374,7 @@ Examples:
 Authors can delete their own comments; team members can delete any comment.
 
 Examples:
-- Delete: delete_comment({ commentId: "comment_01abc..." })`,
+- Delete: delete_comment({ commentId: "post_comment_01abc..." })`,
     deleteCommentSchema,
     DESTRUCTIVE,
     async (args: DeleteCommentArgs): Promise<CallToolResult> => {
@@ -1410,8 +1410,8 @@ Examples:
     `Add or remove an emoji reaction on a comment.
 
 Examples:
-- Add reaction: react_to_comment({ action: "add", commentId: "comment_01abc...", emoji: "👍" })
-- Remove reaction: react_to_comment({ action: "remove", commentId: "comment_01abc...", emoji: "👍" })`,
+- Add reaction: react_to_comment({ action: "add", commentId: "post_comment_01abc...", emoji: "👍" })
+- Remove reaction: react_to_comment({ action: "remove", commentId: "post_comment_01abc...", emoji: "👍" })`,
     reactToCommentSchema,
     WRITE,
     async (args: ReactToCommentArgs): Promise<CallToolResult> => {

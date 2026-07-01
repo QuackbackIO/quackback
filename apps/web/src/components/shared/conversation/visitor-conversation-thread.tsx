@@ -645,9 +645,12 @@ export function VisitorConversationThread({
         const event = row.message.systemEvent
         const notice =
           event?.kind === 'chat_ended' ? (
-            <FormattedMessage id="widget.chat.system.ended" defaultMessage="Chat ended" />
+            <FormattedMessage id="widget.chat.system.ended" defaultMessage="Conversation ended" />
           ) : event?.kind === 'chat_reopened' ? (
-            <FormattedMessage id="widget.chat.system.reopened" defaultMessage="Chat reopened" />
+            <FormattedMessage
+              id="widget.chat.system.reopened"
+              defaultMessage="Conversation reopened"
+            />
           ) : event?.kind === 'assigned' ? (
             <FormattedMessage
               id="widget.chat.system.assigned"

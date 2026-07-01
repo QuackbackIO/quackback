@@ -1,7 +1,8 @@
 -- Conversation messages vertical: chat_messages and its child tables adopt the
 -- conversation_message* naming (matching the `conversations` object). Metadata-
--- only renames; the chat_msg / chat_msg_mention TypeID prefixes are unchanged
--- (later stored-id pass).
+-- only renames. The chat_msg / chat_msg_mention TypeID prefixes were later
+-- flipped code-only to conversation_msg / conversation_msg_mention with NO
+-- stored-id pass (TypeIDs persist as native uuid, prefix is app-layer only).
 
 ALTER TABLE "chat_messages" RENAME TO "conversation_messages";
 ALTER INDEX "chat_messages_conversation_created_idx" RENAME TO "conversation_messages_conversation_created_idx";

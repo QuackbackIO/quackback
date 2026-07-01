@@ -714,9 +714,9 @@ export async function setConversationStatus(
   // Mark the lifecycle change in the transcript for both sides (author-less).
   if (status !== previous) {
     if (status === 'closed') {
-      await emitSystemMessage(conversationId, 'Chat ended', { kind: 'chat_ended' })
+      await emitSystemMessage(conversationId, 'Conversation ended', { kind: 'chat_ended' })
     } else if (previous === 'closed') {
-      await emitSystemMessage(conversationId, 'Chat reopened', { kind: 'chat_reopened' })
+      await emitSystemMessage(conversationId, 'Conversation reopened', { kind: 'chat_reopened' })
     }
   }
   const dto = await conversationToDTO(updated, 'agent')
@@ -734,7 +734,7 @@ const MAX_END_NOTE_LENGTH = 2000
  * Agent action: end a conversation with a reason + optional note. Closes the
  * thread (status='closed', stamps resolvedAt) and records WHY, so resolution-
  * rate reporting has a real outcome to count. Mirrors the close path in
- * setConversationStatus — posts the 'Chat ended' system notice (only on a real
+ * setConversationStatus — posts the 'Conversation ended' system notice (only on a real
  * close, so re-ending an already-closed thread doesn't spam it) and publishes
  * the conversation update so the widget reflects the close over SSE. Returns the
  * updated agent-side DTO so the caller can show the outcome without a refetch.
@@ -765,7 +765,7 @@ export async function endConversation(
   // Mark the close in the transcript for both sides — but only on a real
   // open/pending → closed transition, mirroring setConversationStatus.
   if (previous !== 'closed') {
-    await emitSystemMessage(conversationId, 'Chat ended', { kind: 'chat_ended' })
+    await emitSystemMessage(conversationId, 'Conversation ended', { kind: 'chat_ended' })
   }
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
