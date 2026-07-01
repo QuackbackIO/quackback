@@ -37,6 +37,10 @@ export interface PortalUserListItem {
   segments: UserSegmentSummary[]
   /** Raw metadata JSON string — parsed at the route layer into `attributes` */
   metadata: string | null
+  /** Lifecycle: engaged-but-unauthenticated principal (type='anonymous'). */
+  isLead: boolean
+  /** Email captured from a lead mid-conversation (unverified, self-asserted). */
+  contactEmail: string | null
 }
 
 /**
@@ -55,6 +59,8 @@ export interface PortalUserListItemView {
   voteCount: number
   segments: UserSegmentSummary[]
   metadata: string | null
+  isLead: boolean
+  contactEmail: string | null
 }
 
 /**
@@ -102,8 +108,13 @@ export interface PortalUserListParams {
   limit?: number
   /** Filter by segment IDs (OR logic — users in ANY of the given segments) */
   segmentIds?: import('@quackback/ids').SegmentId[]
-  /** Include anonymous users (principal.type='anonymous'). Default: false (only identified users). */
-  includeAnonymous?: boolean
+  /**
+   * Lifecycle view. 'users' (default) = identified accounts
+   * (principal.type='user'); 'leads' = engaged-but-unauthenticated principals
+   * (type='anonymous' — minted only on first interaction, so engaged by
+   * construction).
+   */
+  lifecycle?: 'users' | 'leads'
 }
 
 /**

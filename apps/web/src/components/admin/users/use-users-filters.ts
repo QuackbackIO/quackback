@@ -31,7 +31,7 @@ export function useUsersFilters() {
       voteCount: search.voteCount,
       commentCount: search.commentCount,
       customAttrs: search.customAttrs,
-      includeAnonymous: search.includeAnonymous === 'true',
+      lifecycle: search.lifecycle === 'leads' ? ('leads' as const) : undefined,
       sort: search.sort,
       segmentIds,
     }
@@ -73,8 +73,8 @@ export function useUsersFilters() {
           ...('voteCount' in updates && { voteCount: updates.voteCount }),
           ...('commentCount' in updates && { commentCount: updates.commentCount }),
           ...('customAttrs' in updates && { customAttrs: updates.customAttrs }),
-          ...('includeAnonymous' in updates && {
-            includeAnonymous: updates.includeAnonymous ? ('true' as const) : undefined,
+          ...('lifecycle' in updates && {
+            lifecycle: updates.lifecycle === 'leads' ? ('leads' as const) : undefined,
           }),
           ...('sort' in updates && { sort: updates.sort }),
           ...('segmentIds' in updates && { segments: segmentsParam }),
@@ -105,8 +105,9 @@ export function useUsersFilters() {
       search: {
         sort: search.sort,
         selected: search.selected,
-        // Preserve segment selection when clearing filters
+        // Preserve segment selection and the lifecycle view when clearing filters
         segments: (search as { segments?: string }).segments,
+        lifecycle: search.lifecycle,
       },
       replace: true,
     })
@@ -122,8 +123,7 @@ export function useUsersFilters() {
       filters.postCount ||
       filters.voteCount ||
       filters.commentCount ||
-      filters.customAttrs ||
-      filters.includeAnonymous
+      filters.customAttrs
     )
   }, [filters])
 

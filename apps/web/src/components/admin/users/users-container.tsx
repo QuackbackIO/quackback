@@ -79,8 +79,10 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
     principalId: selectedUserId as PrincipalId | null,
   })
 
-  // Total user count (always unfiltered, for "All users" label)
+  // Lifecycle view counts (always unfiltered, for the nav labels)
   const { data: totalUserCount } = useTotalUserCount()
+  const { data: totalLeadCount } = useTotalUserCount('leads')
+  const inLeadsMode = filters.lifecycle === 'leads'
 
   // Segments data
   const { data: segments, isLoading: isLoadingSegments } = useSegments()
@@ -223,6 +225,8 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             isEvaluating={evaluatingId}
             inInvitesMode={inInvitesMode}
             invitesPendingCount={invitesPendingCount}
+            inLeadsMode={inLeadsMode}
+            totalLeadCount={totalLeadCount}
           />
         }
       >

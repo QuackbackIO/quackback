@@ -128,7 +128,7 @@ export async function listPortalUsers(
       page = 1,
       limit = 20,
       segmentIds,
-      includeAnonymous = false,
+      lifecycle = 'users',
     } = params
 
     // Pre-aggregate activity counts in subqueries (executed once, not per-row)
@@ -166,13 +166,18 @@ export async function listPortalUsers(
     // Build conditions array - filter for role='user' (portal users only)
     const conditions = [eq(principal.role, 'user')]
 
-    // Exclude anonymous users by default (principal.type='anonymous')
-    if (!includeAnonymous) {
-      conditions.push(eq(principal.type, 'user'))
-    }
+    // Lifecycle view: identified users by default, engaged anonymous
+    // principals (leads) on request. The two views never mix.
+    conditions.push(eq(principal.type, lifecycle === 'leads' ? 'anonymous' : 'user'))
 
     if (search) {
-      conditions.push(or(ilike(user.name, `%${search}%`), ilike(user.email, `%${search}%`))!)
+      conditions.push(
+        or(
+          ilike(user.name, `%${search}%`),
+          ilike(user.email, `%${search}%`),
+          ilike(principal.contactEmail, `%${search}%`)
+        )!
+      )
     }
 
     if (verified !== undefined) {
@@ -302,6 +307,8 @@ export async function listPortalUsers(
           image: user.image,
           emailVerified: user.emailVerified,
           metadata: user.metadata,
+          principalType: principal.type,
+          contactEmail: principal.contactEmail,
           joinedAt: principal.createdAt,
           postCount: sql<number>`COALESCE(${postCounts.postCount}, 0)`,
           commentCount: sql<number>`COALESCE(${commentCounts.commentCount}, 0)`,
@@ -342,11 +349,14 @@ export async function listPortalUsers(
       principalId: row.principalId,
       userId: row.userId,
       name: row.name,
-      // Anonymous rows (shown only with "Include Anonymous") must render no email.
+      // Lead rows carry a synthetic account email that must never render;
+      // their real identity signal is the captured contactEmail, if any.
       email: realEmail(row.email),
       image: row.image,
       emailVerified: row.emailVerified,
       metadata: row.metadata,
+      isLead: row.principalType === 'anonymous',
+      contactEmail: realEmail(row.contactEmail),
       joinedAt: row.joinedAt,
       postCount: Number(row.postCount),
       commentCount: Number(row.commentCount),

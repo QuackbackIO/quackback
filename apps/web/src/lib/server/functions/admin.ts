@@ -126,7 +126,7 @@ const listPortalUsersSchema = z.object({
   page: z.number().optional(),
   limit: z.number().optional(),
   segmentIds: z.array(z.string()).optional(),
-  includeAnonymous: z.boolean().optional(),
+  lifecycle: z.enum(['users', 'leads']).optional(),
 })
 
 const portalUserByIdSchema = z.object({
@@ -703,7 +703,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
         page: data.page,
         limit: data.limit,
         segmentIds: data.segmentIds as SegmentId[] | undefined,
-        includeAnonymous: data.includeAnonymous,
+        lifecycle: data.lifecycle,
       })
 
       log.debug({ count: result.items.length }, 'list portal users')

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   PlusIcon,
   UsersIcon,
+  UserPlusIcon,
   PencilIcon,
   TrashIcon,
   BoltIcon,
@@ -34,6 +35,10 @@ interface UsersSegmentNavProps {
   inInvitesMode?: boolean
   /** Pending-invite count for the Invitations entry badge. */
   invitesPendingCount?: number
+  /** `?lifecycle=leads` is set: the All-leads entry renders active. */
+  inLeadsMode?: boolean
+  /** Lead count for the All-leads entry badge. */
+  totalLeadCount?: number
 }
 
 export function UsersSegmentNav({
@@ -55,6 +60,8 @@ export function UsersSegmentNav({
   isEvaluating,
   inInvitesMode,
   invitesPendingCount,
+  inLeadsMode,
+  totalLeadCount,
 }: UsersSegmentNavProps) {
   const hasSelection = selectedSegmentIds.length > 0
   const navigate = useNavigate()
@@ -78,20 +85,21 @@ export function UsersSegmentNav({
           <button
             type="button"
             onClick={() => {
-              if (!inInvitesMode && !hasSelection) return
+              if (!inInvitesMode && !hasSelection && !inLeadsMode) return
               void navigate({
                 from: '/admin/users',
                 search: (prev) => ({
                   ...prev,
                   invites: undefined,
                   segments: undefined,
+                  lifecycle: undefined,
                 }),
                 replace: true,
               })
             }}
             className={cn(
               'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
-              !hasSelection && !inInvitesMode
+              !hasSelection && !inInvitesMode && !inLeadsMode
                 ? 'bg-muted text-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
@@ -101,6 +109,40 @@ export function UsersSegmentNav({
             <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
               {totalUserCount}
             </span>
+          </button>
+
+          {/* All leads — engaged-but-unauthenticated people (anonymous
+              principals). A lifecycle view, not a filter: it swaps the list's
+              population, so segments and invites mode are cleared with it. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (inLeadsMode) return
+              void navigate({
+                from: '/admin/users',
+                search: (prev) => ({
+                  ...prev,
+                  invites: undefined,
+                  segments: undefined,
+                  lifecycle: 'leads' as const,
+                }),
+                replace: true,
+              })
+            }}
+            className={cn(
+              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
+              inLeadsMode
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            )}
+          >
+            <UserPlusIcon className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1 truncate">All leads</span>
+            {totalLeadCount !== undefined && (
+              <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
+                {totalLeadCount}
+              </span>
+            )}
           </button>
 
           {/* Invitations — sibling of All users. Clicking enters invites

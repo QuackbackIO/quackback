@@ -92,8 +92,8 @@ export interface UsersFilters {
   commentCount?: string
   /** Custom attribute filters: "key:op:value,key2:op:value2" */
   customAttrs?: string
-  /** Include anonymous users (principal.type='anonymous'). Default: false. */
-  includeAnonymous?: boolean
+  /** Lifecycle view: identified users (default) or engaged anonymous leads. */
+  lifecycle?: 'users' | 'leads'
   sort?:
     | 'newest'
     | 'oldest'

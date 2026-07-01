@@ -39,12 +39,20 @@ export function UserCard({ user, isSelected, onClick }: UserCardProps) {
           <h3 className="font-medium text-sm text-foreground truncate">
             {user.name || 'Unnamed User'}
           </h3>
-          {user.emailVerified && <CheckCircleIcon className="h-3.5 w-3.5 text-primary shrink-0" />}
+          {user.isLead ? (
+            <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Lead
+            </span>
+          ) : (
+            user.emailVerified && <CheckCircleIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+          )}
         </div>
 
-        {/* Email */}
-        {user.email ? (
-          <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+        {/* Email: identified account email, or a lead's captured contact email */}
+        {(user.email ?? user.contactEmail) ? (
+          <p className="text-sm text-muted-foreground truncate">
+            {user.email ?? user.contactEmail}
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground/50 italic">No email</p>
         )}

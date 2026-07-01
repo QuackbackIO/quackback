@@ -554,13 +554,15 @@ export function UserDetail({
                     </button>
                   )}
                 </div>
-                {user.email ? (
-                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                {(user.email ?? user.contactEmail) ? (
+                  <p className="text-sm text-muted-foreground truncate">
+                    {user.email ?? user.contactEmail}
+                  </p>
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">No email</p>
                 )}
                 <Badge variant="secondary" className="mt-2 text-xs">
-                  Portal User
+                  {user.isLead ? 'Lead' : 'Portal User'}
                 </Badge>
               </>
             )}
@@ -570,9 +572,9 @@ export function UserDetail({
               size="sm"
               variant="outline"
               onClick={() => setComposeOpen(true)}
-              disabled={!realEmail(user.email)}
+              disabled={!realEmail(user.email ?? user.contactEmail)}
               title={
-                realEmail(user.email)
+                realEmail(user.email ?? user.contactEmail)
                   ? undefined
                   : 'This user has no email address to deliver a message to'
               }
@@ -589,7 +591,7 @@ export function UserDetail({
             initialTarget={{
               principalId: user.principalId,
               name: user.name,
-              email: user.email,
+              email: user.email ?? user.contactEmail,
               image: user.image,
             }}
           />

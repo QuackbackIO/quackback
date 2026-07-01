@@ -71,7 +71,7 @@ async function fetchPortalUsers(
       page,
       limit: 20,
       segmentIds: filters.segmentIds,
-      includeAnonymous: filters.includeAnonymous,
+      lifecycle: filters.lifecycle,
     },
   })) as PortalUserListResultView
 }
@@ -102,7 +102,7 @@ export function usePortalUsers({ filters, initialData }: UsePortalUsersOptions) 
     filters.voteCount ||
     filters.commentCount ||
     filters.customAttrs ||
-    filters.includeAnonymous ||
+    filters.lifecycle === 'leads' ||
     (filters.segmentIds && filters.segmentIds.length > 0)
   )
   const useInitialData = initialData && !hasActiveFilters
@@ -131,13 +131,13 @@ export function useUserDetail({ principalId, enabled = true }: UseUserDetailOpti
   })
 }
 
-/** Total user count (unfiltered) for the "All users" sidebar label */
-export function useTotalUserCount() {
+/** Total count (unfiltered) for a lifecycle view's sidebar label. */
+export function useTotalUserCount(lifecycle: 'users' | 'leads' = 'users') {
   return useQuery({
-    queryKey: usersKeys.totalCount(),
+    queryKey: [...usersKeys.totalCount(), lifecycle],
     queryFn: async () => {
       const result = (await listPortalUsersFn({
-        data: { sort: 'newest', page: 1, limit: 1 },
+        data: { sort: 'newest', page: 1, limit: 1, lifecycle },
       })) as PortalUserListResultView
       return result.total
     },

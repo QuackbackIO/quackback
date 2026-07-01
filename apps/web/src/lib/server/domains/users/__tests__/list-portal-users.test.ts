@@ -106,6 +106,8 @@ vi.mock('@/lib/server/db', () => ({
     id: 'principal.id',
     userId: 'principal.user_id',
     role: 'principal.role',
+    type: 'principal.type',
+    contactEmail: 'principal.contact_email',
     createdAt: 'principal.created_at',
   },
   user: {
@@ -363,5 +365,26 @@ describe('listPortalUsers', () => {
 
     expect(result.total).toBe(1)
     expect(result.items).toHaveLength(1)
+  })
+})
+
+describe('listPortalUsers lifecycle filter', () => {
+  beforeEach(() => {
+    selectCallCount.count = 0
+    mockEq.mockClear()
+  })
+
+  it('defaults to identified users (type=user)', async () => {
+    const { listPortalUsers } = await import('../user.service')
+    await listPortalUsers({})
+    expect(mockEq).toHaveBeenCalledWith('principal.type', 'user')
+    expect(mockEq).not.toHaveBeenCalledWith('principal.type', 'anonymous')
+  })
+
+  it('selects engaged anonymous principals for leads', async () => {
+    const { listPortalUsers } = await import('../user.service')
+    await listPortalUsers({ lifecycle: 'leads' })
+    expect(mockEq).toHaveBeenCalledWith('principal.type', 'anonymous')
+    expect(mockEq).not.toHaveBeenCalledWith('principal.type', 'user')
   })
 })

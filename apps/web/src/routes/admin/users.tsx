@@ -18,7 +18,9 @@ const searchSchema = z.object({
   voteCount: z.string().optional(),
   commentCount: z.string().optional(),
   customAttrs: z.string().optional(),
-  includeAnonymous: z.enum(['true']).optional(),
+  // Lifecycle view: absent = identified users, 'leads' = engaged anonymous
+  // principals (the "All leads" nav entry).
+  lifecycle: z.enum(['leads']).optional(),
   sort: z
     .enum(['newest', 'oldest', 'most_active', 'most_posts', 'most_comments', 'most_votes', 'name'])
     .optional()
@@ -77,7 +79,7 @@ function parseSearchToQueryParams(deps: SearchParams) {
     page: 1,
     limit: 20,
     segmentIds,
-    includeAnonymous: deps.includeAnonymous === 'true',
+    lifecycle: deps.lifecycle,
   }
 }
 
@@ -94,7 +96,7 @@ export const Route = createFileRoute('/admin/users')({
       voteCount,
       commentCount,
       customAttrs,
-      includeAnonymous,
+      lifecycle,
       sort,
       segments,
     },
@@ -108,7 +110,7 @@ export const Route = createFileRoute('/admin/users')({
     voteCount,
     commentCount,
     customAttrs,
-    includeAnonymous,
+    lifecycle,
     sort,
     segments,
   }),

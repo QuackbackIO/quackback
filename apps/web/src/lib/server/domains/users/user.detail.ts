@@ -101,6 +101,8 @@ export async function getPortalUserDetail(
         image: user.image,
         emailVerified: user.emailVerified,
         metadata: user.metadata,
+        principalType: principal.type,
+        contactEmail: principal.contactEmail,
         joinedAt: principal.createdAt,
         createdAt: user.createdAt,
       })
@@ -307,6 +309,8 @@ export async function getPortalUserDetail(
       image: principalData.image,
       emailVerified: principalData.emailVerified,
       metadata: principalData.metadata,
+      isLead: principalData.principalType === 'anonymous',
+      contactEmail: realEmail(principalData.contactEmail),
       joinedAt: principalData.joinedAt,
       createdAt: principalData.createdAt,
       postCount,
