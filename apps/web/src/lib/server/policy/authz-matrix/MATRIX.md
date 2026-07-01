@@ -93,7 +93,7 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 320 surfaces
+### Server functions (`requireAuth`) — 321 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -366,6 +366,7 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/user.ts`::requirePrincipalId | END_USER (any authenticated) |
+| `lib/server/functions/visitor-analytics.ts`::getVisitorAnalyticsData | analytics.view |
 | `lib/server/functions/webhooks.ts`::fetchWebhooks | webhook.view |
 | `lib/server/functions/webhooks.ts`::createWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::updateWebhookFn | webhook.manage |
@@ -572,7 +573,7 @@ API-key classes hold **every** scope regardless of their configured scope (REST 
 
 ## 4. Entry points without a requireAuth/key gate
 
-136 of 538 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+138 of 541 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -683,6 +684,8 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/mcp.ts`::DELETE | route |
 | `routes/api/mcp.ts`::GET | route |
 | `routes/api/mcp.ts`::POST | route |
+| `routes/api/track.ts`::OPTIONS | route |
+| `routes/api/track.ts`::POST | route |
 | `routes/api/user/avatar.$userId.ts`::GET | route |
 | `routes/api/user/profile.ts`::DELETE | route |
 | `routes/api/user/profile.ts`::GET | route |
