@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { buildConversationRows, type ConversationRow } from './conversation-rows'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
-import { chatAvailable } from '@/lib/shared/conversation/presence'
+import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { PaperAirplaneIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftRightIcon, PaperClipIcon, BookOpenIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
@@ -424,7 +424,7 @@ export function VisitorConversationThread({
 
   // Availability shown to the visitor: a live agent always counts as online;
   // when office hours are configured, the schedule also marks us available.
-  const available = chatAvailable(presence.agentsOnline, presence.withinOfficeHours)
+  const available = conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)
 
   // "Back at" time for the away state, formatted in the visitor's own locale.
   const reopenLabel = useMemo(() => {

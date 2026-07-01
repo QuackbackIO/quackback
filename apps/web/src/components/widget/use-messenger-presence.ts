@@ -2,7 +2,7 @@ import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
 import {
-  CHAT_PRESENCE_POLL_MS,
+  CONVERSATION_PRESENCE_POLL_MS,
   type ConversationPresence,
 } from '@/lib/shared/conversation/presence'
 
@@ -25,7 +25,7 @@ const OFFLINE: ConversationPresence = {
  * this one query, so they can never disagree and only ONE poll runs no matter
  * how many surfaces are mounted (React Query dedupes by key).
  *
- * SSR-seeded by the loader, then polled every CHAT_PRESENCE_POLL_MS while the
+ * SSR-seeded by the loader, then polled every CONVERSATION_PRESENCE_POLL_MS while the
  * widget is open. Pass `enabled=false` (chat off) to skip the query entirely.
  */
 export function useConversationPresence(enabled: boolean): ConversationPresence {
@@ -33,10 +33,10 @@ export function useConversationPresence(enabled: boolean): ConversationPresence 
     queryKey: CHAT_PRESENCE_QUERY_KEY,
     queryFn: () => getConversationPresenceFn({ headers: getWidgetAuthHeaders() }),
     enabled,
-    refetchInterval: CHAT_PRESENCE_POLL_MS,
+    refetchInterval: CONVERSATION_PRESENCE_POLL_MS,
     // The SSR seed is fresh at page load, so trust it across the first interval
     // rather than double-fetching on mount; the interval keeps it current.
-    staleTime: CHAT_PRESENCE_POLL_MS,
+    staleTime: CONVERSATION_PRESENCE_POLL_MS,
     // Intentional (React Query defaults): polling pauses while the iframe is
     // backgrounded — a widget no one is looking at needs no live presence — and
     // resumes / refetches on refocus. Cheaper than the old always-on setInterval.

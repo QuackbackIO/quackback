@@ -1,13 +1,16 @@
 /**
  * Whether the team should read as "available" to a visitor — drives the online
- * dot and copy on the chat thread and the support surface's message CTA (via
+ * dot and copy on the conversation thread and the support surface's message CTA (via
  * ConversationPresenceBadge), so the two never contradict each other.
  *
  * A live agent always counts as available. When office hours are configured
  * (`withinOfficeHours` is non-null) the schedule also marks the team available;
  * a present agent still overrides closed hours.
  */
-export function chatAvailable(agentsOnline: boolean, withinOfficeHours: boolean | null): boolean {
+export function conversationAvailable(
+  agentsOnline: boolean,
+  withinOfficeHours: boolean | null
+): boolean {
   return withinOfficeHours === null ? agentsOnline : withinOfficeHours || agentsOnline
 }
 
@@ -29,4 +32,4 @@ export interface ConversationPresence {
  * fresh (e.g. an agent going offline). Comfortably under the server's presence
  * TTL so a gone agent is reflected promptly. The SSR seed covers first paint.
  */
-export const CHAT_PRESENCE_POLL_MS = 30_000
+export const CONVERSATION_PRESENCE_POLL_MS = 30_000

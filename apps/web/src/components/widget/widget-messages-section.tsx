@@ -1,7 +1,7 @@
 import { FormattedMessage } from 'react-intl'
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
-import { chatAvailable } from '@/lib/shared/conversation/presence'
+import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { useConversationSummary } from './use-messenger-summary'
 import { WidgetResumeCard } from './widget-resume-card'
 import { WidgetConversationHistory } from './widget-conversation-history'
@@ -20,7 +20,7 @@ interface WidgetMessagesSectionProps {
  */
 export function WidgetMessagesSection({ onOpenChat }: WidgetMessagesSectionProps) {
   const { conversation, teamName, agentsOnline, withinOfficeHours } = useConversationSummary(true)
-  const available = chatAvailable(agentsOnline, withinOfficeHours)
+  const available = conversationAvailable(agentsOnline, withinOfficeHours)
 
   return (
     <div className="mt-4 border-t border-border/40 pt-3">

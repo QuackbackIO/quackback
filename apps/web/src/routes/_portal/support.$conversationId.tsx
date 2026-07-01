@@ -12,7 +12,7 @@ import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { getConversationPresenceFn } from '@/lib/server/functions/conversation'
 import {
-  CHAT_PRESENCE_POLL_MS,
+  CONVERSATION_PRESENCE_POLL_MS,
   type ConversationPresence,
 } from '@/lib/shared/conversation/presence'
 import {
@@ -51,8 +51,8 @@ function SupportThreadPage() {
     queryKey: PORTAL_CHAT_PRESENCE_QUERY_KEY,
     queryFn: () => getConversationPresenceFn(),
     enabled: supportEnabled && isLoggedIn,
-    refetchInterval: CHAT_PRESENCE_POLL_MS,
-    staleTime: CHAT_PRESENCE_POLL_MS,
+    refetchInterval: CONVERSATION_PRESENCE_POLL_MS,
+    staleTime: CONVERSATION_PRESENCE_POLL_MS,
   })
 
   // The first send creates the thread: move /support/new → /support/<id> so a
