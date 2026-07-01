@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { requireApiKey, withApiKeyAuth, type AuthLevel } from '../auth'
+import { requireApiKey, withApiKeyAuth } from '../auth'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
 import type { PrincipalId, ApiKeyId } from '@quackback/ids'
 import { UnauthorizedError, ForbiddenError } from '@/lib/shared/errors'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 
 // Mock the verifyApiKey function
 vi.mock('@/lib/server/domains/api-keys/api-key.service', () => ({
@@ -133,34 +134,32 @@ describe('API Auth', () => {
   })
 
   describe('withApiKeyAuth', () => {
-    it('should throw UnauthorizedError when authentication fails', async () => {
-      const request = new Request('https://example.com/api', {
+    const bearer = () =>
+      new Request('https://example.com/api', {
         method: 'GET',
+        headers: { Authorization: 'Bearer qb_valid_key' },
       })
 
-      await expect(withApiKeyAuth(request, { role: 'team' })).rejects.toThrow(UnauthorizedError)
+    it('should throw UnauthorizedError when authentication fails', async () => {
+      const request = new Request('https://example.com/api', { method: 'GET' })
+      await expect(
+        withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
+      ).rejects.toThrow(UnauthorizedError)
     })
 
     it('should include hint about Bearer format in error message', async () => {
-      const request = new Request('https://example.com/api', {
-        method: 'GET',
-      })
-
-      await expect(withApiKeyAuth(request, { role: 'team' })).rejects.toThrow('Bearer qb_xxx')
+      const request = new Request('https://example.com/api', { method: 'GET' })
+      await expect(
+        withApiKeyAuth(request, { permission: PERMISSIONS.POST_VIEW_PRIVATE })
+      ).rejects.toThrow('Bearer qb_xxx')
     })
 
-    it('should return auth context when authentication succeeds with team role', async () => {
+    it('returns the auth context when the key owner holds the permission', async () => {
       const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
+      mockFindFirst.mockResolvedValue({ role: 'admin' })
 
-      const request = new Request('https://example.com/api', {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer qb_valid_key',
-        },
-      })
-
-      const result = await withApiKeyAuth(request, { role: 'team' })
+      const result = await withApiKeyAuth(bearer(), { permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
       expect(result).toEqual({
         apiKey: mockApiKey,
@@ -170,62 +169,36 @@ describe('API Auth', () => {
       })
     })
 
-    it('should throw ForbiddenError when admin role required but member is not admin', async () => {
+    it('throws ForbiddenError when the owner (member) lacks a workspace-admin permission', async () => {
       const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
-
       mockFindFirst.mockResolvedValue({ role: 'member' })
 
-      const request = new Request('https://example.com/api', {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer qb_valid_key',
-        },
-      })
-
-      await expect(withApiKeyAuth(request, { role: 'admin' })).rejects.toThrow(ForbiddenError)
-      await expect(withApiKeyAuth(request, { role: 'admin' })).rejects.toThrow(
-        'Admin access required'
-      )
+      await expect(
+        withApiKeyAuth(bearer(), { permission: PERMISSIONS.BILLING_MANAGE })
+      ).rejects.toThrow(ForbiddenError)
+      await expect(
+        withApiKeyAuth(bearer(), { permission: PERMISSIONS.BILLING_MANAGE })
+      ).rejects.toThrow("Requires the 'billing.manage' permission")
     })
 
-    it('should throw ForbiddenError when team role required but member is a portal user', async () => {
+    it('throws ForbiddenError when the owner is a portal user (no team permissions)', async () => {
       const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
-
       mockFindFirst.mockResolvedValue({ role: 'user' })
 
-      const request = new Request('https://example.com/api', {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer qb_valid_key',
-        },
-      })
-
-      await expect(withApiKeyAuth(request, { role: 'team' })).rejects.toThrow(ForbiddenError)
-      await expect(withApiKeyAuth(request, { role: 'team' })).rejects.toThrow(
-        'Team member access required'
-      )
+      await expect(
+        withApiKeyAuth(bearer(), { permission: PERMISSIONS.POST_VIEW_PRIVATE })
+      ).rejects.toThrow(ForbiddenError)
     })
 
-    it('should allow admin through for both team and admin roles', async () => {
+    it('allows a valid key with no permission gate (public read)', async () => {
       const { verifyApiKey } = await import('@/lib/server/domains/api-keys/api-key.service')
       vi.mocked(verifyApiKey).mockResolvedValue(mockApiKey)
+      mockFindFirst.mockResolvedValue({ role: 'user' })
 
-      mockFindFirst.mockResolvedValue({ role: 'admin' })
-
-      const request = new Request('https://example.com/api', {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer qb_valid_key',
-        },
-      })
-
-      for (const role of ['team', 'admin'] as AuthLevel[]) {
-        const result = await withApiKeyAuth(request, { role })
-        expect(result).toBeDefined()
-        expect(result.role).toBe('admin')
-      }
+      const result = await withApiKeyAuth(bearer())
+      expect(result.principalId).toBe(mockApiKey.principalId)
     })
   })
 })

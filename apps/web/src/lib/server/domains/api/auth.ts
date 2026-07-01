@@ -11,7 +11,7 @@ import { checkRateLimit, getClientIp } from './rate-limit'
 import { UnauthorizedError, ForbiddenError, RateLimitError } from '@/lib/shared/errors'
 import { db, principal, eq } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
-import { isAdmin, isTeamMember, type Role } from '@/lib/shared/roles'
+import { isAdmin, type Role } from '@/lib/shared/roles'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 
@@ -79,21 +79,20 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
   }
 }
 
-export type AuthLevel = 'team' | 'admin'
-
 /**
- * Require API key authentication with role-based authorization.
+ * Require API key authentication, optionally gated on a permission.
  * Includes rate limiting to prevent brute-force attacks.
  *
- * @param request - The incoming request
- * @param options.role - Required role level: 'team' (admin or member) or 'admin' (admin only)
+ * A key's authority is its owner's permission set (the service principal's role
+ * preset). Bare `withApiKeyAuth(request)` requires only a valid key. The legacy
+ * `{ role }` form was retired at the Phase C completion gate.
  *
  * @example
  * const { principalId } = await withApiKeyAuth(request, { permission: PERMISSIONS.POST_CREATE })
  */
 export async function withApiKeyAuth(
   request: Request,
-  options?: { role: AuthLevel } | { permission: PermissionKey }
+  options?: { permission: PermissionKey }
 ): Promise<ApiAuthContext> {
   const clientIp = getClientIp(request)
   const wantsImportMode = request.headers.get('x-import-mode') === 'true'
@@ -111,24 +110,16 @@ export async function withApiKeyAuth(
     )
   }
 
-  if (options && 'permission' in options) {
-    // A key's authority is its owner's permission set — the service principal's
-    // role preset. Per-key scope narrowing (owner permissions ∩ key scopes) is a
-    // future addition; today every key carries its owner's full authority, so
-    // this stays non-regressing vs the prior role inheritance.
+  // A key's authority is its owner's permission set — the service principal's
+  // role preset. Per-key scope narrowing (owner permissions ∩ key scopes) is a
+  // future addition; today every key carries its owner's full authority, so this
+  // stays non-regressing vs the prior role inheritance. No options means a valid
+  // key is required but no authorization gate — for reads whose data is public.
+  if (options) {
     if (!resolveActorPermissions(auth.role).has(options.permission)) {
       throw new ForbiddenError('FORBIDDEN', `Requires the '${options.permission}' permission`)
     }
-  } else if (options) {
-    if (options.role === 'admin' && !isAdmin(auth.role)) {
-      throw new ForbiddenError('FORBIDDEN', 'Admin access required for this operation')
-    }
-    if (options.role === 'team' && !isTeamMember(auth.role)) {
-      throw new ForbiddenError('FORBIDDEN', 'Team member access required for this operation')
-    }
   }
-  // No options: a valid key is required (authentication) but no authorization
-  // gate — for public reads whose data is already public.
 
   if (wantsImportMode && isAdmin(auth.role)) {
     auth.importMode = true

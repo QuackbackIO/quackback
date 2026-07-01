@@ -79,26 +79,18 @@ export interface AuthContext {
 }
 
 /**
- * Require authentication with an optional role OR permission check.
+ * Require authentication, optionally gated on a permission.
  *
- * `{ permission }` is the forward path: it checks the caller's resolved
- * permission set (derived from their role's preset bundle via the compat shim),
- * so call sites can migrate off role strings incrementally. `{ roles }` is the
- * legacy path, kept unchanged and provably equivalent per role until the Phase C
- * completion gate retires it. Passing both checks both.
+ * `{ permission }` checks the caller's resolved permission set (their role's
+ * preset bundle). Bare `requireAuth()` requires only a valid principal. The
+ * legacy `{ roles }` form was retired at the Phase C completion gate.
  *
  * @example
- * // Permission gate (preferred)
  * const auth = await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
- *
- * // Just require authentication (any role)
- * const auth = await requireAuth()
+ * const anyAuth = await requireAuth()
  */
-export async function requireAuth(options?: {
-  roles?: Role[]
-  permission?: PermissionKey
-}): Promise<AuthContext> {
-  log.debug({ roles: options?.roles, permission: options?.permission }, 'require auth')
+export async function requireAuth(options?: { permission?: PermissionKey }): Promise<AuthContext> {
+  log.debug({ permission: options?.permission }, 'require auth')
   try {
     const session = await getSessionDirect()
     if (!session?.user) {
@@ -120,10 +112,6 @@ export async function requireAuth(options?: {
     }
 
     const role = principalRecord.role as Role
-
-    if (options?.roles && !options.roles.includes(role)) {
-      throw new Error(`Access denied: Requires [${options.roles.join(', ')}], got ${role}`)
-    }
 
     if (options?.permission && !permissionsForLegacyRole(role).has(options.permission)) {
       throw new Error(
