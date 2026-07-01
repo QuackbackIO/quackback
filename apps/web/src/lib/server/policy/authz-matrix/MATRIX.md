@@ -79,6 +79,13 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | analytics.view | analytics | ✓ | ✓ |
 | integration.view | integration | ✓ | ✓ |
 | integration.manage | integration | ✓ | · |
+| ticket.view | support | ✓ | ✓ |
+| ticket.view_all | support | ✓ | ✓ |
+| ticket.reply | support | ✓ | ✓ |
+| ticket.note | support | ✓ | ✓ |
+| ticket.assign | support | ✓ | ✓ |
+| ticket.set_status | support | ✓ | ✓ |
+| ticket.create | support | ✓ | ✓ |
 | ticket.manage_types | support | ✓ | ✓ |
 | sla.manage | support | ✓ | · |
 | routing.manage | support | ✓ | · |

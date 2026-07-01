@@ -125,24 +125,30 @@ describe('RBAC permission catalogue', () => {
     }
   })
 
-  it('support permissions are membership-scoped, not flat ticket capabilities', () => {
-    // Inbox VERBS are the shared conversation.* set, scoped by team membership; the flat
-    // ticket.reply/note/assign/view_* keys were the wrong shape and are removed.
-    for (const gone of [
-      'ticket.view_all',
-      'ticket.view_assigned',
-      'ticket.reply',
-      'ticket.note',
-      'ticket.assign',
-      'inbox.manage',
-    ]) {
+  it('tickets are a peer aggregate with their own scoped resource verbs', () => {
+    // Tickets carry their OWN verbs (distinct from conversation.*), team-scoped for humans and
+    // workspace-scoped for machine/AI principals. View-scope stays a FILTER, so ticket.view_assigned
+    // is NOT a key; inbox.manage was renamed to channel_account.manage.
+    for (const gone of ['ticket.view_assigned', 'inbox.manage']) {
       expect(ALL_PERMISSIONS).not.toContain(gone)
     }
-    // The cross-team view-scope override + ticket-lifecycle + renamed channel key exist.
-    expect(ALL_PERMISSIONS).toContain(PERMISSIONS.CONVERSATION_VIEW_ALL)
-    expect(ALL_PERMISSIONS).toContain(PERMISSIONS.TICKET_MANAGE_TYPES)
-    expect(ALL_PERMISSIONS).toContain(PERMISSIONS.CHANNEL_ACCOUNT_MANAGE)
-    // Support infrastructure config is admin-only; Manager operates but does not configure it.
+    for (const key of [
+      PERMISSIONS.TICKET_VIEW,
+      PERMISSIONS.TICKET_VIEW_ALL,
+      PERMISSIONS.TICKET_REPLY,
+      PERMISSIONS.TICKET_NOTE,
+      PERMISSIONS.TICKET_ASSIGN,
+      PERMISSIONS.TICKET_SET_STATUS,
+      PERMISSIONS.TICKET_CREATE,
+      PERMISSIONS.CONVERSATION_VIEW_ALL,
+      PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+    ]) {
+      expect(ALL_PERMISSIONS).toContain(key)
+    }
+  })
+
+  it('support infrastructure config is admin-only', () => {
+    // Manager operates the inbox but does not configure the support infrastructure.
     for (const key of [
       PERMISSIONS.SLA_MANAGE,
       PERMISSIONS.ROUTING_MANAGE,
@@ -152,5 +158,8 @@ describe('RBAC permission catalogue', () => {
       expect(WORKSPACE_ADMIN_PERMISSIONS).toContain(key)
       expect(SYSTEM_ROLE_PERMISSIONS.manager).not.toContain(key)
     }
+    // Ticket operator verbs + manage-types are NOT admin-only — Manager holds them.
+    expect(SYSTEM_ROLE_PERMISSIONS.manager).toContain(PERMISSIONS.TICKET_REPLY)
+    expect(SYSTEM_ROLE_PERMISSIONS.manager).toContain(PERMISSIONS.TICKET_MANAGE_TYPES)
   })
 })

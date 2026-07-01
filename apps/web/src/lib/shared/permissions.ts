@@ -103,7 +103,15 @@ export const PERMISSIONS = {
   INTEGRATION_VIEW: 'integration.view',
   INTEGRATION_MANAGE: 'integration.manage',
 
-  // support (dormant until the support platform lands; inbox verbs are the conversation.* set)
+  // support (dormant until the support platform lands). Tickets are a peer aggregate with their own
+  // resource verbs, team-scoped for humans and workspace-scoped for machine/AI principals.
+  TICKET_VIEW: 'ticket.view',
+  TICKET_VIEW_ALL: 'ticket.view_all',
+  TICKET_REPLY: 'ticket.reply',
+  TICKET_NOTE: 'ticket.note',
+  TICKET_ASSIGN: 'ticket.assign',
+  TICKET_SET_STATUS: 'ticket.set_status',
+  TICKET_CREATE: 'ticket.create',
   TICKET_MANAGE_TYPES: 'ticket.manage_types',
   SLA_MANAGE: 'sla.manage',
   ROUTING_MANAGE: 'routing.manage',
@@ -284,6 +292,13 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   { key: PERMISSIONS.ANALYTICS_VIEW, category: 'analytics' },
   { key: PERMISSIONS.INTEGRATION_VIEW, category: 'integration' },
   { key: PERMISSIONS.INTEGRATION_MANAGE, category: 'integration' },
+  { key: PERMISSIONS.TICKET_VIEW, category: 'support' },
+  { key: PERMISSIONS.TICKET_VIEW_ALL, category: 'support' },
+  { key: PERMISSIONS.TICKET_REPLY, category: 'support' },
+  { key: PERMISSIONS.TICKET_NOTE, category: 'support' },
+  { key: PERMISSIONS.TICKET_ASSIGN, category: 'support' },
+  { key: PERMISSIONS.TICKET_SET_STATUS, category: 'support' },
+  { key: PERMISSIONS.TICKET_CREATE, category: 'support' },
   { key: PERMISSIONS.TICKET_MANAGE_TYPES, category: 'support' },
   { key: PERMISSIONS.SLA_MANAGE, category: 'support' },
   { key: PERMISSIONS.ROUTING_MANAGE, category: 'support' },

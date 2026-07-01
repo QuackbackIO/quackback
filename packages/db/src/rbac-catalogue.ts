@@ -111,9 +111,19 @@ export const PERMISSIONS = {
   INTEGRATION_VIEW: 'integration.view', // list connected integrations + in-inbox CRM lookups
   INTEGRATION_MANAGE: 'integration.manage', // connect / configure / secrets
 
-  // category 'support' — seeded, dormant until the support platform lands. Support access is
-  // MEMBERSHIP-SCOPED (team membership x a view-scope filter), so inbox action VERBS are the shared
-  // conversation.* set + conversation.view_all; only ticket-lifecycle + admin-config keys live here.
+  // category 'support' — seeded, dormant until the support platform lands. Tickets are a PEER
+  // aggregate (own lifecycle, need no conversation), so they carry their OWN resource verbs -- distinct
+  // from the conversation.* set above. Scope is a dimension, not baked into the key: ticket.* is
+  // TEAM-scoped for human members (via team membership + ticketFilter) and WORKSPACE-scoped for
+  // machine / AI principals (principalType='service'), which hold ticket scopes directly and act on all
+  // tickets in no team. View-scope stays a FILTER (no ticket.view_assigned key).
+  TICKET_VIEW: 'ticket.view', // read tickets (team-scoped for humans; all for machine/AI)
+  TICKET_VIEW_ALL: 'ticket.view_all', // cross-team supervisor override (mirrors conversation.view_all)
+  TICKET_REPLY: 'ticket.reply', // reply on customer-visible tickets
+  TICKET_NOTE: 'ticket.note', // internal note on a ticket
+  TICKET_ASSIGN: 'ticket.assign', // assign a ticket to a team / teammate
+  TICKET_SET_STATUS: 'ticket.set_status', // move a ticket through its lifecycle (per type)
+  TICKET_CREATE: 'ticket.create', // create a ticket without a conversation (peer-aggregate; AI / integration)
   TICKET_MANAGE_TYPES: 'ticket.manage_types', // define ticket types + their statuses / fields
   SLA_MANAGE: 'sla.manage', // manage SLA policies (workspace-admin)
   ROUTING_MANAGE: 'routing.manage', // manage routing rules (workspace-admin)
@@ -482,6 +492,41 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
     description: 'Connect, configure, and manage integration secrets',
   },
 
+  {
+    key: PERMISSIONS.TICKET_VIEW,
+    category: 'support',
+    description: 'View tickets (team-scoped for humans; all tickets for machine / AI principals)',
+  },
+  {
+    key: PERMISSIONS.TICKET_VIEW_ALL,
+    category: 'support',
+    description: "View all teams' tickets (cross-team supervisor override)",
+  },
+  {
+    key: PERMISSIONS.TICKET_REPLY,
+    category: 'support',
+    description: 'Reply on customer-visible tickets',
+  },
+  {
+    key: PERMISSIONS.TICKET_NOTE,
+    category: 'support',
+    description: 'Add internal notes to tickets',
+  },
+  {
+    key: PERMISSIONS.TICKET_ASSIGN,
+    category: 'support',
+    description: 'Assign a ticket to a team or teammate',
+  },
+  {
+    key: PERMISSIONS.TICKET_SET_STATUS,
+    category: 'support',
+    description: 'Move a ticket through its lifecycle',
+  },
+  {
+    key: PERMISSIONS.TICKET_CREATE,
+    category: 'support',
+    description: 'Create a ticket without a conversation',
+  },
   {
     key: PERMISSIONS.TICKET_MANAGE_TYPES,
     category: 'support',
