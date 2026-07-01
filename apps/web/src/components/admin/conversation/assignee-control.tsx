@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDownIcon, CheckIcon, UserCircleIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import type { ConversationId } from '@quackback/ids'
-import type { ChatAuthorDTO } from '@/lib/shared/conversation/types'
+import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 import { assignConversationFn } from '@/lib/server/functions/conversation'
 import { fetchTeamMembers } from '@/lib/server/functions/admin'
 import { Avatar } from '@/components/ui/avatar'
@@ -21,7 +21,7 @@ export function AssigneeControl({
   onChanged,
 }: {
   conversationId: ConversationId
-  assignedAgent: ChatAuthorDTO | null
+  assignedAgent: ConversationAuthorDTO | null
   onChanged?: () => void
 }) {
   const { data: members } = useQuery({

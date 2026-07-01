@@ -2,7 +2,7 @@
  * suggestPost: an AGENT-ONLY nudge to track a RESOLVED conversation as a feedback
  * post. It is persisted as an INTERNAL note (isInternal=true) carrying the
  * suggestion under metadata.postSuggestion, and broadcast on the inbox channel
- * ONLY (publishAgentChatEvent) — it must NEVER reach the visitor's conversation
+ * ONLY (publishAgentConversationEvent) — it must NEVER reach the visitor's conversation
  * channel, and is rejected unless the conversation is resolved (closed).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,9 +11,9 @@ import type { Actor } from '@/lib/server/policy/types'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 const insertedMessages: Record<string, unknown>[] = []
-const publishChatEvent = vi.fn()
+const publishConversationEvent = vi.fn()
 const publishConversationUpdate = vi.fn()
-const publishAgentChatEvent = vi.fn()
+const publishAgentConversationEvent = vi.fn()
 
 // Mutable state the db mock reads: the conversation status drives the
 // resolved-gate, so one mock serves both the rejected and accepted cases.
@@ -46,9 +46,9 @@ vi.mock('@/lib/server/events/scheduler', () => ({
   cancelScheduledDispatch: vi.fn(async () => {}),
 }))
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: (...args: unknown[]) => publishChatEvent(...args),
-  publishAgentChatEvent: (...args: unknown[]) => publishAgentChatEvent(...args),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: (...args: unknown[]) => publishConversationEvent(...args),
+  publishAgentConversationEvent: (...args: unknown[]) => publishAgentConversationEvent(...args),
   publishConversationUpdate: (...args: unknown[]) => publishConversationUpdate(...args),
 }))
 
@@ -193,7 +193,7 @@ describe('suggestPost', () => {
       )
     ).rejects.toBeInstanceOf(ValidationError)
     expect(insertedMessages).toHaveLength(0)
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 
   it('rejects a pending conversation too (only closed is resolved)', async () => {
@@ -241,15 +241,15 @@ describe('suggestPost', () => {
       { agentActor, agentPrincipalId, agent }
     )
 
-    // Inbox-only fan-out (publishAgentChatEvent); the visitor-facing
-    // publishChatEvent / publishConversationUpdate are never touched.
-    expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    // Inbox-only fan-out (publishAgentConversationEvent); the visitor-facing
+    // publishConversationEvent / publishConversationUpdate are never touched.
+    expect(publishAgentConversationEvent).toHaveBeenCalledTimes(1)
+    expect(publishConversationEvent).not.toHaveBeenCalled()
     expect(publishConversationUpdate).not.toHaveBeenCalled()
 
     // The agent-only broadcast carries the suggestion so the inbox can render the
     // chip in realtime.
-    const [event] = publishAgentChatEvent.mock.calls[0]
+    const [event] = publishAgentConversationEvent.mock.calls[0]
     expect(event).toMatchObject({
       kind: 'message',
       conversationId,
@@ -269,6 +269,6 @@ describe('suggestPost', () => {
       )
     ).rejects.toBeInstanceOf(ForbiddenError)
     expect(insertedMessages).toHaveLength(0)
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 })

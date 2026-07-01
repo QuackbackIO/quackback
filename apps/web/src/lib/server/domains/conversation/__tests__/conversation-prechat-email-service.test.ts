@@ -12,9 +12,9 @@ const updatedSets: Record<string, unknown>[] = []
 // Drives the tx.select(...).limit() result for the existing-conversation path.
 let existingConversation: Record<string, unknown> | null = null
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: vi.fn(),
-  publishAgentChatEvent: vi.fn(),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: vi.fn(),
+  publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
 }))
 

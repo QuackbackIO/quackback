@@ -15,14 +15,14 @@ import { auth } from '@/lib/server/auth'
 import { verifyStreamToken } from '@/lib/server/realtime/stream-token'
 import {
   conversationChannel,
-  CHAT_INBOX_CHANNEL,
-  parseChatFrame,
+  CONVERSATION_INBOX_CHANNEL,
+  parseConversationFrame,
   isOwnTyping,
-  type ParsedChatFrame,
-} from '@/lib/server/realtime/chat-channels'
+  type ParsedConversationFrame,
+} from '@/lib/server/realtime/conversation-channels'
 import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
-import { canViewConversation } from '@/lib/server/policy/chat'
+import { canViewConversation } from '@/lib/server/policy/conversation'
 import { isTeamMember } from '@/lib/shared/roles'
 import {
   loadAuthors,
@@ -86,7 +86,10 @@ function sse(event: string, data: unknown, id?: string): string {
  *  the subscribe callback parses each payload once; an unparseable (null)
  *  frame passes through as a generic message. Pure — hoisted so it isn't
  *  re-created per connection. */
-function formatFrame(message: string, parsed: ParsedChatFrame): { id?: string; frame: string } {
+function formatFrame(
+  message: string,
+  parsed: ParsedConversationFrame
+): { id?: string; frame: string } {
   const eventName = parsed?.kind ?? 'message'
   const id = parsed?.kind === 'message' ? parsed.message?.id : undefined
   return {
@@ -132,7 +135,7 @@ export const Route = createFileRoute('/api/chat/stream')({
           if (!isTeamMember(me.role)) {
             return new Response('Forbidden', { status: 403 })
           }
-          channels.push(CHAT_INBOX_CHANNEL)
+          channels.push(CONVERSATION_INBOX_CHANNEL)
         } else if (scope === 'presence') {
           // App-wide agent presence: any admin page keeps a team member marked
           // online for routing. Heartbeat only — no channel subscription.
@@ -264,7 +267,7 @@ export const Route = createFileRoute('/api/chat/stream')({
               const liveBuffer: Array<{ id?: string; frame: string }> = []
 
               const unsub = await subscribe(channels, (_channel, message) => {
-                const event = parseChatFrame(message)
+                const event = parseConversationFrame(message)
                 // Never echo a subscriber's own typing back to them, on any
                 // surface — clients can treat every typing event they receive
                 // as someone else's.

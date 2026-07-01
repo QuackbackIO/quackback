@@ -17,10 +17,10 @@ import type {
 } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
-import { canActAsAgent } from '@/lib/server/policy/chat'
+import { canActAsAgent } from '@/lib/server/policy/conversation'
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { toMessageDTO, resolveAuthor, enrichMessageForAgent } from './conversation.query'
-import { publishAgentChatEvent } from '@/lib/server/realtime/chat-channels'
+import { publishAgentConversationEvent } from '@/lib/server/realtime/conversation-channels'
 import type { ChatAuthorInput, SendAgentMessageResult } from './conversation.types'
 
 export interface CardAgentCtx {
@@ -62,7 +62,7 @@ export async function sharePost(
  * Agent-only nudge: suggest the SUPPORT TEAM track a RESOLVED conversation as a
  * feedback post. Persisted as an INTERNAL note (isInternal=true) carrying the
  * suggestion under metadata.postSuggestion, and broadcast on the inbox channel
- * ONLY (publishAgentChatEvent) — so it NEVER reaches the visitor and never bumps
+ * ONLY (publishAgentConversationEvent) — so it NEVER reaches the visitor and never bumps
  * the visitor-facing last-message preview. Rejected unless the conversation is
  * resolved (closed); a team member confirms the suggestion with one click.
  */
@@ -122,7 +122,7 @@ export async function suggestPost(
   // never receives it.
   const base = toMessageDTO(message, await resolveAuthor(ctx.agent))
   const messageDTO = await enrichMessageForAgent(base, ctx.agent.principalId, postSuggestion)
-  publishAgentChatEvent({
+  publishAgentConversationEvent({
     kind: 'message',
     conversationId: input.conversationId,
     message: messageDTO,

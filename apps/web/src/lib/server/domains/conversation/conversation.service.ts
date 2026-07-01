@@ -19,7 +19,7 @@ import {
   principal,
   user,
   type Conversation,
-  type ChatSystemEvent,
+  type ConversationSystemEvent,
 } from '@/lib/server/db'
 import { isTeamMember } from '@/lib/shared/roles'
 import type { ConversationAttachment } from '@/lib/server/db'
@@ -32,7 +32,7 @@ import {
   canActAsAgent,
   canViewConversation,
   canDeleteMessage,
-} from '@/lib/server/policy/chat'
+} from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import {
   MAX_CONVERSATION_MESSAGE_LENGTH,
@@ -51,11 +51,11 @@ import {
   unreadWatermarkFromAnchor,
 } from './conversation.lifecycle'
 import {
-  publishChatEvent,
-  publishAgentChatEvent,
+  publishConversationEvent,
+  publishAgentConversationEvent,
   publishConversationUpdate,
   publishTyping,
-} from '@/lib/server/realtime/chat-channels'
+} from '@/lib/server/realtime/conversation-channels'
 import { truncate } from '@/lib/shared/utils/string'
 import {
   notifyVisitorMessage,
@@ -337,7 +337,7 @@ export async function sendVisitorMessage(
     const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
     publishConversationUpdate(agentDTO.id, agentDTO)
   }
-  publishChatEvent(messageDTO.conversationId, {
+  publishConversationEvent(messageDTO.conversationId, {
     kind: 'message',
     conversationId: messageDTO.conversationId,
     message: messageDTO,
@@ -487,7 +487,7 @@ export async function startAgentConversation(
   // agent-only fields from the visitor's copy.
   const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
   publishConversationUpdate(agentDTO.id, agentDTO)
-  publishChatEvent(messageDTO.conversationId, {
+  publishConversationEvent(messageDTO.conversationId, {
     kind: 'message',
     conversationId: messageDTO.conversationId,
     message: messageDTO,
@@ -584,7 +584,7 @@ export async function sendAgentMessage(
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
   publishConversationUpdate(conversationDTO.id, conversationDTO)
-  publishChatEvent(messageDTO.conversationId, {
+  publishConversationEvent(messageDTO.conversationId, {
     kind: 'message',
     conversationId: messageDTO.conversationId,
     message: messageDTO,
@@ -683,7 +683,7 @@ export async function addAgentNote(
   })
 
   // Agent inbox only — the visitor's conversation channel never receives it.
-  publishAgentChatEvent({ kind: 'message', conversationId, message: messageDTO })
+  publishAgentConversationEvent({ kind: 'message', conversationId, message: messageDTO })
 
   // Reload so the published DTO reflects current status/assignment rather
   // than the pre-write snapshot (the admin client replaces its cached
@@ -785,7 +785,7 @@ export async function endConversation(
 async function emitSystemMessage(
   conversationId: ConversationId,
   content: string,
-  systemEvent?: ChatSystemEvent
+  systemEvent?: ConversationSystemEvent
 ): Promise<void> {
   try {
     const [message] = await db
@@ -803,7 +803,11 @@ async function emitSystemMessage(
       })
       .returning()
     const messageDTO = toMessageDTO(message, null)
-    publishChatEvent(conversationId, { kind: 'message', conversationId, message: messageDTO })
+    publishConversationEvent(conversationId, {
+      kind: 'message',
+      conversationId,
+      message: messageDTO,
+    })
   } catch (err) {
     log.warn({ err }, 'emit system message failed')
   }
@@ -1041,13 +1045,13 @@ export async function deleteConversationMessage(
   // An internal note never reached the visitor, so its deletion must not either
   // (the message id would otherwise surface on the visitor's channel).
   if (message.isInternal) {
-    publishAgentChatEvent(deletedEvent)
+    publishAgentConversationEvent(deletedEvent)
   } else {
-    publishChatEvent(message.conversationId, deletedEvent)
+    publishConversationEvent(message.conversationId, deletedEvent)
   }
 
   // Internal-note deletion stays internal (no public webhook); mirror the
-  // publishChatEvent vs publishAgentChatEvent split above.
+  // publishConversationEvent vs publishAgentConversationEvent split above.
   if (!message.isInternal) {
     void emitMessageDeleted(actor, message, conversation)
   }
@@ -1149,7 +1153,7 @@ export async function markConversationRead(
     .update(conversations)
     .set(side === 'agent' ? { agentLastReadAt: now } : { visitorLastReadAt: now })
     .where(eq(conversations.id, conversation.id))
-  publishChatEvent(conversationId, {
+  publishConversationEvent(conversationId, {
     kind: 'read',
     conversationId,
     side,
@@ -1196,7 +1200,7 @@ export async function markConversationUnreadFromMessage(
     .update(conversations)
     .set({ agentLastReadAt: watermark })
     .where(eq(conversations.id, conversation.id))
-  publishAgentChatEvent({
+  publishAgentConversationEvent({
     kind: 'read',
     conversationId,
     side: 'agent',

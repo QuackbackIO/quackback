@@ -1,22 +1,22 @@
 /**
  * Reaction + flag publish routing (LEAK GUARD): every agent-only message action
- * must fan out on the inbox channel via publishAgentChatEvent ONLY — never via
- * publishChatEvent (which also reaches the visitor's conversation channel). The
+ * must fan out on the inbox channel via publishAgentConversationEvent ONLY — never via
+ * publishConversationEvent (which also reaches the visitor's conversation channel). The
  * agent gate and the system/deleted-message guards are exercised too.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationMessageId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
-const publishChatEvent = vi.fn()
-const publishAgentChatEvent = vi.fn()
+const publishConversationEvent = vi.fn()
+const publishAgentConversationEvent = vi.fn()
 
 // The row the message-load SELECT resolves to (set per test).
 let messageRow: Record<string, unknown> | null = null
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: (...a: unknown[]) => publishChatEvent(...a),
-  publishAgentChatEvent: (...a: unknown[]) => publishAgentChatEvent(...a),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: (...a: unknown[]) => publishConversationEvent(...a),
+  publishAgentConversationEvent: (...a: unknown[]) => publishAgentConversationEvent(...a),
   publishConversationUpdate: vi.fn(),
 }))
 
@@ -94,22 +94,24 @@ beforeEach(() => {
 describe('message reaction/flag publish routing', () => {
   it('adds a reaction on the inbox channel only', async () => {
     await addMessageReaction('chat_msg_1' as ConversationMessageId, '👍', agent)
-    expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
-    expect(publishAgentChatEvent.mock.calls[0][0]).toMatchObject({ kind: 'message_updated' })
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).toHaveBeenCalledTimes(1)
+    expect(publishAgentConversationEvent.mock.calls[0][0]).toMatchObject({
+      kind: 'message_updated',
+    })
+    expect(publishConversationEvent).not.toHaveBeenCalled()
   })
 
   it('removes a reaction on the inbox channel only', async () => {
     await removeMessageReaction('chat_msg_1' as ConversationMessageId, '👍', agent)
-    expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).toHaveBeenCalledTimes(1)
+    expect(publishConversationEvent).not.toHaveBeenCalled()
   })
 
   it('flags and unflags without broadcasting (a flag is personal)', async () => {
     await setMessageFlag('chat_msg_1' as ConversationMessageId, true, agent)
     await setMessageFlag('chat_msg_1' as ConversationMessageId, false, agent)
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
+    expect(publishConversationEvent).not.toHaveBeenCalled()
   })
 })
 
@@ -118,8 +120,8 @@ describe('message reaction/flag guards', () => {
     await expect(
       addMessageReaction('chat_msg_1' as ConversationMessageId, '👍', visitor)
     ).rejects.toThrow()
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
+    expect(publishConversationEvent).not.toHaveBeenCalled()
   })
 
   it('refuses reacting to a system message', async () => {
@@ -127,7 +129,7 @@ describe('message reaction/flag guards', () => {
     await expect(
       setMessageFlag('chat_msg_1' as ConversationMessageId, true, agent)
     ).rejects.toThrow()
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 
   it('refuses reacting to a soft-deleted message', async () => {
@@ -135,6 +137,6 @@ describe('message reaction/flag guards', () => {
     await expect(
       addMessageReaction('chat_msg_1' as ConversationMessageId, '👍', agent)
     ).rejects.toThrow()
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 })

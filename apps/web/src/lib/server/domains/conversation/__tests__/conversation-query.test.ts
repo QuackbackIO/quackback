@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationId, ConversationMessageId, PrincipalId, SegmentId } from '@quackback/ids'
 import type { Conversation, ConversationMessage } from '@/lib/server/db'
-import type { ChatAuthorDTO } from '@/lib/shared/conversation/types'
+import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 
 // Drives what the terminal db-chain promise resolves to per test.
 let principalRows: Array<{
@@ -100,7 +100,7 @@ const agentId = 'principal_agent' as PrincipalId
 const conversationId = 'conversation_1' as ConversationId
 const messageId = 'chat_msg_1' as ConversationMessageId
 
-const visitorAuthor: ChatAuthorDTO = {
+const visitorAuthor: ConversationAuthorDTO = {
   principalId: visitorId,
   displayName: 'Jane',
   avatarUrl: null,
@@ -234,7 +234,11 @@ describe('toConversationDTO', () => {
   })
 
   it('passes visitorEmail through when provided', () => {
-    const agent: ChatAuthorDTO = { principalId: agentId, displayName: 'Ann', avatarUrl: null }
+    const agent: ConversationAuthorDTO = {
+      principalId: agentId,
+      displayName: 'Ann',
+      avatarUrl: null,
+    }
     const dto = toConversationDTO(
       makeConversation({ csatRating: 5 }),
       visitorAuthor,

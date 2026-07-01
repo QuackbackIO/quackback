@@ -44,7 +44,7 @@ import { aggregateReactions } from '@/lib/shared'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { truncate } from '@/lib/shared/utils/string'
 import type {
-  ChatAuthorDTO,
+  ConversationAuthorDTO,
   ConversationMessageDTO,
   AgentConversationMessageDTO,
   MessageReactionCount,
@@ -62,9 +62,9 @@ const INBOX_PAGE_SIZE = 25
 /** Batch-load principal display info, returning a lookup map. */
 export async function loadAuthors(
   ids: ReadonlyArray<PrincipalId | null | undefined>
-): Promise<Map<PrincipalId, ChatAuthorDTO>> {
+): Promise<Map<PrincipalId, ConversationAuthorDTO>> {
   const unique = [...new Set(ids.filter((id): id is PrincipalId => !!id))]
-  const map = new Map<PrincipalId, ChatAuthorDTO>()
+  const map = new Map<PrincipalId, ConversationAuthorDTO>()
   if (unique.length === 0) return map
   // Resolve the avatar from the linked user (the canonical source, like the
   // team-member list): an external image URL, or the public URL of an uploaded
@@ -92,7 +92,7 @@ export async function loadAuthors(
   return map
 }
 
-export function fallbackAuthor(principalId: PrincipalId): ChatAuthorDTO {
+export function fallbackAuthor(principalId: PrincipalId): ConversationAuthorDTO {
   return { principalId, displayName: null, avatarUrl: null }
 }
 
@@ -101,7 +101,7 @@ export function authorFromInput(input: {
   principalId: PrincipalId
   displayName?: string | null
   avatarUrl?: string | null
-}): ChatAuthorDTO {
+}): ConversationAuthorDTO {
   return {
     principalId: input.principalId,
     displayName: input.displayName ?? null,
@@ -121,7 +121,7 @@ export async function resolveAuthor(input: {
   principalId: PrincipalId
   displayName?: string | null
   avatarUrl?: string | null
-}): Promise<ChatAuthorDTO> {
+}): Promise<ConversationAuthorDTO> {
   const resolved = (await loadAuthors([input.principalId])).get(input.principalId)
   if (!resolved) return authorFromInput(input)
   return {
@@ -133,7 +133,7 @@ export async function resolveAuthor(input: {
 
 export function toMessageDTO(
   message: ConversationMessage,
-  author: ChatAuthorDTO | null
+  author: ConversationAuthorDTO | null
 ): ConversationMessageDTO {
   return {
     id: message.id,
@@ -299,8 +299,8 @@ export async function listFlaggedMessages(
 
 export function toConversationDTO(
   conversation: Conversation,
-  visitor: ChatAuthorDTO,
-  assignedAgent: ChatAuthorDTO | null,
+  visitor: ConversationAuthorDTO,
+  assignedAgent: ConversationAuthorDTO | null,
   unreadCount: number,
   // Agent-only field; callers pass null on visitor-facing paths.
   visitorEmail: string | null = null,

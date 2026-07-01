@@ -15,12 +15,12 @@ import type {
 // locally (used below) and re-exported for the module's consumers.
 import type {
   ConversationStatus,
-  ChatSystemEvent,
+  ConversationSystemEvent,
   TiptapContent,
   ConversationEndReason,
 } from '@/lib/shared/db-types'
 import { CONVERSATION_END_REASONS } from '@/lib/shared/db-types'
-export type { ConversationStatus, ChatSystemEvent, ConversationEndReason }
+export type { ConversationStatus, ConversationSystemEvent, ConversationEndReason }
 export { CONVERSATION_END_REASONS }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 // 'system' = a status event (e.g. assignment) shown to both sides, rendered as
@@ -54,7 +54,7 @@ export interface OfficeHoursConfig {
 export type PreChatEmailMode = 'off' | 'optional' | 'required'
 
 /** Author identity attached to a rendered message. */
-export interface ChatAuthorDTO {
+export interface ConversationAuthorDTO {
   principalId: PrincipalId
   displayName: string | null
   avatarUrl: string | null
@@ -83,7 +83,7 @@ export interface ConversationMessageDTO {
   content: string
   createdAt: string
   /** Null for system events, which have no human author. */
-  author: ChatAuthorDTO | null
+  author: ConversationAuthorDTO | null
   attachments: ConversationAttachment[]
   /** Agent-only internal note — only ever present on agent-facing payloads. */
   isInternal: boolean
@@ -96,7 +96,7 @@ export interface ConversationMessageDTO {
   viaEmail: boolean
   /** Structured event for a 'system' message, so clients can localize it; null
    *  for ordinary messages (and legacy system rows, which fall back to content). */
-  systemEvent: ChatSystemEvent | null
+  systemEvent: ConversationSystemEvent | null
 }
 
 /** One emoji reaction bucket on a message. `hasReacted` is viewer-relative
@@ -155,8 +155,8 @@ export interface ConversationDTO {
   lastMessagePreview: string | null
   lastMessageAt: string
   createdAt: string
-  visitor: ChatAuthorDTO
-  assignedAgent: ChatAuthorDTO | null
+  visitor: ConversationAuthorDTO
+  assignedAgent: ConversationAuthorDTO | null
   /** Unread count for the side that requested it (0 when fully read). */
   unreadCount: number
   /** Read-receipt watermarks (ISO) used to render a "Seen" state. */
@@ -195,7 +195,7 @@ export const CONVERSATION_END_REASON_LABELS: Record<ConversationEndReason, strin
  * inbox stream can route across many threads. `message` events carry an
  * `id:` line equal to the message id for Last-Event-ID backfill.
  */
-export type ChatStreamEvent =
+export type ConversationStreamEvent =
   | { kind: 'message'; conversationId: ConversationId; message: ConversationMessageDTO }
   | { kind: 'conversation'; conversation: ConversationDTO }
   | {
@@ -220,7 +220,7 @@ export type ChatStreamEvent =
   | { kind: 'message_deleted'; conversationId: ConversationId; messageId: ConversationMessageId }
   // An existing message changed in an agent-only way (reaction or flag toggled).
   // Carries the enriched AgentConversationMessageDTO and is published on the inbox
-  // channel ONLY (publishAgentChatEvent) — it never reaches the visitor.
+  // channel ONLY (publishAgentConversationEvent) — it never reaches the visitor.
   | {
       kind: 'message_updated'
       conversationId: ConversationId

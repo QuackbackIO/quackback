@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { ChatStreamEvent } from '@/lib/shared/conversation/types'
+import type { ConversationStreamEvent } from '@/lib/shared/conversation/types'
 
 interface UseChatStreamOptions {
   /**
@@ -9,7 +9,7 @@ interface UseChatStreamOptions {
    */
   buildUrl: () => Promise<string | null>
   enabled: boolean
-  onEvent: (event: ChatStreamEvent) => void
+  onEvent: (event: ConversationStreamEvent) => void
   /**
    * Called after a reconnect (not the first connect). Use it to refetch state
    * so any events missed while disconnected are caught up — we recreate the
@@ -62,7 +62,7 @@ export function useConversationStream({
 
     const handle = (e: MessageEvent) => {
       try {
-        onEventRef.current(JSON.parse(e.data) as ChatStreamEvent)
+        onEventRef.current(JSON.parse(e.data) as ConversationStreamEvent)
       } catch {
         /* ignore malformed payloads */
       }

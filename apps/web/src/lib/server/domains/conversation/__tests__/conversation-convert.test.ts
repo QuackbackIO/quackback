@@ -25,7 +25,7 @@ const createComment = vi.fn()
 const insertedLinks: Record<string, unknown>[] = []
 let onConflictHit = false
 
-vi.mock('@/lib/server/policy/chat', () => ({
+vi.mock('@/lib/server/policy/conversation', () => ({
   canActAsAgent: (actor: Actor) => canActAsAgent(actor),
 }))
 

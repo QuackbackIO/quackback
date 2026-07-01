@@ -10,7 +10,7 @@ import type { ConversationId, PostId, BoardId, PrincipalId } from '@quackback/id
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 import { config } from '@/lib/server/config'
 import type { Actor } from '@/lib/server/policy/types'
-import { canActAsAgent } from '@/lib/server/policy/chat'
+import { canActAsAgent } from '@/lib/server/policy/conversation'
 import { assertConversationViewable } from './conversation.service'
 import type { ChatAuthorInput } from './conversation.types'
 

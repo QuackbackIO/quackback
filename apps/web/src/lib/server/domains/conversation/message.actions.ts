@@ -16,9 +16,9 @@ import {
 } from '@/lib/server/db'
 import type { ConversationMessageId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
-import { canActAsAgent } from '@/lib/server/policy/chat'
+import { canActAsAgent } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
-import { publishAgentChatEvent } from '@/lib/server/realtime/chat-channels'
+import { publishAgentConversationEvent } from '@/lib/server/realtime/conversation-channels'
 import {
   loadAuthors,
   fallbackAuthor,
@@ -72,7 +72,7 @@ async function publishMessageUpdated(
     viewerPrincipalId,
     message.metadata?.postSuggestion ?? null
   )
-  publishAgentChatEvent({
+  publishAgentConversationEvent({
     kind: 'message_updated',
     conversationId: message.conversationId,
     message: enriched,

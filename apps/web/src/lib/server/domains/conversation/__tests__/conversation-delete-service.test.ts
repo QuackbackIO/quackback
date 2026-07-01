@@ -1,14 +1,14 @@
 /**
  * deleteConversationMessage routing: a public message's deletion fans out to the visitor
- * via publishChatEvent, but an internal note's deletion must stay on the agent
+ * via publishConversationEvent, but an internal note's deletion must stay on the agent
  * inbox channel (the visitor never saw the note, so its id must not surface).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationMessageId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
-const publishChatEvent = vi.fn()
-const publishAgentChatEvent = vi.fn()
+const publishConversationEvent = vi.fn()
+const publishAgentConversationEvent = vi.fn()
 // The message row the initial SELECT resolves to (set per test).
 let messageRow: Record<string, unknown> | null = null
 
@@ -26,9 +26,9 @@ const emit = vi.hoisted(() => ({
 }))
 vi.mock('../conversation.webhooks', () => emit)
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: (...a: unknown[]) => publishChatEvent(...a),
-  publishAgentChatEvent: (...a: unknown[]) => publishAgentChatEvent(...a),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: (...a: unknown[]) => publishConversationEvent(...a),
+  publishAgentConversationEvent: (...a: unknown[]) => publishAgentConversationEvent(...a),
   publishConversationUpdate: vi.fn(),
 }))
 
@@ -105,8 +105,8 @@ describe('deleteConversationMessage publish routing', () => {
       deletedAt: null,
     }
     await deleteConversationMessage('chat_msg_1' as ConversationMessageId, agentActor)
-    expect(publishChatEvent).toHaveBeenCalledTimes(1)
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    expect(publishConversationEvent).toHaveBeenCalledTimes(1)
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
     // A public deletion fires the public message.deleted webhook.
     expect(emit.emitMessageDeleted).toHaveBeenCalledTimes(1)
   })
@@ -121,8 +121,8 @@ describe('deleteConversationMessage publish routing', () => {
       deletedAt: null,
     }
     await deleteConversationMessage('chat_msg_note' as ConversationMessageId, agentActor)
-    expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).toHaveBeenCalledTimes(1)
+    expect(publishConversationEvent).not.toHaveBeenCalled()
     // The note never reached the visitor, so its deletion fires no public webhook.
     expect(emit.emitMessageDeleted).not.toHaveBeenCalled()
   })

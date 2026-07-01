@@ -10,12 +10,12 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const publish = vi.hoisted(() => ({
-  publishChatEvent: vi.fn(),
-  publishAgentChatEvent: vi.fn(),
+  publishConversationEvent: vi.fn(),
+  publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),
 }))
-vi.mock('@/lib/server/realtime/chat-channels', () => publish)
+vi.mock('@/lib/server/realtime/conversation-channels', () => publish)
 
 vi.mock('../conversation.webhooks', () => ({
   emitConversationCreated: vi.fn(),
@@ -171,7 +171,7 @@ describe('markConversationRead side derivation', () => {
   it('a team member reading SOMEONE ELSE’s conversation stamps the agent watermark', async () => {
     await markConversationRead(conversationId, teamActor('principal_agent'))
     expect(mocks.updateSets.at(-1)).toHaveProperty('agentLastReadAt')
-    expect(publish.publishChatEvent).toHaveBeenCalledWith(
+    expect(publish.publishConversationEvent).toHaveBeenCalledWith(
       conversationId,
       expect.objectContaining({ kind: 'read', side: 'agent' })
     )
@@ -180,7 +180,7 @@ describe('markConversationRead side derivation', () => {
   it('a team member reading THEIR OWN conversation stamps the visitor watermark', async () => {
     await markConversationRead(conversationId, teamActor('principal_owner'))
     expect(mocks.updateSets.at(-1)).toHaveProperty('visitorLastReadAt')
-    expect(publish.publishChatEvent).toHaveBeenCalledWith(
+    expect(publish.publishConversationEvent).toHaveBeenCalledWith(
       conversationId,
       expect.objectContaining({ kind: 'read', side: 'visitor' })
     )

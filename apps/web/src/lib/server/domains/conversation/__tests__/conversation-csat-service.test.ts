@@ -26,9 +26,9 @@ const emit = vi.hoisted(() => ({
 }))
 vi.mock('../conversation.webhooks', () => emit)
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: vi.fn(),
-  publishAgentChatEvent: vi.fn(),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: vi.fn(),
+  publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: (...a: unknown[]) => publishConversationUpdate(...a),
 }))
 

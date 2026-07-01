@@ -10,8 +10,8 @@ import type { Actor } from '@/lib/server/policy/types'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
 
 const insertedMessages: Record<string, unknown>[] = []
-const publishChatEvent = vi.fn()
-const publishAgentChatEvent = vi.fn()
+const publishConversationEvent = vi.fn()
+const publishAgentConversationEvent = vi.fn()
 const syncConversationMessageMentions = vi.fn()
 
 // Hoisted so the (also-hoisted) vi.mock factory can reference the spy bag.
@@ -28,9 +28,9 @@ const emit = vi.hoisted(() => ({
 }))
 vi.mock('../conversation.webhooks', () => emit)
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: (...args: unknown[]) => publishChatEvent(...args),
-  publishAgentChatEvent: (...args: unknown[]) => publishAgentChatEvent(...args),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: (...args: unknown[]) => publishConversationEvent(...args),
+  publishAgentConversationEvent: (...args: unknown[]) => publishAgentConversationEvent(...args),
 }))
 
 vi.mock('@/lib/server/config', () => ({
@@ -169,9 +169,9 @@ describe('addAgentNote', () => {
 
   it('publishes ONLY to the agent inbox, never the visitor conversation channel', async () => {
     await addAgentNote(conversationId, 'internal', agent, agentActor)
-    expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
+    expect(publishAgentConversationEvent).toHaveBeenCalledTimes(1)
     // The visitor's conversation channel must never receive an internal note.
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    expect(publishConversationEvent).not.toHaveBeenCalled()
   })
 
   it('emits the note_created webhook, not the public message_created one', async () => {
@@ -217,9 +217,9 @@ describe('addAgentNote', () => {
       content: [{ type: 'paragraph' }],
     })
     expect(syncConversationMessageMentions).toHaveBeenCalled()
-    expect(publishAgentChatEvent).toHaveBeenCalled()
+    expect(publishAgentConversationEvent).toHaveBeenCalled()
     expect(syncConversationMessageMentions.mock.invocationCallOrder[0]).toBeLessThan(
-      publishAgentChatEvent.mock.invocationCallOrder[0]
+      publishAgentConversationEvent.mock.invocationCallOrder[0]
     )
   })
 
@@ -249,7 +249,7 @@ describe('addAgentNote', () => {
       addAgentNote(conversationId, 'sneaky', agent, visitorActor)
     ).rejects.toBeInstanceOf(ForbiddenError)
     expect(insertedMessages).toHaveLength(0)
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 
   it('rejects empty content before any write', async () => {

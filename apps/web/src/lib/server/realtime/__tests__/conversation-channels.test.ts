@@ -12,14 +12,14 @@ vi.mock('../pubsub', () => ({ publish: (...args: unknown[]) => publish(...args) 
 
 import {
   conversationChannel,
-  CHAT_INBOX_CHANNEL,
-  publishChatEvent,
-  publishAgentChatEvent,
+  CONVERSATION_INBOX_CHANNEL,
+  publishConversationEvent,
+  publishAgentConversationEvent,
   publishConversationUpdate,
   publishTyping,
-  parseChatFrame,
+  parseConversationFrame,
   isOwnTyping,
-} from '../chat-channels'
+} from '../conversation-channels'
 
 const conversationId = 'conversation_1' as ConversationId
 
@@ -47,20 +47,25 @@ const agentDto = {
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('publishChatEvent', () => {
+describe('publishConversationEvent', () => {
   it('fans out to both the conversation channel and the inbox', () => {
-    publishChatEvent(conversationId, { kind: 'read', conversationId, side: 'agent', at: 'x' })
+    publishConversationEvent(conversationId, {
+      kind: 'read',
+      conversationId,
+      side: 'agent',
+      at: 'x',
+    })
     const channels = publish.mock.calls.map((c) => c[0])
     expect(channels).toContain(conversationChannel(conversationId))
-    expect(channels).toContain(CHAT_INBOX_CHANNEL)
+    expect(channels).toContain(CONVERSATION_INBOX_CHANNEL)
   })
 })
 
-describe('publishAgentChatEvent', () => {
+describe('publishAgentConversationEvent', () => {
   it('publishes to the inbox channel ONLY (never the visitor conversation channel)', () => {
-    publishAgentChatEvent({ kind: 'conversation', conversation: agentDto })
+    publishAgentConversationEvent({ kind: 'conversation', conversation: agentDto })
     expect(publish).toHaveBeenCalledTimes(1)
-    expect(publish.mock.calls[0][0]).toBe(CHAT_INBOX_CHANNEL)
+    expect(publish.mock.calls[0][0]).toBe(CONVERSATION_INBOX_CHANNEL)
   })
 })
 
@@ -68,7 +73,7 @@ describe('publishConversationUpdate', () => {
   it('sends the full DTO to the inbox and strips ALL agent-only fields for the visitor', () => {
     publishConversationUpdate(conversationId, agentDto)
 
-    const inbox = publish.mock.calls.find((c) => c[0] === CHAT_INBOX_CHANNEL)
+    const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
     const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
     expect(inbox).toBeDefined()
     expect(visitor).toBeDefined()
@@ -91,7 +96,7 @@ describe('publishTyping', () => {
   it('agent side: sends the typist id only to the inbox, never to the visitor channel', () => {
     publishTyping(conversationId, 'agent', '2026-01-01T00:00:00.000Z', 'principal_agent' as never)
 
-    const inbox = publish.mock.calls.find((c) => c[0] === CHAT_INBOX_CHANNEL)
+    const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
     const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
 
     // Inbox carries the typist id (collision detection + self-suppression)...
@@ -108,7 +113,7 @@ describe('publishTyping', () => {
   it('visitor side: carries the typist id on BOTH channels so every stream can drop the echo', () => {
     publishTyping(conversationId, 'visitor', '2026-01-01T00:00:00.000Z', 'principal_owner' as never)
 
-    const inbox = publish.mock.calls.find((c) => c[0] === CHAT_INBOX_CHANNEL)
+    const inbox = publish.mock.calls.find((c) => c[0] === CONVERSATION_INBOX_CHANNEL)
     const visitor = publish.mock.calls.find((c) => c[0] === conversationChannel(conversationId))
 
     // Inbox: a team member typing in a conversation they OWN signals the
@@ -129,7 +134,7 @@ describe('publishTyping', () => {
 })
 
 describe('isOwnTyping', () => {
-  const frame = (e: unknown) => parseChatFrame(JSON.stringify(e))
+  const frame = (e: unknown) => parseConversationFrame(JSON.stringify(e))
 
   it('suppresses a typing frame from the same principal, on either side', () => {
     expect(
@@ -146,6 +151,6 @@ describe('isOwnTyping', () => {
     ).toBe(false)
     expect(isOwnTyping(frame({ kind: 'typing', side: 'visitor' }), 'p1')).toBe(false)
     expect(isOwnTyping(frame({ kind: 'message', typistPrincipalId: 'p1' }), 'p1')).toBe(false)
-    expect(isOwnTyping(parseChatFrame('not json{'), 'p1')).toBe(false)
+    expect(isOwnTyping(parseConversationFrame('not json{'), 'p1')).toBe(false)
   })
 })

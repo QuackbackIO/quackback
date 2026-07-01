@@ -10,7 +10,7 @@ import type { Actor } from '@/lib/server/policy/types'
 import { ForbiddenError } from '@/lib/shared/errors'
 
 const insertedMessages: Record<string, unknown>[] = []
-const publishChatEvent = vi.fn()
+const publishConversationEvent = vi.fn()
 const publishConversationUpdate = vi.fn()
 
 // Hoisted so the (also-hoisted) vi.mock factory can reference the spy bag.
@@ -27,9 +27,9 @@ const emit = vi.hoisted(() => ({
 }))
 vi.mock('../conversation.webhooks', () => emit)
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: (...args: unknown[]) => publishChatEvent(...args),
-  publishAgentChatEvent: vi.fn(),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: (...args: unknown[]) => publishConversationEvent(...args),
+  publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: (...args: unknown[]) => publishConversationUpdate(...args),
 }))
 

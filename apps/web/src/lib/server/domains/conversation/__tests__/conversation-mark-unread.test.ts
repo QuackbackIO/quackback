@@ -1,6 +1,6 @@
 /**
  * markConversationUnreadFromMessage routing (LEAK GUARD): moving the agent
- * read-watermark backward must stay on the inbox channel (publishAgentChatEvent)
+ * read-watermark backward must stay on the inbox channel (publishAgentConversationEvent)
  * so the visitor never sees a "seen" indicator revert. Also covers the agent
  * gate and the backwards-only watermark.
  */
@@ -8,16 +8,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PrincipalId, ConversationMessageId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
-const publishChatEvent = vi.fn()
-const publishAgentChatEvent = vi.fn()
+const publishConversationEvent = vi.fn()
+const publishAgentConversationEvent = vi.fn()
 
 // The agent watermark + anchor createdAt that the SELECTs resolve to.
 let agentLastReadAt: Date | null = null
 let messageRow: Record<string, unknown> | null = null
 
-vi.mock('@/lib/server/realtime/chat-channels', () => ({
-  publishChatEvent: (...a: unknown[]) => publishChatEvent(...a),
-  publishAgentChatEvent: (...a: unknown[]) => publishAgentChatEvent(...a),
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({
+  publishConversationEvent: (...a: unknown[]) => publishConversationEvent(...a),
+  publishAgentConversationEvent: (...a: unknown[]) => publishAgentConversationEvent(...a),
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),
 }))
@@ -98,13 +98,13 @@ describe('markConversationUnreadFromMessage', () => {
       'chat_msg_1' as ConversationMessageId,
       agent
     )
-    expect(publishAgentChatEvent).toHaveBeenCalledTimes(1)
-    expect(publishAgentChatEvent.mock.calls[0][0]).toMatchObject({
+    expect(publishAgentConversationEvent).toHaveBeenCalledTimes(1)
+    expect(publishAgentConversationEvent.mock.calls[0][0]).toMatchObject({
       kind: 'read',
       side: 'agent',
       at: new Date(anchorCreatedAt.getTime() - 1).toISOString(),
     })
-    expect(publishChatEvent).not.toHaveBeenCalled()
+    expect(publishConversationEvent).not.toHaveBeenCalled()
   })
 
   it('refuses a non-team actor', async () => {
@@ -115,7 +115,7 @@ describe('markConversationUnreadFromMessage', () => {
         visitor
       )
     ).rejects.toThrow()
-    expect(publishAgentChatEvent).not.toHaveBeenCalled()
+    expect(publishAgentConversationEvent).not.toHaveBeenCalled()
   })
 
   it('404s an anchor that does not belong to the conversation', async () => {

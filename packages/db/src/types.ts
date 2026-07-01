@@ -347,14 +347,16 @@ export interface ConversationAttachment {
   size: number
 }
 
-// Channel provenance stored on a chat message (chat_messages.metadata). Null for
-// ordinary in-app live-chat messages; set when a message arrives over another
-// channel so the inbox can render it and dedupe provider retries.
-/** Author-less 'system' status events (chat ended/reopened, assignment). */
-export type ChatSystemEventKind = 'chat_ended' | 'chat_reopened' | 'assigned'
+// Channel provenance stored on a conversation message (conversation_messages.metadata).
+// Null for ordinary in-app messenger messages; set when a message arrives over
+// another channel so the inbox can render it and dedupe provider retries.
+/** Author-less 'system' status events (conversation ended/reopened, assignment). */
+// NOTE: the stored kind values keep the chat_ prefix until the Phase B data
+// migration rewrites conversation_messages.metadata.
+export type ConversationSystemEventKind = 'chat_ended' | 'chat_reopened' | 'assigned'
 
-export interface ChatSystemEvent {
-  kind: ChatSystemEventKind
+export interface ConversationSystemEvent {
+  kind: ConversationSystemEventKind
   /** Assignee display name for 'assigned'. */
   agentName?: string
 }
@@ -375,7 +377,7 @@ export interface ConversationMessageMetadata {
   emailMessageId?: string
   /** For 'system' messages: the structured event, so clients can localize the
    *  notice instead of rendering the stored (English) content. */
-  systemEvent?: ChatSystemEvent
+  systemEvent?: ConversationSystemEvent
   /** Agent-only suggestion (on an internal note) to track this conversation as a
    *  feedback post. Surfaced only via the agent DTO, never to the visitor. */
   postSuggestion?: PostSuggestion

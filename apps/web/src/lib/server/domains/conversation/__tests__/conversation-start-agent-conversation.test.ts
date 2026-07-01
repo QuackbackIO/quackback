@@ -35,11 +35,11 @@ const notify = vi.hoisted(() => ({
 vi.mock('../conversation.notify', () => notify)
 
 const publish = vi.hoisted(() => ({
-  publishChatEvent: vi.fn(),
-  publishAgentChatEvent: vi.fn(),
+  publishConversationEvent: vi.fn(),
+  publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
 }))
-vi.mock('@/lib/server/realtime/chat-channels', () => publish)
+vi.mock('@/lib/server/realtime/conversation-channels', () => publish)
 
 vi.mock('../routing', () => ({
   routeConversation: vi.fn(async () => null),
@@ -283,7 +283,7 @@ describe('startAgentConversation happy path', () => {
     )
 
     expect(publish.publishConversationUpdate).toHaveBeenCalledTimes(1)
-    expect(publish.publishChatEvent).toHaveBeenCalledWith(
+    expect(publish.publishConversationEvent).toHaveBeenCalledWith(
       'conversation_outbound',
       expect.objectContaining({ kind: 'message' })
     )
