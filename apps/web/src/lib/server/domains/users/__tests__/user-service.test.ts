@@ -88,7 +88,7 @@ vi.mock('@/lib/server/db', () => ({
   },
   posts: {},
   comments: {},
-  votes: {},
+  postVotes: {},
   postStatuses: {},
   boards: {},
   userSegments: {},

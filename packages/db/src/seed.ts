@@ -25,7 +25,7 @@ import type {
 } from '@quackback/ids'
 import { user, account, settings, principal } from './schema/auth'
 import { boards, postTags, roadmaps } from './schema/boards'
-import { posts, postTagAssignments, postRoadmaps, votes, comments } from './schema/posts'
+import { posts, postTagAssignments, postRoadmaps, postVotes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
 import { changelogEntries, changelogEntryPosts } from './schema/changelog'
 import { segments } from './schema/segments'
@@ -549,7 +549,7 @@ async function seed() {
 
     // Create votes (sample, not all) - votes require principalId
     console.log('Creating votes...')
-    const voteInserts: (typeof votes.$inferInsert)[] = []
+    const voteInserts: (typeof postVotes.$inferInsert)[] = []
     for (const post of postRecords) {
       const numVotes = Math.min(post.voteCount, principals.length) // Cap at number of principals
       const shuffledPrincipals = [...principals].sort(() => Math.random() - 0.5)
@@ -563,7 +563,7 @@ async function seed() {
     }
     for (let i = 0; i < voteInserts.length; i += BATCH_SIZE) {
       await db
-        .insert(votes)
+        .insert(postVotes)
         .values(voteInserts.slice(i, i + BATCH_SIZE))
         .onConflictDoNothing() // Skip duplicate votes (same principal + post)
     }

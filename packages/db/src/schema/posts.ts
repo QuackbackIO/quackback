@@ -195,8 +195,8 @@ export const postRoadmaps = pgTable(
   ]
 )
 
-export const votes = pgTable(
-  'votes',
+export const postVotes = pgTable(
+  'post_votes',
   {
     id: typeIdWithDefault('vote')('id').primaryKey(),
     postId: typeIdColumn('post')('post_id')
@@ -222,13 +222,13 @@ export const votes = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('votes_post_id_idx').on(table.postId),
+    index('post_votes_post_id_idx').on(table.postId),
     // Unique constraint: one vote per principal per post
-    uniqueIndex('votes_principal_post_idx').on(table.postId, table.principalId),
-    index('votes_principal_id_idx').on(table.principalId),
-    index('votes_principal_created_at_idx').on(table.principalId, table.createdAt),
+    uniqueIndex('post_votes_principal_post_idx').on(table.postId, table.principalId),
+    index('post_votes_principal_id_idx').on(table.principalId),
+    index('post_votes_principal_created_at_idx').on(table.principalId, table.createdAt),
     // Partial index for finding integration-sourced votes
-    index('votes_source_type_idx')
+    index('post_votes_source_type_idx')
       .on(table.sourceType)
       .where(sql`source_type IS NOT NULL`),
   ]
@@ -422,7 +422,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     references: [principal.id],
     relationName: 'postMergedBy',
   }),
-  votes: many(votes),
+  votes: many(postVotes),
   comments: many(comments),
   tags: many(postTagAssignments),
   roadmaps: many(postRoadmaps),
@@ -442,13 +442,13 @@ export const postRoadmapsRelations = relations(postRoadmaps, ({ one }) => ({
   }),
 }))
 
-export const votesRelations = relations(votes, ({ one }) => ({
+export const postVotesRelations = relations(postVotes, ({ one }) => ({
   post: one(posts, {
-    fields: [votes.postId],
+    fields: [postVotes.postId],
     references: [posts.id],
   }),
   feedbackSuggestion: one(feedbackSuggestions, {
-    fields: [votes.feedbackSuggestionId],
+    fields: [postVotes.feedbackSuggestionId],
     references: [feedbackSuggestions.id],
     relationName: 'feedbackSuggestionVotes',
   }),

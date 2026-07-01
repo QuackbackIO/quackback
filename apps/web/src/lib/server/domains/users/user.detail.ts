@@ -17,7 +17,7 @@ import {
   user,
   posts,
   comments,
-  votes,
+  postVotes,
   postStatuses,
   boards,
   userSegments,
@@ -157,13 +157,13 @@ export async function getPortalUserDetail(
       // Get post IDs the user has voted on (via indexed principalId column)
       db
         .select({
-          postId: votes.postId,
-          votedAt: votes.createdAt,
+          postId: postVotes.postId,
+          votedAt: postVotes.createdAt,
         })
-        .from(votes)
-        .innerJoin(posts, eq(posts.id, votes.postId))
-        .where(and(eq(votes.principalId, principalData.principalId), isNull(posts.deletedAt)))
-        .orderBy(desc(votes.createdAt))
+        .from(postVotes)
+        .innerJoin(posts, eq(posts.id, postVotes.postId))
+        .where(and(eq(postVotes.principalId, principalData.principalId), isNull(posts.deletedAt)))
+        .orderBy(desc(postVotes.createdAt))
         .limit(100),
     ])
 

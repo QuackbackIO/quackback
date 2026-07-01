@@ -6,7 +6,7 @@ import type {
   posts,
   postRoadmaps,
   postTagAssignments,
-  votes,
+  postVotes,
   comments,
   postCommentReactions,
   postNotes,
@@ -280,8 +280,8 @@ export type PostRoadmap = InferSelectModel<typeof postRoadmaps>
 export type NewPostRoadmap = InferInsertModel<typeof postRoadmaps>
 
 // Vote types
-export type Vote = InferSelectModel<typeof votes>
-export type NewVote = InferInsertModel<typeof votes>
+export type PostVote = InferSelectModel<typeof postVotes>
+export type NewPostVote = InferInsertModel<typeof postVotes>
 
 // Comment types
 export type Comment = InferSelectModel<typeof comments>
@@ -425,7 +425,7 @@ export type PostWithDetails = Post & {
   tags: PostTag[]
   roadmaps: Roadmap[]
   comments: CommentWithReplies[]
-  votes: Vote[]
+  votes: PostVote[]
 }
 
 // Inbox query types

@@ -8,7 +8,7 @@ import { type PostId, type PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { SubscriptionLevel } from '@/lib/server/domains/subscriptions/subscription.service'
-import { db, votes, eq, and } from '@/lib/server/db'
+import { db, postVotes, eq, and } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'subscriptions' })
@@ -174,9 +174,11 @@ export const adminUpdateVoterSubscriptionFn = createServerFn({ method: 'POST' })
 
       // Verify the principal actually has a vote on this post
       const [vote] = await db
-        .select({ id: votes.id })
-        .from(votes)
-        .where(and(eq(votes.postId, targetPostId), eq(votes.principalId, targetPrincipalId)))
+        .select({ id: postVotes.id })
+        .from(postVotes)
+        .where(
+          and(eq(postVotes.postId, targetPostId), eq(postVotes.principalId, targetPrincipalId))
+        )
         .limit(1)
       if (!vote) {
         throw new Error('Principal does not have a vote on this post')

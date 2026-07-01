@@ -98,7 +98,7 @@ vi.mock('@/lib/server/db', () => ({
     id: 'id',
     voteCount: 'vote_count',
   },
-  votes: {},
+  postVotes: {},
   rawFeedbackItems: {},
   postStatuses: {
     isDefault: 'is_default',

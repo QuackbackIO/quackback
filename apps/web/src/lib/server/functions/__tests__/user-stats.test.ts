@@ -29,7 +29,7 @@ vi.mock('@/lib/server/db', () => {
       }),
     },
     posts: { principalId: 'principalId', deletedAt: 'deletedAt' },
-    votes: { principalId: 'principalId' },
+    postVotes: { principalId: 'principalId' },
     comments: { principalId: 'principalId', deletedAt: 'deletedAt' },
     user: {},
     principal: {},

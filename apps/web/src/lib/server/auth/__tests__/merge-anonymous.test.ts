@@ -41,7 +41,7 @@ vi.mock('@/lib/server/db', () => ({
   db: {
     transaction: (fn: unknown) => mockTransaction(fn),
   },
-  votes: { principalId: 'principalId', postId: 'postId', __name: 'votes' },
+  postVotes: { principalId: 'principalId', postId: 'postId', __name: 'post_votes' },
   comments: { principalId: 'principalId', id: 'id', __name: 'comments' },
   posts: { principalId: 'principalId', __name: 'posts' },
   conversations: {
@@ -101,7 +101,7 @@ describe('mergeAnonymousToIdentified', () => {
     await mergeAnonymousToIdentified(defaultParams)
 
     // Should update votes table
-    expect(operations).toContain('update:votes')
+    expect(operations).toContain('update:post_votes')
   })
 
   it('deletes conflicting votes before transfer', async () => {
@@ -112,7 +112,7 @@ describe('mergeAnonymousToIdentified', () => {
 
     // Should delete conflicting anon votes before updating
     const voteOps = operations.filter((op) => op.includes('votes'))
-    expect(voteOps).toEqual(['delete:votes', 'update:votes'])
+    expect(voteOps).toEqual(['delete:post_votes', 'update:post_votes'])
   })
 
   it('skips conflict deletion when target has no existing votes', async () => {
@@ -123,7 +123,7 @@ describe('mergeAnonymousToIdentified', () => {
 
     // The first votes operation should be update (no delete needed)
     const firstVoteOp = operations.find((op) => op.includes('votes'))
-    expect(firstVoteOp).toBe('update:votes')
+    expect(firstVoteOp).toBe('update:post_votes')
   })
 
   it('transfers comments from anonymous to target principal', async () => {

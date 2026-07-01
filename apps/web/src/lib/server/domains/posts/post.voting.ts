@@ -7,7 +7,7 @@
 import {
   db,
   posts,
-  votes,
+  postVotes,
   postSubscriptions,
   boards,
   principal,
@@ -77,16 +77,16 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
         AND deleted_at IS NULL
     ),
     existing AS (
-      SELECT id FROM ${votes}
+      SELECT id FROM ${postVotes}
       WHERE post_id = ${postUuid}::uuid AND principal_id = ${principalUuid}::uuid
     ),
     deleted AS (
-      DELETE FROM ${votes}
+      DELETE FROM ${postVotes}
       WHERE id IN (SELECT id FROM existing)
       RETURNING id
     ),
     inserted AS (
-      INSERT INTO ${votes} (id, post_id, principal_id, updated_at)
+      INSERT INTO ${postVotes} (id, post_id, principal_id, updated_at)
       SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, NOW()
       WHERE NOT EXISTS (SELECT 1 FROM existing)
         AND EXISTS (SELECT 1 FROM post_check)
@@ -198,7 +198,7 @@ export async function addVoteOnBehalf(
         AND deleted_at IS NULL
     ),
     inserted AS (
-      INSERT INTO ${votes} (id, post_id, principal_id, source_type, source_external_url, feedback_suggestion_id, added_by_principal_id, created_at, updated_at)
+      INSERT INTO ${postVotes} (id, post_id, principal_id, source_type, source_external_url, feedback_suggestion_id, added_by_principal_id, created_at, updated_at)
       SELECT ${voteId}::uuid, ${postUuid}::uuid, ${principalUuid}::uuid, ${sourceType}, ${sourceExternalUrl}, ${suggestionUuid}::uuid, ${addedByUuid}::uuid, ${createdAtSql}, ${createdAtSql}
       WHERE EXISTS (SELECT 1 FROM post_check)
         AND EXISTS (SELECT 1 FROM board_check)
@@ -273,7 +273,7 @@ export async function removeVote(
       WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
     ),
     deleted AS (
-      DELETE FROM ${votes}
+      DELETE FROM ${postVotes}
       WHERE post_id = ${postUuid}::uuid
         AND principal_id = ${principalUuid}::uuid
         AND EXISTS (SELECT 1 FROM post_check)
@@ -319,28 +319,28 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
       email: user.email,
       avatarUrl: principal.avatarUrl,
       principalType: principal.type,
-      sourceType: votes.sourceType,
-      sourceExternalUrl: votes.sourceExternalUrl,
+      sourceType: postVotes.sourceType,
+      sourceExternalUrl: postVotes.sourceExternalUrl,
       addedByName: sql<string | null>`(
         SELECT p2.display_name FROM ${principal} p2
-        WHERE p2.id = ${votes.addedByPrincipalId}
+        WHERE p2.id = ${postVotes.addedByPrincipalId}
       )`.as('added_by_name'),
-      createdAt: votes.createdAt,
+      createdAt: postVotes.createdAt,
       notifyComments: postSubscriptions.notifyComments,
       notifyStatusChanges: postSubscriptions.notifyStatusChanges,
     })
-    .from(votes)
-    .innerJoin(principal, eq(principal.id, votes.principalId))
+    .from(postVotes)
+    .innerJoin(principal, eq(principal.id, postVotes.principalId))
     .leftJoin(user, eq(user.id, principal.userId))
     .leftJoin(
       postSubscriptions,
       and(
-        eq(postSubscriptions.postId, votes.postId),
-        eq(postSubscriptions.principalId, votes.principalId)
+        eq(postSubscriptions.postId, postVotes.postId),
+        eq(postSubscriptions.principalId, postVotes.principalId)
       )
     )
-    .where(eq(votes.postId, postId))
-    .orderBy(desc(votes.createdAt))
+    .where(eq(postVotes.postId, postId))
+    .orderBy(desc(postVotes.createdAt))
 
   return rows.map((row) => {
     const isAnonymous = row.principalType === 'anonymous'

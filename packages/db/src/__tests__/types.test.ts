@@ -12,8 +12,8 @@ import type {
   NewPostTagAssignment,
   PostRoadmap,
   NewPostRoadmap,
-  Vote,
-  NewVote,
+  PostVote,
+  NewPostVote,
   Comment,
   NewComment,
   PostCommentReaction,
@@ -133,17 +133,17 @@ describe('Type definitions', () => {
     })
   })
 
-  describe('Vote types', () => {
-    it('Vote has correct shape', () => {
-      expectTypeOf<Vote>().toHaveProperty('id')
-      expectTypeOf<Vote>().toHaveProperty('postId')
-      expectTypeOf<Vote>().toHaveProperty('principalId')
-      expectTypeOf<Vote>().toHaveProperty('createdAt')
+  describe('PostVote types', () => {
+    it('PostVote has correct shape', () => {
+      expectTypeOf<PostVote>().toHaveProperty('id')
+      expectTypeOf<PostVote>().toHaveProperty('postId')
+      expectTypeOf<PostVote>().toHaveProperty('principalId')
+      expectTypeOf<PostVote>().toHaveProperty('createdAt')
     })
 
-    it('NewVote has required fields', () => {
-      expectTypeOf<NewVote>().toHaveProperty('postId')
-      expectTypeOf<NewVote>().toHaveProperty('principalId')
+    it('NewPostVote has required fields', () => {
+      expectTypeOf<NewPostVote>().toHaveProperty('postId')
+      expectTypeOf<NewPostVote>().toHaveProperty('principalId')
     })
   })
 

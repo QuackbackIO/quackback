@@ -16,7 +16,7 @@ vi.mock('@/lib/server/db', async () => {
       execute: (...args: unknown[]) => mockDbExecute(...args),
     },
     posts: { id: 'post_id' },
-    votes: {
+    postVotes: {
       postId: 'post_id',
       principalId: 'principal_id',
       sourceType: 'source_type',

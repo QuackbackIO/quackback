@@ -14,7 +14,7 @@
 import {
   db,
   posts,
-  votes,
+  postVotes,
   boards,
   eq,
   and,
@@ -219,7 +219,9 @@ function schedulePostMergeRecheck(canonicalPostId: PostId): void {
     handler: '__post_merge_recheck__',
     delayMs: 3000,
     payload: { postId: canonicalPostId },
-  }).catch((err) => log.error({ err, post_id: canonicalPostId }, 'failed to schedule merge recheck'))
+  }).catch((err) =>
+    log.error({ err, post_id: canonicalPostId }, 'failed to schedule merge recheck')
+  )
 }
 
 /**
@@ -474,7 +476,7 @@ export async function previewMergedPost(
   const duplicateUuid = toUuid(duplicatePostId)
   const result = await db.execute<{ unique_voters: number }>(sql`
     SELECT COUNT(DISTINCT v.principal_id)::int AS unique_voters
-    FROM ${votes} v
+    FROM ${postVotes} v
     WHERE v.post_id IN (${canonicalUuid}::uuid, ${duplicateUuid}::uuid)
   `)
   const rows = getExecuteRows<{ unique_voters: number }>(result)
@@ -525,7 +527,7 @@ async function recalculateCanonicalVoteCount(
         AND deleted_at IS NULL
     )
     SELECT COUNT(DISTINCT v.principal_id)::int AS unique_voters
-    FROM ${votes} v
+    FROM ${postVotes} v
     WHERE v.post_id IN (SELECT post_id FROM related_post_ids)
   `)
 

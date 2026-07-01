@@ -8,7 +8,7 @@ import {
   isNull,
   posts,
   boards,
-  votes,
+  postVotes,
   postSubscriptions,
 } from '@/lib/server/db'
 import { toUuid, type PostId, type StatusId, type PrincipalId } from '@quackback/ids'
@@ -81,8 +81,8 @@ export async function getPublicRoadmapPostsPaginated(params: {
 }
 
 export async function hasUserVoted(postId: PostId, principalId: PrincipalId): Promise<boolean> {
-  const vote = await db.query.votes.findFirst({
-    where: and(eq(votes.postId, postId), eq(votes.principalId, principalId)),
+  const vote = await db.query.postVotes.findFirst({
+    where: and(eq(postVotes.postId, postId), eq(postVotes.principalId, principalId)),
   })
   return !!vote
 }
@@ -114,9 +114,9 @@ export async function getVoteAndSubscriptionStatus(
   const result = await db.execute(sql`
     SELECT
       EXISTS(
-        SELECT 1 FROM ${votes}
-        WHERE ${votes.postId} = ${postUuid}::uuid
-        AND ${votes.principalId} = ${principalUuid}::uuid
+        SELECT 1 FROM ${postVotes}
+        WHERE ${postVotes.postId} = ${postUuid}::uuid
+        AND ${postVotes.principalId} = ${principalUuid}::uuid
       ) as has_voted,
       ps.post_id IS NOT NULL as subscribed,
       ps.notify_comments,
@@ -166,8 +166,8 @@ export async function getUserVotedPostIds(
     return new Set()
   }
   const result = await db
-    .select({ postId: votes.postId })
-    .from(votes)
-    .where(and(inArray(votes.postId, postIds), eq(votes.principalId, principalId)))
+    .select({ postId: postVotes.postId })
+    .from(postVotes)
+    .where(and(inArray(postVotes.postId, postIds), eq(postVotes.principalId, principalId)))
   return new Set(result.map((r) => r.postId))
 }

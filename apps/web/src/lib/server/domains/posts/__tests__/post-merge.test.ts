@@ -57,7 +57,7 @@ vi.mock('@/lib/server/db', async () => {
         }),
     },
     posts: { id: 'post_id', canonicalPostId: 'canonical_post_id' },
-    votes: { principalId: 'principal_id', postId: 'post_id' },
+    postVotes: { principalId: 'principal_id', postId: 'post_id' },
     boards: { id: 'board_id', slug: 'board_slug' },
     principal: { id: 'principal_id', displayName: 'display_name' },
     eq: vi.fn(),

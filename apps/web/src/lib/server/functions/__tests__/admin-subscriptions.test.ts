@@ -54,7 +54,7 @@ vi.mock('@/lib/server/db', () => ({
   db: {
     select: () => mockSelect(),
   },
-  votes: { id: 'id', postId: 'postId', principalId: 'principalId' },
+  postVotes: { id: 'id', postId: 'postId', principalId: 'principalId' },
   eq: vi.fn(),
   and: vi.fn(),
 }))

@@ -34,7 +34,7 @@ vi.mock('@/lib/server/db', async () => {
     postStatuses: { id: 'status_id', slug: 'slug' },
     postTagAssignments: { postId: 'post_id', tagId: 'tag_id' },
     tags: { id: 'tag_id' },
-    votes: { id: 'votes_id' },
+    postVotes: { id: 'post_votes_id' },
     principal: { id: 'principal_id' },
     eq: vi.fn(() => 'eq-clause'),
     inArray: vi.fn(),

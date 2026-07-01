@@ -161,8 +161,8 @@ export {
   postsRelations,
   postTagAssignments,
   postTagAssignmentsRelations,
-  votes,
-  votesRelations,
+  postVotes,
+  postVotesRelations,
   // Schema tables - integrations
   integrationEventMappings,
   integrationEventMappingsRelations,

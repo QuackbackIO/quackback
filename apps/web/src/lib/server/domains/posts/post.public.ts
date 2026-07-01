@@ -12,7 +12,7 @@ import {
   boards,
   postTagAssignments,
   postTags,
-  votes,
+  postVotes,
   postStatuses,
   principal as principalTable,
 } from '@/lib/server/db'
@@ -187,9 +187,9 @@ export async function listPublicPostsWithVotesAndAvatars(
   const principalUuid = principalId ? toUuid(principalId) : null
   const voteExistsSubquery = principalUuid
     ? sql<boolean>`EXISTS(
-        SELECT 1 FROM ${votes}
-        WHERE ${votes.postId} = ${posts.id}
-        AND ${votes.principalId} = ${principalUuid}::uuid
+        SELECT 1 FROM ${postVotes}
+        WHERE ${postVotes.postId} = ${posts.id}
+        AND ${postVotes.principalId} = ${principalUuid}::uuid
       )`.as('has_voted')
     : sql<boolean>`false`.as('has_voted')
 
@@ -321,9 +321,9 @@ export async function listPublicPosts(
 
 export async function getAllUserVotedPostIds(principalId: PrincipalId): Promise<Set<PostId>> {
   const result = await db
-    .select({ postId: votes.postId })
-    .from(votes)
-    .where(eq(votes.principalId, principalId))
+    .select({ postId: postVotes.postId })
+    .from(postVotes)
+    .where(eq(postVotes.principalId, principalId))
   return new Set(result.map((r) => r.postId))
 }
 
@@ -331,9 +331,9 @@ export async function getVotedPostIdsByUserId(
   userId: import('@quackback/ids').UserId
 ): Promise<Set<PostId>> {
   const result = await db
-    .select({ postId: votes.postId })
-    .from(votes)
-    .innerJoin(principalTable, eq(votes.principalId, principalTable.id))
+    .select({ postId: postVotes.postId })
+    .from(postVotes)
+    .innerJoin(principalTable, eq(postVotes.principalId, principalTable.id))
     .where(eq(principalTable.userId, userId))
   return new Set(result.map((r) => r.postId))
 }

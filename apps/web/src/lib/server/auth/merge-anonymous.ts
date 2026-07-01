@@ -12,7 +12,7 @@
 import type { PrincipalId, UserId } from '@quackback/ids'
 import {
   db,
-  votes,
+  postVotes,
   comments,
   posts,
   postSubscriptions,
@@ -48,16 +48,16 @@ export async function mergeAnonymousToIdentified(params: MergeAnonymousParams): 
   await db.transaction(async (tx) => {
     // 1. Handle vote conflicts: delete anon votes that overlap with target's existing votes
     const existingVotedPostIds = await tx
-      .select({ postId: votes.postId })
-      .from(votes)
-      .where(eq(votes.principalId, targetPrincipalId))
+      .select({ postId: postVotes.postId })
+      .from(postVotes)
+      .where(eq(postVotes.principalId, targetPrincipalId))
 
     if (existingVotedPostIds.length > 0) {
-      await tx.delete(votes).where(
+      await tx.delete(postVotes).where(
         and(
-          eq(votes.principalId, anonPrincipalId),
+          eq(postVotes.principalId, anonPrincipalId),
           inArray(
-            votes.postId,
+            postVotes.postId,
             existingVotedPostIds.map((v) => v.postId)
           )
         )
@@ -75,9 +75,9 @@ export async function mergeAnonymousToIdentified(params: MergeAnonymousParams): 
     // otherwise the anon-principal delete in step 6 throws and breaks the merge.
     await Promise.all([
       tx
-        .update(votes)
+        .update(postVotes)
         .set({ principalId: targetPrincipalId })
-        .where(eq(votes.principalId, anonPrincipalId)),
+        .where(eq(postVotes.principalId, anonPrincipalId)),
       tx
         .update(comments)
         .set({ principalId: targetPrincipalId })

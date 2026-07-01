@@ -165,7 +165,7 @@ vi.mock('@/lib/server/db', async () => {
     postStatuses: { id: 'status_id' },
     postTagAssignments: { __name: 'postTagAssignments' },
     tags: { __name: 'tags', id: 'tag_id' },
-    votes: { __name: 'votes' },
+    postVotes: { __name: 'post_votes' },
     principal: { id: 'principal_id' },
     eq: vi.fn(),
     and: vi.fn(),

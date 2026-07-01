@@ -13,7 +13,7 @@ import {
   boards,
   feedbackSuggestions,
   posts,
-  votes,
+  postVotes,
   sql,
 } from '@/lib/server/db'
 import type { SQL } from 'drizzle-orm'
@@ -205,7 +205,7 @@ export async function acceptCreateSuggestion(
 
   // Add initial vote from the author
   await db
-    .insert(votes)
+    .insert(postVotes)
     .values({
       postId: newPostId,
       principalId: authorPrincipalId,

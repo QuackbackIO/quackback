@@ -17,7 +17,7 @@ import {
   ne,
   desc,
   posts,
-  votes,
+  postVotes,
   comments,
   principal,
   postStatuses,
@@ -58,8 +58,8 @@ export async function refreshAnalytics(): Promise<void> {
       ),
     db
       .select({ value: count() })
-      .from(votes)
-      .where(and(gte(votes.createdAt, dayStart), lte(votes.createdAt, dayEnd))),
+      .from(postVotes)
+      .where(and(gte(postVotes.createdAt, dayStart), lte(postVotes.createdAt, dayEnd))),
     db
       .select({ value: count() })
       .from(comments)
@@ -162,17 +162,17 @@ async function refreshTopPosts(): Promise<void> {
       .select({
         postId: posts.id,
         title: posts.title,
-        voteCount: count(votes.id),
+        voteCount: count(postVotes.id),
         boardName: boards.name,
         statusName: postStatuses.name,
       })
       .from(posts)
-      .leftJoin(votes, and(eq(votes.postId, posts.id), gte(votes.createdAt, since)))
+      .leftJoin(postVotes, and(eq(postVotes.postId, posts.id), gte(postVotes.createdAt, since)))
       .leftJoin(boards, eq(posts.boardId, boards.id))
       .leftJoin(postStatuses, eq(posts.statusId, postStatuses.id))
       .where(and(isNull(posts.deletedAt), gte(posts.createdAt, since)))
       .groupBy(posts.id, posts.title, boards.name, postStatuses.name)
-      .orderBy(desc(count(votes.id)))
+      .orderBy(desc(count(postVotes.id)))
       .limit(10)
 
     // Also get comment counts for these posts

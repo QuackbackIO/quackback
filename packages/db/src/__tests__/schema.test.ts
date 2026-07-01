@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
 import {
   posts,
-  votes,
+  postVotes,
   comments,
   postTagAssignments,
   postRoadmaps,
@@ -137,13 +137,13 @@ describe('Schema definitions', () => {
     })
   })
 
-  describe('votes schema', () => {
+  describe('postVotes schema', () => {
     it('has correct table name', () => {
-      expect(getTableName(votes)).toBe('votes')
+      expect(getTableName(postVotes)).toBe('post_votes')
     })
 
     it('has required columns', () => {
-      const columns = Object.keys(getTableColumns(votes))
+      const columns = Object.keys(getTableColumns(postVotes))
       expect(columns).toContain('id')
       expect(columns).toContain('postId')
       expect(columns).toContain('principalId')

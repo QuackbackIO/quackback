@@ -16,7 +16,7 @@ import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { integrations } from './integrations'
 import { boards } from './boards'
-import { posts, votes } from './posts'
+import { posts, postVotes } from './posts'
 import { principal } from './auth'
 import type {
   RawFeedbackAuthor,
@@ -254,7 +254,7 @@ export const rawFeedbackItemsRelations = relations(rawFeedbackItems, ({ one, man
 }))
 
 export const feedbackSuggestionsRelations = relations(feedbackSuggestions, ({ one, many }) => ({
-  proxyVotes: many(votes, { relationName: 'feedbackSuggestionVotes' }),
+  proxyVotes: many(postVotes, { relationName: 'feedbackSuggestionVotes' }),
   rawItem: one(rawFeedbackItems, {
     fields: [feedbackSuggestions.rawFeedbackItemId],
     references: [rawFeedbackItems.id],

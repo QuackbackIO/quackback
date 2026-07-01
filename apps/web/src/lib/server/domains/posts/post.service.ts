@@ -26,7 +26,7 @@ import {
   posts,
   postTagAssignments,
   postTags,
-  votes,
+  postVotes,
   principal as principalTable,
   type Post,
 } from '@/lib/server/db'
@@ -238,7 +238,7 @@ export async function createPost(
     }
 
     // Auto-upvote by the author
-    await tx.insert(votes).values({
+    await tx.insert(postVotes).values({
       id: createId('vote'),
       postId: newPost.id,
       principalId: author.principalId,

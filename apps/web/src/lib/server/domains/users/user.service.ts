@@ -25,7 +25,7 @@ import {
   user,
   posts,
   comments,
-  votes,
+  postVotes,
   userSegments,
   segments,
 } from '@/lib/server/db'
@@ -156,11 +156,11 @@ export async function listPortalUsers(
 
     const voteCounts = db
       .select({
-        principalId: votes.principalId,
+        principalId: postVotes.principalId,
         voteCount: sql<number>`count(*)::int`.as('vote_count'),
       })
-      .from(votes)
-      .groupBy(votes.principalId)
+      .from(postVotes)
+      .groupBy(postVotes.principalId)
       .as('vote_counts')
 
     // Build conditions array - filter for role='user' (portal users only)
