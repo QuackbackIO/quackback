@@ -10,7 +10,7 @@ import {
   canActAsAgent,
   canDeleteMessage,
   type ConversationShape,
-} from '../chat'
+} from '../conversation'
 import { ANONYMOUS_ACTOR, type Actor } from '../types'
 import type { PrincipalId } from '@quackback/ids'
 

@@ -13,7 +13,7 @@ import { queryOptions } from '@tanstack/react-query'
 import type { ConversationId } from '@quackback/ids'
 import { listConversationsFn, getConversationFn } from '@/lib/server/functions/conversation'
 import { fetchConversationTagsWithCountsFn } from '@/lib/server/functions/conversation-tags'
-import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/chat-segments'
+import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/conversation-segments'
 import {
   inboxNavKey,
   buildListParams,

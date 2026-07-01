@@ -11,7 +11,7 @@ import {
 } from '@heroicons/react/24/solid'
 import type { ConversationTagId, SegmentId } from '@quackback/ids'
 import { fetchConversationTagsWithCountsFn } from '@/lib/server/functions/conversation-tags'
-import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/chat-segments'
+import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/conversation-segments'
 import {
   DropdownMenu,
   DropdownMenuContent,

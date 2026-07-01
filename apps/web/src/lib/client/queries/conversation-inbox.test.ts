@@ -16,7 +16,9 @@ vi.mock('@/lib/server/functions/conversation', () => ({
 vi.mock('@/lib/server/functions/conversation-tags', () => ({
   fetchConversationTagsWithCountsFn: vi.fn(),
 }))
-vi.mock('@/lib/server/functions/chat-segments', () => ({ fetchInboxSegmentsWithCountsFn: vi.fn() }))
+vi.mock('@/lib/server/functions/conversation-segments', () => ({
+  fetchInboxSegmentsWithCountsFn: vi.fn(),
+}))
 
 import { conversationInboxQueries } from './conversation-inbox'
 
