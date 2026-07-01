@@ -813,9 +813,12 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         position: widgetConfig.position,
         tabs: widgetConfig.tabs,
         hmacRequired: widgetConfig.identifyVerification ?? false,
-        // Client-safe chat config — the widget gates its chat tab on chat.enabled,
-        // so this must be projected here (cannedReplies stay agent-only).
-        chat: publicMessengerConfig(widgetConfig.chat ?? DEFAULT_MESSENGER_CONFIG),
+        // Client-safe messenger config — the widget gates its messenger tab on
+        // messenger.enabled, so this must be projected here (cannedReplies stay
+        // agent-only). `chat` is the pre-rename key, still read as a fallback.
+        messenger: publicMessengerConfig(
+          widgetConfig.messenger ?? widgetConfig.chat ?? DEFAULT_MESSENGER_CONFIG
+        ),
       },
       featureFlags,
       brandingData,

@@ -57,26 +57,29 @@ function ConversationsSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const config = widgetConfigQuery.data
+  // `chat` is the pre-rename key — still read as a fallback for rows written
+  // before the switch to `messenger` (new key wins when both are present).
+  const messengerConfig = config.messenger ?? config.chat
   const [isPending, startTransition] = useTransition()
   const [savingField, setSavingField] = useState<string | null>(null)
   const [portalSupportEnabled, setPortalSupportEnabled] = useState(
     portalConfigQuery.data?.support?.enabled ?? false
   )
 
-  const [enabled, setEnabled] = useState(config.chat?.enabled ?? false)
-  const [welcomeMessage, setWelcomeMessage] = useState(config.chat?.welcomeMessage ?? '')
-  const [offlineMessage, setOfflineMessage] = useState(config.chat?.offlineMessage ?? '')
-  const [teamName, setTeamName] = useState(config.chat?.teamName ?? '')
+  const [enabled, setEnabled] = useState(messengerConfig?.enabled ?? false)
+  const [welcomeMessage, setWelcomeMessage] = useState(messengerConfig?.welcomeMessage ?? '')
+  const [offlineMessage, setOfflineMessage] = useState(messengerConfig?.offlineMessage ?? '')
+  const [teamName, setTeamName] = useState(messengerConfig?.teamName ?? '')
   const [cannedReplies, setCannedReplies] = useState<CannedReply[]>(
-    config.chat?.cannedReplies ?? []
+    messengerConfig?.cannedReplies ?? []
   )
   const [officeHours, setOfficeHours] = useState<OfficeHoursConfig>(
-    config.chat?.officeHours ?? DEFAULT_OFFICE_HOURS
+    messengerConfig?.officeHours ?? DEFAULT_OFFICE_HOURS
   )
   const [preChatEmail, setPreChatEmail] = useState<'off' | 'optional' | 'required'>(
-    config.chat?.preChatEmail ?? 'off'
+    messengerConfig?.preChatEmail ?? 'off'
   )
-  const [routingEnabled, setRoutingEnabled] = useState(config.chat?.routing?.enabled ?? false)
+  const [routingEnabled, setRoutingEnabled] = useState(messengerConfig?.routing?.enabled ?? false)
 
   const widgetEnabled = config.enabled
 
@@ -91,7 +94,7 @@ function ConversationsSettingsPage() {
   // Persist the whole schedule on every change (deepMerge replaces arrays).
   function saveOfficeHours(next: OfficeHoursConfig) {
     setOfficeHours(next)
-    void persist('officeHours', { chat: { officeHours: next } })
+    void persist('officeHours', { messenger: { officeHours: next } })
   }
 
   function saveCannedReplies(next: CannedReply[]) {
@@ -100,7 +103,7 @@ function ConversationsSettingsPage() {
     const cleaned = next
       .map((r) => ({ id: r.id, title: r.title.trim(), body: r.body.trim() }))
       .filter((r) => r.title && r.body)
-    void persist('cannedReplies', { chat: { cannedReplies: cleaned } })
+    void persist('cannedReplies', { messenger: { cannedReplies: cleaned } })
   }
 
   async function persist(
@@ -121,8 +124,8 @@ function ConversationsSettingsPage() {
 
   const onToggleEnabled = (checked: boolean) => {
     setEnabled(checked)
-    // Enabling chat also surfaces the widget tab; disabling hides it.
-    persist('enabled', { chat: { enabled: checked }, tabs: { chat: checked } }, () =>
+    // Enabling Messenger also surfaces the widget tab; disabling hides it.
+    persist('enabled', { messenger: { enabled: checked }, tabs: { chat: checked } }, () =>
       setEnabled(!checked)
     )
   }
@@ -144,7 +147,7 @@ function ConversationsSettingsPage() {
     setRoutingEnabled(checked)
     persist(
       'routing',
-      { chat: { routing: { enabled: checked, strategy: 'auto_assign_active' } } },
+      { messenger: { routing: { enabled: checked, strategy: 'auto_assign_active' } } },
       () => setRoutingEnabled(!checked)
     )
   }
@@ -239,7 +242,7 @@ function ConversationsSettingsPage() {
               maxLength={80}
               placeholder="Support"
               onChange={(e) => setTeamName(e.target.value)}
-              onBlur={() => persist('teamName', { chat: { teamName: teamName.trim() } })}
+              onBlur={() => persist('teamName', { messenger: { teamName: teamName.trim() } })}
               disabled={isBusy || !enabled}
             />
             <p className="text-xs text-muted-foreground">
@@ -257,7 +260,7 @@ function ConversationsSettingsPage() {
               placeholder="Hi! 👋 How can we help you today?"
               onChange={(e) => setWelcomeMessage(e.target.value)}
               onBlur={() =>
-                persist('welcomeMessage', { chat: { welcomeMessage: welcomeMessage.trim() } })
+                persist('welcomeMessage', { messenger: { welcomeMessage: welcomeMessage.trim() } })
               }
               disabled={isBusy || !enabled}
             />
@@ -278,7 +281,7 @@ function ConversationsSettingsPage() {
               placeholder="We're away right now. Leave a message and we'll get back to you by email."
               onChange={(e) => setOfflineMessage(e.target.value)}
               onBlur={() =>
-                persist('offlineMessage', { chat: { offlineMessage: offlineMessage.trim() } })
+                persist('offlineMessage', { messenger: { offlineMessage: offlineMessage.trim() } })
               }
               disabled={isBusy || !enabled}
             />
@@ -295,7 +298,7 @@ function ConversationsSettingsPage() {
               onChange={(e) => {
                 const next = e.target.value as 'off' | 'optional' | 'required'
                 setPreChatEmail(next)
-                void persist('preChatEmail', { chat: { preChatEmail: next } })
+                void persist('preChatEmail', { messenger: { preChatEmail: next } })
               }}
               disabled={isBusy || !enabled}
               className="w-full max-w-sm rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"

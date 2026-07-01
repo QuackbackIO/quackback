@@ -720,6 +720,45 @@ export const fetchWidgetSecret = createServerFn({ method: 'GET' }).handler(async
   }
 })
 
+const messengerConfigInputSchema = z.object({
+  enabled: z.boolean().optional(),
+  welcomeMessage: z.string().max(500).optional(),
+  offlineMessage: z.string().max(500).optional(),
+  teamName: z.string().max(80).optional(),
+  preChatEmail: z.enum(['off', 'optional', 'required']).optional(),
+  officeHours: z
+    .object({
+      enabled: z.boolean(),
+      timezone: z.string().max(64),
+      days: z
+        .array(
+          z.object({
+            enabled: z.boolean(),
+            start: z.string().regex(/^\d{2}:\d{2}$/),
+            end: z.string().regex(/^\d{2}:\d{2}$/),
+          })
+        )
+        .length(7),
+    })
+    .optional(),
+  cannedReplies: z
+    .array(
+      z.object({
+        id: z.string().max(64),
+        title: z.string().max(80),
+        body: z.string().max(2000),
+      })
+    )
+    .max(100)
+    .optional(),
+  routing: z
+    .object({
+      enabled: z.boolean(),
+      strategy: z.literal('auto_assign_active'),
+    })
+    .optional(),
+})
+
 const updateWidgetConfigSchema = z.object({
   enabled: z.boolean().optional(),
   defaultBoard: z.string().optional(),
@@ -734,46 +773,10 @@ const updateWidgetConfigSchema = z.object({
       home: z.boolean().optional(),
     })
     .optional(),
-  chat: z
-    .object({
-      enabled: z.boolean().optional(),
-      welcomeMessage: z.string().max(500).optional(),
-      offlineMessage: z.string().max(500).optional(),
-      teamName: z.string().max(80).optional(),
-      preChatEmail: z.enum(['off', 'optional', 'required']).optional(),
-      officeHours: z
-        .object({
-          enabled: z.boolean(),
-          timezone: z.string().max(64),
-          days: z
-            .array(
-              z.object({
-                enabled: z.boolean(),
-                start: z.string().regex(/^\d{2}:\d{2}$/),
-                end: z.string().regex(/^\d{2}:\d{2}$/),
-              })
-            )
-            .length(7),
-        })
-        .optional(),
-      cannedReplies: z
-        .array(
-          z.object({
-            id: z.string().max(64),
-            title: z.string().max(80),
-            body: z.string().max(2000),
-          })
-        )
-        .max(100)
-        .optional(),
-      routing: z
-        .object({
-          enabled: z.boolean(),
-          strategy: z.literal('auto_assign_active'),
-        })
-        .optional(),
-    })
-    .optional(),
+  messenger: messengerConfigInputSchema.optional(),
+  /** @deprecated superseded by `messenger` — accepted so a caller still on the
+   *  pre-rename key doesn't silently drop its update. */
+  chat: messengerConfigInputSchema.optional(),
 })
 
 export const updateWidgetConfigFn = createServerFn({ method: 'POST' })

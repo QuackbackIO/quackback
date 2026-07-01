@@ -65,7 +65,7 @@ export const Route = createFileRoute('/widget/')({
     // enabled + tab on. Hoisted so we only compute presence when chat shows.
     const chatTabEnabled =
       ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
-      (settings?.publicWidgetConfig?.chat?.enabled ?? false) &&
+      (settings?.publicWidgetConfig?.messenger?.enabled ?? false) &&
       (settings?.publicWidgetConfig?.tabs?.chat ?? false)
 
     // Presence is tenant-global (not visitor-specific), so the anonymous SSR

@@ -481,7 +481,11 @@ export interface WidgetConfig {
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
-  /** Messenger settings */
+  /** Messenger settings, stored under `messenger`. */
+  messenger?: MessengerConfig
+  /** @deprecated superseded by `messenger` — kept so rows written before the
+   *  key rename still typecheck; read with a `messenger ?? chat` fallback
+   *  (see getMessengerConfig). */
   chat?: MessengerConfig
 }
 
@@ -496,7 +500,7 @@ export type PublicWidgetConfig = Pick<
   /** Whether verified identity is required (derived from identifyVerification) */
   hmacRequired?: boolean
   /** Client-safe messenger config (no agent-only fields like cannedReplies). */
-  chat?: PublicMessengerConfig
+  messenger?: PublicMessengerConfig
 }
 
 export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
@@ -529,7 +533,7 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
     chat: false,
     home: true,
   },
-  chat: DEFAULT_MESSENGER_CONFIG,
+  messenger: DEFAULT_MESSENGER_CONFIG,
 }
 
 /**
@@ -547,6 +551,8 @@ export interface UpdateWidgetConfigInput {
     chat?: boolean
     home?: boolean
   }
+  messenger?: Partial<MessengerConfig>
+  /** @deprecated superseded by `messenger`. */
   chat?: Partial<MessengerConfig>
 }
 

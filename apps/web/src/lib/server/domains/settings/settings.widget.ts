@@ -80,8 +80,9 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
         home: config.tabs?.home,
       },
       hmacRequired: config.identifyVerification ?? false,
-      // Project only client-safe chat fields; cannedReplies is agent-only.
-      chat: publicMessengerConfig(config.chat ?? DEFAULT_MESSENGER_CONFIG),
+      // Project only client-safe messenger fields; cannedReplies is agent-only.
+      // `chat` is the pre-rename key — still read as a fallback (see getMessengerConfig).
+      messenger: publicMessengerConfig(config.messenger ?? config.chat ?? DEFAULT_MESSENGER_CONFIG),
     }
   } catch (error) {
     log.error({ err: error }, 'get public widget config failed')
@@ -95,7 +96,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
  */
 export async function getMessengerConfig(): Promise<MessengerConfig> {
   const widget = await getWidgetConfig()
-  return { ...DEFAULT_MESSENGER_CONFIG, ...(widget.chat ?? {}) }
+  return { ...DEFAULT_MESSENGER_CONFIG, ...(widget.messenger ?? widget.chat ?? {}) }
 }
 
 /**
@@ -108,7 +109,7 @@ export async function getMessengerConfig(): Promise<MessengerConfig> {
 export async function isMessengerEnabled(): Promise<boolean> {
   const { isFeatureEnabled } = await import('./settings.service')
   const [flagOn, widget] = await Promise.all([isFeatureEnabled('supportInbox'), getWidgetConfig()])
-  return Boolean(flagOn && widget.enabled && widget.chat?.enabled)
+  return Boolean(flagOn && widget.enabled && (widget.messenger ?? widget.chat)?.enabled)
 }
 
 /** Generate a new widget secret: 'wgt_' + 32 random bytes (64 hex chars) */
