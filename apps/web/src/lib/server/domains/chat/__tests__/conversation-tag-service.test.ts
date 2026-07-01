@@ -1,35 +1,38 @@
 import { describe, it, expect } from 'vitest'
-import type { ChatTagId } from '@quackback/ids'
-import { normalizeChatTagInput, hasNameConflict } from '../chat-tag.service'
+import type { ConversationTagId } from '@quackback/ids'
+import { normalizeConversationTagInput, hasNameConflict } from '../conversation-tag.service'
 
-describe('normalizeChatTagInput', () => {
+describe('normalizeConversationTagInput', () => {
   it('trims the name and defaults the color', () => {
-    expect(normalizeChatTagInput({ name: '  Lead ' })).toEqual({ name: 'Lead', color: '#6b7280' })
+    expect(normalizeConversationTagInput({ name: '  Lead ' })).toEqual({
+      name: 'Lead',
+      color: '#6b7280',
+    })
   })
 
   it('keeps a valid custom hex color', () => {
-    expect(normalizeChatTagInput({ name: 'x', color: '#FF0000' })).toEqual({
+    expect(normalizeConversationTagInput({ name: 'x', color: '#FF0000' })).toEqual({
       name: 'x',
       color: '#FF0000',
     })
   })
 
   it('rejects an empty / whitespace name', () => {
-    expect(() => normalizeChatTagInput({ name: '   ' })).toThrow()
+    expect(() => normalizeConversationTagInput({ name: '   ' })).toThrow()
   })
 
   it('rejects a name over 50 characters', () => {
-    expect(() => normalizeChatTagInput({ name: 'a'.repeat(51) })).toThrow()
+    expect(() => normalizeConversationTagInput({ name: 'a'.repeat(51) })).toThrow()
   })
 
   it('rejects a non-hex color', () => {
-    expect(() => normalizeChatTagInput({ name: 'x', color: 'red' })).toThrow()
-    expect(() => normalizeChatTagInput({ name: 'x', color: '#FFF' })).toThrow()
+    expect(() => normalizeConversationTagInput({ name: 'x', color: 'red' })).toThrow()
+    expect(() => normalizeConversationTagInput({ name: 'x', color: '#FFF' })).toThrow()
   })
 })
 
 describe('hasNameConflict', () => {
-  const id = (s: string) => s as ChatTagId
+  const id = (s: string) => s as ConversationTagId
   const live = [
     { id: id('chat_tag_a'), name: 'Lead' },
     { id: id('chat_tag_b'), name: 'VIP' },

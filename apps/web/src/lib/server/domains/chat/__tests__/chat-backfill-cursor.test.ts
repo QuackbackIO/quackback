@@ -53,7 +53,7 @@ vi.mock('@/lib/server/db', () => {
     user: { id: 'id' },
     chatMessageReactions: {},
     chatMessageMentions: {},
-    conversationTags: {},
+    conversationTagAssignments: {},
     tags: {},
   }
 })

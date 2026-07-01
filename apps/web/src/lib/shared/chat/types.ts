@@ -3,7 +3,7 @@
  * the SSE transport. No server-only imports here — this module is bundled into
  * the browser.
  */
-import type { ConversationId, ChatMessageId, ChatTagId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, ChatMessageId, ConversationTagId, PrincipalId } from '@quackback/ids'
 
 // Sourced from the DB enum (CONVERSATION_STATUSES) via the browser-safe bridge,
 // so the client type can never drift from the column's allowed values. Imported
@@ -56,8 +56,8 @@ export interface ChatAuthorDTO {
 }
 
 /** A conversation label ("tag") as surfaced to the inbox. Agent-only. */
-export interface ChatTagDTO {
-  id: ChatTagId
+export interface ConversationTagDTO {
+  id: ConversationTagId
   name: string
   color: string
 }
@@ -171,7 +171,7 @@ export interface ConversationDTO {
    *  Stripped on visitor-facing payloads. */
   endNote: string | null
   /** Conversation labels (agent-managed); empty when untagged. Agent-only. */
-  tags: ChatTagDTO[]
+  tags: ConversationTagDTO[]
 }
 
 /** Human labels for each end reason, for the end-conversation dialog + the

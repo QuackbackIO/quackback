@@ -58,7 +58,7 @@ import {
   InboxNavSidebar,
   isInboxView,
   scopeLabelFor,
-  useChatTagsWithCounts,
+  useConversationTagsWithCounts,
   useInboxSegmentsWithCounts,
 } from '@/components/admin/chat/inbox-nav-sidebar'
 import {
@@ -283,7 +283,7 @@ function InboxPage() {
   // The status/priority chips apply to every scope except the Mentions feed
   // (tag + segment scopes both refine by status/priority).
   const showRefinements = nav.kind !== 'view' || nav.view !== 'mentions'
-  const { data: navTags } = useChatTagsWithCounts()
+  const { data: navTags } = useConversationTagsWithCounts()
   const { data: navSegments } = useInboxSegmentsWithCounts()
   const scopeLabel = scopeLabelFor(nav, navTags, navSegments)
 

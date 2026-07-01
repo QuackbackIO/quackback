@@ -140,13 +140,14 @@ export const chatMessages = pgTable(
 )
 
 /**
- * Conversation tags ("labels") — agent-managed, org-wide, created on the fly
- * from a conversation and used to filter the inbox. Intentionally SEPARATE from
- * the feedback `tags` taxonomy: the two share no rows, ids, or lifecycle, so a
- * label here never leaks into feedback boards and vice-versa.
+ * Conversation tags — agent-managed, org-wide, created on the fly from a
+ * conversation and used to filter the inbox. Same shape as the feedback tag
+ * catalog (type ConversationTag mirrors Tag) but intentionally SEPARATE: the two
+ * share no rows, ids, or lifecycle, so a tag here never leaks into feedback
+ * boards and vice-versa. Applied to conversations via `conversation_tag_assignments`.
  */
-export const chatTags = pgTable(
-  'chat_tags',
+export const conversationTags = pgTable(
+  'conversation_tags',
   {
     id: typeIdWithDefault('chat_tag')('id').primaryKey(),
     name: text('name').notNull().unique(),
@@ -156,26 +157,29 @@ export const chatTags = pgTable(
     // Soft delete: a removed tag detaches from conversations but keeps history.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
-  (table) => [index('chat_tags_deleted_at_idx').on(table.deletedAt)]
+  (table) => [index('conversation_tags_deleted_at_idx').on(table.deletedAt)]
 )
 
 /**
- * Join table: which chat tags are applied to which conversation. Both FKs
+ * Join table: which conversation tags are applied to which conversation. Both FKs
  * cascade, so removing a conversation or hard-deleting a tag row cleans up.
  */
-export const conversationTags = pgTable(
-  'conversation_tags',
+export const conversationTagAssignments = pgTable(
+  'conversation_tag_assignments',
   {
     conversationId: typeIdColumn('conversation')('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
-    chatTagId: typeIdColumn('chat_tag')('chat_tag_id')
+    conversationTagId: typeIdColumn('chat_tag')('conversation_tag_id')
       .notNull()
-      .references(() => chatTags.id, { onDelete: 'cascade' }),
+      .references(() => conversationTags.id, { onDelete: 'cascade' }),
   },
   (table) => [
-    uniqueIndex('conversation_tags_pk').on(table.conversationId, table.chatTagId),
-    index('conversation_tags_chat_tag_idx').on(table.chatTagId),
+    uniqueIndex('conversation_tag_assignments_pk').on(
+      table.conversationId,
+      table.conversationTagId
+    ),
+    index('conversation_tag_assignments_tag_idx').on(table.conversationTagId),
   ]
 )
 
@@ -264,23 +268,26 @@ export const chatMessageFlags = pgTable(
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({
   messages: many(chatMessages),
-  tags: many(conversationTags),
+  tags: many(conversationTagAssignments),
 }))
 
-export const chatTagsRelations = relations(chatTags, ({ many }) => ({
-  conversationTags: many(conversationTags),
+export const conversationTagsRelations = relations(conversationTags, ({ many }) => ({
+  conversationTagAssignments: many(conversationTagAssignments),
 }))
 
-export const conversationTagsRelations = relations(conversationTags, ({ one }) => ({
-  conversation: one(conversations, {
-    fields: [conversationTags.conversationId],
-    references: [conversations.id],
-  }),
-  chatTag: one(chatTags, {
-    fields: [conversationTags.chatTagId],
-    references: [chatTags.id],
-  }),
-}))
+export const conversationTagAssignmentsRelations = relations(
+  conversationTagAssignments,
+  ({ one }) => ({
+    conversation: one(conversations, {
+      fields: [conversationTagAssignments.conversationId],
+      references: [conversations.id],
+    }),
+    tag: one(conversationTags, {
+      fields: [conversationTagAssignments.conversationTagId],
+      references: [conversationTags.id],
+    }),
+  })
+)
 
 export const chatMessageMentionsRelations = relations(chatMessageMentions, ({ one }) => ({
   message: one(chatMessages, {

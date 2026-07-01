@@ -15,7 +15,7 @@ import type { changelogEntries, changelogEntryPosts } from './schema/changelog'
 import type {
   conversations,
   chatMessages,
-  chatTags,
+  conversationTags,
   chatMessageMentions,
   chatMessageReactions,
   chatMessageFlags,
@@ -383,8 +383,8 @@ export type Conversation = InferSelectModel<typeof conversations>
 export type NewConversation = InferInsertModel<typeof conversations>
 export type ChatMessage = InferSelectModel<typeof chatMessages>
 export type NewChatMessage = InferInsertModel<typeof chatMessages>
-export type ChatTag = InferSelectModel<typeof chatTags>
-export type NewChatTag = InferInsertModel<typeof chatTags>
+export type ConversationTag = InferSelectModel<typeof conversationTags>
+export type NewConversationTag = InferInsertModel<typeof conversationTags>
 export type ChatMessageMention = InferSelectModel<typeof chatMessageMentions>
 export type NewChatMessageMention = InferInsertModel<typeof chatMessageMentions>
 export type ChatMessageReaction = InferSelectModel<typeof chatMessageReactions>

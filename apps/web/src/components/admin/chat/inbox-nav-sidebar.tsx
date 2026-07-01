@@ -9,8 +9,8 @@ import {
   MagnifyingGlassIcon,
   BookmarkIcon,
 } from '@heroicons/react/24/solid'
-import type { ChatTagId, SegmentId } from '@quackback/ids'
-import { fetchChatTagsWithCountsFn } from '@/lib/server/functions/chat-tags'
+import type { ConversationTagId, SegmentId } from '@quackback/ids'
+import { fetchConversationTagsWithCountsFn } from '@/lib/server/functions/conversation-tags'
 import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/chat-segments'
 import {
   DropdownMenu,
@@ -52,15 +52,20 @@ export function isInboxView(v: unknown): v is InboxView {
   return typeof v === 'string' && CONVERSATION_VIEWS.some((c) => c.view === v)
 }
 
-export type ChatTagWithCount = { id: ChatTagId; name: string; color: string; count: number }
+export type ConversationTagWithCount = {
+  id: ConversationTagId
+  name: string
+  color: string
+  count: number
+}
 
 const CHAT_TAG_COUNTS_KEY = ['admin', 'inbox', 'chat-tags', 'counts'] as const
 
 /** Shared (deduped) source of the labels + per-tag conversation counts. */
-export function useChatTagsWithCounts() {
+export function useConversationTagsWithCounts() {
   return useQuery({
     queryKey: CHAT_TAG_COUNTS_KEY,
-    queryFn: () => fetchChatTagsWithCountsFn() as Promise<ChatTagWithCount[]>,
+    queryFn: () => fetchConversationTagsWithCountsFn() as Promise<ConversationTagWithCount[]>,
     staleTime: 60_000,
   })
 }
@@ -81,7 +86,7 @@ export function useInboxSegmentsWithCounts() {
 /** Human label for the active scope, resolving a tag/segment id against its list. */
 export function scopeLabelFor(
   nav: InboxNavItem,
-  tags?: ChatTagWithCount[],
+  tags?: ConversationTagWithCount[],
   segments?: InboxSegmentWithCount[]
 ): string {
   if (nav.kind === 'tag') return tags?.find((t) => t.id === nav.tagId)?.name ?? 'Label'
@@ -199,7 +204,7 @@ function ScopeMenuSection({
   )
 }
 
-const tagNavItem = (id: string): InboxNavItem => ({ kind: 'tag', tagId: id as ChatTagId })
+const tagNavItem = (id: string): InboxNavItem => ({ kind: 'tag', tagId: id as ConversationTagId })
 const segmentNavItem = (id: string): InboxNavItem => ({
   kind: 'segment',
   segmentId: id as SegmentId,
@@ -223,7 +228,7 @@ export function InboxNavSidebar({
   search: string
   onSearch: (value: string) => void
 }) {
-  const { data: tags } = useChatTagsWithCounts()
+  const { data: tags } = useConversationTagsWithCounts()
   const { data: segments } = useInboxSegmentsWithCounts()
   const activeKey = inboxNavKey(nav)
 
@@ -298,7 +303,7 @@ export function InboxScopeMenu({
   nav: InboxNavItem
   onSelect: (item: InboxNavItem) => void
 }) {
-  const { data: tags } = useChatTagsWithCounts()
+  const { data: tags } = useConversationTagsWithCounts()
   const { data: segments } = useInboxSegmentsWithCounts()
   const activeKey = inboxNavKey(nav)
 

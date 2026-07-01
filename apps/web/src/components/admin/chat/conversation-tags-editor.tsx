@@ -5,15 +5,15 @@ import { PlusIcon, CheckIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { TagChip } from '@/components/shared/tag-chip'
-import type { ChatTagDTO, ConversationDTO } from '@/lib/shared/chat/types'
-import type { ConversationId, ChatTagId } from '@quackback/ids'
+import type { ConversationTagDTO, ConversationDTO } from '@/lib/shared/chat/types'
+import type { ConversationId, ConversationTagId } from '@quackback/ids'
 import {
-  fetchChatTagsFn,
+  fetchConversationTagsFn,
   addConversationTagFn,
   removeConversationTagFn,
-  updateChatTagFn,
-  deleteChatTagFn,
-} from '@/lib/server/functions/chat-tags'
+  updateConversationTagFn,
+  deleteConversationTagFn,
+} from '@/lib/server/functions/conversation-tags'
 import { cn } from '@/lib/shared/utils'
 
 const CHAT_TAGS_KEY = ['admin', 'inbox', 'chat-tags'] as const
@@ -77,14 +77,14 @@ export function ConversationTagsEditor({
   tags,
 }: {
   conversationId: ConversationId
-  tags: ChatTagDTO[]
+  tags: ConversationTagDTO[]
 }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [createColor, setCreateColor] = useState<string>(DEFAULT_TAG_COLOR)
   // The label currently being renamed/recolored inline (null = none).
-  const [editingId, setEditingId] = useState<ChatTagId | null>(null)
+  const [editingId, setEditingId] = useState<ConversationTagId | null>(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState<string>(DEFAULT_TAG_COLOR)
   // Two-step guard for the destructive delete: deleting a label removes it from
@@ -97,7 +97,7 @@ export function ConversationTagsEditor({
   // Only fetch the full label list when the picker is open.
   const { data: allTags } = useQuery({
     queryKey: CHAT_TAGS_KEY,
-    queryFn: () => fetchChatTagsFn(),
+    queryFn: () => fetchConversationTagsFn(),
     enabled: open,
     staleTime: 60_000,
   })
@@ -105,7 +105,7 @@ export function ConversationTagsEditor({
   // Write the conversation's tag list straight into the thread cache
   // (authoritative — the chips reflect the server response without waiting on a
   // refetch). add/remove pass the full returned list; update/delete map it.
-  const patchThreadTags = (fn: (current: ChatTagDTO[]) => ChatTagDTO[]) =>
+  const patchThreadTags = (fn: (current: ConversationTagDTO[]) => ConversationTagDTO[]) =>
     queryClient.setQueryData<ThreadCache>(threadKey, (prev) =>
       prev
         ? { ...prev, conversation: { ...prev.conversation, tags: fn(prev.conversation.tags) } }
@@ -119,7 +119,7 @@ export function ConversationTagsEditor({
   }
 
   const addMut = useMutation({
-    mutationFn: (v: { tagId?: ChatTagId; name?: string; color?: string }) =>
+    mutationFn: (v: { tagId?: ConversationTagId; name?: string; color?: string }) =>
       addConversationTagFn({ data: { conversationId, ...v } }),
     onSuccess: (updated) => {
       patchThreadTags(() => updated)
@@ -128,7 +128,8 @@ export function ConversationTagsEditor({
     onError: () => toast.error('Failed to add tag'),
   })
   const removeMut = useMutation({
-    mutationFn: (tagId: ChatTagId) => removeConversationTagFn({ data: { conversationId, tagId } }),
+    mutationFn: (tagId: ConversationTagId) =>
+      removeConversationTagFn({ data: { conversationId, tagId } }),
     onSuccess: (updated) => {
       patchThreadTags(() => updated)
       invalidateLists()
@@ -136,8 +137,8 @@ export function ConversationTagsEditor({
     onError: () => toast.error('Failed to remove tag'),
   })
   const updateMut = useMutation({
-    mutationFn: (v: { id: ChatTagId; name?: string; color?: string }) =>
-      updateChatTagFn({ data: v }),
+    mutationFn: (v: { id: ConversationTagId; name?: string; color?: string }) =>
+      updateConversationTagFn({ data: v }),
     onSuccess: (updated) => {
       // A renamed/recolored label updates wherever it's applied on this thread.
       patchThreadTags((ts) => ts.map((t) => (t.id === updated.id ? updated : t)))
@@ -147,7 +148,7 @@ export function ConversationTagsEditor({
     onError: () => toast.error('Failed to update tag'),
   })
   const deleteMut = useMutation({
-    mutationFn: (id: ChatTagId) => deleteChatTagFn({ data: { id } }),
+    mutationFn: (id: ConversationTagId) => deleteConversationTagFn({ data: { id } }),
     onSuccess: (_r, id) => {
       // A soft-deleted label drops off this conversation immediately.
       patchThreadTags((ts) => ts.filter((t) => t.id !== id))
@@ -168,7 +169,7 @@ export function ConversationTagsEditor({
   const showCreate = q.length > 0 && !exactExists
   const loadingTags = open && allTags === undefined
 
-  function beginEdit(tag: ChatTagDTO) {
+  function beginEdit(tag: ConversationTagDTO) {
     setEditingId(tag.id)
     setEditName(tag.name)
     setEditColor(tag.color)

@@ -15,7 +15,7 @@ import type {
   PrincipalId,
   PostId,
   BoardId,
-  ChatTagId,
+  ConversationTagId,
   SegmentId,
 } from '@quackback/ids'
 import {
@@ -597,7 +597,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         assignedAgentPrincipalId: data.assignee === 'mine' ? ctx.principal.id : undefined,
         unassignedOnly: data.assignee === 'unassigned',
         search: data.search,
-        tagIds: data.tagIds as ChatTagId[] | undefined,
+        tagIds: data.tagIds as ConversationTagId[] | undefined,
         segmentIds: data.segmentIds as SegmentId[] | undefined,
         // Always the requesting agent — never trust a client-supplied id here.
         mentionedPrincipalId: data.view === 'mentions' ? ctx.principal.id : undefined,

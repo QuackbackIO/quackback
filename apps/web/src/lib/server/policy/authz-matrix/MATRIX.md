@@ -159,13 +159,6 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/changelog.ts`::listChangelogsFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::searchShippedPostsFn | changelog.manage |
 | `lib/server/functions/chat-segments.ts`::fetchInboxSegmentsWithCountsFn | conversation.view |
-| `lib/server/functions/chat-tags.ts`::fetchChatTagsFn | conversation.view |
-| `lib/server/functions/chat-tags.ts`::fetchChatTagsWithCountsFn | conversation.view |
-| `lib/server/functions/chat-tags.ts`::createChatTagFn | conversation.manage_tags |
-| `lib/server/functions/chat-tags.ts`::updateChatTagFn | conversation.manage_tags |
-| `lib/server/functions/chat-tags.ts`::deleteChatTagFn | conversation.manage_tags |
-| `lib/server/functions/chat-tags.ts`::addConversationTagFn | conversation.set_tags |
-| `lib/server/functions/chat-tags.ts`::removeConversationTagFn | conversation.set_tags |
 | `lib/server/functions/chat.ts`::sendChatMessageFn | END_USER (any authenticated) |
 | `lib/server/functions/chat.ts`::listChatMessagesFn | END_USER (any authenticated) |
 | `lib/server/functions/chat.ts`::markChatReadFn | END_USER (any authenticated) |
@@ -203,6 +196,13 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/comments.ts`::restoreCommentFn | comment.moderate |
 | `lib/server/functions/comments.ts`::pinCommentFn | comment.pin |
 | `lib/server/functions/comments.ts`::unpinCommentFn | comment.pin |
+| `lib/server/functions/conversation-tags.ts`::fetchConversationTagsFn | conversation.view |
+| `lib/server/functions/conversation-tags.ts`::fetchConversationTagsWithCountsFn | conversation.view |
+| `lib/server/functions/conversation-tags.ts`::createConversationTagFn | conversation.manage_tags |
+| `lib/server/functions/conversation-tags.ts`::updateConversationTagFn | conversation.manage_tags |
+| `lib/server/functions/conversation-tags.ts`::deleteConversationTagFn | conversation.manage_tags |
+| `lib/server/functions/conversation-tags.ts`::addConversationTagFn | conversation.set_tags |
+| `lib/server/functions/conversation-tags.ts`::removeConversationTagFn | conversation.set_tags |
 | `lib/server/functions/external-statuses.ts`::fetchExternalStatusesFn | integration.manage |
 | `lib/server/functions/feature-flags.ts`::updateFeatureFlagsFn | settings.manage |
 | `lib/server/functions/feedback.ts`::fetchSuggestions | suggestion.view |

@@ -5,7 +5,7 @@
  * and lib/ may not import components/. Free of React/server imports so it's
  * unit-tested directly; the nav-sidebar component re-exports the nav types.
  */
-import type { ChatTagId, SegmentId } from '@quackback/ids'
+import type { ConversationTagId, SegmentId } from '@quackback/ids'
 import type { ConversationStatus, ConversationPriority } from '@/lib/shared/chat/types'
 
 export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions' | 'saved'
@@ -13,7 +13,7 @@ export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions' | 'saved'
 /** The active left-nav selection — one view, one label, or one segment at a time. */
 export type InboxNavItem =
   | { kind: 'view'; view: InboxView }
-  | { kind: 'tag'; tagId: ChatTagId }
+  | { kind: 'tag'; tagId: ConversationTagId }
   | { kind: 'segment'; segmentId: SegmentId }
 
 /** Stable identity for query keys + active-state comparison. */
@@ -50,7 +50,7 @@ export interface InboxSearch {
  * tag wins over segment wins over view if the URL somehow carries more than one.
  */
 export function navFromSearch(search: InboxSearch): InboxNavItem {
-  if (search.tag) return { kind: 'tag', tagId: search.tag as ChatTagId }
+  if (search.tag) return { kind: 'tag', tagId: search.tag as ConversationTagId }
   if (search.segment) return { kind: 'segment', segmentId: search.segment as SegmentId }
   return { kind: 'view', view: search.view ?? 'all' }
 }

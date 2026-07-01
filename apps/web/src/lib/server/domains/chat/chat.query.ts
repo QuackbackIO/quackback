@@ -21,8 +21,8 @@ import {
   posts,
   boards,
   postExternalLinks,
-  chatTags,
   conversationTags,
+  conversationTagAssignments,
   chatMessageMentions,
   chatMessageReactions,
   chatMessageFlags,
@@ -36,7 +36,7 @@ import type {
   ConversationId,
   PrincipalId,
   PostId,
-  ChatTagId,
+  ConversationTagId,
   ChatMessageId,
   SegmentId,
 } from '@quackback/ids'
@@ -50,7 +50,7 @@ import type {
   MessageReactionCount,
   FlaggedMessageDTO,
   ConversationDTO,
-  ChatTagDTO,
+  ConversationTagDTO,
   MessageSenderType,
   ConversationStatus,
   ConversationEndReason,
@@ -299,7 +299,7 @@ export function toConversationDTO(
   // Agent-only field; callers pass null on visitor-facing paths.
   visitorEmail: string | null = null,
   // Conversation labels (agent-only); empty when untagged.
-  tags: ChatTagDTO[] = [],
+  tags: ConversationTagDTO[] = [],
   // The end-conversation note (agent-only); callers pass null on visitor paths.
   endNote: string | null = null
 ): ConversationDTO {
@@ -334,24 +334,30 @@ export function toConversationDTO(
  * keyed by conversation id. Soft-deleted tags are excluded. Empty input → empty
  * map (no query).
  */
-export async function loadChatTagsForConversations(
+export async function loadConversationTagsForConversations(
   conversationIds: ConversationId[]
-): Promise<Map<ConversationId, ChatTagDTO[]>> {
-  const map = new Map<ConversationId, ChatTagDTO[]>()
+): Promise<Map<ConversationId, ConversationTagDTO[]>> {
+  const map = new Map<ConversationId, ConversationTagDTO[]>()
   if (conversationIds.length === 0) return map
   const rows = await db
     .select({
-      conversationId: conversationTags.conversationId,
-      id: chatTags.id,
-      name: chatTags.name,
-      color: chatTags.color,
+      conversationId: conversationTagAssignments.conversationId,
+      id: conversationTags.id,
+      name: conversationTags.name,
+      color: conversationTags.color,
     })
-    .from(conversationTags)
-    .innerJoin(chatTags, eq(conversationTags.chatTagId, chatTags.id))
-    .where(
-      and(inArray(conversationTags.conversationId, conversationIds), isNull(chatTags.deletedAt))
+    .from(conversationTagAssignments)
+    .innerJoin(
+      conversationTags,
+      eq(conversationTagAssignments.conversationTagId, conversationTags.id)
     )
-    .orderBy(asc(chatTags.name))
+    .where(
+      and(
+        inArray(conversationTagAssignments.conversationId, conversationIds),
+        isNull(conversationTags.deletedAt)
+      )
+    )
+    .orderBy(asc(conversationTags.name))
   for (const r of rows) {
     const list = map.get(r.conversationId) ?? []
     list.push({ id: r.id, name: r.name, color: r.color })
@@ -399,8 +405,8 @@ export async function conversationToDTO(
     loadAuthors([conversation.visitorPrincipalId, conversation.assignedAgentPrincipalId]),
     unreadCountFor(conversation, side),
     side === 'agent'
-      ? loadChatTagsForConversations([conversation.id])
-      : Promise.resolve(new Map<ConversationId, ChatTagDTO[]>()),
+      ? loadConversationTagsForConversations([conversation.id])
+      : Promise.resolve(new Map<ConversationId, ConversationTagDTO[]>()),
   ])
   return toConversationDTO(
     conversation,
@@ -672,7 +678,7 @@ export interface ConversationListFilter {
   /** Free-text match over the visitor name + message content. */
   search?: string
   /** Filter to conversations carrying ANY of these labels (OR semantics). */
-  tagIds?: ChatTagId[]
+  tagIds?: ConversationTagId[]
   /** Filter to conversations whose visitor is a member of ANY of these segments
    *  (OR semantics). Exclusive-scope today sends a single id, but the array keeps
    *  it symmetric with tagIds. */
@@ -754,13 +760,16 @@ export async function listConversationsForAgent(
           ? inArray(
               conversations.id,
               db
-                .selectDistinct({ id: conversationTags.conversationId })
-                .from(conversationTags)
-                .innerJoin(chatTags, eq(conversationTags.chatTagId, chatTags.id))
+                .selectDistinct({ id: conversationTagAssignments.conversationId })
+                .from(conversationTagAssignments)
+                .innerJoin(
+                  conversationTags,
+                  eq(conversationTagAssignments.conversationTagId, conversationTags.id)
+                )
                 .where(
                   and(
-                    inArray(conversationTags.chatTagId, filter.tagIds),
-                    isNull(chatTags.deletedAt)
+                    inArray(conversationTagAssignments.conversationTagId, filter.tagIds),
+                    isNull(conversationTags.deletedAt)
                   )
                 )
             )
@@ -861,7 +870,7 @@ export async function listConversationsForAgent(
   for (const row of unreadRows) unreadMap.set(row.conversationId, row.c)
 
   // Labels for all rows, batched (one query). Inbox is agent-only.
-  const tagMap = await loadChatTagsForConversations(ids)
+  const tagMap = await loadConversationTagsForConversations(ids)
 
   return {
     conversations: page.map((c) =>

@@ -56,7 +56,7 @@ export type ConversationId = TypeId<'conversation'>
 export type ChatMessageId = TypeId<'chat_msg'>
 
 /** Conversation tag ("label") ID - e.g., chat_tag_01h455vb4pex5vsknk084sn02q */
-export type ChatTagId = TypeId<'chat_tag'>
+export type ConversationTagId = TypeId<'chat_tag'>
 
 /** Chat-message @-mention ID - e.g., chat_msg_mention_01h455vb4pex5vsknk084sn02q */
 export type ChatMessageMentionId = TypeId<'chat_msg_mention'>
@@ -272,7 +272,7 @@ export interface EntityIdMap {
   changelog: ChangelogId
   conversation: ConversationId
   chat_message: ChatMessageId
-  chat_tag: ChatTagId
+  chat_tag: ConversationTagId
   chat_message_mention: ChatMessageMentionId
   integration: IntegrationId
   platform_cred: PlatformCredentialId

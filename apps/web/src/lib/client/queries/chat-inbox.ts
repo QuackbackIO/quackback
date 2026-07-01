@@ -12,7 +12,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { ConversationId } from '@quackback/ids'
 import { listConversationsFn, getConversationFn } from '@/lib/server/functions/chat'
-import { fetchChatTagsWithCountsFn } from '@/lib/server/functions/chat-tags'
+import { fetchConversationTagsWithCountsFn } from '@/lib/server/functions/conversation-tags'
 import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/chat-segments'
 import {
   inboxNavKey,
@@ -46,7 +46,7 @@ export const chatInboxQueries = {
   tagCounts: () =>
     queryOptions({
       queryKey: ['admin', 'inbox', 'chat-tags', 'counts'],
-      queryFn: () => fetchChatTagsWithCountsFn(),
+      queryFn: () => fetchConversationTagsWithCountsFn(),
       staleTime: 60_000,
     }),
 

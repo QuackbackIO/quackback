@@ -6,7 +6,7 @@
  *
  * Deliberately a thin chat-side helper rather than living in the segments
  * domain, because the count it returns is chat-specific (open conversations),
- * mirroring `listChatTagsWithCounts` so the two nav groups read identically.
+ * mirroring `listConversationTagsWithCounts` so the two nav groups read identically.
  * Authorization is enforced at the server-fn layer, not here.
  */
 import {
@@ -33,7 +33,7 @@ export type InboxSegmentWithCount = {
  * Non-deleted segments with the count of OPEN conversations whose visitor is a
  * member of each. Scoped to `status='open'` so the nav badge is an actionable
  * signal matching the default inbox view (open), exactly like
- * `listChatTagsWithCounts`. The open filter lives in the conversations LEFT
+ * `listConversationTagsWithCounts`. The open filter lives in the conversations LEFT
  * JOIN's ON clause so segments with no open conversations still appear with a
  * count of 0. `count(distinct …)` guards against any membership fan-out.
  */

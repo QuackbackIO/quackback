@@ -6,23 +6,23 @@
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { ChatTagId, ConversationId } from '@quackback/ids'
+import type { ConversationTagId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
 import {
-  listChatTags,
-  listChatTagsWithCounts,
-  createChatTag,
-  updateChatTag,
-  deleteChatTag,
+  listConversationTags,
+  listConversationTagsWithCounts,
+  createConversationTag,
+  updateConversationTag,
+  deleteConversationTag,
   attachTag,
   detachTag,
   listTagsForConversation,
-} from '@/lib/server/domains/chat/chat-tag.service'
+} from '@/lib/server/domains/chat/conversation-tag.service'
 
-const createChatTagSchema = z.object({
+const createConversationTagSchema = z.object({
   name: z.string().min(1).max(50),
   color: z
     .string()
@@ -30,10 +30,10 @@ const createChatTagSchema = z.object({
     .optional(),
 })
 
-const deleteChatTagSchema = z.object({ id: z.string() })
+const deleteConversationTagSchema = z.object({ id: z.string() })
 
 // Rename and/or recolor a label. At least one of name/color must be present.
-const updateChatTagSchema = z
+const updateConversationTagSchema = z
   .object({
     id: z.string(),
     name: z.string().min(1).max(50).optional(),
@@ -68,41 +68,46 @@ const removeConversationTagSchema = z.object({
 })
 
 /** All conversation labels (for the picker). */
-export const fetchChatTagsFn = createServerFn({ method: 'GET' }).handler(async () => {
+export const fetchConversationTagsFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-  return listChatTags()
+  return listConversationTags()
 })
 
 /** Conversation labels with their conversation counts (drives the inbox nav). */
-export const fetchChatTagsWithCountsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-  return listChatTagsWithCounts()
-})
+export const fetchConversationTagsWithCountsFn = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    return listConversationTagsWithCounts()
+  }
+)
 
 /** Create (or reuse, by name) a conversation label. */
-export const createChatTagFn = createServerFn({ method: 'POST' })
-  .validator(createChatTagSchema)
+export const createConversationTagFn = createServerFn({ method: 'POST' })
+  .validator(createConversationTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_TAGS })
-    const tag = await createChatTag({ name: data.name, color: data.color })
+    const tag = await createConversationTag({ name: data.name, color: data.color })
     return { id: tag.id, name: tag.name, color: tag.color }
   })
 
 /** Rename and/or recolor a conversation label. */
-export const updateChatTagFn = createServerFn({ method: 'POST' })
-  .validator(updateChatTagSchema)
+export const updateConversationTagFn = createServerFn({ method: 'POST' })
+  .validator(updateConversationTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_TAGS })
-    return updateChatTag(data.id as ChatTagId, { name: data.name, color: data.color })
+    return updateConversationTag(data.id as ConversationTagId, {
+      name: data.name,
+      color: data.color,
+    })
   })
 
 /** Soft-delete a conversation label. */
-export const deleteChatTagFn = createServerFn({ method: 'POST' })
-  .validator(deleteChatTagSchema)
+export const deleteConversationTagFn = createServerFn({ method: 'POST' })
+  .validator(deleteConversationTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_TAGS })
-    await deleteChatTag(data.id as ChatTagId)
-    return { id: data.id as ChatTagId }
+    await deleteConversationTag(data.id as ConversationTagId)
+    return { id: data.id as ConversationTagId }
   })
 
 /**
@@ -114,7 +119,7 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
     const conversationId = data.conversationId as ConversationId
-    let tagId = data.tagId as ChatTagId | undefined
+    let tagId = data.tagId as ConversationTagId | undefined
     if (data.name?.trim()) {
       // Inline-create mints new taxonomy, so it additionally requires manage_tags.
       if (!resolveActorPermissions(auth.principal.role).has(PERMISSIONS.CONVERSATION_MANAGE_TAGS)) {
@@ -123,7 +128,7 @@ export const addConversationTagFn = createServerFn({ method: 'POST' })
           `Requires the '${PERMISSIONS.CONVERSATION_MANAGE_TAGS}' permission`
         )
       }
-      const tag = await createChatTag({ name: data.name, color: data.color })
+      const tag = await createConversationTag({ name: data.name, color: data.color })
       tagId = tag.id
     }
     if (!tagId) return listTagsForConversation(conversationId)
@@ -135,5 +140,5 @@ export const removeConversationTagFn = createServerFn({ method: 'POST' })
   .validator(removeConversationTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_TAGS })
-    return detachTag(data.conversationId as ConversationId, data.tagId as ChatTagId)
+    return detachTag(data.conversationId as ConversationId, data.tagId as ConversationTagId)
   })

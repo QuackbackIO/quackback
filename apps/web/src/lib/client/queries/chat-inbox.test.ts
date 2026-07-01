@@ -5,7 +5,7 @@
  * invalidation/optimistic writes, with no type error to catch it.
  */
 import { describe, it, expect, vi } from 'vitest'
-import type { ChatTagId, SegmentId, ConversationId } from '@quackback/ids'
+import type { ConversationTagId, SegmentId, ConversationId } from '@quackback/ids'
 
 // Stub the server fns so importing the factory doesn't pull server-only code
 // (config/env validation) into the test; we only assert on queryKey here.
@@ -13,12 +13,14 @@ vi.mock('@/lib/server/functions/chat', () => ({
   listConversationsFn: vi.fn(),
   getConversationFn: vi.fn(),
 }))
-vi.mock('@/lib/server/functions/chat-tags', () => ({ fetchChatTagsWithCountsFn: vi.fn() }))
+vi.mock('@/lib/server/functions/conversation-tags', () => ({
+  fetchConversationTagsWithCountsFn: vi.fn(),
+}))
 vi.mock('@/lib/server/functions/chat-segments', () => ({ fetchInboxSegmentsWithCountsFn: vi.fn() }))
 
 import { chatInboxQueries } from './chat-inbox'
 
-const tagId = 'chat_tag_x' as ChatTagId
+const tagId = 'chat_tag_x' as ConversationTagId
 const segId = 'segment_y' as SegmentId
 const convId = 'conversation_z' as ConversationId
 
