@@ -17,7 +17,7 @@ import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 const PERIOD_DAYS = { '7d': 7, '30d': 30, '90d': 90, '12m': 365 } as const
 
-interface MetricTotal {
+export interface MetricTotal {
   current: number
   /** Period-over-period percentage; null when the previous window is empty. */
   delta: number | null

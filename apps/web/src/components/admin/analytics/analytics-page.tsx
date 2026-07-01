@@ -14,6 +14,8 @@ import { CHART_HEIGHT_CLASS } from './analytics-constants'
 import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
 import { AnalyticsSummaryCards, type MetricKey } from './analytics-summary-cards'
+import { AnalyticsVisitorCards, type VisitorMetricKey } from './analytics-visitor-cards'
+import { AnalyticsVisitorPanels } from './analytics-visitor-panels'
 import { AnalyticsStatRow, type AnalyticsStatProps } from './analytics-stat-row'
 import { AnalyticsEmpty } from './analytics-empty'
 import { AnalyticsBoardChart } from './analytics-board-chart'
@@ -32,6 +34,9 @@ const AnalyticsActivityChart = lazy(() =>
 )
 const AnalyticsStatusChart = lazy(() =>
   import('./analytics-status-chart').then((m) => ({ default: m.AnalyticsStatusChart }))
+)
+const AnalyticsVisitorChart = lazy(() =>
+  import('./analytics-visitor-chart').then((m) => ({ default: m.AnalyticsVisitorChart }))
 )
 
 /** A section card matching the Overview: a divided headline stat row, then the
@@ -68,19 +73,29 @@ const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
 export function AnalyticsPage() {
   const { settings } = useRouteContext({ from: '__root__' })
   const flags = settings?.featureFlags as FeatureFlags | undefined
-  // The Support section reports CSAT metrics, so hide it unless the experimental
-  // Support Inbox flag is on — same gate as the inbox itself.
+  // Flag-gated sections: Support reports CSAT (Support Inbox flag), Visitors
+  // reports pageview analytics (Visitor Analytics flag) — same gates as the
+  // features themselves.
   const sections = SECTION_NAV_ITEMS.filter(
-    (i) => i.key !== 'support' || (flags?.supportInbox ?? false)
+    (i) =>
+      (i.key !== 'support' || (flags?.supportInbox ?? false)) &&
+      (i.key !== 'visitors' || (flags?.visitorAnalytics ?? false))
   )
 
   const [period, setPeriod] = useState<AnalyticsPeriod>('30d')
   const [section, setSection] = useState<Section>('overview')
   const [activeMetric, setActiveMetric] = useState<MetricKey>('posts')
+  const [visitorMetric, setVisitorMetric] = useState<VisitorMetricKey>('visitors')
+  const [surface, setSurface] = useState<'all' | 'portal' | 'widget'>('all')
 
   const { data, isLoading } = useQuery({
     ...analyticsQueries.data(period),
     placeholderData: keepPreviousData,
+  })
+  const { data: visitorData, isLoading: visitorLoading } = useQuery({
+    ...analyticsQueries.visitors(period, surface),
+    placeholderData: keepPreviousData,
+    enabled: (flags?.visitorAnalytics ?? false) && section === 'visitors',
   })
 
   return (
@@ -175,6 +190,57 @@ export function AnalyticsPage() {
                     </div>
                   </Card>
                 )}
+
+                {section === 'visitors' &&
+                  (visitorLoading || !visitorData ? (
+                    <SectionSkeleton section="overview" />
+                  ) : !visitorData.enabled ? (
+                    <Card className="overflow-hidden">
+                      <AnalyticsEmpty message="Visitor analytics is turned off" />
+                    </Card>
+                  ) : (
+                    <div className="flex flex-col gap-6">
+                      <div className="flex items-center justify-end">
+                        <div className="flex items-center gap-1 rounded-lg border border-border/50 p-1">
+                          {(['all', 'portal', 'widget'] as const).map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setSurface(value)}
+                              className={cn(
+                                'rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors',
+                                surface === value
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                              )}
+                            >
+                              {value === 'all' ? 'All surfaces' : value}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <Card className="overflow-hidden py-0 gap-0">
+                        <AnalyticsVisitorCards
+                          totals={{
+                            visitors: visitorData.uniqueVisitors,
+                            pageviews: visitorData.pageviews,
+                            visits: visitorData.visits,
+                          }}
+                          activeMetric={visitorMetric}
+                          onMetricChange={setVisitorMetric}
+                        />
+                        <div className="border-t border-border/50 px-6 pt-7 pb-6">
+                          <Suspense fallback={<ChartSkeleton className={CHART_HEIGHT_CLASS} />}>
+                            <AnalyticsVisitorChart
+                              dailyStats={visitorData.dailyStats}
+                              activeMetric={visitorMetric}
+                            />
+                          </Suspense>
+                        </div>
+                      </Card>
+                      <AnalyticsVisitorPanels top={visitorData.top} />
+                    </div>
+                  ))}
 
                 {section === 'feedback' && (
                   <div className="flex flex-col gap-6">

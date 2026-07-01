@@ -121,6 +121,9 @@
     --metric-votes: oklch(0.66 0.14 75);
     --metric-comments: oklch(0.58 0.11 195);
     --metric-users: oklch(0.55 0.15 295);
+    --metric-visitors: oklch(0.55 0.13 170);
+    --metric-pageviews: oklch(0.52 0.13 230);
+    --metric-visits: oklch(0.6 0.14 45);
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.886 0.176 86);
@@ -190,6 +193,9 @@
     --metric-votes: oklch(0.8 0.14 80);
     --metric-comments: oklch(0.72 0.11 195);
     --metric-users: oklch(0.7 0.15 295);
+    --metric-visitors: oklch(0.7 0.13 170);
+    --metric-pageviews: oklch(0.7 0.13 230);
+    --metric-visits: oklch(0.75 0.13 50);
     --sidebar: oklch(0.145 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.886 0.176 86);
@@ -253,6 +259,9 @@
     --color-metric-votes: var(--metric-votes);
     --color-metric-comments: var(--metric-comments);
     --color-metric-users: var(--metric-users);
+    --color-metric-visitors: var(--metric-visitors);
+    --color-metric-pageviews: var(--metric-pageviews);
+    --color-metric-visits: var(--metric-visits);
     --color-sidebar: var(--sidebar);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar-primary: var(--sidebar-primary);
