@@ -34,8 +34,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ChannelBadge } from '@/components/admin/chat/channel-badge'
-import { NewConversationDialog } from '@/components/admin/chat/new-conversation-dialog'
+import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
+import { NewConversationDialog } from '@/components/admin/conversation/new-conversation-dialog'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'

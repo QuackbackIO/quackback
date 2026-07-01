@@ -28,8 +28,16 @@ import { cn } from '@/lib/shared/utils'
 // key live in lib/ so the route loader + query factory can share them without
 // importing this component. Re-exported here so existing nav consumers are
 // unaffected.
-export { inboxNavKey, type InboxView, type InboxNavItem } from '@/lib/client/chat/inbox-scope'
-import { inboxNavKey, type InboxView, type InboxNavItem } from '@/lib/client/chat/inbox-scope'
+export {
+  inboxNavKey,
+  type InboxView,
+  type InboxNavItem,
+} from '@/lib/client/conversation/inbox-scope'
+import {
+  inboxNavKey,
+  type InboxView,
+  type InboxNavItem,
+} from '@/lib/client/conversation/inbox-scope'
 
 // Primary views are assignee-based queues — Mine / Unassigned / All — then the
 // @-mentions feed and the personal "Saved for later" feed of flagged messages.

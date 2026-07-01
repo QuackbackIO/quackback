@@ -18,36 +18,52 @@ vi.mock('@/lib/server/functions/conversation-tags', () => ({
 }))
 vi.mock('@/lib/server/functions/chat-segments', () => ({ fetchInboxSegmentsWithCountsFn: vi.fn() }))
 
-import { chatInboxQueries } from './chat-inbox'
+import { conversationInboxQueries } from './conversation-inbox'
 
 const tagId = 'chat_tag_x' as ConversationTagId
 const segId = 'segment_y' as SegmentId
 const convId = 'conversation_z' as ConversationId
 
-describe('chatInboxQueries key parity', () => {
+describe('conversationInboxQueries key parity', () => {
   it('conversationList key matches the legacy inline list key', () => {
     expect(
-      chatInboxQueries.conversationList({ kind: 'view', view: 'all' }, 'open', 'all', '').queryKey
+      conversationInboxQueries.conversationList({ kind: 'view', view: 'all' }, 'open', 'all', '')
+        .queryKey
     ).toEqual(['admin', 'inbox', 'conversations', 'view:all', 'open', 'all', ''])
     expect(
-      chatInboxQueries.conversationList({ kind: 'tag', tagId }, 'closed', 'high', 'refund').queryKey
+      conversationInboxQueries.conversationList({ kind: 'tag', tagId }, 'closed', 'high', 'refund')
+        .queryKey
     ).toEqual(['admin', 'inbox', 'conversations', `tag:${tagId}`, 'closed', 'high', 'refund'])
     expect(
-      chatInboxQueries.conversationList({ kind: 'segment', segmentId: segId }, 'open', 'all', '')
-        .queryKey
+      conversationInboxQueries.conversationList(
+        { kind: 'segment', segmentId: segId },
+        'open',
+        'all',
+        ''
+      ).queryKey
     ).toEqual(['admin', 'inbox', 'conversations', `segment:${segId}`, 'open', 'all', ''])
   })
 
   it('thread key matches the legacy thread key', () => {
-    expect(chatInboxQueries.thread(convId).queryKey).toEqual(['admin', 'inbox', 'thread', convId])
+    expect(conversationInboxQueries.thread(convId).queryKey).toEqual([
+      'admin',
+      'inbox',
+      'thread',
+      convId,
+    ])
   })
 
   it('tagCounts key matches CHAT_TAG_COUNTS_KEY', () => {
-    expect(chatInboxQueries.tagCounts().queryKey).toEqual(['admin', 'inbox', 'chat-tags', 'counts'])
+    expect(conversationInboxQueries.tagCounts().queryKey).toEqual([
+      'admin',
+      'inbox',
+      'chat-tags',
+      'counts',
+    ])
   })
 
   it('segmentCounts key matches INBOX_SEGMENT_COUNTS_KEY', () => {
-    expect(chatInboxQueries.segmentCounts().queryKey).toEqual([
+    expect(conversationInboxQueries.segmentCounts().queryKey).toEqual([
       'admin',
       'inbox',
       'segments',

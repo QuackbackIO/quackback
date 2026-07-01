@@ -35,32 +35,35 @@ import type {
   ConversationDTO,
   ConversationPriority,
 } from '@/lib/shared/conversation/types'
-import { AdminBubble, UnreadDivider } from '@/components/admin/chat/admin-bubble'
-import { PriorityControl } from '@/components/admin/chat/priority-control'
-import { AssigneeControl } from '@/components/admin/chat/assignee-control'
-import { ChannelBadge } from '@/components/admin/chat/channel-badge'
-import { ConversationTagsEditor } from '@/components/admin/chat/conversation-tags-editor'
-import { StatusControl } from '@/components/admin/chat/status-control'
-import { ConversationDetailPanel } from '@/components/admin/chat/conversation-detail-panel'
-import { ConvertToPostDialog } from '@/components/admin/chat/convert-to-post-dialog'
-import { EndConversationDialog } from '@/components/admin/chat/end-conversation-dialog'
-import { SharePostDialog } from '@/components/admin/chat/share-post-dialog'
-import { ConversationListColumn } from '@/components/admin/chat/conversation-list-column'
-import { SavedMessagesColumn } from '@/components/admin/chat/saved-messages-column'
-import { ChatNoteEditor, type ChatNoteEditorHandle } from '@/components/admin/chat/chat-note-editor'
+import { AdminBubble, UnreadDivider } from '@/components/admin/conversation/admin-bubble'
+import { PriorityControl } from '@/components/admin/conversation/priority-control'
+import { AssigneeControl } from '@/components/admin/conversation/assignee-control'
+import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
+import { ConversationTagsEditor } from '@/components/admin/conversation/conversation-tags-editor'
+import { StatusControl } from '@/components/admin/conversation/status-control'
+import { ConversationDetailPanel } from '@/components/admin/conversation/conversation-detail-panel'
+import { ConvertToPostDialog } from '@/components/admin/conversation/convert-to-post-dialog'
+import { EndConversationDialog } from '@/components/admin/conversation/end-conversation-dialog'
+import { SharePostDialog } from '@/components/admin/conversation/share-post-dialog'
+import { ConversationListColumn } from '@/components/admin/conversation/conversation-list-column'
+import { SavedMessagesColumn } from '@/components/admin/conversation/saved-messages-column'
+import {
+  ChatNoteEditor,
+  type ChatNoteEditorHandle,
+} from '@/components/admin/conversation/conversation-note-editor'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import {
   ChatRichComposer,
   type ChatRichComposerHandle,
-} from '@/components/admin/chat/chat-rich-composer'
+} from '@/components/admin/conversation/conversation-rich-composer'
 import {
   InboxNavSidebar,
   isInboxView,
   scopeLabelFor,
   useConversationTagsWithCounts,
   useInboxSegmentsWithCounts,
-} from '@/components/admin/chat/inbox-nav-sidebar'
+} from '@/components/admin/conversation/inbox-nav-sidebar'
 import {
   inboxNavKey,
   navFromSearch,
@@ -68,9 +71,12 @@ import {
   type InboxNavItem,
   type InboxSearch,
   type StatusFilter,
-} from '@/lib/client/chat/inbox-scope'
-import { chatInboxQueries } from '@/lib/client/queries/chat-inbox'
-import { buildAdminChatRows, type AdminChatRow } from '@/lib/client/chat/admin-chat-rows'
+} from '@/lib/client/conversation/inbox-scope'
+import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
+import {
+  buildAdminChatRows,
+  type AdminChatRow,
+} from '@/lib/client/conversation/admin-conversation-rows'
 import type { JSONContent } from '@tiptap/core'
 import { useChatStream } from '@/lib/client/hooks/use-chat-stream'
 import { useChatTyping } from '@/lib/client/hooks/use-chat-typing'
@@ -165,13 +171,15 @@ export const Route = createFileRoute('/admin/inbox')({
         ? undefined
         : warm(
             queryClient.ensureQueryData(
-              chatInboxQueries.conversationList(nav, status, priority, search)
+              conversationInboxQueries.conversationList(nav, status, priority, search)
             )
           ),
-      warm(queryClient.ensureQueryData(chatInboxQueries.tagCounts())),
-      warm(queryClient.ensureQueryData(chatInboxQueries.segmentCounts())),
+      warm(queryClient.ensureQueryData(conversationInboxQueries.tagCounts())),
+      warm(queryClient.ensureQueryData(conversationInboxQueries.segmentCounts())),
       deps.c
-        ? warm(queryClient.ensureQueryData(chatInboxQueries.thread(deps.c as ConversationId)))
+        ? warm(
+            queryClient.ensureQueryData(conversationInboxQueries.thread(deps.c as ConversationId))
+          )
         : undefined,
     ])
     return {}
@@ -299,7 +307,7 @@ function InboxPage() {
   // factory so the route loader's SSR prefetch (same key) hydrates this read.
   const isSaved = nav.kind === 'view' && nav.view === 'saved'
   const { data: listData, isLoading: listLoading } = useQuery({
-    ...chatInboxQueries.conversationList(nav, status, priorityFilter, search),
+    ...conversationInboxQueries.conversationList(nav, status, priorityFilter, search),
     refetchInterval: 30_000, // polling fallback if the stream drops
     enabled: !isSaved,
   })
@@ -685,7 +693,7 @@ function ChatThread({
 
   // Shared factory (same key as `threadKey`) so a `?c=` deep-link prefetched by
   // the route loader hydrates this thread on first paint.
-  const { data, isLoading } = useQuery(chatInboxQueries.thread(conversationId))
+  const { data, isLoading } = useQuery(conversationInboxQueries.thread(conversationId))
 
   const messages = data?.messages ?? []
   const conversation = data?.conversation

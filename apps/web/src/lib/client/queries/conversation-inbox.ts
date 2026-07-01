@@ -19,10 +19,10 @@ import {
   buildListParams,
   type InboxNavItem,
   type StatusFilter,
-} from '@/lib/client/chat/inbox-scope'
+} from '@/lib/client/conversation/inbox-scope'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 
-export const chatInboxQueries = {
+export const conversationInboxQueries = {
   /** The conversation list for a scope + status/priority/search refinement. */
   conversationList: (
     nav: InboxNavItem,

@@ -21,7 +21,7 @@ import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-
 import {
   ChatRichComposer,
   type ChatRichComposerHandle,
-} from '@/components/admin/chat/chat-rich-composer'
+} from '@/components/admin/conversation/conversation-rich-composer'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
