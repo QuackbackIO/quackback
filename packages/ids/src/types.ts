@@ -133,8 +133,8 @@ export type AiUsageLogId = TypeId<'ailog'>
 /** Pipeline audit log entry ID - e.g., plog_01h455vb4pex5vsknk084sn02q */
 export type PipelineLogId = TypeId<'plog'>
 
-/** Post activity log ID - e.g., activity_01h455vb4pex5vsknk084sn02q */
-export type ActivityId = TypeId<'activity'>
+/** Post activity log ID - e.g., post_activity_01h455vb4pex5vsknk084sn02q */
+export type PostActivityId = TypeId<'post_activity'>
 
 // ============================================
 // Feedback Aggregation Entity IDs
@@ -263,7 +263,7 @@ export interface EntityIdMap {
   sentiment: SentimentId
   ai_usage: AiUsageLogId
   pipeline_log: PipelineLogId
-  activity: ActivityId
+  post_activity: PostActivityId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId
   feedback_signal: FeedbackSignalId

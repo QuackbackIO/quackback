@@ -80,7 +80,7 @@ export const ID_PREFIXES = {
 
   user_mapping: 'user_mapping',
   merge_suggestion: 'merge_sug',
-  activity: 'activity',
+  post_activity: 'post_activity',
 
   // ============================================
   // Auth Entities (Better-auth, text primary keys)

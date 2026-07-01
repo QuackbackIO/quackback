@@ -97,7 +97,7 @@ export type {
   UserAttributeId,
   // AI entities
   SentimentId,
-  ActivityId,
+  PostActivityId,
   // Feedback aggregation entities
   FeedbackSourceId,
   RawFeedbackItemId,

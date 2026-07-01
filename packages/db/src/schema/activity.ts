@@ -14,7 +14,7 @@ import { principal } from './auth'
 export const postActivity = pgTable(
   'post_activity',
   {
-    id: typeIdWithDefault('activity')('id').primaryKey(),
+    id: typeIdWithDefault('post_activity')('id').primaryKey(),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
