@@ -2,7 +2,7 @@ import { Button, Column, Heading, Row, Section, Text } from '@react-email/compon
 import { EmailLayout, NotificationFooter } from './email-layout'
 import { typography, button, colors } from './shared-styles'
 
-interface ChatMessageEmailProps {
+interface ConversationMessageEmailProps {
   heading: string
   intro: string
   senderName: string
@@ -15,7 +15,7 @@ interface ChatMessageEmailProps {
   logoUrl?: string
 }
 
-export function ChatMessageEmail({
+export function ConversationMessageEmail({
   heading,
   intro,
   senderName,
@@ -26,7 +26,7 @@ export function ChatMessageEmail({
   reason,
   unsubscribeUrl,
   logoUrl,
-}: ChatMessageEmailProps) {
+}: ConversationMessageEmailProps) {
   return (
     <EmailLayout preview={heading} logoUrl={logoUrl} logoAlt={organizationName}>
       <Heading style={typography.h1}>{heading}</Heading>

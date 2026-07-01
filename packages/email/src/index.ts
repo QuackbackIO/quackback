@@ -19,7 +19,7 @@ import { PortalInviteEmail } from './templates/portal-invite'
 import { WelcomeEmail } from './templates/welcome'
 import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
-import { ChatMessageEmail } from './templates/chat-message'
+import { ConversationMessageEmail } from './templates/conversation-message'
 import { PostMentionEmail } from './templates/post-mention'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
@@ -520,7 +520,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
 // Live Chat Email
 // ============================================================================
 
-interface SendChatMessageEmailParams {
+interface SendConversationMessageEmailParams {
   to: string
   /** Phrasing differs per case: an agent reply to the visitor, a new visitor
    *  message to the team, or an agent-started outreach message to the visitor. */
@@ -542,7 +542,7 @@ interface SendChatMessageEmailParams {
  * visitor message, or a visitor of an agent reply.
  */
 export async function sendConversationMessageEmail(
-  params: SendChatMessageEmailParams
+  params: SendConversationMessageEmailParams
 ): Promise<EmailResult> {
   const {
     to,
@@ -582,7 +582,7 @@ export async function sendConversationMessageEmail(
 
   if (getProvider() === 'console') {
     log.debug(
-      { email_type: 'ChatMessageEmail', to, ctaUrl },
+      { email_type: 'ConversationMessageEmail', to, ctaUrl },
       '[dev] email preview (console provider)'
     )
     return { sent: false }
@@ -591,7 +591,7 @@ export async function sendConversationMessageEmail(
   return sendEmail({
     to,
     subject,
-    react: ChatMessageEmail({
+    react: ConversationMessageEmail({
       heading,
       intro,
       senderName,
