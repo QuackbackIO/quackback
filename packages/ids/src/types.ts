@@ -40,8 +40,8 @@ export type PostTagId = TypeId<'post_tag'>
 /** Post status ID - e.g., status_01h455vb4pex5vsknk084sn02q */
 export type StatusId = TypeId<'status'>
 
-/** Comment reaction ID - e.g., reaction_01h455vb4pex5vsknk084sn02q */
-export type ReactionId = TypeId<'reaction'>
+/** Post comment reaction ID - e.g., post_comment_reaction_01h455vb4pex5vsknk084sn02q */
+export type PostCommentReactionId = TypeId<'post_comment_reaction'>
 
 /** Roadmap ID - e.g., roadmap_01h455vb4pex5vsknk084sn02q */
 export type RoadmapId = TypeId<'roadmap'>
@@ -60,6 +60,9 @@ export type ConversationTagId = TypeId<'conversation_tag'>
 
 /** Conversation message @-mention ID - e.g., conversation_msg_mention_01h455vb4pex5vsknk084sn02q */
 export type ConversationMessageMentionId = TypeId<'conversation_msg_mention'>
+
+/** Conversation message reaction ID - e.g., conversation_msg_reaction_01h455vb4pex5vsknk084sn02q */
+export type ConversationMessageReactionId = TypeId<'conversation_msg_reaction'>
 
 /** Integration ID - e.g., integration_01h455vb4pex5vsknk084sn02q */
 export type IntegrationId = TypeId<'integration'>
@@ -246,7 +249,7 @@ export interface EntityIdMap {
   post_vote: PostVoteId
   post_tag: PostTagId
   status: StatusId
-  reaction: ReactionId
+  post_comment_reaction: PostCommentReactionId
   post_edit: PostEditId
   post_comment_edit: PostCommentEditId
   post_mention: PostMentionId
@@ -274,6 +277,7 @@ export interface EntityIdMap {
   conversation_message: ConversationMessageId
   conversation_tag: ConversationTagId
   conversation_message_mention: ConversationMessageMentionId
+  conversation_message_reaction: ConversationMessageReactionId
   integration: IntegrationId
   platform_cred: PlatformCredentialId
   event_mapping: EventMappingId

@@ -18,7 +18,7 @@ export const ID_PREFIXES = {
   post_vote: 'post_vote',
   post_tag: 'post_tag',
   status: 'status',
-  reaction: 'reaction',
+  post_comment_reaction: 'post_comment_reaction',
   post_edit: 'post_edit',
   post_comment_edit: 'post_comment_edit',
   note: 'note', // Internal staff notes on posts
@@ -33,6 +33,7 @@ export const ID_PREFIXES = {
   conversation_message: 'conversation_msg',
   conversation_tag: 'conversation_tag',
   conversation_message_mention: 'conversation_msg_mention',
+  conversation_message_reaction: 'conversation_msg_reaction',
 
   // Help center
   category: 'category',

@@ -294,7 +294,7 @@ export const postComments = pgTable(
 export const postCommentReactions = pgTable(
   'post_comment_reactions',
   {
-    id: typeIdWithDefault('reaction')('id').primaryKey(),
+    id: typeIdWithDefault('post_comment_reaction')('id').primaryKey(),
     commentId: typeIdColumn('post_comment')('comment_id')
       .notNull()
       .references(() => postComments.id, { onDelete: 'cascade' }),

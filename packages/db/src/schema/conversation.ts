@@ -224,7 +224,7 @@ export const conversationMessageMentions = pgTable(
 export const conversationMessageReactions = pgTable(
   'conversation_message_reactions',
   {
-    id: typeIdWithDefault('reaction')('id').primaryKey(),
+    id: typeIdWithDefault('conversation_msg_reaction')('id').primaryKey(),
     conversationMessageId: typeIdColumn('conversation_msg')('conversation_message_id')
       .notNull()
       .references(() => conversationMessages.id, { onDelete: 'cascade' }),

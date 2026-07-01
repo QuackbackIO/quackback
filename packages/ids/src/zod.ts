@@ -174,7 +174,10 @@ export const commentIdSchema = typeIdSchema(ID_PREFIXES.post_comment)
 export const voteIdSchema = typeIdSchema(ID_PREFIXES.post_vote)
 export const tagIdSchema = typeIdSchema(ID_PREFIXES.post_tag)
 export const statusIdSchema = typeIdSchema(ID_PREFIXES.status)
-export const reactionIdSchema = typeIdSchema(ID_PREFIXES.reaction)
+export const postCommentReactionIdSchema = typeIdSchema(ID_PREFIXES.post_comment_reaction)
+export const conversationMessageReactionIdSchema = typeIdSchema(
+  ID_PREFIXES.conversation_message_reaction
+)
 export const roadmapIdSchema = typeIdSchema(ID_PREFIXES.roadmap)
 export const changelogIdSchema = typeIdSchema(ID_PREFIXES.changelog)
 export const conversationIdSchema = typeIdSchema(ID_PREFIXES.conversation)
@@ -204,7 +207,12 @@ export const flexibleCommentIdSchema = flexibleIdSchema(ID_PREFIXES.post_comment
 export const flexibleVoteIdSchema = flexibleIdSchema(ID_PREFIXES.post_vote)
 export const flexibleTagIdSchema = flexibleIdSchema(ID_PREFIXES.post_tag)
 export const flexibleStatusIdSchema = flexibleIdSchema(ID_PREFIXES.status)
-export const flexibleReactionIdSchema = flexibleIdSchema(ID_PREFIXES.reaction)
+export const flexiblePostCommentReactionIdSchema = flexibleIdSchema(
+  ID_PREFIXES.post_comment_reaction
+)
+export const flexibleConversationMessageReactionIdSchema = flexibleIdSchema(
+  ID_PREFIXES.conversation_message_reaction
+)
 export const flexibleRoadmapIdSchema = flexibleIdSchema(ID_PREFIXES.roadmap)
 export const flexibleChangelogIdSchema = flexibleIdSchema(ID_PREFIXES.changelog)
 export const flexibleIntegrationIdSchema = flexibleIdSchema(ID_PREFIXES.integration)
