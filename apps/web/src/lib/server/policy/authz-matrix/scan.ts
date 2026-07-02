@@ -301,6 +301,7 @@ export function scanEntryPoints(relPath: string, text: string): EntryPoint[] {
     true,
     relPath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   )
+  const moduleFns = collectModuleFunctions(sf)
   const entries: EntryPoint[] = []
   const seenStmts = new Set<ts.Node>()
 
@@ -330,19 +331,79 @@ export function scanEntryPoints(relPath: string, text: string): EntryPoint[] {
       ts.isIdentifier(node.name) &&
       HTTP_METHODS.has(node.name.text) &&
       node.initializer &&
-      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+      (ts.isArrowFunction(node.initializer) ||
+        ts.isFunctionExpression(node.initializer) ||
+        ts.isIdentifier(node.initializer))
     ) {
       entries.push({
         file: relPath,
         surface: node.name.text,
         kind: 'route',
-        gated: subtreeHasGate(node.initializer),
+        gated: routeHandlerHasGate(node.initializer, moduleFns),
       })
     }
     ts.forEachChild(node, visit)
   }
   visit(sf)
   return entries
+}
+
+/**
+ * Gate detection for a route handler in any of its authored shapes: an inline
+ * function, an extracted same-file function referenced by identifier, or an
+ * inline wrapper delegating to one. Resolution is same-file and one hop only;
+ * an identifier that cannot be resolved is treated as UNGATED so the route
+ * stays visible in the inventory instead of silently disappearing (the
+ * fail-visible rule this scanner exists for).
+ */
+function routeHandlerHasGate(initializer: ts.Expression, moduleFns: Map<string, ts.Node>): boolean {
+  if (ts.isIdentifier(initializer)) {
+    const resolved = moduleFns.get(initializer.text)
+    return resolved ? subtreeHasGate(resolved) : false
+  }
+  if (subtreeHasGate(initializer)) return true
+  // Delegating wrapper: scan any same-file functions the inline body calls.
+  let delegated = false
+  const followCalls = (n: ts.Node): void => {
+    if (delegated) return
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+      const target = moduleFns.get(n.expression.text)
+      if (target && subtreeHasGate(target)) {
+        delegated = true
+        return
+      }
+    }
+    ts.forEachChild(n, followCalls)
+  }
+  followCalls(initializer)
+  return delegated
+}
+
+/**
+ * Index every module-level `function name() {}` / `const name = () => {}` in
+ * one pass, so identifier resolution during the entry-point scan is a map
+ * lookup instead of a statement re-walk per call site. First declaration
+ * wins, matching the sequential resolution it replaces.
+ */
+function collectModuleFunctions(sf: ts.SourceFile): Map<string, ts.Node> {
+  const fns = new Map<string, ts.Node>()
+  for (const stmt of sf.statements) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && !fns.has(stmt.name.text)) {
+      fns.set(stmt.name.text, stmt)
+    } else if (ts.isVariableStatement(stmt)) {
+      for (const decl of stmt.declarationList.declarations) {
+        if (
+          ts.isIdentifier(decl.name) &&
+          !fns.has(decl.name.text) &&
+          decl.initializer &&
+          (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))
+        ) {
+          fns.set(decl.name.text, decl.initializer)
+        }
+      }
+    }
+  }
+  return fns
 }
 
 /**

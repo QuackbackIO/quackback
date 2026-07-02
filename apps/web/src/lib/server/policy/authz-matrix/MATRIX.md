@@ -576,7 +576,7 @@ API-key classes hold **every** scope regardless of their configured scope (REST 
 
 ## 4. Entry points without a requireAuth/key gate
 
-139 of 545 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+147 of 553 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -687,8 +687,12 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/mcp.ts`::DELETE | route |
 | `routes/api/mcp.ts`::GET | route |
 | `routes/api/mcp.ts`::POST | route |
+| `routes/api/portal/upload.ts`::POST | route |
+| `routes/api/storage/$.ts`::GET | route |
+| `routes/api/storage/$.ts`::PUT | route |
 | `routes/api/track.ts`::OPTIONS | route |
 | `routes/api/track.ts`::POST | route |
+| `routes/api/upload/image.ts`::POST | route |
 | `routes/api/user/avatar.$userId.ts`::GET | route |
 | `routes/api/user/profile.ts`::DELETE | route |
 | `routes/api/user/profile.ts`::GET | route |
@@ -702,14 +706,18 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/v1/apps/suggest.ts`::OPTIONS | route |
 | `routes/api/v1/apps/unlink.ts`::OPTIONS | route |
 | `routes/api/v1/docs.ts`::GET | route |
+| `routes/api/v1/mentions/suggest.ts`::GET | route |
 | `routes/api/v1/openapi.json.ts`::GET | route |
+| `routes/api/v1/users/$principalId.card.ts`::GET | route |
 | `routes/api/widget/config[.]json.ts`::GET | route |
 | `routes/api/widget/device.ts`::POST | route |
 | `routes/api/widget/identify.ts`::POST | route |
+| `routes/api/widget/kb-ask.ts`::GET | route |
 | `routes/api/widget/kb-search.ts`::GET | route |
 | `routes/api/widget/sdk[.]js.ts`::GET | route |
 | `routes/api/widget/search.ts`::GET | route |
 | `routes/api/widget/session.ts`::GET | route |
+| `routes/api/widget/upload.ts`::POST | route |
 | `routes/apps.tsx`::setIframeHeaders | server-fn |
 | `routes/auth.widget-handoff.tsx`::consumeWidgetHandoffFn | server-fn |
 | `routes/changelog/feed.ts`::GET | route |

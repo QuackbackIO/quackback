@@ -143,6 +143,54 @@ describe('scanEntryPoints — gate presence per entry point', () => {
       { file: 'routes/api/v1/x.ts', surface: 'POST', kind: 'route', gated: false },
     ])
   })
+
+  it('resolves an extracted same-file handler referenced by identifier', () => {
+    const eps = scanEntryPoints(
+      'routes/api/v1/x.ts',
+      `export async function handleGet({ request }) { await withApiKeyAuth(request) }
+       async function handlePost() { return ok() }
+       export const Route = r({ server: { handlers: { GET: handleGet, POST: handlePost } } })`
+    )
+    expect(eps).toEqual([
+      { file: 'routes/api/v1/x.ts', surface: 'GET', kind: 'route', gated: true },
+      { file: 'routes/api/v1/x.ts', surface: 'POST', kind: 'route', gated: false },
+    ])
+  })
+
+  it('resolves a const arrow handler referenced by identifier', () => {
+    const eps = scanEntryPoints(
+      'routes/api/v1/x.ts',
+      `const handleGet = async ({ request }) => { await requireTeamAuth(request) }
+       export const Route = r({ server: { handlers: { GET: handleGet } } })`
+    )
+    expect(eps).toEqual([
+      { file: 'routes/api/v1/x.ts', surface: 'GET', kind: 'route', gated: true },
+    ])
+  })
+
+  it('follows a delegating inline arrow one hop to the extracted handler', () => {
+    const eps = scanEntryPoints(
+      'routes/api/v1/x.ts',
+      `export async function handlePost(request) { await withApiKeyAuth(request) }
+       export const Route = r({ server: { handlers: {
+         POST: ({ request }) => handlePost(request),
+       } } })`
+    )
+    expect(eps).toEqual([
+      { file: 'routes/api/v1/x.ts', surface: 'POST', kind: 'route', gated: true },
+    ])
+  })
+
+  it('records an unresolvable identifier handler as an ungated entry point (fail visible)', () => {
+    const eps = scanEntryPoints(
+      'routes/api/v1/x.ts',
+      `import { importedHandler } from './elsewhere'
+       export const Route = r({ server: { handlers: { GET: importedHandler } } })`
+    )
+    expect(eps).toEqual([
+      { file: 'routes/api/v1/x.ts', surface: 'GET', kind: 'route', gated: false },
+    ])
+  })
 })
 
 describe('scanAuthzSurfaces — live tree invariants', () => {
