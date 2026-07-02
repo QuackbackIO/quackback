@@ -9,9 +9,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "declaration": true,
-    "declarationMap": true,
-    "composite": true,
     "types": ["node"]
   }
 }

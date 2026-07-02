@@ -1,0 +1,106 @@
+# Dependency graph (generated, do not edit by hand)
+
+Regenerate with `bunx vitest run apps/web/src/lib/server/policy/dep-graph -u`.
+A diff here means a dependency edge or cycle was added or removed. Review it as an architecture change, then commit the regenerated file.
+
+Edges come from static analysis of import / export-from / string-literal dynamic-import specifiers. Type-only imports count. Self-edges are omitted.
+
+## 1. Workspace packages
+
+Nodes (6): apps/web, packages/db, packages/email, packages/ids, packages/logger, packages/widget
+
+| From           | To              | Evidence            |
+| -------------- | --------------- | ------------------- |
+| apps/web       | packages/db     | declared + imported |
+| apps/web       | packages/email  | declared + imported |
+| apps/web       | packages/ids    | declared + imported |
+| apps/web       | packages/logger | declared + imported |
+| packages/db    | packages/ids    | declared + imported |
+| packages/email | packages/logger | declared + imported |
+
+Hard rule (test-enforced, not just snapshotted): no package imports app code.
+
+## 2. apps/web/src buckets
+
+Top-level directories of src, with lib split one level deeper; root-level files form `(root)`. The components -> lib/server edge is the TanStack Start server-function pattern, recorded as reality.
+
+Nodes (9): (root), components, lib/client, lib/server, lib/shared, locales, routes, test, types
+Edges (17):
+
+- (root) -> components
+- (root) -> lib/server
+- (root) -> routes
+- components -> lib/client
+- components -> lib/server
+- components -> lib/shared
+- components -> routes
+- lib/client -> lib/server
+- lib/client -> lib/shared
+- lib/server -> lib/shared
+- lib/shared -> lib/server
+- lib/shared -> locales
+- routes -> (root)
+- routes -> components
+- routes -> lib/client
+- routes -> lib/server
+- routes -> lib/shared
+
+## 3. Server domains (lib/server/domains)
+
+Nodes (31): activity, ai, analytics, api, api-keys, assistant, boards, changelog, comments, conversation, embeddings, feedback, help-center, import, merge-suggestions, notifications, platform-credentials, post-tags, posts, principals, push-devices, roadmaps, segments, sentiment, settings, statuses, subscriptions, summary, user-attributes, users, webhooks
+Edges (48):
+
+- analytics -> api
+- analytics -> settings
+- api -> api-keys
+- api -> settings
+- api -> webhooks
+- api-keys -> principals
+- assistant -> ai
+- assistant -> help-center
+- boards -> settings
+- comments -> activity
+- comments -> posts
+- comments -> settings
+- comments -> subscriptions
+- conversation -> comments
+- conversation -> notifications
+- conversation -> posts
+- conversation -> settings
+- embeddings -> ai
+- embeddings -> merge-suggestions
+- feedback -> activity
+- feedback -> ai
+- feedback -> embeddings
+- feedback -> merge-suggestions
+- feedback -> posts
+- feedback -> principals
+- feedback -> settings
+- feedback -> subscriptions
+- help-center -> ai
+- import -> principals
+- merge-suggestions -> ai
+- merge-suggestions -> posts
+- merge-suggestions -> settings
+- posts -> activity
+- posts -> embeddings
+- posts -> platform-credentials
+- posts -> settings
+- posts -> subscriptions
+- principals -> settings
+- roadmaps -> activity
+- sentiment -> ai
+- sentiment -> settings
+- settings -> ai
+- settings -> platform-credentials
+- summary -> ai
+- summary -> settings
+- users -> principals
+- users -> user-attributes
+- webhooks -> settings
+
+### Cycles
+
+Strongly connected components with more than one domain. A new entry here is a new cycle and needs an explicit decision.
+
+- embeddings <-> merge-suggestions <-> posts
