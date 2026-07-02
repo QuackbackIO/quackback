@@ -6,14 +6,16 @@ interface ActivityChartProps {
   activeMetric: MetricKey
 }
 
+const CHART_BINDINGS: Record<MetricKey, { dataKey: string; metric: string; label: string }> = {
+  posts: { dataKey: 'posts', metric: 'posts', label: 'Posts' },
+  votes: { dataKey: 'votes', metric: 'votes', label: 'Votes' },
+  // The metric key is 'postComments' but the daily rows and the color token
+  // are both named 'comments'.
+  postComments: { dataKey: 'comments', metric: 'comments', label: 'Comments' },
+  users: { dataKey: 'users', metric: 'users', label: 'Users' },
+}
+
 export function AnalyticsActivityChart({ dailyStats, activeMetric }: ActivityChartProps) {
-  return (
-    <AnalyticsAreaChart
-      data={dailyStats}
-      dataKey={activeMetric}
-      // Capitalize the metric key so the tooltip reads "Posts", not "posts".
-      label={activeMetric[0].toUpperCase() + activeMetric.slice(1)}
-      metric={activeMetric}
-    />
-  )
+  const { dataKey, metric, label } = CHART_BINDINGS[activeMetric]
+  return <AnalyticsAreaChart data={dailyStats} dataKey={dataKey} label={label} metric={metric} />
 }
