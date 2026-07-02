@@ -1,31 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { canEmailVisitor } from '../reply-capability'
 
+// The widget never collects emails inline (GH issue #300), so an email reply
+// is only possible when transport is configured AND an address is already on
+// file (verified identity, or agent/email-channel capture).
 describe('canEmailVisitor', () => {
-  it('is false when email transport is not configured (cannot send at all)', () => {
-    expect(
-      canEmailVisitor({ emailConfigured: false, preChatEmail: 'optional', visitorHasEmail: true })
-    ).toBe(false)
+  it('is false when email transport is not configured', () => {
+    expect(canEmailVisitor({ emailConfigured: false, visitorHasEmail: true })).toBe(false)
   })
 
-  it('is false when capture is off and no address is on file', () => {
-    expect(
-      canEmailVisitor({ emailConfigured: true, preChatEmail: 'off', visitorHasEmail: false })
-    ).toBe(false)
+  it('is false when no address is on file', () => {
+    expect(canEmailVisitor({ emailConfigured: true, visitorHasEmail: false })).toBe(false)
   })
 
-  it('is true when capture is off but an address is already on file', () => {
-    expect(
-      canEmailVisitor({ emailConfigured: true, preChatEmail: 'off', visitorHasEmail: true })
-    ).toBe(true)
-  })
-
-  it('is true when capture is optional or required (an address will be obtained)', () => {
-    expect(
-      canEmailVisitor({ emailConfigured: true, preChatEmail: 'optional', visitorHasEmail: false })
-    ).toBe(true)
-    expect(
-      canEmailVisitor({ emailConfigured: true, preChatEmail: 'required', visitorHasEmail: false })
-    ).toBe(true)
+  it('is true when configured and an address is on file', () => {
+    expect(canEmailVisitor({ emailConfigured: true, visitorHasEmail: true })).toBe(true)
   })
 })

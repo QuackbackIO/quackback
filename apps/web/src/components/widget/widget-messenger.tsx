@@ -70,6 +70,7 @@ export function WidgetMessenger({
       onAgentActivity={onAgentActivity}
       helpSearch={helpSearch}
       embedOpenMode="newTab"
+      showHeader={false}
     />
   )
 }

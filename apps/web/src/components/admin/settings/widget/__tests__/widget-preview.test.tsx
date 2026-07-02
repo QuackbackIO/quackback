@@ -2,104 +2,127 @@
 /**
  * <WidgetPreview> — admin widget settings live preview.
  *
- * Covers the Messenger tab integration (the preview must mirror the real widget's
- * tab set so admins see an accurate representation):
- *   - A messenger-only config renders the messenger view ("Message us" heading) and
- *     reflects the configured teamName + welcomeMessage, with no tab bar.
- *   - With multiple tabs enabled, a "Messenger" tab button appears and selecting it
- *     switches to the messenger view.
- *   - Messenger is not rendered when tabs.chat is off.
+ * The preview must mirror the real widget's nav model (widget-nav.ts) so admins
+ * see an accurate representation:
+ *   - Tab order is Home | Messages | Feedback | Help | Changelog, with Home only
+ *     when 2+ surfaces are enabled.
+ *   - The Messages tab renders the conversation list fronted by the assistant
+ *     identity (or the team name when the assistant is off).
+ *   - A messages-only config renders the list with no tab bar.
+ *   - Home renders the customised greeting and the ordered card list.
  */
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { WidgetPreview } from '../widget-preview'
 
-describe('WidgetPreview — messenger tab', () => {
-  it('renders the messenger view with configured team name + welcome message when messenger is the only tab', () => {
+describe('WidgetPreview — messages tab', () => {
+  it('renders the conversation list with no tab bar when messages is the only surface', () => {
     render(
       <WidgetPreview
         position="bottom-right"
-        tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Hi! How can we help you today?' }}
+        tabs={{ feedback: false, changelog: false, help: false, messenger: true }}
+        teamName="Acme Support"
       />
     )
 
-    expect(screen.getByText('Message us')).toBeTruthy()
-    expect(screen.getByText('Hi! How can we help you today?')).toBeTruthy()
-    expect(screen.getByText('Acme Support')).toBeTruthy()
+    // List rows are fronted by the team name (no assistant configured).
+    expect(screen.getAllByText('Acme Support').length).toBeGreaterThan(0)
+    expect(screen.getByText('Ask a question')).toBeTruthy()
     // Single tab → no tab bar.
-    expect(screen.queryByRole('button', { name: /Messenger tab/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Messages tab/i })).toBeNull()
   })
 
-  it('exposes a Messenger tab and switches to the messenger view when selected', () => {
+  it('fronts the conversation list with the assistant identity when enabled', () => {
     render(
       <WidgetPreview
         position="bottom-right"
-        tabs={{ feedback: true, changelog: false, help: false, chat: true }}
-        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Welcome aboard!' }}
+        tabs={{ feedback: false, changelog: false, help: false, messenger: true }}
+        assistant={{ enabled: true, name: 'Quinn' }}
+        teamName="Acme Support"
       />
     )
 
-    // Starts on feedback.
+    expect(screen.getAllByText('Quinn').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Acme Support')).toBeNull()
+  })
+
+  it('exposes a Messages tab and switches to the list when selected', () => {
+    render(
+      <WidgetPreview
+        position="bottom-right"
+        tabs={{ feedback: true, changelog: false, help: false, messenger: true, home: false }}
+        teamName="Acme Support"
+      />
+    )
+
+    // Starts on the first surface (messages is first in the order).
+    expect(screen.getByRole('button', { name: /Feedback tab/i })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Feedback tab/i }))
     expect(screen.getByText('Share your ideas')).toBeTruthy()
 
-    const messengerTab = screen.getByRole('button', { name: /Messenger tab/i })
-    fireEvent.click(messengerTab)
-
-    expect(screen.getByText('Message us')).toBeTruthy()
-    expect(screen.getByText('Welcome aboard!')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Messages tab/i }))
+    expect(screen.getByText('Ask a question')).toBeTruthy()
   })
 
-  it('does not render the messenger view when messenger tab is off', () => {
+  it('does not render a Messages tab when messenger is off', () => {
     render(
       <WidgetPreview
         position="bottom-right"
-        tabs={{ feedback: true, changelog: true, help: false, chat: false }}
-        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Welcome aboard!' }}
+        tabs={{ feedback: true, changelog: true, help: false, messenger: false }}
       />
     )
 
-    expect(screen.queryByText('Message us')).toBeNull()
-    expect(screen.queryByText('Welcome aboard!')).toBeNull()
-    expect(screen.queryByRole('button', { name: /Messenger tab/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Messages tab/i })).toBeNull()
   })
+})
 
-  it('renders the availability presence strip in the messenger view (mirrors the real widget)', () => {
+describe('WidgetPreview — home tab', () => {
+  it('shows Home first with 2+ surfaces and renders the customised greeting', () => {
     render(
       <WidgetPreview
         position="bottom-right"
-        tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        messenger={{ teamName: 'Acme Support', welcomeMessage: 'Hi!' }}
+        tabs={{ feedback: true, changelog: true, help: false, messenger: false }}
+        home={{ greeting: 'Welcome to Acme 👋', subtitle: 'We are here for you' }}
       />
     )
 
-    expect(screen.getByText(/We're online/i)).toBeTruthy()
+    // Home is the initial tab, so its hero renders immediately.
+    expect(screen.getByText('Welcome to Acme 👋')).toBeTruthy()
+    expect(screen.getByText('We are here for you')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Home tab/i })).toBeTruthy()
   })
 
-  it('shows the empty-state prompt instead of a fabricated greeting when no welcome message is set', () => {
+  it('renders ordered custom cards and skips cards for disabled surfaces', () => {
     render(
       <WidgetPreview
         position="bottom-right"
-        tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        messenger={{ teamName: 'Acme Support', welcomeMessage: '' }}
+        tabs={{ feedback: true, changelog: true, help: false, messenger: false }}
+        home={{
+          cards: [
+            { id: 'c1', type: 'link', title: 'Book a demo', url: 'https://example.com' },
+            { id: 'c2', type: 'feedback' },
+            // Help is disabled, so this card must not render.
+            { id: 'c3', type: 'article_search' },
+          ],
+        }}
       />
     )
 
-    // The real widget shows the empty-state prompt — not an invented greeting.
-    expect(screen.getByText(/Send us a message/i)).toBeTruthy()
-    expect(screen.queryByText(/How can we help/i)).toBeNull()
+    expect(screen.getByText('Book a demo')).toBeTruthy()
+    expect(screen.getByText('Suggest a feature')).toBeTruthy()
+    expect(screen.queryByText('Get help')).toBeNull()
   })
 
-  it('omits the agent name label when no team name is configured (matches the real ChatBubble)', () => {
+  it('hides Home when the admin disables it', () => {
     render(
       <WidgetPreview
         position="bottom-right"
-        tabs={{ feedback: false, changelog: false, help: false, chat: true }}
-        messenger={{ welcomeMessage: 'Hello there' }}
+        tabs={{ feedback: true, changelog: true, help: false, messenger: false, home: false }}
       />
     )
 
-    expect(screen.getByText('Hello there')).toBeTruthy()
-    expect(screen.queryByText('Support')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Home tab/i })).toBeNull()
+    // Lands on feedback instead.
+    expect(screen.getByText('Share your ideas')).toBeTruthy()
   })
 })

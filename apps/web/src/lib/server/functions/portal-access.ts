@@ -165,17 +165,14 @@ export const resolvePortalAccessForRequest = createServerOnlyFn(
     //     A private portal must never silently become public on transient errors.
     let result: { granted: boolean; reason: string }
     try {
-      const [{ getPortalConfig }, { getWidgetConfig }, { evaluatePortalAccess }] =
-        await Promise.all([
-          import('@/lib/server/domains/settings/settings.service'),
-          import('@/lib/server/domains/settings/settings.widget'),
-          import('@/lib/server/domains/settings/portal-access'),
-        ])
-      const [portalConfig, widgetConfig] = await Promise.all([
-        getPortalConfig(),
-        getWidgetConfig().catch(() => null),
+      const [{ getPortalConfig }, { evaluatePortalAccess }] = await Promise.all([
+        import('@/lib/server/domains/settings/settings.service'),
+        import('@/lib/server/domains/settings/portal-access'),
       ])
-      const identifyVerificationEnabled = widgetConfig?.identifyVerification ?? false
+      const portalConfig = await getPortalConfig()
+      // Widget identify is verified-only (backend-signed ssoToken; GH issue
+      // #300), so HMAC verification is structural, not a per-workspace toggle.
+      const identifyVerificationEnabled = true
 
       // Check segment membership — only when authenticated and the config lists allowed segments.
       // Fail CLOSED on DB error: a lookup failure never grants access.

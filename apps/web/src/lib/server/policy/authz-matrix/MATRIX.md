@@ -93,7 +93,7 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 321 surfaces
+### Server functions (`requireAuth`) — 324 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -329,6 +329,8 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/settings.ts`::fetchWidgetConfig | settings.manage |
 | `lib/server/functions/settings.ts`::fetchWidgetSecret | settings.manage |
 | `lib/server/functions/settings.ts`::updateWidgetConfigFn | settings.manage |
+| `lib/server/functions/settings.ts`::saveWidgetHeroImageKeyFn | settings.manage |
+| `lib/server/functions/settings.ts`::deleteWidgetHeroImageFn | settings.manage |
 | `lib/server/functions/settings.ts`::regenerateWidgetSecretFn | settings.manage |
 | `lib/server/functions/settings.ts`::getEmailChannelStatusFn | settings.manage |
 | `lib/server/functions/settings.ts`::updateModerationDefaultFn | settings.moderation |
@@ -364,6 +366,7 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/uploads.ts`::getLogoUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getFaviconUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.manage |
+| `lib/server/functions/uploads.ts`::getWidgetHeroUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/user.ts`::requirePrincipalId | END_USER (any authenticated) |
 | `lib/server/functions/visitor-analytics.ts`::getVisitorAnalyticsData | analytics.view |
@@ -573,7 +576,7 @@ API-key classes hold **every** scope regardless of their configured scope (REST 
 
 ## 4. Entry points without a requireAuth/key gate
 
-139 of 542 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+139 of 545 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -591,6 +594,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/conversation.ts`::getConversationPresenceFn | server-fn |
 | `lib/server/functions/conversation.ts`::getMyConversationFn | server-fn |
 | `lib/server/functions/conversation.ts`::getMyConversationsFn | server-fn |
+| `lib/server/functions/conversation.ts`::getWidgetTeamAvatarsFn | server-fn |
 | `lib/server/functions/embeds.ts`::getEmbedPreviewFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicArticleBySlugFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicCategoryBySlugFn | server-fn |
@@ -658,7 +662,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/user.ts`::updateNotificationPreferencesFn | server-fn |
 | `lib/server/functions/user.ts`::updateProfileNameFn | server-fn |
 | `lib/server/functions/version.ts`::getLatestVersion | server-fn |
-| `lib/server/functions/widget.ts`::createWidgetIdentifyTokenFn | server-fn |
 | `lib/server/functions/workspace-utils.ts`::requireWorkspaceRole | server-fn |
 | `lib/server/functions/workspace.ts`::getCurrentUserRole | server-fn |
 | `lib/server/functions/workspace.ts`::getSettings | server-fn |

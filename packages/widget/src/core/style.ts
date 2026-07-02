@@ -7,9 +7,14 @@ export function ensureStyles(side: 'left' | 'right'): void {
   el.textContent = [
     '.quackback-panel{position:fixed;z-index:2147483647;overflow:hidden;pointer-events:none;',
     `bottom:88px;${side}:24px;width:400px;height:min(600px,calc(100vh - 108px));`,
-    'border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.12);',
+    'border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,0.32),0 6px 20px rgba(0,0,0,0.18);',
     `opacity:0;transform:scale(0);transform-origin:bottom ${side};`,
-    'transition:opacity 280ms cubic-bezier(0.34,1.56,0.64,1),transform 280ms cubic-bezier(0.34,1.56,0.64,1)}',
+    'transition:opacity 280ms cubic-bezier(0.34,1.56,0.64,1),transform 280ms cubic-bezier(0.34,1.56,0.64,1),',
+    'width 520ms cubic-bezier(0.26,1,0.32,1),height 520ms cubic-bezier(0.26,1,0.32,1)}',
+    // Long-form content (posts, articles, changelog entries) grows the panel.
+    // Desktop-scoped: on mobile the panel is already full-screen, and this
+    // higher-specificity rule would otherwise SHRINK it there.
+    '@media(min-width:640px){.quackback-panel.quackback-expanded{width:min(720px,calc(100vw - 48px));height:min(780px,calc(100vh - 48px))}}',
     '.quackback-panel.quackback-open{opacity:1;transform:scale(1);pointer-events:auto}',
     '.quackback-panel.quackback-closing{opacity:0;transform:scale(0);pointer-events:none;',
     'transition:opacity 200ms cubic-bezier(0.4,0,1,1),transform 200ms cubic-bezier(0.4,0,1,1)}',

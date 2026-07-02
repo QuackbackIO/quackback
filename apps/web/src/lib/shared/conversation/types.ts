@@ -51,7 +51,6 @@ export interface OfficeHoursConfig {
 }
 
 /** Pre-chat email capture mode for anonymous visitors. */
-export type PreChatEmailMode = 'off' | 'optional' | 'required'
 
 /** Author identity attached to a rendered message. */
 export interface ConversationAuthorDTO {

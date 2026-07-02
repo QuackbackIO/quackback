@@ -13,6 +13,8 @@ import {
   updateHeaderDisplayNameFn,
   saveLogoKeyFn,
   saveHeaderLogoKeyFn,
+  saveWidgetHeroImageKeyFn,
+  deleteWidgetHeroImageFn,
   updatePortalConfigFn,
   updateModerationDefaultFn,
   updateWidgetConfigFn,
@@ -21,7 +23,11 @@ import {
   updateCustomCssFn,
 } from '@/lib/server/functions/settings'
 import { updateHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
-import { getLogoUploadUrlFn, getHeaderLogoUploadUrlFn } from '@/lib/server/functions/uploads'
+import {
+  getLogoUploadUrlFn,
+  getHeaderLogoUploadUrlFn,
+  getWidgetHeroUploadUrlFn,
+} from '@/lib/server/functions/uploads'
 import { settingsQueries } from '@/lib/client/queries/settings'
 
 // ============================================================================
@@ -122,6 +128,59 @@ export function useDeleteWorkspaceHeaderLogo() {
     mutationFn: () => deleteHeaderLogoFn(),
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: settingsQueries.headerLogo().queryKey })
+    },
+  })
+}
+
+// ============================================================================
+// Widget Hero Image Mutation Hooks
+// ============================================================================
+
+export function useUploadWidgetHeroImage() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (file: Blob) => {
+      // 1. Get presigned URL from server
+      const { uploadUrl, key } = await getWidgetHeroUploadUrlFn({
+        data: {
+          filename: (file as File).name || 'widget-hero.png',
+          contentType: file.type,
+          fileSize: file.size,
+        },
+      })
+
+      // 2. Upload directly to S3
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload hero image to storage')
+      }
+
+      // 3. Save the S3 key (also switches the Home header style to 'image')
+      await saveWidgetHeroImageKeyFn({ data: { key } })
+    },
+    onSuccess: () => {
+      // Loaders read via ensureQueryData — invalidate AND return the promise
+      // so callers awaiting the mutation see fresh config (see note above).
+      return queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey })
+    },
+  })
+}
+
+export function useDeleteWidgetHeroImage() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => deleteWidgetHeroImageFn(),
+    onSuccess: () => {
+      return queryClient.invalidateQueries({ queryKey: settingsQueries.widgetConfig().queryKey })
     },
   })
 }

@@ -11,7 +11,13 @@ interface ServerTheme {
 
 interface ServerConfig {
   theme?: ServerTheme
-  tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean; chat?: boolean; home?: boolean }
+  tabs?: {
+    feedback?: boolean
+    changelog?: boolean
+    help?: boolean
+    messenger?: boolean
+    home?: boolean
+  }
   hmacRequired?: boolean
   visitorAnalytics?: boolean
   visitorDeviceTracking?: boolean
@@ -79,8 +85,8 @@ export const Route = createFileRoute('/api/widget/config.json')({
         const { getBrandingConfig, getCustomCss } =
           await import('@/lib/server/domains/settings/settings.media')
 
-        // Public projection: tabs are already flag-gated (e.g. chat behind the
-        // experimental `chat` flag), so this endpoint just forwards them.
+        // Public projection: tabs are already flag-gated (e.g. messenger behind
+        // the experimental `supportInbox` flag), so this endpoint just forwards them.
         const widgetConfig = await getPublicWidgetConfig()
 
         if (!widgetConfig.enabled) {

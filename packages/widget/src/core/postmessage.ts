@@ -11,6 +11,7 @@ export type OutboundMessage =
   | { type: 'quackback:ready' }
   | { type: 'quackback:close' }
   | { type: 'quackback:navigate'; url: string }
+  | { type: 'quackback:expand'; expanded: boolean }
   | { type: 'quackback:identify-result'; success: boolean; user?: unknown; error?: string }
   | { type: 'quackback:auth-change'; user: unknown }
   | { type: 'quackback:event'; name: string; payload: unknown }

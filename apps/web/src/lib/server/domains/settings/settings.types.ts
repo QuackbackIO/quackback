@@ -7,7 +7,7 @@
 
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
-import type { OfficeHoursConfig, PreChatEmailMode } from '@/lib/shared/conversation/types'
+import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -437,6 +437,21 @@ export interface CannedReply {
  * and projected into PublicMessengerConfig; `cannedReplies` is agent-only and is
  * stripped from the public projection (see getPublicWidgetConfig).
  */
+/**
+ * Display identity for the workspace's AI assistant. Presentation only — the
+ * assistant's actual replies come from the external agent layer (MCP service
+ * principal); enabling this only changes who the messenger says is greeting
+ * the visitor. Keep this the single source of the assistant's name/avatar so
+ * the future agent principal adopts it rather than adding a second identity.
+ */
+export interface AssistantIdentityConfig {
+  enabled?: boolean
+  /** Display name (e.g. "Quinn"). */
+  name?: string
+  /** Avatar image URL; falls back to an initial when unset. */
+  avatarUrl?: string
+}
+
 export interface MessengerConfig {
   /** Master toggle for the messenger tab + endpoints. */
   enabled: boolean
@@ -446,10 +461,10 @@ export interface MessengerConfig {
   offlineMessage?: string
   /** Heading shown for the messenger tab/view (falls back to the workspace name). */
   teamName?: string
+  /** AI-assistant display identity (client-safe). */
+  assistant?: AssistantIdentityConfig
   /** Weekly office hours; when enabled, drives the widget's away state + copy. */
   officeHours?: OfficeHoursConfig
-  /** Ask anonymous visitors for an email before messaging ('off' by default). */
-  preChatEmail?: PreChatEmailMode
   /** Agent-only saved replies — NEVER projected into the public widget config. */
   cannedReplies?: CannedReply[]
   /** Conversation routing: auto-assign new conversations to an active agent.
@@ -464,29 +479,88 @@ export interface MessengerConfig {
 /** Client-safe subset of MessengerConfig (drops agent-only fields). */
 export type PublicMessengerConfig = Omit<MessengerConfig, 'cannedReplies' | 'routing'>
 
+/**
+ * Types of card the widget Home surface can show. Built-in types route to a
+ * widget surface and carry sensible default copy; 'link' opens an external URL.
+ * Future types (e.g. recent tickets) extend this union.
+ */
+export type WidgetHomeCardType =
+  | 'feedback'
+  | 'new_conversation'
+  | 'article_search'
+  | 'latest_updates'
+  | 'link'
+
+/** An ordered, admin-configurable card on the widget Home surface. */
+export interface WidgetHomeCard {
+  id: string
+  type: WidgetHomeCardType
+  /** Hidden without being removed (defaults to shown). */
+  enabled?: boolean
+  /** Override the card's default title (built-in types have default copy). */
+  title?: string
+  /** Override the card's default subtitle. */
+  subtitle?: string
+  /** External URL opened in a new tab — 'link' cards only. */
+  url?: string
+}
+
+/**
+ * The Home cards shown when the admin hasn't customised the list: one card per
+ * built-in surface, each auto-hidden when its surface is disabled. Shared by
+ * the widget renderer and the admin editor (as the seed for customisation).
+ */
+export const DEFAULT_WIDGET_HOME_CARDS: WidgetHomeCard[] = [
+  { id: 'feedback', type: 'feedback' },
+  { id: 'new-conversation', type: 'new_conversation' },
+  { id: 'article-search', type: 'article_search' },
+  { id: 'latest-updates', type: 'latest_updates' },
+]
+
+/** Customisation for the aggregated Home surface (greeting, hero, quick links). */
+export interface WidgetHomeConfig {
+  /** Greeting heading; supports a `{name}` placeholder (e.g. "Hi {name} 👋"). */
+  greeting?: string
+  /** Subtitle under the greeting (e.g. "How can we help?"). */
+  subtitle?: string
+  /** Home hero treatment: plain background, a brand-tinted gradient, or an
+   *  uploaded image that fades into the content. */
+  headerStyle?: 'plain' | 'gradient' | 'image'
+  /** S3 key of the uploaded hero image. Written ONLY via saveWidgetHeroImageKey
+   *  (single writer owns the S3 object lifecycle) — never through the generic
+   *  config update; resolved to `heroImageUrl` in the public projection. */
+  heroImageKey?: string
+  /** Public URL of the hero image — derived from heroImageKey at projection
+   *  time; present only on the public/client side. */
+  heroImageUrl?: string | null
+  /** Show the workspace logo in the Home header (default on when a logo is set). */
+  showLogo?: boolean
+  /** Show a small teammate-avatar cluster in the Home header (default on). */
+  showTeamAvatars?: boolean
+  /** Admin-defined quick-link cards shown below the surface cards. */
+  cards?: WidgetHomeCard[]
+}
+
 export interface WidgetConfig {
   enabled: boolean
   /** Board slug to filter/default to */
   defaultBoard?: string
   /** Trigger button position */
   position?: 'bottom-right' | 'bottom-left'
-  /** Whether to require app-signed identity instead of inline email capture */
-  identifyVerification?: boolean
   /** Which tabs to show in the widget bottom bar */
   tabs?: {
     feedback?: boolean
     changelog?: boolean
     help?: boolean
-    chat?: boolean
+    /** Messenger (the "Messages" tab). */
+    messenger?: boolean
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
   /** Messenger settings, stored under `messenger`. */
   messenger?: MessengerConfig
-  /** @deprecated superseded by `messenger` — kept so rows written before the
-   *  key rename still typecheck; read with a `messenger ?? chat` fallback
-   *  (see getMessengerConfig). */
-  chat?: MessengerConfig
+  /** Home surface customisation (greeting, hero style, quick-link cards). */
+  home?: WidgetHomeConfig
 }
 
 /**
@@ -495,9 +569,9 @@ export interface WidgetConfig {
  */
 export type PublicWidgetConfig = Pick<
   WidgetConfig,
-  'enabled' | 'defaultBoard' | 'position' | 'tabs'
+  'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'home'
 > & {
-  /** Whether verified identity is required (derived from identifyVerification) */
+  /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
   /** Client-safe messenger config (no agent-only fields like cannedReplies). */
   messenger?: PublicMessengerConfig
@@ -507,10 +581,9 @@ export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
   enabled: false,
   welcomeMessage: 'Hi! 👋 How can we help you today?',
   offlineMessage: "We're away right now. Leave a message and we'll get back to you by email.",
-  // Default to capturing an email (optional, non-blocking) so an offline reply
-  // can actually reach the visitor. 'off' left the common "type and leave" case
-  // with no way to follow up.
-  preChatEmail: 'optional',
+  // AI-first by default: conversations open fronted by the assistant identity.
+  // Admins can rename or disable it under Settings → AI & Automation.
+  assistant: { enabled: true, name: 'Quinn' },
 }
 
 /** A sensible starting schedule for the settings UI: Mon–Fri, 9–5, disabled. */
@@ -526,11 +599,10 @@ export const DEFAULT_OFFICE_HOURS: OfficeHoursConfig = {
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   enabled: false,
-  identifyVerification: false,
   tabs: {
     feedback: true,
     changelog: false,
-    chat: false,
+    messenger: false,
     home: true,
   },
   messenger: DEFAULT_MESSENGER_CONFIG,
@@ -543,17 +615,15 @@ export interface UpdateWidgetConfigInput {
   enabled?: boolean
   defaultBoard?: string
   position?: 'bottom-right' | 'bottom-left'
-  identifyVerification?: boolean
   tabs?: {
     feedback?: boolean
     changelog?: boolean
     help?: boolean
-    chat?: boolean
+    messenger?: boolean
     home?: boolean
   }
   messenger?: Partial<MessengerConfig>
-  /** @deprecated superseded by `messenger`. */
-  chat?: Partial<MessengerConfig>
+  home?: WidgetHomeConfig
 }
 
 // =============================================================================

@@ -1,16 +1,14 @@
 /**
- * Team-role guard on POST /api/widget/identify.
+ * Verified-only contract on POST /api/widget/identify (GH issue #300).
  *
  * Background: the route mints a normal Better Auth session token and returns
  * it as a Bearer. The `bearer()` plugin is registered globally, so that token
  * satisfies `auth.api.getSession()` everywhere — including the admin-only
- * `requireAuth({ roles: ['admin'] })` path. Without this guard, "knowing an
- * admin's email" in unverified mode escalates to full admin takeover.
- *
- * The guard refuses to mint sessions for emails whose principal is admin or
- * member. Customer-tier collisions (role='user') remain allowed — that's the
- * documented unverified trust model. The verified (ssoToken) path is exempt:
- * HMAC vouches for the claim.
+ * `requireAuth({ roles: ['admin'] })` path. An unverified id+email path would
+ * turn "knowing an admin's email" into full account takeover, so identify
+ * accepts ONLY an ssoToken signed by the customer's backend with the widget
+ * secret. These tests are the regression pin: an id+email body must never
+ * mint a session, no matter whose email it names.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -127,8 +125,8 @@ beforeEach(() => {
   mockUpdate.mockReset()
 })
 
-describe('POST /api/widget/identify — team-role guard (unverified path)', () => {
-  it('refuses with 403 IDENTITY_LOCKED when the email belongs to an admin', async () => {
+describe('POST /api/widget/identify — rejects any body without a signed ssoToken', () => {
+  it('rejects an id+email body naming an admin email and mints nothing', async () => {
     mockUserFindFirst.mockResolvedValue({
       id: 'user_admin',
       email: 'admin@acme.com',
@@ -141,64 +139,38 @@ describe('POST /api/widget/identify — team-role guard (unverified path)', () =
 
     const res = await postIdentify({ id: 'attacker-supplied', email: 'admin@acme.com' })
 
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(400)
     const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('IDENTITY_LOCKED')
-    // No session should be minted on the rejection path.
+    expect(body.error?.code).toBe('VALIDATION_ERROR')
+    // No session (or any row) may be created on the rejection path.
     expect(mockInsert).not.toHaveBeenCalled()
     expect(mockUpdate).not.toHaveBeenCalled()
+    // The rejection happens at the schema boundary, before any user lookup.
+    expect(mockUserFindFirst).not.toHaveBeenCalled()
   })
 
-  it('refuses with 403 IDENTITY_LOCKED when the email belongs to a member', async () => {
-    mockUserFindFirst.mockResolvedValue({
-      id: 'user_member',
-      email: 'member@acme.com',
-      name: 'Member',
-      image: null,
-      imageKey: null,
-      metadata: null,
-    })
-    mockPrincipalFindFirst.mockResolvedValue({ role: 'member' })
-
+  it('rejects an id+email body naming a member email', async () => {
     const res = await postIdentify({ id: 'attacker-supplied', email: 'member@acme.com' })
-
-    expect(res.status).toBe(403)
-    const body = (await res.json()) as { error?: { code?: string } }
-    expect(body.error?.code).toBe('IDENTITY_LOCKED')
+    expect(res.status).toBe(400)
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 
-  it('allows the unverified path when the email belongs to a role=user principal', async () => {
-    // Customer-tier collision: documented trust model accepts this.
-    mockUserFindFirst.mockResolvedValue({
-      id: 'user_customer',
-      email: 'customer@acme.com',
-      name: 'Customer',
-      image: null,
-      imageKey: null,
-      metadata: null,
-    })
-    mockPrincipalFindFirst.mockResolvedValue({ role: 'user' })
-
+  it('rejects an id+email body even for a plain customer email', async () => {
+    // Unverified identify is gone entirely — not just team-guarded.
     const res = await postIdentify({ id: 'foo', email: 'customer@acme.com' })
-
-    expect(res.status).toBe(200)
-    const body = (await res.json()) as { sessionToken?: string }
-    expect(body.sessionToken).toBeTypeOf('string')
+    expect(res.status).toBe(400)
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 
-  it('allows the unverified path when no user exists for the email yet', async () => {
-    // No collision — first-time identify creates a fresh user + principal.
+  it('rejects a first-time email with no existing user', async () => {
     mockUserFindFirst.mockResolvedValue(null)
-    // After the user insert, the principal lookup also returns null and is created.
-    mockPrincipalFindFirst.mockResolvedValue(null)
-
     const res = await postIdentify({ id: 'new-id', email: 'first-time@acme.com' })
-
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
+    expect(mockInsert).not.toHaveBeenCalled()
   })
 })
 
-describe('POST /api/widget/identify — team-role guard does NOT apply to verified path', () => {
+describe('POST /api/widget/identify — the verified (ssoToken) path', () => {
   it('allows ssoToken identify even when the email backs an admin', async () => {
     // verifyHS256JWT mock above returns sso@acme.com; we map an admin to it.
     mockUserFindFirst.mockResolvedValue({

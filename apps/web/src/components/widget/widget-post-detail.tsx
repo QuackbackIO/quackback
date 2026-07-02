@@ -33,15 +33,8 @@ interface WidgetPostDetailProps {
 
 export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   const intl = useIntl()
-  const {
-    isIdentified,
-    hmacRequired,
-    user,
-    ensureSessionThen,
-    identifyWithEmail,
-    emitEvent,
-    sessionVersion,
-  } = useWidgetAuth()
+  const { isIdentified, hmacRequired, user, ensureSessionThen, emitEvent, sessionVersion } =
+    useWidgetAuth()
   const queryClient = useQueryClient()
 
   // Widget-specific post detail query that injects Bearer headers so the server
@@ -172,7 +165,8 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
 
   return (
     <ScrollArea ref={scrollAreaRef} scrollBarClassName="w-1.5" className="flex-1 h-full">
-      <div className="px-3 pt-3 pb-4 space-y-3">
+      {/* Readable column when the host panel expands for long-form content. */}
+      <div className="mx-auto w-full max-w-2xl px-3 pt-3 pb-4 space-y-3">
         {/* Header: mirrors widget listing layout (vote left, status/title right) */}
         <div className="flex items-start gap-3">
           <div className="shrink-0 mt-0.5">
@@ -285,12 +279,7 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
           {/* Root comment form — unified: textarea + email (when anonymous) + single Post.
               For an anonymous viewer the email field escalates them to a real user. */}
           {!post.isCommentsLocked && !commentNoAccess && !hmacRequired && (
-            <WidgetCommentForm
-              isIdentified={isIdentified}
-              user={user}
-              onSubmit={submitComment}
-              identifyWithEmail={identifyWithEmail}
-            />
+            <WidgetCommentForm isIdentified={isIdentified} user={user} onSubmit={submitComment} />
           )}
 
           {!post.isCommentsLocked && !commentNoAccess && hmacRequired && !canComment && (

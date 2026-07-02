@@ -15,10 +15,12 @@ function formatDate(iso: string) {
 }
 
 interface WidgetChangelogProps {
+  /** Team label for the "From {team}" subline; omitted when unknown. */
+  teamName?: string | null
   onEntrySelect?: (entryId: string) => void
 }
 
-export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
+export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProps) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
     publicChangelogQueries.list()
   )
@@ -61,20 +63,35 @@ export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
   return (
     <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
       <div className="px-3 pt-2 pb-3">
-        <div className="space-y-1">
+        <header className="px-1 pb-2">
+          <h2 className="text-base font-semibold text-foreground">
+            <FormattedMessage id="widget.changelog.latest" defaultMessage="Latest" />
+          </h2>
+          {teamName && (
+            <p className="text-xs text-muted-foreground">
+              <FormattedMessage
+                id="widget.changelog.latestFrom"
+                defaultMessage="From {team}"
+                values={{ team: teamName }}
+              />
+            </p>
+          )}
+        </header>
+
+        <div className="space-y-2">
           {entries.map((entry) => (
             <button
               key={entry.id}
               type="button"
               onClick={() => onEntrySelect?.(entry.id)}
-              className="w-full text-start rounded-lg hover:bg-muted/30 transition-colors px-2.5 py-2.5 cursor-pointer"
+              className="w-full text-start rounded-xl border border-border/50 bg-card hover:bg-muted/30 transition-colors px-3.5 py-3 cursor-pointer"
             >
               <div className="flex items-center gap-2 mb-1">
                 <time className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
                   {formatDate(entry.publishedAt)}
                 </time>
               </div>
-              <h3 className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
+              <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug">
                 {entry.title}
               </h3>
               <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">

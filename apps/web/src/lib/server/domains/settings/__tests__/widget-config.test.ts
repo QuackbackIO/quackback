@@ -2,16 +2,18 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_WIDGET_CONFIG,
   DEFAULT_MESSENGER_CONFIG,
+  DEFAULT_WIDGET_HOME_CARDS,
   type WidgetConfig,
   type UpdateWidgetConfigInput,
   type PublicWidgetConfig,
 } from '../settings.types'
-import { generateWidgetSecret } from '../settings.widget'
+import { generateWidgetSecret, publicMessengerConfig } from '../settings.widget'
+import { deepMerge } from '../settings.helpers'
 
 describe('Widget Config Types', () => {
   describe('DEFAULT_MESSENGER_CONFIG', () => {
-    it('captures an email by default (optional) so offline replies can reach the visitor', () => {
-      expect(DEFAULT_MESSENGER_CONFIG.preChatEmail).toBe('optional')
+    it('is AI-first by default: the assistant identity is on and named Quinn', () => {
+      expect(DEFAULT_MESSENGER_CONFIG.assistant).toEqual({ enabled: true, name: 'Quinn' })
     })
   })
 
@@ -20,8 +22,8 @@ describe('Widget Config Types', () => {
       expect(DEFAULT_WIDGET_CONFIG.enabled).toBe(false)
     })
 
-    it('should have identifyVerification set to false', () => {
-      expect(DEFAULT_WIDGET_CONFIG.identifyVerification).toBe(false)
+    it('keeps the messenger (Messages) tab off by default', () => {
+      expect(DEFAULT_WIDGET_CONFIG.tabs?.messenger).toBe(false)
     })
 
     it('should not have optional fields set', () => {
@@ -36,7 +38,6 @@ describe('Widget Config Types', () => {
         enabled: true,
         defaultBoard: 'feature-requests',
         position: 'bottom-right',
-        identifyVerification: true,
       }
       expect(config.enabled).toBe(true)
       expect(config.position).toBe('bottom-right')
@@ -72,7 +73,6 @@ describe('Widget Config Types', () => {
         enabled: true,
         defaultBoard: 'bugs',
         position: 'bottom-left',
-        identifyVerification: true,
       }
       expect(update.position).toBe('bottom-left')
     })
@@ -88,6 +88,57 @@ describe('Widget Config Types', () => {
       expect(publicConfig.enabled).toBe(true)
       // identifyVerification is NOT in PublicWidgetConfig (type-level check)
       expect('identifyVerification' in publicConfig).toBe(false)
+    })
+  })
+
+  describe('publicMessengerConfig', () => {
+    it('projects the assistant identity but strips agent-only fields', () => {
+      const projected = publicMessengerConfig({
+        enabled: true,
+        assistant: { enabled: true, name: 'Quinn' },
+        cannedReplies: [{ id: '1', title: 'Hi', body: 'Hello!' }],
+        routing: { enabled: true, strategy: 'auto_assign_active' },
+      })
+      expect(projected.assistant).toEqual({ enabled: true, name: 'Quinn' })
+      expect('cannedReplies' in projected).toBe(false)
+      expect('routing' in projected).toBe(false)
+    })
+  })
+
+  describe('home config merge semantics', () => {
+    it('replaces the ordered cards array wholesale (remove/reorder must persist)', () => {
+      // deepMerge is the widget-config write path; arrays must REPLACE, not
+      // element-merge, or removing/reordering Home cards silently breaks.
+      const existing: WidgetConfig = {
+        enabled: true,
+        home: {
+          greeting: 'Hi {name}',
+          cards: [
+            { id: 'a', type: 'feedback' },
+            { id: 'b', type: 'link', title: 'Docs', url: 'https://docs.example.com' },
+          ],
+        },
+      }
+      const updated = deepMerge(existing, {
+        home: {
+          cards: [
+            { id: 'b', type: 'link' as const, title: 'Docs', url: 'https://docs.example.com' },
+          ],
+        },
+      })
+      expect(updated.home?.cards).toHaveLength(1)
+      expect(updated.home?.cards?.[0]?.id).toBe('b')
+      // Sibling home keys survive a cards-only update.
+      expect(updated.home?.greeting).toBe('Hi {name}')
+    })
+
+    it('ships a default card per built-in surface', () => {
+      expect(DEFAULT_WIDGET_HOME_CARDS.map((c) => c.type)).toEqual([
+        'feedback',
+        'new_conversation',
+        'article_search',
+        'latest_updates',
+      ])
     })
   })
 })

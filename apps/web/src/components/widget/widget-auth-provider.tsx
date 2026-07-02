@@ -27,7 +27,6 @@ import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/sha
 import { htmlLangDir } from '@/lib/shared/document-locale'
 import { useIntlSetup } from '@/lib/client/hooks/use-intl-setup'
 import { onIntlError } from '@/lib/client/intl-error'
-import { createWidgetIdentifyTokenFn } from '@/lib/server/functions/widget'
 
 interface WidgetUser {
   id: string
@@ -45,8 +44,6 @@ interface WidgetAuthContextValue {
   ensureSession: () => Promise<boolean>
   /** Ensures a session exists before performing a write action. Creates anonymous session if needed. */
   ensureSessionThen: (callback: () => void | Promise<void>) => Promise<void>
-  /** Identify by email (inline capture). Returns true on success. */
-  identifyWithEmail: (email: string, name?: string) => Promise<boolean>
   closeWidget: () => void
   /** Emit an event to the parent SDK via postMessage */
   emitEvent: <T extends WidgetEventName>(name: T, payload: WidgetEventMap[T]) => void
@@ -252,44 +249,11 @@ export function WidgetAuthProvider({
     [storeToken, queryClient]
   )
 
-  const identifyPromiseRef = useRef<Promise<boolean> | null>(null)
-  const identifyWithEmail = useCallback(
-    (email: string, name?: string): Promise<boolean> => {
-      if (identifyPromiseRef.current) return identifyPromiseRef.current
-
-      const p = (async () => {
-        try {
-          if (hmacRequired) return false
-
-          const previousToken = getWidgetToken()
-          const { ssoToken } = await createWidgetIdentifyTokenFn({
-            data: { email, name: name || email.split('@')[0] },
-          })
-
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-          if (previousToken) {
-            headers.Authorization = `Bearer ${previousToken}`
-          }
-
-          const response = await fetch('/api/widget/identify', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(previousToken ? { ssoToken, previousToken } : { ssoToken }),
-          })
-          if (!response.ok) return false
-          applyIdentifyResult(await response.json())
-          return true
-        } catch {
-          return false
-        } finally {
-          identifyPromiseRef.current = null
-        }
-      })()
-      identifyPromiseRef.current = p
-      return p
-    },
-    [applyIdentifyResult, hmacRequired]
-  )
+  // NOTE: there is deliberately no inline email-capture identify. A verified
+  // session comes only from an ssoToken signed by the customer's backend (SDK
+  // identify / portal passthrough) — see GH issue #300. Anonymous visitors keep
+  // anonymous sessions; the future assistant collects contact info as lead data
+  // on the principal instead of minting user sessions.
 
   // If a portal session token was extracted during SSR, use it directly as the
   // widget's Bearer token. This works in both same-origin AND cross-origin iframes
@@ -452,7 +416,6 @@ export function WidgetAuthProvider({
       hmacRequired: hmacRequired ?? false,
       ensureSession,
       ensureSessionThen,
-      identifyWithEmail,
       closeWidget,
       emitEvent,
       metadata: widgetMetadata,
@@ -463,7 +426,6 @@ export function WidgetAuthProvider({
       isIdentified,
       ensureSession,
       ensureSessionThen,
-      identifyWithEmail,
       closeWidget,
       emitEvent,
       widgetMetadata,

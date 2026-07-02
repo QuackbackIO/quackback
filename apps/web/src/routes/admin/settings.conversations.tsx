@@ -57,9 +57,7 @@ function ConversationsSettingsPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const portalConfigQuery = useSuspenseQuery(settingsQueries.portalConfig())
   const config = widgetConfigQuery.data
-  // `chat` is the pre-rename key — still read as a fallback for rows written
-  // before the switch to `messenger` (new key wins when both are present).
-  const messengerConfig = config.messenger ?? config.chat
+  const messengerConfig = config.messenger
   const [isPending, startTransition] = useTransition()
   const [savingField, setSavingField] = useState<string | null>(null)
   const [portalSupportEnabled, setPortalSupportEnabled] = useState(
@@ -75,9 +73,6 @@ function ConversationsSettingsPage() {
   )
   const [officeHours, setOfficeHours] = useState<OfficeHoursConfig>(
     messengerConfig?.officeHours ?? DEFAULT_OFFICE_HOURS
-  )
-  const [preChatEmail, setPreChatEmail] = useState<'off' | 'optional' | 'required'>(
-    messengerConfig?.preChatEmail ?? 'off'
   )
   const [routingEnabled, setRoutingEnabled] = useState(messengerConfig?.routing?.enabled ?? false)
 
@@ -124,8 +119,8 @@ function ConversationsSettingsPage() {
 
   const onToggleEnabled = (checked: boolean) => {
     setEnabled(checked)
-    // Enabling Messenger also surfaces the widget tab; disabling hides it.
-    persist('enabled', { messenger: { enabled: checked }, tabs: { chat: checked } }, () =>
+    // Enabling Messenger also surfaces the widget's Messages tab; disabling hides it.
+    persist('enabled', { messenger: { enabled: checked }, tabs: { messenger: checked } }, () =>
       setEnabled(!checked)
     )
   }
@@ -287,28 +282,6 @@ function ConversationsSettingsPage() {
             />
             <p className="text-xs text-muted-foreground">
               Shown when no agents are currently available to reply.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="messenger-prechat-email">Ask for an email</Label>
-            <select
-              id="messenger-prechat-email"
-              value={preChatEmail}
-              onChange={(e) => {
-                const next = e.target.value as 'off' | 'optional' | 'required'
-                setPreChatEmail(next)
-                void persist('preChatEmail', { messenger: { preChatEmail: next } })
-              }}
-              disabled={isBusy || !enabled}
-              className="w-full max-w-sm rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-            >
-              <option value="off">Don&apos;t ask</option>
-              <option value="optional">Optional</option>
-              <option value="required">Required before messaging</option>
-            </select>
-            <p className="text-xs text-muted-foreground">
-              Capture an email from anonymous visitors so you can follow up by email when offline.
             </p>
           </div>
         </div>

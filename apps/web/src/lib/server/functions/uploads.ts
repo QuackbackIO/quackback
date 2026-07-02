@@ -322,6 +322,37 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
   })
 
 /**
+ * Get a presigned URL for uploading the widget Home hero image.
+ */
+export const getWidgetHeroUploadUrlFn = createServerFn({ method: 'POST' })
+  .validator(brandingImageSchema)
+  .handler(async ({ data }) => {
+    log.debug(
+      { content_type: data.contentType, file_size: data.fileSize },
+      'widget hero upload url requested'
+    )
+    try {
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+
+      if (!isS3Configured()) {
+        throw new Error('File storage is not configured. Contact your administrator.')
+      }
+
+      if (!isAllowedImageType(data.contentType)) {
+        throw new Error(
+          `Invalid image type: ${data.contentType}. Allowed types: JPEG, PNG, GIF, WebP.`
+        )
+      }
+
+      const key = generateStorageKey('widget-hero', data.filename)
+      return await generatePresignedUploadUrl(key, data.contentType)
+    } catch (error) {
+      log.error({ err: error }, 'widget hero upload url failed')
+      throw error
+    }
+  })
+
+/**
  * Get a presigned URL for uploading user avatars.
  */
 export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })

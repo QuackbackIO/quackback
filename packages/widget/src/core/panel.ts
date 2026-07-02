@@ -14,6 +14,8 @@ export interface PanelHandle {
   iframe: HTMLIFrameElement
   show(): void
   hide(): void
+  /** Grow/shrink the panel for long-form content (transitioned via CSS). */
+  setExpanded(expanded: boolean): void
   destroy(): void
 }
 
@@ -76,6 +78,9 @@ export function createPanel(opts: PanelOptions): PanelHandle {
         panel.classList.remove('quackback-closing')
         backdrop.classList.remove('quackback-closing')
       }, 300)
+    },
+    setExpanded(expanded) {
+      panel.classList.toggle('quackback-expanded', expanded)
     },
     destroy() {
       panel.remove()

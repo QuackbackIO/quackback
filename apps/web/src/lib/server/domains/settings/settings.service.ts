@@ -31,7 +31,7 @@ import {
   DEFAULT_FEATURE_FLAGS,
   DEFAULT_HELP_CENTER_CONFIG,
 } from './settings.types'
-import { publicMessengerConfig } from './settings.widget'
+import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
 import {
   parseJsonConfig,
   parseJsonOrNull,
@@ -812,13 +812,15 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         defaultBoard: widgetConfig.defaultBoard,
         position: widgetConfig.position,
         tabs: widgetConfig.tabs,
-        hmacRequired: widgetConfig.identifyVerification ?? false,
+        // Identify is verified-only (backend-signed ssoToken; GH issue #300).
+        hmacRequired: true,
+        // Home customisation is client-safe (greeting, hero style, quick links);
+        // the stored hero-image key is resolved to a public URL.
+        home: publicHomeConfig(widgetConfig.home),
         // Client-safe messenger config — the widget gates its messenger tab on
         // messenger.enabled, so this must be projected here (cannedReplies stay
-        // agent-only). `chat` is the pre-rename key, still read as a fallback.
-        messenger: publicMessengerConfig(
-          widgetConfig.messenger ?? widgetConfig.chat ?? DEFAULT_MESSENGER_CONFIG
-        ),
+        // agent-only).
+        messenger: publicMessengerConfig(widgetConfig.messenger ?? DEFAULT_MESSENGER_CONFIG),
       },
       featureFlags,
       brandingData,

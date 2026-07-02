@@ -47,7 +47,7 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     fontWeight: '600',
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    boxShadow: '0 12px 32px rgba(0,0,0,0.28), 0 4px 12px rgba(0,0,0,0.18)',
     opacity: '0',
     transition:
       'opacity 450ms ease, transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease, color 200ms ease',

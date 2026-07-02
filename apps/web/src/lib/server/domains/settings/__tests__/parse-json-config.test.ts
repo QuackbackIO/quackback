@@ -99,7 +99,7 @@ describe('parseJsonConfig', () => {
     const result = parseJsonConfig(stored, DEFAULT_WIDGET_CONFIG)
 
     expect(result.enabled).toBe(true)
-    expect(result.identifyVerification).toBe(false)
+    expect(result.tabs?.home).toBe(true)
   })
 
   it('preserves default authConfig.oauth.password when stored oauth omits it (bug fix)', () => {

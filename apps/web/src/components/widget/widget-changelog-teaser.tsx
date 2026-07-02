@@ -31,8 +31,8 @@ export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelog
   if (!latest) return null
 
   return (
-    <div className="border-t border-border/40 pt-3">
-      <div className="flex items-center justify-between px-1 pb-2">
+    <div className="rounded-2xl border border-border/60 bg-card p-2">
+      <div className="flex items-center justify-between px-2 pt-1.5 pb-1">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
           <FormattedMessage id="widget.launcher.changelog.heading" defaultMessage="What's new" />
         </p>
@@ -47,12 +47,12 @@ export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelog
       <button
         type="button"
         onClick={() => onOpenEntry(latest.id)}
-        className="w-full text-start rounded-lg border border-border/60 bg-card px-3 py-2.5 hover:bg-muted/40 transition-colors"
+        className="w-full rounded-xl px-2 py-2 text-start transition-colors hover:bg-accent"
       >
         <time className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
           {formatDate(latest.publishedAt)}
         </time>
-        <h3 className="mt-0.5 text-sm font-medium text-foreground line-clamp-1 leading-snug">
+        <h3 className="mt-0.5 text-sm font-semibold text-foreground line-clamp-1 leading-snug">
           {latest.title}
         </h3>
         <p className="mt-0.5 text-xs text-muted-foreground/70 line-clamp-2 leading-relaxed">

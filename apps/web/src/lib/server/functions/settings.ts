@@ -725,7 +725,13 @@ const messengerConfigInputSchema = z.object({
   welcomeMessage: z.string().max(500).optional(),
   offlineMessage: z.string().max(500).optional(),
   teamName: z.string().max(80).optional(),
-  preChatEmail: z.enum(['off', 'optional', 'required']).optional(),
+  assistant: z
+    .object({
+      enabled: z.boolean().optional(),
+      name: z.string().max(80).optional(),
+      avatarUrl: z.string().url().max(2000).optional().or(z.literal('')),
+    })
+    .optional(),
   officeHours: z
     .object({
       enabled: z.boolean(),
@@ -759,24 +765,55 @@ const messengerConfigInputSchema = z.object({
     .optional(),
 })
 
+// heroImageKey is intentionally absent: the hero image is written only via
+// saveWidgetHeroImageKeyFn, which owns the S3 object lifecycle.
+const widgetHomeConfigSchema = z.object({
+  greeting: z.string().max(120).optional(),
+  subtitle: z.string().max(200).optional(),
+  headerStyle: z.enum(['plain', 'gradient', 'image']).optional(),
+  showLogo: z.boolean().optional(),
+  showTeamAvatars: z.boolean().optional(),
+  cards: z
+    .array(
+      z
+        .object({
+          id: z.string().max(64),
+          type: z.enum([
+            'feedback',
+            'new_conversation',
+            'article_search',
+            'latest_updates',
+            'link',
+          ]),
+          enabled: z.boolean().optional(),
+          title: z.string().max(80).optional(),
+          subtitle: z.string().max(160).optional(),
+          url: z.string().url().max(2000).optional(),
+        })
+        // A link card without a URL has nowhere to go.
+        .refine((c) => c.type !== 'link' || !!c.url, {
+          message: 'Link cards require a URL',
+        })
+    )
+    .max(8)
+    .optional(),
+})
+
 const updateWidgetConfigSchema = z.object({
   enabled: z.boolean().optional(),
   defaultBoard: z.string().optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
-  identifyVerification: z.boolean().optional(),
   tabs: z
     .object({
       feedback: z.boolean().optional(),
       changelog: z.boolean().optional(),
       help: z.boolean().optional(),
-      chat: z.boolean().optional(),
+      messenger: z.boolean().optional(),
       home: z.boolean().optional(),
     })
     .optional(),
   messenger: messengerConfigInputSchema.optional(),
-  /** @deprecated superseded by `messenger` — accepted so a caller still on the
-   *  pre-rename key doesn't silently drop its update. */
-  chat: messengerConfigInputSchema.optional(),
+  home: widgetHomeConfigSchema.optional(),
 })
 
 export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
@@ -792,6 +829,33 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
       throw error
     }
   })
+
+export const saveWidgetHeroImageKeyFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ key: z.string().min(1).max(512) }))
+  .handler(async ({ data }) => {
+    log.info('save widget hero image key')
+    try {
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      const { saveWidgetHeroImageKey } =
+        await import('@/lib/server/domains/settings/settings.widget')
+      await saveWidgetHeroImageKey(data.key)
+    } catch (error) {
+      log.error({ err: error }, 'save widget hero image key failed')
+      throw error
+    }
+  })
+
+export const deleteWidgetHeroImageFn = createServerFn({ method: 'POST' }).handler(async () => {
+  log.info('delete widget hero image')
+  try {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { deleteWidgetHeroImage } = await import('@/lib/server/domains/settings/settings.widget')
+    await deleteWidgetHeroImage()
+  } catch (error) {
+    log.error({ err: error }, 'delete widget hero image failed')
+    throw error
+  }
+})
 
 export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('regenerate widget secret')

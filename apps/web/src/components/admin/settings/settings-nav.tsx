@@ -15,6 +15,7 @@ import {
   BookOpenIcon,
   TagIcon,
   MegaphoneIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
@@ -92,6 +93,11 @@ export function buildNavSections(flags?: {
   if (supportItems.length > 0) {
     sections.push({ label: 'Support', items: supportItems })
   }
+
+  sections.push({
+    label: 'AI & Automation',
+    items: [{ label: 'Assistant', to: '/admin/settings/ai', icon: SparklesIcon }],
+  })
 
   sections.push({
     label: 'Customers',

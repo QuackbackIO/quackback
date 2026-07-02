@@ -55,7 +55,8 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
   return (
     <div className="flex flex-col h-full">
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0">
-        <div className="px-4 py-3">
+        {/* Readable column when the host panel expands for long-form content. */}
+        <div className="mx-auto w-full max-w-2xl px-4 py-3">
           <time className="text-[11px] text-muted-foreground/60 uppercase tracking-wide">
             {formatDate(entry.publishedAt)}
           </time>

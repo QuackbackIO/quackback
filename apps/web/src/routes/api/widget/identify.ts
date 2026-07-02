@@ -6,7 +6,6 @@ import {
   db,
   user,
   session,
-  principal,
   segments,
   widgetIdentifiedSession,
   eq,
@@ -28,21 +27,16 @@ import {
 import { reconcileWidgetMemberships } from '@/lib/server/domains/segments/segment-membership.service'
 import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
 
-const identifySchema = z
-  .object({
-    // Verified path
-    ssoToken: z.string().min(1).optional(),
-    // Unverified path
-    id: z.string().min(1).optional(),
-    sub: z.string().min(1).optional(),
-    email: z.string().email().optional(),
-    name: z.string().optional(),
-    avatarURL: z.string().optional(),
-    avatarUrl: z.string().optional(),
-    // Anonymous→identified merge: previous widget session token
-    previousToken: z.string().optional(),
-  })
-  .passthrough()
+// Identify is verified-only: a session for a real user is minted exclusively
+// from an ssoToken signed by the customer's own backend with the widget
+// secret. There is no unverified id+email path — accepting one would let any
+// visitor claim an arbitrary email (see GH issue #300); anonymous visitors get
+// anonymous sessions elsewhere and never identify.
+const identifySchema = z.object({
+  ssoToken: z.string().min(1),
+  // Anonymous→identified merge: previous widget session token
+  previousToken: z.string().optional(),
+})
 
 /** JWT claims that are identity fields or standard JWT metadata — not custom attributes */
 export const RESERVED_JWT_CLAIMS = new Set([
@@ -158,41 +152,19 @@ export const Route = createFileRoute('/api/widget/identify')({
           return jsonError('VALIDATION_ERROR', 'Invalid request body', 400)
         }
 
-        // Determine identity source: verified JWT or unverified body fields
-        let claims: Record<string, unknown>
-        let claimsAreVerified = false
-
-        if (body.ssoToken) {
-          const widgetSecret = await getWidgetSecret()
-          if (!widgetSecret) {
-            return jsonError('SERVER_ERROR', 'Widget secret not configured', 500)
-          }
-          const payload = verifyHS256JWT(body.ssoToken, widgetSecret)
-          if (!payload) {
-            return jsonError('TOKEN_INVALID', 'Invalid or expired ssoToken', 403)
-          }
-          claims = payload
-          claimsAreVerified = true
-        } else {
-          // Unverified identify — only allowed when verified-identity-only is off
-          if (widgetConfig.identifyVerification) {
-            return jsonError(
-              'TOKEN_REQUIRED',
-              'ssoToken is required when verified identity is enabled',
-              403
-            )
-          }
-          // Strip session-management fields so they're not treated as attributes.
-          // Also strip `segments` — an unverified body must NOT grant segment
-          // membership, which is an access-control surface (anyone could self-
-          // assign to 'enterprise' otherwise).
-          claims = { ...body } as Record<string, unknown>
-          delete claims.ssoToken
-          delete claims.previousToken
-          delete claims.segments
+        // Verified-only: the HMAC-signed JWT from the customer's backend is the
+        // sole identity source (see identifySchema note / GH issue #300).
+        const widgetSecret = await getWidgetSecret()
+        if (!widgetSecret) {
+          return jsonError('SERVER_ERROR', 'Widget secret not configured', 500)
         }
+        const payload = verifyHS256JWT(body.ssoToken, widgetSecret)
+        if (!payload) {
+          return jsonError('TOKEN_INVALID', 'Invalid or expired ssoToken', 403)
+        }
+        const claims: Record<string, unknown> = payload
 
-        // Extract identity fields, supporting both JWT and unverified body shapes
+        // Extract identity fields from the JWT claims
         const sub =
           typeof claims.sub === 'string'
             ? claims.sub
@@ -202,10 +174,8 @@ export const Route = createFileRoute('/api/widget/identify')({
         const email = typeof claims.email === 'string' ? claims.email : undefined
         if (!sub || !email) {
           return jsonError(
-            body.ssoToken ? 'TOKEN_INVALID' : 'VALIDATION_ERROR',
-            body.ssoToken
-              ? 'ssoToken must contain sub (or id) and email claims'
-              : 'id (or sub) and email are required',
+            'TOKEN_INVALID',
+            'ssoToken must contain sub (or id) and email claims',
             400
           )
         }
@@ -239,42 +209,18 @@ export const Route = createFileRoute('/api/widget/identify')({
         // "one email per account" invariant. The fix mirrors the
         // segment-evaluator + recovery-codes case-insensitive lookups.
         const normalizedEmail = identified.email.toLowerCase()
-        // Verified ssoToken: the JWT `sub` is the durable cross-device identity
-        // key — resolve by it first so a returning visitor is recognized even
-        // after an email change in the host app. NEVER trust `sub` on the
-        // unverified path (the client controls it there), so external_id stays
-        // null and unread for id+email bodies.
-        const externalId = claimsAreVerified ? identified.id : null
-        let userRecord = externalId
-          ? await db.query.user.findFirst({ where: eq(user.externalId, externalId) })
-          : undefined
+        // The JWT `sub` is the durable cross-device identity key — resolve by
+        // it first so a returning visitor is recognized even after an email
+        // change in the host app. Trusting it is safe: only the customer's
+        // backend holds the widget secret that signed it.
+        const externalId = identified.id
+        let userRecord = await db.query.user.findFirst({
+          where: eq(user.externalId, externalId),
+        })
         if (!userRecord) {
           userRecord = await db.query.user.findFirst({
             where: sql`LOWER(${user.email}) = ${normalizedEmail}`,
           })
-        }
-
-        // Team-role guard: refuse to mint a session-Bearer for an email
-        // that already backs a team principal (admin or member). The Bearer
-        // the route hands out is a normal Better Auth session token — `bearer()`
-        // is registered globally, so it satisfies `auth.api.getSession()` at
-        // every server function, including admin-only permission gates.
-        // Allowing this in the unverified path would turn "knowing an admin's
-        // email" into full admin takeover. Customer-tier collisions (role='user')
-        // remain allowed — that's the documented trust model for unverified
-        // identify. The verified (ssoToken) path is exempt: HMAC vouches for it.
-        if (!claimsAreVerified && userRecord) {
-          const existingPrincipal = await db.query.principal.findFirst({
-            where: eq(principal.userId, userRecord.id as UserId),
-            columns: { role: true },
-          })
-          if (existingPrincipal?.role === 'admin' || existingPrincipal?.role === 'member') {
-            return jsonError(
-              'IDENTITY_LOCKED',
-              'This address is bound to a team account. Use a verified ssoToken to identify.',
-              403
-            )
-          }
         }
 
         const country = captureCountryFromHeaders(request.headers)
@@ -347,10 +293,8 @@ export const Route = createFileRoute('/api/widget/identify')({
         const principalId = principalRecord.id as PrincipalId
 
         // Segments claim — the customer can tag the identified user with one
-        // or more segment slugs in the signed JWT. ONLY honored on the
-        // verified-token path; the unverified body's `segments` was stripped
-        // above (else any visitor could self-assign to 'enterprise'). Unknown
-        // slugs are silently skipped. Lookup by slug (unique), not name.
+        // or more segment slugs in the signed JWT. Unknown slugs are silently
+        // skipped. Lookup by slug (unique), not name.
         //
         // The reconcile is what makes the claim authoritative on every
         // identify: adding NEW slugs grants membership, dropping a slug
@@ -359,17 +303,7 @@ export const Route = createFileRoute('/api/widget/identify')({
         // `enterprise` membership forever and retain portal-access via
         // allowedSegmentIds. Manual / sso / api memberships are sticky
         // (addedBy='widget' filter inside reconcileWidgetMemberships).
-        // Reconcile widget-sourced memberships on EVERY identify, not
-        // only the verified path. A previously-verified session that
-        // later re-identifies on the unverified path (e.g. admin flipped
-        // off identifyVerification, or the embedding code regressed)
-        // would otherwise keep its stale 'enterprise' membership
-        // indefinitely — exactly the bug reconcileWidgetMemberships was
-        // added to close. The unverified path supplies no segment claim
-        // (already stripped), so it reconciles to []: any widget-sourced
-        // row gets dropped, manual / sso / api stay sticky.
-        const rawSegments =
-          claimsAreVerified && Array.isArray(claims.segments) ? claims.segments : []
+        const rawSegments = Array.isArray(claims.segments) ? claims.segments : []
         // Dedupe + filter non-strings BEFORE the DB lookup so we don't
         // round-trip per duplicate. Previously this was a per-slug
         // findFirst loop — a 10-slug claim was 10 sequential queries
@@ -418,12 +352,9 @@ export const Route = createFileRoute('/api/widget/identify')({
 
         // Record HMAC-verification provenance for this session. The
         // widget-handoff route reads this to decide whether to grant
-        // the portal widget branch — without an hmacVerified=true row,
-        // the handoff refuses to insert the widget_origin_session
-        // marker. Upsert by sessionId; re-identifying via the
-        // unverified path demotes a previously-verified row, so a
-        // session that loses HMAC verification loses its trust.
-        await recordWidgetSessionProvenance(sessionInfo.id, claimsAreVerified)
+        // the portal widget branch. Identify is verified-only, so every
+        // identified session carries hmacVerified=true.
+        await recordWidgetSessionProvenance(sessionInfo.id, true)
 
         // No Set-Cookie — the widget sends the token as Bearer header.
         // An unsigned cookie here would poison Better Auth's signed-cookie

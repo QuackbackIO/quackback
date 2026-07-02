@@ -555,7 +555,11 @@ describe('resolvePortalAccessForRequest — widget origin marker', () => {
     expect(result).toEqual({ granted: true, reason: 'widget' })
   })
 
-  it('email-capture widget user (identifyVerification=false) cannot gain widget grant', async () => {
+  it('grants the widget branch regardless of any legacy identifyVerification value', async () => {
+    // Identify is verified-only (GH issue #300): HMAC verification is
+    // structural, so a stale identifyVerification=false in old stored config
+    // must not block the widget grant — the origin marker (only written for
+    // hmac-verified sessions) is the trust anchor.
     mockGetSession.mockResolvedValue(SESSION_WITH_ID)
     mockPrincipalFindFirst.mockResolvedValue({ type: 'user', role: 'user' })
     mockWidgetOriginSessionFindFirst.mockResolvedValue({ sessionId: 'sess_abc123' })
@@ -566,8 +570,7 @@ describe('resolvePortalAccessForRequest — widget origin marker', () => {
 
     const result = await resolvePortalAccessForRequest()
 
-    expect(result.granted).toBe(false)
-    if (!result.granted) expect(result.reason).toBe('unauthorized')
+    expect(result).toEqual({ granted: true, reason: 'widget' })
   })
 
   it('skips marker lookup for unauthenticated callers', async () => {

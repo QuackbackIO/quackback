@@ -4,7 +4,7 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { buildConversationRows, type ConversationRow } from './conversation-rows'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
-import { PaperAirplaneIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
+import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftRightIcon, PaperClipIcon, BookOpenIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
@@ -98,6 +98,11 @@ export interface VisitorConversationThreadProps {
   }
   /** How embedded post cards open. The widget's iframe opens a new tab. */
   embedOpenMode?: EmbedOpenMode
+  /** Render the built-in header row (assistant identity / presence strip).
+   *  The widget passes false — its shell shows the same content in the top
+   *  bar beside the back button, keeping one header row like the reference
+   *  messengers. The portal keeps the built-in row. */
+  showHeader?: boolean
   /** Notified when the first send creates the conversation. */
   onConversationStarted?: (id: ConversationId) => void
 }
@@ -123,6 +128,7 @@ export function VisitorConversationThread({
   onAgentActivity,
   helpSearch,
   embedOpenMode = 'newTab',
+  showHeader = true,
   onConversationStarted,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
@@ -130,16 +136,23 @@ export function VisitorConversationThread({
 
   const [loading, setLoading] = useState(true)
   const [conversationId, setConversationId] = useState<ConversationId | null>(null)
+  // The conversation the FIRST send created. A fresh visitor's first send
+  // mints their anonymous session, which bumps sessionVersion and re-runs the
+  // load effect; for a 'new' target that reload would reset to the greeting
+  // state and wipe the just-sent message. Remembering the created id lets the
+  // reload fetch the real thread instead.
+  const createdConversationIdRef = useRef<ConversationId | null>(null)
   const [messages, setMessages] = useState<ConversationMessageDTO[]>([])
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null)
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
+  // AI-assistant display identity (fronts new conversations); null when disabled.
+  const [assistant, setAssistant] = useState<{ name: string; avatarUrl: string | null } | null>(
+    null
+  )
   const [agentReadAt, setAgentReadAt] = useState<string | null>(null)
   // Pre-chat email capture (anonymous visitors). Data-driven: identified
   // visitors come back with visitorHasEmail=true, so the prompt never shows.
-  const [preChatMode, setPreChatMode] = useState<'off' | 'optional' | 'required'>('off')
-  const [emailKnown, setEmailKnown] = useState(false)
-  const [emailInput, setEmailInput] = useState('')
   // Whether an offline reply could actually reach this visitor by email — drives
   // the offline copy so the surface never promises email it can't send.
   const [canEmailReply, setCanEmailReply] = useState(false)
@@ -242,20 +255,27 @@ export function VisitorConversationThread({
     let cancelled = false
     void (async () => {
       try {
+        // 'new' → null (blank greeting) until the first send creates a thread,
+        // then that thread; an id → that thread; undefined → active.
+        const effectiveTarget =
+          conversationTarget === 'new'
+            ? (createdConversationIdRef.current ?? null)
+            : (conversationTarget ?? undefined)
         const res = await getMyConversationFn({
-          // 'new' → null (blank greeting); an id → that thread; undefined → active.
-          data: {
-            conversationId: conversationTarget === 'new' ? null : (conversationTarget ?? undefined),
-          },
+          data: { conversationId: effectiveTarget },
           headers: getAuthHeaders(),
         })
         if (cancelled) return
+        // A 'new'-target reload can race the first send (minting the anonymous
+        // session bumps sessionVersion mid-send): if the send has created a
+        // thread meanwhile, drop this stale greeting-only response instead of
+        // wiping the just-sent message — the send path owns the state.
+        if (!res.conversation && createdConversationIdRef.current) return
         setWelcomeMessage(res.welcomeMessage)
         setOfflineMessage(res.offlineMessage)
         setTeamName(res.teamName)
-        setPreChatMode(res.preChatEmail)
+        setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
-        setEmailKnown(res.visitorHasEmail)
         setHasMoreOlder(res.hasMore)
         setConversationId((res.conversation?.id as ConversationId | undefined) ?? null)
         setAgentReadAt(res.conversation?.agentLastReadAt ?? null)
@@ -438,16 +458,14 @@ export function VisitorConversationThread({
     }).format(at)
   }, [presence.nextOpenAt, intl.locale])
 
-  // Pre-chat email: prompt only before the conversation starts, for anonymous
-  // visitors, when configured. 'required' blocks sending until a valid address.
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim())
-  const needsEmail =
-    preChatMode !== 'off' && !emailKnown && !conversationId && messages.length === 0
-  const emailBlocksSend = preChatMode === 'required' && needsEmail && !emailValid
   // Show the offline hint when the team is away. When we can email a reply, only
   // echo the admin's message if one is set; when we can't, always show the
-  // neutral "we'll reply here" note instead of a false email promise.
-  const showOfflineHint = !available && (canEmailReply ? Boolean(offlineMessage) : true)
+  // neutral "we'll reply here" note instead of a false email promise. With the
+  // assistant fronting the conversation there is no "away" — it is always
+  // available, so the hint is suppressed entirely; availability only becomes
+  // relevant again when the assistant hands off to a human (future).
+  const showOfflineHint =
+    !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
 
   // Flatten the thread into virtualized rows. anchorTo:'end' + followOnAppend
   // keep the view pinned to the newest message and stick to the bottom as
@@ -517,13 +535,7 @@ export function VisitorConversationThread({
     const doc = messageDocRef.current
     const hasAttachments = pendingAttachments.length > 0
     // Sendable when there's typed text, an inline embed, or a tray attachment.
-    if (
-      (!text && !docHasContentNode(doc) && !hasAttachments) ||
-      sending ||
-      uploading ||
-      emailBlocksSend
-    )
-      return
+    if ((!text && !docHasContentNode(doc) && !hasAttachments) || sending || uploading) return
     setSending(true)
 
     const ready = await ensureSession()
@@ -541,12 +553,11 @@ export function VisitorConversationThread({
           // attachments (the tray) — matching admin.
           contentJson: doc,
           attachments: hasAttachments ? pendingAttachments : undefined,
-          // Attach the captured email on the first message only.
-          visitorEmail: needsEmail && emailValid ? emailInput.trim() : undefined,
         },
         headers: getAuthHeaders(),
       })
       const isNewConversation = !conversationId
+      createdConversationIdRef.current = res.conversation.id as ConversationId
       setConversationId(res.conversation.id as ConversationId)
       // Adopt the server's status so a reply that reopens a closed thread clears
       // the "closed / reply to reopen" hint (and its CSAT prompt) immediately.
@@ -555,7 +566,6 @@ export function VisitorConversationThread({
       if (isNewConversation) {
         onConversationStarted?.(res.conversation.id as ConversationId)
       }
-      if (needsEmail && emailValid) setEmailKnown(true)
       // Clear the composer only on success — the resetSignal bump empties the editor.
       setMessageText('')
       messageDocRef.current = null
@@ -571,10 +581,6 @@ export function VisitorConversationThread({
   }, [
     messageText,
     sending,
-    emailBlocksSend,
-    needsEmail,
-    emailValid,
-    emailInput,
     conversationId,
     ensureSession,
     appendMessage,
@@ -608,9 +614,13 @@ export function VisitorConversationThread({
           </div>
         )
       case 'greeting':
+        // The assistant fronts the greeting when enabled; the team name
+        // otherwise. Identity only — replies still come from the team.
         return (
           <ChatBubble
-            authorName={teamName ?? undefined}
+            variant="peer"
+            authorName={assistant?.name ?? teamName ?? undefined}
+            isAssistant={!!assistant}
             content={personalizeMessage(welcomeMessage ?? '', firstName)}
             embedOpenMode={embedOpenMode}
           />
@@ -620,15 +630,8 @@ export function VisitorConversationThread({
         const isVisitor = m.senderType === 'visitor'
         return (
           <ChatBubble
-            authorName={
-              isVisitor
-                ? (currentUser?.name ??
-                  intl.formatMessage({ id: 'widget.messenger.you', defaultMessage: 'You' }))
-                : (m.author?.displayName ?? teamName ?? undefined)
-            }
-            authorAvatar={
-              isVisitor ? (currentUser?.avatarUrl ?? null) : (m.author?.avatarUrl ?? null)
-            }
+            variant={isVisitor ? 'self' : 'peer'}
+            authorName={isVisitor ? undefined : (m.author?.displayName ?? teamName ?? undefined)}
             content={m.content}
             contentJson={m.contentJson}
             attachments={m.attachments}
@@ -690,16 +693,12 @@ export function VisitorConversationThread({
           </p>
         )
       case 'typing':
+        // Dots-only bubble, matching the messenger bubble language.
         return (
-          <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground/70">
-            <TypingDots />
-            <span>
-              <FormattedMessage
-                id="widget.messenger.typing"
-                defaultMessage="{name} is typing…"
-                values={{ name: teamName ?? 'Support' }}
-              />
-            </span>
+          <div className="flex">
+            <div className="rounded-2xl bg-muted px-4 py-3">
+              <TypingDots />
+            </div>
           </div>
         )
       case 'csat':
@@ -781,10 +780,28 @@ export function VisitorConversationThread({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Presence strip */}
-      <div className="flex items-center px-4 py-2 border-b border-border/40 shrink-0">
-        <ConversationPresenceBadge available={available} />
-      </div>
+      {/* Header: with the assistant enabled the thread is always fronted by its
+          identity — the AI is always available, so no availability promise is
+          made at any point (matching the AI-first messenger model). Without an
+          assistant, the classic live presence strip shows. */}
+      {showHeader && assistant ? (
+        <div className="flex items-center gap-2.5 px-4 py-2 border-b border-border/40 shrink-0">
+          <Avatar src={assistant.avatarUrl} name={assistant.name} className="size-7 text-[10px]" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight text-foreground">{assistant.name}</p>
+            <p className="text-[11px] leading-tight text-muted-foreground">
+              <FormattedMessage
+                id="widget.messenger.assistant.teamAlso"
+                defaultMessage="The team can also help"
+              />
+            </p>
+          </div>
+        </div>
+      ) : showHeader ? (
+        <div className="flex items-center px-4 py-2 border-b border-border/40 shrink-0">
+          <ConversationPresenceBadge available={available} />
+        </div>
+      ) : null}
 
       <div className="relative flex-1 min-h-0">
         <ScrollArea viewportRef={scrollViewportRef} scrollBarClassName="w-1.5" className="h-full">
@@ -887,54 +904,11 @@ export function VisitorConversationThread({
         </div>
       )}
       <div className="border-t border-border/40 p-2 shrink-0">
-        {/* Pre-chat email capture (anonymous visitors). */}
-        {needsEmail && (
-          <div className="px-1 pb-2">
-            <label
-              htmlFor="visitor-conversation-email"
-              className="mb-1 block text-[11px] font-medium text-muted-foreground"
-            >
-              {preChatMode === 'required' ? (
-                <FormattedMessage
-                  id="widget.messenger.email.required"
-                  defaultMessage="Your email so we can reply"
-                />
-              ) : (
-                <FormattedMessage
-                  id="widget.messenger.email.optional"
-                  defaultMessage="Your email (optional)"
-                />
-              )}
-            </label>
-            <input
-              id="visitor-conversation-email"
-              type="email"
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            {/* Optional mode: an explicit skip so blank-and-send is a choice,
-                not a silent fallthrough. */}
-            {preChatMode === 'optional' && (
-              <button
-                type="button"
-                onClick={() => setEmailKnown(true)}
-                className="mt-1 text-[11px] text-muted-foreground/70 underline hover:text-foreground"
-              >
-                <FormattedMessage
-                  id="widget.messenger.email.skip"
-                  defaultMessage="Continue without email"
-                />
-              </button>
-            )}
-          </div>
-        )}
         {/* Composer: a rich editor on top (inline images via paste/drop +
               the attach button, and post links become embed cards), actions
               (attach / emoji / send) on the row below. Enter sends; Shift+Enter
               inserts a newline and the editor auto-grows to fit. */}
-        <div className="rounded-lg border border-border bg-background px-2.5 py-2 focus-within:ring-2 focus-within:ring-primary/20">
+        <div className="rounded-2xl border border-border bg-background px-3 py-2.5 shadow-sm transition-shadow focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-primary/25">
           <input
             ref={fileInputRef}
             type="file"
@@ -951,7 +925,7 @@ export function VisitorConversationThread({
           <ConversationRichComposer
             ref={composerRef}
             resetSignal={composerResetSignal}
-            disabled={sending || emailBlocksSend}
+            disabled={sending}
             placeholder={intl.formatMessage({
               id: 'widget.messenger.placeholder',
               defaultMessage: 'Type your message…',
@@ -996,16 +970,15 @@ export function VisitorConversationThread({
                   !messageHasContentNode &&
                   pendingAttachments.length === 0) ||
                 sending ||
-                uploading ||
-                emailBlocksSend
+                uploading
               }
-              className="shrink-0 flex items-center justify-center size-8 rounded-md bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
+              className="shrink-0 flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
               aria-label={intl.formatMessage({
                 id: 'widget.messenger.send',
                 defaultMessage: 'Send',
               })}
             >
-              <PaperAirplaneIcon className="w-4 h-4" />
+              <ArrowUpIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -1019,8 +992,12 @@ interface ChatBubbleProps {
   /** Rich TipTap doc (inline images / post embeds). When present it renders in
    *  place of the plain-text `content`; messages without it keep the text path. */
   contentJson?: TiptapContent | null
+  /** 'peer' = agent/assistant (left, muted bubble + attribution below);
+   *  'self' = the visitor (right, brand bubble, no attribution). */
+  variant?: 'peer' | 'self'
   authorName?: string
-  authorAvatar?: string | null
+  /** Marks the author as the AI assistant in the attribution line. */
+  isAssistant?: boolean
   attachments?: ConversationAttachment[]
   time?: string
   linkPreviews?: boolean
@@ -1029,37 +1006,38 @@ interface ChatBubbleProps {
 }
 
 /**
- * A single message row in the threaded layout: the author's avatar on the left,
- * their name (and time) on top, and the message content below. Visitor and
- * agent messages render identically — the avatar + name carry the "who".
+ * A single message: a rounded bubble — muted on the left for the team and
+ * assistant with a small attribution line below ("Name · AI Agent · time"),
+ * brand-colored on the right for the visitor — matching the modern messenger
+ * bubble language. Lone-emoji messages render large without a bubble.
  */
 function ChatBubble({
   content,
   contentJson,
+  variant = 'peer',
   authorName,
-  authorAvatar,
+  isAssistant = false,
   attachments,
   time,
   linkPreviews = false,
   getAuthHeaders,
   embedOpenMode = 'newTab',
 }: ChatBubbleProps) {
+  const self = variant === 'self'
+  const jumbo = isJumboEmojiMessage(content, contentJson)
   return (
-    <div className="flex gap-2.5">
-      <Avatar
-        src={authorAvatar ?? null}
-        name={authorName ?? 'Support'}
-        className="mt-0.5 size-9 shrink-0 text-xs"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          {authorName && (
-            <span className="truncate text-xs font-semibold text-foreground">{authorName}</span>
-          )}
-          {time && <span className="shrink-0 text-[10px] text-muted-foreground/50">{time}</span>}
-        </div>
-        {isJumboEmojiMessage(content, contentJson) ? (
-          // A lone-emoji message renders large (Slack/iMessage style).
+    <div className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}>
+      <div
+        className={
+          jumbo
+            ? 'max-w-[85%]'
+            : self
+              ? 'max-w-[85%] rounded-2xl bg-primary px-3.5 py-2.5 text-primary-foreground'
+              : 'max-w-[85%] rounded-2xl bg-muted px-3.5 py-2.5 text-foreground'
+        }
+      >
+        {jumbo ? (
+          // A lone-emoji message renders large (no bubble chrome).
           <div className={JUMBO_EMOJI_CLASS}>{content}</div>
         ) : contentJson ? (
           // Rich message (inline images / post embeds): hydrate embed cards into
@@ -1069,14 +1047,16 @@ function ChatBubble({
           <EmbedHydration openMode={embedOpenMode} getAuthHeaders={getAuthHeaders}>
             <RichTextContent
               content={contentJson}
-              className="mt-0.5 text-sm leading-relaxed text-foreground/90"
+              className={
+                self
+                  ? 'text-sm leading-relaxed text-primary-foreground'
+                  : 'text-sm leading-relaxed text-foreground/90'
+              }
             />
           </EmbedHydration>
         ) : (
           content && (
-            <div className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
-              {content}
-            </div>
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
           )
         )}
         {attachments && attachments.length > 0 && (
@@ -1090,6 +1070,24 @@ function ChatBubble({
           />
         )}
       </div>
+      {/* Attribution below the bubble — team/assistant side only. */}
+      {!self && (authorName || time) && (
+        <p className="mt-1 px-1 text-[11px] text-muted-foreground/70">
+          {authorName}
+          {isAssistant && (
+            <>
+              {' · '}
+              <FormattedMessage id="widget.messenger.aiAgent" defaultMessage="AI Agent" />
+            </>
+          )}
+          {time && (
+            <>
+              {' · '}
+              {time}
+            </>
+          )}
+        </p>
+      )}
     </div>
   )
 }

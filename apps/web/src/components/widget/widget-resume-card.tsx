@@ -10,6 +10,8 @@ interface WidgetResumeCardProps {
   teamName: string | null
   /** Whether an agent is reachable now — drives the presence dot. */
   agentsOnline: boolean
+  /** Row-only rendering (no border/background) for embedding in a labeled card. */
+  bare?: boolean
   /** Resume the conversation (opens the full messenger thread). */
   onClick: () => void
 }
@@ -23,6 +25,7 @@ export function WidgetResumeCard({
   conversation,
   teamName,
   agentsOnline,
+  bare = false,
   onClick,
 }: WidgetResumeCardProps) {
   const intl = useIntl()
@@ -43,7 +46,10 @@ export function WidgetResumeCard({
         { name }
       )}
       className={cn(
-        'group w-full flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3 py-2.5 text-start hover:bg-muted/40 transition-colors',
+        'group w-full flex items-center gap-3 text-start transition-colors',
+        bare
+          ? 'rounded-xl px-2 py-1.5 hover:bg-accent'
+          : 'rounded-2xl border border-border/60 bg-card px-3 py-2.5 hover:bg-accent',
         isClosed && 'opacity-70'
       )}
     >

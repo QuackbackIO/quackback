@@ -128,6 +128,31 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
 }
 
 /**
+ * Public-safe teammate avatars for the widget Home header: name + image only,
+ * nothing else leaves the server. Same teammate predicate as listTeamMembers
+ * (identified human + teammate role) so portal end-users, anonymous visitors,
+ * and service principals can never appear. Members with a real avatar image
+ * sort first so the cluster shows faces over initials.
+ */
+export async function listTeamAvatars(
+  limit = 3
+): Promise<{ name: string; avatarUrl: string | null }[]> {
+  try {
+    const rows = await db
+      .select({ name: user.name, avatarUrl: user.image })
+      .from(principal)
+      .innerJoin(user, eq(principal.userId, user.id))
+      .where(and(eq(principal.type, 'user'), ne(principal.role, 'user')))
+      .orderBy(sql`(${user.image} IS NOT NULL) DESC`, principal.createdAt)
+      .limit(limit)
+    return rows
+  } catch (error) {
+    log.error({ err: error }, 'failed to list team avatars')
+    throw new InternalError('DATABASE_ERROR', 'Failed to list team avatars', error)
+  }
+}
+
+/**
  * Search members (all human principals) by name or email.
  * Returns a limited result set for use in typeahead/combobox components.
  */

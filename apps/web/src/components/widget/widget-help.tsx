@@ -7,7 +7,7 @@ import { MagnifyingGlassIcon, QuestionMarkCircleIcon } from '@heroicons/react/24
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { getTopLevelCategories } from '@/components/help-center/help-center-utils'
 import { CategoryIcon } from '@/components/help-center/category-icon'
-import { WidgetMessagesSection } from './widget-messages-section'
+import { ChevronRightIcon } from '@heroicons/react/24/outline'
 
 interface WidgetHelpArticle {
   id: string
@@ -20,19 +20,9 @@ interface WidgetHelpArticle {
 interface WidgetHelpProps {
   onArticleSelect?: (articleSlug: string) => void
   onCategorySelect?: (categoryId: string, categoryName: string, categoryIcon: string | null) => void
-  /**
-   * When messenger is part of this (merged) support surface, open the messenger
-   * thread. Surfaced as a Messages entry above the articles. Omit when messenger is
-   * disabled — the support surface is then help articles only.
-   */
-  onOpenMessenger?: (target?: import('@quackback/ids').ConversationId | 'new') => void
 }
 
-export function WidgetHelp({
-  onArticleSelect,
-  onCategorySelect,
-  onOpenMessenger,
-}: WidgetHelpProps) {
+export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProps) {
   const intl = useIntl()
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<WidgetHelpArticle[]>([])
@@ -138,33 +128,47 @@ export function WidgetHelp({
               )}
 
               {!categoriesQuery.isLoading && topLevelCategories.length > 0 && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  {topLevelCategories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => onCategorySelect?.(cat.id, cat.name, cat.icon)}
-                      className="group text-start rounded-lg border border-border/50 bg-card p-3 hover:border-border hover:bg-muted/30 transition-all cursor-pointer"
-                    >
-                      <CategoryIcon icon={cat.icon} className="w-6 h-6 mb-1" />
-                      <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {cat.name}
-                      </h3>
-                      {cat.description && (
-                        <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">
-                          {cat.description}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
-                        {cat.articleCount} {cat.articleCount === 1 ? 'article' : 'articles'}
-                      </p>
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <p className="px-1 pt-2 pb-1 text-sm font-semibold text-foreground">
+                    <FormattedMessage
+                      id="widget.help.collectionsCount"
+                      defaultMessage="{count, plural, one {# collection} other {# collections}}"
+                      values={{ count: topLevelCategories.length }}
+                    />
+                  </p>
+                  <ul>
+                    {topLevelCategories.map((cat) => (
+                      <li key={cat.id} className="border-b border-border/40 last:border-b-0">
+                        <button
+                          type="button"
+                          onClick={() => onCategorySelect?.(cat.id, cat.name, cat.icon)}
+                          className="group flex w-full items-center gap-3 rounded-lg px-2 py-3.5 text-start transition-colors hover:bg-muted/40 cursor-pointer"
+                        >
+                          <CategoryIcon icon={cat.icon} className="w-6 h-6 shrink-0" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                              {cat.name}
+                            </span>
+                            {cat.description && (
+                              <span className="block text-xs text-muted-foreground/70 mt-0.5 line-clamp-2 leading-relaxed">
+                                {cat.description}
+                              </span>
+                            )}
+                            <span className="block text-[11px] text-muted-foreground/50 mt-1">
+                              <FormattedMessage
+                                id="widget.help.articleCount"
+                                defaultMessage="{count, plural, one {# article} other {# articles}}"
+                                values={{ count: cat.articleCount }}
+                              />
+                            </span>
+                          </span>
+                          <ChevronRightIcon className="w-4 h-4 shrink-0 text-muted-foreground/40 rtl:rotate-180" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
-
-              {/* Messages — the messenger half of the combined support surface. */}
-              {onOpenMessenger && <WidgetMessagesSection onOpenMessenger={onOpenMessenger} />}
             </>
           )}
 

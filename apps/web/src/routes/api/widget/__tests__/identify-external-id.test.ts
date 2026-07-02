@@ -181,18 +181,12 @@ describe('POST /api/widget/identify — external_id resolution (verified path)',
   })
 })
 
-describe('POST /api/widget/identify — external_id is untrusted on the unverified path', () => {
-  it('never looks up or stores external_id for an unverified id+email body', async () => {
-    mockUserFindFirst.mockResolvedValue(null) // single email lookup, then create
-    mockPrincipalFindFirst.mockResolvedValue(null)
-
+describe('POST /api/widget/identify — no unverified path exists (GH issue #300)', () => {
+  it('rejects an id+email body outright; no lookups, no user row, no external_id', async () => {
     const res = await postIdentify({ id: 'client_sub', email: 'dan@acme.com' })
 
-    expect(res.status).toBe(200)
-    // Only the email lookup runs — no external_id probe on the unverified path.
-    expect(mockUserFindFirst).toHaveBeenCalledTimes(1)
-    // The client-supplied sub is NOT persisted as an identity key.
-    const created = userInsertValues()
-    expect(created?.externalId ?? null).toBeNull()
+    expect(res.status).toBe(400)
+    expect(mockUserFindFirst).not.toHaveBeenCalled()
+    expect(userInsertValues()).toBeUndefined()
   })
 })

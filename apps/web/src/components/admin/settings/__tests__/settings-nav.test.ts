@@ -112,13 +112,26 @@ describe('buildNavSections', () => {
   it('has the expected section order with helpCenter and supportInbox on', () => {
     const sections = buildNavSections({ helpCenter: true, supportInbox: true })
     const labels = sections.map((s) => s.label)
-    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Support', 'Customers'])
+    expect(labels).toEqual([
+      'Administration',
+      'Customization',
+      'Feedback',
+      'Support',
+      'AI & Automation',
+      'Customers',
+    ])
   })
 
   it('has the expected section order without helpCenter', () => {
     const sections = buildNavSections()
     const labels = sections.map((s) => s.label)
-    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Customers'])
+    expect(labels).toEqual([
+      'Administration',
+      'Customization',
+      'Feedback',
+      'AI & Automation',
+      'Customers',
+    ])
   })
 
   it('Administration contains Members, Integrations, Security, Audit log, Developers, Labs in that order', () => {

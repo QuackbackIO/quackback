@@ -97,6 +97,12 @@ export function createSDK(): SDK {
       case 'quackback:close':
         dispatch('close')
         break
+      case 'quackback:expand': {
+        // Long-form content (article/changelog detail) grows the panel.
+        const m = msg as { expanded?: boolean }
+        panel?.setExpanded(!!m.expanded)
+        break
+      }
       case 'quackback:identify-result': {
         const m = msg as {
           success?: boolean

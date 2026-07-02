@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { FormattedMessage } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { WidgetVoteButton } from '@/components/widget/widget-vote-button'
@@ -12,8 +14,8 @@ import {
   type WidgetView,
   resolveInitialTab,
   resolveInitialView,
-  supportRootView,
   homeEnabled,
+  isExpandedView,
 } from '@/components/widget/widget-nav'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
@@ -25,13 +27,24 @@ import { WidgetHelpCategory } from '@/components/widget/widget-help-category'
 import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
 import { WidgetMessenger } from '@/components/widget/widget-messenger'
 import type { ConversationId } from '@quackback/ids'
-import { WidgetMessagesSection } from '@/components/widget/widget-messages-section'
+import { WidgetMessages } from '@/components/widget/widget-messages'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
+import { publicChangelogQueries } from '@/lib/client/queries/changelog'
+import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
+import { listPublicArticlesFn } from '@/lib/server/functions/help-center'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
+import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
-import { CONVERSATION_PRESENCE_QUERY_KEY } from '@/components/widget/use-messenger-presence'
+import {
+  CONVERSATION_PRESENCE_QUERY_KEY,
+  useConversationPresence,
+} from '@/components/widget/use-messenger-presence'
+import { conversationAvailable } from '@/lib/shared/conversation/presence'
+import { ConversationPresenceBadge } from '@/components/shared/conversation/conversation-presence-badge'
+import { Avatar } from '@/components/ui/avatar'
+import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -61,12 +74,13 @@ export const Route = createFileRoute('/widget/')({
 
     const { getBaseUrl } = await import('@/lib/server/config')
 
-    // Same triple-gate as the `chat` tab below: Support Inbox flag + Messenger
-    // enabled + tab on. Hoisted so we only compute presence when Messenger shows.
-    const chatTabEnabled =
+    // Same triple-gate as the `messages` tab below: Support Inbox flag +
+    // Messenger enabled + tab on. Hoisted so we only compute presence when
+    // Messenger shows.
+    const messengerTabEnabled =
       ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
       (settings?.publicWidgetConfig?.messenger?.enabled ?? false) &&
-      (settings?.publicWidgetConfig?.tabs?.chat ?? false)
+      (settings?.publicWidgetConfig?.tabs?.messenger ?? false)
 
     // Presence is tenant-global (not visitor-specific), so the anonymous SSR
     // baseline value is exactly correct for every visitor — seed the shared
@@ -74,7 +88,7 @@ export const Route = createFileRoute('/widget/')({
     // instead of flashing "away" until the first client poll. The seed is
     // dehydrated to the client just like the votedPosts seed below. Skipped when
     // Messenger isn't shown.
-    if (chatTabEnabled) {
+    if (messengerTabEnabled) {
       try {
         // Call the server fn (not an unwrapped helper): its handler — and the
         // ioredis-reaching presence import inside it — is stripped from the
@@ -86,6 +100,56 @@ export const Route = createFileRoute('/widget/')({
         // the seed empty and let the client query fetch presence on mount.
       }
     }
+
+    // Teammate-avatar cluster for the Home header. Tenant-global and public-safe
+    // (name + image only), so the anonymous SSR baseline is correct for everyone.
+    let team: { name: string; avatarUrl: string | null }[] = []
+    if (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true) {
+      try {
+        const { getWidgetTeamAvatarsFn } = await import('@/lib/server/functions/conversation')
+        team = await getWidgetTeamAvatarsFn()
+      } catch {
+        // Never break the widget load over a decorative header cluster.
+      }
+    }
+
+    // SSR-complete Home: seed everything its sections read so the first paint
+    // never pops content in after render. All of these are public/tenant-global
+    // except the conversation summary, which is correct for cookie-authed
+    // visitors here; Bearer-token visitors refetch it client-side on mount.
+    const helpTabEnabled =
+      ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
+      (settings?.helpCenterConfig?.enabled ?? false) &&
+      (settings?.publicWidgetConfig?.tabs?.help ?? false)
+    const changelogTabEnabled = settings?.publicWidgetConfig?.tabs?.changelog ?? false
+
+    let topArticles: { slug: string; title: string }[] = []
+    await Promise.all([
+      changelogTabEnabled
+        ? queryClient.ensureInfiniteQueryData(publicChangelogQueries.list()).catch(() => {})
+        : Promise.resolve(),
+      helpTabEnabled
+        ? queryClient.ensureQueryData(publicHelpCenterQueries.categories()).catch(() => {})
+        : Promise.resolve(),
+      helpTabEnabled
+        ? listPublicArticlesFn({ data: { limit: 4 } })
+            .then((res) => {
+              topArticles = res.items.map((a) => ({ slug: a.slug, title: a.title }))
+            })
+            .catch(() => {})
+        : Promise.resolve(),
+      messengerTabEnabled
+        ? import('@/lib/server/functions/conversation')
+            .then(({ getMyConversationFn }) => getMyConversationFn())
+            .then((res) => {
+              queryClient.setQueryData(conversationSummaryKey(INITIAL_SESSION_VERSION), {
+                conversation: res.conversation ?? null,
+                teamName: res.teamName,
+              })
+            })
+            .catch(() => {})
+        : Promise.resolve(),
+    ])
 
     return {
       posts: portalData.posts.items.map((p) => ({
@@ -126,11 +190,32 @@ export const Route = createFileRoute('/widget/')({
           ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
           (settings?.helpCenterConfig?.enabled ?? false) &&
           (settings?.publicWidgetConfig?.tabs?.help ?? false),
-        // Support Inbox flag + Messenger enabled + tab on (computed above).
-        chat: chatTabEnabled,
+        // Support Inbox flag + Messenger enabled + tab on (computed above). The
+        // persisted config names this `messenger`; the widget speaks `messages`.
+        messages: messengerTabEnabled,
         // Admin opt-out for the aggregated Home tab (defaults to shown).
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
       },
+      // Home surface customisation (greeting, hero style, quick-link cards).
+      home: settings?.publicWidgetConfig?.home ?? null,
+      // Workspace logo for the Home header (branding config).
+      logoUrl: settings?.brandingData?.logoUrl ?? null,
+      // Top help articles for the Home search card (public; SSR'd).
+      topArticles,
+      // Team label for widget surfaces (changelog header, messages fallback):
+      // the configured messenger team name, else the workspace name.
+      teamName: settings?.publicWidgetConfig?.messenger?.teamName || settings?.name || null,
+      // Teammate avatars for the Home header cluster (empty when disabled).
+      team,
+      // AI-assistant display identity — fronts unassigned conversations in the
+      // Messages list and the Home messages card. Null when disabled.
+      assistant:
+        messengerTabEnabled && settings?.publicWidgetConfig?.messenger?.assistant?.enabled
+          ? {
+              name: settings.publicWidgetConfig.messenger.assistant.name?.trim() || 'Quinn',
+              avatarUrl: settings.publicWidgetConfig.messenger.assistant.avatarUrl || null,
+            }
+          : null,
       linkPreviews:
         (settings?.featureFlags as { linkPreviews?: boolean } | undefined)?.linkPreviews ?? false,
       defaultBoard: settings?.publicWidgetConfig?.defaultBoard,
@@ -155,6 +240,38 @@ interface SuccessPost {
   board: { id: string; name: string; slug: string }
 }
 
+/**
+ * Entry transition for a widget view. Root views (tab switches) rise and fade
+ * in place; pushed views (details, the messenger thread) slide in from the
+ * side like a navigation push. Entry-only by design: exits are instant, so the
+ * keep-mounted feedback view and back-navigation stay snappy, matching the
+ * feel of polished in-product messengers. Honors prefers-reduced-motion.
+ */
+function ViewTransition({
+  id,
+  kind,
+  children,
+}: {
+  id: string
+  kind: 'root' | 'push'
+  children: ReactNode
+}) {
+  const reduceMotion = useReducedMotion()
+  return (
+    <motion.div
+      key={id}
+      initial={
+        reduceMotion ? false : kind === 'push' ? { x: 28, opacity: 0 } : { y: 10, opacity: 0 }
+      }
+      animate={{ x: 0, y: 0, opacity: 1 }}
+      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+      className="h-full"
+    >
+      {children}
+    </motion.div>
+  )
+}
+
 function WidgetPage() {
   const {
     posts,
@@ -168,6 +285,12 @@ function WidgetPage() {
     defaultBoard,
     portalAccess,
     portalOrigin,
+    home,
+    logoUrl,
+    topArticles,
+    teamName,
+    assistant,
+    team,
   } = Route.useLoaderData()
   const { ensureSession, sessionVersion } = useWidgetAuth()
 
@@ -196,16 +319,46 @@ function WidgetPage() {
   // A `?c=` deep link opens straight to Messenger (when Messenger is enabled); the widget
   // then loads the visitor's active conversation from their session.
   const [view, setView] = useState<WidgetView>(
-    resumeConversationId && tabs.chat ? 'messenger' : resolveInitialView(tabs)
+    resumeConversationId && tabs.messages ? 'messenger' : resolveInitialView(tabs)
   )
   const [activeTab, setActiveTab] = useState<WidgetTab>(
-    resumeConversationId && tabs.chat ? 'help' : initialTab
+    resumeConversationId && tabs.messages ? 'messages' : initialTab
   )
   // Which thread the messenger view opens: an id, 'new', or null (active/default).
   // Seeded from the ?c= deep link so it opens that exact thread.
   const [conversationTarget, setConversationTarget] = useState<ConversationId | 'new' | null>(
     resumeConversationId ? (resumeConversationId as ConversationId) : null
   )
+  // Manual size preference: the header's expand/collapse button flips this,
+  // and it is STICKY — collapsing turns auto-expansion off for every later
+  // item view until the visitor expands again. Persisted per browser.
+  const [autoExpand, setAutoExpand] = useState(true)
+  useEffect(() => {
+    try {
+      setAutoExpand(window.localStorage.getItem('quackback:auto-expand') !== 'off')
+    } catch {
+      /* storage unavailable — keep the default */
+    }
+  }, [])
+  const toggleExpand = useCallback(() => {
+    setAutoExpand((prev) => {
+      const next = !prev
+      try {
+        window.localStorage.setItem('quackback:auto-expand', next ? 'on' : 'off')
+      } catch {
+        /* best-effort persistence */
+      }
+      return next
+    })
+  }, [])
+  // Host viewport class, reported by the SDK (quackback:mobile). On mobile the
+  // panel is always full-screen, so the manual size control is meaningless.
+  const [hostIsMobile, setHostIsMobile] = useState(false)
+
+  // Where a cross-navigation came from (e.g. Home's "Search for help" jumping
+  // to the Help tab). While set, even a ROOT view shows a back chevron that
+  // returns here. Cleared by any tab-bar click — tabs never show a back arrow.
+  const [backTarget, setBackTarget] = useState<{ tab: WidgetTab; view: WidgetView } | null>(null)
 
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
@@ -225,25 +378,45 @@ function WidgetPage() {
 
   const openMessenger = useCallback((target?: ConversationId | 'new') => {
     setConversationTarget(target ?? null)
-    setActiveTab('help')
+    setActiveTab('messages')
     setView('messenger')
   }, [])
+
+  // Long-form content reads better wide: ask the host SDK to grow the panel
+  // while an article or changelog entry is open, and shrink it back after.
+  const panelExpanded = isExpandedView(view) && autoExpand
+  useEffect(() => {
+    // The tab bar fades out concurrently as the panel grows; on the way back
+    // the panel shrinks first and the bar fades in once it has settled (the
+    // shell delays its reveal).
+    sendToHost({ type: 'quackback:expand', expanded: panelExpanded })
+  }, [panelExpanded])
 
   // Listen for quackback:open messages from the SDK
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (event.source !== window.parent) return
       const msg = event.data
-      if (!msg || typeof msg !== 'object' || msg.type !== 'quackback:open' || !msg.data) return
+      if (!msg || typeof msg !== 'object') return
+      if (msg.type === 'quackback:mobile') {
+        setHostIsMobile(!!msg.data)
+        return
+      }
+      if (msg.type !== 'quackback:open' || !msg.data) return
 
       const opts = msg.data as { view?: string }
+      // SDK-driven opens are tab-level landings: no back-chevron origin.
+      setBackTarget(null)
       if (opts.view === 'changelog' && tabs.changelog) {
         setActiveTab('changelog')
         setView('changelog')
-      } else if (opts.view === 'help' && (tabs.help || tabs.chat)) {
+      } else if (opts.view === 'help' && tabs.help) {
         setActiveTab('help')
-        setView(supportRootView(tabs))
-      } else if ((opts.view === 'chat' || opts.view === 'live-chat') && tabs.chat) {
+        setView('help')
+      } else if (
+        (opts.view === 'messages' || opts.view === 'chat' || opts.view === 'live-chat') &&
+        tabs.messages
+      ) {
         openMessenger()
       } else if ((opts.view === 'home' || opts.view === 'overview') && homeEnabled(tabs)) {
         setActiveTab('home')
@@ -296,34 +469,68 @@ function WidgetPage() {
       return
     }
     if (view === 'messenger') {
-      // Messenger is opened from the support surface; back returns to its root
-      // (help articles, or the messages list for a messenger-only widget).
-      setView(supportRootView(tabs))
+      // Messenger opens from the Messages tab; back returns to the conversation list.
+      setView('messages')
+      return
+    }
+    // Root views only show a back arrow after a cross-navigation (e.g. a Home
+    // card jumped here); back returns to that origin and consumes it.
+    if (
+      backTarget &&
+      (view === 'overview' ||
+        view === 'messages' ||
+        view === 'feedback' ||
+        view === 'help' ||
+        view === 'changelog')
+    ) {
+      setActiveTab(backTarget.tab)
+      setView(backTarget.view)
+      setBackTarget(null)
       return
     }
     setSelectedPostId(null)
     setView('feedback')
-  }, [view, selectedCategory, tabs])
+  }, [view, selectedCategory, backTarget])
 
+  const navigateToTab = useCallback((tab: WidgetTab) => {
+    setActiveTab(tab)
+    if (tab === 'home') {
+      setView('overview')
+    } else if (tab === 'messages') {
+      setConversationTarget(null)
+      setView('messages')
+    } else if (tab === 'feedback') {
+      setSelectedPostId(null)
+      setView('feedback')
+    } else if (tab === 'changelog') {
+      setSelectedChangelogId(null)
+      setView('changelog')
+    } else {
+      // 'help' — the knowledge-base articles surface
+      setSelectedHelpSlug(null)
+      setSelectedCategory(null)
+      setView('help')
+    }
+  }, [])
+
+  // Tab-bar navigation: tabs are peers, so landing on one never shows a back
+  // arrow — any pending cross-navigation origin is dropped.
   const handleTabChange = useCallback(
     (tab: WidgetTab) => {
-      setActiveTab(tab)
-      if (tab === 'home') {
-        setView('overview')
-      } else if (tab === 'feedback') {
-        setSelectedPostId(null)
-        setView('feedback')
-      } else if (tab === 'changelog') {
-        setSelectedChangelogId(null)
-        setView('changelog')
-      } else {
-        // 'help' — the combined support surface (articles + messages)
-        setSelectedHelpSlug(null)
-        setSelectedCategory(null)
-        setView(supportRootView(tabs))
-      }
+      setBackTarget(null)
+      navigateToTab(tab)
     },
-    [tabs]
+    [navigateToTab]
+  )
+
+  // Cross-navigation (e.g. a Home card jumping to another surface): remember
+  // the origin so the destination shows a back chevron returning here.
+  const crossNavigate = useCallback(
+    (tab: WidgetTab) => {
+      setBackTarget({ tab: activeTab, view })
+      navigateToTab(tab)
+    },
+    [activeTab, view, navigateToTab]
   )
 
   const handleChangelogEntrySelect = useCallback((entryId: string) => {
@@ -349,15 +556,54 @@ function WidgetPage() {
     setView('help-detail')
   }, [])
 
-  // Root views have no back arrow. 'messages' is the messenger-only support root.
-  const shellOnBack =
-    view !== 'overview' &&
-    view !== 'feedback' &&
-    view !== 'changelog' &&
-    view !== 'help' &&
-    view !== 'messages'
-      ? handleBack
-      : undefined
+  // Detail views always get a back arrow; root views only when a
+  // cross-navigation origin is pending (tab-bar landings never show one).
+  const isRootView =
+    view === 'overview' ||
+    view === 'feedback' ||
+    view === 'changelog' ||
+    view === 'help' ||
+    view === 'messages'
+  const shellOnBack = !isRootView || backTarget ? handleBack : undefined
+
+  // Messenger thread header lives in the SHELL's top bar (single header row):
+  // the assistant identity when enabled — always available, no presence — or
+  // the live presence badge for assistant-less workspaces.
+  const presence = useConversationPresence(!!tabs.messages && !assistant)
+  const messengerHeader =
+    view === 'messenger' ? (
+      assistant ? (
+        <div className="flex min-w-0 items-center gap-2.5 ps-1">
+          <Avatar src={assistant.avatarUrl} name={assistant.name} className="size-8 text-[10px]" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold leading-tight text-foreground">
+              {assistant.name}
+            </p>
+            <p className="truncate text-[11px] leading-tight text-muted-foreground">
+              <FormattedMessage
+                id="widget.messenger.assistant.teamAlso"
+                defaultMessage="The team can also help"
+              />
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="ps-1">
+          <ConversationPresenceBadge
+            available={conversationAvailable(presence.agentsOnline, presence.withinOfficeHours)}
+          />
+        </div>
+      )
+    ) : undefined
+
+  // The Home hero (brand gradient or uploaded image) fills the whole panel
+  // behind the floating header; rendered by the shell.
+  const heroStyle =
+    home?.headerStyle === 'image' && home.heroImageUrl
+      ? { style: 'image' as const, imageUrl: home.heroImageUrl }
+      : home?.headerStyle === 'gradient'
+        ? { style: 'gradient' as const }
+        : null
 
   return (
     <WidgetShell
@@ -368,62 +614,111 @@ function WidgetPage() {
       enabledTabs={tabs}
       portalAccess={portalAccess}
       portalOrigin={portalOrigin}
+      team={team}
+      hero={heroStyle}
+      logoUrl={(home?.showLogo ?? true) ? logoUrl : null}
+      headerContent={messengerHeader}
+      // Immersive views: the conversation thread and single-item reading views
+      // (post/article/changelog) drop the tab bar; the back chevron handles exit.
+      hideTabBar={view === 'messenger' || isExpandedView(view)}
+      panelExpanded={panelExpanded}
+      expandControl={
+        isExpandedView(view) && !hostIsMobile
+          ? { expanded: panelExpanded, onToggle: toggleExpand }
+          : undefined
+      }
     >
       {view === 'overview' && (
-        <WidgetOverview
-          tabs={tabs}
-          onLeaveFeedback={() => handleTabChange('feedback')}
-          onGetHelp={() => handleTabChange('help')}
-          onResumeMessenger={() => openMessenger()}
-          onSeeChangelog={() => handleTabChange('changelog')}
-          onOpenChangelogEntry={(id) => {
-            setActiveTab('changelog')
-            handleChangelogEntrySelect(id)
-          }}
-        />
+        <ViewTransition id="overview" kind="root">
+          <WidgetOverview
+            tabs={tabs}
+            home={home}
+            assistant={assistant}
+            team={team}
+            topArticles={topArticles}
+            onLeaveFeedback={() => crossNavigate('feedback')}
+            onOpenHelp={() => crossNavigate('help')}
+            onOpenHelpArticle={(slug) => {
+              setBackTarget({ tab: 'home', view: 'overview' })
+              setActiveTab('help')
+              handleHelpArticleSelect(slug)
+            }}
+            onStartConversation={() => {
+              setBackTarget({ tab: 'home', view: 'overview' })
+              openMessenger('new')
+            }}
+            onResumeMessenger={() => {
+              setBackTarget({ tab: 'home', view: 'overview' })
+              openMessenger()
+            }}
+            onSeeChangelog={() => crossNavigate('changelog')}
+            onOpenChangelogEntry={(id) => {
+              setBackTarget({ tab: 'home', view: 'overview' })
+              setActiveTab('changelog')
+              handleChangelogEntrySelect(id)
+            }}
+          />
+        </ViewTransition>
       )}
 
-      {view === 'changelog' && <WidgetChangelog onEntrySelect={handleChangelogEntrySelect} />}
+      {view === 'changelog' && (
+        <ViewTransition id="changelog" kind="root">
+          <WidgetChangelog teamName={teamName} onEntrySelect={handleChangelogEntrySelect} />
+        </ViewTransition>
+      )}
 
       {view === 'messenger' && (
-        <WidgetMessenger
-          key={conversationTarget ?? 'active'}
-          helpEnabled={tabs.help}
-          onArticleSelect={handleHelpArticleSelect}
-          conversationTarget={conversationTarget === null ? undefined : conversationTarget}
-          linkPreviews={linkPreviews}
-        />
+        <ViewTransition id={`messenger-${conversationTarget ?? 'active'}`} kind="push">
+          <WidgetMessenger
+            key={conversationTarget ?? 'active'}
+            helpEnabled={tabs.help}
+            onArticleSelect={handleHelpArticleSelect}
+            conversationTarget={conversationTarget === null ? undefined : conversationTarget}
+            linkPreviews={linkPreviews}
+          />
+        </ViewTransition>
       )}
 
       {view === 'messages' && (
-        <div className="flex h-full flex-col overflow-y-auto px-3 pb-3">
-          <WidgetMessagesSection onOpenMessenger={openMessenger} />
-        </div>
+        <ViewTransition id="messages" kind="root">
+          <WidgetMessages
+            teamName={teamName}
+            assistant={assistant}
+            onOpenMessenger={openMessenger}
+          />
+        </ViewTransition>
       )}
 
       {view === 'changelog-detail' && selectedChangelogId && (
-        <WidgetChangelogDetail entryId={selectedChangelogId} />
+        <ViewTransition id={`changelog-${selectedChangelogId}`} kind="push">
+          <WidgetChangelogDetail entryId={selectedChangelogId} />
+        </ViewTransition>
       )}
 
       {view === 'help' && (
-        <WidgetHelp
-          onArticleSelect={handleHelpArticleSelect}
-          onCategorySelect={handleHelpCategorySelect}
-          onOpenMessenger={tabs.chat ? () => openMessenger() : undefined}
-        />
+        <ViewTransition id="help" kind="root">
+          <WidgetHelp
+            onArticleSelect={handleHelpArticleSelect}
+            onCategorySelect={handleHelpCategorySelect}
+          />
+        </ViewTransition>
       )}
 
       {view === 'help-category' && selectedCategory && (
-        <WidgetHelpCategory
-          categoryId={selectedCategory.id}
-          categoryName={selectedCategory.name}
-          categoryIcon={selectedCategory.icon}
-          onArticleSelect={handleHelpCategoryArticleSelect}
-        />
+        <ViewTransition id={`help-category-${selectedCategory.id}`} kind="push">
+          <WidgetHelpCategory
+            categoryId={selectedCategory.id}
+            categoryName={selectedCategory.name}
+            categoryIcon={selectedCategory.icon}
+            onArticleSelect={handleHelpCategoryArticleSelect}
+          />
+        </ViewTransition>
       )}
 
       {view === 'help-detail' && selectedHelpSlug && (
-        <WidgetHelpDetail articleSlug={selectedHelpSlug} />
+        <ViewTransition id={`help-detail-${selectedHelpSlug}`} kind="push">
+          <WidgetHelpDetail articleSlug={selectedHelpSlug} />
+        </ViewTransition>
       )}
 
       {/* Keep home mounted (hidden) when viewing post detail so form state is preserved */}
@@ -436,99 +731,127 @@ function WidgetPage() {
             : 'hidden'
         }
       >
-        <WidgetHome
-          initialPosts={allPosts}
-          initialHasMore={postsHasMore}
-          statuses={statuses}
-          boards={boards}
-          boardPermissions={livePermissions}
-          defaultBoard={defaultBoard}
-          onPostSelect={handlePostSelect}
-          onPostCreated={handlePostCreated}
-        />
+        {/* Kept mounted, so it can't use the remount-keyed ViewTransition;
+            instead the same root entrance replays whenever it becomes visible. */}
+        <motion.div
+          initial={false}
+          animate={view === 'feedback' ? { y: 0, opacity: 1 } : { y: 10, opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+          className="flex flex-col h-full"
+        >
+          <WidgetHome
+            initialPosts={allPosts}
+            initialHasMore={postsHasMore}
+            statuses={statuses}
+            boards={boards}
+            boardPermissions={livePermissions}
+            defaultBoard={defaultBoard}
+            onPostSelect={handlePostSelect}
+            onPostCreated={handlePostCreated}
+          />
+        </motion.div>
       </div>
 
       {view === 'post-detail' && selectedPostId && (
-        <WidgetPostDetail postId={selectedPostId} statuses={statuses} />
+        <ViewTransition id={`post-${selectedPostId}`} kind="push">
+          <WidgetPostDetail postId={selectedPostId} statuses={statuses} />
+        </ViewTransition>
       )}
 
-      {view === 'success' &&
-        successPost &&
-        (() => {
-          const successStatus = successPost.statusId
-            ? (statuses.find(
-                (s: { id: string; name: string; color: string }) => s.id === successPost.statusId
-              ) ?? null)
-            : null
-          // Vote gate follows the created post's board for the real actor
-          // (livePermissions is refetched with the widget's Bearer identity).
-          const canVote = livePermissions?.[successPost.board.id]?.canVote ?? false
-
-          return (
-            <div className="flex flex-col h-full">
-              <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 shrink-0">
-                  <CheckCircleIcon className="w-4.5 h-4.5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Thanks for your feedback!</p>
-                  <p className="text-[11px] text-muted-foreground">Your idea has been submitted.</p>
-                </div>
-              </div>
-
-              <div className="px-3">
-                <div
-                  className="flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
-                  onClick={() => {
-                    setSelectedPostId(successPost.id)
-                    setView('post-detail')
-                  }}
-                >
-                  <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                    <WidgetVoteButton
-                      postId={successPost.id as PostId}
-                      voteCount={successPost.voteCount}
-                      onBeforeVote={canVote ? ensureSession : undefined}
-                      noAccessReason={
-                        canVote ? undefined : "You don't have access to vote on this board"
-                      }
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-foreground line-clamp-2">
-                      {successPost.title}
-                    </h3>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {successStatus && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                          <span
-                            className="size-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: successStatus.color }}
-                          />
-                          {successStatus.name}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-muted-foreground/60">
-                        {successPost.board.name}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="px-3 pt-3">
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg border border-border/50 transition-colors"
-                >
-                  <ArrowLeftIcon className="w-3.5 h-3.5" />
-                  Back to ideas
-                </button>
-              </div>
-            </div>
-          )
-        })()}
+      {view === 'success' && successPost && (
+        <ViewTransition id={`success-${successPost.id}`} kind="push">
+          <SuccessView
+            post={successPost}
+            status={
+              successPost.statusId
+                ? (statuses.find((s) => s.id === successPost.statusId) ?? null)
+                : null
+            }
+            // Vote gate follows the created post's board for the real actor
+            // (livePermissions is refetched with the widget's Bearer identity).
+            canVote={livePermissions?.[successPost.board.id]?.canVote ?? false}
+            ensureSession={ensureSession}
+            onOpenPost={() => {
+              setSelectedPostId(successPost.id)
+              setView('post-detail')
+            }}
+            onBack={handleBack}
+          />
+        </ViewTransition>
+      )}
     </WidgetShell>
+  )
+}
+
+/** Post-submission confirmation: the created post with its vote button. */
+function SuccessView({
+  post,
+  status,
+  canVote,
+  ensureSession,
+  onOpenPost,
+  onBack,
+}: {
+  post: SuccessPost
+  status: { id: string; name: string; color: string } | null
+  canVote: boolean
+  ensureSession: () => Promise<boolean>
+  onOpenPost: () => void
+  onBack: () => void
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2.5 px-4 pt-5 pb-3">
+        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 shrink-0">
+          <CheckCircleIcon className="w-4.5 h-4.5 text-primary" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-foreground">Thanks for your feedback!</p>
+          <p className="text-[11px] text-muted-foreground">Your idea has been submitted.</p>
+        </div>
+      </div>
+
+      <div className="px-3">
+        <div
+          className="flex items-center gap-2 rounded-lg bg-muted/20 border border-border/50 px-2 py-2 cursor-pointer hover:bg-muted/30 transition-colors"
+          onClick={onOpenPost}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+            <WidgetVoteButton
+              postId={post.id as PostId}
+              voteCount={post.voteCount}
+              onBeforeVote={canVote ? ensureSession : undefined}
+              noAccessReason={canVote ? undefined : "You don't have access to vote on this board"}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-medium text-foreground line-clamp-2">{post.title}</h3>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {status && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                  <span
+                    className="size-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: status.color }}
+                  />
+                  {status.name}
+                </span>
+              )}
+              <span className="text-[10px] text-muted-foreground/60">{post.board.name}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-3 pt-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg border border-border/50 transition-colors"
+        >
+          <ArrowLeftIcon className="w-3.5 h-3.5" />
+          Back to ideas
+        </button>
+      </div>
+    </div>
   )
 }

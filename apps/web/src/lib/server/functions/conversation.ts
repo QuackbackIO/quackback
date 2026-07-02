@@ -61,7 +61,6 @@ const sendMessageSchema = z.object({
   contentJson: z.unknown().nullable().optional(),
   attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
   /** Optional pre-chat email capture (anonymous visitors). */
-  visitorEmail: z.string().email().max(320).optional(),
 })
 
 const conversationIdSchema = z.object({ conversationId: z.string() })
@@ -199,18 +198,6 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
         const { assertConversationSendRate } =
           await import('@/lib/server/domains/conversation/conversation.ratelimit')
         await assertConversationSendRate(ctx.principal.id)
-
-        // Enforce required pre-chat email server-side (the widget gates the
-        // button, but a direct call must not bypass it): only on the first
-        // message of a new conversation, for a visitor with no email on file.
-        if (!data.conversationId && !data.visitorEmail && !realEmail(ctx.user?.email)) {
-          const { getMessengerConfig } =
-            await import('@/lib/server/domains/settings/settings.widget')
-          const { preChatEmail } = await getMessengerConfig()
-          if (preChatEmail === 'required') {
-            throw new Error('An email is required to start a conversation')
-          }
-        }
       }
 
       const actor = await policyActorFromAuth(ctx)
@@ -222,7 +209,6 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
           conversationId: data.conversationId as ConversationId | undefined,
           content: data.content,
           attachments: data.attachments as ConversationAttachment[] | undefined,
-          visitorEmail: data.visitorEmail,
         },
         {
           principalId: ctx.principal.id,
@@ -267,6 +253,19 @@ export const getConversationPresenceFn = createServerFn({ method: 'GET' }).handl
   }
 )
 
+/**
+ * Teammate avatars for the widget Home header cluster. Tenant-global and
+ * public-safe by construction — the domain query exposes only name + image for
+ * genuine teammates (never portal users, anonymous visitors, or service
+ * principals), so no visitor auth is needed.
+ */
+export const getWidgetTeamAvatarsFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<{ name: string; avatarUrl: string | null }[]> => {
+    const { listTeamAvatars } = await import('@/lib/server/domains/principals/principal.service')
+    return listTeamAvatars(3)
+  }
+)
+
 // getMyConversationFn optionally targets a specific conversation:
 //  - omitted        → the visitor's active/most-recent thread (default)
 //  - a conversation → that thread, if the caller owns it (else greeting state)
@@ -289,7 +288,6 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         getMessengerConfig(),
         getSettings(),
       ])
-      const preChatEmail = messengerConfig.preChatEmail ?? 'off'
       const emailConfigured = isEmailConfigured()
       // Note: team-availability presence is NOT returned here. The widget reads it
       // from the shared useConversationPresence query (getConversationPresenceFn) so every surface
@@ -301,13 +299,20 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         // Falls back to the workspace name (as the settings help text promises)
         // when no team name is set.
         teamName: messengerConfig.teamName?.trim() || appSettings?.name || null,
-        preChatEmail,
-        // Whether we already have a contact email — the widget skips the pre-chat
-        // prompt when true.
+        // AI-assistant display identity: fronts new conversations (greeting
+        // author + thread header) when enabled. Identity only — replies still
+        // come from the team until the integrated agent lands.
+        assistant: messengerConfig.assistant?.enabled
+          ? {
+              name: messengerConfig.assistant.name?.trim() || 'Quinn',
+              avatarUrl: messengerConfig.assistant.avatarUrl || null,
+            }
+          : null,
+        // Whether we already have a contact email for this visitor.
         visitorHasEmail: false,
         // Whether an offline reply could actually reach this visitor by email —
         // the widget shows a non-promising offline message when false.
-        canEmailVisitor: canEmailVisitor({ emailConfigured, preChatEmail, visitorHasEmail: false }),
+        canEmailVisitor: canEmailVisitor({ emailConfigured, visitorHasEmail: false }),
         // Whether the surfaced conversation is closed (read-only) — the widget
         // then offers "start a new conversation" instead of a composer (P1.9).
         isReadOnly: false,
@@ -341,7 +346,7 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         return {
           ...base,
           visitorHasEmail,
-          canEmailVisitor: canEmailVisitor({ emailConfigured, preChatEmail, visitorHasEmail }),
+          canEmailVisitor: canEmailVisitor({ emailConfigured, visitorHasEmail }),
           conversation: null,
           messages: [],
           hasMore: false,
@@ -364,7 +369,7 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
       // as a real address (else the widget promises an email reply it can't send).
       const visitorHasEmail =
         Boolean(realEmail(ctx.user?.email)) || Boolean(realEmail(conversation?.visitorEmail))
-      const canEmail = canEmailVisitor({ emailConfigured, preChatEmail, visitorHasEmail })
+      const canEmail = canEmailVisitor({ emailConfigured, visitorHasEmail })
       if (!conversation) {
         return {
           ...base,
