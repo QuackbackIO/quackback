@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PrincipalId } from '@quackback/ids'
+import { createId } from '@quackback/ids'
 import {
   operations,
   mockTx,
@@ -15,8 +15,8 @@ vi.mock('@/lib/server/db', async () =>
 import { REPOINT_STEPS, repointPrincipalActivity } from '../principal-repoint'
 import { isNull, eq } from '@/lib/server/db'
 
-const FROM = 'principal_anon' as PrincipalId
-const TO = 'principal_target' as PrincipalId
+const FROM = createId('principal')
+const TO = createId('principal')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tx = mockTx as any

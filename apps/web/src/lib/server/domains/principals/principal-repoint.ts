@@ -25,7 +25,7 @@
  * auth/merge-anonymous.ts. Identity teardown afterwards is the factory's
  * deleteAnonymousIdentity.
  */
-import type { PrincipalId } from '@quackback/ids'
+import { toUuid, type PrincipalId } from '@quackback/ids'
 import {
   postVotes,
   postCommentReactions,
@@ -130,7 +130,8 @@ function collisionRepoint(
     columns: [column],
     description,
     async run(tx, { from, to }) {
-      let match = sql`t.${sql.raw(column)} = ${to}`
+      // Raw fragments bypass the TypeID column mapper: embed uuids, not TypeIDs.
+      let match = sql`t.${sql.raw(column)} = ${toUuid(to)}`
       for (const uniqueCol of uniqueCols) {
         match = sql`${match} AND t.${sql.raw(uniqueCol)} = ${dbTable[columnKey(uniqueCol)]}`
       }
@@ -179,7 +180,7 @@ export const REPOINT_STEPS: RepointStep[] = [
     description:
       'Recipient re-point, plus fixups for the anon comments about to transfer: notifications the target received about them become self-notifications (deleted), and titles swap the anon display name for the real one. Must run before the post_comments step.',
     async run(tx, { from, to, displayNames }) {
-      const aboutAnonComment = sql`EXISTS (SELECT 1 FROM post_comments c WHERE c.id = ${inAppNotifications.commentId} AND c.principal_id = ${from})`
+      const aboutAnonComment = sql`EXISTS (SELECT 1 FROM post_comments c WHERE c.id = ${inAppNotifications.commentId} AND c.principal_id = ${toUuid(from)})`
       await tx
         .delete(inAppNotifications)
         .where(and(eq(inAppNotifications.principalId, to), aboutAnonComment))
@@ -259,7 +260,7 @@ export const REPOINT_STEPS: RepointStep[] = [
         .where(
           and(
             eq(userSegments.principalId, from),
-            sql`EXISTS (SELECT 1 FROM user_segments t WHERE t.principal_id = ${to} AND t.segment_id = ${userSegments.segmentId})`
+            sql`EXISTS (SELECT 1 FROM user_segments t WHERE t.principal_id = ${toUuid(to)} AND t.segment_id = ${userSegments.segmentId})`
           )
         )
       await tx
@@ -289,7 +290,7 @@ export const REPOINT_STEPS: RepointStep[] = [
       await tx
         .update(principal)
         .set({
-          contactEmail: sql`(SELECT source.contact_email FROM principal source WHERE source.id = ${from})`,
+          contactEmail: sql`(SELECT source.contact_email FROM principal source WHERE source.id = ${toUuid(from)})`,
         })
         .where(and(eq(principal.id, to), isNull(principal.contactEmail)))
     },
