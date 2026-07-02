@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { format } from 'date-fns'
 import {
   DocumentTextIcon,
   PlusIcon,
@@ -7,9 +8,11 @@ import {
   UserIcon,
   Squares2X2Icon,
   CubeIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
@@ -40,6 +43,10 @@ interface ChangelogMetadataSidebarContentProps {
   productName: string
   onProductNameChange: (name: string) => void
   authorName?: string | null
+  publishedAt?: string | null
+  displayDateValue?: Date
+  onDisplayDateChange?: (value: Date | undefined) => void
+  onDisplayDateClear?: () => void
 }
 
 const PUBLISH_STATUS_OPTIONS: readonly StatusOption[] = [
@@ -58,6 +65,10 @@ export function ChangelogMetadataSidebarContent({
   productName,
   onProductNameChange,
   authorName,
+  publishedAt,
+  displayDateValue,
+  onDisplayDateChange = () => {},
+  onDisplayDateClear = () => {},
 }: ChangelogMetadataSidebarContentProps) {
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -72,6 +83,13 @@ export function ChangelogMetadataSidebarContent({
     tomorrow.setHours(9, 0, 0, 0)
     return tomorrow
   })
+
+  const displayPlaceholder =
+    publishedAt != null
+      ? format(new Date(publishedAt), 'MMM d, yyyy')
+      : publishState.type === 'published'
+        ? format(publishState.publishAt ?? new Date(), 'MMM d, yyyy')
+        : 'Pick a date'
 
   // Search shipped posts
   const { data: posts = [], isLoading: postsLoading } = useQuery({
@@ -101,6 +119,12 @@ export function ChangelogMetadataSidebarContent({
       if (publishState.type === 'scheduled') {
         onPublishStateChange({ type: 'scheduled', publishAt: date })
       }
+    }
+  }
+
+  const handleDisplayDateChange = (date: Date | undefined) => {
+    if (date) {
+      onDisplayDateChange(date)
     }
   }
 
@@ -183,6 +207,35 @@ export function ChangelogMetadataSidebarContent({
           ))}
         </datalist>
       </div>
+
+      {/* Published date shown on the public changelog - only when published */}
+      {publishState.type === 'published' && (
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <span className="flex items-center gap-1 text-sm text-muted-foreground shrink-0">
+            Published date
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <InformationCircleIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[15rem]">
+                <p>
+                  The date shown on your public changelog. Changing it won&apos;t send
+                  notifications.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </span>
+          <DateTimePicker
+            value={displayDateValue}
+            onChange={handleDisplayDateChange}
+            onClear={displayDateValue !== undefined ? onDisplayDateClear : undefined}
+            maxDate={new Date()}
+            dateOnly
+            placeholder={displayPlaceholder}
+            className="h-7 min-w-0 max-w-[11rem] text-xs"
+          />
+        </div>
+      )}
 
       {/* Linked Posts - single unified section */}
       <div className="space-y-2">

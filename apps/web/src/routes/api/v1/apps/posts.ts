@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import { badRequestResponse, handleDomainError } from '@/lib/server/domains/api/responses'
 import { parseTypeId } from '@/lib/server/domains/api/validation'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { BoardId, PostId } from '@quackback/ids'
 import { appJsonResponse, preflightResponse } from '@/lib/server/integrations/apps/cors'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
@@ -117,7 +118,7 @@ export const Route = createFileRoute('/api/v1/apps/posts')({
             {
               id: result.id,
               title: result.title,
-              content: result.content,
+              content: contentJsonToMarkdown(result.contentJson, result.content),
               voteCount: result.voteCount,
               boardId: result.boardId,
               statusId: result.statusId,

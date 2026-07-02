@@ -29,6 +29,7 @@ export const createChangelogSchema = z.object({
   productName: z.string().max(200).nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
+  displayDate: z.coerce.date().nullable().optional(),
 })
 
 /**
@@ -45,6 +46,7 @@ export const updateChangelogSchema = z.object({
   productName: z.string().max(200).nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),
+  displayDate: z.coerce.date().nullable().optional(),
 })
 
 /**

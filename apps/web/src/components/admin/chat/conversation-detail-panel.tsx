@@ -29,7 +29,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/shared/utils'
 
 const CHANNEL_LABEL: Record<Channel, string> = {
-  live_chat: 'Live chat',
+  messenger: 'Messenger',
   email: 'Email',
   web_form: 'Web form',
 }
