@@ -409,8 +409,6 @@ async function createAuth() {
         // pushes their verification row out to 7 days post-mint.
         expiresIn: 60 * 10,
         disableSignUp: false,
-        // Outlook Safe Links / Slack unfurl can consume tokens before the user clicks.
-        allowedAttempts: 3,
       }),
 
       emailOTP({

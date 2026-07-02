@@ -392,6 +392,12 @@ export const WEBHOOK_EVENT_CONFIG = [
     category: 'conversations',
   },
   {
+    id: 'conversation.csat_comment_added',
+    label: 'CSAT Comment Added',
+    description: 'When a visitor adds the optional comment to a satisfaction rating',
+    category: 'conversations',
+  },
+  {
     id: 'message.created',
     label: 'New Message',
     description: 'When a visitor or agent sends a public message',

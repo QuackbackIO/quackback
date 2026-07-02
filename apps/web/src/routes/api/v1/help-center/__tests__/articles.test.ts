@@ -59,12 +59,16 @@ import { Route as ArticlesListRoute } from '../articles/index'
 import { Route as ArticleDetailRoute } from '../articles/$articleId'
 import { Route as ArticleFeedbackRoute } from '../articles/$articleId.feedback'
 
-type MockedHandler = (ctx: { request: Request; params?: Record<string, string> }) => Promise<Response>
+type MockedHandler = (ctx: {
+  request: Request
+  params?: Record<string, string>
+}) => Promise<Response>
 type MockedRouteShape = { options: { server: { handlers: Record<string, MockedHandler> } } }
 
 const listHandlers = (ArticlesListRoute as unknown as MockedRouteShape).options.server.handlers
 const detailHandlers = (ArticleDetailRoute as unknown as MockedRouteShape).options.server.handlers
-const feedbackHandlers = (ArticleFeedbackRoute as unknown as MockedRouteShape).options.server.handlers
+const feedbackHandlers = (ArticleFeedbackRoute as unknown as MockedRouteShape).options.server
+  .handlers
 
 // --- Helpers ---
 
@@ -87,10 +91,29 @@ const mockAuthContext: ApiAuthContext = {
     expiresAt: null,
     createdAt: new Date('2026-01-01'),
     revokedAt: null,
+    scopes: [],
+    allowedTeamIds: [],
+    allowedInboxIds: [],
+    lastIp: null,
+    lastUserAgent: null,
+    rotatedAt: null,
+    compatLegacyFullAccess: true,
+    compatAcknowledgedAt: null,
   },
   principalId: 'principal_1' as PrincipalId,
   role: 'admin',
   importMode: false,
+  ipAddress: null,
+  userAgent: null,
+  source: 'api',
+  key: {
+    id: 'api_key_test' as ApiKeyId,
+    name: 'test',
+    scopes: [],
+    allowedTeamIds: [],
+    allowedInboxIds: [],
+    compatLegacyFullAccess: true,
+  },
 }
 
 const mockArticle: HelpCenterArticleWithCategory = {
@@ -110,7 +133,11 @@ const mockArticle: HelpCenterArticleWithCategory = {
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-10'),
   deletedAt: null,
-  category: { id: 'category_1' as HelpCenterCategoryId, slug: 'getting-started', name: 'Getting Started' },
+  category: {
+    id: 'category_1' as HelpCenterCategoryId,
+    slug: 'getting-started',
+    name: 'Getting Started',
+  },
   author: { id: 'principal_1' as PrincipalId, name: 'Admin', avatarUrl: null },
 }
 
@@ -364,7 +391,10 @@ describe('PATCH /api/v1/help-center/articles/:id', () => {
   })
 
   it('reassigns author when authorId is provided', async () => {
-    const updatedArticle = { ...mockArticle, author: { id: 'principal_2' as PrincipalId, name: 'Other', avatarUrl: null } }
+    const updatedArticle = {
+      ...mockArticle,
+      author: { id: 'principal_2' as PrincipalId, name: 'Other', avatarUrl: null },
+    }
     vi.mocked(updateArticle).mockResolvedValue(updatedArticle)
     vi.mocked(parseOptionalTypeId).mockReturnValue('principal_2' as PrincipalId)
 

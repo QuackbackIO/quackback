@@ -14,18 +14,66 @@ import {
 import type { HelpCenterArticleId, HelpCenterCategoryId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
+import { uniqueHelpCenterSlug } from './help-center.slug'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
   UpdateArticleInput,
 } from './help-center.types'
 import { generateArticleEmbedding } from './help-center-embedding.service'
+import { canActorViewCategory, type HelpCenterVisibilityActor } from './help-center.visibility'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center-articles' })
+
+/**
+ * Best-effort webhook dispatch for help-center article lifecycle events.
+ * Lazy import + `service` actor + try/catch so a dispatch failure never aborts
+ * the mutation. Mirrors the config-plane fire helpers.
+ */
+async function fireArticleEvent(
+  kind: 'created' | 'updated' | 'published' | 'unpublished' | 'deleted',
+  article: HelpCenterArticleWithCategory,
+  changedFields?: string[]
+): Promise<void> {
+  try {
+    const {
+      dispatchHelpCenterArticleCreated,
+      dispatchHelpCenterArticleUpdated,
+      dispatchHelpCenterArticlePublished,
+      dispatchHelpCenterArticleUnpublished,
+      dispatchHelpCenterArticleDeleted,
+    } = await import('@/lib/server/events/dispatch')
+    const actor = { type: 'service' as const, displayName: 'help-center-system' }
+    const ref = {
+      id: article.id,
+      categoryId: article.categoryId,
+      slug: article.slug,
+      title: article.title,
+      authorPrincipalId: article.principalId ?? null,
+      publishedAt: article.publishedAt ? article.publishedAt.toISOString() : null,
+      createdAt: article.createdAt ? article.createdAt.toISOString() : null,
+      updatedAt: article.updatedAt ? article.updatedAt.toISOString() : null,
+    }
+    if (kind === 'created') await dispatchHelpCenterArticleCreated(actor, ref)
+    else if (kind === 'updated')
+      await dispatchHelpCenterArticleUpdated(actor, ref, changedFields ?? [])
+    else if (kind === 'published') await dispatchHelpCenterArticlePublished(actor, ref)
+    else if (kind === 'unpublished') await dispatchHelpCenterArticleUnpublished(actor, ref)
+    else await dispatchHelpCenterArticleDeleted(actor, ref)
+  } catch (err) {
+    log.error({ err }, `failed to dispatch help_center.article.${kind} event`)
+  }
+}
+
+function normalizeIdArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
 
 // ============================================================================
 // Articles
@@ -84,14 +132,26 @@ export async function getArticleBySlug(slug: string): Promise<HelpCenterArticleW
   return resolveArticleWithCategory(article)
 }
 
-export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterArticleWithCategory> {
+export async function getPublicArticleBySlug(
+  slug: string,
+  actor: HelpCenterVisibilityActor | null = null
+): Promise<HelpCenterArticleWithCategory> {
   const now = new Date()
   // Join the parent category so the public lookup also enforces
   // category.isPublic. Without that check, an article under a category
   // an admin had flagged private was still reachable by slug — the
   // category's intent was respected only in the list/nav UI.
   const rows = await db
-    .select({ article: helpCenterArticles })
+    .select({
+      article: helpCenterArticles,
+      category: {
+        id: helpCenterCategories.id,
+        isPublic: helpCenterCategories.isPublic,
+        visibility: helpCenterCategories.visibility,
+        allowedSegmentIds: helpCenterCategories.allowedSegmentIds,
+        allowedPrincipalIds: helpCenterCategories.allowedPrincipalIds,
+      },
+    })
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
     .where(
@@ -105,8 +165,22 @@ export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterAr
       )
     )
     .limit(1)
-  const article = rows[0]?.article
-  if (!article) {
+  const row = rows[0]
+  const article = row?.article
+  if (!article || !row?.category) {
+    throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
+  }
+
+  const canView = canActorViewCategory(
+    {
+      ...row.category,
+      allowedSegmentIds: normalizeIdArray(row.category.allowedSegmentIds),
+      allowedPrincipalIds: normalizeIdArray(row.category.allowedPrincipalIds),
+    },
+    actor
+  )
+
+  if (!canView) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
   }
 
@@ -118,6 +192,16 @@ export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterAr
 
   return resolveArticleWithCategory(article)
 }
+
+// Fallback slug base for article titles that romanize to nothing (see
+// uniqueHelpCenterSlug). 'article', 'article-2', ...
+const FALLBACK_ARTICLE_SLUG = 'article'
+
+const findArticleSlugConflict = (slug: string) =>
+  db.query.helpCenterArticles.findFirst({
+    where: eq(helpCenterArticles.slug, slug),
+    columns: { id: true },
+  })
 
 export async function createArticle(
   input: CreateArticleInput,
@@ -154,7 +238,11 @@ export async function createArticle(
     }
     effectivePrincipalId = principalId
   }
-  const slug = input.slug?.trim() || slugify(title)
+  const slug = await uniqueHelpCenterSlug(
+    input.slug?.trim() || slugify(title),
+    FALLBACK_ARTICLE_SLUG,
+    findArticleSlugConflict
+  )
 
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
   const contentJson = await rehostExternalImages(parsedContentJson, {
@@ -167,7 +255,9 @@ export async function createArticle(
     .values({
       categoryId: input.categoryId as HelpCenterCategoryId,
       title,
-      content,
+      // Store the markdown projection of the canonical contentJson so the
+      // article list endpoint (which omits contentJson) still serves images.
+      content: contentJsonToMarkdown(contentJson, content),
       contentJson,
       slug,
       principalId: effectivePrincipalId,
@@ -183,6 +273,8 @@ export async function createArticle(
     log.error({ article_id: article.id, err }, 'article embedding generation failed')
   )
 
+  void fireArticleEvent('created', resolved)
+
   return resolved
 }
 
@@ -194,17 +286,29 @@ export async function updateArticle(
   const updateData: Partial<typeof helpCenterArticles.$inferInsert> = { updatedAt: new Date() }
   if (input.title !== undefined) updateData.title = input.title.trim()
   if (input.content !== undefined || input.contentJson !== undefined) {
-    if (input.content !== undefined) {
-      updateData.content = input.content.trim()
-    }
     const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
-    updateData.contentJson = await rehostExternalImages(parsed, {
+    const contentJson = await rehostExternalImages(parsed, {
       contentType: 'help-center',
     })
+    updateData.contentJson = contentJson
+    if (input.content !== undefined) {
+      updateData.content = contentJsonToMarkdown(contentJson, input.content.trim())
+    } else {
+      // contentJson-only edit (no markdown source): refresh the stored column
+      // only when the tree carries images, else leave it as-is.
+      const regenerated = contentJsonToMarkdown(contentJson, '')
+      if (regenerated) updateData.content = regenerated
+    }
   }
   if (input.categoryId !== undefined)
     updateData.categoryId = input.categoryId as HelpCenterCategoryId
-  if (input.slug !== undefined) updateData.slug = input.slug.trim()
+  if (input.slug !== undefined)
+    updateData.slug = await uniqueHelpCenterSlug(
+      input.slug.trim(),
+      FALLBACK_ARTICLE_SLUG,
+      findArticleSlugConflict,
+      id
+    )
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   const updated = await db.transaction(async (tx) => {
@@ -251,6 +355,10 @@ export async function updateArticle(
     )
   }
 
+  // Report the changed columns (drop the always-present updatedAt bump).
+  const changedFields = Object.keys(updateData).filter((k) => k !== 'updatedAt')
+  void fireArticleEvent('updated', resolved, changedFields)
+
   return resolved
 }
 
@@ -263,7 +371,9 @@ export async function publishArticle(
     .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
     .returning()
   if (!updated) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
-  return resolveArticleWithCategory(updated)
+  const resolved = await resolveArticleWithCategory(updated)
+  void fireArticleEvent('published', resolved)
+  return resolved
 }
 
 export async function unpublishArticle(
@@ -275,19 +385,24 @@ export async function unpublishArticle(
     .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
     .returning()
   if (!updated) throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
-  return resolveArticleWithCategory(updated)
+  const resolved = await resolveArticleWithCategory(updated)
+  void fireArticleEvent('unpublished', resolved)
+  return resolved
 }
 
 export async function deleteArticle(id: HelpCenterArticleId): Promise<void> {
-  const result = await db
+  const [deleted] = await db
     .update(helpCenterArticles)
     .set({ deletedAt: new Date() })
     .where(and(eq(helpCenterArticles.id, id), isNull(helpCenterArticles.deletedAt)))
     .returning()
 
-  if (result.length === 0) {
+  if (!deleted) {
     throw new NotFoundError('ARTICLE_NOT_FOUND', `Article ${id} not found`)
   }
+
+  const resolved = await resolveArticleWithCategory(deleted)
+  void fireArticleEvent('deleted', resolved)
 }
 
 export async function restoreArticle(

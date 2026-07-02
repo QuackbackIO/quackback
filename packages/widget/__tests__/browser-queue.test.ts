@@ -36,6 +36,13 @@ function installQueueStub(): void {
   window.Quackback = queueFn
 }
 
+function setCurrentScript(script: HTMLScriptElement | null): void {
+  Object.defineProperty(document, 'currentScript', {
+    configurable: true,
+    value: script,
+  })
+}
+
 describe('browser-queue', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -43,6 +50,7 @@ describe('browser-queue', () => {
     delete (window as Window).__QUACKBACK_URL__
     document.body.innerHTML = ''
     document.head.innerHTML = ''
+    setCurrentScript(null)
   })
 
   afterEach(() => {
@@ -104,6 +112,56 @@ describe('browser-queue', () => {
     ])
   })
 
+  it('folds data attributes from the SDK script into queued init', async () => {
+    const dispatched = mockSDK()
+    window.__QUACKBACK_URL__ = 'https://feedback.acme.com'
+    installQueueStub()
+    const script = document.createElement('script')
+    script.dataset.applicationKey = 'lex-app'
+    script.dataset.environment = 'production'
+    document.head.appendChild(script)
+    setCurrentScript(script)
+    window.Quackback!('init')
+
+    await import('../src/browser-queue')
+
+    expect(dispatched[0]).toEqual([
+      'init',
+      {
+        applicationKey: 'lex-app',
+        environment: 'production',
+        instanceUrl: 'https://feedback.acme.com',
+      },
+      undefined,
+    ])
+  })
+
+  it('folds data attributes from the inline bootstrap script into queued init', async () => {
+    const dispatched = mockSDK()
+    window.__QUACKBACK_URL__ = 'https://feedback.acme.com'
+    installQueueStub()
+    const bootstrapScript = document.createElement('script')
+    bootstrapScript.dataset.applicationKey = 'lex-app'
+    bootstrapScript.dataset.environment = 'production'
+    document.head.appendChild(bootstrapScript)
+    const sdkScript = document.createElement('script')
+    document.head.appendChild(sdkScript)
+    setCurrentScript(sdkScript)
+    window.Quackback!('init', { instanceUrl: 'https://feedback.acme.com' })
+
+    await import('../src/browser-queue')
+
+    expect(dispatched[0]).toEqual([
+      'init',
+      {
+        applicationKey: 'lex-app',
+        environment: 'production',
+        instanceUrl: 'https://feedback.acme.com',
+      },
+      undefined,
+    ])
+  })
+
   it('an explicit init dispatched after load is not pre-empted by the auto-init', async () => {
     const dispatched = mockSDK()
     window.__QUACKBACK_URL__ = 'https://feedback.acme.com'
@@ -130,6 +188,20 @@ describe('browser-queue', () => {
     window.__QUACKBACK_URL__ = 'https://feedback.acme.com'
     installQueueStub()
     // The documented admin snippet — no second argument at all.
+    window.Quackback!('init')
+
+    await import('../src/browser-queue')
+
+    expect(dispatched[0]).toEqual(['init', { instanceUrl: 'https://feedback.acme.com' }, undefined])
+  })
+
+  it('prefers the SDK script origin when the baked URL points at localhost', async () => {
+    const dispatched = mockSDK()
+    window.__QUACKBACK_URL__ = 'http://localhost:3000'
+    installQueueStub()
+    const sdkScript = document.createElement('script')
+    sdkScript.src = 'https://feedback.acme.com/api/widget/sdk.js'
+    setCurrentScript(sdkScript)
     window.Quackback!('init')
 
     await import('../src/browser-queue')

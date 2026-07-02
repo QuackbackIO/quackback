@@ -74,6 +74,7 @@ Drop this in your `<head>` and skip the install step entirely:
 | `Quackback.identify(identity?)`               | Attribute activity to a user. Omit for anonymous.                          |
 | `Quackback.logout()`                          | Clear identity; widget stays visible in anonymous mode.                    |
 | `Quackback.open(options?)`                    | Open the panel; optional deep-link payload (see below).                    |
+| `Quackback.openSupport(ticketId?)`            | Open the support ticket list, or jump to a ticket by id.                   |
 | `Quackback.close()`                           | Close the panel.                                                           |
 | `Quackback.showLauncher()` / `hideLauncher()` | Toggle the floating button.                                                |
 | `Quackback.metadata(patch)`                   | Attach session context to submitted feedback. Pass `null` to remove a key. |
@@ -116,6 +117,8 @@ Quackback.open() // home
 Quackback.open({ view: 'new-post', title: 'Bug:', body: '...' }) // pre-filled form
 Quackback.open({ view: 'changelog' }) // changelog feed
 Quackback.open({ view: 'help', query: 'pricing' }) // help search
+Quackback.open({ view: 'support' }) // your tickets
+Quackback.open({ view: 'support', ticketId: 'ticket_01h...' }) // a specific ticket
 Quackback.open({ postId: 'post_01h...' }) // specific post
 Quackback.open({ articleId: 'art_01h...' }) // help article
 ```
@@ -131,16 +134,19 @@ const unsubscribe = Quackback.on('vote', (payload) => {
 unsubscribe()
 ```
 
-| Event             | Payload                                    |
-| ----------------- | ------------------------------------------ |
-| `ready`           | `{}`                                       |
-| `open`            | `{ view?, postId?, articleId?, entryId? }` |
-| `close`           | `{}`                                       |
-| `post:created`    | `{ id, title, board, statusId }`           |
-| `vote`            | `{ postId, voted, voteCount }`             |
-| `comment:created` | `{ postId, commentId, parentId }`          |
-| `identify`        | `{ success, user, anonymous, error? }`     |
-| `email-submitted` | `{ email }`                                |
+| Event             | Payload                                               |
+| ----------------- | ----------------------------------------------------- |
+| `ready`           | `{}`                                                  |
+| `open`            | `{ view?, postId?, articleId?, entryId?, ticketId? }` |
+| `close`           | `{}`                                                  |
+| `post:created`    | `{ id, title, board, statusId }`                      |
+| `vote`            | `{ postId, voted, voteCount }`                        |
+| `comment:created` | `{ postId, commentId, parentId }`                     |
+| `identify`        | `{ success, user, anonymous, error? }`                |
+| `email-submitted` | `{ email }`                                           |
+| `ticket:created`  | `{ id, subject, statusId, statusCategory }`           |
+| `ticket:replied`  | `{ ticketId, threadId }`                              |
+| `ticket:resolved` | `{ ticketId, statusId, alreadyResolved }`             |
 
 ## Docs
 
