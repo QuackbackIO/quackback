@@ -87,6 +87,22 @@ const post = await db.query.posts.findFirst({
 
 - Single workspace, `DATABASE_URL` singleton
 
+### Authorization
+
+Quackback has two independent authorization systems serving different product domains:
+
+| System     | Import                       | Domain                                                          |
+| ---------- | ---------------------------- | --------------------------------------------------------------- |
+| **Policy** | `@/lib/server/policy`        | Feedback portal (boards, posts, comments, chat)                 |
+| **Authz**  | `@/lib/server/domains/authz` | Ticketing & workspace admin (tickets, teams, inboxes, SLA, CRM) |
+
+**Which one should I use?**
+
+- Adding a board/post/comment/chat feature → use `policy`
+- Adding a ticket/inbox/team/contact/SLA feature → use `authz`
+
+The two systems are independent and will be unified in a future iteration.
+
 ## Development Guidelines
 
 ### Code Style

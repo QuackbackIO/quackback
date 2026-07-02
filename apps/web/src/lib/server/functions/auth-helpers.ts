@@ -75,6 +75,33 @@ export interface AuthContext {
     role: Role
     type: string
   }
+  /** Best-effort client IP for audit attribution. */
+  ipAddress: string | null
+  /** Best-effort user-agent (truncated to 500 chars) for audit attribution. */
+  userAgent: string | null
+  /** Audit source for write paths originating from web sessions. */
+  source: 'web'
+}
+
+/**
+ * Extract best-effort client IP + user-agent from request headers.
+ */
+function readRequestContext(): { ipAddress: string | null; userAgent: string | null } {
+  try {
+    const headers = getRequestHeaders()
+    const get = (k: string): string | null => {
+      const v = (headers as unknown as Record<string, string | string[] | undefined>)[k]
+      if (!v) return null
+      return Array.isArray(v) ? (v[0] ?? null) : v
+    }
+    const cf = get('cf-connecting-ip')
+    const xff = get('x-forwarded-for')
+    const ip = cf ?? (xff ? (xff.split(',')[0]?.trim() ?? null) : null)
+    const ua = get('user-agent')
+    return { ipAddress: ip, userAgent: ua ? ua.slice(0, 500) : null }
+  } catch {
+    return { ipAddress: null, userAgent: null }
+  }
 }
 
 /**
@@ -119,6 +146,7 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
       )
     }
 
+    const reqCtx = readRequestContext()
     return {
       settings: {
         id: appSettings.id as WorkspaceId,
@@ -137,6 +165,9 @@ export async function requireAuth(options?: { roles?: Role[] }): Promise<AuthCon
         role: principalRecord.role as Role,
         type: principalRecord.type,
       },
+      ipAddress: reqCtx.ipAddress,
+      userAgent: reqCtx.userAgent,
+      source: 'web',
     }
   } catch (error) {
     log.error({ err: error }, 'require auth failed')
@@ -186,6 +217,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       principalRecord = created
     }
 
+    const reqCtx = readRequestContext()
     return {
       settings: {
         id: appSettings.id as WorkspaceId,
@@ -204,11 +236,77 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
         role: principalRecord.role as Role,
         type: principalRecord.type,
       },
+      ipAddress: reqCtx.ipAddress,
+      userAgent: reqCtx.userAgent,
+      source: 'web',
     }
   } catch (error) {
     log.error({ err: error }, 'get optional auth failed')
     throw error
   }
+}
+
+// ============================================================================
+// Permission-based auth (Phase 1: ticketing RBAC)
+// ============================================================================
+
+import {
+  loadPermissionSet,
+  hasPermission,
+  hasPermissionForResource,
+  type PermissionSet,
+} from '@/lib/server/domains/authz/authz.service'
+import type { PermissionKey, ResourceScope } from '@/lib/server/domains/authz'
+import { ForbiddenError } from '@/lib/shared/errors'
+
+/**
+ * AuthContext extended with the principal's permission set.
+ *
+ * Built by `requirePermission` and the upcoming ticketing helpers; the
+ * permission set is loaded once per request and reused for downstream checks
+ * to avoid extra round-trips to `principal_role_assignments`.
+ */
+export interface AuthContextWithPermissions extends AuthContext {
+  permissions: PermissionSet
+}
+
+/**
+ * Like `requireAuth`, but additionally requires the principal to hold
+ * `permission`. Loads the full permission set so subsequent checks in the
+ * same request are free.
+ *
+ * For permissions that depend on a specific resource (e.g. team-scoped
+ * grants), pass `resource` to evaluate the scope.
+ *
+ * @example
+ *   const ctx = await requirePermission(PERMISSIONS.TICKET_REPLY_PUBLIC, {
+ *     primaryTeamId: ticket.primaryTeamId,
+ *   })
+ */
+export async function requirePermission(
+  permission: PermissionKey,
+  resource?: ResourceScope
+): Promise<AuthContextWithPermissions> {
+  const auth = await requireAuth()
+  const set = await loadPermissionSet(auth.principal.id)
+  const ok = resource
+    ? hasPermissionForResource(set, permission, resource)
+    : hasPermission(set, permission)
+  if (!ok) {
+    throw new ForbiddenError('PERMISSION_DENIED', `Missing required permission: ${permission}`)
+  }
+  return { ...auth, permissions: set }
+}
+
+/**
+ * Load `AuthContext` plus permission set without enforcing any specific
+ * permission. Useful for endpoints that need to perform multiple
+ * `hasPermission` checks themselves (e.g. listing tickets across scopes).
+ */
+export async function requireAuthWithPermissions(): Promise<AuthContextWithPermissions> {
+  const auth = await requireAuth()
+  const set = await loadPermissionSet(auth.principal.id)
+  return { ...auth, permissions: set }
 }
 
 // ============================================================================

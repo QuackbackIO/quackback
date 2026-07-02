@@ -13,7 +13,7 @@ import { config } from '@/lib/server/config'
  */
 let _shared: IORedis | null = null
 
-export function getQueueRedis(): IORedis {
+export function getQueueRedis(): any {
   if (!_shared) {
     _shared = new IORedis(config.redisUrl, {
       maxRetriesPerRequest: null,
@@ -28,7 +28,7 @@ export function getQueueRedis(): IORedis {
  * `new Worker(name, fn, getQueueConnection())`. Returns the shared
  * IORedis instance wrapped in BullMQ's connection option shape.
  */
-export function getQueueConnection(): { connection: IORedis } {
+export function getQueueConnection(): { connection: any } {
   return { connection: getQueueRedis() }
 }
 

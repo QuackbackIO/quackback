@@ -4,7 +4,7 @@
  * Type definitions for in-app notifications
  */
 
-import type { NotificationId, PostId, CommentId, PrincipalId } from '@quackback/ids'
+import type { NotificationId, PostId, CommentId, PrincipalId, TicketId } from '@quackback/ids'
 
 /**
  * Notification event types that can trigger in-app notifications
@@ -14,6 +14,16 @@ export type NotificationType =
   | 'comment_created'
   | 'post_mentioned'
   | 'changelog_published'
+  | 'ticket_sla_warning'
+  | 'ticket_sla_breach'
+  | 'ticket_assigned'
+  | 'ticket_unassigned'
+  | 'ticket_thread_added'
+  | 'ticket_status_changed'
+  | 'ticket_participant_added'
+  | 'ticket_participant_removed'
+  | 'ticket_shared'
+  | 'ticket_unshared'
   | 'chat_message'
   | 'chat_mention'
 
@@ -27,6 +37,7 @@ export interface CreateNotificationInput {
   body?: string
   postId?: PostId
   commentId?: CommentId
+  ticketId?: TicketId
   metadata?: Record<string, unknown>
 }
 
@@ -41,6 +52,7 @@ export interface Notification {
   body: string | null
   postId: PostId | null
   commentId: CommentId | null
+  ticketId: TicketId | null
   metadata: Record<string, unknown> | null
   readAt: Date | null
   archivedAt: Date | null

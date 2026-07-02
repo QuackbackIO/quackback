@@ -23,6 +23,8 @@ const updateChangelogSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
+  categoryName: z.string().max(200).nullable().optional(),
+  productName: z.string().max(200).nullable().optional(),
   displayDate: z.string().datetime().nullable().optional(),
 })
 
@@ -31,6 +33,8 @@ function formatChangelogResponse(entry: {
   title: string
   content: string
   contentJson: TiptapContent | null
+  category?: { id: string; name: string; slug: string; color?: string | null } | null
+  product?: { id: string; name: string; slug: string } | null
   publishedAt: Date | null
   displayDate: Date | null
   createdAt: Date
@@ -40,6 +44,8 @@ function formatChangelogResponse(entry: {
     id: entry.id,
     title: entry.title,
     content: contentJsonToMarkdown(entry.contentJson, entry.content),
+    category: entry.category ?? null,
+    product: entry.product ?? null,
     publishedAt: entry.publishedAt?.toISOString() || null,
     displayDate: entry.displayDate?.toISOString() || null,
     createdAt: entry.createdAt.toISOString(),
@@ -111,6 +117,8 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
           const updated = await updateChangelog(entryId, {
             title: parsed.data.title,
             content: parsed.data.content,
+            categoryName: parsed.data.categoryName,
+            productName: parsed.data.productName,
             ...(publishState && { publishState }),
             ...(parsed.data.displayDate !== undefined && {
               displayDate:
