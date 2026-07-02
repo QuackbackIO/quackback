@@ -7,7 +7,7 @@ import {
   fetchTagsList,
   fetchStatusesList,
   fetchTeamMembers,
-  searchMembersFn,
+  searchPeopleFn,
   fetchOnboardingStatus,
   fetchIntegrationsList,
   fetchIntegrationCatalog,
@@ -161,12 +161,13 @@ export const adminQueries = {
     }),
 
   /**
-   * Search members (typeahead for author selector)
+   * Search people (portal users included) for on-behalf typeaheads:
+   * the author selector and the proxy-vote picker.
    */
-  searchMembers: (params: { search?: string; limit?: number }) =>
+  searchPeople: (params: { search?: string; limit?: number }) =>
     queryOptions({
-      queryKey: ['admin', 'members', 'search', params],
-      queryFn: () => searchMembersFn({ data: params }),
+      queryKey: ['admin', 'people', 'search', params],
+      queryFn: () => searchPeopleFn({ data: params }),
       staleTime: 30 * 1000,
     }),
 

@@ -32,7 +32,7 @@ import { listPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
 import { listStatuses } from '@/lib/server/domains/statuses/status.service'
 import {
   listTeamMembers,
-  searchMembers,
+  searchPeople,
   updateMemberRole,
   removeTeamMember,
 } from '@/lib/server/domains/principals/principal.service'
@@ -261,16 +261,18 @@ export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async 
   }
 })
 
-const searchMembersSchema = z.object({
+const searchPeopleSchema = z.object({
   search: z.string().optional(),
   limit: z.number().optional(),
 })
 
-export const searchMembersFn = createServerFn({ method: 'GET' })
-  .validator(searchMembersSchema)
+// People search (portal users included) for on-behalf pickers, so the gate is
+// people.view, not member.view; every teammate preset holds both.
+export const searchPeopleFn = createServerFn({ method: 'GET' })
+  .validator(searchPeopleSchema)
   .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
-    return searchMembers(data)
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
+    return searchPeople(data)
   })
 
 // Schema for team member operations

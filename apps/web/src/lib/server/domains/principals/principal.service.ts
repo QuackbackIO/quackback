@@ -73,6 +73,16 @@ export {
 } from './principal.factory'
 
 /**
+ * Teammates are identified humans (type='user') holding a teammate role
+ * (role != 'user'). One shared predicate so the team listers cannot drift.
+ * Without the role guard a portal end-user (role='user', type='user') would
+ * leak into team surfaces. People-facing pickers use searchPeople instead.
+ */
+function teamMemberWhere() {
+  return and(eq(principal.type, 'user'), ne(principal.role, 'user'))
+}
+
+/**
  * List all team members with user details
  *
  * `lastSignInAt` is computed as `max(session.created_at)` per user
@@ -107,10 +117,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
       .leftJoin(lastSession, eq(lastSession.userId, user.id))
-      // Teammates only: an identified human (type='user') with a teammate role
-      // (admin or member, i.e. role != 'user'). Without the role guard a portal
-      // end-user (role='user', type='user') leaks into the team roster.
-      .where(and(eq(principal.type, 'user'), ne(principal.role, 'user')))
+      .where(teamMemberWhere())
 
     // The `max()` aggregate comes back as a string from postgres-js
     // (Date mapping only fires on plain timestamp column selects);
@@ -142,7 +149,7 @@ export async function listTeamAvatars(
       .select({ name: user.name, avatarUrl: user.image })
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
-      .where(and(eq(principal.type, 'user'), ne(principal.role, 'user')))
+      .where(teamMemberWhere())
       .orderBy(sql`(${user.image} IS NOT NULL) DESC`, principal.createdAt)
       .limit(limit)
     return rows
@@ -153,10 +160,13 @@ export async function listTeamAvatars(
 }
 
 /**
- * Search members (all human principals) by name or email.
- * Returns a limited result set for use in typeahead/combobox components.
+ * Search PEOPLE by name or email: all identified humans, portal end-users
+ * deliberately included (anonymous and service principals excluded via
+ * type='user'). This is the on-behalf picker query (proxy voting, author
+ * selection), NOT a team roster: teammate surfaces use listTeamMembers,
+ * which applies teamMemberWhere().
  */
-export async function searchMembers(params: {
+export async function searchPeople(params: {
   search?: string
   limit?: number
 }): Promise<TeamMember[]> {
@@ -177,9 +187,8 @@ export async function searchMembers(params: {
       image: user.image,
       role: principal.role,
       createdAt: principal.createdAt,
-      // searchMembers is the typeahead path — never displays
-      // last-sign-in, so a null literal is cheaper than the
-      // group-by needed in listTeamMembers.
+      // The typeahead path never displays last-sign-in, so a null
+      // literal is cheaper than the group-by in listTeamMembers.
       lastSignInAt: sql<Date | null>`NULL::timestamptz`,
     })
     .from(principal)

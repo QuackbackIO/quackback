@@ -67,7 +67,7 @@ export function VotersAvatarStack({
   }, [addVoterOpen, mode])
 
   const { data: searchResults = [] } = useQuery({
-    ...adminQueries.searchMembers({ search: debouncedSearch || undefined, limit: 20 }),
+    ...adminQueries.searchPeople({ search: debouncedSearch || undefined, limit: 20 }),
     placeholderData: keepPreviousData,
     enabled: addVoterOpen,
   })

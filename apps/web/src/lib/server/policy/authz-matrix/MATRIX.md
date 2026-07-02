@@ -104,7 +104,7 @@ Profiles: **Owner** = admin class + any admin-owned API key; **Manager** = membe
 | `lib/server/functions/admin.ts`::fetchTagsList | tag.view |
 | `lib/server/functions/admin.ts`::fetchStatusesList | status.view |
 | `lib/server/functions/admin.ts`::fetchTeamMembers | member.view |
-| `lib/server/functions/admin.ts`::searchMembersFn | member.view |
+| `lib/server/functions/admin.ts`::searchPeopleFn | people.view |
 | `lib/server/functions/admin.ts`::updateMemberRoleFn | member.manage |
 | `lib/server/functions/admin.ts`::forceSignOutUserFn | auth.manage |
 | `lib/server/functions/admin.ts`::removeTeamMemberFn | member.manage |
