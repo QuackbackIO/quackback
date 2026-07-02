@@ -70,6 +70,7 @@ import {
   emitConversationAssigned,
   emitConversationPriorityChanged,
   emitConversationCsatSubmitted,
+  emitConversationCsatCommentAdded,
 } from './chat.webhooks'
 import { extractMentions } from '@/lib/server/domains/posts/extract-mentions'
 import { syncChatMessageMentions } from './sync-chat-mentions'
@@ -260,6 +261,7 @@ export async function sendVisitorMessage(
         .insert(conversations)
         .values({
           visitorPrincipalId: author.principalId,
+          channel: 'messenger',
           status: 'open',
           subject: preview(content || fallbackLabel, attachments),
         })
@@ -438,6 +440,7 @@ export async function startAgentConversation(
       .insert(conversations)
       .values({
         visitorPrincipalId: input.targetPrincipalId,
+        channel: 'messenger',
         // The composer owns the thread from the start — it lands in "Mine".
         assignedAgentPrincipalId: agent.principalId,
         status: 'open',
@@ -1056,21 +1059,46 @@ export async function recordCsat(
   // supplied, so a rating-only call can never null a comment that the follow-up
   // already saved (or that arrives in either order).
   const trimmedComment = comment?.trim() ? comment.trim().slice(0, 2000) : undefined
-  const [updated] = await db
-    .update(conversations)
-    .set({
-      csatRating: rating,
-      ...(trimmedComment !== undefined ? { csatComment: trimmedComment } : {}),
-      csatSubmittedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(conversations.id, conversationId))
-    .returning()
+
+  // Lock the row and read its pre-update CSAT state in the same transaction so
+  // the once-per-survey decisions are atomic. The widget fires the rating POST
+  // without awaiting it, so a racing comment POST must serialize behind this
+  // SELECT ... FOR UPDATE instead of both seeing a null rating and each emitting
+  // conversation.csat_submitted.
+  const { updated, isFirstSubmission, commentJustAdded } = await db.transaction(async (tx) => {
+    const [prev] = await tx
+      .select({ csatRating: conversations.csatRating, csatComment: conversations.csatComment })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .for('update')
+    const [row] = await tx
+      .update(conversations)
+      .set({
+        csatRating: rating,
+        ...(trimmedComment !== undefined ? { csatComment: trimmedComment } : {}),
+        csatSubmittedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(conversations.id, conversationId))
+      .returning()
+    // Each public webhook fires on the single call that completes its meaning:
+    // csat_submitted on the first submission (the rating is banked instantly),
+    // csat_comment_added when a comment first lands. Deciding from the locked
+    // prev state keeps each event to once per survey under concurrent POSTs.
+    return {
+      updated: row,
+      isFirstSubmission: prev?.csatRating == null,
+      commentJustAdded: trimmedComment !== undefined && prev?.csatComment == null,
+    }
+  })
+
   // Surface the rating to the agent inbox live (agent-only fields stripped for
-  // the visitor).
+  // the visitor). This fires on every call so a follow-up comment still lands.
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
-  void emitConversationCsatSubmitted(actor, updated)
+  // Emit after the transaction commits so a rolled-back write never webhooks.
+  if (isFirstSubmission) void emitConversationCsatSubmitted(actor, updated)
+  if (commentJustAdded) void emitConversationCsatCommentAdded(actor, updated)
 }
 
 /**

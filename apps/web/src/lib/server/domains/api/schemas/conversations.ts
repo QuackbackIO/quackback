@@ -23,9 +23,9 @@ const ConversationSchema = z.object({
     description: 'Current conversation status',
     example: 'open',
   }),
-  channel: z.enum(['live_chat', 'email', 'web_form']).meta({
+  channel: z.enum(['messenger', 'email', 'web_form']).meta({
     description: 'Channel the conversation arrived on',
-    example: 'live_chat',
+    example: 'messenger',
   }),
   priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']).meta({
     description: 'Agent-set triage priority',

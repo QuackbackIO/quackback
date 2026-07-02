@@ -65,9 +65,36 @@ export function accessToAudience(access: BoardAccess): LegacyBoardAudience {
   }
 }
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
+import {
+  dispatchBoardCreated,
+  dispatchBoardUpdated,
+  dispatchBoardDeleted,
+} from '@/lib/server/events/dispatch'
+import type { EventActor, EventBoardRef } from '@/lib/server/events/types'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'boards' })
+
+/** Service-actor fallback for board lifecycle events. */
+const boardEventActor: EventActor = { type: 'service', displayName: 'boards-system' }
+
+/** Build the fixed-shape webhook ref from a board row. */
+function toBoardRef(board: Board): EventBoardRef {
+  return {
+    id: board.id,
+    slug: board.slug,
+    name: board.name,
+    description: board.description ?? null,
+    createdAt: board.createdAt?.toISOString() ?? null,
+    updatedAt: board.updatedAt?.toISOString() ?? null,
+  }
+}
+
+// Slug base for names that romanize to nothing even after transliteration
+// (emoji- or punctuation-only). The uniqueness loop disambiguates ("board",
+// "board-1", ...). Without it such names yield an empty slug, which breaks
+// the NOT NULL UNIQUE column and crashes slug-keyed <Select.Item> (#285).
+const FALLBACK_BOARD_SLUG = 'board'
 
 /**
  * Create a new board
@@ -100,12 +127,18 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
     },
   })
 
-  // Generate or validate slug
-  const baseSlug = input.slug ? slugify(input.slug) : slugify(input.name)
-
-  // Ensure slug is not empty after slugification
-  if (!baseSlug) {
-    throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug from name')
+  // Derive the slug. An explicit slug that slugifies to nothing is a caller
+  // error worth rejecting (mirrors updateBoard, and avoids silently turning
+  // e.g. slug "---" into a generic "board"); only a name-derived slug falls
+  // back to a generic base so any-language name can still create a board.
+  let baseSlug: string
+  if (input.slug) {
+    baseSlug = slugify(input.slug)
+    if (!baseSlug) {
+      throw new ValidationError('VALIDATION_ERROR', 'Could not generate valid slug from name')
+    }
+  } else {
+    baseSlug = slugify(input.name) || FALLBACK_BOARD_SLUG
   }
 
   // Check for slug uniqueness and generate a unique one if needed
@@ -145,6 +178,7 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
 
   const [board] = await db.insert(boards).values(insertValues).returning()
 
+  void dispatchBoardCreated(boardEventActor, toBoardRef(board)).catch(() => {})
   return board
 }
 
@@ -194,8 +228,8 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
       }
     }
   } else if (input.name !== undefined) {
-    // Auto-update slug if name changes but slug is not explicitly provided
-    const newSlug = slugify(input.name)
+    // Auto-update slug when the name changes and no slug was given, never empty.
+    const newSlug = slugify(input.name) || FALLBACK_BOARD_SLUG
     if (newSlug !== existingBoard.slug) {
       const existingWithSlug = await db.query.boards.findFirst({
         where: eq(boards.slug, newSlug),
@@ -224,6 +258,12 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
 
+  // `slug` is a derived side-effect of renaming; report caller-facing input
+  // fields so receivers see the intent, not the implementation.
+  const changedFields = Object.keys(updateData).filter((k) => k !== 'slug')
+  void dispatchBoardUpdated(boardEventActor, toBoardRef(updatedBoard), changedFields).catch(
+    () => {}
+  )
   return updatedBoard
 }
 
@@ -234,6 +274,11 @@ export async function updateBoard(id: BoardId, input: UpdateBoardInput): Promise
  * Also removes the board ID from webhook board_ids filters to maintain referential integrity.
  */
 export async function deleteBoard(id: BoardId): Promise<void> {
+  // Snapshot before the mutation so the delete event carries a populated ref.
+  const snapshot = await db.query.boards.findFirst({
+    where: and(eq(boards.id, id), isNull(boards.deletedAt)),
+  })
+
   // Soft delete the board by setting deletedAt
   const result = await db
     .update(boards)
@@ -243,6 +288,10 @@ export async function deleteBoard(id: BoardId): Promise<void> {
 
   if (result.length === 0) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
+  }
+
+  if (snapshot) {
+    void dispatchBoardDeleted(boardEventActor, toBoardRef(snapshot)).catch(() => {})
   }
 
   // Clean up webhook board_ids references (fire-and-forget)

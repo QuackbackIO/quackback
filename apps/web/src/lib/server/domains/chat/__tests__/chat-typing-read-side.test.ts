@@ -26,6 +26,7 @@ vi.mock('../chat.webhooks', () => ({
   emitConversationAssigned: vi.fn(),
   emitConversationPriorityChanged: vi.fn(),
   emitConversationCsatSubmitted: vi.fn(),
+  emitConversationCsatCommentAdded: vi.fn(),
 }))
 
 vi.mock('../chat.notify', () => ({

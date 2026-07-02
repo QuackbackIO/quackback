@@ -36,7 +36,11 @@ interface ChangelogModalContentProps {
 function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps) {
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
+  const [categoryName, setCategoryName] = useState('')
+  const [productName, setProductName] = useState('')
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
+  const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
+  const [displayDateTouched, setDisplayDateTouched] = useState(false)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
 
@@ -65,7 +69,11 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
       form.setValue('content', entry.content)
       setContentJson(entry.contentJson as JSONContent | null)
       setLinkedPostIds(entry.linkedPosts.map((p) => p.id))
+      setCategoryName(entry.category?.name ?? '')
+      setProductName(entry.product?.name ?? '')
       setPublishState(toPublishState(entry.status, entry.publishedAt))
+      setDisplayDateOverride(entry.displayDate ? new Date(entry.displayDate) : undefined)
+      setDisplayDateTouched(false)
       setHasInitialized(true)
     }
   }, [entry, form, hasInitialized])
@@ -78,15 +86,36 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
     [form]
   )
 
+  function handleDisplayDateChange(value: Date | undefined) {
+    if (value) {
+      setDisplayDateOverride(value)
+      setDisplayDateTouched(true)
+    }
+  }
+
+  function handleDisplayDateClear() {
+    setDisplayDateOverride(undefined)
+    setDisplayDateTouched(true)
+  }
+
   const handleSubmit = form.handleSubmit((data) => {
+    const displayDatePayload = displayDateTouched
+      ? displayDateOverride === undefined
+        ? null
+        : displayDateOverride
+      : undefined
+
     updateChangelogMutation.mutate(
       {
         id: entryId,
         title: data.title,
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
+        categoryName: categoryName.trim() || null,
+        productName: productName.trim() || null,
         linkedPostIds,
         publishState,
+        ...(displayDatePayload !== undefined && { displayDate: displayDatePayload }),
       },
       {
         onSuccess: () => {
@@ -151,7 +180,15 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
             onPublishStateChange={setPublishState}
             linkedPostIds={linkedPostIds}
             onLinkedPostsChange={setLinkedPostIds}
+            categoryName={categoryName}
+            onCategoryNameChange={setCategoryName}
+            productName={productName}
+            onProductNameChange={setProductName}
             authorName={entry?.author?.name}
+            publishedAt={entry?.publishedAt}
+            displayDateValue={displayDateOverride}
+            onDisplayDateChange={handleDisplayDateChange}
+            onDisplayDateClear={handleDisplayDateClear}
           />
         </div>
 
@@ -179,7 +216,15 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
                   onPublishStateChange={setPublishState}
                   linkedPostIds={linkedPostIds}
                   onLinkedPostsChange={setLinkedPostIds}
+                  categoryName={categoryName}
+                  onCategoryNameChange={setCategoryName}
+                  productName={productName}
+                  onProductNameChange={setProductName}
                   authorName={entry?.author?.name}
+                  publishedAt={entry?.publishedAt}
+                  displayDateValue={displayDateOverride}
+                  onDisplayDateChange={handleDisplayDateChange}
+                  onDisplayDateClear={handleDisplayDateClear}
                 />
               </div>
             </SheetContent>

@@ -27,7 +27,7 @@ const agentDto = {
   id: conversationId,
   status: 'open',
   priority: 'none',
-  channel: 'live_chat',
+  channel: 'messenger',
   subject: null,
   lastMessagePreview: 'hi',
   lastMessageAt: '2026-01-01T00:00:00.000Z',

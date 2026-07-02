@@ -351,7 +351,7 @@ const assignment: EventRoleAssignmentRef = {
 const conversation: EventConversationRef = {
   id: 'conversation_1',
   status: 'open',
-  channel: 'live_chat',
+  channel: 'messenger',
   priority: 'medium',
 }
 
