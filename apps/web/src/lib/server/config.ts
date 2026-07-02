@@ -112,6 +112,7 @@ const configSchema = z.object({
   aiQualityGateModel: z.string().optional(),
   aiInterpretationModel: z.string().optional(),
   aiMergeModel: z.string().optional(),
+  aiHelpCenterModel: z.string().optional(),
 
   // Telemetry (optional)
   disableTelemetry: envBoolean,
@@ -173,6 +174,7 @@ function buildConfigFromEnv(): unknown {
     aiQualityGateModel: env('AI_QUALITY_GATE_MODEL'),
     aiInterpretationModel: env('AI_INTERPRETATION_MODEL'),
     aiMergeModel: env('AI_MERGE_MODEL'),
+    aiHelpCenterModel: env('AI_HELP_CENTER_MODEL'),
 
     // Telemetry
     disableTelemetry: env('DISABLE_TELEMETRY'),
@@ -329,6 +331,9 @@ export const config = {
   },
   get aiMergeModel() {
     return loadConfig().aiMergeModel
+  },
+  get aiHelpCenterModel() {
+    return loadConfig().aiHelpCenterModel
   },
 
   // Telemetry

@@ -19,6 +19,7 @@ export type ChatFeature =
   | 'qualityGate'
   | 'interpretation'
   | 'merge'
+  | 'helpCenterAnswers'
 
 /**
  * Resolve an effective model: per-feature override wins over the role default;
@@ -47,6 +48,7 @@ export function getChatModel(feature: ChatFeature): string | null {
     qualityGate: config.aiQualityGateModel,
     interpretation: config.aiInterpretationModel,
     merge: config.aiMergeModel,
+    helpCenterAnswers: config.aiHelpCenterModel,
   }
   return resolveModel(overrides[feature], config.aiChatModel)
 }
