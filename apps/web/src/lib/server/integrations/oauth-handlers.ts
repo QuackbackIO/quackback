@@ -16,10 +16,12 @@ import {
   isSecureRequest,
   getStateCookieName,
   buildCallbackUri,
+  getPublicOriginFromRequest,
   parseCookies,
   redirectResponse,
-  clearCookie,
+  clearStateCookies,
   createCookie,
+  getStateCookieNameVariants,
   isValidTenantDomain,
 } from './oauth'
 import { logger } from '@/lib/server/logger'
@@ -37,6 +39,10 @@ interface OAuthState {
   ts: number
   /** Pre-auth fields collected before OAuth (e.g. Zendesk subdomain) */
   preAuthFields?: Record<string, string>
+  /** 'new' = create a new integration row, 'reconnect' = update existing */
+  intent?: 'new' | 'reconnect'
+  /** Integration ID to reconnect (when intent === 'reconnect') */
+  integrationId?: string
 }
 
 function buildSettingsUrl(
@@ -48,6 +54,32 @@ function buildSettingsUrl(
 ): string {
   const params = new URLSearchParams({ [integration]: status, ...(reason && { reason }) })
   return `${baseUrl}${settingsPath}?${params}`
+}
+
+function buildTenantUrl(returnDomain: string, request: Request): string {
+  try {
+    const requestOrigin = getPublicOriginFromRequest(request)
+    if (new URL(requestOrigin).host === returnDomain) {
+      return requestOrigin
+    }
+  } catch {
+    // Fall back to the historical HTTPS return-domain behavior below.
+  }
+
+  return `https://${returnDomain}`
+}
+
+function normalizePreAuthConfig(
+  fields: Record<string, string> | undefined
+): Record<string, string> | undefined {
+  if (!fields) return undefined
+
+  const { repoFullName, ...config } = fields
+  if (repoFullName && !config.channelId) {
+    config.channelId = repoFullName
+  }
+
+  return config
 }
 
 /**
@@ -141,7 +173,7 @@ export async function handleOAuthCallback(
   }
 
   const { returnDomain, principalId } = stateData
-  const tenantUrl = `https://${returnDomain}`
+  const tenantUrl = buildTenantUrl(returnDomain, request)
 
   if (!isValidTenantDomain(returnDomain)) {
     return redirectResponse(errorUrl(FALLBACK_URL, 'invalid_tenant'))
@@ -155,9 +187,11 @@ export async function handleOAuthCallback(
     return redirectResponse(errorUrl(tenantUrl, 'invalid_request'))
   }
 
-  const cookieName = getStateCookieName(integrationType, request)
   const cookies = parseCookies(request.headers.get('cookie') || '')
-  if (cookies[cookieName] !== state) {
+  const matchedCookieName = getStateCookieNameVariants(integrationType).find(
+    (name) => cookies[name] === state
+  )
+  if (!matchedCookieName) {
     return redirectResponse(errorUrl(tenantUrl, 'state_mismatch'))
   }
 
@@ -191,7 +225,7 @@ export async function handleOAuthCallback(
 
   let accessToken: string | undefined
   try {
-    const callbackUri = buildCallbackUri(integrationType, request)
+    const callbackUri = `${tenantUrl}/oauth/${integrationType}/callback`
     const exchangeResult = await definition.oauth.exchangeCode(
       code,
       callbackUri,
@@ -201,10 +235,23 @@ export async function handleOAuthCallback(
     accessToken = exchangeResult.accessToken
 
     const { saveIntegration } = await import('./save')
-    await saveIntegration(integrationType, { principalId, ...exchangeResult })
+    const saveParams: Parameters<typeof saveIntegration>[1] = {
+      principalId,
+      ...exchangeResult,
+      ...(stateData.intent === 'new' ? { forceCreate: true } : {}),
+      ...(stateData.intent === 'reconnect' && stateData.integrationId
+        ? { integrationId: stateData.integrationId as import('@quackback/ids').IntegrationId }
+        : {}),
+    }
+    // Pass pre-auth fields as initial config for new connections (e.g., repo full name)
+    const preAuthConfig = normalizePreAuthConfig(stateData.preAuthFields)
+    if (preAuthConfig && stateData.intent === 'new') {
+      saveParams.config = { ...saveParams.config, ...preAuthConfig }
+    }
+    await saveIntegration(integrationType, saveParams)
 
     const successUrl = buildSettingsUrl(tenantUrl, settingsPath, integrationType, 'connected')
-    return redirectResponse(successUrl, [clearCookie(cookieName, isSecureRequest(request))])
+    return redirectResponse(successUrl, clearStateCookies(integrationType))
   } catch (err) {
     log.error({ err, integration_type: integrationType }, 'oauth exchange/save failed')
 

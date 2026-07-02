@@ -7,7 +7,6 @@ import { SecretRevealDialog } from '@/components/shared/secret-reveal-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -17,7 +16,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { createWebhookFn } from '@/lib/server/functions/webhooks'
-import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/shared/webhook-events'
+import { WEBHOOK_EVENTS } from '@/lib/shared/webhook-events'
+import { WebhookEventPicker } from './webhook-event-picker'
+import { WebhookInboxPicker } from './webhook-inbox-picker'
 
 interface CreateWebhookDialogProps {
   open: boolean
@@ -32,6 +33,7 @@ export function CreateWebhookDialog({ open, onOpenChange }: CreateWebhookDialogP
   // Form state
   const [url, setUrl] = useState('')
   const [selectedEvents, setSelectedEvents] = useState<string[]>([])
+  const [selectedInboxIds, setSelectedInboxIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   // Secret reveal state
@@ -51,6 +53,7 @@ export function CreateWebhookDialog({ open, onOpenChange }: CreateWebhookDialogP
         data: {
           url,
           events: selectedEvents as (typeof WEBHOOK_EVENTS)[number][],
+          inboxIds: selectedInboxIds.length > 0 ? selectedInboxIds : undefined,
         },
       })
 
@@ -69,15 +72,10 @@ export function CreateWebhookDialog({ open, onOpenChange }: CreateWebhookDialogP
   const handleClose = () => {
     setUrl('')
     setSelectedEvents([])
+    setSelectedInboxIds([])
     setError(null)
     setCreatedSecret(null)
     onOpenChange(false)
-  }
-
-  const toggleEvent = (eventId: string) => {
-    setSelectedEvents((prev) =>
-      prev.includes(eventId) ? prev.filter((e) => e !== eventId) : [...prev, eventId]
-    )
   }
 
   // Secret reveal view
@@ -134,29 +132,18 @@ export function CreateWebhookDialog({ open, onOpenChange }: CreateWebhookDialogP
               <p className="text-xs text-muted-foreground">Must be HTTPS in production</p>
             </div>
 
-            <div className="space-y-2">
-              <Label>Events</Label>
-              <div className="space-y-2">
-                {WEBHOOK_EVENT_CONFIG.map((event) => (
-                  <label
-                    key={event.id}
-                    className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedEvents.includes(event.id)}
-                      onCheckedChange={() => toggleEvent(event.id)}
-                      disabled={isPending}
-                      className="mt-0.5"
-                      aria-label={`Subscribe to ${event.label} events`}
-                    />
-                    <div>
-                      <p className="text-sm font-medium">{event.label}</p>
-                      <p className="text-xs text-muted-foreground">{event.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <WebhookEventPicker
+              value={selectedEvents}
+              onChange={setSelectedEvents}
+              disabled={isPending}
+            />
+
+            <WebhookInboxPicker
+              value={selectedInboxIds}
+              onChange={setSelectedInboxIds}
+              disabled={isPending}
+              active={selectedEvents.some((e) => e.startsWith('ticket.'))}
+            />
 
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>

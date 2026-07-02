@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { z } from 'zod'
@@ -16,6 +16,14 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute('/_portal/roadmap/')({
   validateSearch: searchSchema,
+  beforeLoad: async ({ context }) => {
+    // Check if roadmap tab is enabled for the user
+    const parentData = context as any
+    const enabledTabs = parentData.enabledTabs || {}
+    if (enabledTabs.roadmap === false) {
+      throw redirect({ to: '/' })
+    }
+  },
   loader: async ({ context }) => {
     const { queryClient, settings, baseUrl, userRole } = context
 
