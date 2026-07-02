@@ -49,6 +49,8 @@ vi.mock('@/lib/server/db', () => ({
     __name: 'conversations',
   },
   conversationMessages: { principalId: 'principalId', __name: 'conversationMessages' },
+  pageViews: { principalId: 'principalId', __name: 'pageViews' },
+  visitorDevices: { principalId: 'principalId', __name: 'visitorDevices' },
   postSubscriptions: { principalId: 'principalId', postId: 'postId', __name: 'postSubscriptions' },
   inAppNotifications: {
     principalId: 'principalId',
