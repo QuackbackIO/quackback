@@ -5,11 +5,20 @@ import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { analyticsQueries, type AnalyticsPeriod } from '@/lib/client/queries/analytics'
 import { formatDistanceToNow } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
-import { ChartBarIcon } from '@heroicons/react/24/solid'
+import { ChartBarIcon, FunnelIcon, CalendarDaysIcon } from '@heroicons/react/24/solid'
 import { CHART_HEIGHT_CLASS } from './analytics-constants'
 import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
@@ -64,10 +73,10 @@ function formatResolveTime(days: number | null): { value: string; suffix?: strin
 }
 
 const periods: Array<{ value: AnalyticsPeriod; label: string }> = [
-  { value: '7d', label: '7d' },
-  { value: '30d', label: '30d' },
-  { value: '90d', label: '90d' },
-  { value: '12m', label: '12m' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: '90d', label: 'Last 90 days' },
+  { value: '12m', label: 'Last 12 months' },
 ]
 
 export function AnalyticsPage() {
@@ -149,23 +158,52 @@ export function AnalyticsPage() {
                     Updated {formatDistanceToNow(new Date(data.computedAt), { addSuffix: true })}
                   </p>
                 )}
-                <div className="flex items-center gap-1 rounded-lg border border-border/50 p-1">
-                  {periods.map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setPeriod(value)}
-                      className={cn(
-                        'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                        period === value
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                      )}
+                {/* Available filters for the active section (surface, today);
+                    hidden when the section has none. */}
+                {section === 'visitors' && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="relative px-2.5">
+                        <FunnelIcon className="h-4 w-4" />
+                        {surface !== 'all' && (
+                          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary" />
+                        )}
+                        <span className="sr-only">Filters</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuLabel>Surface</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={surface}
+                        onValueChange={(value) => setSurface(value as typeof surface)}
+                      >
+                        <DropdownMenuRadioItem value="all">All surfaces</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="portal">Portal</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="widget">Widget</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5">
+                      <CalendarDaysIcon className="h-4 w-4" />
+                      {periods.find((p) => p.value === period)?.label}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuRadioGroup
+                      value={period}
+                      onValueChange={(value) => setPeriod(value as AnalyticsPeriod)}
                     >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                      {periods.map(({ value, label }) => (
+                        <DropdownMenuRadioItem key={value} value={value}>
+                          {label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -200,25 +238,6 @@ export function AnalyticsPage() {
                     </Card>
                   ) : (
                     <div className="flex flex-col gap-6">
-                      <div className="flex items-center justify-end">
-                        <div className="flex items-center gap-1 rounded-lg border border-border/50 p-1">
-                          {(['all', 'portal', 'widget'] as const).map((value) => (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => setSurface(value)}
-                              className={cn(
-                                'rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors',
-                                surface === value
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                              )}
-                            >
-                              {value === 'all' ? 'All surfaces' : value}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
                       <Card className="overflow-hidden py-0 gap-0">
                         <AnalyticsVisitorCards
                           totals={{
