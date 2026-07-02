@@ -17,6 +17,8 @@ export interface ServerConfig {
   hmacRequired?: boolean
   /** Host-page pageview tracking; the SDK starts the tracker only when true. */
   visitorAnalytics?: boolean
+  /** Durable device id (layer-2 identity); minted only when true. */
+  visitorDeviceTracking?: boolean
 }
 
 export async function fetchServerConfig(instanceUrl: string): Promise<ServerConfig> {

@@ -12,6 +12,7 @@ import { createLauncher, type LauncherHandle } from './launcher'
 import { createPanel, type PanelHandle } from './panel'
 import { fetchServerConfig, type ServerConfig } from './config'
 import { createTracker, type Tracker } from './tracker'
+import { getOrCreateDeviceId } from './device'
 import { removeStyles } from './style'
 
 type Command =
@@ -221,10 +222,12 @@ export function createSDK(): SDK {
             applyServerTheme(serverConfig)
             // Host-page pageview tracking is instance-controlled: it starts
             // only when the server config enables visitor analytics, and only
-            // if this init is still the live one.
+            // if this init is still the live one. The durable device id is a
+            // separate opt-in on top.
             if (serverConfig.visitorAnalytics && config === next) {
               tracker?.stop()
-              tracker = createTracker(next.instanceUrl)
+              const deviceId = serverConfig.visitorDeviceTracking ? getOrCreateDeviceId() : null
+              tracker = createTracker(next.instanceUrl, deviceId)
               tracker.start()
             }
           })

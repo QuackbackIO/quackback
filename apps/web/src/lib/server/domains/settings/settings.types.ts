@@ -741,6 +741,8 @@ export interface FeatureFlags {
   linkPreviews: boolean
   /** Cookieless visitor + pageview analytics (portal and widget) */
   visitorAnalytics: boolean
+  /** Durable first-party device id: connects visitors to leads and users across visits */
+  visitorDeviceTracking: boolean
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -749,6 +751,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   supportInbox: false,
   linkPreviews: false,
   visitorAnalytics: false,
+  visitorDeviceTracking: false,
 }
 
 /**
@@ -780,6 +783,11 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       'Measure visitors and pageviews across your portal and widget without cookies or personal data.',
   },
+  visitorDeviceTracking: {
+    label: 'Visitor Identity',
+    description:
+      'Remember returning visitors with a first-party device id so their activity connects to leads and users. Stores an identifier in the browser; check your privacy requirements before enabling.',
+  },
 }
 
 /**
@@ -806,6 +814,6 @@ export const LAB_SECTIONS: Array<{
   {
     title: 'Analytics',
     description: 'Understand who visits your portal and widget, privately and without cookies.',
-    flags: ['visitorAnalytics'],
+    flags: ['visitorAnalytics', 'visitorDeviceTracking'],
   },
 ]

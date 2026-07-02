@@ -65,6 +65,24 @@ describe('createTracker', () => {
     expect(sendBeacon).not.toHaveBeenCalled()
   })
 
+  it('includes the device id on every beacon when provided', () => {
+    tracker = createTracker(INSTANCE, 'dev-abc')
+    tracker.start()
+    window.history.pushState({}, '', '/second')
+
+    const bodies = sentBodies() as Array<{ deviceId?: string }>
+    expect(bodies).toHaveLength(2)
+    for (const body of bodies) {
+      expect(body.deviceId).toBe('dev-abc')
+    }
+  })
+
+  it('omits the device id field when not provided', () => {
+    tracker = createTracker(INSTANCE)
+    tracker.start()
+    expect('deviceId' in sentBodies()[0]).toBe(false)
+  })
+
   it('falls back to fetch when sendBeacon is unavailable', () => {
     Object.defineProperty(navigator, 'sendBeacon', { value: undefined, configurable: true })
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null))

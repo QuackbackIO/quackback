@@ -14,6 +14,7 @@ interface ServerConfig {
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean; chat?: boolean; home?: boolean }
   hmacRequired?: boolean
   visitorAnalytics?: boolean
+  visitorDeviceTracking?: boolean
 }
 
 function jsonResponse(body: unknown, maxAge: number): Response {
@@ -118,12 +119,16 @@ export const Route = createFileRoute('/api/widget/config.json')({
         }
 
         const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
+        const visitorAnalytics = await isFeatureEnabled('visitorAnalytics')
 
         const config: ServerConfig = {
           theme: Object.keys(theme).length > 0 ? theme : undefined,
           tabs: widgetConfig.tabs,
           hmacRequired: widgetConfig.hmacRequired,
-          visitorAnalytics: await isFeatureEnabled('visitorAnalytics'),
+          visitorAnalytics,
+          // The durable device id is only meaningful with analytics on.
+          visitorDeviceTracking:
+            visitorAnalytics && (await isFeatureEnabled('visitorDeviceTracking')),
         }
 
         return jsonResponse(config, 3600)

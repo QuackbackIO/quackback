@@ -12,9 +12,26 @@ import type { FeatureFlags } from '@/lib/shared/types/settings'
  * restricts itself to portal routes, and dedupes re-renders of the same
  * URL. It sends no identifier — the server derives everything.
  */
+const DEVICE_COOKIE = 'qb_device'
+
+/** First-party durable device id (layer-2 identity, instance-opt-in). */
+function getOrCreateDeviceId(): string | null {
+  try {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${DEVICE_COOKIE}=([^;]+)`))
+    if (match) return match[1]
+    const id = crypto.randomUUID()
+    document.cookie = `${DEVICE_COOKIE}=${id}; Max-Age=31536000; Path=/; SameSite=Lax`
+    return id
+  } catch {
+    return null
+  }
+}
+
 export function VisitorBeacon() {
   const { settings } = useRouteContext({ from: '__root__' })
-  const enabled = (settings?.featureFlags as FeatureFlags | undefined)?.visitorAnalytics ?? false
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+  const enabled = flags?.visitorAnalytics ?? false
+  const deviceTracking = flags?.visitorDeviceTracking ?? false
   const href = useRouterState({ select: (s) => s.location.href })
   // Public visitor-facing surfaces: the portal tree plus the standalone
   // changelog and help-center trees (the latter also serve the subdomain).
@@ -32,15 +49,17 @@ export function VisitorBeacon() {
     if (nav.doNotTrack === '1' || nav.globalPrivacyControl === true) return
     lastTracked.current = href
 
+    const deviceId = deviceTracking ? getOrCreateDeviceId() : null
     const body = JSON.stringify({
       url: window.location.href,
       referrer: document.referrer,
       surface: 'portal',
+      ...(deviceId ? { deviceId } : {}),
     })
     if (!navigator.sendBeacon?.('/api/track', body)) {
       fetch('/api/track', { method: 'POST', body, keepalive: true }).catch(() => {})
     }
-  }, [href, isPublicSurface, enabled])
+  }, [href, isPublicSurface, enabled, deviceTracking])
 
   return null
 }

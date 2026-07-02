@@ -14,7 +14,7 @@ export interface Tracker {
   stop(): void
 }
 
-export function createTracker(instanceUrl: string): Tracker {
+export function createTracker(instanceUrl: string, deviceId: string | null = null): Tracker {
   let active = false
   let lastHref: string | null = null
   let originalPushState: History['pushState'] | null = null
@@ -31,7 +31,12 @@ export function createTracker(instanceUrl: string): Tracker {
     const href = window.location.href
     if (href === lastHref) return
     lastHref = href
-    const body = JSON.stringify({ url: href, referrer: document.referrer, surface: 'widget' })
+    const body = JSON.stringify({
+      url: href,
+      referrer: document.referrer,
+      surface: 'widget',
+      ...(deviceId ? { deviceId } : {}),
+    })
     try {
       if (!navigator.sendBeacon || !navigator.sendBeacon(`${instanceUrl}/api/track`, body)) {
         void fetch(`${instanceUrl}/api/track`, { method: 'POST', body, keepalive: true }).catch(
