@@ -8,6 +8,7 @@ import {
   PaintBrushIcon,
   PuzzlePieceIcon,
   ChatBubbleLeftRightIcon,
+  ClockIcon,
   CommandLineIcon,
   ShieldCheckIcon,
   DocumentTextIcon,
@@ -84,6 +85,11 @@ export function buildNavSections(flags?: {
             to: '/admin/settings/conversations',
             icon: ChatBubbleLeftRightIcon,
           },
+          {
+            label: 'Office Hours',
+            to: '/admin/settings/office-hours',
+            icon: ClockIcon,
+          },
         ]
       : []),
     ...(flags?.helpCenter
@@ -96,7 +102,10 @@ export function buildNavSections(flags?: {
 
   sections.push({
     label: 'AI & Automation',
-    items: [{ label: 'Assistant', to: '/admin/settings/ai', icon: SparklesIcon }],
+    items: [
+      { label: 'Assistant', to: '/admin/settings/ai', icon: SparklesIcon },
+      { label: 'Sandbox', to: '/admin/settings/ai/sandbox', icon: BeakerIcon },
+    ],
   })
 
   sections.push({

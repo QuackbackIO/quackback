@@ -36,12 +36,19 @@ describe('buildNavSections', () => {
     expect(supportIdx).toBeLessThan(customersIdx)
   })
 
-  it('Support bundles Conversations then Help Center in that order', () => {
+  it('Support bundles Conversations, Office Hours then Help Center in that order', () => {
     const sections = buildNavSections({ helpCenter: true, supportInbox: true })
     const support = sections.find((s) => s.label === 'Support')!
-    expect(support.items.map((i) => i.label)).toEqual(['Conversations', 'Help Center'])
+    expect(support.items.map((i) => i.label)).toEqual([
+      'Conversations',
+      'Office Hours',
+      'Help Center',
+    ])
     expect(support.items.find((i) => i.label === 'Conversations')!.to).toBe(
       '/admin/settings/conversations'
+    )
+    expect(support.items.find((i) => i.label === 'Office Hours')!.to).toBe(
+      '/admin/settings/office-hours'
     )
     expect(support.items.find((i) => i.label === 'Help Center')!.to).toBe(
       '/admin/settings/help-center'
@@ -54,10 +61,10 @@ describe('buildNavSections', () => {
     expect(support.items.map((i) => i.label)).toEqual(['Help Center'])
   })
 
-  it('Support contains only Conversations when helpCenter is off', () => {
+  it('Support contains Conversations and Office Hours when only supportInbox is on', () => {
     const sections = buildNavSections({ supportInbox: true })
     const support = sections.find((s) => s.label === 'Support')!
-    expect(support.items.map((i) => i.label)).toEqual(['Conversations'])
+    expect(support.items.map((i) => i.label)).toEqual(['Conversations', 'Office Hours'])
   })
 
   it('does not place Conversations under Customization', () => {

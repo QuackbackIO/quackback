@@ -31,7 +31,11 @@ export type ConversationSide = Exclude<MessageSenderType, 'system'>
 /** How a conversation arrived — mirrors the conversations.channel column enum. */
 export type Channel = 'messenger' | 'email' | 'web_form'
 
-/** One weekday's availability window, local to the config timezone. */
+/**
+ * @deprecated Migration-only shape. One weekday's availability window in the
+ * released `widgetConfig.messenger.officeHours`. The live model is the interval
+ * schedule in `@/lib/shared/office-hours`.
+ */
 export interface OfficeHoursDay {
   /** Whether the team is available this weekday. */
   enabled: boolean
@@ -41,7 +45,10 @@ export interface OfficeHoursDay {
   end: string
 }
 
-/** Weekly office hours used to set visitor expectations in the widget. */
+/**
+ * @deprecated Migration-only shape (see {@link OfficeHoursDay}). Retained only to
+ * type stored legacy config for the read-time fallback in settings.office-hours.ts.
+ */
 export interface OfficeHoursConfig {
   enabled: boolean
   /** IANA timezone the ranges are expressed in (e.g. "America/New_York"). */

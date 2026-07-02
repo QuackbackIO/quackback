@@ -35,6 +35,7 @@ import { requireAuth } from './auth-helpers'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'settings' })
@@ -875,6 +876,38 @@ export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handl
     throw error
   }
 })
+
+// ============================================
+// Office Hours Operations
+// ============================================
+
+export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch office hours')
+  try {
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { getOfficeHoursSchedule } =
+      await import('@/lib/server/domains/settings/settings.office-hours')
+    return await getOfficeHoursSchedule()
+  } catch (error) {
+    log.error({ err: error }, 'fetch office hours failed')
+    throw error
+  }
+})
+
+export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
+  .validator(officeHoursScheduleSchema)
+  .handler(async ({ data }) => {
+    log.info({ enabled: data.enabled, intervals: data.intervals.length }, 'update office hours')
+    try {
+      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+      const { updateOfficeHoursSchedule } =
+        await import('@/lib/server/domains/settings/settings.office-hours')
+      return await updateOfficeHoursSchedule(data)
+    } catch (error) {
+      log.error({ err: error }, 'update office hours failed')
+      throw error
+    }
+  })
 
 // ============================================
 // Moderation Default Operations

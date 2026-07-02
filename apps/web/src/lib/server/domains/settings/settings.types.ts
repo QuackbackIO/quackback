@@ -448,10 +448,11 @@ export interface CannedReply {
  * stripped from the public projection (see getPublicWidgetConfig).
  */
 /**
- * Display identity for the workspace's AI assistant. Presentation only — the
- * assistant's actual replies come from the external agent layer (MCP service
- * principal); enabling this only changes who the messenger says is greeting
- * the visitor. Keep this the single source of the assistant's name/avatar so
+ * Display identity for the workspace's AI assistant, plus whether it replies.
+ * Replies are no longer exclusively from the external agent layer: the assistant
+ * may reply in-process as a service principal through a defined tool layer, or
+ * out-of-process via the MCP service principal — `respond` gates whether it
+ * answers at all. Keep this the single source of the assistant's name/avatar so
  * the future agent principal adopts it rather than adding a second identity.
  */
 export interface AssistantIdentityConfig {
@@ -460,6 +461,8 @@ export interface AssistantIdentityConfig {
   name?: string
   /** Avatar image URL; falls back to an initial when unset. */
   avatarUrl?: string
+  /** Whether the assistant actually replies (vs. identity-only). Default false. */
+  respond?: boolean
 }
 
 export interface MessengerConfig {
@@ -473,7 +476,12 @@ export interface MessengerConfig {
   teamName?: string
   /** AI-assistant display identity (client-safe). */
   assistant?: AssistantIdentityConfig
-  /** Weekly office hours; when enabled, drives the widget's away state + copy. */
+  /**
+   * @deprecated Migration-only. The canonical office-hours schedule now lives in
+   * the `settings.metadata` bag (see settings.office-hours.ts). This field only
+   * types the released stored config that the read-time fallback converts; no
+   * code writes it and it is not projected into the public widget config.
+   */
   officeHours?: OfficeHoursConfig
   /** Agent-only saved replies — NEVER projected into the public widget config. */
   cannedReplies?: CannedReply[]
@@ -486,8 +494,11 @@ export interface MessengerConfig {
   }
 }
 
-/** Client-safe subset of MessengerConfig (drops agent-only fields). */
-export type PublicMessengerConfig = Omit<MessengerConfig, 'cannedReplies' | 'routing'>
+/** Client-safe subset of MessengerConfig (drops agent-only + deprecated fields). */
+export type PublicMessengerConfig = Omit<
+  MessengerConfig,
+  'cannedReplies' | 'routing' | 'officeHours'
+>
 
 /**
  * Types of card the widget Home surface can show. Built-in types route to a
@@ -592,19 +603,9 @@ export const DEFAULT_MESSENGER_CONFIG: MessengerConfig = {
   welcomeMessage: 'Hi! 👋 How can we help you today?',
   offlineMessage: "We're away right now. Leave a message and we'll get back to you by email.",
   // AI-first by default: conversations open fronted by the assistant identity.
-  // Admins can rename or disable it under Settings → AI & Automation.
-  assistant: { enabled: true, name: 'Quinn' },
-}
-
-/** A sensible starting schedule for the settings UI: Mon–Fri, 9–5, disabled. */
-export const DEFAULT_OFFICE_HOURS: OfficeHoursConfig = {
-  enabled: false,
-  timezone: 'UTC',
-  days: [0, 1, 2, 3, 4, 5, 6].map((d) => ({
-    enabled: d >= 1 && d <= 5,
-    start: '09:00',
-    end: '17:00',
-  })),
+  // Admins can rename or disable it under Settings → AI & Automation. `respond`
+  // defaults off — identity is on, in-process answering is opt-in.
+  assistant: { enabled: true, name: 'Quinn', respond: false },
 }
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {

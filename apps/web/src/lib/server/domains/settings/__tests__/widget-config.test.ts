@@ -12,8 +12,12 @@ import { deepMerge } from '../settings.helpers'
 
 describe('Widget Config Types', () => {
   describe('DEFAULT_MESSENGER_CONFIG', () => {
-    it('is AI-first by default: the assistant identity is on and named Quinn', () => {
-      expect(DEFAULT_MESSENGER_CONFIG.assistant).toEqual({ enabled: true, name: 'Quinn' })
+    it('is AI-first by default: the assistant identity is on and named Quinn, replies off', () => {
+      expect(DEFAULT_MESSENGER_CONFIG.assistant).toEqual({
+        enabled: true,
+        name: 'Quinn',
+        respond: false,
+      })
     })
   })
 

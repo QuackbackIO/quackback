@@ -25,14 +25,16 @@ export function publicHomeConfig(home: WidgetHomeConfig | undefined): WidgetHome
 }
 
 /** Drop agent-only fields (cannedReplies) from a messenger config for public
- *  exposure. Allowlist projection: new fields are excluded unless added here. */
+ *  exposure. Allowlist projection: new fields are excluded unless added here.
+ *  Office hours are NOT projected here — the widget reads availability from the
+ *  presence snapshot (getConversationPresenceFn), which resolves the one canonical
+ *  schedule via `@/lib/shared/office-hours`. */
 export function publicMessengerConfig(messenger: MessengerConfig): PublicMessengerConfig {
   return {
     enabled: messenger.enabled,
     welcomeMessage: messenger.welcomeMessage,
     offlineMessage: messenger.offlineMessage,
     teamName: messenger.teamName,
-    officeHours: messenger.officeHours,
     assistant: messenger.assistant,
   }
 }

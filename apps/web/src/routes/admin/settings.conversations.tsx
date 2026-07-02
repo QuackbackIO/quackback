@@ -1,11 +1,9 @@
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { createFileRoute, useRouter, Navigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ChatBubbleLeftRightIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { CannedReply } from '@/lib/server/domains/settings/settings.types'
-import { DEFAULT_OFFICE_HOURS } from '@/lib/server/domains/settings/settings.types'
-import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -19,9 +17,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-
-// Index 0 = Sunday … 6 = Saturday, matching OfficeHoursConfig.days.
-const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 export const Route = createFileRoute('/admin/settings/conversations')({
   loader: async ({ context }) => {
@@ -71,26 +66,9 @@ function ConversationsSettingsPage() {
   const [cannedReplies, setCannedReplies] = useState<CannedReply[]>(
     messengerConfig?.cannedReplies ?? []
   )
-  const [officeHours, setOfficeHours] = useState<OfficeHoursConfig>(
-    messengerConfig?.officeHours ?? DEFAULT_OFFICE_HOURS
-  )
   const [routingEnabled, setRoutingEnabled] = useState(messengerConfig?.routing?.enabled ?? false)
 
   const widgetEnabled = config.enabled
-
-  const timezones = useMemo<string[]>(() => {
-    try {
-      return Intl.supportedValuesOf('timeZone')
-    } catch {
-      return [officeHours.timezone || 'UTC']
-    }
-  }, [officeHours.timezone])
-
-  // Persist the whole schedule on every change (deepMerge replaces arrays).
-  function saveOfficeHours(next: OfficeHoursConfig) {
-    setOfficeHours(next)
-    void persist('officeHours', { messenger: { officeHours: next } })
-  }
 
   function saveCannedReplies(next: CannedReply[]) {
     setCannedReplies(next)
@@ -179,7 +157,7 @@ function ConversationsSettingsPage() {
             <p className="mt-0.5 text-xs text-muted-foreground">
               Adds the Messenger tab to the widget; conversations land in your support inbox.
               Turning it off removes Messenger entirely; to pause outside working hours instead, set
-              office hours below.
+              your Office Hours.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -284,107 +262,6 @@ function ConversationsSettingsPage() {
               Shown when no agents are currently available to reply.
             </p>
           </div>
-        </div>
-      </SettingsCard>
-
-      <SettingsCard
-        title="Office hours"
-        description="Set when your team is available so the widget can manage visitor expectations outside those hours."
-      >
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-1">
-            <div className="pr-4">
-              <Label htmlFor="office-hours-enabled" className="text-sm font-medium cursor-pointer">
-                Enable office hours
-              </Label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Outside these hours the widget shows your offline message.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {savingField === 'officeHours' && (
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              )}
-              <Switch
-                id="office-hours-enabled"
-                checked={officeHours.enabled}
-                onCheckedChange={(checked) => saveOfficeHours({ ...officeHours, enabled: checked })}
-                disabled={isBusy || !enabled}
-              />
-            </div>
-          </div>
-
-          {officeHours.enabled && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="office-hours-tz">Timezone</Label>
-                <select
-                  id="office-hours-tz"
-                  value={officeHours.timezone}
-                  onChange={(e) => saveOfficeHours({ ...officeHours, timezone: e.target.value })}
-                  disabled={isBusy || !enabled}
-                  className="w-full max-w-sm rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                >
-                  {timezones.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                {officeHours.days.map((day, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="flex w-32 items-center gap-2">
-                      <Switch
-                        checked={day.enabled}
-                        onCheckedChange={(checked) =>
-                          saveOfficeHours({
-                            ...officeHours,
-                            days: officeHours.days.map((d, idx) =>
-                              idx === i ? { ...d, enabled: checked } : d
-                            ),
-                          })
-                        }
-                        disabled={isBusy || !enabled}
-                      />
-                      <span className="text-sm">{DAY_LABELS[i]}</span>
-                    </div>
-                    <Input
-                      type="time"
-                      value={day.start}
-                      onChange={(e) =>
-                        saveOfficeHours({
-                          ...officeHours,
-                          days: officeHours.days.map((d, idx) =>
-                            idx === i ? { ...d, start: e.target.value } : d
-                          ),
-                        })
-                      }
-                      disabled={isBusy || !enabled || !day.enabled}
-                      className="w-32"
-                    />
-                    <span className="text-xs text-muted-foreground">to</span>
-                    <Input
-                      type="time"
-                      value={day.end}
-                      onChange={(e) =>
-                        saveOfficeHours({
-                          ...officeHours,
-                          days: officeHours.days.map((d, idx) =>
-                            idx === i ? { ...d, end: e.target.value } : d
-                          ),
-                        })
-                      }
-                      disabled={isBusy || !enabled || !day.enabled}
-                      className="w-32"
-                    />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
         </div>
       </SettingsCard>
 
