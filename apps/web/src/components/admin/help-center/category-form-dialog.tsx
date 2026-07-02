@@ -20,17 +20,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
+import { PrincipalPicker } from '@/components/admin/shared/principal-picker'
 import { CategoryIcon, ICON_LOOKUP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
 import { cn } from '@/lib/shared/utils'
 import { useCreateCategory, useUpdateCategory } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
+import { adminQueries } from '@/lib/client/queries/admin'
 import {
   MAX_CATEGORY_DEPTH,
   collectDescendantIdsIncludingSelf,
   getCategoryDepth,
   getSubtreeMaxDepth,
 } from '@/lib/shared/help-center-tree'
-import type { HelpCenterCategoryId } from '@quackback/ids'
+import type { HelpCenterCategoryId, PrincipalId } from '@quackback/ids'
 
 const DEFAULT_ICON = 'FolderIcon'
 
@@ -51,6 +54,9 @@ interface CategoryFormDialogProps {
     description: string | null
     icon: string | null
     isPublic: boolean
+    visibility: 'public' | 'targeted'
+    allowedSegmentIds: string[]
+    allowedPrincipalIds: string[]
     parentId: HelpCenterCategoryId | null
   }
   /** Pre-selected parent when creating a new category (ignored if initialValues is set). */
@@ -73,6 +79,9 @@ export function CategoryFormDialog({
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [isPublic, setIsPublic] = useState(true)
+  const [visibility, setVisibility] = useState<'public' | 'targeted'>('public')
+  const [allowedSegmentIds, setAllowedSegmentIds] = useState<string[]>([])
+  const [allowedPrincipalIds, setAllowedPrincipalIds] = useState<PrincipalId[]>([])
   const [parentId, setParentId] = useState<HelpCenterCategoryId | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const [iconSearch, setIconSearch] = useState('')
@@ -83,12 +92,20 @@ export function CategoryFormDialog({
       setName(initialValues?.name || '')
       setDescription(initialValues?.description || '')
       setIsPublic(initialValues?.isPublic ?? true)
+      setVisibility(initialValues?.visibility ?? 'public')
+      setAllowedSegmentIds(initialValues?.allowedSegmentIds ?? [])
+      setAllowedPrincipalIds((initialValues?.allowedPrincipalIds as PrincipalId[]) ?? [])
       setParentId(initialValues?.parentId ?? defaultParentId ?? null)
     }
   }, [open, initialValues, defaultParentId])
 
   const { data: allCategories = [] } = useQuery({
     ...helpCenterQueries.categories(),
+    enabled: open,
+  })
+
+  const { data: segments = [] } = useQuery({
+    ...adminQueries.segments(),
     enabled: open,
   })
 
@@ -124,12 +141,18 @@ export function CategoryFormDialog({
   }, [iconSearch])
 
   const isPending = createCategory.isPending || updateCategory.isPending
+  const targetedWithoutAudience =
+    isPublic &&
+    visibility === 'targeted' &&
+    allowedSegmentIds.length === 0 &&
+    allowedPrincipalIds.length === 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmedName = name.trim()
     const trimmedDesc = description.trim()
     if (!trimmedName) return
+    if (targetedWithoutAudience) return
 
     if (isEdit) {
       await updateCategory.mutateAsync({
@@ -138,6 +161,9 @@ export function CategoryFormDialog({
         description: trimmedDesc || null,
         icon,
         isPublic,
+        visibility,
+        allowedSegmentIds,
+        allowedPrincipalIds,
         parentId,
       })
     } else {
@@ -146,6 +172,9 @@ export function CategoryFormDialog({
         description: trimmedDesc || undefined,
         icon,
         isPublic,
+        visibility,
+        allowedSegmentIds,
+        allowedPrincipalIds,
         parentId,
       })
       onCreated?.(result.id)
@@ -265,17 +294,72 @@ export function CategoryFormDialog({
 
           <div className="flex items-center justify-between">
             <div>
-              <Label>Public</Label>
-              <p className="text-xs text-muted-foreground">Visible on your public help center</p>
+              <Label>Enabled</Label>
+              <p className="text-xs text-muted-foreground">Visible in your help center</p>
             </div>
             <Switch checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
+
+          {isPublic && (
+            <div className="space-y-3 rounded-md border border-border/50 p-3">
+              <div className="space-y-2">
+                <Label htmlFor="category-visibility">Audience</Label>
+                <Select
+                  value={visibility}
+                  onValueChange={(value) => setVisibility(value as 'public' | 'targeted')}
+                >
+                  <SelectTrigger id="category-visibility">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="public">All portal users</SelectItem>
+                    <SelectItem value="targeted">Selected users and segments</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {visibility === 'targeted' && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Allowed segments</Label>
+                    <SegmentMultiSelect
+                      segments={segments.map((segment) => ({
+                        id: segment.id,
+                        name: segment.name,
+                        memberCount: segment.memberCount,
+                      }))}
+                      value={allowedSegmentIds}
+                      onChange={setAllowedSegmentIds}
+                      ariaLabel="Allowed segments"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Allowed users</Label>
+                    <PrincipalPicker
+                      multiple
+                      roleFilter={['user']}
+                      value={allowedPrincipalIds}
+                      onValueChange={(next) => setAllowedPrincipalIds(next as PrincipalId[])}
+                      placeholder="Select portal users"
+                    />
+                  </div>
+
+                  {targetedWithoutAudience && (
+                    <p className="text-xs text-destructive">
+                      Select at least one user or segment for targeted visibility.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending || !name.trim()}>
+            <Button type="submit" disabled={isPending || !name.trim() || targetedWithoutAudience}>
               {isPending ? (isEdit ? 'Saving...' : 'Creating...') : isEdit ? 'Save' : 'Create'}
             </Button>
           </DialogFooter>

@@ -37,9 +37,23 @@ import { fetchSegmentAttributeValuesFn } from '@/lib/server/functions/admin'
 // Attributes with DB-backed value typeahead. Matches SEARCHABLE_ATTRIBUTES
 // in segment-attribute-values.ts; kept duplicated here to avoid pulling
 // a server-only module into the client bundle.
-const SEARCHABLE_VALUE_ATTRIBUTES = new Set(['country', 'locale', 'name', 'email', 'signup_source'])
+const SEARCHABLE_VALUE_ATTRIBUTES = new Set([
+  'country',
+  'locale',
+  'name',
+  'email',
+  'signup_source',
+  'contact_title',
+  'organization_domain',
+  'organization_external_id',
+])
 
 export const CUSTOM_ATTR_PREFIX = '__custom__'
+const METADATA_KEY_ATTRIBUTES = new Set([
+  'metadata_key',
+  'contact_metadata_key',
+  'organization_metadata_key',
+])
 
 type RuleOperator = FieldOperator
 
@@ -188,6 +202,7 @@ function RuleConditionRow({
             [
               { group: 'attribute', label: 'Built-in fields' },
               { group: 'account', label: 'Account' },
+              { group: 'crm', label: 'Customers' },
               { group: 'activity', label: 'Activity' },
             ] as const
           ).map(({ group, label }, i) => {
@@ -252,7 +267,7 @@ function RuleConditionRow({
         </SelectContent>
       </Select>
 
-      {condition.attribute === 'metadata_key' && (
+      {METADATA_KEY_ATTRIBUTES.has(condition.attribute) && (
         <Input
           className="h-8 text-xs w-[100px] shrink-0"
           placeholder="key"
@@ -310,7 +325,10 @@ function RuleConditionRow({
                   | 'locale'
                   | 'name'
                   | 'email'
-                  | 'signup_source',
+                  | 'signup_source'
+                  | 'contact_title'
+                  | 'organization_domain'
+                  | 'organization_external_id',
                 query,
                 limit: 20,
               },

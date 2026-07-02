@@ -6,7 +6,6 @@ import { useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -20,7 +19,9 @@ import { updateWebhookFn } from '@/lib/server/functions/webhooks'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import { CopyButton } from '@/components/shared/copy-button'
 import { WarningBox } from '@/components/shared/warning-box'
-import { WEBHOOK_EVENTS, WEBHOOK_EVENT_CONFIG } from '@/lib/shared/webhook-events'
+import { WEBHOOK_EVENTS } from '@/lib/shared/webhook-events'
+import { WebhookEventPicker } from './webhook-event-picker'
+import { WebhookInboxPicker } from './webhook-inbox-picker'
 import { RotateWebhookSecretDialog } from './rotate-webhook-secret-dialog'
 import type { Webhook } from '@/lib/shared/types'
 
@@ -38,6 +39,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
   // Form state
   const [url, setUrl] = useState(webhook.url)
   const [selectedEvents, setSelectedEvents] = useState<string[]>(webhook.events)
+  const [selectedInboxIds, setSelectedInboxIds] = useState<string[]>(webhook.inboxIds ?? [])
   const [isEnabled, setIsEnabled] = useState(webhook.status === 'active')
   const [error, setError] = useState<string | null>(null)
 
@@ -49,6 +51,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
   useEffect(() => {
     setUrl(webhook.url)
     setSelectedEvents(webhook.events)
+    setSelectedInboxIds(webhook.inboxIds ?? [])
     setIsEnabled(webhook.status === 'active')
     setError(null)
     setNewSecret(null)
@@ -69,6 +72,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
           webhookId: webhook.id,
           url,
           events: selectedEvents as (typeof WEBHOOK_EVENTS)[number][],
+          inboxIds: selectedInboxIds.length > 0 ? selectedInboxIds : null,
           status: isEnabled ? 'active' : 'disabled',
         },
       })
@@ -82,12 +86,6 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update webhook')
     }
-  }
-
-  const toggleEvent = (eventId: string) => {
-    setSelectedEvents((prev) =>
-      prev.includes(eventId) ? prev.filter((e) => e !== eventId) : [...prev, eventId]
-    )
   }
 
   const handleSecretRotated = (secret: string) => {
@@ -120,29 +118,18 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Events</Label>
-                <div className="space-y-2">
-                  {WEBHOOK_EVENT_CONFIG.map((event) => (
-                    <label
-                      key={event.id}
-                      className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                    >
-                      <Checkbox
-                        checked={selectedEvents.includes(event.id)}
-                        onCheckedChange={() => toggleEvent(event.id)}
-                        disabled={isPending}
-                        className="mt-0.5"
-                        aria-label={`Subscribe to ${event.label} events`}
-                      />
-                      <div>
-                        <p className="text-sm font-medium">{event.label}</p>
-                        <p className="text-xs text-muted-foreground">{event.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <WebhookEventPicker
+                value={selectedEvents}
+                onChange={setSelectedEvents}
+                disabled={isPending}
+              />
+
+              <WebhookInboxPicker
+                value={selectedInboxIds}
+                onChange={setSelectedInboxIds}
+                disabled={isPending}
+                active={selectedEvents.some((e) => e.startsWith('ticket.'))}
+              />
 
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div>
@@ -192,7 +179,7 @@ export function EditWebhookDialog({ webhook, open, onOpenChange }: EditWebhookDi
                   </div>
                 ) : (
                   <div className="flex items-center justify-between rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       Rotate to generate a new signing secret
                     </p>
                     <Button

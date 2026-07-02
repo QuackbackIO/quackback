@@ -5,7 +5,9 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { NotificationItem } from '@/components/notifications/notification-item'
+import { MyTicketSubscriptionsPanel } from '@/components/admin/notifications/my-ticket-subscriptions-panel'
 import { useNotifications } from '@/lib/client/hooks/use-notifications-queries'
 import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
 
@@ -53,32 +55,42 @@ function NotificationsPage() {
         )}
       </div>
 
-      {/* Content */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Spinner size="xl" />
-        </div>
-      ) : notifications.length > 0 ? (
-        <ScrollArea className="flex-1">
-          <div className="divide-y divide-border/50">
-            {notifications.map((notification) => (
-              <NotificationItem
-                key={notification.id}
-                notification={notification}
-                onMarkAsRead={(id) => markAsRead.mutate(id)}
-                variant="full"
-              />
-            ))}
-          </div>
-        </ScrollArea>
-      ) : (
-        <EmptyState
-          icon={InboxIcon}
-          title="No notifications yet"
-          description="You'll see notifications here when there are status changes or new comments on posts you're subscribed to."
-          className="py-24"
-        />
-      )}
+      <Tabs defaultValue="all" className="flex-1 flex flex-col">
+        <TabsList className="mx-6 mt-3 self-start">
+          <TabsTrigger value="all">All notifications</TabsTrigger>
+          <TabsTrigger value="ticket-subscriptions">Ticket subscriptions</TabsTrigger>
+        </TabsList>
+        <TabsContent value="all" className="flex-1 mt-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-24">
+              <Spinner size="xl" />
+            </div>
+          ) : notifications.length > 0 ? (
+            <ScrollArea className="flex-1">
+              <div className="divide-y divide-border/50">
+                {notifications.map((notification) => (
+                  <NotificationItem
+                    key={notification.id}
+                    notification={notification}
+                    onMarkAsRead={(id) => markAsRead.mutate(id)}
+                    variant="full"
+                  />
+                ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <EmptyState
+              icon={InboxIcon}
+              title="No notifications yet"
+              description="You'll see notifications here when there are status changes or new comments on posts you're subscribed to."
+              className="py-24"
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="ticket-subscriptions" className="flex-1 mt-0">
+          <MyTicketSubscriptionsPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
