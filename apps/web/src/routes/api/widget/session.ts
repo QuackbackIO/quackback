@@ -34,6 +34,11 @@ export const Route = createFileRoute('/api/widget/session')({
                       email: session.user.email,
                       avatarUrl: session.user.image,
                     },
+                // True iff this widget user is linked to a CRM contact via a
+                // verified identify. Drives the widget UI's decision to show
+                // "My tickets" — anonymous / unverified sessions can still
+                // file a ticket via inline email but cannot list past ones.
+                contactLinked: !isAnonymous && session.contactId !== null,
               },
             },
             { headers: noStoreHeaders() }

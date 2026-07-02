@@ -28,6 +28,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
+  const [categoryName, setCategoryName] = useState('')
+  const [productName, setProductName] = useState('')
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
@@ -72,6 +74,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     form.reset()
     setContentJson(null)
     setLinkedPostIds([])
+    setCategoryName('')
+    setProductName('')
     setPublishState({ type: 'draft' })
     setDisplayDateOverride(undefined)
     createChangelogMutation.reset()
@@ -83,6 +87,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         title: data.title,
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
+        categoryName: categoryName.trim() || null,
+        productName: productName.trim() || null,
         linkedPostIds,
         publishState,
         ...(publishState.type === 'published' &&
@@ -160,6 +166,10 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                 onPublishStateChange={handlePublishStateChange}
                 linkedPostIds={linkedPostIds}
                 onLinkedPostsChange={setLinkedPostIds}
+                categoryName={categoryName}
+                onCategoryNameChange={setCategoryName}
+                productName={productName}
+                onProductNameChange={setProductName}
                 displayDateValue={displayDateOverride}
                 onDisplayDateChange={handleDisplayDateChange}
                 onDisplayDateClear={handleDisplayDateClear}
@@ -190,6 +200,10 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                       onPublishStateChange={handlePublishStateChange}
                       linkedPostIds={linkedPostIds}
                       onLinkedPostsChange={setLinkedPostIds}
+                      categoryName={categoryName}
+                      onCategoryNameChange={setCategoryName}
+                      productName={productName}
+                      onProductNameChange={setProductName}
                       displayDateValue={displayDateOverride}
                       onDisplayDateChange={handleDisplayDateChange}
                       onDisplayDateClear={handleDisplayDateClear}
