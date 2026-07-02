@@ -2,8 +2,10 @@ import type { SQL } from 'drizzle-orm'
 import {
   db,
   boards,
+  changelogCategories,
   changelogEntries,
   changelogEntryPosts,
+  changelogProducts,
   posts,
   principal,
   postStatuses,
@@ -16,16 +18,26 @@ import {
   gt,
   or,
   desc,
+  asc,
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { BoardId, ChangelogId, PrincipalId, PostId, StatusId } from '@quackback/ids'
+import type {
+  BoardId,
+  ChangelogCategoryId,
+  ChangelogId,
+  ChangelogProductId,
+  PrincipalId,
+  PostId,
+  StatusId,
+} from '@quackback/ids'
 import { computeStatus } from './changelog.service'
 import type {
   ListChangelogParams,
   ChangelogEntryWithDetails,
   ChangelogListResult,
   ChangelogAuthor,
+  ChangelogTaxonomyListResult,
 } from './changelog.types'
 
 /**
@@ -145,6 +157,31 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
+  const categoryIds = items
+    .map((entry) => entry.categoryId)
+    .filter((id): id is ChangelogCategoryId => typeof id === 'string')
+  const productIds = items
+    .map((entry) => entry.productId)
+    .filter((id): id is ChangelogProductId => typeof id === 'string')
+
+  const [categories, products] = await Promise.all([
+    categoryIds.length > 0
+      ? db.query.changelogCategories.findMany({
+          where: inArray(changelogCategories.id, categoryIds),
+          columns: { id: true, name: true, slug: true, color: true },
+        })
+      : [],
+    productIds.length > 0
+      ? db.query.changelogProducts.findMany({
+          where: inArray(changelogProducts.id, productIds),
+          columns: { id: true, name: true, slug: true },
+        })
+      : [],
+  ])
+
+  const categoryMap = new Map(categories.map((category) => [category.id, category]))
+  const productMap = new Map(products.map((product) => [product.id, product]))
+
   // Transform to output format
   const result: ChangelogEntryWithDetails[] = items.map((entry) => {
     const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
@@ -154,10 +191,15 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       content: entry.content,
       contentJson: entry.contentJson,
       principalId: entry.principalId,
+      categoryId: entry.categoryId,
+      productId: entry.productId,
       publishedAt: entry.publishedAt,
+      displayDate: entry.displayDate,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       author: entry.principalId ? (authorMap.get(entry.principalId) ?? null) : null,
+      category: entry.categoryId ? (categoryMap.get(entry.categoryId) ?? null) : null,
+      product: entry.productId ? (productMap.get(entry.productId) ?? null) : null,
       linkedPosts: entryLinkedPosts.map((lp) => ({
         id: lp.post.id,
         title: lp.post.title,
@@ -173,6 +215,21 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
     hasMore,
   }
+}
+
+export async function listChangelogTaxonomy(): Promise<ChangelogTaxonomyListResult> {
+  const [categories, products] = await Promise.all([
+    db.query.changelogCategories.findMany({
+      orderBy: [asc(changelogCategories.name)],
+      columns: { id: true, name: true, slug: true, color: true },
+    }),
+    db.query.changelogProducts.findMany({
+      orderBy: [asc(changelogProducts.name)],
+      columns: { id: true, name: true, slug: true },
+    }),
+  ])
+
+  return { categories, products }
 }
 
 /**

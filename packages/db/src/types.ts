@@ -354,9 +354,9 @@ export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 
 // The inbound channel a conversation arrived on - kept in sync with the
 // conversations.channel column enum. Existing live-chat threads default to
-// 'live_chat'; 'email' and 'web_form' are wired up in later phases. This turns
+// 'messenger'; 'email' and 'web_form' are wired up in later phases. This turns
 // "live chat vs ticket" into one polymorphic conversation with a channel field.
-export const CHANNELS = ['live_chat', 'email', 'web_form'] as const
+export const CHANNELS = ['messenger', 'email', 'web_form'] as const
 export type Channel = (typeof CHANNELS)[number]
 
 // Agent-set conversation priority for inbox triage - kept in sync with the

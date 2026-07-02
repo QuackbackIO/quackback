@@ -14,15 +14,50 @@ vi.mock('better-auth/oauth2', () => ({
 
 const mockFindFirst = vi.fn()
 
-vi.mock('@/lib/server/db', () => ({
-  db: {
-    query: {
-      principal: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+// Base the mock on the REAL module via importOriginal so every named export the
+// MCP tool/resource registration transitively imports (tables, enums like
+// TICKET_STATUS_CATEGORIES, operators, etc.) resolves. The `db` export is a lazy
+// Proxy, so importOriginal opens NO database connection. The spread satisfies
+// transitive imports while our explicit `db`/table/operator overrides below
+// preserve the query-shape assertions this file depends on.
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const updateChain = {
+    set: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    execute: vi.fn().mockResolvedValue(undefined),
+  }
+  const selectChain = {
+    from: vi.fn().mockReturnThis(),
+    leftJoin: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue([]),
+  }
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
+    db: {
+      query: {
+        principal: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+      },
+      update: vi.fn(() => updateChain),
+      select: vi.fn(() => selectChain),
     },
-  },
-  principal: { id: 'id', userId: 'user_id' },
-  eq: vi.fn((_a: unknown, _b: unknown) => 'eq-condition'),
-}))
+    principal: { id: 'id', userId: 'user_id', displayName: 'name', avatarUrl: 'avatar' },
+    apiKeys: { id: 'id' },
+    ticketActivity: {
+      id: 'id',
+      ticketId: 'ticket_id',
+      principalId: 'principal_id',
+      type: 'type',
+      metadata: 'metadata',
+      createdAt: 'created_at',
+    },
+    eq: vi.fn((_a: unknown, _b: unknown) => 'eq-condition'),
+    and: vi.fn((..._args: unknown[]) => 'and-condition'),
+    lt: vi.fn((_a: unknown, _b: unknown) => 'lt-condition'),
+    desc: vi.fn((_a: unknown) => 'desc-order'),
+  }
+})
 
 // Mock getTypeIdPrefix from @quackback/ids — extract prefix from underscore-separated IDs
 vi.mock('@quackback/ids', async (importOriginal) => {
@@ -282,6 +317,145 @@ vi.mock('@/lib/server/domains/principals/principal.service', () => ({
     .mockResolvedValue([{ id: 'principal_test', name: 'Jane', role: 'admin' }]),
 }))
 
+// ── Ticketing & CRM mocks (Phases 2–4) ────────────────────────────────────
+
+const MOCK_TICKET = {
+  id: 'ticket_01test',
+  subject: 'Test Ticket',
+  descriptionText: 'Body',
+  priority: 'normal',
+  channel: 'manual',
+  visibilityScope: 'team',
+  statusId: 'ticket_status_01open',
+  primaryTeamId: null,
+  assigneePrincipalId: null,
+  assigneeTeamId: null,
+  requesterPrincipalId: null,
+  requesterContactId: null,
+  organizationId: null,
+  inboxId: null,
+  slaPolicyId: null,
+  lastActivityAt: new Date('2026-01-01'),
+  firstResponseAt: null,
+  resolvedAt: null,
+  closedAt: null,
+  reopenedAt: null,
+  createdAt: new Date('2026-01-01'),
+  updatedAt: new Date('2026-01-01'),
+}
+
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  createTicket: vi.fn().mockResolvedValue(MOCK_TICKET),
+  updateTicket: vi.fn().mockResolvedValue(MOCK_TICKET),
+  assignTicket: vi.fn().mockResolvedValue(MOCK_TICKET),
+  transitionStatus: vi.fn().mockResolvedValue(MOCK_TICKET),
+  getTicket: vi.fn().mockResolvedValue(MOCK_TICKET),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.query', () => ({
+  listTickets: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.take-return', () => ({
+  takeTicket: vi.fn().mockResolvedValue(MOCK_TICKET),
+  returnTicket: vi.fn().mockResolvedValue(MOCK_TICKET),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.bulk', () => ({
+  bulkAssign: vi.fn().mockResolvedValue({ ok: 0, denied: 0, errors: [] }),
+  bulkTransition: vi.fn().mockResolvedValue({ ok: 0, denied: 0, errors: [] }),
+  bulkChangeInbox: vi.fn().mockResolvedValue({ ok: 0, denied: 0, errors: [] }),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket-statuses.service', () => ({
+  getTicketStatus: vi.fn().mockResolvedValue(null),
+  listTicketStatuses: vi.fn().mockResolvedValue([
+    {
+      id: 'ticket_status_01open',
+      name: 'Open',
+      slug: 'open',
+      color: '#22c55e',
+      category: 'open',
+      position: 0,
+      isDefault: true,
+      isSystem: true,
+    },
+  ]),
+  createTicketStatus: vi.fn().mockResolvedValue({ id: 'ticket_status_01new' }),
+  updateTicketStatus: vi.fn().mockResolvedValue({ id: 'ticket_status_01open' }),
+  archiveTicketStatus: vi
+    .fn()
+    .mockResolvedValue({ id: 'ticket_status_01open', deletedAt: new Date() }),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.threads', () => ({
+  addThread: vi.fn().mockResolvedValue({ id: 'ticket_thread_01new' }),
+  editThread: vi.fn().mockResolvedValue({ id: 'ticket_thread_01new' }),
+  softDeleteThread: vi.fn().mockResolvedValue({ id: 'ticket_thread_01new', deletedAt: new Date() }),
+  listThreads: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.participants', () => ({
+  addParticipant: vi.fn().mockResolvedValue({ id: 'ticket_participant_01new' }),
+  removeParticipant: vi.fn().mockResolvedValue(undefined),
+  listParticipants: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.share', () => ({
+  shareTicketWithTeam: vi.fn().mockResolvedValue({ id: 'ticket_share_01new' }),
+  revokeShare: vi.fn().mockResolvedValue({ id: 'ticket_share_01new', revokedAt: new Date() }),
+  listSharesForTicket: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.subscriptions', () => ({
+  safeSubscribe: vi.fn().mockResolvedValue(undefined),
+  unsubscribeFromTicket: vi.fn().mockResolvedValue(true),
+  updateSubscriptionPrefs: vi.fn().mockResolvedValue({}),
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.permissions', () => ({
+  toResourceScope: vi.fn(() => ({})),
+  canViewTicket: vi.fn(() => true),
+  canReplyPublic: vi.fn(() => true),
+  canCommentInternal: vi.fn(() => true),
+  canShareCrossTeam: vi.fn(() => true),
+  canManageParticipants: vi.fn(() => true),
+}))
+
+vi.mock('@/lib/server/domains/authz/authz.service', () => ({
+  loadPermissionSet: vi.fn().mockResolvedValue({
+    principalId: 'principal_test',
+    teamIds: [],
+    workspacePermissions: new Set(),
+    teamPermissions: new Map(),
+  }),
+  hasPermission: vi.fn(() => true),
+  hasPermissionForResource: vi.fn(() => true),
+}))
+
+vi.mock('@/lib/server/domains/organizations/contact.service', () => ({
+  searchContacts: vi.fn().mockResolvedValue([]),
+  getContact: vi.fn().mockResolvedValue(null),
+  createContact: vi.fn().mockResolvedValue({ id: 'contact_01new' }),
+  updateContact: vi.fn().mockResolvedValue({ id: 'contact_01new' }),
+  archiveContact: vi.fn().mockResolvedValue(undefined),
+  findOrCreateByEmail: vi.fn().mockResolvedValue({ id: 'contact_01new' }),
+  linkContactToUser: vi.fn().mockResolvedValue({ id: 'contact_user_link_01new' }),
+  unlinkContactFromUser: vi.fn().mockResolvedValue(undefined),
+  listLinksForContact: vi.fn().mockResolvedValue([]),
+  listContactsForOrganization: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/server/domains/organizations/organization.service', () => ({
+  listOrganizations: vi.fn().mockResolvedValue([]),
+  getOrganization: vi.fn().mockResolvedValue(null),
+  getOrganizationByDomain: vi.fn().mockResolvedValue(null),
+  createOrganization: vi.fn().mockResolvedValue({ id: 'organization_01new' }),
+  updateOrganization: vi.fn().mockResolvedValue({ id: 'organization_01new' }),
+  archiveOrganization: vi.fn().mockResolvedValue(undefined),
+  unarchiveOrganization: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('@/lib/server/domains/chat/chat.query', () => ({
   listConversationsForAgent: vi.fn(),
   listMessages: vi.fn(),
@@ -312,6 +486,14 @@ const MOCK_API_KEY: ApiKey = {
   lastUsedAt: null,
   expiresAt: null,
   revokedAt: null,
+  scopes: [],
+  allowedTeamIds: [],
+  allowedInboxIds: [],
+  lastIp: null,
+  lastUserAgent: null,
+  rotatedAt: null,
+  compatLegacyFullAccess: true,
+  compatAcknowledgedAt: null,
 }
 
 const MOCK_MEMBER_RECORD = {
@@ -662,13 +844,87 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('unmerge_post')
       expect(toolNames).toContain('delete_post')
       expect(toolNames).toContain('restore_post')
+      // Phase 2–4 ticketing + CRM tools
+      expect(toolNames).toContain('list_tickets')
+      expect(toolNames).toContain('create_ticket')
+      expect(toolNames).toContain('add_ticket_thread')
+      expect(toolNames).toContain('manage_ticket_share')
+      expect(toolNames).toContain('manage_ticket_status')
+      expect(toolNames).toContain('manage_contact')
+      expect(toolNames).toContain('manage_organization')
       expect(toolNames).toContain('list_conversations')
       expect(toolNames).toContain('get_conversation')
       expect(toolNames).toContain('reply_to_conversation')
       expect(toolNames).toContain('suggest_post')
       expect(toolNames).toContain('share_post')
       expect(toolNames).toContain('set_conversation_status')
-      expect(toolNames).toHaveLength(33)
+      // Audience / configuration tools (external-surface coverage)
+      expect(toolNames).toContain('list_segments')
+      expect(toolNames).toContain('manage_segment')
+      expect(toolNames).toContain('list_user_attributes')
+      expect(toolNames).toContain('manage_user_attribute')
+      expect(toolNames).toContain('get_changelog_visibility')
+      expect(toolNames).toContain('set_changelog_visibility')
+      expect(toolNames).toContain('get_portal_tabs')
+      expect(toolNames).toContain('set_portal_tabs')
+      expect(toolNames).toContain('delete_portal_tab_segment')
+      expect(toolNames).toContain('list_widget_applications')
+      expect(toolNames).toContain('manage_widget_application')
+      expect(toolNames).toContain('manage_widget_environment_profile')
+      // Feedback-plane config tools (Phase 1)
+      expect(toolNames).toContain('manage_board')
+      expect(toolNames).toContain('manage_tag')
+      expect(toolNames).toContain('manage_status')
+      expect(toolNames).toContain('manage_roadmap')
+      // Conversation write + chat-tag tools (Phase 4)
+      expect(toolNames).toContain('assign_conversation')
+      expect(toolNames).toContain('set_conversation_priority')
+      expect(toolNames).toContain('add_conversation_note')
+      expect(toolNames).toContain('list_chat_tags')
+      expect(toolNames).toContain('manage_chat_tag')
+      expect(toolNames).toContain('tag_conversation')
+      // Team tools (Phase 3)
+      expect(toolNames).toContain('list_teams')
+      expect(toolNames).toContain('get_team')
+      expect(toolNames).toContain('manage_team')
+      expect(toolNames).toContain('manage_team_member')
+      // RBAC role tools (Phase 5)
+      expect(toolNames).toContain('list_permissions')
+      expect(toolNames).toContain('list_roles')
+      expect(toolNames).toContain('get_role')
+      expect(toolNames).toContain('manage_role')
+      expect(toolNames).toContain('list_principal_roles')
+      expect(toolNames).toContain('manage_role_assignment')
+      // Support-config read tools (Phase 3 MCP parity)
+      expect(toolNames).toContain('list_inboxes')
+      expect(toolNames).toContain('get_inbox')
+      expect(toolNames).toContain('list_routing_rules')
+      expect(toolNames).toContain('list_sla_policies')
+      expect(toolNames).toContain('get_sla_policy')
+      expect(toolNames).toContain('list_business_hours')
+      // Settings tools (Phase 5)
+      expect(toolNames).toContain('get_settings')
+      expect(toolNames).toContain('update_settings')
+      // Admin tools (Phase 5)
+      expect(toolNames).toContain('list_users')
+      expect(toolNames).toContain('list_api_keys')
+      expect(toolNames).toContain('list_audit_events')
+      expect(toolNames).toContain('list_webhooks')
+      expect(toolNames).toContain('manage_webhook')
+      // Moderation + support-config write tools (Phase 5/3)
+      expect(toolNames).toContain('list_pending_moderation')
+      expect(toolNames).toContain('moderate_post')
+      expect(toolNames).toContain('moderate_comment')
+      expect(toolNames).toContain('manage_inbox')
+      expect(toolNames).toContain('manage_sla_policy')
+      expect(toolNames).toContain('manage_business_hours')
+      expect(toolNames).toContain('manage_routing_rule')
+      expect(toolNames).toContain('list_ticket_attachments')
+      expect(toolNames).toContain('manage_ticket_attachment')
+      // Total registered tool count for an admin OAuth session with all
+      // surfaces enabled. Pins the count so an accidental tool add/remove is
+      // caught. 119 = 116 prior + manage_routing_rule + ticket attachment list/manage.
+      expect(toolNames).toHaveLength(119)
     })
 
     it('should handle resources/list request', async () => {
@@ -687,7 +943,11 @@ describe('MCP HTTP Handler', () => {
       expect(uris).toContain('quackback://roadmaps')
       expect(uris).toContain('quackback://members')
       expect(uris).toContain('quackback://help-center/categories')
-      expect(uris).toHaveLength(6)
+      expect(uris).toContain('quackback://ticket-statuses')
+      expect(uris).toContain('quackback://tickets/inbox')
+      expect(uris).toContain('quackback://contacts')
+      expect(uris).toContain('quackback://organizations')
+      expect(uris).toHaveLength(10)
     })
 
     // ── search tool (posts) ─────────────────────────────────────────────────
@@ -1625,7 +1885,9 @@ describe('MCP HTTP Handler', () => {
     }
 
     it('should deny search when read:feedback scope missing', async () => {
-      const handleMcpRequest = await initializeOAuthSession(['write:feedback'])
+      // After Phase 1's SCOPE_IMPLIES (write:feedback → read:feedback),
+      // we use a strictly unrelated scope to assert the gate still fires.
+      const handleMcpRequest = await initializeOAuthSession(['read:tickets'])
 
       const response = await handleMcpRequest(
         oauthRequest(
@@ -2283,7 +2545,7 @@ describe('MCP HTTP Handler', () => {
             id: 'conversation_1',
             status: 'open',
             priority: 'none',
-            channel: 'live_chat',
+            channel: 'messenger',
             subject: 'Hi',
             lastMessagePreview: 'Hi',
             lastMessageAt: '2026-06-05T00:00:00.000Z',
@@ -2321,7 +2583,7 @@ describe('MCP HTTP Handler', () => {
         id: 'conversation_1',
         status: 'open',
         priority: 'none',
-        channel: 'live_chat',
+        channel: 'messenger',
         subject: null,
         lastMessageAt: '2026-06-05T00:00:00.000Z',
         createdAt: '2026-06-05T00:00:00.000Z',
@@ -2655,6 +2917,73 @@ describe('MCP HTTP Handler', () => {
       const response = await handleMcpRequest(request)
       // Stateless: DELETE either succeeds as no-op (200) or rejects (405)
       expect([200, 405]).toContain(response.status)
+    })
+  })
+
+  // ===========================================================================
+  // Ticketing scope gating (Phase 5)
+  // ===========================================================================
+
+  describe('Ticketing tools', () => {
+    it('should reject list_tickets when OAuth token lacks read:tickets scope', async () => {
+      await setupValidOAuth({ scopes: ['read:feedback'] })
+
+      const { handleMcpRequest } = await import('../handler')
+      // Initialize first
+      await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('initialize', {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 'test', version: '1.0' },
+          })
+        )
+      )
+      await setupValidOAuth({ scopes: ['read:feedback'] })
+
+      const response = await handleMcpRequest(
+        oauthRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'list_tickets',
+            arguments: { scope: 'all' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as {
+        result: { isError?: boolean; content: Array<{ type: string; text: string }> }
+      }
+      expect(body.result.isError).toBe(true)
+      expect(body.result.content[0].text).toContain('Insufficient scope')
+      expect(body.result.content[0].text).toContain('read:tickets')
+    })
+
+    it('should handle tools/call for create_ticket via API key (full scope set)', async () => {
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const handleMcpRequest = await initializeSession()
+
+      const response = await handleMcpRequest(
+        mcpRequest(
+          jsonRpcRequest('tools/call', {
+            name: 'create_ticket',
+            arguments: { subject: 'New ticket', descriptionText: 'Body text' },
+          })
+        )
+      )
+
+      expect(response.status).toBe(200)
+      expect(vi.mocked(createTicket)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'New ticket',
+          descriptionText: 'Body text',
+        })
+      )
+      const body = (await response.json()) as {
+        result: { content: Array<{ type: string; text: string }> }
+      }
+      const text = JSON.parse(body.result.content[0].text)
+      expect(text.id).toBe('ticket_01test')
     })
   })
 })

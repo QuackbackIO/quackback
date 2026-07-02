@@ -13,6 +13,8 @@ import {
   updateChangelog,
   deleteChangelog,
 } from '@/lib/server/domains/changelog/changelog.service'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/server/db'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { ChangelogId } from '@quackback/ids'
 
@@ -21,21 +23,31 @@ const updateChangelogSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).optional(),
   publishedAt: z.string().datetime().nullable().optional(),
+  categoryName: z.string().max(200).nullable().optional(),
+  productName: z.string().max(200).nullable().optional(),
+  displayDate: z.string().datetime().nullable().optional(),
 })
 
 function formatChangelogResponse(entry: {
   id: string
   title: string
   content: string
+  contentJson: TiptapContent | null
+  category?: { id: string; name: string; slug: string; color?: string | null } | null
+  product?: { id: string; name: string; slug: string } | null
   publishedAt: Date | null
+  displayDate: Date | null
   createdAt: Date
   updatedAt: Date
 }) {
   return {
     id: entry.id,
     title: entry.title,
-    content: entry.content,
+    content: contentJsonToMarkdown(entry.contentJson, entry.content),
+    category: entry.category ?? null,
+    product: entry.product ?? null,
     publishedAt: entry.publishedAt?.toISOString() || null,
+    displayDate: entry.displayDate?.toISOString() || null,
     createdAt: entry.createdAt.toISOString(),
     updatedAt: entry.updatedAt.toISOString(),
   }
@@ -105,7 +117,13 @@ export const Route = createFileRoute('/api/v1/changelog/$entryId')({
           const updated = await updateChangelog(entryId, {
             title: parsed.data.title,
             content: parsed.data.content,
+            categoryName: parsed.data.categoryName,
+            productName: parsed.data.productName,
             ...(publishState && { publishState }),
+            ...(parsed.data.displayDate !== undefined && {
+              displayDate:
+                parsed.data.displayDate === null ? null : new Date(parsed.data.displayDate),
+            }),
           })
 
           return successResponse(formatChangelogResponse(updated))

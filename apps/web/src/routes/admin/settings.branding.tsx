@@ -41,7 +41,6 @@ import {
 import { ThemePreview } from '@/components/admin/settings/branding/theme-preview'
 import {
   useBrandingState,
-  ALL_FONTS_URL,
   FONT_OPTIONS,
 } from '@/components/admin/settings/branding/use-branding-state'
 import { oklchColor } from '@/components/admin/settings/branding/oklch-color-extension'
@@ -187,8 +186,6 @@ function BrandingPage() {
 
   return (
     <>
-      <link rel="stylesheet" href={ALL_FONTS_URL} />
-
       <div className="space-y-6 max-w-5xl">
         <div className="lg:hidden">
           <BackLink to="/admin/settings">Settings</BackLink>

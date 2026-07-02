@@ -333,50 +333,24 @@ export async function removeDelayedJob(jobId: string): Promise<void> {
 }
 
 /**
- * Handle a delayed changelog publish job.
- * Re-fetches the entry from DB to verify it's still published before dispatching.
+ * Handle a delayed changelog publish job. A thin trigger: the service helper's
+ * atomic claim handles eligibility (published, not future-dated, not deleted)
+ * and the notify-once guarantee, so a lost or duplicated job can't double-send.
  */
 async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>): Promise<void> {
   const changelogId = hookConfig.changelogId as string | undefined
   const principalId = hookConfig.principalId as string | undefined
   if (!changelogId) return
 
-  const { db, changelogEntries, eq } = await import('@/lib/server/db')
-  const entry = await db.query.changelogEntries.findFirst({
-    where: eq(changelogEntries.id, changelogId as import('@quackback/ids').ChangelogId),
-  })
-
-  if (!entry || !entry.publishedAt || entry.publishedAt > new Date()) {
-    log.debug(
-      { changelog_id: changelogId },
-      'skipping delayed changelog publish, no longer published'
-    )
-    return
-  }
-
-  // Count linked posts
-  const { changelogEntryPosts } = await import('@/lib/server/db')
-  const linkedPosts = await db.query.changelogEntryPosts.findMany({
-    where: eq(
-      changelogEntryPosts.changelogEntryId,
-      changelogId as import('@quackback/ids').ChangelogId
-    ),
-    columns: { postId: true },
-  })
-
-  const { buildEventActor, dispatchChangelogPublished } = await import('./dispatch')
+  const { notifyChangelogPublished } =
+    await import('@/lib/server/domains/changelog/changelog.service')
+  const { buildEventActor } = await import('./dispatch')
 
   const actor = principalId
     ? buildEventActor({ principalId: principalId as import('@quackback/ids').PrincipalId })
     : { type: 'service' as const, displayName: 'scheduler' }
 
-  await dispatchChangelogPublished(actor, {
-    id: entry.id,
-    title: entry.title,
-    contentPreview: entry.content.slice(0, 200),
-    publishedAt: entry.publishedAt,
-    linkedPostCount: linkedPosts.length,
-  })
+  await notifyChangelogPublished(changelogId as import('@quackback/ids').ChangelogId, actor)
 }
 
 /**
