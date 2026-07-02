@@ -48,6 +48,8 @@ export interface RoadmapPostEntry {
   title: string
   voteCount: number
   statusId: PostStatusId | null
+  /** Target ship date (time-based roadmap); serialized across the RPC boundary. */
+  eta: Date | string | null
   board: {
     id: BoardId
     name: string

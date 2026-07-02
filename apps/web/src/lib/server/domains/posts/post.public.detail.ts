@@ -124,6 +124,7 @@ export async function getPublicPostDetail(
         voteCount: posts.voteCount,
         principalId: posts.principalId,
         createdAt: posts.createdAt,
+        eta: posts.eta,
         pinnedCommentId: posts.pinnedCommentId,
         isCommentsLocked: posts.isCommentsLocked,
         boardId: boards.id,
@@ -494,6 +495,7 @@ export async function getPublicPostDetail(
     principalId: postResult.principalId,
     authorAvatarUrl,
     createdAt: postResult.createdAt,
+    eta: postResult.eta,
     board: { id: postResult.boardId, name: postResult.boardName, slug: postResult.boardSlug },
     // Server-only: fetchPublicPostDetail derives canVote/canComment from this
     // and strips it before the response reaches the client.

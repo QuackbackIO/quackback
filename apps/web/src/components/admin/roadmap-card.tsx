@@ -1,7 +1,8 @@
 import { memo } from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { ChevronUpIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
+import { ChevronUpIcon, Squares2X2Icon, CalendarIcon } from '@heroicons/react/24/solid'
 import { Badge } from '@/components/ui/badge'
+import { formatMonthYear } from '@/lib/shared/utils'
 import type { RoadmapPostEntry } from '@/lib/shared/types'
 
 interface RoadmapCardProps {
@@ -35,6 +36,7 @@ export const RoadmapCard = memo(function RoadmapCard({
 })
 
 function CardContent({ post }: { post: RoadmapPostEntry }) {
+  const etaLabel = formatMonthYear(post.eta)
   return (
     <>
       <div className="flex flex-col items-center justify-center w-14 shrink-0 border-r border-border/50 text-muted-foreground">
@@ -45,10 +47,18 @@ function CardContent({ post }: { post: RoadmapPostEntry }) {
         <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
           {post.title}
         </p>
-        <Badge variant="secondary" className="mt-2.5 text-xs inline-flex items-center gap-0.5">
-          <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
-          {post.board.name}
-        </Badge>
+        <div className="mt-2.5 flex flex-wrap items-center gap-1">
+          <Badge variant="secondary" className="text-xs inline-flex items-center gap-0.5">
+            <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
+            {post.board.name}
+          </Badge>
+          {etaLabel && (
+            <Badge variant="secondary" className="text-xs inline-flex items-center gap-0.5">
+              <CalendarIcon className="h-3 w-3 text-muted-foreground/40" />
+              {etaLabel}
+            </Badge>
+          )}
+        </div>
       </div>
     </>
   )

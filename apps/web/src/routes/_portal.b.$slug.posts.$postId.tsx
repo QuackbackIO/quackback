@@ -247,6 +247,7 @@ function PostDetailPage() {
               authorName={post.authorName}
               authorAvatarUrl={post.authorAvatarUrl}
               createdAt={new Date(post.createdAt)}
+              eta={post.eta ?? null}
               tags={post.tags}
               roadmaps={post.roadmaps}
             />

@@ -53,6 +53,7 @@ import {
 import { usePostExternalLinks } from '@/lib/client/hooks/use-post-external-links-query'
 import { usePostDetailKeyboard } from '@/lib/client/hooks/use-post-detail-keyboard'
 import { addPostToRoadmapFn, removePostFromRoadmapFn } from '@/lib/server/functions/roadmaps'
+import { setPostEtaFn } from '@/lib/server/functions/posts'
 import { useRouterState } from '@tanstack/react-router'
 import {
   type PostId,
@@ -226,6 +227,19 @@ function PostModalContent({
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(post.id as PostId) })
     } finally {
       setPendingRoadmapId(null)
+    }
+  }
+
+  const handleEtaChange = async (eta: string | null) => {
+    setIsUpdating(true)
+    try {
+      await setPostEtaFn({ data: { id: post.id, eta } })
+      queryClient.invalidateQueries({ queryKey: inboxKeys.detail(post.id as PostId) })
+      toast.success(eta ? 'ETA updated' : 'ETA cleared')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update ETA')
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -480,6 +494,7 @@ function PostModalContent({
               authorAvatarUrl={(post.principalId && post.avatarUrls?.[post.principalId]) || null}
               authorPrincipalId={post.principalId}
               createdAt={new Date(post.createdAt)}
+              eta={post.eta ?? null}
               tags={post.tags}
               roadmaps={postRoadmaps}
               canEdit
@@ -488,6 +503,7 @@ function PostModalContent({
               allRoadmaps={roadmaps}
               allBoards={boards}
               onStatusChange={handleStatusChange}
+              onEtaChange={handleEtaChange}
               onTagsChange={handleTagsChange}
               onRoadmapAdd={handleRoadmapAdd}
               onRoadmapRemove={handleRoadmapRemove}

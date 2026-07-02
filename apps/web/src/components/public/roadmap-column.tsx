@@ -80,6 +80,7 @@ export function RoadmapColumn({ roadmapId, statusId, title, color, filters }: Ro
                     title={post.title}
                     voteCount={post.voteCount}
                     board={{ slug: post.board.slug, name: post.board.name }}
+                    eta={post.eta}
                   />
                 </div>
               ))}

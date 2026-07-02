@@ -85,6 +85,9 @@ const PostDetailSchema = z.object({
   pinnedComment: PinnedCommentSchema.meta({
     description: 'Pinned comment used as official response',
   }),
+  eta: NullableTimestampSchema.meta({
+    description: 'Target ship date for time-based roadmaps, null if unset',
+  }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   deletedAt: NullableTimestampSchema.meta({

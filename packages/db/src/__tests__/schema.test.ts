@@ -100,7 +100,7 @@ describe('Schema definitions', () => {
 
     it('has correct column count', () => {
       const columns = Object.keys(getTableColumns(posts))
-      expect(columns.length).toBe(31)
+      expect(columns.length).toBe(32)
     })
 
     it('MODERATION_STATES matches the posts.moderation_state column enum', () => {

@@ -40,6 +40,8 @@ export interface UpdatePostInput {
   statusId?: PostStatusId
   tagIds?: PostTagId[]
   ownerPrincipalId?: PrincipalId | null
+  /** Target ship date for time-based roadmaps; null clears it. */
+  eta?: Date | null
 }
 
 /**
@@ -249,6 +251,8 @@ export interface PublicPostDetail {
   principalId: PrincipalId | null
   authorAvatarUrl: string | null
   createdAt: Date
+  /** Target ship date (time-based roadmap); null when unset. */
+  eta: Date | string | null
   board: { id: string; name: string; slug: string }
   /**
    * The board's per-action access matrix. Server-only — `fetchPublicPostDetail`

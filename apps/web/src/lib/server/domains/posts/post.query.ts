@@ -64,6 +64,7 @@ export async function getPostWithDetails(postId: PostId): Promise<PostWithDetail
       createdAt: true,
       updatedAt: true,
       deletedAt: true,
+      eta: true,
       isCommentsLocked: true,
       moderationState: true,
       canonicalPostId: true,

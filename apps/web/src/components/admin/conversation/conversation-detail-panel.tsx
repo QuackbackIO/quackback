@@ -23,6 +23,7 @@ import { AssigneeControl } from './assignee-control'
 import { ConversationTagsEditor } from './conversation-tags-editor'
 import { StatusControl } from './status-control'
 import { NoEmailBadge } from './channel-badge'
+import { CompanyCard } from './company-card'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -232,6 +233,11 @@ export function ConversationDetailPanel({
               </div>
             </div>
           </div>
+
+          {/* Company context (plan / MRR); renders nothing when unset. */}
+          {visitorPrincipalId && (
+            <CompanyCard principalId={visitorPrincipalId} enabled={isVisible} />
+          )}
 
           {/* Manage */}
           <div className="space-y-4 border-t border-border/30 pt-4">

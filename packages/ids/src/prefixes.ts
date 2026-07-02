@@ -40,6 +40,12 @@ export const ID_PREFIXES = {
   kb_article: 'kb_article',
   kb_article_feedback: 'kb_article_feedback',
 
+  // Companies (B2B customer accounts)
+  company: 'company',
+
+  // Assistant (in-product AI agent)
+  assistant_involvement: 'assistant_involvement',
+
   // Integrations
   integration: 'integration',
   platform_cred: 'platform_cred',

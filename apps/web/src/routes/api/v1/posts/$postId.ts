@@ -87,6 +87,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
             canonicalPostId: post.canonicalPostId ?? null,
             mergedAt: post.mergedAt?.toISOString() ?? null,
             isCommentsLocked: post.isCommentsLocked,
+            eta: post.eta ? new Date(post.eta).toISOString() : null,
             mergedPosts: mergedPosts.map((mp: MergedPostSummary) => ({
               id: mp.id,
               title: mp.title,

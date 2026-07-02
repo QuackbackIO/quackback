@@ -116,6 +116,7 @@ export async function getRoadmapPosts(
           title: posts.title,
           voteCount: posts.voteCount,
           statusId: posts.statusId,
+          eta: posts.eta,
         },
         board: {
           id: boards.id,
@@ -150,6 +151,7 @@ export async function getRoadmapPosts(
       title: r.post.title,
       voteCount: r.post.voteCount,
       statusId: r.post.statusId,
+      eta: r.post.eta,
       board: r.board,
       roadmapEntry: r.roadmapEntry,
     })),
@@ -208,6 +210,7 @@ export async function getPublicRoadmapPosts(
           title: posts.title,
           voteCount: posts.voteCount,
           statusId: posts.statusId,
+          eta: posts.eta,
         },
         board: {
           id: boards.id,
@@ -241,6 +244,7 @@ export async function getPublicRoadmapPosts(
       title: r.post.title,
       voteCount: r.post.voteCount,
       statusId: r.post.statusId,
+      eta: r.post.eta,
       board: r.board,
       roadmapEntry: r.roadmapEntry,
     })),

@@ -119,6 +119,9 @@ export const posts = pgTable(
     summaryCommentCount: integer('summary_comment_count'),
     // Merge suggestion staleness tracking
     mergeCheckedAt: timestamp('merge_checked_at', { withTimezone: true }),
+    // Nullable target ship date for time-based roadmap columns. Stored as a full
+    // timestamp (single-datetime ETA model); presented at month granularity.
+    eta: timestamp('eta', { withTimezone: true }),
   },
   (table) => [
     // Named to match the constraint the SQL migration created.
@@ -157,6 +160,10 @@ export const posts = pgTable(
     index('posts_pinned_comment_id_idx').on(table.pinnedCommentId),
     // Index for finding merged/duplicate posts by canonical post
     index('posts_canonical_post_id_idx').on(table.canonicalPostId),
+    // Partial index for time-based roadmap bucketing (only posts with an ETA).
+    index('posts_eta_idx')
+      .on(table.eta)
+      .where(sql`"eta" IS NOT NULL`),
     // CHECK constraints to ensure counts are never negative
     check('vote_count_non_negative', sql`vote_count >= 0`),
     check('comment_count_non_negative', sql`comment_count >= 0`),

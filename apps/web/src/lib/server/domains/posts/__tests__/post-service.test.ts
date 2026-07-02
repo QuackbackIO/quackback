@@ -191,4 +191,57 @@ describe('post.service updatePost', () => {
       })
     )
   })
+
+  it('writes the eta when set', async () => {
+    const { updatePost } = await import('../post.service')
+    const eta = new Date('2027-03-01T00:00:00.000Z')
+
+    await updatePost(
+      'post_123' as PostId,
+      { eta },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ eta }))
+  })
+
+  it('truncates a mid-month eta to the first of its UTC month', async () => {
+    const { updatePost } = await import('../post.service')
+
+    await updatePost(
+      'post_123' as PostId,
+      { eta: new Date('2027-03-18T14:37:12.000Z') },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ eta: new Date('2027-03-01T00:00:00.000Z') })
+    )
+  })
+
+  it('clears the eta when passed null', async () => {
+    const { updatePost } = await import('../post.service')
+
+    await updatePost(
+      'post_123' as PostId,
+      { eta: null },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ eta: null }))
+  })
+
+  it('leaves the eta untouched when the field is omitted', async () => {
+    const { updatePost } = await import('../post.service')
+    updateSet.mockClear()
+
+    await updatePost(
+      'post_123' as PostId,
+      { title: 'Updated title' },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+
+    // The UPDATE set never carries an eta key when eta is not in the input.
+    expect(updateSet).toHaveBeenCalledWith(expect.not.objectContaining({ eta: expect.anything() }))
+  })
 })

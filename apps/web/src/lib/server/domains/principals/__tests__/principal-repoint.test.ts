@@ -128,7 +128,8 @@ describe('REPOINT_STEPS registry', () => {
     it('fills the target from the source via one conditional UPDATE', async () => {
       await repointPrincipalActivity(tx, FROM, TO)
 
-      expect(opsFor('principal')).toEqual(['update:principal'])
+      // Two principal consolidation UPDATEs: contact_email then company_id.
+      expect(opsFor('principal')).toEqual(['update:principal', 'update:principal'])
       // The SET pulls the source email with a correlated subquery.
       expect(mockUpdateSet).toHaveBeenCalledWith({
         contactEmail: expect.objectContaining({ _type: 'sql' }),
@@ -142,6 +143,24 @@ describe('REPOINT_STEPS registry', () => {
       // Fill-if-empty is enforced in the WHERE: a populated target matches
       // zero rows, and a source without an email writes NULL over NULL.
       expect(isNull).toHaveBeenCalledWith('principal.contactEmail')
+    })
+  })
+
+  describe('company_id consolidation (user wins, source fills gaps)', () => {
+    it('fills the target company from the source via one conditional UPDATE', async () => {
+      await repointPrincipalActivity(tx, FROM, TO)
+
+      // The SET pulls the source company with a correlated subquery, mirroring
+      // the contact_email step.
+      expect(mockUpdateSet).toHaveBeenCalledWith({
+        companyId: expect.objectContaining({ _type: 'sql' }),
+      })
+    })
+
+    it('never overwrites a set target company_id (guarded by IS NULL in the WHERE)', async () => {
+      await repointPrincipalActivity(tx, FROM, TO)
+
+      expect(isNull).toHaveBeenCalledWith('principal.companyId')
     })
   })
 })

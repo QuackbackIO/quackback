@@ -152,6 +152,33 @@ function collisionRepoint(
 }
 
 /**
+ * A fill-if-empty attribute consolidation on the principal itself (not a
+ * re-point): the source value fills the target only when the target's own
+ * column is still NULL (user wins, source fills gaps). A source with no value
+ * writes NULL over the target's NULL — a no-op.
+ */
+function fillIfEmpty(column: string, description: string): RepointStep {
+  const key = columnKey(column)
+  const dbTable = principal as RepointTable
+  return {
+    table: 'principal',
+    columns: [column],
+    description,
+    async run(tx, { from, to }) {
+      // The SET pulls the source value via a correlated subquery (a raw uuid,
+      // so no TypeID mapping); the IS NULL guard makes a populated target match
+      // zero rows.
+      await tx
+        .update(dbTable)
+        .set({
+          [key]: sql`(SELECT source.${sql.raw(column)} FROM principal source WHERE source.id = ${toUuid(from)})`,
+        })
+        .where(and(eq(dbTable.id, to), isNull(dbTable[key])))
+    },
+  }
+}
+
+/**
  * Ordered re-point steps. Ordering constraints:
  * - in_app_notifications must run before post_comments (it finds the anon
  *   user's comments by principal_id).
@@ -277,24 +304,14 @@ export const REPOINT_STEPS: RepointStep[] = [
     ['article_id'],
     'Help-center article feedback; unique (article_id, principal_id). The identified vote wins: colliding anon rows are dropped.'
   ),
-  {
-    table: 'principal',
-    columns: ['contact_email'],
-    description:
-      'Attribute consolidation, not a re-point: contact_email fills the target only when the target has none (user wins, lead fills gaps).',
-    async run(tx, { from, to }) {
-      // Single conditional UPDATE: the SET pulls the source email via a
-      // correlated subquery, and the IS NULL guard in the WHERE enforces
-      // fill-if-empty (a populated target matches zero rows). A source with
-      // no contact_email writes NULL over the target's NULL — a no-op.
-      await tx
-        .update(principal)
-        .set({
-          contactEmail: sql`(SELECT source.contact_email FROM principal source WHERE source.id = ${toUuid(from)})`,
-        })
-        .where(and(eq(principal.id, to), isNull(principal.contactEmail)))
-    },
-  },
+  fillIfEmpty(
+    'contact_email',
+    'Attribute consolidation, not a re-point: contact_email fills the target only when the target has none (user wins, lead fills gaps).'
+  ),
+  fillIfEmpty(
+    'company_id',
+    'Attribute consolidation, not a re-point: company_id fills the target only when the target has none (user wins, source fills gaps), mirroring contact_email.'
+  ),
 ]
 
 /**

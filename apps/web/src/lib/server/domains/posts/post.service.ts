@@ -50,6 +50,7 @@ import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { canCreatePost, ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy'
 import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
+import { startOfUtcMonth } from '@/lib/shared/utils/date'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
@@ -397,6 +398,11 @@ export async function updatePost(
   }
   if (input.statusId !== undefined) updateData.statusId = input.statusId
   if (input.ownerPrincipalId !== undefined) updateData.ownerPrincipalId = input.ownerPrincipalId
+  if (input.eta !== undefined) {
+    // ETAs are month-granular; truncate to the first of the UTC month here so
+    // the invariant holds no matter which caller supplies the timestamp.
+    updateData.eta = input.eta ? startOfUtcMonth(input.eta) : null
+  }
 
   // Update the post only if there's data to update
   let updatedPost: Post

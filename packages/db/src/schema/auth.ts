@@ -22,6 +22,7 @@ import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { apiKeys } from './api-keys'
 import { integrations } from './integrations'
+import { companies } from './companies'
 
 /**
  * User table - User identities for the application
@@ -523,6 +524,13 @@ export const principal = pgTable(
     chatAvailability: text('chat_availability', { enum: ['online', 'away'] })
       .notNull()
       .default('online'),
+    // The B2B company this person belongs to (support platform §4.4). Soft-owned
+    // FK: set null on company delete so people are never orphaned. Filled on
+    // anonymous-to-identified merge via the contact_email rule (user wins,
+    // source only fills a gap).
+    companyId: typeIdColumnNullable('company')('company_id').references(() => companies.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => [
     // Ensure one principal record per human user (partial index excludes service principals)
@@ -545,6 +553,10 @@ export const principal = pgTable(
       'btree',
       sql`lower(display_name) text_pattern_ops`
     ),
+    // Company -> people lookups (sidebar roster, member counts).
+    index('principal_company_id_idx')
+      .on(table.companyId)
+      .where(sql`"company_id" IS NOT NULL`),
   ]
 )
 
@@ -752,6 +764,10 @@ export const principalRelations = relations(principal, ({ one, many }) => ({
   user: one(user, {
     fields: [principal.userId],
     references: [user.id],
+  }),
+  company: one(companies, {
+    fields: [principal.companyId],
+    references: [companies.id],
   }),
   createdApiKeys: many(apiKeys, { relationName: 'apiKeyCreator' }),
   apiKey: many(apiKeys, { relationName: 'apiKeyPrincipal' }),

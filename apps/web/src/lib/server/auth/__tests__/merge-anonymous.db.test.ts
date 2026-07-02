@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 import {
   createId,
   type BoardId,
+  type CompanyId,
   type ConversationId,
   type PostCommentId,
   type PostId,
@@ -28,6 +29,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   account,
   boards,
+  companies,
   conversationMessages,
   conversations,
   eq,
@@ -56,7 +58,11 @@ const fixture = await createDbTestFixture({
   probe: async (db) => {
     // Schema-currency probe over the seeded tables + merge-critical columns;
     // a stale test DB skips the suite instead of failing it mid-test.
-    await db.select({ id: principal.id, email: principal.contactEmail }).from(principal).limit(0)
+    await db
+      .select({ id: principal.id, email: principal.contactEmail, company: principal.companyId })
+      .from(principal)
+      .limit(0)
+    await db.select({ id: companies.id }).from(companies).limit(0)
     await db.select({ id: user.id, ext: user.externalId }).from(user).limit(0)
     await db.select({ id: session.id }).from(session).limit(0)
     await db.select({ id: account.id }).from(account).limit(0)
@@ -81,6 +87,7 @@ async function seedIdentity(opts: {
   name: string
   email?: string | null
   contactEmail?: string | null
+  companyId?: CompanyId | null
 }): Promise<SeededIdentity> {
   const userId = createId('user') as UserId
   const principalId = createId('principal') as PrincipalId
@@ -97,9 +104,16 @@ async function seedIdentity(opts: {
     type: opts.type,
     displayName: opts.name,
     contactEmail: opts.contactEmail ?? null,
+    companyId: opts.companyId ?? null,
     createdAt: new Date(),
   })
   return { userId, principalId }
+}
+
+async function seedCompany(name: string): Promise<CompanyId> {
+  const id = createId('company') as CompanyId
+  await testDb.insert(companies).values({ id, name })
+  return id
 }
 
 async function seedSession(userId: UserId): Promise<string> {
@@ -141,10 +155,12 @@ describe.skipIf(!fixture.available)('principal merge (real DB, rolled back)', ()
 
   describe('mergeAnonymousToIdentified', () => {
     it('moves every seeded activity row to the survivor and deletes the anonymous identity', async () => {
+      const companyId = await seedCompany('Acme Inc')
       const anon = await seedIdentity({
         type: 'anonymous',
         name: 'Curious Penguin',
         contactEmail: 'visitor@example.com',
+        companyId,
       })
       const target = await seedIdentity({
         type: 'user',
@@ -258,12 +274,14 @@ describe.skipIf(!fixture.available)('principal merge (real DB, rolled back)', ()
       expect(messages.find((m) => m.senderType === 'visitor')?.principalId).toBe(target.principalId)
       expect(messages.find((m) => m.senderType === 'system')?.principalId).toBeNull()
 
-      // contact_email fill-if-empty: the empty target takes the lead's email.
+      // contact_email + company_id fill-if-empty: the empty target takes the
+      // lead's email and company.
       const [targetPrincipal] = await testDb
         .select()
         .from(principal)
         .where(eq(principal.id, target.principalId))
       expect(targetPrincipal.contactEmail).toBe('visitor@example.com')
+      expect(targetPrincipal.companyId).toBe(companyId)
 
       // Anonymous identity fully torn down.
       await expect(
@@ -278,15 +296,19 @@ describe.skipIf(!fixture.available)('principal merge (real DB, rolled back)', ()
     })
 
     it('never overwrites a populated target contact_email and merges a no-activity anon cleanly', async () => {
+      const anonCompany = await seedCompany('Lead Co')
+      const targetCompany = await seedCompany('Existing Co')
       const anon = await seedIdentity({
         type: 'anonymous',
         name: 'Curious Penguin',
         contactEmail: 'lead@example.com',
+        companyId: anonCompany,
       })
       const target = await seedIdentity({
         type: 'user',
         name: 'Jane Doe',
         contactEmail: 'existing@example.com',
+        companyId: targetCompany,
       })
 
       await mergeAnonymousToIdentified({
@@ -302,6 +324,8 @@ describe.skipIf(!fixture.available)('principal merge (real DB, rolled back)', ()
         .from(principal)
         .where(eq(principal.id, target.principalId))
       expect(targetPrincipal.contactEmail).toBe('existing@example.com')
+      // A populated target company is never overwritten by the source.
+      expect(targetPrincipal.companyId).toBe(targetCompany)
       await expect(
         testDb.select().from(principal).where(eq(principal.id, anon.principalId))
       ).resolves.toHaveLength(0)

@@ -36,7 +36,7 @@ import { AuthVoteButton } from '@/components/public/auth-vote-button'
 import { AuthSubscriptionBell } from '@/components/public/auth-subscription-bell'
 import { VotersAvatarStack } from '@/components/admin/feedback/voters-avatar-stack'
 import { SOURCE_TYPE_LABELS, SourceTypeIcon } from '@/components/admin/feedback/source-type-icon'
-import { cn, getInitials } from '@/lib/shared/utils'
+import { cn, getInitials, formatMonthYear } from '@/lib/shared/utils'
 import type { PostStatusEntity } from '@/lib/shared/db-types'
 import type { PostId, PostStatusId, PostTagId, RoadmapId, BoardId } from '@quackback/ids'
 
@@ -246,6 +246,8 @@ interface MetadataSidebarProps {
   /** Principal ID of the author (used to link to admin user detail) */
   authorPrincipalId?: string | null
   createdAt: Date
+  /** Target ship date (time-based roadmap); rendered as a "Mar 2027" chip. */
+  eta?: Date | string | null
   tags?: Array<{ id: string; name: string; color: string }>
   roadmaps?: Array<{ id: string; name: string; slug: string }>
 
@@ -260,6 +262,8 @@ interface MetadataSidebarProps {
   allRoadmaps?: Array<{ id: string; name: string; slug: string }>
   /** Callback when status changes */
   onStatusChange?: (statusId: PostStatusId) => Promise<void>
+  /** Callback when the ETA is set (ISO string) or cleared (null) */
+  onEtaChange?: (eta: string | null) => Promise<void>
   /** Callback when tags change */
   onTagsChange?: (tagIds: PostTagId[]) => Promise<void>
   /** Callback when roadmap added */
@@ -303,6 +307,7 @@ export function MetadataSidebar({
   authorAvatarUrl,
   authorPrincipalId,
   createdAt,
+  eta,
   tags = [],
   roadmaps = [],
   canEdit = false,
@@ -310,6 +315,7 @@ export function MetadataSidebar({
   allTags = [],
   allRoadmaps = [],
   onStatusChange,
+  onEtaChange,
   onTagsChange,
   onRoadmapAdd,
   onRoadmapRemove,
@@ -328,8 +334,23 @@ export function MetadataSidebar({
   const [tagOpen, setTagOpen] = useState(false)
   const [roadmapOpen, setRoadmapOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
+  const [etaOpen, setEtaOpen] = useState(false)
   const [sourceQuoteOpen, setSourceQuoteOpen] = useState(false)
   const [pendingRoadmapId, setPendingRoadmapId] = useState<string | null>(null)
+
+  const etaLabel = formatMonthYear(eta)
+  // Month input value ("YYYY-MM"), derived in UTC to match the stored ETA.
+  const etaMonthValue = eta ? new Date(eta).toISOString().slice(0, 7) : ''
+  const handleEtaChange = async (value: string) => {
+    if (!onEtaChange || !value) return
+    await onEtaChange(new Date(`${value}-01T00:00:00.000Z`).toISOString())
+    setEtaOpen(false)
+  }
+  const handleEtaClear = async () => {
+    if (!onEtaChange) return
+    await onEtaChange(null)
+    setEtaOpen(false)
+  }
 
   // Fetch subscription status for the bell (only in portal mode)
   const { data: sidebarData } = useQuery({
@@ -494,6 +515,67 @@ export function MetadataSidebar({
             <NoneLabel />
           )}
         </div>
+
+        {/* ETA (time-based roadmap). Read: a "Mar 2027" chip; admin: month picker. */}
+        {(canEdit || etaLabel) && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CalendarIcon className="h-4 w-4" />
+              <span>
+                <FormattedMessage id="portal.postDetail.metadata.eta" defaultMessage="ETA" />
+              </span>
+            </div>
+            {canEdit && onEtaChange ? (
+              <Popover open={etaOpen} onOpenChange={setEtaOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    className={cn(
+                      'text-sm font-medium text-end',
+                      etaLabel ? 'text-foreground' : 'text-muted-foreground/70',
+                      'hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    {etaLabel ??
+                      intl.formatMessage({
+                        id: 'portal.postDetail.metadata.setEta',
+                        defaultMessage: 'Set ETA',
+                      })}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-2 space-y-2" align="end" sideOffset={4}>
+                  <input
+                    type="month"
+                    value={etaMonthValue}
+                    disabled={isUpdating}
+                    onChange={(e) => handleEtaChange(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+                    aria-label={intl.formatMessage({
+                      id: 'portal.postDetail.metadata.eta',
+                      defaultMessage: 'ETA',
+                    })}
+                  />
+                  {etaLabel && (
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={handleEtaClear}
+                      className="w-full text-start text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    >
+                      <FormattedMessage
+                        id="portal.postDetail.metadata.clearEta"
+                        defaultMessage="Clear ETA"
+                      />
+                    </button>
+                  )}
+                </PopoverContent>
+              </Popover>
+            ) : etaLabel ? (
+              <span className="text-sm font-medium text-foreground text-end">{etaLabel}</span>
+            ) : null}
+          </div>
+        )}
 
         {/* Board */}
         <div className="flex items-center justify-between">

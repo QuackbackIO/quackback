@@ -366,6 +366,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       ...serializable,
       contentJson: result.contentJson ?? {},
       createdAt: toISOString(result.createdAt),
+      eta: result.eta ? toISOString(result.eta) : null,
       comments: result.comments.map(serializeComment),
       mergeInfo,
       mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,

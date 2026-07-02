@@ -136,6 +136,12 @@ export type PostActivityId = TypeId<'post_activity'>
 /** Visitor analytics pageview ID - e.g., pv_01h455vb4pex5vsknk084sn02q */
 export type PageViewId = TypeId<'pv'>
 
+/** Company (B2B customer account) ID - e.g., company_01h455vb4pex5vsknk084sn02q */
+export type CompanyId = TypeId<'company'>
+
+/** Assistant involvement ID - e.g., assistant_involvement_01h455vb4pex5vsknk084sn02q */
+export type AssistantInvolvementId = TypeId<'assistant_involvement'>
+
 // ============================================
 // Feedback Aggregation Entity IDs
 // ============================================
@@ -255,6 +261,8 @@ export interface EntityIdMap {
   pipeline_log: PipelineLogId
   post_activity: PostActivityId
   page_view: PageViewId
+  company: CompanyId
+  assistant_involvement: AssistantInvolvementId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId
   feedback_signal: FeedbackSignalId

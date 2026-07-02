@@ -49,19 +49,22 @@ function serializePostDates<
     createdAt: Date | string
     updatedAt: Date | string
     deletedAt?: Date | string | null
+    eta?: Date | string | null
   },
 >(
   post: T
-): Omit<T, 'createdAt' | 'updatedAt' | 'deletedAt'> & {
+): Omit<T, 'createdAt' | 'updatedAt' | 'deletedAt' | 'eta'> & {
   createdAt: string
   updatedAt: string
   deletedAt: string | null
+  eta: string | null
 } {
   return {
     ...post,
     createdAt: toIsoString(post.createdAt),
     updatedAt: toIsoString(post.updatedAt),
     deletedAt: toIsoStringOrNull(post.deletedAt),
+    eta: toIsoStringOrNull(post.eta),
   }
 }
 
@@ -115,6 +118,12 @@ const updatePostSchema = z.object({
 const setPostOwnerSchema = z.object({
   id: z.string(),
   ownerId: z.string().nullable(),
+})
+
+const setPostEtaSchema = z.object({
+  id: z.string(),
+  // ISO datetime (first of the target month) or null to clear.
+  eta: z.string().datetime().nullable(),
 })
 
 const deletePostSchema = z.object({
@@ -455,6 +464,35 @@ export const setPostOwnerFn = createServerFn({ method: 'POST' })
       return serializePostDates(result)
     } catch (error) {
       log.error({ err: error }, 'set post owner failed')
+      throw error
+    }
+  })
+
+/**
+ * Set or clear a post ETA (time-based roadmap). First enforcement of the
+ * reserved post.set_eta permission.
+ */
+export const setPostEtaFn = createServerFn({ method: 'POST' })
+  .validator(setPostEtaSchema)
+  .handler(async ({ data }) => {
+    log.info({ post_id: data.id }, 'set post eta')
+    try {
+      const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_ETA })
+
+      const result = await updatePost(
+        data.id as PostId,
+        { eta: data.eta ? new Date(data.eta) : null },
+        {
+          principalId: auth.principal.id,
+          userId: auth.user.id as UserId,
+          email: auth.user.email,
+          displayName: auth.user.name,
+        }
+      )
+      log.info({ post_id: result.id }, 'post eta set')
+      return serializePostDates(result)
+    } catch (error) {
+      log.error({ err: error }, 'set post eta failed')
       throw error
     }
   })

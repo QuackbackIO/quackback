@@ -128,6 +128,7 @@ export function mockDbModule(): Record<string, unknown> {
       id: 'principal.id',
       userId: 'principal.userId',
       contactEmail: 'principal.contactEmail',
+      companyId: 'principal.companyId',
       __name: 'principal',
     },
     session: { userId: 'session.userId', __name: 'session' },
