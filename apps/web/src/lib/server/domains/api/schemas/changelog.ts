@@ -36,6 +36,9 @@ const ChangelogEntrySchema = z.object({
   publishedAt: NullableTimestampSchema.meta({
     description: 'When the entry was published (null if draft)',
   }),
+  displayDate: NullableTimestampSchema.meta({
+    description: 'Optional portal display override (null uses publishedAt for display)',
+  }),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 })
@@ -71,6 +74,10 @@ const UpdateChangelogEntrySchema = z
       .meta({ description: 'Set to null to unpublish' }),
     categoryName: z.string().max(200).nullable().optional(),
     productName: z.string().max(200).nullable().optional(),
+    displayDate: z.string().datetime().nullable().optional().meta({
+      description:
+        'Portal display override for published entries. Null clears override. Must not be in the future.',
+    }),
   })
   .meta({ description: 'Update changelog entry request body' })
 

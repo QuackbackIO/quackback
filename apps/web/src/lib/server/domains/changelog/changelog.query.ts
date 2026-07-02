@@ -194,6 +194,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       categoryId: entry.categoryId,
       productId: entry.productId,
       publishedAt: entry.publishedAt,
+      displayDate: entry.displayDate,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       author: entry.principalId ? (authorMap.get(entry.principalId) ?? null) : null,

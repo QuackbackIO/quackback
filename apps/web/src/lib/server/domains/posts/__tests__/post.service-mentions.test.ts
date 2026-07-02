@@ -195,6 +195,7 @@ vi.mock('@/lib/server/domains/activity/activity.service', () => ({
 
 vi.mock('@/lib/server/markdown-tiptap', () => ({
   markdownToTiptapJson: vi.fn(() => ({ type: 'doc', content: [] })),
+  contentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
 }))
 
 vi.mock('@/lib/server/content/rehost-images', () => ({

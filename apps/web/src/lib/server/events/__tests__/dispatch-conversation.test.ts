@@ -9,6 +9,7 @@ import {
   dispatchMessageCreated,
   dispatchMessageNoteCreated,
   dispatchConversationCsatSubmitted,
+  dispatchConversationCsatCommentAdded,
 } from '../dispatch'
 import type { EventConversationData, EventConversationRef, EventMessageData } from '../types'
 
@@ -16,7 +17,7 @@ const actor = { type: 'user' as const, principalId: 'principal_v', displayName: 
 const convData: EventConversationData = {
   id: 'conversation_1',
   status: 'open',
-  channel: 'live_chat',
+  channel: 'messenger',
   priority: 'none',
   subject: 'Hi',
   visitorPrincipalId: 'principal_v',
@@ -29,7 +30,7 @@ const convData: EventConversationData = {
 const convRef: EventConversationRef = {
   id: 'conversation_1',
   status: 'open',
-  channel: 'live_chat',
+  channel: 'messenger',
   priority: 'none',
 }
 const msg: EventMessageData = {
@@ -79,6 +80,24 @@ describe('conversation/message dispatch', () => {
     await dispatchConversationCsatSubmitted(actor, convRef, 5, 'great', '2026-06-05T01:00:00.000Z')
     const event = processEvent.mock.calls[0][0]
     expect(event.type).toBe('conversation.csat_submitted')
+    expect(event.data).toEqual({
+      conversation: convRef,
+      rating: 5,
+      comment: 'great',
+      submittedAt: '2026-06-05T01:00:00.000Z',
+    })
+  })
+
+  it('dispatchConversationCsatCommentAdded carries the rating + comment', async () => {
+    await dispatchConversationCsatCommentAdded(
+      actor,
+      convRef,
+      5,
+      'great',
+      '2026-06-05T01:00:00.000Z'
+    )
+    const event = processEvent.mock.calls[0][0]
+    expect(event.type).toBe('conversation.csat_comment_added')
     expect(event.data).toEqual({
       conversation: convRef,
       rating: 5,

@@ -25,6 +25,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
+import type { JsonValue } from '@/lib/server/audit/log'
 import { DEFAULT_OIDC_SCOPES } from '@/lib/server/auth/build-oauth-configs'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 
@@ -229,6 +230,9 @@ export type SsoTestDiagnostic = {
           hasRefreshToken: boolean
           expiresIn?: number
         }
+        /** Full decoded ID-token payload as the IdP returned it (groups, roles,
+         *  and any other non-standard claims), for claim-mapping debugging. */
+        allClaims?: Record<string, JsonValue>
       }
     | {
         ok: false

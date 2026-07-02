@@ -71,7 +71,10 @@ export interface AuthConfig {
      * Optional IdP-attribute → role mapping. When set, the SSO callback
      * resolves the user's role from a claim on the ID token instead of
      * falling back to `autoProvisionRole`. The mapping is first-match-
-     * wins against `rules`; nothing matches → `defaultRole`.
+     * wins against `rules`; when none matches, `resolveSsoRole` returns null
+     * and the caller falls back to the provider's `autoProvisionRole` (the
+     * per-provider model dropped this blob's `defaultRole`, kept here only for
+     * the legacy config shape).
      *
      * Resolved on every sign-in when `syncOnEverySignIn=true` so role
      * changes in the IdP propagate down. Default `false` keeps JIT
@@ -122,9 +125,9 @@ export interface AuthConfig {
  *    default on the login form.
  *  - `enforced: true` (with `verifiedAt: <ISO>`) — emails at this domain
  *    are hard-bound to SSO; password / magic-link / non-SSO OAuth are
- *    blocked. Toggling `enforced=true` requires the calling admin to
- *    have signed in via SSO within the bootstrap window (lockout guard)
- *    AND email-delivery configured (break-glass precondition).
+ *    blocked. Toggling `enforced=true` requires a successful test sign-in
+ *    through the owning provider (lockout guard) AND active recovery codes —
+ *    the break-glass to sign back in if the IdP is ever unavailable.
  */
 export interface VerifiedDomain {
   id: `domain_${string}`
@@ -798,7 +801,7 @@ export const FEATURE_FLAG_REGISTRY: Record<
   supportInbox: {
     label: 'Conversations',
     description:
-      'Let visitors start a live chat from the widget; messages land in a shared inbox your team works from.',
+      'Let visitors start a Messenger chat from the widget; messages land in a shared inbox your team works from.',
   },
   linkPreviews: {
     label: 'Link Previews',
@@ -824,7 +827,7 @@ export const LAB_SECTIONS: Array<{
 }> = [
   {
     title: 'Support',
-    description: 'Support your customers with live chat and a self-serve help center.',
+    description: 'Support your customers with Messenger and a self-serve help center.',
     flags: ['supportInbox', 'tickets', 'helpCenter', 'linkPreviews'],
   },
   {

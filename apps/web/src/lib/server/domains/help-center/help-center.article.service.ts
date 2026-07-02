@@ -14,9 +14,10 @@ import {
 import type { HelpCenterArticleId, HelpCenterCategoryId, PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
+import { uniqueHelpCenterSlug } from './help-center.slug'
 import type {
   HelpCenterArticleWithCategory,
   CreateArticleInput,
@@ -192,6 +193,16 @@ export async function getPublicArticleBySlug(
   return resolveArticleWithCategory(article)
 }
 
+// Fallback slug base for article titles that romanize to nothing (see
+// uniqueHelpCenterSlug). 'article', 'article-2', ...
+const FALLBACK_ARTICLE_SLUG = 'article'
+
+const findArticleSlugConflict = (slug: string) =>
+  db.query.helpCenterArticles.findFirst({
+    where: eq(helpCenterArticles.slug, slug),
+    columns: { id: true },
+  })
+
 export async function createArticle(
   input: CreateArticleInput,
   principalId: PrincipalId,
@@ -227,7 +238,11 @@ export async function createArticle(
     }
     effectivePrincipalId = principalId
   }
-  const slug = input.slug?.trim() || slugify(title)
+  const slug = await uniqueHelpCenterSlug(
+    input.slug?.trim() || slugify(title),
+    FALLBACK_ARTICLE_SLUG,
+    findArticleSlugConflict
+  )
 
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
   const contentJson = await rehostExternalImages(parsedContentJson, {
@@ -240,7 +255,9 @@ export async function createArticle(
     .values({
       categoryId: input.categoryId as HelpCenterCategoryId,
       title,
-      content,
+      // Store the markdown projection of the canonical contentJson so the
+      // article list endpoint (which omits contentJson) still serves images.
+      content: contentJsonToMarkdown(contentJson, content),
       contentJson,
       slug,
       principalId: effectivePrincipalId,
@@ -269,17 +286,29 @@ export async function updateArticle(
   const updateData: Partial<typeof helpCenterArticles.$inferInsert> = { updatedAt: new Date() }
   if (input.title !== undefined) updateData.title = input.title.trim()
   if (input.content !== undefined || input.contentJson !== undefined) {
-    if (input.content !== undefined) {
-      updateData.content = input.content.trim()
-    }
     const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
-    updateData.contentJson = await rehostExternalImages(parsed, {
+    const contentJson = await rehostExternalImages(parsed, {
       contentType: 'help-center',
     })
+    updateData.contentJson = contentJson
+    if (input.content !== undefined) {
+      updateData.content = contentJsonToMarkdown(contentJson, input.content.trim())
+    } else {
+      // contentJson-only edit (no markdown source): refresh the stored column
+      // only when the tree carries images, else leave it as-is.
+      const regenerated = contentJsonToMarkdown(contentJson, '')
+      if (regenerated) updateData.content = regenerated
+    }
   }
   if (input.categoryId !== undefined)
     updateData.categoryId = input.categoryId as HelpCenterCategoryId
-  if (input.slug !== undefined) updateData.slug = input.slug.trim()
+  if (input.slug !== undefined)
+    updateData.slug = await uniqueHelpCenterSlug(
+      input.slug.trim(),
+      FALLBACK_ARTICLE_SLUG,
+      findArticleSlugConflict,
+      id
+    )
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   const updated = await db.transaction(async (tx) => {

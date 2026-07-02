@@ -24,6 +24,7 @@ const hoisted = vi.hoisted(() => ({
       featureFlags: { helpCenter: true, supportInbox: true },
       brandingData: { logoUrl: '/brand.png', name: 'Acme' },
     },
+    userRole: 'admin' as 'admin' | 'member' | null,
   },
   myPerms: {
     workspacePermissions: ['ticket.view_all'],
@@ -144,6 +145,7 @@ beforeEach(() => {
       featureFlags: { helpCenter: true, supportInbox: true },
       brandingData: { logoUrl: '/brand.png', name: 'Acme' },
     },
+    userRole: 'admin',
   }
   hoisted.myPerms = {
     workspacePermissions: ['ticket.view_all'],
@@ -205,5 +207,23 @@ describe('AdminSidebar', () => {
     fireEvent.click(screen.getAllByText('Set yourself as away')[0])
 
     expect(hoisted.mutateMock).toHaveBeenCalledWith('away', { onError: expect.any(Function) })
+  })
+})
+
+describe('AdminSidebar — settings cog visibility', () => {
+  it('shows the settings cog to admins', () => {
+    hoisted.routeContext = { ...hoisted.routeContext, userRole: 'admin' }
+
+    const { container } = render(<AdminSidebar />)
+
+    expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBeGreaterThan(0)
+  })
+
+  it('hides the settings cog from non-admin team members', () => {
+    hoisted.routeContext = { ...hoisted.routeContext, userRole: 'member' }
+
+    const { container } = render(<AdminSidebar />)
+
+    expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBe(0)
   })
 })

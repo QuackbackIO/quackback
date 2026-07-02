@@ -13,42 +13,6 @@ import {
 import type { ParsedCssVariables } from '@/lib/shared/theme'
 import { cn } from '@/lib/shared/utils'
 
-/** Map font family names to Google Fonts URL */
-const GOOGLE_FONT_MAP: Record<string, string> = {
-  '"Inter"': 'Inter',
-  '"Roboto"': 'Roboto',
-  '"Open Sans"': 'Open+Sans',
-  '"Lato"': 'Lato',
-  '"Montserrat"': 'Montserrat',
-  '"Poppins"': 'Poppins',
-  '"Nunito"': 'Nunito',
-  '"DM Sans"': 'DM+Sans',
-  '"Plus Jakarta Sans"': 'Plus+Jakarta+Sans',
-  '"Geist"': 'Geist',
-  '"Work Sans"': 'Work+Sans',
-  '"Raleway"': 'Raleway',
-  '"Source Sans 3"': 'Source+Sans+3',
-  '"Outfit"': 'Outfit',
-  '"Manrope"': 'Manrope',
-  '"Space Grotesk"': 'Space+Grotesk',
-  '"Playfair Display"': 'Playfair+Display',
-  '"Merriweather"': 'Merriweather',
-  '"Lora"': 'Lora',
-  '"Crimson Text"': 'Crimson+Text',
-  '"Fira Code"': 'Fira+Code',
-  '"JetBrains Mono"': 'JetBrains+Mono',
-}
-
-function getGoogleFontsUrl(fontFamily: string | undefined): string | null {
-  if (!fontFamily) return null
-  for (const [cssName, googleName] of Object.entries(GOOGLE_FONT_MAP)) {
-    if (fontFamily.includes(cssName)) {
-      return `https://fonts.googleapis.com/css2?family=${googleName}:wght@400;500;600;700&display=swap`
-    }
-  }
-  return null
-}
-
 interface ThemePreviewProps {
   previewMode: 'light' | 'dark'
   /** Parsed CSS variables from the theme CSS (source of truth) */
@@ -72,26 +36,22 @@ export function ThemePreview({ previewMode, cssVariables }: ThemePreviewProps) {
   const cssVars = useMemo(() => ({ ...modeVars, ...COMPONENT_ALIASES }), [modeVars])
 
   const fontFamily = modeVars['--font-sans'] || DEFAULT_FONT
-  const googleFontsUrl = useMemo(() => getGoogleFontsUrl(fontFamily), [fontFamily])
 
   return (
-    <>
-      {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
-      <div
-        className="rounded-lg border overflow-hidden"
-        style={
-          {
-            ...cssVars,
-            backgroundColor: 'var(--background)',
-            borderColor: 'var(--border)',
-            color: 'var(--foreground)',
-            fontFamily,
-          } as React.CSSProperties
-        }
-      >
-        <PortalPreview />
-      </div>
-    </>
+    <div
+      className="rounded-lg border overflow-hidden"
+      style={
+        {
+          ...cssVars,
+          backgroundColor: 'var(--background)',
+          borderColor: 'var(--border)',
+          color: 'var(--foreground)',
+          fontFamily,
+        } as React.CSSProperties
+      }
+    >
+      <PortalPreview />
+    </div>
   )
 }
 

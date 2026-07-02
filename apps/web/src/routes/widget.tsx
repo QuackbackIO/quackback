@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 import { z } from 'zod'
-import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
+import { generateThemeCSS } from '@/lib/shared/theme'
 import { resolveLocale } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
@@ -129,7 +129,6 @@ export const Route = createFileRoute('/widget')({
       themeMode,
       themeStyles,
       customCss,
-      googleFontsUrl: getGoogleFontsUrl(brandingConfig),
       portalUser,
       portalSessionToken,
       hmacRequired: widgetContext.publicConfig.hmacRequired ?? false,
@@ -147,7 +146,6 @@ function WidgetLayout() {
   const {
     themeStyles,
     customCss,
-    googleFontsUrl,
     portalUser,
     portalSessionToken,
     hmacRequired,
@@ -163,7 +161,6 @@ function WidgetLayout() {
       initialLocale={locale}
       widgetContextToken={widgetContextToken}
     >
-      {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
       <style

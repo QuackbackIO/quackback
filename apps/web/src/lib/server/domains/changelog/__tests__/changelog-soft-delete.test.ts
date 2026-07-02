@@ -96,6 +96,17 @@ function selectChainResolving(rows: unknown[]): unknown {
   return chain
 }
 
+// Chainable mock for the entries query: `db.select().from().where().orderBy().limit()`.
+// Resolves with the rows you provide when `.limit()` is awaited.
+function entriesListChain(rows: unknown[]): unknown {
+  const chain: Record<string, unknown> = {}
+  chain.from = () => chain
+  chain.where = () => chain
+  chain.orderBy = () => chain
+  chain.limit = () => Promise.resolve(rows)
+  return chain
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockStatusesFindMany.mockResolvedValue([])
@@ -127,7 +138,7 @@ describe('listPublicChangelogs', () => {
     const { listPublicChangelogs } = await import('../changelog.public')
     const { isNull } = await import('@/lib/server/db')
 
-    mockEntryFindMany.mockResolvedValueOnce([])
+    mockSelect.mockReturnValueOnce(entriesListChain([]))
 
     await listPublicChangelogs({})
 
@@ -142,8 +153,9 @@ describe('listPublicChangelogs', () => {
     // preserves it precisely so pagination has an anchor.
     mockEntryFindFirst.mockResolvedValueOnce({
       publishedAt: new Date('2026-01-01'),
+      displayDate: null,
     })
-    mockEntryFindMany.mockResolvedValueOnce([])
+    mockSelect.mockReturnValueOnce(entriesListChain([]))
 
     await listPublicChangelogs({ cursor: 'cl_cursor' })
 
@@ -156,12 +168,13 @@ describe('listPublicChangelogs', () => {
       )
     expect(cursorEqCalls.length).toBe(1)
 
-    // The pagination filter (lt publishedAt) was applied, so the user
-    // doesn't fall back to the first page.
-    const ltPublishedAtCalls = vi
+    // The pagination filter was applied on the effective display date
+    // (coalesce(display_date, published_at)), so the user doesn't fall
+    // back to the first page.
+    const ltEffectiveDateCalls = vi
       .mocked(lt)
-      .mock.calls.filter((args) => (args[0] as unknown) === changelogEntriesTable.publishedAt)
-    expect(ltPublishedAtCalls.length).toBeGreaterThanOrEqual(1)
+      .mock.calls.filter((args) => (args[0] as { kind?: string })?.kind === 'sql')
+    expect(ltEffectiveDateCalls.length).toBeGreaterThanOrEqual(1)
   })
 })
 

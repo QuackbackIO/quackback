@@ -15,6 +15,7 @@ import { getBootstrapData, type BootstrapData } from '@/lib/server/functions/boo
 import type { TenantSettings } from '@/lib/shared/types/settings'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
 import { ThemeProvider } from '@/components/theme-provider'
+import { resolveDocumentTheme } from '@/lib/shared/theme'
 import { Toaster } from '@/components/ui/sonner'
 import { DefaultErrorPage } from '@/components/shared/error-page'
 import { OttHandler } from '@/components/shared/ott-handler'
@@ -28,6 +29,7 @@ export interface RouterContext {
   settings?: TenantSettings | null
   userRole?: 'admin' | 'member' | 'user' | null
   themeCookie?: BootstrapData['themeCookie']
+  prefersColorScheme?: BootstrapData['prefersColorScheme']
   managedFieldPaths?: string[]
   registeredAuthProviders?: string[]
   acceptLanguageLocale?: SupportedLocale
@@ -58,6 +60,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       settings,
       userRole,
       themeCookie,
+      prefersColorScheme,
       managedFieldPaths,
       registeredAuthProviders,
       acceptLanguageLocale,
@@ -114,6 +117,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       settings: redactedSettings,
       userRole,
       themeCookie,
+      prefersColorScheme,
       managedFieldPaths,
       registeredAuthProviders,
       acceptLanguageLocale,
@@ -179,8 +183,12 @@ function RootComponent() {
  * (e.g. when the error occurred during beforeLoad).
  */
 function MinimalDocument({ children }: Readonly<{ children: ReactNode }>) {
+  // No route context here, so the theme is unknown — fall back to the same
+  // OS-driven canvas the helper uses for `system`, so the error page doesn't
+  // white-flash either.
+  const { colorScheme } = resolveDocumentTheme('system')
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" style={{ colorScheme }} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -214,7 +222,8 @@ class SafeRootDocument extends Component<{ children: ReactNode }, { hasError: bo
 const NON_PORTAL_PREFIXES = ['/admin', '/onboarding', '/api', '/complete-signup']
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  const { settings, themeCookie, acceptLanguageLocale } = Route.useRouteContext()
+  const { settings, themeCookie, prefersColorScheme, acceptLanguageLocale } =
+    Route.useRouteContext()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // structuralSharing keeps the array reference stable across store updates that
   // don't change the matched routes, so RootDocument doesn't re-render every tick.
@@ -239,6 +248,16 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // We pass the resolved default so the script knows what to apply.
   const defaultTheme = forcedTheme ?? themeCookie ?? 'system'
 
+  // ...but the script can't color the very first canvas the browser paints
+  // during load, so when the theme is known we also commit the class and
+  // color-scheme on the SSR <html> — otherwise dark users get a white flash.
+  // `system` is resolved from the Sec-CH-Prefers-Color-Scheme hint when the
+  // browser sent it, so even system users get a fully server-rendered theme.
+  const { className: themeClass, colorScheme } = resolveDocumentTheme(
+    defaultTheme,
+    prefersColorScheme
+  )
+
   // Advertise the rendered language on the document during SSR so non-English
   // visitors don't get an English `<html lang>` (and so RTL locales aren't laid
   // out LTR until hydration). Decided from the matched route IDs so only
@@ -249,8 +268,19 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const resolvedLocale = widgetOverride ?? acceptLanguageLocale ?? DEFAULT_LOCALE
   const { lang, dir } = htmlLangDir(documentLocale(routeIds, resolvedLocale))
 
+  // suppressHydrationWarning stays: next-themes' inline script sets the theme
+  // class on <html> before React hydrates, and for `system` without the client
+  // hint (Firefox/Safari) the server can't know the OS preference, so the SSR
+  // markup and the hydrated DOM differ by design. This silences that one
+  // expected mismatch (one element, one level).
   return (
-    <html lang={lang} dir={dir} suppressHydrationWarning>
+    <html
+      lang={lang}
+      dir={dir}
+      className={themeClass}
+      style={{ colorScheme }}
+      suppressHydrationWarning
+    >
       <head>
         <HeadContent />
       </head>

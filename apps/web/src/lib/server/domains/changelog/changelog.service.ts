@@ -19,7 +19,10 @@ import {
   postStatuses,
   eq,
   and,
+  asc,
   isNull,
+  isNotNull,
+  lte,
   inArray,
 } from '@/lib/server/db'
 import type {
@@ -31,7 +34,7 @@ import type {
 } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { slugify } from '@/lib/shared/utils'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import {
   buildEventActor,
@@ -39,10 +42,21 @@ import {
   dispatchChangelogCreated,
   dispatchChangelogUpdated,
   dispatchChangelogDeleted,
+  type EventActor,
 } from '@/lib/server/events/dispatch'
-import type { EventActor } from '@/lib/server/events/dispatch'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
 import { logger } from '@/lib/server/logger'
+import { isSameDay } from 'date-fns'
+import type {
+  CreateChangelogInput,
+  UpdateChangelogInput,
+  ChangelogEntryWithDetails,
+  PublishState,
+  ChangelogAuthor,
+  ChangelogCategorySummary,
+  ChangelogLinkedPost,
+  ChangelogProductSummary,
+} from './changelog.types'
 
 const log = logger.child({ component: 'changelog' })
 
@@ -63,16 +77,6 @@ function changelogRef(entry: ChangelogEntryWithDetails) {
     updatedAt: entry.updatedAt ? entry.updatedAt.toISOString() : null,
   }
 }
-import type {
-  CreateChangelogInput,
-  UpdateChangelogInput,
-  ChangelogEntryWithDetails,
-  PublishState,
-  ChangelogAuthor,
-  ChangelogCategorySummary,
-  ChangelogLinkedPost,
-  ChangelogProductSummary,
-} from './changelog.types'
 
 // ============================================================================
 // Create
@@ -108,6 +112,21 @@ export async function createChangelog(
   const categoryId = await resolveChangelogCategory(input.categoryId, input.categoryName)
   const productId = await resolveChangelogProduct(input.productId, input.productName)
 
+  if (input.displayDate != null) {
+    if (input.publishState.type !== 'published') {
+      throw new ValidationError(
+        'VALIDATION_ERROR',
+        'Display date can only be set on published changelog entries'
+      )
+    }
+    validateDisplayDate(publishedAt, input.displayDate)
+  }
+
+  const displayDate =
+    input.displayDate != null && input.publishState.type === 'published'
+      ? normalizeDisplayDate(input.displayDate, publishedAt)
+      : null
+
   // Create the changelog entry
   const parsedContentJson = input.contentJson ?? markdownToTiptapJson(content)
   const contentJson = await rehostExternalImages(parsedContentJson, {
@@ -119,12 +138,15 @@ export async function createChangelog(
     .insert(changelogEntries)
     .values({
       title,
-      content,
+      // Store the markdown projection of the canonical contentJson so every
+      // consumer of the `content` column (webhooks, notifications) sees images.
+      content: contentJsonToMarkdown(contentJson, content),
       contentJson,
       principalId: author.principalId,
       categoryId,
       productId,
       publishedAt,
+      ...(displayDate != null && { displayDate }),
     })
     .returning()
 
@@ -136,13 +158,9 @@ export async function createChangelog(
   // Dispatch event or schedule delayed job based on publish state
   const actor = buildEventActor({ principalId: author.principalId })
   if (input.publishState.type === 'published') {
-    dispatchChangelogPublished(actor, {
-      id: entry.id,
-      title: entry.title,
-      contentPreview: entry.content.slice(0, 200),
-      publishedAt: publishedAt!,
-      linkedPostCount: input.linkedPostIds?.length ?? 0,
-    }).catch((err) => log.error({ err }, 'failed to dispatch changelog published event'))
+    notifyChangelogPublished(entry.id, actor).catch((err) =>
+      log.error({ err }, 'failed to dispatch changelog published event')
+    )
   } else if (input.publishState.type === 'scheduled' && publishedAt) {
     const delayMs = publishedAt.getTime() - Date.now()
     if (delayMs > 0) {
@@ -203,7 +221,6 @@ export async function updateChangelog(
   }
 
   if (input.title !== undefined) updateData.title = input.title.trim()
-  if (input.content !== undefined) updateData.content = input.content.trim()
   if (input.categoryId !== undefined || input.categoryName !== undefined) {
     updateData.categoryId = await resolveChangelogCategory(input.categoryId, input.categoryName)
   }
@@ -212,10 +229,28 @@ export async function updateChangelog(
   }
   if (input.contentJson !== undefined || input.content !== undefined) {
     const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
-    updateData.contentJson = await rehostExternalImages(parsed, {
+    const contentJson = await rehostExternalImages(parsed, {
       contentType: 'changelog',
       principalId: existing.principalId ?? undefined,
     })
+    updateData.contentJson = contentJson
+    // Every content edit carries `input.content` (the API accepts only markdown;
+    // the editor emits markdown alongside contentJson), so the fallback reflects
+    // the new doc. `existing.content` is only a defensive default for a
+    // contentJson-only edit, which no caller makes.
+    updateData.content = contentJsonToMarkdown(
+      contentJson,
+      (input.content ?? existing.content).trim()
+    )
+  }
+
+  if (input.displayDate !== undefined) {
+    validateDisplayDate(existing.publishedAt, input.displayDate)
+    const publishedAtRef =
+      input.publishState !== undefined
+        ? getPublishedAtFromState(input.publishState)
+        : existing.publishedAt
+    updateData.displayDate = normalizeDisplayDate(input.displayDate, publishedAtRef)
   }
 
   // Handle publish state change
@@ -245,16 +280,12 @@ export async function updateChangelog(
       : { type: 'service' as const, displayName: 'system' }
 
     if (input.publishState.type === 'published') {
-      // Cancel any pending scheduled job, then dispatch immediately
+      // Cancel any pending scheduled job, then announce. The helper's atomic
+      // claim makes this a no-op if the entry was already announced.
       cancelScheduledDispatch(jobId).catch(() => {})
-      const updated = await getChangelogById(id)
-      dispatchChangelogPublished(actor, {
-        id,
-        title: updated.title,
-        contentPreview: updated.content.slice(0, 200),
-        publishedAt: new Date(),
-        linkedPostCount: updated.linkedPosts.length,
-      }).catch((err) => log.error({ err }, 'failed to dispatch changelog published event'))
+      notifyChangelogPublished(id, actor).catch((err) =>
+        log.error({ err }, 'failed to dispatch changelog published event')
+      )
     } else if (input.publishState.type === 'scheduled') {
       const newPublishedAt = getPublishedAtFromState(input.publishState)
       if (newPublishedAt) {
@@ -429,6 +460,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     categoryId: entry.categoryId,
     productId: entry.productId,
     publishedAt: entry.publishedAt,
+    displayDate: entry.displayDate,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     author,
@@ -437,6 +469,108 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     linkedPosts,
     status: computeStatus(entry.publishedAt),
   }
+}
+
+// ============================================================================
+// Publish notification
+// ============================================================================
+
+/**
+ * Predicates for an entry that is publicly live (published, due, not deleted)
+ * but not yet announced. Shared by the atomic claim and the reconciler so the
+ * two can't drift. Mirrors `publicChangelogConditions` in changelog.public.ts
+ * (kept separate to avoid an import cycle) plus the not-yet-notified guard, so
+ * an entry is announced exactly when it becomes publicly visible.
+ */
+function liveUnnotifiedConditions(now: Date) {
+  return [
+    isNull(changelogEntries.notifiedAt),
+    isNotNull(changelogEntries.publishedAt),
+    lte(changelogEntries.publishedAt, now),
+    isNull(changelogEntries.deletedAt),
+  ]
+}
+
+/**
+ * Announce a published changelog entry exactly once.
+ *
+ * Atomically claims the entry by flipping `notifiedAt` from null, and only
+ * for an entry that is actually live (published, not future-dated, not
+ * soft-deleted). Only the caller whose UPDATE matched a row dispatches, so
+ * concurrent publish paths and the reconciler never double-notify. If the
+ * dispatch fails the claim is released so the reconciler retries later.
+ *
+ * Returns true when this call sent the announcement, false otherwise.
+ */
+export async function notifyChangelogPublished(
+  id: ChangelogId,
+  actor: EventActor
+): Promise<boolean> {
+  const now = new Date()
+  const [claimed] = await db
+    .update(changelogEntries)
+    .set({ notifiedAt: now })
+    .where(and(eq(changelogEntries.id, id), ...liveUnnotifiedConditions(now)))
+    .returning()
+
+  if (!claimed) return false
+
+  try {
+    const linkedPosts = await db.query.changelogEntryPosts.findMany({
+      where: eq(changelogEntryPosts.changelogEntryId, id),
+      columns: { postId: true },
+    })
+    // rethrow so an enqueue failure reaches the catch below; dispatch is
+    // otherwise best-effort and would swallow it.
+    await dispatchChangelogPublished(
+      actor,
+      {
+        id: claimed.id,
+        title: claimed.title,
+        contentPreview: claimed.content.slice(0, 200),
+        publishedAt: claimed.publishedAt!,
+        linkedPostCount: linkedPosts.length,
+      },
+      { rethrow: true }
+    )
+    return true
+  } catch (err) {
+    // Release the claim so the reconciler retries; nothing went out.
+    await db
+      .update(changelogEntries)
+      .set({ notifiedAt: null })
+      .where(eq(changelogEntries.id, id))
+      .catch(() => {})
+    log.error({ err, changelog_id: id }, 'failed to dispatch changelog published event')
+    return false
+  }
+}
+
+/**
+ * Safety net for publish notifications. Finds entries that are live but were
+ * never announced (a dropped delayed-publish job, or a dispatch that failed
+ * after the synchronous publish) and notifies each via {@link
+ * notifyChangelogPublished}. Idempotent via that helper's atomic claim;
+ * intended to run on an interval under a cross-instance sweep lock.
+ *
+ * @returns the number of entries announced this pass.
+ */
+export async function reconcileChangelogNotifications(): Promise<number> {
+  const due = await db
+    .select({ id: changelogEntries.id, principalId: changelogEntries.principalId })
+    .from(changelogEntries)
+    .where(and(...liveUnnotifiedConditions(new Date())))
+    .orderBy(asc(changelogEntries.publishedAt))
+    .limit(100)
+
+  let notified = 0
+  for (const entry of due) {
+    const actor = entry.principalId
+      ? buildEventActor({ principalId: entry.principalId })
+      : { type: 'service' as const, displayName: 'scheduler' }
+    if (await notifyChangelogPublished(entry.id, actor)) notified++
+  }
+  return notified
 }
 
 // ============================================================================
@@ -575,4 +709,22 @@ export function computeStatus(publishedAt: Date | null): 'draft' | 'scheduled' |
   if (!publishedAt) return 'draft'
   if (publishedAt > new Date()) return 'scheduled'
   return 'published'
+}
+
+function normalizeDisplayDate(displayDate: Date | null, publishedAt: Date | null): Date | null {
+  if (displayDate == null || publishedAt == null) return displayDate
+  return isSameDay(displayDate, publishedAt) ? null : displayDate
+}
+
+function validateDisplayDate(publishedAt: Date | null, displayDate: Date | null): void {
+  const now = new Date()
+  if (!publishedAt || publishedAt > now) {
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      'Display date can only be set on published changelog entries'
+    )
+  }
+  if (displayDate !== null && displayDate > now) {
+    throw new ValidationError('VALIDATION_ERROR', 'Display date cannot be in the future')
+  }
 }

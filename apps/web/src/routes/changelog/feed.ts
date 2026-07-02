@@ -11,7 +11,7 @@ export const Route = createFileRoute('/changelog/feed')({
       GET: async () => {
         const [
           { config },
-          { db, changelogEntries, and, desc },
+          { db, changelogEntries, and, desc, sql },
           { publicChangelogConditions },
           { getSettingsBrandingData },
           { resolvePortalAccessForRequest },
@@ -22,6 +22,8 @@ export const Route = createFileRoute('/changelog/feed')({
           import('@/lib/server/settings-utils'),
           import('@/lib/server/functions/portal-access'),
         ])
+
+        const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
         const baseUrl = config.baseUrl
 
@@ -34,11 +36,12 @@ export const Route = createFileRoute('/changelog/feed')({
         const access = await resolvePortalAccessForRequest()
 
         const entries = access.granted
-          ? await db.query.changelogEntries.findMany({
-              where: and(...publicChangelogConditions(new Date())),
-              orderBy: [desc(changelogEntries.publishedAt)],
-              limit: 50,
-            })
+          ? await db
+              .select()
+              .from(changelogEntries)
+              .where(and(...publicChangelogConditions(new Date())))
+              .orderBy(desc(effectiveDisplayDate))
+              .limit(50)
           : []
 
         // Per-caller portal-access decisions can't share a public CDN
@@ -61,7 +64,7 @@ export const Route = createFileRoute('/changelog/feed')({
             id: entry.id,
             title: entry.title,
             content: entry.content,
-            publishedAt: entry.publishedAt!,
+            publishedAt: entry.displayDate ?? entry.publishedAt!,
             link: `${baseUrl}/changelog/${entry.id}`,
           })),
         })

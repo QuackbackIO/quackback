@@ -24,7 +24,7 @@ export type ChatSenderType = 'visitor' | 'agent' | 'system'
 /** A human side of a conversation — who acts (types, reads); 'system' is neither. */
 export type ConversationSide = Exclude<ChatSenderType, 'system'>
 /** How a conversation arrived — mirrors the conversations.channel column enum. */
-export type Channel = 'live_chat' | 'email' | 'web_form'
+export type Channel = 'messenger' | 'email' | 'web_form'
 
 /** One weekday's availability window, local to the config timezone. */
 export interface OfficeHoursDay {
@@ -144,7 +144,7 @@ export interface ConversationDTO {
   status: ConversationStatus
   /** Agent-set triage priority ('none' = unset). */
   priority: ConversationPriority
-  /** The channel the conversation arrived on ('live_chat' for widget threads). */
+  /** The channel the conversation arrived on ('messenger' for widget threads). */
   channel: Channel
   subject: string | null
   lastMessagePreview: string | null

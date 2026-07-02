@@ -139,8 +139,11 @@ function NavItem({
 
 export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
   const router = useRouter()
-  const { session, settings } = useRouteContext({ from: '__root__' })
+  const { session, settings, userRole } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // The settings area is admin-only (every tab gates on requireAuth(['admin'])).
+  // Members would only ever land on the access-denied page, so hide the cog.
+  const isAdmin = userRole === 'admin'
   const flags = settings?.featureFlags as
     | { helpCenter?: boolean; supportInbox?: boolean }
     | undefined
@@ -230,13 +233,15 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
             {/* Bottom Section */}
             <div className="flex flex-col items-center gap-3">
-              {/* Settings */}
-              <NavItem
-                href="/admin/settings"
-                icon={Cog6ToothIcon}
-                label="Settings"
-                isActive={isNavActive(pathname, '/admin/settings')}
-              />
+              {/* Settings (admin-only) */}
+              {isAdmin && (
+                <NavItem
+                  href="/admin/settings"
+                  icon={Cog6ToothIcon}
+                  label="Settings"
+                  isActive={isNavActive(pathname, '/admin/settings')}
+                />
+              )}
 
               {/* Notifications */}
               <NotificationBell />
@@ -408,19 +413,21 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                 )
               })}
               <div className="h-px bg-border/40 my-4" />
-              <Link
-                to="/admin/settings"
-                onClick={() => setMobileMenuOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
-                  'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
-                  isNavActive(pathname, '/admin/settings') &&
-                    'bg-muted/80 text-foreground font-medium'
-                )}
-              >
-                <Cog6ToothIcon className="h-5 w-5" />
-                Settings
-              </Link>
+              {isAdmin && (
+                <Link
+                  to="/admin/settings"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors',
+                    'text-muted-foreground/80 hover:text-foreground hover:bg-muted/50',
+                    isNavActive(pathname, '/admin/settings') &&
+                      'bg-muted/80 text-foreground font-medium'
+                  )}
+                >
+                  <Cog6ToothIcon className="h-5 w-5" />
+                  Settings
+                </Link>
+              )}
               <Link
                 to="/"
                 onClick={() => setMobileMenuOpen(false)}

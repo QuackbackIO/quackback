@@ -9,16 +9,14 @@
  *
  * resolveSsoRole matches the resolved claim value against the
  * mapping's rules (first-match-wins). Arrays are scanned member-wise;
- * scalars are compared via case-insensitive equality. When no rule
- * matches we fall back to `defaultRole`. When no mapping is set
- * (or the mapping is undefined), returns `null` so the caller can
- * decide whether to fall back to the legacy `autoProvisionRole`.
+ * scalars are compared via case-insensitive equality. Returns null when
+ * no rule matches (or no mapping is set) so the caller can fall back to
+ * the provider's default role (`autoProvisionRole`).
  */
 
-import type { AuthConfig } from '@/lib/server/domains/settings/settings.types'
+import type { IdentityProviderAttributeMapping } from '@/lib/server/db'
 
 type Claims = Record<string, unknown>
-type AttributeMapping = NonNullable<NonNullable<AuthConfig['ssoOidc']>['attributeMapping']>
 type Role = 'admin' | 'member' | 'user'
 
 /** Resolve a claim by dotted path OR by literal URL-shaped key. */
@@ -50,10 +48,13 @@ function matchesRule(claim: unknown, whenContains: string): boolean {
 
 /**
  * Look up the user's role from their ID-token claims. Returns null
- * when the workspace hasn't configured attribute mapping — caller
- * falls back to the legacy autoProvisionRole field in that case.
+ * when no rule matches or the workspace hasn't configured attribute
+ * mapping — the caller falls back to the provider's autoProvisionRole.
  */
-export function resolveSsoRole(claims: Claims, mapping: AttributeMapping | undefined): Role | null {
+export function resolveSsoRole(
+  claims: Claims,
+  mapping: IdentityProviderAttributeMapping | undefined
+): Role | null {
   if (!mapping) return null
   const claim = getNestedClaim(claims, mapping.claimPath)
   for (const rule of mapping.rules) {
@@ -61,5 +62,6 @@ export function resolveSsoRole(claims: Claims, mapping: AttributeMapping | undef
       return rule.role
     }
   }
-  return mapping.defaultRole
+  // No rule matched — the caller falls back to the provider's default role.
+  return null
 }

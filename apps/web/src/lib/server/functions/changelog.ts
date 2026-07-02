@@ -148,6 +148,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
           productName: data.productName,
           linkedPostIds: (data.linkedPostIds ?? []) as PostId[],
           publishState: data.publishState as PublishState,
+          ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
         },
         {
           principalId: auth.principal.id,
@@ -160,6 +161,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
         createdAt: toIsoString(entry.createdAt),
         updatedAt: toIsoString(entry.updatedAt),
         publishedAt: toIsoStringOrNull(entry.publishedAt),
+        displayDate: toIsoStringOrNull(entry.displayDate),
       }
     } catch (error) {
       log.error({ err: error }, 'create changelog failed')
@@ -187,6 +189,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
         productName: data.productName,
         linkedPostIds: data.linkedPostIds as PostId[] | undefined,
         publishState: data.publishState as PublishState | undefined,
+        ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
       })
 
       return {
@@ -194,6 +197,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
         createdAt: toIsoString(entry.createdAt),
         updatedAt: toIsoString(entry.updatedAt),
         publishedAt: toIsoStringOrNull(entry.publishedAt),
+        displayDate: toIsoStringOrNull(entry.displayDate),
       }
     } catch (error) {
       log.error({ err: error }, 'update changelog failed')
@@ -238,6 +242,7 @@ export const getChangelogFn = createServerFn({ method: 'GET' })
         createdAt: toIsoString(entry.createdAt),
         updatedAt: toIsoString(entry.updatedAt),
         publishedAt: toIsoStringOrNull(entry.publishedAt),
+        displayDate: toIsoStringOrNull(entry.displayDate),
       }
     } catch (error) {
       log.error({ err: error }, 'get changelog failed')
@@ -268,6 +273,7 @@ export const listChangelogsFn = createServerFn({ method: 'GET' })
           createdAt: toIsoString(entry.createdAt),
           updatedAt: toIsoString(entry.updatedAt),
           publishedAt: toIsoStringOrNull(entry.publishedAt),
+          displayDate: toIsoStringOrNull(entry.displayDate),
         })),
       }
     } catch (error) {

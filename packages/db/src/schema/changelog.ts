@@ -80,6 +80,9 @@ export const changelogEntries = pgTable(
       { onDelete: 'set null' }
     ),
     publishedAt: timestamp('published_at', { withTimezone: true }),
+    displayDate: timestamp('display_date', { withTimezone: true }),
+    // Timestamp the publish notification was sent; null until dispatched.
+    notifiedAt: timestamp('notified_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
