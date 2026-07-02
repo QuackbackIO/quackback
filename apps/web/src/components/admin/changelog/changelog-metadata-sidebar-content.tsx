@@ -1,18 +1,24 @@
 import { useState } from 'react'
+import { format } from 'date-fns'
 import {
   DocumentTextIcon,
   PlusIcon,
   MagnifyingGlassIcon,
   ChevronUpIcon,
   UserIcon,
+  Squares2X2Icon,
+  CubeIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { useQuery } from '@tanstack/react-query'
 import { searchShippedPostsFn } from '@/lib/server/functions/changelog'
+import { changelogQueries } from '@/lib/client/queries/changelog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import {
   SidebarRow,
@@ -23,6 +29,7 @@ import {
   type StatusOption,
 } from '@/components/shared/sidebar-primitives'
 import { cn } from '@/lib/shared/utils'
+import { Input } from '@/components/ui/input'
 import type { PostId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 
@@ -31,7 +38,15 @@ interface ChangelogMetadataSidebarContentProps {
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
+  categoryName: string
+  onCategoryNameChange: (name: string) => void
+  productName: string
+  onProductNameChange: (name: string) => void
   authorName?: string | null
+  publishedAt?: string | null
+  displayDateValue?: Date
+  onDisplayDateChange?: (value: Date | undefined) => void
+  onDisplayDateClear?: () => void
 }
 
 const PUBLISH_STATUS_OPTIONS: readonly StatusOption[] = [
@@ -45,7 +60,15 @@ export function ChangelogMetadataSidebarContent({
   onPublishStateChange,
   linkedPostIds,
   onLinkedPostsChange,
+  categoryName,
+  onCategoryNameChange,
+  productName,
+  onProductNameChange,
   authorName,
+  publishedAt,
+  displayDateValue,
+  onDisplayDateChange = () => {},
+  onDisplayDateClear = () => {},
 }: ChangelogMetadataSidebarContentProps) {
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -61,12 +84,20 @@ export function ChangelogMetadataSidebarContent({
     return tomorrow
   })
 
+  const displayPlaceholder =
+    publishedAt != null
+      ? format(new Date(publishedAt), 'MMM d, yyyy')
+      : publishState.type === 'published'
+        ? format(publishState.publishAt ?? new Date(), 'MMM d, yyyy')
+        : 'Pick a date'
+
   // Search shipped posts
   const { data: posts = [], isLoading: postsLoading } = useQuery({
     queryKey: ['shipped-posts', search],
     queryFn: () => searchShippedPostsFn({ data: { query: search || undefined, limit: 30 } }),
     staleTime: 30 * 1000,
   })
+  const { data: taxonomy } = useQuery(changelogQueries.taxonomy())
 
   // Get selected post details
   const selectedPosts = posts.filter((p) => linkedPostIds.includes(p.id))
@@ -88,6 +119,12 @@ export function ChangelogMetadataSidebarContent({
       if (publishState.type === 'scheduled') {
         onPublishStateChange({ type: 'scheduled', publishAt: date })
       }
+    }
+  }
+
+  const handleDisplayDateChange = (date: Date | undefined) => {
+    if (date) {
+      onDisplayDateChange(date)
     }
   }
 
@@ -135,6 +172,67 @@ export function ChangelogMetadataSidebarContent({
             onChange={handleDateTimeChange}
             minDate={new Date()}
             className="h-7 text-xs"
+          />
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <SidebarRow icon={<Squares2X2Icon className="h-4 w-4" />} label="Category" alignTop>
+          <Input
+            list="changelog-category-options"
+            value={categoryName}
+            onChange={(event) => onCategoryNameChange(event.target.value)}
+            placeholder="Feature"
+            className="h-8 w-36 text-xs"
+          />
+        </SidebarRow>
+        <datalist id="changelog-category-options">
+          {(taxonomy?.categories ?? []).map((category) => (
+            <option key={category.id} value={category.name} />
+          ))}
+        </datalist>
+
+        <SidebarRow icon={<CubeIcon className="h-4 w-4" />} label="Product" alignTop>
+          <Input
+            list="changelog-product-options"
+            value={productName}
+            onChange={(event) => onProductNameChange(event.target.value)}
+            placeholder="Core app"
+            className="h-8 w-36 text-xs"
+          />
+        </SidebarRow>
+        <datalist id="changelog-product-options">
+          {(taxonomy?.products ?? []).map((product) => (
+            <option key={product.id} value={product.name} />
+          ))}
+        </datalist>
+      </div>
+
+      {/* Published date shown on the public changelog - only when published */}
+      {publishState.type === 'published' && (
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <span className="flex items-center gap-1 text-sm text-muted-foreground shrink-0">
+            Published date
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <InformationCircleIcon className="h-3.5 w-3.5 text-muted-foreground/60" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[15rem]">
+                <p>
+                  The date shown on your public changelog. Changing it won&apos;t send
+                  notifications.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </span>
+          <DateTimePicker
+            value={displayDateValue}
+            onChange={handleDisplayDateChange}
+            onClear={displayDateValue !== undefined ? onDisplayDateClear : undefined}
+            maxDate={new Date()}
+            dateOnly
+            placeholder={displayPlaceholder}
+            className="h-7 min-w-0 max-w-[11rem] text-xs"
           />
         </div>
       )}

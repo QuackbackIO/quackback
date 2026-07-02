@@ -1,3 +1,4 @@
+import { isSameDay } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -23,11 +24,19 @@ interface ChangelogListItemProps {
   content: string
   status: 'draft' | 'scheduled' | 'published'
   publishedAt: string | null
+  displayDate?: string | null
   createdAt: string
   author: {
     id: PrincipalId
     name: string
     avatarUrl: string | null
+  } | null
+  category?: {
+    name: string
+    color: string | null
+  } | null
+  product?: {
+    name: string
   } | null
   linkedPosts: Array<{
     id: PostId
@@ -50,14 +59,24 @@ export function ChangelogListItem({
   content,
   status,
   publishedAt,
+  displayDate,
   createdAt,
   author,
+  category,
+  product,
   linkedPosts,
   onEdit,
   onDelete,
 }: ChangelogListItemProps) {
   const config = STATUS_CONFIG[status]
   const contentPreview = stripMarkdownPreview(content, 150)
+  const portalDisplayDate =
+    status === 'published' &&
+    displayDate &&
+    publishedAt &&
+    !isSameDay(new Date(displayDate), new Date(publishedAt))
+      ? displayDate
+      : null
 
   return (
     <div
@@ -67,7 +86,17 @@ export function ChangelogListItem({
       {/* Content */}
       <div className="flex-1 min-w-0">
         {/* Status badge */}
-        <StatusBadge name={config.label} color={config.color} className="mb-1" />
+        <div className="mb-1 flex flex-wrap items-center gap-1.5">
+          <StatusBadge name={config.label} color={config.color} />
+          {category && (
+            <StatusBadge name={category.name} color={category.color ?? 'var(--muted-foreground)'} />
+          )}
+          {product && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {product.name}
+            </span>
+          )}
+        </div>
 
         {/* Title */}
         <h3 className="font-semibold text-base text-foreground line-clamp-1">{title}</h3>
@@ -104,6 +133,19 @@ export function ChangelogListItem({
               </>
             )}
           </span>
+          {portalDisplayDate && (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-muted-foreground/70">
+                Showing as{' '}
+                {new Date(portalDisplayDate).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </span>
+            </>
+          )}
           {linkedPosts.length > 0 && (
             <span className="flex items-center gap-1 text-muted-foreground/50 ml-auto">
               <LinkIcon className="h-3.5 w-3.5" />

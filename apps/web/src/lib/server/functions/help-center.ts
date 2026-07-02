@@ -3,9 +3,16 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
-import type { HelpCenterCategoryId, HelpCenterArticleId, PrincipalId } from '@quackback/ids'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import type {
+  HelpCenterCategoryId,
+  HelpCenterArticleId,
+  PrincipalId,
+  SegmentId,
+} from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth, getOptionalAuth } from './auth-helpers'
+import { NotFoundError } from '@/lib/shared/errors'
 import {
   listCategories,
   listPublicCategories,
@@ -50,10 +57,11 @@ import {
 } from '@/lib/shared/schemas/help-center'
 import { z } from 'zod'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
+import { getWidgetRequestContext, type WidgetRequestContext } from '@/lib/server/widget/context'
+import type { HelpCenterVisibilityActor } from '@/lib/server/domains/help-center/help-center.visibility'
+
 import { logger } from '@/lib/server/logger'
-
 const log = logger.child({ component: 'help-center' })
-
 // ============================================================================
 // Helper: serialize article dates
 // ============================================================================
@@ -81,6 +89,58 @@ function serializeCategory<T extends { createdAt: Date; updatedAt: Date; deleted
   }
 }
 
+async function getWidgetContextFromServerFnHeaders(): Promise<WidgetRequestContext> {
+  const headers = getRequestHeaders()
+  const request = new Request('https://widget-context.local/help', { headers })
+  return getWidgetRequestContext(request)
+}
+
+function categoryAllowedByWidgetContext(
+  category: { id: string },
+  context: WidgetRequestContext
+): boolean {
+  if (!context.profileId) return true
+  const allowedCategoryIds = new Set(context.contentFilters.help?.categoryIds ?? [])
+  if (allowedCategoryIds.size === 0) return true
+  return allowedCategoryIds.has(category.id as HelpCenterCategoryId)
+}
+
+function articleAllowedByWidgetContext(
+  article: { id: string; categoryId?: string; category?: { id: string } },
+  context: WidgetRequestContext
+): boolean {
+  if (!context.profileId) return true
+  const helpFilters = context.contentFilters.help
+  const allowedCategoryIds = new Set(helpFilters?.categoryIds ?? [])
+  const allowedArticleIds = new Set(helpFilters?.articleIds ?? [])
+  if (
+    allowedCategoryIds.size > 0 &&
+    !allowedCategoryIds.has(
+      (article.categoryId ?? article.category?.id ?? '') as HelpCenterCategoryId
+    )
+  ) {
+    return false
+  }
+  if (allowedArticleIds.size > 0 && !allowedArticleIds.has(article.id as HelpCenterArticleId)) {
+    return false
+  }
+  return true
+}
+
+async function resolveHelpCenterActor(): Promise<HelpCenterVisibilityActor | null> {
+  const auth = await getOptionalAuth()
+  const principalId = auth?.principal?.id as PrincipalId | undefined
+  if (!principalId) return null
+
+  const { segmentIdsForPrincipal } =
+    await import('@/lib/server/domains/segments/segment-membership.service')
+  const segmentIds = await segmentIdsForPrincipal(principalId)
+  return {
+    principalId,
+    segmentIds: segmentIds as ReadonlySet<SegmentId>,
+  }
+}
+
 // ============================================================================
 // Category Server Functions
 // ============================================================================
@@ -96,8 +156,12 @@ export const listCategoriesFn = createServerFn({ method: 'GET' })
 export const listPublicCategoriesFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {
-    const categories = await listPublicCategories()
-    return categories.map(serializeCategory)
+    const actor = await resolveHelpCenterActor()
+    const categories = await listPublicCategories(actor)
+    const widgetContext = await getWidgetContextFromServerFnHeaders()
+    return categories
+      .filter((category) => categoryAllowedByWidgetContext(category, widgetContext))
+      .map(serializeCategory)
   })
 
 export const getCategoryFn = createServerFn({ method: 'GET' })
@@ -116,7 +180,8 @@ export const getPublicCategoryBySlugFn = createServerFn({ method: 'GET' })
     // help-center traffic.
     const { getPublicCategoryBySlug } =
       await import('@/lib/server/domains/help-center/help-center.category.service')
-    const category = await getPublicCategoryBySlug(data.slug)
+    const actor = await resolveHelpCenterActor()
+    const category = await getPublicCategoryBySlug(data.slug, actor)
     return serializeCategory(category)
   })
 
@@ -192,21 +257,35 @@ export const restoreArticleFn = createServerFn({ method: 'POST' })
 export const listPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(listPublicArticlesSchema)
   .handler(async ({ data }) => {
-    const result = await listPublicArticles(data)
+    const actor = await resolveHelpCenterActor()
+    const result = await listPublicArticles(data, actor)
+    const widgetContext = await getWidgetContextFromServerFnHeaders()
+    const filteredItems = result.items.filter((article) =>
+      articleAllowedByWidgetContext(article, widgetContext)
+    )
     return {
       ...result,
-      items: result.items.map(serializeArticle),
+      items: filteredItems.map(serializeArticle),
     }
   })
 
 export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
   .validator(z.object({ categoryId: z.string() }))
   .handler(async ({ data }) => {
-    const articles = await listPublicArticlesForCategory(data.categoryId)
-    return articles.map((a) => ({
-      ...a,
-      publishedAt: toIsoStringOrNull(a.publishedAt),
-    }))
+    const actor = await resolveHelpCenterActor()
+    const widgetContext = await getWidgetContextFromServerFnHeaders()
+    if (!categoryAllowedByWidgetContext({ id: data.categoryId }, widgetContext)) {
+      return []
+    }
+    const articles = await listPublicArticlesForCategory(data.categoryId, actor)
+    return articles
+      .filter((article) =>
+        articleAllowedByWidgetContext({ ...article, categoryId: data.categoryId }, widgetContext)
+      )
+      .map((a) => ({
+        ...a,
+        publishedAt: toIsoStringOrNull(a.publishedAt),
+      }))
   })
 
 export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
@@ -226,7 +305,12 @@ export const getArticleFn = createServerFn({ method: 'GET' })
 export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
   .validator(getArticleBySlugSchema)
   .handler(async ({ data }) => {
-    const article = await getPublicArticleBySlug(data.slug)
+    const actor = await resolveHelpCenterActor()
+    const article = await getPublicArticleBySlug(data.slug, actor)
+    const widgetContext = await getWidgetContextFromServerFnHeaders()
+    if (!articleAllowedByWidgetContext(article, widgetContext)) {
+      throw new NotFoundError('ARTICLE_NOT_FOUND', `Article not found`)
+    }
     const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
     return publicArticle
   })

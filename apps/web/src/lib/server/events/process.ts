@@ -46,8 +46,8 @@ const DEFAULT_JOB_OPTS = {
 }
 
 let initPromise: Promise<{
-  queue: Queue<HookJobData>
-  worker: Worker<HookJobData>
+  queue: Queue
+  worker: Worker
 }> | null = null
 
 /**
@@ -55,14 +55,16 @@ let initPromise: Promise<{
  * Uses a Promise to guard against concurrent first-call race conditions.
  * Resets on failure so transient errors don't permanently break the queue.
  */
-function ensureQueue(): Promise<Queue<HookJobData>> {
+function ensureQueue(): Promise<Queue> {
   if (!initPromise) {
     initPromise = initializeQueue().catch((err) => {
       initPromise = null
       throw err
     })
   }
-  return initPromise.then(({ queue }) => queue)
+  const promise = initPromise
+  if (!promise) throw new Error('Event queue failed to initialize')
+  return promise.then(({ queue }) => queue)
 }
 
 async function initializeQueue() {
@@ -71,15 +73,15 @@ async function initializeQueue() {
   // BullMQ duplicates this client internally for the Worker's blocking
   // commands (BLMOVE), so a single shared connection is safe and avoids
   // opening N TCP sockets per queue.
-  const queue = new Queue<HookJobData>(QUEUE_NAME, {
+  const queue = new Queue(QUEUE_NAME, {
     connection,
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<HookJobData>(
+  const worker = new Worker(
     QUEUE_NAME,
     async (job) => {
-      const { hookType, event, target, config: hookConfig } = job.data
+      const { hookType, event, target, config: hookConfig } = job.data as HookJobData
 
       // Handle delayed changelog publish sentinel
       if (hookType === '__changelog_publish__') {
@@ -98,9 +100,16 @@ async function initializeQueue() {
 
       let result: HookResult
       try {
+        // Phase 7: thread the BullMQ attempt counter into hook config so
+        // delivery handlers (e.g. webhook) can record the attempt number
+        // on each audit-log row.
+        const configWithAttempt = {
+          ...hookConfig,
+          attemptNumber: (job.attemptsMade ?? 0) + 1,
+        }
         // Pass job.id so idempotency-sensitive handlers (webhook, AI)
         // can dedupe re-runs after worker crashes.
-        result = await hook.run(event, target, hookConfig, { jobId: job.id })
+        result = await hook.run(event, target, configWithAttempt, { jobId: job.id })
       } catch (error) {
         if (isRetryableError(error)) throw error
         throw new UnrecoverableError(error instanceof Error ? error.message : 'Unknown error')
@@ -108,9 +117,7 @@ async function initializeQueue() {
 
       if (result.success) {
         if (result.externalId) {
-          persistExternalLink(job.data, result).catch((err) =>
-            log.error({ err }, 'failed to persist external link')
-          )
+          await persistExternalLink(job.data, result)
         }
         return
       }
@@ -195,24 +202,42 @@ async function updateWebhookFailureCount(data: HookJobData, errorMessage: string
  * Non-fatal — errors are logged but don't fail the hook job.
  */
 async function persistExternalLink(data: HookJobData, result: HookResult): Promise<void> {
-  // Extract postId from event data
+  // Ticket external links — use integrationId from config (set by targets.ts)
+  const ticketId = (data.event.data as { ticket?: { id?: string } }).ticket?.id
+  if (ticketId && data.event.type === 'ticket.created') {
+    const integrationId = data.config.integrationId as string | undefined
+    if (!integrationId) return
+
+    const { db, ticketExternalLinks } = await import('@/lib/server/db')
+    await db
+      .insert(ticketExternalLinks)
+      .values({
+        ticketId: ticketId as import('@quackback/ids').TicketId,
+        integrationId: integrationId as import('@quackback/ids').IntegrationId,
+        integrationType: data.hookType,
+        externalId: result.externalId!,
+        externalDisplayId: result.externalDisplayId ?? null,
+        externalUrl: result.externalUrl ?? null,
+        syncDirection: 'outbound',
+      })
+      .onConflictDoNothing()
+    return
+  }
+
+  // Post external links — use the resolved integration target when available.
   const postId = (data.event.data as { post?: { id?: string } }).post?.id
-  if (!postId) return
+  if (!postId || data.event.type !== 'post.created') return
 
-  const { db, integrations, postExternalLinks, eq } = await import('@/lib/server/db')
+  const integrationId = data.config.integrationId as string | undefined
+  if (!integrationId) return
 
-  // Look up the integration by type
-  const integration = await db.query.integrations.findFirst({
-    where: eq(integrations.integrationType, data.hookType),
-    columns: { id: true },
-  })
-  if (!integration) return
+  const { db, postExternalLinks } = await import('@/lib/server/db')
 
   await db
     .insert(postExternalLinks)
     .values({
       postId: postId as import('@quackback/ids').PostId,
-      integrationId: integration.id as import('@quackback/ids').IntegrationId,
+      integrationId: integrationId as import('@quackback/ids').IntegrationId,
       integrationType: data.hookType,
       externalId: result.externalId!,
       externalDisplayId: result.externalDisplayId ?? null,
@@ -308,47 +333,24 @@ export async function removeDelayedJob(jobId: string): Promise<void> {
 }
 
 /**
- * Handle a delayed changelog publish job.
- * Re-fetches the entry from DB to verify it's still published before dispatching.
+ * Handle a delayed changelog publish job. A thin trigger: the service helper's
+ * atomic claim handles eligibility (published, not future-dated, not deleted)
+ * and the notify-once guarantee, so a lost or duplicated job can't double-send.
  */
 async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>): Promise<void> {
   const changelogId = hookConfig.changelogId as string | undefined
   const principalId = hookConfig.principalId as string | undefined
   if (!changelogId) return
 
-  const { db, changelogEntries, eq } = await import('@/lib/server/db')
-  const entry = await db.query.changelogEntries.findFirst({
-    where: eq(changelogEntries.id, changelogId as import('@quackback/ids').ChangelogId),
-  })
-
-  if (!entry || !entry.publishedAt || entry.publishedAt > new Date()) {
-    log.debug({ changelog_id: changelogId }, 'skipping delayed changelog publish, no longer published')
-    return
-  }
-
-  // Count linked posts
-  const { changelogEntryPosts } = await import('@/lib/server/db')
-  const linkedPosts = await db.query.changelogEntryPosts.findMany({
-    where: eq(
-      changelogEntryPosts.changelogEntryId,
-      changelogId as import('@quackback/ids').ChangelogId
-    ),
-    columns: { postId: true },
-  })
-
-  const { buildEventActor, dispatchChangelogPublished } = await import('./dispatch')
+  const { notifyChangelogPublished } =
+    await import('@/lib/server/domains/changelog/changelog.service')
+  const { buildEventActor } = await import('./dispatch')
 
   const actor = principalId
     ? buildEventActor({ principalId: principalId as import('@quackback/ids').PrincipalId })
     : { type: 'service' as const, displayName: 'scheduler' }
 
-  await dispatchChangelogPublished(actor, {
-    id: entry.id,
-    title: entry.title,
-    contentPreview: entry.content.slice(0, 200),
-    publishedAt: entry.publishedAt,
-    linkedPostCount: linkedPosts.length,
-  })
+  await notifyChangelogPublished(changelogId as import('@quackback/ids').ChangelogId, actor)
 }
 
 /**

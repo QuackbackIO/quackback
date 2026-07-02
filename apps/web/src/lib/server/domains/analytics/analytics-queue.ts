@@ -24,20 +24,21 @@ interface AnalyticsJob {
   type: 'refresh-analytics'
 }
 
-let initPromise: Promise<{ queue: Queue<AnalyticsJob>; worker: Worker<AnalyticsJob> }> | null = null
+let initPromise: Promise<{ queue: Queue; worker: Worker }> | null = null
 
 async function initializeQueue() {
   const connection = getQueueRedis()
 
-  const queue = new Queue<AnalyticsJob>(QUEUE_NAME, {
+  const queue = new Queue(QUEUE_NAME, {
     connection,
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<AnalyticsJob>(
+  const worker = new Worker(
     QUEUE_NAME,
     async (job) => {
-      if (job.data.type === 'refresh-analytics') {
+      const data = job.data as AnalyticsJob
+      if (data.type === 'refresh-analytics') {
         await refreshAnalytics()
       }
     },

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
   type PostId,
   type PrincipalId,
@@ -39,10 +40,11 @@ import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscr
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { resolvePortalAccessForRequest } from './portal-access'
+import { toIsoString } from '@/lib/shared/utils'
+import { getWidgetRequestContext, type WidgetRequestContext } from '@/lib/server/widget/context'
+
 import { logger } from '@/lib/server/logger'
-
 const log = logger.child({ component: 'portal' })
-
 // Schemas
 const sortSchema = z.enum(['top', 'new', 'trending'])
 
@@ -67,6 +69,52 @@ const fetchPortalDataSchema = z.object({
     .optional(),
   responded: z.enum(['responded', 'unresponded']).optional(),
 })
+
+async function getWidgetContextFromServerFnHeaders(): Promise<WidgetRequestContext> {
+  const headers = getRequestHeaders()
+  const request = new Request('https://widget-context.local/portal', { headers })
+  return getWidgetRequestContext(request)
+}
+
+function postAllowedByWidgetFeedbackFilters(
+  post: {
+    board?: { id?: string; slug?: string } | null
+    statusId?: string | null
+    tags?: Array<{ id?: string; slug?: string }> | null
+  },
+  context: WidgetRequestContext
+): boolean {
+  if (!context.profileId) return true
+  const feedbackFilters = context.contentFilters.feedback
+  const allowedBoardIds = new Set(feedbackFilters?.boardIds ?? [])
+  const allowedBoardSlugs = new Set(feedbackFilters?.boardSlugs ?? [])
+  const allowedStatusIds = new Set(feedbackFilters?.statusIds ?? [])
+  const allowedTagIds = new Set(feedbackFilters?.tagIds ?? [])
+  const allowedTagSlugs = new Set(feedbackFilters?.tagSlugs ?? [])
+  const hasBoardFilter = allowedBoardIds.size > 0 || allowedBoardSlugs.size > 0
+  const hasStatusFilter = allowedStatusIds.size > 0
+  const hasTagFilter = allowedTagIds.size > 0 || allowedTagSlugs.size > 0
+
+  if (
+    hasBoardFilter &&
+    !allowedBoardIds.has(post.board?.id as BoardId) &&
+    !allowedBoardSlugs.has(post.board?.slug ?? '')
+  ) {
+    return false
+  }
+  if (hasStatusFilter && (!post.statusId || !allowedStatusIds.has(post.statusId as StatusId))) {
+    return false
+  }
+  if (hasTagFilter) {
+    const tags = post.tags ?? []
+    return tags.some(
+      (tag) =>
+        (tag.id && allowedTagIds.has(tag.id as TagId)) ||
+        (tag.slug && allowedTagSlugs.has(tag.slug))
+    )
+  }
+  return true
+}
 
 /**
  * Build the per-board submit/vote capability map for `actor` from already-fetched
@@ -137,6 +185,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         tags: [],
         votedPostIds: [],
         principalId: null,
+        boardPermissions: {},
       }
     }
 
@@ -205,7 +254,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
         voteCount: post.voteCount,
         authorName: post.authorName,
         principalId: post.principalId,
-        createdAt: post.createdAt.toISOString(),
+        createdAt: toIsoString(post.createdAt),
         commentCount: post.commentCount,
         tags: post.tags,
         board: post.board,
@@ -310,11 +359,8 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     const result = await getPublicPostDetail(data.postId as PostId, actor)
 
     if (!result) return null
-
-    // Helper to safely convert Date or string to ISO string
-    // Raw SQL may return dates as strings depending on the driver
-    const toISOString = (date: Date | string): string =>
-      typeof date === 'string' ? date : date.toISOString()
+    const widgetContext = await getWidgetContextFromServerFnHeaders()
+    if (!postAllowedByWidgetFeedbackFilters(result, widgetContext)) return null
 
     type CommentType = (typeof result.comments)[0]
     type SerializedComment = Omit<CommentType, 'createdAt' | 'replies'> & {
@@ -324,7 +370,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     function serializeComment(c: CommentType): SerializedComment {
       return {
         ...c,
-        createdAt: toISOString(c.createdAt),
+        createdAt: toIsoString(c.createdAt),
         replies: c.replies.map(serializeComment),
       }
     }
@@ -339,7 +385,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     const needsAnonCeiling = actor.principalType !== 'user'
     const [mergeInfo, mergedPostsList, allowAnonymous] = await Promise.all([
       getPostMergeInfo(postId, actor).then((info) =>
-        info ? { ...info, mergedAt: toISOString(info.mergedAt) } : null
+        info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
       ),
       getMergedPosts(postId),
       needsAnonCeiling ? loadAllowAnonymous() : Promise.resolve(false),
@@ -365,7 +411,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     return {
       ...serializable,
       contentJson: result.contentJson ?? {},
-      createdAt: toISOString(result.createdAt),
+      createdAt: toIsoString(result.createdAt),
       comments: result.comments.map(serializeComment),
       mergeInfo,
       mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
@@ -391,7 +437,7 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
       const result = await listPublicPosts({ ...data, page: 1, limit: 20, actor })
       return {
         ...result,
-        items: result.items.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
+        items: result.items.map((p) => ({ ...p, createdAt: toIsoString(p.createdAt) })),
       }
     } catch (error) {
       log.error({ err: error }, 'fetch public posts failed')
@@ -458,6 +504,18 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
       throw error
     }
   })
+
+export const getEffectivePortalTabConfigForCurrentUserFn = createServerFn({
+  method: 'GET',
+}).handler(async () => {
+  const auth = await getOptionalAuth()
+  if (!auth?.user?.id) {
+    return {}
+  }
+
+  const { getEffectiveTabConfigForUser } = await import('@/lib/server/domains/portal/index.server')
+  return await getEffectiveTabConfigForUser(auth.user.id as UserId)
+})
 
 export const fetchAvatars = createServerFn({ method: 'GET' })
   .validator(z.array(z.string()))
@@ -544,8 +602,8 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
       description: r.description,
       isPublic: r.isPublic,
       position: r.position,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
+      createdAt: toIsoString(r.createdAt),
+      updatedAt: toIsoString(r.updatedAt),
     }))
   } catch (error) {
     log.error({ err: error }, 'fetch public roadmaps failed')

@@ -67,9 +67,7 @@ test.describe('Changelog admin navigation', () => {
 
   test('page shows entry list or empty state', async ({ page }) => {
     // Either an h3 (entry title) or an empty-state message should be visible
-    const content = page
-      .getByText('No changelog entries yet')
-      .or(page.locator('h3').first())
+    const content = page.getByText('No changelog entries yet').or(page.locator('h3').first())
 
     await expect(content.first()).toBeVisible({ timeout: 10000 })
   })
@@ -415,8 +413,11 @@ test.describe('Changelog delete entry', () => {
 
     await page.waitForLoadState('networkidle')
 
-    const row = page.locator('h3').filter({ hasText: title })
-      .locator('xpath=ancestor::div[contains(@class,"group")]').first()
+    const row = page
+      .locator('h3')
+      .filter({ hasText: title })
+      .locator('xpath=ancestor::div[contains(@class,"group")]')
+      .first()
 
     await row.hover()
 
@@ -429,7 +430,9 @@ test.describe('Changelog delete entry', () => {
     await deleteItem.click()
 
     // Confirmation dialog should appear
-    const confirmDialog = page.getByRole('alertdialog').or(page.getByRole('dialog').filter({ hasText: /delete/i }))
+    const confirmDialog = page
+      .getByRole('alertdialog')
+      .or(page.getByRole('dialog').filter({ hasText: /delete/i }))
     await expect(confirmDialog).toBeVisible({ timeout: 5000 })
 
     // Cancel — don't actually delete
@@ -442,8 +445,11 @@ test.describe('Changelog delete entry', () => {
 
     await page.waitForLoadState('networkidle')
 
-    const row = page.locator('h3').filter({ hasText: title })
-      .locator('xpath=ancestor::div[contains(@class,"group")]').first()
+    const row = page
+      .locator('h3')
+      .filter({ hasText: title })
+      .locator('xpath=ancestor::div[contains(@class,"group")]')
+      .first()
 
     await row.hover()
     const menuBtn = row.locator('button').last()
@@ -453,9 +459,9 @@ test.describe('Changelog delete entry', () => {
     if ((await deleteItem.count()) === 0) return
     await deleteItem.click()
 
-    const confirmDialog = page.getByRole('alertdialog').or(
-      page.getByRole('dialog').filter({ hasText: /delete/i })
-    )
+    const confirmDialog = page
+      .getByRole('alertdialog')
+      .or(page.getByRole('dialog').filter({ hasText: /delete/i }))
     await expect(confirmDialog).toBeVisible({ timeout: 5000 })
 
     // Click Cancel
@@ -473,8 +479,11 @@ test.describe('Changelog delete entry', () => {
 
     await page.waitForLoadState('networkidle')
 
-    const row = page.locator('h3').filter({ hasText: title })
-      .locator('xpath=ancestor::div[contains(@class,"group")]').first()
+    const row = page
+      .locator('h3')
+      .filter({ hasText: title })
+      .locator('xpath=ancestor::div[contains(@class,"group")]')
+      .first()
 
     await row.hover()
     const menuBtn = row.locator('button').last()
@@ -484,9 +493,9 @@ test.describe('Changelog delete entry', () => {
     if ((await deleteItem.count()) === 0) return
     await deleteItem.click()
 
-    const confirmDialog = page.getByRole('alertdialog').or(
-      page.getByRole('dialog').filter({ hasText: /delete/i })
-    )
+    const confirmDialog = page
+      .getByRole('alertdialog')
+      .or(page.getByRole('dialog').filter({ hasText: /delete/i }))
     await expect(confirmDialog).toBeVisible({ timeout: 5000 })
 
     // Confirm deletion
@@ -542,10 +551,7 @@ async function createAndPublishEntry(
  * Helper: revert a published entry back to draft via the edit modal.
  * Expects to be called from /admin/changelog with the entry visible.
  */
-async function unpublishEntry(
-  page: import('@playwright/test').Page,
-  title: string
-): Promise<void> {
+async function unpublishEntry(page: import('@playwright/test').Page, title: string): Promise<void> {
   const card = entryCard(page, title)
   await card.click()
 
@@ -647,6 +653,52 @@ test.describe('Changelog - Admin/Public Publishing Pipeline', () => {
     await expect(page.locator('h2').filter({ hasText: title })).toBeVisible({ timeout: 10000 })
 
     // Clean up
+    await deleteEntryByTitle(page, title)
+  })
+
+  test('display date override appears on public /changelog', async ({ page }) => {
+    const title = `Display Date Test ${Date.now()}`
+
+    const published = await createAndPublishEntry(page, title)
+    if (!published) return
+
+    await page.waitForLoadState('networkidle')
+
+    await entryCard(page, title).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 10000 })
+
+    const displayDateLabel = dialog.getByText('Published date', { exact: true })
+    await expect(displayDateLabel).toBeVisible({ timeout: 5000 })
+
+    const displayDateRow = dialog.locator('div').filter({
+      has: page.getByText('Published date', { exact: true }),
+    })
+    await displayDateRow.getByRole('button').first().click()
+
+    const prevMonth = page.getByRole('button', { name: /previous month/i })
+    for (let i = 0; i < 24; i++) {
+      const caption = page.locator('[class*="CaptionLabel"]')
+      const text = (await caption.textContent()) ?? ''
+      if (/january 2024/i.test(text)) break
+      if ((await prevMonth.count()) === 0) break
+      await prevMonth.click()
+    }
+
+    await page.getByRole('button', { name: /^15$/ }).first().click()
+
+    await dialog.getByRole('button', { name: /update & publish/i }).click()
+    await expect(dialog).toBeHidden({ timeout: 15000 })
+    await page.waitForLoadState('networkidle')
+
+    await page.goto('/changelog')
+    await page.waitForLoadState('networkidle')
+
+    const entry = page.locator('article').filter({ hasText: title })
+    await expect(entry.locator('time').first()).toContainText('January 15, 2024', {
+      timeout: 10000,
+    })
+
     await deleteEntryByTitle(page, title)
   })
 

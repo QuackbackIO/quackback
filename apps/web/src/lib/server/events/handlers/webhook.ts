@@ -94,7 +94,10 @@ export const webhookHook: HookHandler = {
     ctx?: HookRunContext
   ): Promise<HookResult> {
     const { url } = target as WebhookTarget
-    const { secret, webhookId } = config as WebhookConfig
+    const { secret, webhookId, attemptNumber } = config as WebhookConfig & {
+      attemptNumber?: number
+    }
+    const attempt = attemptNumber ?? 1
 
     // Idempotency: if BullMQ is re-running this job after a worker crash,
     // skip the delivery — the previous attempt already POSTed (and the
@@ -108,26 +111,47 @@ export const webhookHook: HookHandler = {
 
     log.debug({ event_type: event.type, url }, 'processing webhook')
 
+    const eventId = `evt_${crypto.randomUUID().replace(/-/g, '')}`
+    const timestamp = Math.floor(Date.now() / 1000)
+
     // SSRF protection: Resolve and validate IP at delivery time
     // Note: We validate the IP but use the original hostname for the request
     // to ensure TLS certificates match. The TOCTOU window is minimal in practice.
     const parsedUrl = new URL(url)
     const ipCheck = await resolveAndValidateIP(parsedUrl.hostname)
     if (!ipCheck.valid) {
-      log.error({ url, reason: ipCheck.error }, 'ssrf blocked')
+      log.error(`[Webhook] ❌ SSRF blocked: ${ipCheck.error}`)
+      void recordAttempt({
+        webhookId,
+        eventId,
+        eventType: event.type,
+        attemptNumber: attempt,
+        status: 'blocked_ssrf',
+        errorMessage: ipCheck.error ?? 'blocked',
+        requestUrl: url,
+        requestPayloadBytes: 0,
+        signatureTimestamp: timestamp,
+      })
       return { success: false, error: ipCheck.error, shouldRetry: false }
     }
 
     // Build payload
     const payload = JSON.stringify({
-      id: `evt_${crypto.randomUUID().replace(/-/g, '')}`,
+      id: eventId,
       type: event.type,
       createdAt: event.timestamp,
       data: event.data,
     })
+    const payloadBytes = Buffer.byteLength(payload, 'utf8')
+    // Cap stored payload at ~32 KB so the audit log stays small enough to
+    // browse cheaply. Oversized payloads are dropped (NULL) and flagged so
+    // the redeliver UI can surface a friendly "payload not stored" message.
+    const PAYLOAD_STORE_MAX = 32 * 1024
+    const requestPayloadJson: unknown =
+      payloadBytes <= PAYLOAD_STORE_MAX ? JSON.parse(payload) : null
+    const requestPayloadTruncated = payloadBytes > PAYLOAD_STORE_MAX
 
     // Create HMAC signature
-    const timestamp = Math.floor(Date.now() / 1000)
     const signaturePayload = `${timestamp}.${payload}`
     const signature = crypto.createHmac('sha256', secret).update(signaturePayload).digest('hex')
 
@@ -139,6 +163,7 @@ export const webhookHook: HookHandler = {
       'X-Quackback-Event': event.type,
     }
 
+    const start = Date.now()
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -152,10 +177,35 @@ export const webhookHook: HookHandler = {
       })
 
       clearTimeout(timeoutId)
+      const latencyMs = Date.now() - start
+
+      // Read up to 500 chars of response body for the audit log.
+      let snippet: string | null = null
+      try {
+        const text = await response.text()
+        snippet = text.slice(0, 500)
+      } catch {
+        snippet = null
+      }
 
       if (response.ok) {
         log.info({ event_type: event.type, url }, 'webhook delivered')
         await updateWebhookSuccess(webhookId)
+        void recordAttempt({
+          webhookId,
+          eventId,
+          eventType: event.type,
+          attemptNumber: attempt,
+          status: 'success',
+          httpStatus: response.status,
+          requestUrl: url,
+          requestPayloadBytes: payloadBytes,
+          requestPayloadJson,
+          requestPayloadTruncated,
+          responseBodySnippet: snippet,
+          latencyMs,
+          signatureTimestamp: timestamp,
+        })
         return { success: true }
       }
 
@@ -163,8 +213,25 @@ export const webhookHook: HookHandler = {
       const error = `HTTP ${response.status}`
       log.warn({ url, status: response.status }, 'webhook delivery failed')
       const retryable = response.status >= 500 || response.status === 429
+      void recordAttempt({
+        webhookId,
+        eventId,
+        eventType: event.type,
+        attemptNumber: attempt,
+        status: retryable ? 'failed_retryable' : 'failed_terminal',
+        httpStatus: response.status,
+        errorMessage: error,
+        requestUrl: url,
+        requestPayloadBytes: payloadBytes,
+        requestPayloadJson,
+        requestPayloadTruncated,
+        responseBodySnippet: snippet,
+        latencyMs,
+        signatureTimestamp: timestamp,
+      })
       return { success: false, error, shouldRetry: retryable }
     } catch (error) {
+      const latencyMs = Date.now() - start
       let errorMsg = 'Unknown error'
       if (error instanceof Error) {
         errorMsg = error.name === 'AbortError' ? 'Request timeout' : error.message
@@ -172,9 +239,48 @@ export const webhookHook: HookHandler = {
 
       log.error({ err: error, url }, 'webhook delivery failed')
       const retryable = isRetryableError(error)
+      void recordAttempt({
+        webhookId,
+        eventId,
+        eventType: event.type,
+        attemptNumber: attempt,
+        status: retryable ? 'failed_retryable' : 'failed_terminal',
+        errorMessage: errorMsg,
+        requestUrl: url,
+        requestPayloadBytes: payloadBytes,
+        requestPayloadJson,
+        requestPayloadTruncated,
+        latencyMs,
+        signatureTimestamp: timestamp,
+      })
       return { success: false, error: errorMsg, shouldRetry: retryable }
     }
   },
+}
+
+async function recordAttempt(input: {
+  webhookId: WebhookId
+  eventId: string
+  eventType: string
+  attemptNumber: number
+  status: 'queued' | 'success' | 'failed_retryable' | 'failed_terminal' | 'blocked_ssrf'
+  httpStatus?: number | null
+  errorMessage?: string | null
+  requestUrl: string
+  requestPayloadBytes: number
+  requestPayloadJson?: unknown
+  requestPayloadTruncated?: boolean
+  responseBodySnippet?: string | null
+  latencyMs?: number | null
+  signatureTimestamp: number
+}): Promise<void> {
+  try {
+    const { recordDeliveryAttempt } =
+      await import('@/lib/server/domains/webhooks/webhook.deliveries')
+    await recordDeliveryAttempt(input)
+  } catch (err) {
+    console.warn('[Webhook] recordDeliveryAttempt failed', err)
+  }
 }
 
 /**

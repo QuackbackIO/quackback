@@ -163,4 +163,111 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
       )
     })
   )
+
+  server.resource(
+    'ticket-statuses',
+    'quackback://ticket-statuses',
+    { description: 'List all ticket workflow statuses (the workspace status catalogue)' },
+    scopeGated(auth, 'read:tickets', async () => {
+      const { listTicketStatuses } =
+        await import('@/lib/server/domains/tickets/ticket-statuses.service')
+      const statuses = await listTicketStatuses()
+      return jsonResource(
+        'ticket-statuses',
+        statuses.map((s) => ({
+          id: s.id,
+          name: s.name,
+          slug: s.slug,
+          color: s.color,
+          category: s.category,
+          position: s.position,
+          isDefault: s.isDefault,
+          isSystem: s.isSystem,
+        }))
+      )
+    })
+  )
+
+  server.resource(
+    'tickets-inbox',
+    'quackback://tickets/inbox',
+    { description: "List up to 50 tickets in the caller's inbox queue (read:tickets)" },
+    scopeGated(auth, 'read:tickets', async () => {
+      try {
+        const { listTickets } = await import('@/lib/server/domains/tickets/ticket.query')
+        const { loadPermissionSet } = await import('@/lib/server/domains/authz/authz.service')
+        const set = await loadPermissionSet(auth.principalId)
+        const result = await listTickets({
+          scope: 'my_inbox',
+          permissionSet: set,
+          limit: 50,
+        })
+        return jsonResource('tickets/inbox', {
+          tickets: result.rows.map((t) => ({
+            id: t.id,
+            subject: t.subject,
+            statusId: t.statusId,
+            priority: t.priority,
+            assigneePrincipalId: t.assigneePrincipalId,
+            primaryTeamId: t.primaryTeamId,
+            inboxId: t.inboxId,
+            lastActivityAt: t.lastActivityAt,
+            createdAt: t.createdAt,
+          })),
+          total: result.total,
+        })
+      } catch (err) {
+        return {
+          contents: [
+            {
+              uri: 'quackback://tickets/inbox',
+              mimeType: 'text/plain',
+              text: `Cannot list inbox tickets: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+        }
+      }
+    })
+  )
+
+  server.resource(
+    'contacts',
+    'quackback://contacts',
+    { description: 'List up to 50 most recent contacts' },
+    scopeGated(auth, 'read:contacts', async () => {
+      const { searchContacts } = await import('@/lib/server/domains/organizations/contact.service')
+      const rows = await searchContacts({ limit: 50 })
+      return jsonResource(
+        'contacts',
+        rows.map((c) => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          organizationId: c.organizationId,
+          externalId: c.externalId,
+        }))
+      )
+    })
+  )
+
+  server.resource(
+    'organizations',
+    'quackback://organizations',
+    { description: 'List up to 50 customer organizations' },
+    scopeGated(auth, 'read:contacts', async () => {
+      const { listOrganizations } =
+        await import('@/lib/server/domains/organizations/organization.service')
+      const rows = await listOrganizations({ limit: 50 })
+      return jsonResource(
+        'organizations',
+        rows.map((o) => ({
+          id: o.id,
+          name: o.name,
+          domain: o.domain,
+          externalId: o.externalId,
+          website: o.website,
+        }))
+      )
+    })
+  )
 }

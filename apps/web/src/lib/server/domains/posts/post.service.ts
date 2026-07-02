@@ -33,6 +33,7 @@ import {
 import { sql, isNull } from 'drizzle-orm'
 import { getTierLimits } from '@/lib/server/domains/settings/tier-limits.service'
 import { enforceCountLimit } from '@/lib/server/domains/settings/tier-enforce'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 import { createId } from '@quackback/ids'
 import { type PostId, type PrincipalId, type UserId, type TagId } from '@quackback/ids'
 import {
@@ -43,7 +44,7 @@ import {
 import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { recordAuditEvent } from '@/lib/server/audit/log'
-import { markdownToTiptapJson } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
@@ -53,7 +54,6 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
-import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'posts' })
@@ -216,7 +216,9 @@ export async function createPost(
       .values({
         boardId: input.boardId,
         title,
-        content,
+        // Store the markdown projection of the canonical contentJson so every
+        // consumer of the `content` column (webhooks, notifications) sees images.
+        content: contentJsonToMarkdown(contentJson, content),
         contentJson,
         statusId,
         principalId: author.principalId,
@@ -375,13 +377,21 @@ export async function updatePost(
   // Build update data
   const updateData: Partial<Post> = {}
   if (input.title !== undefined) updateData.title = input.title.trim()
-  if (input.content !== undefined) updateData.content = input.content.trim()
   if (input.contentJson !== undefined || input.content !== undefined) {
     const parsed = input.contentJson ?? markdownToTiptapJson((input.content ?? '').trim())
-    updateData.contentJson = await rehostExternalImages(parsed, {
+    const contentJson = await rehostExternalImages(parsed, {
       contentType: 'post',
       principalId: existingPost.principalId,
     })
+    updateData.contentJson = contentJson
+    // Every content edit carries `input.content` (the API accepts only markdown;
+    // the editor emits markdown alongside contentJson), so the fallback reflects
+    // the new doc. `existingPost.content` is only a defensive default for a
+    // contentJson-only edit, which no caller makes.
+    updateData.content = contentJsonToMarkdown(
+      contentJson,
+      (input.content ?? existingPost.content).trim()
+    )
   }
   if (input.statusId !== undefined) updateData.statusId = input.statusId
   if (input.ownerPrincipalId !== undefined) updateData.ownerPrincipalId = input.ownerPrincipalId
@@ -555,7 +565,7 @@ export async function updatePost(
     await syncPostMentions({
       postId: updatedPost.id,
       postTitle: updatedPost.title,
-      postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+      postUrl: buildPostUrl(resolvePublicBaseUrl(), board.slug, updatedPost.id),
       mentionedIds: contentJson ? extractMentions(contentJson) : new Set(),
       excerptByPrincipalId: contentJson ? extractMentionExcerpts(contentJson) : new Map(),
       actor: buildEventActor(actor),
