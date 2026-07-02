@@ -109,3 +109,11 @@ export async function initPageViewPartitionWorker(): Promise<void> {
   await initPromise
   log.info('page-view partition worker initialized')
 }
+
+export async function closePageViewPartitionQueue(): Promise<void> {
+  if (!initPromise) return
+  const { worker, queue } = await initPromise
+  initPromise = null
+  await worker.close().catch(() => {})
+  await queue.close().catch(() => {})
+}

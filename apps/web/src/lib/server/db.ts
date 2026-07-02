@@ -294,6 +294,8 @@ export {
   SYSTEM_ROLE_DEFS,
   SYSTEM_ROLE_PERMISSIONS,
   presetForLegacyRole,
+  // Migration ledger status (readiness probe)
+  getMigrationStatus,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,

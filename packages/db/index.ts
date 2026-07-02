@@ -14,6 +14,9 @@ export { ensurePageViewPartitions, dropExpiredPageViewPartitions } from './src/p
 // Visitor analytics rollup (hourly recompute of visitor_stats_daily + visitor_top_stats)
 export { refreshVisitorAnalytics, VISITOR_PERIODS } from './src/visitor-rollup'
 
+// Migration ledger status (bundled journal vs applied rows; readiness probe)
+export { getMigrationStatus, type MigrationStatus } from './src/migration-status'
+
 // Types
 export * from './src/types'
 

@@ -37,7 +37,10 @@ async function initializeQueue() {
       if (job.data.type === 'sweep-anonymous') {
         const result = await sweepAnonymousPrincipals()
         if (result.deleted > 0 || result.candidates > 0) {
-          log.debug({ candidates: result.candidates, deleted: result.deleted }, 'anon-sweep run complete')
+          log.debug(
+            { candidates: result.candidates, deleted: result.deleted },
+            'anon-sweep run complete'
+          )
         }
       }
     },
@@ -91,4 +94,12 @@ export async function initAnonSweepWorker(): Promise<void> {
   }
   await initPromise
   log.info('anon-sweep worker initialized')
+}
+
+export async function closeAnonSweepQueue(): Promise<void> {
+  if (!initPromise) return
+  const { worker, queue } = await initPromise
+  initPromise = null
+  await worker.close().catch(() => {})
+  await queue.close().catch(() => {})
 }

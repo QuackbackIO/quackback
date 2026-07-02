@@ -3,6 +3,7 @@
  * Build-time constants are injected via Vite `define`; runtime info is read at call time.
  */
 import { logger } from '@/lib/server/logger'
+import { closeAllWorkers, initAllWorkers } from './queue/worker-registry'
 
 const log = logger.child({ component: 'startup' })
 
@@ -39,21 +40,9 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
-        const closes = await Promise.allSettled([
-          import('./events/process').then(({ closeQueue }) => closeQueue()),
-          import('./events/segment-scheduler').then(({ closeSegmentScheduler }) =>
-            closeSegmentScheduler()
-          ),
-          import('./domains/feedback/queues/feedback-ai-queue').then(({ closeFeedbackAiQueue }) =>
-            closeFeedbackAiQueue()
-          ),
-          import('./domains/feedback/queues/feedback-ingest-queue').then(
-            ({ closeFeedbackIngestQueue }) => closeFeedbackIngestQueue()
-          ),
-        ])
-        for (const r of closes) {
-          if (r.status === 'rejected') log.error({ err: r.reason }, 'queue close failed')
-        }
+        // Drain every registered queue/worker. One list drives boot and
+        // shutdown, so nothing can be booted but left undrained.
+        await closeAllWorkers()
 
         // Drain the conversation pub/sub subscriber connection before the
         // shared client closes — it's a separate long-lived socket.
@@ -112,32 +101,9 @@ export function logStartupBanner(): void {
   // any of them start so a fast Ctrl-C in dev still gets a clean exit.
   wireGracefulShutdown()
 
-  // Restore any dynamic segment evaluation schedules that were persisted in the
-  // DB but may be absent from Redis (e.g. after a Redis wipe in dev). BullMQ
-  // repeatable jobs survive normal app restarts, but this is a safety net.
-  import('@/lib/server/events/segment-scheduler')
-    .then(({ restoreAllEvaluationSchedules }) => restoreAllEvaluationSchedules())
-    .catch((err) => log.error({ err }, 'failed to restore segment schedules'))
-
-  // Initialize feedback AI worker eagerly so it processes jobs from any source
-  import('./domains/feedback/queues/feedback-ai-queue')
-    .then(({ initFeedbackAiWorker }) => initFeedbackAiWorker())
-    .catch((err) => log.error({ err }, 'failed to init feedback ai worker'))
-
-  // Initialize analytics worker (hourly stats refresh)
-  import('./domains/analytics/analytics-queue')
-    .then(({ initAnalyticsWorker }) => initAnalyticsWorker())
-    .catch((err) => log.error({ err }, 'failed to init analytics worker'))
-
-  // Initialize anonymous-principal sweep worker (daily; bounds anon-row bloat)
-  import('./domains/principals/anon-sweep-queue')
-    .then(({ initAnonSweepWorker }) => initAnonSweepWorker())
-    .catch((err) => log.error({ err }, 'failed to init anon-sweep worker'))
-
-  // Initialize page_views partition maintenance (daily; pre-create + retention drop)
-  import('./domains/analytics/partition-maintenance-queue')
-    .then(({ initPageViewPartitionWorker }) => initPageViewPartitionWorker())
-    .catch((err) => log.error({ err }, 'failed to init page-view partition worker'))
+  // Boot every eagerly-initialized queue worker from the registry. Each init
+  // is isolated: one failure is logged without blocking the rest.
+  initAllWorkers()
 
   // Periodic feedback maintenance (stuck-item recovery every 15min, suggestion expiry daily).
   // Runs under a cross-instance lock so only one replica executes per tick.

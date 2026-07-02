@@ -98,3 +98,11 @@ export async function initAnalyticsWorker(): Promise<void> {
   await initPromise
   log.info('analytics worker initialized')
 }
+
+export async function closeAnalyticsQueue(): Promise<void> {
+  if (!initPromise) return
+  const { worker, queue } = await initPromise
+  initPromise = null
+  await worker.close().catch(() => {})
+  await queue.close().catch(() => {})
+}
