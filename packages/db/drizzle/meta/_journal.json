@@ -918,6 +918,55 @@
       "when": 1783036800000,
       "tag": "0118_identity_provider_consolidate_default_role",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1783123200000,
+      "tag": "0119_changelog_display_date",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1783209600000,
+      "tag": "0120_changelog_notified_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1783296000000,
+      "tag": "0121_board_slug_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1783382400000,
+      "tag": "0122_help_center_slug_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1783468800000,
+      "tag": "0123_csat_comment_subscription_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1783555200000,
+      "tag": "0124_conversation_channel_messenger",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1783641600000,
+      "tag": "0125_conversation_channel_drop_default",
+      "breakpoints": true
     }
   ]
 }

@@ -48,10 +48,12 @@ describe('conversations schema', () => {
     expect(cols.status.default).toBe('open')
   })
 
-  it('channel enum matches CHANNELS and defaults to live_chat (not null)', () => {
+  it('channel enum matches CHANNELS, has no default, and is not null', () => {
     const cols = getTableColumns(conversations)
     expect(cols.channel.enumValues).toEqual([...CHANNELS])
-    expect(cols.channel.default).toBe('live_chat')
+    // No column default on purpose: every create path sets channel explicitly so
+    // a non-messenger conversation cannot be silently mislabeled (#omnichannel).
+    expect(cols.channel.default).toBeUndefined()
     expect(cols.channel.notNull).toBe(true)
   })
 

@@ -25,6 +25,7 @@ import {
   dispatchConversationAssigned,
   dispatchConversationPriorityChanged,
   dispatchConversationCsatSubmitted,
+  dispatchConversationCsatCommentAdded,
   dispatchMessageCreated,
   dispatchMessageNoteCreated,
   dispatchMessageDeleted,
@@ -200,6 +201,31 @@ export async function emitConversationCsatSubmitted(
       conversationRef(conversation),
       csatRating,
       conversation.csatComment ?? null,
+      csatSubmittedAt.toISOString()
+    )
+  )
+}
+
+export async function emitConversationCsatCommentAdded(
+  actor: Actor,
+  conversation: Conversation
+): Promise<void> {
+  // The optional follow-up comment is its own event so csat_submitted can stay
+  // a once-per-survey signal. Only emit once the rating + comment are on file.
+  if (
+    conversation.csatRating == null ||
+    conversation.csatSubmittedAt == null ||
+    !conversation.csatComment
+  ) {
+    return
+  }
+  const { csatRating, csatComment, csatSubmittedAt } = conversation
+  await safe('conversation.csat_comment_added', () =>
+    dispatchConversationCsatCommentAdded(
+      toEventActor(actor),
+      conversationRef(conversation),
+      csatRating,
+      csatComment,
       csatSubmittedAt.toISOString()
     )
   )

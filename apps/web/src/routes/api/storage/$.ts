@@ -15,6 +15,32 @@ function extractKey(url: URL): string | null {
   return key && !key.includes('..') ? key : null
 }
 
+/**
+ * Returns true when the presigned URL's host is a private / loopback address
+ * that the browser cannot reach from the public internet (or through a tunnel).
+ * In those cases the storage GET handler must proxy bytes instead of redirecting,
+ * otherwise HTTPS pages get mixed-content errors (e.g. Cloudflare / ngrok tunnels
+ * where MinIO runs on http://localhost:9000).
+ */
+function isPrivateHost(urlStr: string): boolean {
+  try {
+    const { hostname } = new URL(urlStr)
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.endsWith('.local') ||
+      hostname.endsWith('.internal') ||
+      // RFC 1918 — 10.x, 172.16-31.x, 192.168.x
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+      /^192\.168\./.test(hostname)
+    )
+  } catch {
+    return false
+  }
+}
+
 // Reads up to maxBytes from the request body stream, cancelling early if exceeded.
 // Returns null when the body exceeds the limit, avoiding full buffering of oversized payloads.
 export async function readBodyWithLimit(
@@ -163,6 +189,23 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
     }
 
     const presignedUrl = await generatePresignedGetUrl(key)
+
+    // When the presigned URL points to a private/localhost endpoint (e.g. MinIO
+    // in local dev), the browser cannot reach it directly and HTTPS pages get
+    // mixed-content errors through tunnels like Cloudflare / ngrok.
+    // Proxy the bytes through the app instead of issuing a 302 redirect.
+    if (isPrivateHost(presignedUrl)) {
+      const { body, contentType } = await getS3Object(key)
+      const data = await new Response(body).arrayBuffer()
+      return new Response(data, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      })
+    }
 
     return new Response(null, {
       status: 302,

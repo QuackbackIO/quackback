@@ -13,6 +13,7 @@ import {
   parseOptionalTypeId,
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { BoardId, PrincipalId, StatusId, TagId } from '@quackback/ids'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
 
@@ -91,7 +92,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
             result.items.map((post) => ({
               id: post.id,
               title: post.title,
-              content: post.content,
+              content: contentJsonToMarkdown(post.contentJson, post.content),
               voteCount: post.voteCount,
               commentCount: post.commentCount,
               boardId: post.boardId,
@@ -239,7 +240,7 @@ export const Route = createFileRoute('/api/v1/posts/')({
           return createdResponse({
             id: result.id,
             title: result.title,
-            content: result.content,
+            content: contentJsonToMarkdown(result.contentJson, result.content),
             voteCount: result.voteCount,
             boardId: result.boardId,
             statusId: result.statusId,

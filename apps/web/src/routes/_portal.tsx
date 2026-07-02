@@ -1,12 +1,15 @@
 import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
-import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import {
+  fetchUserAvatar,
+  getEffectivePortalTabConfigForCurrentUserFn,
+} from '@/lib/server/functions/portal'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
 import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
-import { generateThemeCSS, getGoogleFontsUrl } from '@/lib/shared/theme'
+import { generateThemeCSS } from '@/lib/shared/theme'
 import { PortalIntlProvider } from '@/components/portal-intl-provider'
 import { getPortalLocaleFn, loadPortalIntl } from '@/lib/server/functions/locale'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
@@ -14,7 +17,9 @@ import {
   evaluateMyPortalAccessFn,
   recordPortalAccessDeniedFn,
 } from '@/lib/server/functions/portal-access'
+import { getSupportSurfaceAccessFn } from '@/lib/server/functions/chat'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
+import type { PortalTabConfig } from '@/lib/server/domains/portal/types'
 import { parseAuthPromptSearch } from '@/lib/shared/auth-prompt'
 import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
@@ -159,9 +164,6 @@ export const Route = createFileRoute('/_portal')({
     // Always apply custom CSS on top (cascades over theme styles)
     const customCssToApply = customCss
 
-    // Always load Google Fonts from theme config
-    const googleFontsUrl = getGoogleFontsUrl(brandingConfig)
-
     const initialUserData = session?.user
       ? {
           name: session.user.name,
@@ -179,6 +181,12 @@ export const Route = createFileRoute('/_portal')({
     }
 
     const { locale, messages } = await loadPortalIntl()
+    const supportAccess = await getSupportSurfaceAccessFn({ data: { surface: 'portal' } })
+
+    // Fetch effective portal tab configuration for the current user
+    const enabledTabs: PortalTabConfig = session?.user
+      ? await getEffectivePortalTabConfigForCurrentUserFn()
+      : {}
 
     return {
       org: redactSettingsForClient(org),
@@ -190,11 +198,12 @@ export const Route = createFileRoute('/_portal')({
       themeStyles,
       customCss: customCssToApply,
       themeMode,
-      googleFontsUrl,
       initialUserData,
       authConfig,
       locale,
       messages,
+      supportAccessGranted: supportAccess.granted,
+      enabledTabs,
       prompt,
       gate: null,
     }
@@ -268,11 +277,12 @@ function PortalLayout() {
     themeStyles,
     customCss,
     themeMode,
-    googleFontsUrl,
     initialUserData,
     authConfig,
     locale,
     messages,
+    supportAccessGranted,
+    enabledTabs,
     prompt,
   } = loaderData
 
@@ -288,7 +298,6 @@ function PortalLayout() {
           isAuthenticated={isAuthenticated}
         />
         <div className="min-h-screen bg-background flex flex-col">
-          {googleFontsUrl && <link rel="stylesheet" href={googleFontsUrl} />}
           {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
           {/* Custom CSS is injected after theme styles so it can override */}
           {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
@@ -298,6 +307,8 @@ function PortalLayout() {
             userRole={userRole}
             initialUserData={initialUserData}
             showThemeToggle={themeMode === 'user'}
+            supportAccessGranted={supportAccessGranted}
+            enabledTabs={enabledTabs}
           />
           <main className="flex-1 w-full flex flex-col">
             <Outlet />

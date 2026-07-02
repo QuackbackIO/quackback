@@ -3,6 +3,7 @@ import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, eq, principal } from '@/lib/server/db'
 import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { getPublicOriginFromRequest } from '@/lib/server/integrations/oauth'
 
 const ALLOWED_PREFIXES = new Set([
   'uploads',
@@ -37,7 +38,8 @@ export async function handleAdminUpload({ request }: { request: Request }): Prom
   const rawPrefix = formData.get('prefix')
   const prefix =
     typeof rawPrefix === 'string' && ALLOWED_PREFIXES.has(rawPrefix) ? rawPrefix : 'uploads'
-  return uploadImageFromFormData(formData, prefix)
+  const requestOrigin = getPublicOriginFromRequest(request)
+  return uploadImageFromFormData(formData, prefix, requestOrigin)
 }
 
 export const Route = createFileRoute('/api/upload/image')({

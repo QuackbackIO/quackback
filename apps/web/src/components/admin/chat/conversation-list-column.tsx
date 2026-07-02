@@ -236,9 +236,9 @@ export function ConversationListColumn({
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
                 </p>
-                {(c.channel !== 'live_chat' || c.tags.length > 0) && (
+                {(c.channel !== 'messenger' || c.tags.length > 0) && (
                   <div className="mt-1 flex flex-wrap items-center gap-1">
-                    {c.channel !== 'live_chat' && <ChannelBadge channel={c.channel} />}
+                    {c.channel !== 'messenger' && <ChannelBadge channel={c.channel} />}
                     {c.tags.map((t) => (
                       <TagChip
                         key={t.id}

@@ -17,6 +17,8 @@ import {
   unpublishArticle,
   deleteArticle,
 } from '@/lib/server/domains/help-center/help-center.service'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/server/db'
 import type { HelpCenterArticleId, PrincipalId } from '@quackback/ids'
 
 const updateArticleBody = z.object({
@@ -35,6 +37,7 @@ function formatArticle(article: {
   title: string
   description: string | null
   content: string
+  contentJson: TiptapContent | null
   publishedAt: Date | null
   viewCount: number
   helpfulCount: number
@@ -49,7 +52,9 @@ function formatArticle(article: {
     slug: article.slug,
     title: article.title,
     description: article.description,
-    content: article.content,
+    // Render markdown from the canonical contentJson so images survive; falls
+    // back to the stored column for legacy rows.
+    content: contentJsonToMarkdown(article.contentJson, article.content),
     publishedAt: article.publishedAt?.toISOString() || null,
     viewCount: article.viewCount,
     helpfulCount: article.helpfulCount,
