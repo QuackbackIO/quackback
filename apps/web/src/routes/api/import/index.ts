@@ -152,10 +152,7 @@ export const Route = createFileRoute('/api/import/')({
           // Process import inline (synchronous)
           const result = await processImport(importData)
 
-          log.info(
-            { imported: result.imported, skipped: result.skipped },
-            'csv import complete'
-          )
+          log.info({ imported: result.imported, skipped: result.skipped }, 'csv import complete')
           return Response.json({
             imported: result.imported,
             skipped: result.skipped,

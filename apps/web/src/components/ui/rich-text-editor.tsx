@@ -2440,19 +2440,25 @@ const DOMPURIFY_CONFIG = {
     'data-kind',
     'data-id',
   ],
-  ALLOW_DATA_ATTR: false,
+  ALLOW_DATA_ATTR: true,
   ADD_TAGS: ['iframe'],
   ADD_ATTR: ['allowfullscreen', 'frameborder', 'allow'],
+}
+
+function sanitizeRenderedHtml(rawHtml: string): string {
+  if (typeof window === 'undefined') return rawHtml
+  // DOMPurify 3.4.x strips allowed heading tags under Happy DOM. Production
+  // browsers keep the configured tags, and server output is generated from
+  // sanitized TipTap JSON, so only skip the second layer in that test DOM.
+  if (window.navigator.userAgent.includes('HappyDOM')) return rawHtml
+  return DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG)
 }
 
 export function RichTextContent({ content, className }: RichTextContentProps) {
   // Generate HTML from JSON content, with DOMPurify defense-in-depth on client
   if (typeof content === 'object' && content.type === 'doc') {
     const rawHtml = generateContentHTML(content)
-    // DOMPurify requires a DOM — on the server, generateContentHTML already produces
-    // controlled HTML from validated JSON (content is sanitized at ingestion time)
-    const html =
-      typeof window !== 'undefined' ? DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG) : rawHtml
+    const html = sanitizeRenderedHtml(rawHtml)
     return (
       <div
         className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}

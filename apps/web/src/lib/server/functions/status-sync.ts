@@ -3,6 +3,7 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
 import { db, integrations, eq } from '@/lib/server/db'
@@ -55,7 +56,9 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
       if (integration.status !== 'active') throw new Error('Integration must be active')
 
       const secret = generateWebhookSecret()
-      const callbackUrl = buildWebhookCallbackUrl(data.integrationType)
+      const callbackUrl = buildWebhookCallbackUrl(data.integrationType, {
+        requestHeaders: getRequestHeaders(),
+      })
       const config = (integration.config ?? {}) as Record<string, unknown>
 
       let externalWebhookId: string | undefined
@@ -134,7 +137,18 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
         }
       }
 
-      await storeWebhookConfig(integrationId, secret, externalWebhookId)
+      await storeWebhookConfig(
+        integrationId,
+        secret,
+        externalWebhookId,
+        data.integrationType === 'github'
+          ? {
+              githubWebhookEventsVersion: (
+                await import('@/lib/server/integrations/github/webhook-registration')
+              ).GITHUB_WEBHOOK_EVENTS_VERSION,
+            }
+          : undefined
+      )
 
       return {
         success: true,

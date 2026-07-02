@@ -187,6 +187,8 @@ export function ChangelogList() {
                       displayDate={entry.displayDate}
                       createdAt={entry.createdAt}
                       author={entry.author}
+                      category={entry.category}
+                      product={entry.product}
                       linkedPosts={entry.linkedPosts}
                       onEdit={handleEdit}
                       onDelete={handleDelete}

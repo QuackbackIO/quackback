@@ -27,6 +27,10 @@ export interface TierFeatureFlags {
    *  conversations from connected sources into structured feedback.
    *  Scale-only on cloud; always on for self-hosters. */
   aiFeedbackExtraction: boolean
+  /** Portal tab visibility configuration: allows fine-grained control
+   *  over which tabs are visible to different user groups.
+   *  Pro and Scale on cloud; always on for self-hosters. */
+  portalTabCustomization: boolean
 }
 
 /**
@@ -90,5 +94,6 @@ export const OSS_TIER_LIMITS: TierLimits = {
     customCss: true,
     integrations: true,
     aiFeedbackExtraction: true,
+    portalTabCustomization: true,
   },
 }

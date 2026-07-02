@@ -25,7 +25,7 @@ import { hashRecoveryCode, verifyRecoveryCode } from '@/lib/server/auth/recovery
 import { mintMagicLinkUrl } from '@/lib/server/auth/magic-link-mint'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { bucketRetryAfter, incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
-import { config } from '@/lib/server/config'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'recovery' })
@@ -162,11 +162,11 @@ export const consumeRecoveryCodeFn = createServerFn({ method: 'POST' })
     const { url: redirectUrl } = await mintMagicLinkUrl({
       email: data.email,
       callbackPath: '/admin',
+      portalUrl: resolvePublicBaseUrl(headers),
       // Unified login with the `/admin` callback (team break-glass form).
       // Better-Auth merges its `error` param via `URL.searchParams`, so the
       // `?callbackUrl=` query survives on a failed verify (joined with `&`).
       errorCallbackPath: '/auth/login?callbackUrl=/admin',
-      portalUrl: config.baseUrl,
     })
 
     await recordAuditEvent({

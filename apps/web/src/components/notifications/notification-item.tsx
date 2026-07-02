@@ -52,6 +52,18 @@ export function NotificationItem({
     />
   )
 
+  if (notification.ticketId) {
+    return (
+      <Link
+        to="/admin/tickets/$ticketId"
+        params={{ ticketId: notification.ticketId }}
+        onClick={handleClick}
+      >
+        {content}
+      </Link>
+    )
+  }
+
   if (notification.post && notification.postId) {
     return (
       <Link
