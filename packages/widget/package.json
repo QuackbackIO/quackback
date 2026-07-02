@@ -1,6 +1,6 @@
 {
   "name": "@quackback/widget",
-  "version": "0.1.5",
+  "version": "0.2.1",
   "license": "AGPL-3.0",
   "description": "Official SDK for the Quackback feedback widget. Embed Quackback in your app.",
   "type": "module",
@@ -10,15 +10,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "development": "./src/index.ts"
+      "require": "./dist/index.cjs"
     },
     "./react": {
       "types": "./dist/react/index.d.ts",
+      "development": "./src/react/index.ts",
       "import": "./dist/react/index.js",
-      "require": "./dist/react/index.cjs",
-      "development": "./src/react/index.ts"
+      "require": "./dist/react/index.cjs"
     },
     "./browser.js": "./dist/browser.js"
   },

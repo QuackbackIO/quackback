@@ -16,6 +16,7 @@ export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
     handlers: {
       GET: async () => {
         const { config } = await import('@/lib/server/config')
+        const { MCP_SCOPES } = await import('@/lib/server/mcp/types')
         const baseUrl = config.baseUrl
 
         return new Response(
@@ -23,19 +24,7 @@ export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
             resource: `${baseUrl}/api/mcp`,
             authorization_servers: [baseUrl],
             bearer_methods_supported: ['header'],
-            scopes_supported: [
-              'openid',
-              'profile',
-              'email',
-              'offline_access',
-              'read:feedback',
-              'write:feedback',
-              'write:changelog',
-              'read:article',
-              'write:article',
-              'read:chat',
-              'write:chat',
-            ],
+            scopes_supported: ['openid', 'profile', 'email', 'offline_access', ...MCP_SCOPES],
           }),
           {
             headers: {
