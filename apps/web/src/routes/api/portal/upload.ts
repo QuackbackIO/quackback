@@ -3,6 +3,7 @@ import type { UserId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { db, eq, principal } from '@/lib/server/db'
 import { isS3Configured, uploadImageFromFormData } from '@/lib/server/storage/s3'
+import { getPublicOriginFromRequest } from '@/lib/server/integrations/oauth'
 
 export async function handlePortalUpload({ request }: { request: Request }): Promise<Response> {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -25,7 +26,7 @@ export async function handlePortalUpload({ request }: { request: Request }): Pro
   } catch {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })
   }
-  return uploadImageFromFormData(formData, 'portal-images')
+  return uploadImageFromFormData(formData, 'portal-images', getPublicOriginFromRequest(request))
 }
 
 export const Route = createFileRoute('/api/portal/upload')({

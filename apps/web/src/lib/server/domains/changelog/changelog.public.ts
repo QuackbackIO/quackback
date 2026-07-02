@@ -1,7 +1,9 @@
 import {
   db,
+  changelogCategories,
   changelogEntries,
   changelogEntryPosts,
+  changelogProducts,
   postStatuses,
   posts,
   boards,
@@ -16,10 +18,12 @@ import {
   inArray,
   sql,
 } from '@/lib/server/db'
-import type { ChangelogId, StatusId } from '@quackback/ids'
+import type { ChangelogCategoryId, ChangelogId, ChangelogProductId, StatusId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { computeStatus } from './changelog.service'
 import type { PublicChangelogEntry, PublicChangelogListResult } from './changelog.types'
+
+const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
 
 /**
  * Predicates that make a changelog entry publicly visible: not soft-deleted
@@ -47,10 +51,14 @@ export async function getPublicChangelogMetaById(
   const now = new Date()
   const entry = await db.query.changelogEntries.findFirst({
     where: and(eq(changelogEntries.id, id), ...publicChangelogConditions(now)),
-    columns: { id: true, title: true, publishedAt: true },
+    columns: { id: true, title: true, publishedAt: true, displayDate: true },
   })
   if (!entry || !entry.publishedAt) return null
-  return { id: entry.id as ChangelogId, title: entry.title, publishedAt: entry.publishedAt }
+  return {
+    id: entry.id as ChangelogId,
+    title: entry.title,
+    publishedAt: entry.displayDate ?? entry.publishedAt,
+  }
 }
 
 /**
@@ -99,6 +107,7 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
       postTitle: posts.title,
       postVoteCount: posts.voteCount,
       postStatusId: posts.statusId,
+      boardId: boards.id,
       boardSlug: boards.slug,
     })
     .from(changelogEntryPosts)
@@ -129,17 +138,36 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
     statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
+  const [category, product] = await Promise.all([
+    entry.categoryId
+      ? db.query.changelogCategories.findFirst({
+          where: eq(changelogCategories.id, entry.categoryId),
+          columns: { id: true, name: true, slug: true, color: true },
+        })
+      : null,
+    entry.productId
+      ? db.query.changelogProducts.findFirst({
+          where: eq(changelogProducts.id, entry.productId),
+          columns: { id: true, name: true, slug: true },
+        })
+      : null,
+  ])
+
   return {
     id: entry.id,
     title: entry.title,
     content: entry.content,
     contentJson: entry.contentJson,
-    publishedAt: entry.publishedAt,
+    category: category ?? null,
+    product: product ?? null,
+    publishedAt: entry.displayDate ?? entry.publishedAt,
     linkedPosts: linkedPostRows.map((lp) => ({
       id: lp.postId,
       title: lp.postTitle,
       voteCount: lp.postVoteCount,
+      boardId: lp.boardId,
       boardSlug: lp.boardSlug,
+      statusId: lp.postStatusId,
       status: lp.postStatusId ? (statusMap.get(lp.postStatusId) ?? null) : null,
     })),
   }
@@ -154,11 +182,57 @@ export async function getPublicChangelogById(id: ChangelogId): Promise<PublicCha
 export async function listPublicChangelogs(params: {
   cursor?: string
   limit?: number
+  entryIds?: ChangelogId[]
+  categoryIds?: ChangelogCategoryId[]
+  productIds?: ChangelogProductId[]
+  /** Visibility restriction: only show entries with categoryId in this list (or no category). null = no restriction. */
+  visibilityCategoryIds?: ChangelogCategoryId[] | null
+  /** Visibility restriction: only show entries with productId in this list (or no product). null = no restriction. */
+  visibilityProductIds?: ChangelogProductId[] | null
 }): Promise<PublicChangelogListResult> {
-  const { cursor, limit = 20 } = params
+  const {
+    cursor,
+    limit = 20,
+    entryIds,
+    categoryIds,
+    productIds,
+    visibilityCategoryIds,
+    visibilityProductIds,
+  } = params
   const now = new Date()
 
   const conditions = publicChangelogConditions(now)
+
+  if (entryIds !== undefined) {
+    if (entryIds.length === 0) return { items: [], nextCursor: null, hasMore: false }
+    conditions.push(inArray(changelogEntries.id, entryIds))
+  }
+  if (categoryIds !== undefined) {
+    if (categoryIds.length === 0) return { items: [], nextCursor: null, hasMore: false }
+    conditions.push(inArray(changelogEntries.categoryId, categoryIds))
+  }
+  if (productIds !== undefined) {
+    if (productIds.length === 0) return { items: [], nextCursor: null, hasMore: false }
+    conditions.push(inArray(changelogEntries.productId, productIds))
+  }
+
+  // Visibility restrictions: always allow entries with no category/product through (null = uncategorized is always visible)
+  if (visibilityCategoryIds !== null && visibilityCategoryIds !== undefined) {
+    conditions.push(
+      or(
+        isNull(changelogEntries.categoryId),
+        inArray(changelogEntries.categoryId, visibilityCategoryIds)
+      )!
+    )
+  }
+  if (visibilityProductIds !== null && visibilityProductIds !== undefined) {
+    conditions.push(
+      or(
+        isNull(changelogEntries.productId),
+        inArray(changelogEntries.productId, visibilityProductIds)
+      )!
+    )
+  }
 
   // Cursor-based pagination. The lookup does NOT filter on deletedAt:
   // if an admin deleted the cursor row between page load and "Load
@@ -169,14 +243,17 @@ export async function listPublicChangelogs(params: {
   if (cursor) {
     const cursorEntry = await db.query.changelogEntries.findFirst({
       where: eq(changelogEntries.id, cursor as ChangelogId),
-      columns: { publishedAt: true },
+      columns: { publishedAt: true, displayDate: true },
     })
-    if (cursorEntry?.publishedAt) {
+    const cursorEffective = cursorEntry?.publishedAt
+      ? (cursorEntry.displayDate ?? cursorEntry.publishedAt)
+      : null
+    if (cursorEffective) {
       conditions.push(
         or(
-          lt(changelogEntries.publishedAt, cursorEntry.publishedAt),
+          lt(effectiveDisplayDate, cursorEffective),
           and(
-            eq(changelogEntries.publishedAt, cursorEntry.publishedAt),
+            sql`${effectiveDisplayDate} = ${cursorEffective}`,
             lt(changelogEntries.id, cursor as ChangelogId)
           )
         )!
@@ -185,11 +262,12 @@ export async function listPublicChangelogs(params: {
   }
 
   // Fetch entries
-  const entries = await db.query.changelogEntries.findMany({
-    where: and(...conditions),
-    orderBy: [desc(changelogEntries.publishedAt), desc(changelogEntries.id)],
-    limit: limit + 1,
-  })
+  const entries = await db
+    .select()
+    .from(changelogEntries)
+    .where(and(...conditions))
+    .orderBy(desc(effectiveDisplayDate), desc(changelogEntries.id))
+    .limit(limit + 1)
 
   const hasMore = entries.length > limit
   const items = hasMore ? entries.slice(0, limit) : entries
@@ -197,9 +275,9 @@ export async function listPublicChangelogs(params: {
   // Get linked posts for all entries. Same four-guard filter as
   // `getPublicChangelogById` — see the comment there. Filtering happens
   // in SQL so we never materialize rows we'd just throw away.
-  const entryIds = items.map((e) => e.id)
+  const itemIds = items.map((e) => e.id)
   const allLinkedPosts =
-    entryIds.length > 0
+    itemIds.length > 0
       ? await db
           .select({
             changelogEntryId: changelogEntryPosts.changelogEntryId,
@@ -207,6 +285,7 @@ export async function listPublicChangelogs(params: {
             postTitle: posts.title,
             postVoteCount: posts.voteCount,
             postStatusId: posts.statusId,
+            boardId: boards.id,
             boardSlug: boards.slug,
           })
           .from(changelogEntryPosts)
@@ -214,7 +293,7 @@ export async function listPublicChangelogs(params: {
           .innerJoin(boards, eq(posts.boardId, boards.id))
           .where(
             and(
-              inArray(changelogEntryPosts.changelogEntryId, entryIds),
+              inArray(changelogEntryPosts.changelogEntryId, itemIds),
               isNull(posts.deletedAt),
               eq(posts.moderationState, 'published'),
               isNull(boards.deletedAt),
@@ -246,6 +325,29 @@ export async function listPublicChangelogs(params: {
     statuses.forEach((s) => publicStatusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
+  const itemCategoryIds = items
+    .map((entry) => entry.categoryId)
+    .filter((id): id is ChangelogCategoryId => typeof id === 'string')
+  const itemProductIds = items
+    .map((entry) => entry.productId)
+    .filter((id): id is ChangelogProductId => typeof id === 'string')
+  const [categories, products] = await Promise.all([
+    itemCategoryIds.length > 0
+      ? db.query.changelogCategories.findMany({
+          where: inArray(changelogCategories.id, itemCategoryIds),
+          columns: { id: true, name: true, slug: true, color: true },
+        })
+      : [],
+    itemProductIds.length > 0
+      ? db.query.changelogProducts.findMany({
+          where: inArray(changelogProducts.id, itemProductIds),
+          columns: { id: true, name: true, slug: true },
+        })
+      : [],
+  ])
+  const categoryMap = new Map(categories.map((category) => [category.id, category]))
+  const productMap = new Map(products.map((product) => [product.id, product]))
+
   // Transform to output format (no author info for public view)
   const result: PublicChangelogEntry[] = items
     .filter((entry) => entry.publishedAt !== null)
@@ -256,12 +358,16 @@ export async function listPublicChangelogs(params: {
         title: entry.title,
         content: entry.content,
         contentJson: entry.contentJson,
-        publishedAt: entry.publishedAt!,
+        category: entry.categoryId ? (categoryMap.get(entry.categoryId) ?? null) : null,
+        product: entry.productId ? (productMap.get(entry.productId) ?? null) : null,
+        publishedAt: entry.displayDate ?? entry.publishedAt!,
         linkedPosts: entryLinkedPosts.map((lp) => ({
           id: lp.postId,
           title: lp.postTitle,
           voteCount: lp.postVoteCount,
+          boardId: lp.boardId,
           boardSlug: lp.boardSlug,
+          statusId: lp.postStatusId,
           status: lp.postStatusId ? (publicStatusMap.get(lp.postStatusId) ?? null) : null,
         })),
       }

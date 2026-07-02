@@ -55,6 +55,8 @@ export {
   useAddMonitoredChannel,
   useUpdateMonitoredChannel,
   useRemoveMonitoredChannel,
+  useUpsertUserMapping,
+  useDeleteUserMapping,
 } from './integrations'
 
 // Status sync mutations

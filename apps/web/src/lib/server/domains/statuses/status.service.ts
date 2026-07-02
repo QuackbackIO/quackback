@@ -19,9 +19,33 @@ import {
   InternalError,
 } from '@/lib/shared/errors'
 import type { Status, CreateStatusInput, UpdateStatusInput } from './status.types'
+import {
+  dispatchStatusCreated,
+  dispatchStatusUpdated,
+  dispatchStatusDeleted,
+} from '@/lib/server/events/dispatch'
+import type { EventActor, EventStatusRef } from '@/lib/server/events/types'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'statuses' })
+
+/** Service-actor fallback for status lifecycle events. */
+const statusEventActor: EventActor = { type: 'service', displayName: 'statuses-system' }
+
+/** Build the fixed-shape webhook ref from a status row. */
+function toStatusRef(status: Status): EventStatusRef {
+  return {
+    id: status.id,
+    slug: status.slug,
+    name: status.name,
+    color: status.color ?? null,
+    category: status.category,
+    position: status.position,
+    showOnRoadmap: status.showOnRoadmap,
+    isDefault: status.isDefault,
+    createdAt: status.createdAt?.toISOString() ?? null,
+  }
+}
 
 /**
  * Atomically set a status as default, unsetting all others in a single query.
@@ -92,6 +116,7 @@ export async function createStatus(input: CreateStatusInput): Promise<Status> {
     await setStatusAsDefaultAtomic(status.id)
   }
 
+  void dispatchStatusCreated(statusEventActor, toStatusRef(status)).catch(() => {})
   return status
 }
 
@@ -149,6 +174,14 @@ export async function updateStatus(id: StatusId, input: UpdateStatusInput): Prom
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
   }
 
+  // Derive from caller-facing input so the `isDefault: true` path (which goes
+  // through the atomic setter rather than `updateData`) is still reported.
+  const changedFields = (['name', 'color', 'showOnRoadmap', 'isDefault'] as const).filter(
+    (k) => input[k] !== undefined
+  )
+  void dispatchStatusUpdated(statusEventActor, toStatusRef(updatedStatus), changedFields).catch(
+    () => {}
+  )
   return updatedStatus
 }
 
@@ -199,6 +232,8 @@ export async function deleteStatus(id: StatusId): Promise<void> {
   if (deleteResult.length === 0) {
     throw new NotFoundError('STATUS_NOT_FOUND', `Status with ID ${id} not found`)
   }
+
+  void dispatchStatusDeleted(statusEventActor, toStatusRef(existingStatus)).catch(() => {})
 }
 
 /**

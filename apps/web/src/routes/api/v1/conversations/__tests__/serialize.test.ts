@@ -6,7 +6,7 @@ const convBase = {
   id: 'conversation_1',
   status: 'open',
   priority: 'none',
-  channel: 'live_chat',
+  channel: 'messenger',
   subject: 'Hi',
   lastMessagePreview: 'Hi',
   lastMessageAt: '2026-06-05T00:00:00.000Z',
@@ -28,7 +28,7 @@ describe('serializeConversation', () => {
     expect(serializeConversation(dto)).toEqual({
       id: 'conversation_1',
       status: 'open',
-      channel: 'live_chat',
+      channel: 'messenger',
       priority: 'none',
       subject: 'Hi',
       visitorPrincipalId: 'principal_v',

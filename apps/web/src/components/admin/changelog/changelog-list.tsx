@@ -184,8 +184,11 @@ export function ChangelogList() {
                       content={entry.content}
                       status={entry.status}
                       publishedAt={entry.publishedAt}
+                      displayDate={entry.displayDate}
                       createdAt={entry.createdAt}
                       author={entry.author}
+                      category={entry.category}
+                      product={entry.product}
                       linkedPosts={entry.linkedPosts}
                       onEdit={handleEdit}
                       onDelete={handleDelete}

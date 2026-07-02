@@ -349,10 +349,10 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                       ) : (
                         <span>Unassigned</span>
                       )}
-                      {c.channel !== 'live_chat' ? (
+                      {c.channel !== 'messenger' ? (
                         <ChannelBadge channel={c.channel} />
                       ) : (
-                        <span>· live chat</span>
+                        <span>· Messenger</span>
                       )}
                       {c.csatRating != null && <span>· ★ {c.csatRating}/5</span>}
                     </div>
