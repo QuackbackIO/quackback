@@ -22,9 +22,12 @@ export function NtfyConnectionActions({ integrationId, isConnected }: NtfyConnec
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false)
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => () => {
-    if (successTimer.current) clearTimeout(successTimer.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (successTimer.current) clearTimeout(successTimer.current)
+    },
+    []
+  )
 
   const handleSave = async () => {
     if (!url.trim()) return

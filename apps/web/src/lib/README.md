@@ -92,3 +92,7 @@ server/domains/posts/
 - **Mutations**: All in `client/mutations/`, named by domain
 - **Services**: Max 400 lines, split by responsibility
 - **Hooks**: Max 300 lines, queries only (no mutations)
+- **Server functions**: Use `GET` only when input is safe to appear in URLs
+  (public slugs, locale, pagination, resource IDs). Use `POST` for sensitive
+  or private input such as tokens, secrets, emails, credentials, free-text
+  searches, and private filter objects.

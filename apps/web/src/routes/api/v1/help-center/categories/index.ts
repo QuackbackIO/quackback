@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
@@ -13,42 +12,8 @@ import {
   listCategories,
   createCategory,
 } from '@/lib/server/domains/help-center/help-center.service'
-
-const createCategoryBody = z.object({
-  name: z.string().min(1, 'Name is required').max(200),
-  slug: z.string().max(200).optional(),
-  description: z.string().max(2000).optional(),
-  isPublic: z.boolean().optional(),
-  position: z.number().int().min(0).optional(),
-  parentId: z.string().nullable().optional(),
-  icon: z.string().max(50).nullable().optional(),
-})
-
-function formatCategory(cat: {
-  id: string
-  slug: string
-  name: string
-  description: string | null
-  icon: string | null
-  parentId: string | null
-  isPublic: boolean
-  position: number
-  createdAt: Date
-  updatedAt: Date
-}) {
-  return {
-    id: cat.id,
-    slug: cat.slug,
-    name: cat.name,
-    description: cat.description,
-    icon: cat.icon,
-    parentId: cat.parentId,
-    isPublic: cat.isPublic,
-    position: cat.position,
-    createdAt: cat.createdAt.toISOString(),
-    updatedAt: cat.updatedAt.toISOString(),
-  }
-}
+import { createCategorySchema } from '@/lib/shared/schemas/help-center'
+import { formatHelpCenterCategory } from './-serialize'
 
 export const Route = createFileRoute('/api/v1/help-center/categories/')({
   server: {
@@ -62,7 +27,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
           const categories = await listCategories()
           return successResponse(
             categories.map((cat) => ({
-              ...formatCategory(cat),
+              ...formatHelpCenterCategory(cat),
               articleCount: cat.articleCount,
             }))
           )
@@ -78,7 +43,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
           await withApiKeyAuth(request, { role: 'admin' })
 
           const body = await request.json()
-          const parsed = createCategoryBody.safeParse(body)
+          const parsed = createCategorySchema.safeParse(body)
 
           if (!parsed.success) {
             return badRequestResponse('Invalid request body', {
@@ -87,7 +52,7 @@ export const Route = createFileRoute('/api/v1/help-center/categories/')({
           }
 
           const category = await createCategory(parsed.data)
-          return createdResponse(formatCategory(category))
+          return createdResponse(formatHelpCenterCategory(category))
         } catch (error) {
           return handleDomainError(error)
         }
