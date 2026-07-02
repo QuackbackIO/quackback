@@ -36,10 +36,12 @@ export const postExternalLinks = pgTable(
       columns: [table.integrationId],
       foreignColumns: [integrations.id],
     }).onDelete('cascade'),
-    // Allow one ticket to link to multiple posts (unique per type+externalId+postId)
+    // Allow one ticket to link to multiple posts (unique per type+externalId+postId).
+    // Columns listed alphabetically: drizzle-kit introspects multi-column UNIQUE
+    // constraints in alphabetical order, and the drift check compares that order.
     unique('post_external_links_type_external_post_unique').on(
-      table.integrationType,
       table.externalId,
+      table.integrationType,
       table.postId
     ),
     index('post_external_links_post_id_idx').on(table.postId),

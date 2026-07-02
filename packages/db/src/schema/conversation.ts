@@ -8,8 +8,9 @@ import {
   integer,
   boolean,
   primaryKey,
+  foreignKey,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 import {
@@ -33,14 +34,10 @@ export const conversations = pgTable(
     // The visitor side of the conversation. `restrict` so a principal that
     // owns chat history can never be silently orphaned — the anonymous→
     // identified merge re-points this column (see merge-anonymous.ts).
-    visitorPrincipalId: typeIdColumn('principal')('visitor_principal_id')
-      .notNull()
-      .references(() => principal.id, { onDelete: 'restrict' }),
+    visitorPrincipalId: typeIdColumn('principal')('visitor_principal_id').notNull(),
     // The team member currently handling the conversation (nullable: an open
     // conversation may be unassigned). `set null` mirrors other actor FKs.
-    assignedAgentPrincipalId: typeIdColumnNullable('principal')(
-      'assigned_agent_principal_id'
-    ).references(() => principal.id, { onDelete: 'set null' }),
+    assignedAgentPrincipalId: typeIdColumnNullable('principal')('assigned_agent_principal_id'),
     status: text('status', { enum: CONVERSATION_STATUSES }).notNull().default('open'),
     // The inbound channel this conversation arrived on. Required and set
     // explicitly by every create path; no default, so a conversation on a new
@@ -79,6 +76,17 @@ export const conversations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (table) => [
+    // FK names match the constraints the SQL migration created.
+    foreignKey({
+      name: 'conversations_visitor_principal_id_fkey',
+      columns: [table.visitorPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'conversations_assigned_agent_principal_id_fkey',
+      columns: [table.assignedAgentPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
     // Inbox feed: list by status, newest activity first.
     index('conversations_status_last_message_idx').on(table.status, table.lastMessageAt),
     index('conversations_visitor_principal_idx').on(table.visitorPrincipalId),
@@ -95,13 +103,9 @@ export const conversationMessages = pgTable(
   'conversation_messages',
   {
     id: typeIdWithDefault('conversation_msg')('id').primaryKey(),
-    conversationId: typeIdColumn('conversation')('conversation_id')
-      .notNull()
-      .references(() => conversations.id, { onDelete: 'cascade' }),
+    conversationId: typeIdColumn('conversation')('conversation_id').notNull(),
     // Nullable: system events (e.g. assignment notices) have no human author.
-    principalId: typeIdColumnNullable('principal')('principal_id').references(() => principal.id, {
-      onDelete: 'restrict',
-    }),
+    principalId: typeIdColumnNullable('principal')('principal_id'),
     // Explicit sender side for rendering + authorization, independent of the
     // principal's current role (a team member could also be a visitor).
     senderType: text('sender_type', { enum: MESSAGE_SENDER_TYPES }).notNull(),
@@ -121,12 +125,25 @@ export const conversationMessages = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
     // Soft delete support, mirroring comments.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
-    deletedByPrincipalId: typeIdColumnNullable('principal')('deleted_by_principal_id').references(
-      () => principal.id,
-      { onDelete: 'set null' }
-    ),
+    deletedByPrincipalId: typeIdColumnNullable('principal')('deleted_by_principal_id'),
   },
   (table) => [
+    // FK names match the constraints the SQL migration created.
+    foreignKey({
+      name: 'conversation_messages_conversation_id_fkey',
+      columns: [table.conversationId],
+      foreignColumns: [conversations.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_messages_principal_id_fkey',
+      columns: [table.principalId],
+      foreignColumns: [principal.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'conversation_messages_deleted_by_principal_id_fkey',
+      columns: [table.deletedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
     // Live feed + keyset pagination on the composite (conversationId, createdAt, id);
     // id is the tie-break so same-microsecond siblings page deterministically.
     index('conversation_messages_conversation_created_idx').on(
@@ -136,6 +153,10 @@ export const conversationMessages = pgTable(
     ),
     index('conversation_messages_principal_idx').on(table.principalId),
     index('conversation_messages_created_at_idx').on(table.createdAt),
+    // Inbound-email dedupe: one message per provider Message-ID.
+    uniqueIndex('conversation_messages_email_message_id_idx')
+      .using('btree', sql`(metadata ->> 'emailMessageId')`)
+      .where(sql`(metadata ->> 'emailMessageId') IS NOT NULL`),
   ]
 )
 
@@ -150,7 +171,8 @@ export const conversationTags = pgTable(
   'conversation_tags',
   {
     id: typeIdWithDefault('conversation_tag')('id').primaryKey(),
-    name: text('name').notNull().unique(),
+    // Constraint name matches what the SQL migration created.
+    name: text('name').notNull().unique('conversation_tags_name_key'),
     color: text('color').default('#6b7280').notNull(),
     description: text('description'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -167,14 +189,21 @@ export const conversationTags = pgTable(
 export const conversationTagAssignments = pgTable(
   'conversation_tag_assignments',
   {
-    conversationId: typeIdColumn('conversation')('conversation_id')
-      .notNull()
-      .references(() => conversations.id, { onDelete: 'cascade' }),
-    conversationTagId: typeIdColumn('conversation_tag')('conversation_tag_id')
-      .notNull()
-      .references(() => conversationTags.id, { onDelete: 'cascade' }),
+    conversationId: typeIdColumn('conversation')('conversation_id').notNull(),
+    conversationTagId: typeIdColumn('conversation_tag')('conversation_tag_id').notNull(),
   },
   (table) => [
+    // FK names match the constraints the SQL migration created.
+    foreignKey({
+      name: 'conversation_tag_assignments_conversation_id_fkey',
+      columns: [table.conversationId],
+      foreignColumns: [conversations.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_tag_assignments_conversation_tag_id_fkey',
+      columns: [table.conversationTagId],
+      foreignColumns: [conversationTags.id],
+    }).onDelete('cascade'),
     uniqueIndex('conversation_tag_assignments_pk').on(
       table.conversationId,
       table.conversationTagId
@@ -194,23 +223,31 @@ export const conversationMessageMentions = pgTable(
   'conversation_message_mentions',
   {
     id: typeIdWithDefault('conversation_msg_mention')('id').primaryKey(),
-    conversationMessageId: typeIdColumn('conversation_msg')('conversation_message_id')
-      .notNull()
-      .references(() => conversationMessages.id, { onDelete: 'cascade' }),
-    principalId: typeIdColumn('principal')('principal_id')
-      .notNull()
-      .references(() => principal.id, { onDelete: 'cascade' }),
+    conversationMessageId: typeIdColumn('conversation_msg')('conversation_message_id').notNull(),
+    principalId: typeIdColumn('principal')('principal_id').notNull(),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // FK names match the constraints the SQL migration created.
+    foreignKey({
+      name: 'conversation_message_mentions_conversation_message_id_fkey',
+      columns: [table.conversationMessageId],
+      foreignColumns: [conversationMessages.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_message_mentions_principal_id_fkey',
+      columns: [table.principalId],
+      foreignColumns: [principal.id],
+    }).onDelete('cascade'),
     uniqueIndex('conversation_message_mentions_message_principal_uq').on(
       table.conversationMessageId,
       table.principalId
     ),
+    // nullsFirst matches the migration's plain DESC (postgres default).
     index('conversation_message_mentions_principal_idx').on(
       table.principalId,
-      table.createdAt.desc()
+      table.createdAt.desc().nullsFirst()
     ),
   ]
 )
@@ -225,17 +262,24 @@ export const conversationMessageReactions = pgTable(
   'conversation_message_reactions',
   {
     id: typeIdWithDefault('conversation_msg_reaction')('id').primaryKey(),
-    conversationMessageId: typeIdColumn('conversation_msg')('conversation_message_id')
-      .notNull()
-      .references(() => conversationMessages.id, { onDelete: 'cascade' }),
+    conversationMessageId: typeIdColumn('conversation_msg')('conversation_message_id').notNull(),
     // Required — only authenticated team members can react.
-    principalId: typeIdColumn('principal')('principal_id')
-      .notNull()
-      .references(() => principal.id, { onDelete: 'cascade' }),
+    principalId: typeIdColumn('principal')('principal_id').notNull(),
     emoji: text('emoji').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    // FK names match the constraints the SQL migration created.
+    foreignKey({
+      name: 'conversation_message_reactions_conversation_message_id_fkey',
+      columns: [table.conversationMessageId],
+      foreignColumns: [conversationMessages.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_message_reactions_principal_id_fkey',
+      columns: [table.principalId],
+      foreignColumns: [principal.id],
+    }).onDelete('cascade'),
     index('conversation_message_reactions_message_idx').on(table.conversationMessageId),
     index('conversation_message_reactions_principal_idx').on(table.principalId),
     uniqueIndex('conversation_message_reactions_unique_idx').on(
@@ -255,17 +299,31 @@ export const conversationMessageReactions = pgTable(
 export const conversationMessageFlags = pgTable(
   'conversation_message_flags',
   {
-    conversationMessageId: typeIdColumn('conversation_msg')('conversation_message_id')
-      .notNull()
-      .references(() => conversationMessages.id, { onDelete: 'cascade' }),
-    principalId: typeIdColumn('principal')('principal_id')
-      .notNull()
-      .references(() => principal.id, { onDelete: 'cascade' }),
+    conversationMessageId: typeIdColumn('conversation_msg')('conversation_message_id').notNull(),
+    principalId: typeIdColumn('principal')('principal_id').notNull(),
     flaggedAt: timestamp('flagged_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.conversationMessageId, table.principalId] }),
-    index('conversation_message_flags_principal_idx').on(table.principalId, table.flaggedAt.desc()),
+    // Constraint names match what the SQL migration created.
+    primaryKey({
+      name: 'conversation_message_flags_pkey',
+      columns: [table.conversationMessageId, table.principalId],
+    }),
+    foreignKey({
+      name: 'conversation_message_flags_conversation_message_id_fkey',
+      columns: [table.conversationMessageId],
+      foreignColumns: [conversationMessages.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_message_flags_principal_id_fkey',
+      columns: [table.principalId],
+      foreignColumns: [principal.id],
+    }).onDelete('cascade'),
+    // nullsFirst matches the migration's plain DESC (postgres default).
+    index('conversation_message_flags_principal_idx').on(
+      table.principalId,
+      table.flaggedAt.desc().nullsFirst()
+    ),
   ]
 )
 

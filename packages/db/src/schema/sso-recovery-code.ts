@@ -11,7 +11,7 @@
  * NULL prevents two active codes from sharing the same hash (a tiny
  * but real birthday risk with 60-bit codes).
  */
-import { pgTable, text, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, index, uniqueIndex, foreignKey } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { user } from './auth'
@@ -20,9 +20,7 @@ export const ssoRecoveryCode = pgTable(
   'sso_recovery_code',
   {
     id: typeIdWithDefault('rcode')('id').primaryKey(),
-    userId: typeIdColumn('user')('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    userId: typeIdColumn('user')('user_id').notNull(),
     /** argon2id digest of the user-facing code. Never stored plaintext. */
     codeHash: text('code_hash').notNull(),
     /** Set when the code is consumed. Null = active. */
@@ -30,6 +28,12 @@ export const ssoRecoveryCode = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'sso_recovery_code_user_id_fkey',
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete('cascade'),
     index('sso_recovery_code_user_id_idx').on(table.userId),
     uniqueIndex('sso_recovery_code_active_hash_unique')
       .on(table.userId, table.codeHash)

@@ -1,4 +1,13 @@
-import { pgTable, text, timestamp, integer, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  timestamp,
+  integer,
+  index,
+  uniqueIndex,
+  jsonb,
+  foreignKey,
+} from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -39,15 +48,19 @@ export const changelogEntries = pgTable(
 export const changelogEntryPosts = pgTable(
   'changelog_entry_posts',
   {
-    changelogEntryId: typeIdColumn('changelog')('changelog_entry_id')
-      .notNull()
-      .references(() => changelogEntries.id, { onDelete: 'cascade' }),
+    changelogEntryId: typeIdColumn('changelog')('changelog_entry_id').notNull(),
     postId: typeIdColumn('post')('post_id')
       .notNull()
       .references(() => posts.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    // Named to match the migration's constraint (63-char pg truncation).
+    foreignKey({
+      name: 'changelog_entry_posts_changelog_entry_id_changelog_entries_id_f',
+      columns: [table.changelogEntryId],
+      foreignColumns: [changelogEntries.id],
+    }).onDelete('cascade'),
     uniqueIndex('changelog_entry_posts_pk').on(table.changelogEntryId, table.postId),
     index('changelog_entry_posts_changelog_id_idx').on(table.changelogEntryId),
     index('changelog_entry_posts_post_id_idx').on(table.postId),

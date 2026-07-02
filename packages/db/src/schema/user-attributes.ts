@@ -5,8 +5,30 @@
  * These appear as first-class segment rule options and can be used for
  * segment weighting (e.g., MRR, company size, contract value).
  */
-import { pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
-import { typeIdWithDefault } from '@quackback/ids/drizzle'
+import { pgTable, text, timestamp, uniqueIndex, customType } from 'drizzle-orm/pg-core'
+import { generateId, toUuid, fromUuid, isUuid, type TypeId } from '@quackback/ids'
+
+/**
+ * TypeID column stored as `text` holding the UUID form. The migration created
+ * this id column as text rather than uuid, so the standard typeIdColumn (uuid)
+ * would drift from the live schema; the app-layer conversion is identical.
+ * A follow-up migration converting the column to uuid would let this revert
+ * to typeIdWithDefault.
+ */
+const userAttrIdText = customType<{ data: TypeId<'user_attr'>; driverData: string }>({
+  dataType() {
+    return 'text'
+  },
+  toDriver(value: TypeId<'user_attr'>): string {
+    return isUuid(value) ? value : toUuid(value)
+  },
+  fromDriver(value: unknown): TypeId<'user_attr'> {
+    if (typeof value !== 'string') {
+      throw new Error(`Expected string from database, got ${typeof value}`)
+    }
+    return fromUuid('user_attr', value)
+  },
+})
 
 /** Supported data types for user attributes */
 export type UserAttributeType = 'string' | 'number' | 'boolean' | 'date' | 'currency'
@@ -27,7 +49,9 @@ export type CurrencyCode =
 export const userAttributeDefinitions = pgTable(
   'user_attribute_definitions',
   {
-    id: typeIdWithDefault('user_attr')('id').primaryKey(),
+    id: userAttrIdText('id')
+      .primaryKey()
+      .$defaultFn(() => generateId('user_attr')),
     /** The JSON key inside user.metadata, e.g. "mrr", "company_size" */
     key: text('key').notNull(),
     /** Human-readable label shown in the UI, e.g. "Monthly Revenue" */

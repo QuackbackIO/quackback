@@ -16,6 +16,7 @@ import {
   uniqueIndex,
   jsonb,
   integer,
+  foreignKey,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -101,16 +102,26 @@ export const user = pgTable(
  * subsequent `/two-factor/verify-totp`; the default `true` matches
  * Better-Auth's expectation for newly-inserted rows.
  */
-export const twoFactor = pgTable('two_factor', {
-  id: typeIdWithDefault('two_factor')('id').primaryKey(),
-  userId: typeIdColumn('user')('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  secret: text('secret').notNull(),
-  backupCodes: text('backup_codes').notNull(),
-  verified: boolean('verified').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const twoFactor = pgTable(
+  'two_factor',
+  {
+    id: typeIdWithDefault('two_factor')('id').primaryKey(),
+    userId: typeIdColumn('user')('user_id').notNull(),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    verified: boolean('verified').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'two_factor_user_id_fkey',
+      columns: [table.userId],
+      foreignColumns: [user.id],
+    }).onDelete('cascade'),
+    index('two_factor_user_id_idx').on(table.userId),
+  ]
+)
 
 export const session = pgTable(
   'session',
@@ -136,7 +147,8 @@ export const session = pgTable(
     // — without it, the planner does an index scan on `session_userId_idx`
     // but still reads every row's created_at. With this, the planner
     // can do an index-only scan and stop at the first row per group.
-    index('session_userId_createdAt_idx').on(table.userId, table.createdAt.desc()),
+    // nullsFirst matches the migration's plain DESC (postgres default).
+    index('session_userId_createdAt_idx').on(table.userId, table.createdAt.desc().nullsFirst()),
     // Range-scan support for the active-users analytics query, which counts
     // distinct users whose session.updated_at falls within the period.
     index('session_updatedAt_idx').on(table.updatedAt),
@@ -433,12 +445,16 @@ export const ssoVerifiedDomain = pgTable(
      * domains stay unlinked until the backfill (Task 9) attaches them.
      * Cascades so removing a provider clears its domain bindings.
      */
-    providerId: typeIdColumnNullable('idp')('provider_id').references(() => identityProvider.id, {
-      onDelete: 'cascade',
-    }),
+    providerId: typeIdColumnNullable('idp')('provider_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
+    // Named to match the constraint the SQL migration created.
+    providerFk: foreignKey({
+      name: 'sso_verified_domain_provider_id_fk',
+      columns: [t.providerId],
+      foreignColumns: [identityProvider.id],
+    }).onDelete('cascade'),
     nameUnique: uniqueIndex('sso_verified_domain_name_unique').on(t.name),
   })
 )
@@ -523,6 +539,12 @@ export const principal = pgTable(
     index('principal_type_idx').on(table.type),
     // Composite index for date-filtered user listings (e.g. portal users by join date)
     index('principal_role_created_at_idx').on(table.role, table.createdAt),
+    // Case-insensitive prefix search for the @-mention typeahead;
+    // text_pattern_ops lets the planner use it for LIKE 'prefix%'.
+    index('principal_displayname_lower_idx').using(
+      'btree',
+      sql`lower(display_name) text_pattern_ops`
+    ),
   ]
 )
 

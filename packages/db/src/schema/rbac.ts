@@ -1,4 +1,13 @@
-import { pgTable, text, timestamp, boolean, uuid, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  uuid,
+  index,
+  uniqueIndex,
+  foreignKey,
+} from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -62,13 +71,16 @@ export const principalRoleAssignments = pgTable(
       .references(() => roles.id, { onDelete: 'cascade' }),
     // Reserved for the later team-scoping phase; NULL = workspace-wide.
     teamId: uuid('team_id'),
-    grantedByPrincipalId: typeIdColumnNullable('principal')('granted_by_principal_id').references(
-      () => principal.id,
-      { onDelete: 'set null' }
-    ),
+    grantedByPrincipalId: typeIdColumnNullable('principal')('granted_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    // Named to match the migration's constraint (63-char pg truncation).
+    foreignKey({
+      name: 'principal_role_assignments_granted_by_principal_id_principal_id',
+      columns: [table.grantedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
     // One workspace-wide assignment per (principal, role). Partial so future
     // team-scoped grants (team_id NOT NULL) are exempt.
     uniqueIndex('principal_role_assignments_workspace_unique_idx')

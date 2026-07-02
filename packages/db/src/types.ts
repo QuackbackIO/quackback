@@ -101,13 +101,16 @@ export interface BoardAccess {
   }
 }
 
+// Key order is jsonb-canonical (length, then bytewise) so the serialized
+// column default matches what postgres stores for the migration's default;
+// the drift check compares the two strings byte for byte.
 export const DEFAULT_BOARD_ACCESS: BoardAccess = {
   view: 'anonymous',
   vote: 'anonymous',
-  comment: 'anonymous',
   submit: 'anonymous',
-  segments: { view: [], vote: [], comment: [], submit: [] },
-  moderation: { anonPosts: 'inherit', signedPosts: 'inherit', comments: 'inherit' },
+  comment: 'anonymous',
+  segments: { view: [], vote: [], submit: [], comment: [] },
+  moderation: { comments: 'inherit', anonPosts: 'inherit', signedPosts: 'inherit' },
 }
 
 // Integration config (stored in integrations.config JSONB column)

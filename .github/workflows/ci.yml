@@ -47,6 +47,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run db:migrate
+      # Applies every migration to a scratch DB on the postgres service and
+      # diffs the result against the Drizzle TS schema (packages/db/README.md).
+      - name: Check migration/schema drift
+        run: bun run db:check-drift
       - run: bun run test --run
 
   e2e-smoke:

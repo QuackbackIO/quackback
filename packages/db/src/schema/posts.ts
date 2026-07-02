@@ -10,6 +10,7 @@ import {
   customType,
   check,
   varchar,
+  foreignKey,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -64,10 +65,7 @@ export const posts = pgTable(
     ),
     // Team member who tracked this post from a support conversation on the
     // customer's behalf. The author (principalId) stays the customer.
-    trackedByPrincipalId: typeIdColumnNullable('principal')('tracked_by_principal_id').references(
-      () => principal.id,
-      { onDelete: 'set null' }
-    ),
+    trackedByPrincipalId: typeIdColumnNullable('principal')('tracked_by_principal_id'),
     voteCount: integer('vote_count').default(0).notNull(),
     // Denormalized comment count for performance
     // Maintained by application code in comment.service.ts (create/delete operations)
@@ -123,6 +121,12 @@ export const posts = pgTable(
     mergeCheckedAt: timestamp('merge_checked_at', { withTimezone: true }),
   },
   (table) => [
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'posts_tracked_by_principal_id_fk',
+      columns: [table.trackedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
     index('posts_board_id_idx').on(table.boardId),
     index('posts_status_id_idx').on(table.statusId),
     index('posts_principal_id_idx').on(table.principalId),
@@ -162,14 +166,21 @@ export const posts = pgTable(
 export const postTagAssignments = pgTable(
   'post_tag_assignments',
   {
-    postId: typeIdColumn('post')('post_id')
-      .notNull()
-      .references(() => posts.id, { onDelete: 'cascade' }),
-    tagId: typeIdColumn('post_tag')('tag_id')
-      .notNull()
-      .references(() => postTags.id, { onDelete: 'cascade' }),
+    postId: typeIdColumn('post')('post_id').notNull(),
+    tagId: typeIdColumn('post_tag')('tag_id').notNull(),
   },
   (table) => [
+    // FK names predate the post_tags -> post_tag_assignments table rename.
+    foreignKey({
+      name: 'post_tags_post_id_posts_id_fk',
+      columns: [table.postId],
+      foreignColumns: [posts.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'post_tags_tag_id_tags_id_fk',
+      columns: [table.tagId],
+      foreignColumns: [postTags.id],
+    }).onDelete('cascade'),
     uniqueIndex('post_tag_assignments_pk').on(table.postId, table.tagId),
     index('post_tag_assignments_post_id_idx').on(table.postId),
     index('post_tag_assignments_tag_id_idx').on(table.tagId),
@@ -214,14 +225,17 @@ export const postVotes = pgTable(
       'feedback_suggestion_id'
     ).references(() => feedbackSuggestions.id, { onDelete: 'set null' }),
     // Which admin/member added this vote on behalf of the voter
-    addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id').references(
-      () => principal.id,
-      { onDelete: 'set null' }
-    ),
+    addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    // Named to match the constraint the SQL migration created.
+    foreignKey({
+      name: 'post_votes_added_by_principal_id_fkey',
+      columns: [table.addedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
     index('post_votes_post_id_idx').on(table.postId),
     // Unique constraint: one vote per principal per post
     uniqueIndex('post_votes_principal_post_idx').on(table.postId, table.principalId),

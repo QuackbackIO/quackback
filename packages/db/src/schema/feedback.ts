@@ -11,6 +11,7 @@ import {
   real,
   boolean,
   check,
+  foreignKey,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -164,9 +165,7 @@ export const feedbackSuggestions = pgTable(
     id: typeIdWithDefault('feedback_suggestion')('id').primaryKey(),
     suggestionType: varchar('suggestion_type', { length: 20 }).notNull(), // 'create_post' | 'vote_on_post'
     status: varchar('status', { length: 20 }).notNull().default('pending'), // 'pending' | 'accepted' | 'dismissed' | 'expired'
-    rawFeedbackItemId: typeIdColumn('raw_feedback')('raw_feedback_item_id')
-      .notNull()
-      .references(() => rawFeedbackItems.id, { onDelete: 'cascade' }),
+    rawFeedbackItemId: typeIdColumn('raw_feedback')('raw_feedback_item_id').notNull(),
     signalId: typeIdColumnNullable('feedback_signal')('signal_id').references(
       () => feedbackSignals.id,
       { onDelete: 'set null' }
@@ -194,8 +193,14 @@ export const feedbackSuggestions = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // Named to match the migration's constraint (63-char pg truncation).
+    foreignKey({
+      name: 'feedback_suggestions_raw_feedback_item_id_raw_feedback_items_id',
+      columns: [t.rawFeedbackItemId],
+      foreignColumns: [rawFeedbackItems.id],
+    }).onDelete('cascade'),
     index('feedback_suggestions_status_idx').on(t.status),
-    index('feedback_suggestions_type_idx').on(t.suggestionType),
+    // No suggestion_type index: it was dropped in migration 0024.
     index('feedback_suggestions_raw_item_idx').on(t.rawFeedbackItemId),
     index('feedback_suggestions_created_idx').on(t.createdAt),
     index('feedback_suggestions_result_post_idx').on(t.resultPostId),

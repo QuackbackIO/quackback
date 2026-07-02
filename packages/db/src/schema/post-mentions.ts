@@ -1,4 +1,4 @@
-import { pgTable, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core'
+import { pgTable, timestamp, uniqueIndex, index, foreignKey } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { posts } from './posts'
@@ -16,18 +16,26 @@ export const postMentions = pgTable(
   'post_mentions',
   {
     id: typeIdWithDefault('post_mention')('id').primaryKey(),
-    postId: typeIdColumn('post')('post_id')
-      .notNull()
-      .references(() => posts.id, { onDelete: 'cascade' }),
-    principalId: typeIdColumn('principal')('principal_id')
-      .notNull()
-      .references(() => principal.id, { onDelete: 'cascade' }),
+    postId: typeIdColumn('post')('post_id').notNull(),
+    principalId: typeIdColumn('principal')('principal_id').notNull(),
     notifiedAt: timestamp('notified_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // FK names match the constraints the SQL migration created.
+    foreignKey({
+      name: 'post_mentions_post_id_fkey',
+      columns: [t.postId],
+      foreignColumns: [posts.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'post_mentions_principal_id_fkey',
+      columns: [t.principalId],
+      foreignColumns: [principal.id],
+    }).onDelete('cascade'),
     uniqueIndex('post_mentions_post_principal_uq').on(t.postId, t.principalId),
-    index('post_mentions_principal_idx').on(t.principalId, t.createdAt.desc()),
+    // nullsFirst matches the migration's plain DESC (postgres default).
+    index('post_mentions_principal_idx').on(t.principalId, t.createdAt.desc().nullsFirst()),
   ]
 )
 

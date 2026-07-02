@@ -8,7 +8,7 @@
  * Both types share the same userSegments join table — dynamic segments
  * are treated as a cached result set, evaluated periodically and synced.
  */
-import { pgTable, text, timestamp, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, index, uniqueIndex, jsonb, check } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -184,6 +184,11 @@ export const userSegments = pgTable(
     uniqueIndex('user_segments_pk').on(table.principalId, table.segmentId),
     index('user_segments_principal_id_idx').on(table.principalId),
     index('user_segments_segment_id_idx').on(table.segmentId),
+    // DB-level backstop for the enum above, created by the SQL migration.
+    check(
+      'user_segments_added_by_check',
+      sql`added_by = ANY (ARRAY['manual'::text, 'dynamic'::text, 'sso'::text, 'widget'::text, 'api'::text])`
+    ),
   ]
 )
 

@@ -1,4 +1,5 @@
 import { pgTable, varchar, integer, text, timestamp, jsonb, index } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
 
 export const aiUsageLog = pgTable(
@@ -31,5 +32,9 @@ export const aiUsageLog = pgTable(
     index('ai_usage_log_step_idx').on(t.pipelineStep),
     index('ai_usage_log_created_idx').on(t.createdAt),
     index('ai_usage_log_raw_item_idx').on(t.rawFeedbackItemId),
+    // Partial index backing the per-month chat-completion tier quota counter.
+    index('ai_usage_log_month_chat_idx')
+      .on(t.createdAt)
+      .where(sql`"call_type" = 'chat_completion' AND "status" = 'success'`),
   ]
 )

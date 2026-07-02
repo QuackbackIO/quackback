@@ -72,13 +72,19 @@ export const integrationPlatformCredentials = pgTable(
     id: typeIdWithDefault('platform_cred')('id').primaryKey(),
     integrationType: varchar('integration_type', { length: 50 }).notNull(),
     secrets: text('secrets').notNull(),
-    configuredByPrincipalId: typeIdColumnNullable('principal')(
-      'configured_by_principal_id'
-    ).references(() => principal.id, { onDelete: 'set null' }),
+    configuredByPrincipalId: typeIdColumnNullable('principal')('configured_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [unique('platform_cred_type_unique').on(table.integrationType)]
+  (table) => [
+    // Named to match the migration's constraint (63-char pg truncation).
+    foreignKey({
+      name: 'integration_platform_credentials_configured_by_principal_id_pri',
+      columns: [table.configuredByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
+    unique('platform_cred_type_unique').on(table.integrationType),
+  ]
 )
 
 export const integrationPlatformCredentialsRelations = relations(
@@ -116,10 +122,13 @@ export const integrationEventMappings = pgTable(
       columns: [table.integrationId],
       foreignColumns: [integrations.id],
     }).onDelete('cascade'),
+    // Columns listed alphabetically: drizzle-kit introspects multi-column
+    // UNIQUE constraints in alphabetical order, and the drift check compares
+    // that order. The live constraint's real order comes from the migration.
     unique('mapping_unique').on(
-      table.integrationId,
-      table.eventType,
       table.actionType,
+      table.eventType,
+      table.integrationId,
       table.targetKey
     ),
     index('idx_event_mappings_lookup').on(table.integrationId, table.eventType, table.enabled),
@@ -150,7 +159,8 @@ export const slackChannelMonitors = pgTable(
       columns: [table.integrationId],
       foreignColumns: [integrations.id],
     }).onDelete('cascade'),
-    unique('slack_monitor_channel_unique').on(table.integrationId, table.channelId),
+    // Alphabetical for the drift check; see mapping_unique above.
+    unique('slack_monitor_channel_unique').on(table.channelId, table.integrationId),
     index('idx_slack_monitors_lookup').on(table.integrationId, table.channelId, table.enabled),
   ]
 )

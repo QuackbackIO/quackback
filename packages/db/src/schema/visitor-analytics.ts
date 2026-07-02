@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, date, integer, index, primaryKey } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
 
 /**
@@ -35,8 +36,12 @@ export const pageViews = pgTable(
   },
   (t) => [
     // The partition column must be part of the PK on a partitioned table.
-    primaryKey({ columns: [t.occurredAt, t.id] }),
+    primaryKey({ name: 'page_views_pkey', columns: [t.occurredAt, t.id] }),
     index('page_views_path_occurred_idx').on(t.path, t.occurredAt),
+    // Layer-2 device lookups; partial so cookieless layer-1 rows cost nothing.
+    index('page_views_device_id_idx')
+      .on(t.deviceId)
+      .where(sql`"device_id" IS NOT NULL`),
   ]
 )
 
@@ -47,14 +52,23 @@ export const pageViews = pgTable(
  * the anonymous-to-identified merge. Converges with the support platform's
  * per-channel identity table when that lands.
  */
-export const visitorDevices = pgTable('visitor_devices', {
-  deviceId: text('device_id').primaryKey(),
-  /** Soft link (no FK): the person this device belongs to, once engaged. */
-  principalId: typeIdColumnNullable('principal')('principal_id'),
-  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).defaultNow().notNull(),
-  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
-  lastCountry: text('last_country'),
-})
+export const visitorDevices = pgTable(
+  'visitor_devices',
+  {
+    deviceId: text('device_id').primaryKey(),
+    /** Soft link (no FK): the person this device belongs to, once engaged. */
+    principalId: typeIdColumnNullable('principal')('principal_id'),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
+    lastCountry: text('last_country'),
+  },
+  (t) => [
+    // Principal -> devices reverse lookup; partial to skip unengaged devices.
+    index('visitor_devices_principal_idx')
+      .on(t.principalId)
+      .where(sql`"principal_id" IS NOT NULL`),
+  ]
+)
 
 /** Surface values stored on rollup rows; 'all' is the cross-surface aggregate. */
 export const VISITOR_SURFACES = ['all', 'portal', 'widget'] as const
@@ -85,7 +99,7 @@ export const visitorStatsDaily = pgTable(
     visits: integer('visits').default(0).notNull(),
     computedAt: timestamp('computed_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [primaryKey({ columns: [t.date, t.surface] })]
+  (t) => [primaryKey({ name: 'visitor_stats_daily_pkey', columns: [t.date, t.surface] })]
 )
 
 /**
@@ -103,5 +117,13 @@ export const visitorTopStats = pgTable(
     count: integer('count').default(0).notNull(),
     computedAt: timestamp('computed_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [primaryKey({ columns: [t.period, t.surface, t.dimension, t.rank] })]
+  (t) => [
+    // Columns listed alphabetically: drizzle-kit introspects composite-PK
+    // columns in alphabetical order and the drift check compares that order.
+    // The real key order lives in the migration: (period, surface, dimension, rank).
+    primaryKey({
+      name: 'visitor_top_stats_pkey',
+      columns: [t.dimension, t.period, t.rank, t.surface],
+    }),
+  ]
 )
