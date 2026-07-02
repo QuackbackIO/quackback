@@ -20,6 +20,7 @@ import {
   type InboxNavItem,
   type StatusFilter,
 } from '@/lib/client/conversation/inbox-scope'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 
 export const conversationInboxQueries = {
@@ -31,21 +32,21 @@ export const conversationInboxQueries = {
     search: string
   ) =>
     queryOptions({
-      queryKey: ['admin', 'inbox', 'conversations', inboxNavKey(nav), status, priority, search],
+      queryKey: conversationKeys.agentConversationList(inboxNavKey(nav), status, priority, search),
       queryFn: () => listConversationsFn({ data: buildListParams(nav, status, priority, search) }),
     }),
 
   /** A single conversation's thread (conversation DTO + first page of messages). */
   thread: (conversationId: ConversationId) =>
     queryOptions({
-      queryKey: ['admin', 'inbox', 'thread', conversationId],
+      queryKey: conversationKeys.agentThread(conversationId),
       queryFn: () => getConversationFn({ data: { conversationId } }),
     }),
 
   /** Labels + per-tag open-conversation counts (drives the nav Tags group). */
   tagCounts: () =>
     queryOptions({
-      queryKey: ['admin', 'inbox', 'conversation-tags', 'counts'],
+      queryKey: conversationKeys.agentTagCounts(),
       queryFn: () => fetchConversationTagsWithCountsFn(),
       staleTime: 60_000,
     }),
@@ -53,7 +54,7 @@ export const conversationInboxQueries = {
   /** Segments + per-segment open-conversation counts (drives the nav Segments group). */
   segmentCounts: () =>
     queryOptions({
-      queryKey: ['admin', 'inbox', 'segments', 'counts'],
+      queryKey: conversationKeys.agentSegmentCounts(),
       queryFn: () => fetchInboxSegmentsWithCountsFn(),
       staleTime: 60_000,
     }),

@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/solid'
 import type { ConversationId } from '@quackback/ids'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
 import { Avatar } from '@/components/ui/avatar'
@@ -34,7 +35,7 @@ export function WidgetMessages({ teamName, assistant, onOpenMessenger }: WidgetM
   const { data, isLoading } = useQuery({
     // Re-keyed on sessionVersion so the list refreshes after identify merges
     // the visitor's anonymous threads onto their account.
-    queryKey: ['widget', 'my-conversations', sessionVersion],
+    queryKey: conversationKeys.widgetConversationList(sessionVersion),
     // Forward the widget Bearer token, or token-authed visitors fail the
     // server-side hasAuthCredentials() guard and always get an empty list.
     queryFn: () => getMyConversationsFn({ headers: getWidgetAuthHeaders() }),

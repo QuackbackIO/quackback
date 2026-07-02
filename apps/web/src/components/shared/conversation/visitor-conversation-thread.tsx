@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { buildConversationRows, type ConversationRow } from './conversation-rows'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
@@ -8,9 +8,7 @@ import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import { ChatBubbleLeftRightIcon, PaperClipIcon, BookOpenIcon } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { TypingDots } from '@/components/shared/typing-dots'
-import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
@@ -22,24 +20,31 @@ import {
   ConversationRichComposer,
   type ConversationRichComposerHandle,
 } from '@/components/admin/conversation/conversation-rich-composer'
-import { RichTextContent } from '@/components/ui/rich-text-editor'
-import { EmbedHydration } from '@/components/shared/embed-hydration'
+import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
+import {
+  ThreadViewport,
+  docHasContentNode,
+  useComposerDoc,
+  useMarkReadOnIncoming,
+  useOlderMessages,
+  useThreadVirtualizer,
+  useTypingSender,
+} from '@/components/conversation/thread'
+import {
+  applyVisitorThreadEvent,
+  appendSentVisitorMessage,
+  prependOlderVisitorMessages,
+  type VisitorThreadCache,
+} from '@/components/conversation/events-reducer'
+import { conversationKeys } from '@/components/conversation/query-keys'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
-import type { JSONContent } from '@tiptap/core'
-import type { TiptapContent } from '@/lib/shared/db-types'
-import type {
-  ConversationAttachment,
-  ConversationMessageDTO,
-} from '@/lib/shared/conversation/types'
-import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
+import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import {
   getMyConversationFn,
   sendConversationMessageFn,
   listConversationMessagesFn,
-  markConversationReadFn,
   mintConversationStreamTokenFn,
-  sendConversationTypingFn,
   submitCsatFn,
 } from '@/lib/server/functions/conversation'
 
@@ -47,18 +52,9 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-/** True when the composer doc carries an inline image or post embed, which makes
- *  a message worth sending even with no typed text. Walks the doc since these are
- *  block atoms at the top level (and defensively, any nesting). */
-function docHasContentNode(doc: JSONContent | null): boolean {
-  if (!doc) return false
-  const walk = (nodes: JSONContent[] | undefined): boolean =>
-    !!nodes?.some((n) => n.type === 'chatImage' || n.type === 'quackbackEmbed' || walk(n.content))
-  return walk(doc.content)
-}
-
 const NO_HEADERS = (): Record<string, string> => ({})
 const ALWAYS_READY = async (): Promise<boolean> => true
+const EMPTY_MESSAGES: ConversationMessageDTO[] = []
 
 export interface VisitorConversationThreadPresence {
   agentsOnline: boolean
@@ -114,7 +110,9 @@ export interface VisitorConversationThreadProps {
  *
  * Shared by the widget messenger tab and the portal Support tab — every
  * surface-specific dependency (auth headers, session minting, presence,
- * uploads, help search) comes in through props.
+ * uploads, help search) comes in through props. Built on the shared thread
+ * core (components/conversation): the message model lives in the query cache
+ * and stream events apply through the pure events reducer.
  */
 export function VisitorConversationThread({
   conversationTarget,
@@ -132,6 +130,7 @@ export function VisitorConversationThread({
   onConversationStarted,
 }: VisitorConversationThreadProps) {
   const intl = useIntl()
+  const queryClient = useQueryClient()
   const firstName = firstNameOf(currentUser?.name)
 
   const [loading, setLoading] = useState(true)
@@ -142,7 +141,6 @@ export function VisitorConversationThread({
   // state and wipe the just-sent message. Remembering the created id lets the
   // reload fetch the real thread instead.
   const createdConversationIdRef = useRef<ConversationId | null>(null)
-  const [messages, setMessages] = useState<ConversationMessageDTO[]>([])
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null)
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
@@ -150,30 +148,20 @@ export function VisitorConversationThread({
   const [assistant, setAssistant] = useState<{ name: string; avatarUrl: string | null } | null>(
     null
   )
-  const [agentReadAt, setAgentReadAt] = useState<string | null>(null)
   // Pre-chat email capture (anonymous visitors). Data-driven: identified
   // visitors come back with visitorHasEmail=true, so the prompt never shows.
   // Whether an offline reply could actually reach this visitor by email — drives
   // the offline copy so the surface never promises email it can't send.
   const [canEmailReply, setCanEmailReply] = useState(false)
-  // Older-message pagination.
-  const [hasMoreOlder, setHasMoreOlder] = useState(false)
-  const [loadingOlder, setLoadingOlder] = useState(false)
-  const [conversationStatus, setConversationStatus] = useState<string | null>(null)
-  const [csatRating, setCsatRating] = useState<number | null>(null)
   // Whether the visitor rated in THIS session — enables the optional comment
   // follow-up. A returning, already-rated visitor goes straight to "thanks".
   const [csatJustRated, setCsatJustRated] = useState(false)
   const [csatCommentDone, setCsatCommentDone] = useState(false)
   const [csatComment, setCsatComment] = useState('')
-  // Composer is a rich TipTap doc (inline images + post embeds). `messageText` is
-  // the doc's plain text (gates send + drives help-search/typing); `messageDocRef`
-  // holds the doc persisted as contentJson; `composerResetSignal` clears the
-  // editor after a successful send.
-  const [messageText, setMessageText] = useState('')
-  const messageDocRef = useRef<JSONContent | null>(null)
-  const [messageHasContentNode, setMessageHasContentNode] = useState(false)
-  const [composerResetSignal, setComposerResetSignal] = useState(0)
+  // Composer is a rich TipTap doc (inline images + post embeds): the shared
+  // composer-doc state (plain text gates send + drives help-search/typing; the
+  // doc persists as contentJson; the reset signal clears the editor on send).
+  const composer = useComposerDoc()
   const [sending, setSending] = useState(false)
 
   const scrollViewportRef = useRef<HTMLDivElement>(null)
@@ -181,17 +169,21 @@ export function VisitorConversationThread({
   // rating-request failure can't roll back state the visitor has moved past.
   const csatSubmitGenRef = useRef(0)
 
-  const appendMessage = useCallback((msg: ConversationMessageDTO) => {
-    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
-  }, [])
+  // The thread's message model lives in the query cache (written by the load
+  // below + the reducer): messages, backfill cursor, the agent read watermark,
+  // status, and CSAT. A skipToken query subscribes without ever fetching.
+  const { data: thread } = useQuery<VisitorThreadCache>({
+    queryKey: conversationKeys.visitorThread(conversationId),
+    queryFn: skipToken,
+    staleTime: Infinity,
+  })
+  const messages = thread?.messages ?? EMPTY_MESSAGES
+  const hasMoreOlder = thread?.hasMore ?? false
+  const agentReadAt = thread?.agentLastReadAt ?? null
+  const conversationStatus = thread?.status ?? null
+  const csatRating = thread?.csatRating ?? null
 
-  const sendTyping = useCallback(() => {
-    if (!conversationId) return
-    void sendConversationTypingFn({
-      data: { conversationId },
-      headers: getAuthHeaders(),
-    }).catch(() => {})
-  }, [conversationId, getAuthHeaders])
+  const sendTyping = useTypingSender(conversationId, getAuthHeaders)
   const { remoteTyping, onLocalInput, onRemoteTyping, clearRemoteTyping } =
     useConversationTyping(sendTyping)
 
@@ -243,7 +235,7 @@ export function VisitorConversationThread({
     [ensureSession, addFiles, intl]
   )
   // Live link unfurl while composing (debounced), matching admin.
-  const debouncedMessageText = useDebouncedValue(messageText, 500)
+  const debouncedMessageText = useDebouncedValue(composer.text, 500)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composerRef = useRef<ConversationRichComposerHandle>(null)
 
@@ -276,12 +268,19 @@ export function VisitorConversationThread({
         setTeamName(res.teamName)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
-        setHasMoreOlder(res.hasMore)
-        setConversationId((res.conversation?.id as ConversationId | undefined) ?? null)
-        setAgentReadAt(res.conversation?.agentLastReadAt ?? null)
-        setConversationStatus(res.conversation?.status ?? null)
-        setCsatRating(res.conversation?.csatRating ?? null)
-        setMessages(res.messages)
+        const conv = res.conversation
+        if (conv) {
+          // Snapshot the thread into the query cache; stream events and sends
+          // apply on top of it through the events reducer.
+          queryClient.setQueryData(conversationKeys.visitorThread(conv.id as ConversationId), {
+            messages: res.messages,
+            hasMore: res.hasMore,
+            agentLastReadAt: conv.agentLastReadAt ?? null,
+            status: conv.status ?? null,
+            csatRating: conv.csatRating ?? null,
+          } satisfies VisitorThreadCache)
+        }
+        setConversationId((conv?.id as ConversationId | undefined) ?? null)
       } catch {
         /* leave greeting-only state */
       } finally {
@@ -302,33 +301,37 @@ export function VisitorConversationThread({
         data: { conversationId },
         headers: getAuthHeaders(),
       })
-      setMessages(page.messages)
-      setHasMoreOlder(page.hasMore)
+      queryClient.setQueryData(
+        conversationKeys.visitorThread(conversationId),
+        (prev: VisitorThreadCache | undefined) =>
+          prev
+            ? { ...prev, messages: page.messages, hasMore: page.hasMore }
+            : {
+                messages: page.messages,
+                hasMore: page.hasMore,
+                agentLastReadAt: null,
+                status: null,
+                csatRating: null,
+              }
+      )
     } catch {
       /* keep current messages */
     }
-  }, [conversationId, getAuthHeaders])
+  }, [conversationId, getAuthHeaders, queryClient])
 
   // Prepend an older page (keyset cursor = oldest loaded message id).
-  const loadOlder = useCallback(async () => {
-    if (!conversationId || loadingOlder || messages.length === 0) return
-    setLoadingOlder(true)
-    try {
-      const page = await listConversationMessagesFn({
-        data: { conversationId, before: messages[0].id },
-        headers: getAuthHeaders(),
-      })
-      setMessages((prev) => {
-        const known = new Set(prev.map((m) => m.id))
-        return [...page.messages.filter((m) => !known.has(m.id)), ...prev]
-      })
-      setHasMoreOlder(page.hasMore)
-    } catch {
-      /* keep current messages */
-    } finally {
-      setLoadingOlder(false)
-    }
-  }, [conversationId, loadingOlder, messages, getAuthHeaders])
+  const { loadingOlder, loadOlder } = useOlderMessages({
+    conversationId,
+    messages,
+    getHeaders: getAuthHeaders,
+    onPage: (page) => {
+      if (!conversationId) return
+      queryClient.setQueryData(
+        conversationKeys.visitorThread(conversationId),
+        (prev: VisitorThreadCache | undefined) => prependOlderVisitorMessages(prev, page)
+      )
+    },
+  })
 
   useConversationStream({
     enabled: conversationId != null,
@@ -346,22 +349,21 @@ export function VisitorConversationThread({
       }
     },
     onEvent: (evt) => {
-      if (evt.kind === 'message') {
-        appendMessage(evt.message)
-        if (evt.message.senderType === 'agent') {
-          clearRemoteTyping()
-          onAgentActivity?.() // an agent is clearly here right now
-        }
+      // Cache-shaped updates (message/read/deleted/conversation) route through
+      // the pure reducer; typing + presence side effects stay here.
+      if (conversationId) {
+        queryClient.setQueryData(
+          conversationKeys.visitorThread(conversationId),
+          (prev: VisitorThreadCache | undefined) =>
+            applyVisitorThreadEvent(prev, evt, conversationId)
+        )
+      }
+      if (evt.kind === 'message' && evt.message.senderType === 'agent') {
+        clearRemoteTyping()
+        onAgentActivity?.() // an agent is clearly here right now
       } else if (evt.kind === 'typing' && evt.side === 'agent') {
         onRemoteTyping()
         onAgentActivity?.()
-      } else if (evt.kind === 'read' && evt.side === 'agent') {
-        setAgentReadAt(evt.at)
-      } else if (evt.kind === 'message_deleted') {
-        setMessages((prev) => prev.filter((m) => m.id !== evt.messageId))
-      } else if (evt.kind === 'conversation' && evt.conversation.id === conversationId) {
-        setConversationStatus(evt.conversation.status)
-        setCsatRating(evt.conversation.csatRating)
       }
     },
     onReconnect: () => void refreshMessages(),
@@ -373,7 +375,12 @@ export function VisitorConversationThread({
     (rating: number) => {
       if (!conversationId) return
       const gen = ++csatSubmitGenRef.current
-      setCsatRating(rating)
+      const setRating = (value: number | null) =>
+        queryClient.setQueryData(
+          conversationKeys.visitorThread(conversationId),
+          (prev: VisitorThreadCache | undefined) => (prev ? { ...prev, csatRating: value } : prev)
+        )
+      setRating(rating)
       setCsatJustRated(true)
       void submitCsatFn({
         data: { conversationId, rating },
@@ -382,12 +389,12 @@ export function VisitorConversationThread({
         // Roll back so the stars reappear for a retry — unless a later CSAT
         // submit (e.g. the comment) already superseded this request.
         if (csatSubmitGenRef.current === gen) {
-          setCsatRating(null)
+          setRating(null)
           setCsatJustRated(false)
         }
       })
     },
-    [conversationId, getAuthHeaders]
+    [conversationId, getAuthHeaders, queryClient]
   )
 
   // Optional follow-up: attach a comment to the rating already on file.
@@ -410,6 +417,7 @@ export function VisitorConversationThread({
   // conversation exists), suggest relevant articles so they can self-serve.
   const [helpResults, setHelpResults] = useState<Array<{ slug: string; title: string }>>([])
   const helpSearchFn = helpSearch?.search
+  const messageText = composer.text
   useEffect(() => {
     if (!helpSearchFn || conversationId || messages.length > 0) {
       setHelpResults([])
@@ -499,40 +507,26 @@ export function VisitorConversationThread({
     ]
   )
 
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollViewportRef.current,
-    estimateSize: () => 64,
-    getItemKey: (index) => rows[index].key,
-    anchorTo: 'end',
-    followOnAppend: true,
-    overscan: 6,
+  const virtualizer = useThreadVirtualizer({
+    rows,
+    scrollRef: scrollViewportRef,
+    estimateSize: 64,
+    loading,
   })
-
-  // Land on the newest message once the initial thread has loaded.
-  const didInitialScroll = useRef(false)
-  useLayoutEffect(() => {
-    if (loading || didInitialScroll.current || rows.length === 0) return
-    didInitialScroll.current = true
-    virtualizer.scrollToEnd()
-  }, [loading, rows.length, virtualizer])
 
   // Clear unread on the visitor side only when the newest message is from an
   // agent — skip the visitor's own outbound sends (avoids a write + 'read'
-  // broadcast on every send). Keyed on the last message id so benign array
-  // re-creation doesn't re-fire the write.
-  const lastMessageId = messages.at(-1)?.id
-  useEffect(() => {
-    if (!conversationId) return
-    if (messages.at(-1)?.senderType !== 'agent') return
-    void markConversationReadFn({ data: { conversationId }, headers: getAuthHeaders() }).catch(
-      () => {}
-    )
-  }, [conversationId, lastMessageId])
+  // broadcast on every send).
+  useMarkReadOnIncoming({
+    conversationId,
+    messages,
+    whenLastFrom: 'agent',
+    getHeaders: getAuthHeaders,
+  })
 
   const send = useCallback(async () => {
-    const text = messageText.trim()
-    const doc = messageDocRef.current
+    const text = composer.text.trim()
+    const doc = composer.docRef.current
     const hasAttachments = pendingAttachments.length > 0
     // Sendable when there's typed text, an inline embed, or a tray attachment.
     if ((!text && !docHasContentNode(doc) && !hasAttachments) || sending || uploading) return
@@ -557,20 +551,21 @@ export function VisitorConversationThread({
         headers: getAuthHeaders(),
       })
       const isNewConversation = !conversationId
-      createdConversationIdRef.current = res.conversation.id as ConversationId
-      setConversationId(res.conversation.id as ConversationId)
-      // Adopt the server's status so a reply that reopens a closed thread clears
-      // the "closed / reply to reopen" hint (and its CSAT prompt) immediately.
-      setConversationStatus(res.conversation.status)
-      appendMessage(res.message)
+      const newId = res.conversation.id as ConversationId
+      createdConversationIdRef.current = newId
+      setConversationId(newId)
+      // The reducer initializes the cache on a first send, dedupes the append,
+      // and adopts the server's status so a reply that reopens a closed thread
+      // clears the "closed / reply to reopen" hint (and its CSAT prompt).
+      queryClient.setQueryData(
+        conversationKeys.visitorThread(newId),
+        (prev: VisitorThreadCache | undefined) => appendSentVisitorMessage(prev, res)
+      )
       if (isNewConversation) {
-        onConversationStarted?.(res.conversation.id as ConversationId)
+        onConversationStarted?.(newId)
       }
       // Clear the composer only on success — the resetSignal bump empties the editor.
-      setMessageText('')
-      messageDocRef.current = null
-      setMessageHasContentNode(false)
-      setComposerResetSignal((n) => n + 1)
+      composer.clear()
       clearAttachments()
       setUploadError(null)
     } catch {
@@ -579,16 +574,16 @@ export function VisitorConversationThread({
       setSending(false)
     }
   }, [
-    messageText,
+    composer,
     sending,
     conversationId,
     ensureSession,
-    appendMessage,
     pendingAttachments,
     uploading,
     clearAttachments,
     getAuthHeaders,
     onConversationStarted,
+    queryClient,
   ])
 
   const renderRow = (row: ConversationRow) => {
@@ -617,8 +612,8 @@ export function VisitorConversationThread({
         // The assistant fronts the greeting when enabled; the team name
         // otherwise. Identity only — replies still come from the team.
         return (
-          <ChatBubble
-            variant="peer"
+          <VisitorMessageBubble
+            side="peer"
             authorName={assistant?.name ?? teamName ?? undefined}
             isAssistant={!!assistant}
             content={personalizeMessage(welcomeMessage ?? '', firstName)}
@@ -629,8 +624,8 @@ export function VisitorConversationThread({
         const m = row.message
         const isVisitor = m.senderType === 'visitor'
         return (
-          <ChatBubble
-            variant={isVisitor ? 'self' : 'peer'}
+          <VisitorMessageBubble
+            side={isVisitor ? 'self' : 'peer'}
             authorName={isVisitor ? undefined : (m.author?.displayName ?? teamName ?? undefined)}
             content={m.content}
             contentJson={m.contentJson}
@@ -804,21 +799,15 @@ export function VisitorConversationThread({
       ) : null}
 
       <div className="relative flex-1 min-h-0">
-        <ScrollArea viewportRef={scrollViewportRef} scrollBarClassName="w-1.5" className="h-full">
-          <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-            {virtualizer.getVirtualItems().map((vi) => (
-              <div
-                key={vi.key}
-                data-index={vi.index}
-                ref={virtualizer.measureElement}
-                className="absolute inset-x-0 top-0"
-                style={{ transform: `translateY(${vi.start}px)` }}
-              >
-                <div className="px-3 py-1.5">{renderRow(rows[vi.index])}</div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
+        <ThreadViewport
+          virtualizer={virtualizer}
+          rows={rows}
+          renderRow={renderRow}
+          viewportRef={scrollViewportRef}
+          scrollBarClassName="w-1.5"
+          className="h-full"
+          rowClassName="px-3 py-1.5"
+        />
 
         {/* Jump to latest — shown only when the visitor has scrolled up to read
             history (followOnAppend keeps the view pinned when already at end). */}
@@ -924,17 +913,13 @@ export function VisitorConversationThread({
           />
           <ConversationRichComposer
             ref={composerRef}
-            resetSignal={composerResetSignal}
+            resetSignal={composer.resetSignal}
             disabled={sending}
             placeholder={intl.formatMessage({
               id: 'widget.messenger.placeholder',
               defaultMessage: 'Type your message…',
             })}
-            onChange={(text, doc) => {
-              setMessageText(text)
-              messageDocRef.current = doc
-              setMessageHasContentNode(docHasContentNode(doc))
-            }}
+            onChange={composer.onChange}
             onSubmit={() => void send()}
             onLocalInput={onLocalInput}
             onImageFiles={(files) => void handleAddFiles(files)}
@@ -966,8 +951,8 @@ export function VisitorConversationThread({
               type="button"
               onClick={() => void send()}
               disabled={
-                (!messageText.trim() &&
-                  !messageHasContentNode &&
+                (!composer.text.trim() &&
+                  !composer.hasContentNode &&
                   pendingAttachments.length === 0) ||
                 sending ||
                 uploading
@@ -983,111 +968,6 @@ export function VisitorConversationThread({
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-interface ChatBubbleProps {
-  content: string
-  /** Rich TipTap doc (inline images / post embeds). When present it renders in
-   *  place of the plain-text `content`; messages without it keep the text path. */
-  contentJson?: TiptapContent | null
-  /** 'peer' = agent/assistant (left, muted bubble + attribution below);
-   *  'self' = the visitor (right, brand bubble, no attribution). */
-  variant?: 'peer' | 'self'
-  authorName?: string
-  /** Marks the author as the AI assistant in the attribution line. */
-  isAssistant?: boolean
-  attachments?: ConversationAttachment[]
-  time?: string
-  linkPreviews?: boolean
-  getAuthHeaders?: () => Record<string, string>
-  embedOpenMode?: EmbedOpenMode
-}
-
-/**
- * A single message: a rounded bubble — muted on the left for the team and
- * assistant with a small attribution line below ("Name · AI Agent · time"),
- * brand-colored on the right for the visitor — matching the modern messenger
- * bubble language. Lone-emoji messages render large without a bubble.
- */
-function ChatBubble({
-  content,
-  contentJson,
-  variant = 'peer',
-  authorName,
-  isAssistant = false,
-  attachments,
-  time,
-  linkPreviews = false,
-  getAuthHeaders,
-  embedOpenMode = 'newTab',
-}: ChatBubbleProps) {
-  const self = variant === 'self'
-  const jumbo = isJumboEmojiMessage(content, contentJson)
-  return (
-    <div className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}>
-      <div
-        className={
-          jumbo
-            ? 'max-w-[85%]'
-            : self
-              ? 'max-w-[85%] rounded-2xl bg-primary px-3.5 py-2.5 text-primary-foreground'
-              : 'max-w-[85%] rounded-2xl bg-muted px-3.5 py-2.5 text-foreground'
-        }
-      >
-        {jumbo ? (
-          // A lone-emoji message renders large (no bubble chrome).
-          <div className={JUMBO_EMOJI_CLASS}>{content}</div>
-        ) : contentJson ? (
-          // Rich message (inline images / post embeds): hydrate embed cards into
-          // the static rendered HTML, matching the changelog/inbox surfaces. The
-          // widget's iframe origin may differ from the portal's, so an embedded
-          // post opens its absolute URL in a new tab there.
-          <EmbedHydration openMode={embedOpenMode} getAuthHeaders={getAuthHeaders}>
-            <RichTextContent
-              content={contentJson}
-              className={
-                self
-                  ? 'text-sm leading-relaxed text-primary-foreground'
-                  : 'text-sm leading-relaxed text-foreground/90'
-              }
-            />
-          </EmbedHydration>
-        ) : (
-          content && (
-            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
-          )
-        )}
-        {attachments && attachments.length > 0 && (
-          <ConversationAttachmentList attachments={attachments} />
-        )}
-        {linkPreviews && (
-          <LinkPreviews
-            content={content}
-            contentJson={contentJson}
-            getAuthHeaders={getAuthHeaders}
-          />
-        )}
-      </div>
-      {/* Attribution below the bubble — team/assistant side only. */}
-      {!self && (authorName || time) && (
-        <p className="mt-1 px-1 text-[11px] text-muted-foreground/70">
-          {authorName}
-          {isAssistant && (
-            <>
-              {' · '}
-              <FormattedMessage id="widget.messenger.aiAgent" defaultMessage="AI Agent" />
-            </>
-          )}
-          {time && (
-            <>
-              {' · '}
-              {time}
-            </>
-          )}
-        </p>
-      )}
     </div>
   )
 }

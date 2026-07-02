@@ -1,4 +1,18 @@
+/**
+ * The conversation message bubbles, one per audience:
+ *
+ *  - AgentMessageBubble: the inbox row — avatar + author line, internal-note
+ *    tint, reactions, flag/mark-unread/delete hover toolbar, track-as-feedback
+ *    actions. Agent-only affordances arrive as props; absent props hide them.
+ *  - VisitorMessageBubble: the messenger bubble — muted on the left for the
+ *    team and assistant with an attribution line below, brand-colored on the
+ *    right for the visitor.
+ *
+ * Each bubble's DOM is its surface's original markup, so rendering through
+ * the shared component is pixel-equivalent per surface.
+ */
 import { useState } from 'react'
+import { FormattedMessage } from 'react-intl'
 import {
   EllipsisVerticalIcon,
   TrashIcon,
@@ -15,10 +29,11 @@ import { BookmarkIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
 import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
 import { ReactionChip } from '@/components/shared/reaction-chip'
-import { NoteContent } from './note-content'
+import { NoteContent } from '@/components/admin/conversation/note-content'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
+import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -30,7 +45,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { REACTION_EMOJIS } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
-import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type { TiptapContent } from '@/lib/shared/db-types'
+import type {
+  AgentConversationMessageDTO,
+  ConversationAttachment,
+} from '@/lib/shared/conversation/types'
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -49,7 +68,7 @@ export function UnreadDivider() {
   )
 }
 
-interface AdminBubbleProps {
+interface AgentMessageBubbleProps {
   message: AgentConversationMessageDTO
   onDelete: () => void
   /** Toggle the caller's reaction with `emoji` (hasReacted = current state). */
@@ -74,7 +93,25 @@ interface AdminBubbleProps {
   linkPreviews?: boolean
 }
 
-export function AdminBubble({
+interface VisitorMessageBubbleProps {
+  content: string
+  /** Rich TipTap doc (inline images / post embeds). When present it renders in
+   *  place of the plain-text `content`; messages without it keep the text path. */
+  contentJson?: TiptapContent | null
+  /** 'peer' = agent/assistant (left, muted bubble + attribution below);
+   *  'self' = the visitor (right, brand bubble, no attribution). */
+  side?: 'peer' | 'self'
+  authorName?: string
+  /** Marks the author as the AI assistant in the attribution line. */
+  isAssistant?: boolean
+  attachments?: ConversationAttachment[]
+  time?: string
+  linkPreviews?: boolean
+  getAuthHeaders?: () => Record<string, string>
+  embedOpenMode?: EmbedOpenMode
+}
+
+export function AgentMessageBubble({
   message,
   onDelete,
   onToggleReaction,
@@ -86,7 +123,7 @@ export function AdminBubble({
   onOpenPost,
   highlighted = false,
   linkPreviews = false,
-}: AdminBubbleProps) {
+}: AgentMessageBubbleProps) {
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -335,6 +372,93 @@ export function AdminBubble({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+    </div>
+  )
+}
+
+/**
+ * A single visitor-facing message: a rounded bubble — muted on the left for the
+ * team and assistant with a small attribution line below ("Name · AI Agent ·
+ * time"), brand-colored on the right for the visitor — matching the modern
+ * messenger bubble language. Lone-emoji messages render large without a bubble.
+ */
+export function VisitorMessageBubble({
+  content,
+  contentJson,
+  side = 'peer',
+  authorName,
+  isAssistant = false,
+  attachments,
+  time,
+  linkPreviews = false,
+  getAuthHeaders,
+  embedOpenMode = 'newTab',
+}: VisitorMessageBubbleProps) {
+  const self = side === 'self'
+  const jumbo = isJumboEmojiMessage(content, contentJson)
+  return (
+    <div className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}>
+      <div
+        className={
+          jumbo
+            ? 'max-w-[85%]'
+            : self
+              ? 'max-w-[85%] rounded-2xl bg-primary px-3.5 py-2.5 text-primary-foreground'
+              : 'max-w-[85%] rounded-2xl bg-muted px-3.5 py-2.5 text-foreground'
+        }
+      >
+        {jumbo ? (
+          // A lone-emoji message renders large (no bubble chrome).
+          <div className={JUMBO_EMOJI_CLASS}>{content}</div>
+        ) : contentJson ? (
+          // Rich message (inline images / post embeds): hydrate embed cards into
+          // the static rendered HTML, matching the changelog/inbox surfaces. The
+          // widget's iframe origin may differ from the portal's, so an embedded
+          // post opens its absolute URL in a new tab there.
+          <EmbedHydration openMode={embedOpenMode} getAuthHeaders={getAuthHeaders}>
+            <RichTextContent
+              content={contentJson}
+              className={
+                self
+                  ? 'text-sm leading-relaxed text-primary-foreground'
+                  : 'text-sm leading-relaxed text-foreground/90'
+              }
+            />
+          </EmbedHydration>
+        ) : (
+          content && (
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
+          )
+        )}
+        {attachments && attachments.length > 0 && (
+          <ConversationAttachmentList attachments={attachments} />
+        )}
+        {linkPreviews && (
+          <LinkPreviews
+            content={content}
+            contentJson={contentJson}
+            getAuthHeaders={getAuthHeaders}
+          />
+        )}
+      </div>
+      {/* Attribution below the bubble — team/assistant side only. */}
+      {!self && (authorName || time) && (
+        <p className="mt-1 px-1 text-[11px] text-muted-foreground/70">
+          {authorName}
+          {isAssistant && (
+            <>
+              {' · '}
+              <FormattedMessage id="widget.messenger.aiAgent" defaultMessage="AI Agent" />
+            </>
+          )}
+          {time && (
+            <>
+              {' · '}
+              {time}
+            </>
+          )}
+        </p>
+      )}
     </div>
   )
 }

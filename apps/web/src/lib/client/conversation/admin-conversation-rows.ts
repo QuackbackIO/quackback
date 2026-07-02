@@ -5,7 +5,8 @@ import type { AgentConversationMessageDTO } from '@/lib/shared/conversation/type
  * A single virtualized row in the admin message thread. Messages are keyed by
  * their id (stable across prepend, so the virtualizer can hold the viewport when
  * older history loads); the surrounding affordances use fixed keys. System
- * events stay as `message` rows — AdminBubble renders them as a centered notice.
+ * events stay as `message` rows; AgentMessageBubble renders them as a centered
+ * notice.
  */
 export type AdminConversationRow =
   | { type: 'load-older'; key: 'load-older' }
