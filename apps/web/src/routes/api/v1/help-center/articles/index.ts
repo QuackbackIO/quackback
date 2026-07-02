@@ -12,6 +12,8 @@ import {
 import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { listArticles, createArticle } from '@/lib/server/domains/help-center/help-center.service'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import type { TiptapContent } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 
 const createArticleBody = z.object({
@@ -29,6 +31,7 @@ function formatArticle(article: {
   title: string
   description: string | null
   content: string
+  contentJson: TiptapContent | null
   publishedAt: Date | null
   viewCount: number
   helpfulCount: number
@@ -43,7 +46,10 @@ function formatArticle(article: {
     slug: article.slug,
     title: article.title,
     description: article.description,
-    content: article.content,
+    // Render markdown from the canonical contentJson so images survive; falls
+    // back to the stored column for legacy rows (and the list query, which
+    // omits contentJson for performance).
+    content: contentJsonToMarkdown(article.contentJson, article.content),
     publishedAt: article.publishedAt?.toISOString() || null,
     viewCount: article.viewCount,
     helpfulCount: article.helpfulCount,
@@ -100,7 +106,11 @@ export const Route = createFileRoute('/api/v1/help-center/articles/')({
 
           const { authorId, ...articleData } = parsed.data
 
-          const authorPrincipalId = parseOptionalTypeId<PrincipalId>(authorId, 'principal', 'author ID')
+          const authorPrincipalId = parseOptionalTypeId<PrincipalId>(
+            authorId,
+            'principal',
+            'author ID'
+          )
 
           const article = await createArticle(
             articleData,

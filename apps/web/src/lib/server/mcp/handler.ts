@@ -19,7 +19,7 @@ import { db, principal, eq } from '@/lib/server/db'
 import { config } from '@/lib/server/config'
 import { createMcpServer } from './server'
 import type { PrincipalId } from '@quackback/ids'
-import type { McpAuthContext, McpScope } from './types'
+import { MCP_SCOPES, type McpAuthContext, type McpScope } from './types'
 
 /** Build a JSON-RPC error response (used for MCP-level denials). */
 function jsonRpcError(status: number, message: string): Response {
@@ -33,15 +33,7 @@ function jsonRpcError(status: number, message: string): Response {
   )
 }
 
-export const ALL_SCOPES: McpScope[] = [
-  'read:feedback',
-  'write:feedback',
-  'write:changelog',
-  'read:article',
-  'write:article',
-  'read:chat',
-  'write:chat',
-]
+export const ALL_SCOPES: McpScope[] = [...MCP_SCOPES]
 
 const API_KEY_PREFIX = 'qb_'
 

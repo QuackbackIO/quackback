@@ -2,10 +2,12 @@ import type { ThemePreset } from './types'
 import type { MinimalThemeVariables } from './expand'
 import { expandTheme } from './expand'
 
+// Each family here must be self-hosted in globals.css (and match the @fontsource
+// @font-face family name exactly), or the preset falls back to the generic stack.
 const FONTS = {
   inter: '"Inter", ui-sans-serif, system-ui, sans-serif',
   system: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-  geist: '"Geist", ui-sans-serif, system-ui, sans-serif',
+  geist: '"Geist Sans", ui-sans-serif, system-ui, sans-serif',
   jakarta: '"Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif',
   dmSans: '"DM Sans", ui-sans-serif, system-ui, sans-serif',
   nunito: '"Nunito", ui-sans-serif, system-ui, sans-serif',

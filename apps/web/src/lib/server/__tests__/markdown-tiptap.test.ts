@@ -2,6 +2,7 @@ import { describe, test, expect } from 'vitest'
 import {
   markdownToTiptapJson,
   tiptapJsonToMarkdown,
+  contentJsonToMarkdown,
   commentMarkdownToTiptapJson,
 } from '../markdown-tiptap'
 
@@ -174,6 +175,123 @@ describe('tiptapJsonToMarkdown', () => {
     expect(roundTripped).toContain('**bold**')
     expect(roundTripped).toContain('Item 1')
     expect(roundTripped).toContain('Item 2')
+  })
+})
+
+describe('contentJsonToMarkdown', () => {
+  const imageDoc = {
+    type: 'doc' as const,
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Shipped a thing.' }] },
+      {
+        type: 'image',
+        attrs: { src: 'https://cdn.example.com/shot.png', alt: 'Screenshot', title: null },
+      },
+    ],
+  }
+
+  test('serializes image nodes the stored markdown dropped', () => {
+    // The reported bug: the API returned text-only markdown because the stored
+    // `content` column lost images. Deriving from contentJson restores them.
+    const result = contentJsonToMarkdown(imageDoc, 'Shipped a thing.')
+    expect(result).toContain('Shipped a thing.')
+    expect(result).toContain('![Screenshot](https://cdn.example.com/shot.png)')
+  })
+
+  test('serializes resizableImage nodes (the type the editor actually stores)', () => {
+    // UI uploads are stored as `resizableImage`, which @tiptap/markdown's Image
+    // extension does not know — they must be normalized to `image` first.
+    const resizableDoc = {
+      type: 'doc' as const,
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Look:' }] },
+        {
+          type: 'resizableImage',
+          attrs: { src: 'https://cdn.example.com/r.png', alt: 'Resized', title: null, width: 400 },
+        },
+      ],
+    }
+    const result = contentJsonToMarkdown(resizableDoc, 'Look:')
+    expect(result).toContain('![Resized](https://cdn.example.com/r.png)')
+  })
+
+  test('keeps mentions (as @label) when restoring an image', () => {
+    // The server manager has no mention extension, so re-serializing must not
+    // drop it; normalize it to the @label text instead.
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'cc ' },
+            { type: 'mention', attrs: { id: 'p1', label: 'Alice' } },
+          ],
+        },
+        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
+      ],
+    }
+    const result = contentJsonToMarkdown(doc, 'cc @Alice')
+    expect(result).toContain('@Alice')
+    expect(result).toContain('![S](https://cdn.example.com/s.png)')
+  })
+
+  test('keeps stored markdown when an image coexists with an unsupported node', () => {
+    // A youtube embed has no server renderer; re-serializing would drop it, so
+    // the whole document keeps its stored markdown (image not re-derived) rather
+    // than losing the embed.
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
+        { type: 'youtube', attrs: { src: 'https://youtu.be/abc' } },
+      ],
+    }
+    const stored = 'stored markdown with :::youtube::: and no image'
+    expect(contentJsonToMarkdown(doc, stored)).toBe(stored)
+  })
+
+  test('returns the stored markdown verbatim for image-free content', () => {
+    // No images means the stored column is already faithful; don't re-serialize
+    // (and risk reformatting) what was correct.
+    const noImageDoc = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Just text' }] }],
+    }
+    expect(contentJsonToMarkdown(noImageDoc, '_Just_ text')).toBe('_Just_ text')
+  })
+
+  test.each([null, undefined])(
+    'falls back to stored markdown when contentJson is %s (legacy rows)',
+    (value) => {
+      expect(contentJsonToMarkdown(value, '# Legacy\n\nPlain markdown')).toBe(
+        '# Legacy\n\nPlain markdown'
+      )
+    }
+  )
+
+  test('falls back when contentJson has no real content', () => {
+    expect(contentJsonToMarkdown({ type: 'doc', content: [] }, 'fallback text')).toBe(
+      'fallback text'
+    )
+  })
+
+  test('falls back instead of throwing on malformed contentJson', () => {
+    // A corrupt/unexpected shape must never 500 a read endpoint.
+    const malformed = { not: 'a real doc' } as unknown as Parameters<
+      typeof contentJsonToMarkdown
+    >[0]
+    expect(contentJsonToMarkdown(malformed, 'safe fallback')).toBe('safe fallback')
+  })
+
+  test.each([
+    ['content is a string', { type: 'doc', content: 'oops' }],
+    ['content is an object', { type: 'doc', content: { bad: 1 } }],
+  ])('falls back when %s (image scan must not throw)', (_label, doc) => {
+    // The image scan runs before the serialize try/catch, so a row whose
+    // `content` is present but not an array must not throw a read into a 500.
+    const malformed = doc as unknown as Parameters<typeof contentJsonToMarkdown>[0]
+    expect(contentJsonToMarkdown(malformed, 'safe fallback')).toBe('safe fallback')
   })
 })
 

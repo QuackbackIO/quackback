@@ -127,7 +127,7 @@ const SAMPLE_ORG_REF = {
 const SAMPLE_CONVERSATION_REF = {
   id: 'conv_sample',
   status: 'open' as const,
-  channel: 'live_chat' as const,
+  channel: 'messenger' as const,
   priority: 'medium' as const,
 }
 

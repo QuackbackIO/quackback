@@ -13,7 +13,15 @@
 import { db, sql } from '@/lib/server/db'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 
-export type SearchableAttribute = 'country' | 'locale' | 'name' | 'email' | 'signup_source'
+export type SearchableAttribute =
+  | 'country'
+  | 'locale'
+  | 'name'
+  | 'email'
+  | 'signup_source'
+  | 'contact_title'
+  | 'organization_domain'
+  | 'organization_external_id'
 
 export const SEARCHABLE_ATTRIBUTES: ReadonlySet<SearchableAttribute> = new Set([
   'country',
@@ -21,6 +29,9 @@ export const SEARCHABLE_ATTRIBUTES: ReadonlySet<SearchableAttribute> = new Set([
   'name',
   'email',
   'signup_source',
+  'contact_title',
+  'organization_domain',
+  'organization_external_id',
 ])
 
 export interface AttributeValue {
@@ -52,6 +63,21 @@ function queryForAttribute(
   limit: number
 ): ReturnType<typeof sql> {
   const baseJoin = sql`FROM "user" u INNER JOIN principal p ON p.user_id = u.id WHERE p.role = 'user'`
+  const linkedContactJoin = sql`
+    FROM contact_user_links cul
+    INNER JOIN "user" u ON u.id = cul.user_id
+    INNER JOIN principal p ON p.user_id = u.id
+    INNER JOIN contacts c ON c.id = cul.contact_id AND c.archived_at IS NULL
+    WHERE p.role = 'user'
+  `
+  const linkedOrganizationJoin = sql`
+    FROM contact_user_links cul
+    INNER JOIN "user" u ON u.id = cul.user_id
+    INNER JOIN principal p ON p.user_id = u.id
+    INNER JOIN contacts c ON c.id = cul.contact_id AND c.archived_at IS NULL
+    INNER JOIN organizations o ON o.id = c.organization_id AND o.archived_at IS NULL
+    WHERE p.role = 'user'
+  `
   switch (attribute) {
     case 'country': {
       const upperQuery = query.toUpperCase()
@@ -110,6 +136,36 @@ function queryForAttribute(
         LIMIT ${limit}
       `
     }
+    case 'contact_title':
+      return sql`
+        SELECT c.title AS value, COUNT(DISTINCT p.id)::int AS count
+        ${linkedContactJoin}
+        AND c.title IS NOT NULL AND c.title <> ''
+        ${prefixFilter(sql`c.title`, query)}
+        GROUP BY c.title
+        ORDER BY count DESC, value ASC
+        LIMIT ${limit}
+      `
+    case 'organization_domain':
+      return sql`
+        SELECT o.domain AS value, COUNT(DISTINCT p.id)::int AS count
+        ${linkedOrganizationJoin}
+        AND o.domain IS NOT NULL AND o.domain <> ''
+        ${prefixFilter(sql`o.domain`, query.toLowerCase())}
+        GROUP BY o.domain
+        ORDER BY count DESC, value ASC
+        LIMIT ${limit}
+      `
+    case 'organization_external_id':
+      return sql`
+        SELECT o.external_id AS value, COUNT(DISTINCT p.id)::int AS count
+        ${linkedOrganizationJoin}
+        AND o.external_id IS NOT NULL AND o.external_id <> ''
+        ${prefixFilter(sql`o.external_id`, query)}
+        GROUP BY o.external_id
+        ORDER BY count DESC, value ASC
+        LIMIT ${limit}
+      `
   }
 }
 

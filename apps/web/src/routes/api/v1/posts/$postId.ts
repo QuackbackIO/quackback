@@ -13,6 +13,7 @@ import {
   parseOptionalTypeId,
   parseTypeIdArray,
 } from '@/lib/server/domains/api/validation'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import type { PostId, StatusId, TagId, PrincipalId } from '@quackback/ids'
 import type { MergedPostSummary } from '@/lib/server/domains/posts/post.types'
 
@@ -49,7 +50,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           return successResponse({
             id: post.id,
             title: post.title,
-            content: post.content,
+            content: contentJsonToMarkdown(post.contentJson, post.content),
             contentJson: post.contentJson,
             voteCount: post.voteCount,
             commentCount: post.commentCount,
@@ -141,7 +142,7 @@ export const Route = createFileRoute('/api/v1/posts/$postId')({
           return successResponse({
             id: result.id,
             title: result.title,
-            content: result.content,
+            content: contentJsonToMarkdown(result.contentJson, result.content),
             contentJson: result.contentJson,
             voteCount: result.voteCount,
             boardId: result.boardId,

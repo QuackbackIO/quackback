@@ -49,7 +49,7 @@ export const Route = createFileRoute('/sitemap.xml')({
 
 async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
   const [
-    { db, changelogEntries, and, desc, eq },
+    { db, changelogEntries, and, desc, eq, sql },
     { publicChangelogConditions },
     { toIsoDateOnly },
   ] = await Promise.all([
@@ -58,6 +58,8 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
     import('@/lib/shared/utils/date'),
   ])
 
+  const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
+
   const urls: SitemapUrl[] = []
 
   // Static pages
@@ -65,11 +67,11 @@ async function collectUrls(baseUrl: string): Promise<SitemapUrl[]> {
   urls.push({ loc: `${baseUrl}/roadmap` })
   urls.push({ loc: `${baseUrl}/changelog` })
 
-  const entries = await db.query.changelogEntries.findMany({
-    where: and(...publicChangelogConditions(new Date())),
-    orderBy: [desc(changelogEntries.publishedAt)],
-    columns: { id: true, updatedAt: true },
-  })
+  const entries = await db
+    .select({ id: changelogEntries.id, updatedAt: changelogEntries.updatedAt })
+    .from(changelogEntries)
+    .where(and(...publicChangelogConditions(new Date())))
+    .orderBy(desc(effectiveDisplayDate))
 
   for (const entry of entries) {
     urls.push({

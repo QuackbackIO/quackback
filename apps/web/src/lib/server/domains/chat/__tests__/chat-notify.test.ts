@@ -302,9 +302,11 @@ describe('notifyAgentReply', () => {
         agentName: 'Agent',
       })
 
-      // Signed plus-address: reply+<id>.<hmac>@domain (unforgeable conversation id).
+      // Signed plus-address: reply+<id-suffix>.<hmac>@domain (unforgeable; the
+      // `conversation_` prefix is dropped to stay under the 64-char local part).
+      const suffix = conversationId.replace(/^conversation_/, '')
       expect(sendChatMessageEmail.mock.calls[0][0].replyTo).toMatch(
-        new RegExp(`^reply\\+${conversationId}\\.[A-Za-z0-9_-]+@tenaevexeo\\.resend\\.app$`)
+        new RegExp(`^reply\\+${suffix}\\.[A-Za-z0-9_-]+@tenaevexeo\\.resend\\.app$`)
       )
     })
 

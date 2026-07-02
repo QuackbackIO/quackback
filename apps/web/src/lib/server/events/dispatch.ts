@@ -134,13 +134,18 @@ function eventEnvelope(actor: EventActor) {
  * Awaiting ensures targets are resolved and jobs enqueued.
  * Hook execution runs in the background via BullMQ.
  */
-async function dispatchEvent(event: EventData): Promise<void> {
+async function dispatchEvent(event: EventData, opts?: { rethrow?: boolean }): Promise<void> {
   log.debug({ event_type: event.type, event_id: event.id }, 'dispatching event')
   try {
     const { processEvent } = await import('./process')
     await processEvent(event)
   } catch (error) {
     log.error({ err: error, event_type: event.type, event_id: event.id }, 'failed to process event')
+    // Dispatch is best-effort by default (a failed webhook enqueue must not
+    // fail the user action). Callers that own a retry/recovery path opt into
+    // propagation so they can react to an enqueue failure; everyone else
+    // falls back to a synchronous best-effort email send.
+    if (opts?.rethrow) throw error
     await fallbackSendEmails(event)
   }
 }
@@ -315,21 +320,25 @@ export interface ChangelogPublishedInput {
 
 export async function dispatchChangelogPublished(
   actor: EventActor,
-  changelog: ChangelogPublishedInput
+  changelog: ChangelogPublishedInput,
+  opts?: { rethrow?: boolean }
 ): Promise<void> {
-  await dispatchEvent({
-    ...eventEnvelope(actor),
-    type: 'changelog.published',
-    data: {
-      changelog: {
-        id: changelog.id,
-        title: changelog.title,
-        contentPreview: changelog.contentPreview,
-        publishedAt: changelog.publishedAt.toISOString(),
-        linkedPostCount: changelog.linkedPostCount,
+  await dispatchEvent(
+    {
+      ...eventEnvelope(actor),
+      type: 'changelog.published',
+      data: {
+        changelog: {
+          id: changelog.id,
+          title: changelog.title,
+          contentPreview: changelog.contentPreview,
+          publishedAt: changelog.publishedAt.toISOString(),
+          linkedPostCount: changelog.linkedPostCount,
+        },
       },
     },
-  })
+    opts
+  )
 }
 
 // ============================================================================
@@ -938,6 +947,20 @@ export async function dispatchConversationCsatSubmitted(
       comment: comment ?? null,
       submittedAt: submittedAt ?? new Date().toISOString(),
     },
+  })
+}
+
+export async function dispatchConversationCsatCommentAdded(
+  actor: EventActor,
+  conversation: EventConversationRef,
+  rating: number,
+  comment: string,
+  submittedAt: string
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'conversation.csat_comment_added',
+    data: { conversation, rating, comment, submittedAt },
   })
 }
 

@@ -7,6 +7,7 @@
 
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { OfficeHoursConfig, PreChatEmailMode } from '@/lib/shared/chat/types'
+import type { PrincipalId, SegmentId } from '@quackback/ids'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -242,6 +243,26 @@ export interface PortalAccessConfig {
   allowedSegmentIds: string[]
 }
 
+export type SupportAccessMode = 'anonymous' | 'authenticated' | 'selected' | 'team'
+
+export interface SupportAccessConfig {
+  mode: SupportAccessMode
+  segmentIds: SegmentId[]
+  principalIds: PrincipalId[]
+}
+
+export const DEFAULT_WIDGET_SUPPORT_ACCESS: SupportAccessConfig = {
+  mode: 'anonymous',
+  segmentIds: [],
+  principalIds: [],
+}
+
+export const DEFAULT_PORTAL_SUPPORT_ACCESS: SupportAccessConfig = {
+  mode: 'authenticated',
+  segmentIds: [],
+  principalIds: [],
+}
+
 /**
  * Portal configuration
  * Controls the public feedback portal behavior
@@ -265,6 +286,8 @@ export interface PortalConfig {
  */
 export interface PortalSupportConfig {
   enabled: boolean
+  /** Server-only policy for who can use the portal Support surface. */
+  access?: SupportAccessConfig
 }
 
 /**
@@ -284,7 +307,7 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   },
   moderationDefault: { requireApproval: 'none' },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
-  support: { enabled: false },
+  support: { enabled: false, access: DEFAULT_PORTAL_SUPPORT_ACCESS },
 }
 
 /**
@@ -439,6 +462,8 @@ export interface CannedReply {
 export interface LiveChatConfig {
   /** Master toggle for the chat tab + endpoints. */
   enabled: boolean
+  /** Server-only policy for who can use widget live chat. */
+  access?: SupportAccessConfig
   /** Greeting shown when a visitor opens chat with no history. */
   welcomeMessage?: string
   /** Shown when no agents are currently available to reply. */
@@ -460,8 +485,8 @@ export interface LiveChatConfig {
   }
 }
 
-/** Client-safe subset of LiveChatConfig (drops agent-only fields). */
-export type PublicLiveChatConfig = Omit<LiveChatConfig, 'cannedReplies' | 'routing'>
+/** Client-safe subset of LiveChatConfig (drops agent-only and policy fields). */
+export type PublicLiveChatConfig = Omit<LiveChatConfig, 'access' | 'cannedReplies' | 'routing'>
 
 export interface WidgetConfig {
   enabled: boolean
@@ -480,6 +505,12 @@ export interface WidgetConfig {
     /** Show the aggregated Home tab (defaults to on; only appears with 2+ sections) */
     home?: boolean
   }
+  /** Whether authenticated widget users can upload images in feedback submissions */
+  imageUploadsInWidget?: boolean
+  /** Support ticketing surface (entry card on home + ticket endpoints) */
+  ticketing?: {
+    enabled?: boolean
+  }
   /** Chat settings */
   chat?: LiveChatConfig
 }
@@ -490,7 +521,7 @@ export interface WidgetConfig {
  */
 export type PublicWidgetConfig = Pick<
   WidgetConfig,
-  'enabled' | 'defaultBoard' | 'position' | 'tabs'
+  'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'imageUploadsInWidget' | 'ticketing'
 > & {
   /** Whether verified identity is required (derived from identifyVerification) */
   hmacRequired?: boolean
@@ -500,6 +531,7 @@ export type PublicWidgetConfig = Pick<
 
 export const DEFAULT_LIVE_CHAT_CONFIG: LiveChatConfig = {
   enabled: false,
+  access: DEFAULT_WIDGET_SUPPORT_ACCESS,
   welcomeMessage: 'Hi! 👋 How can we help you today?',
   offlineMessage: "We're away right now — leave a message and we'll get back to you by email.",
   // Default to capturing an email (optional, non-blocking) so an offline reply
@@ -528,6 +560,9 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
     chat: false,
     home: true,
   },
+  ticketing: {
+    enabled: false,
+  },
   chat: DEFAULT_LIVE_CHAT_CONFIG,
 }
 
@@ -545,6 +580,10 @@ export interface UpdateWidgetConfigInput {
     help?: boolean
     chat?: boolean
     home?: boolean
+  }
+  imageUploadsInWidget?: boolean
+  ticketing?: {
+    enabled?: boolean
   }
   chat?: Partial<LiveChatConfig>
 }
@@ -728,6 +767,8 @@ export interface FeatureFlags {
   helpCenter: boolean
   /** AI-powered feedback extraction from external sources */
   aiFeedbackExtraction: boolean
+  /** Customer-support ticketing module (inboxes, routing, queues) */
+  tickets: boolean
   /** Support inbox: live-chat widget channel + unified admin inbox */
   supportInbox: boolean
   /** External link preview cards in chat (OG unfurling) */
@@ -737,6 +778,7 @@ export interface FeatureFlags {
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   helpCenter: false,
   aiFeedbackExtraction: false,
+  tickets: false,
   supportInbox: false,
   linkPreviews: false,
 }
@@ -759,11 +801,16 @@ export const FEATURE_FLAG_REGISTRY: Record<
   supportInbox: {
     label: 'Conversations',
     description:
-      'Let visitors start a live chat from the widget; messages land in a shared inbox your team works from.',
+      'Let visitors start a Messenger chat from the widget; messages land in a shared inbox your team works from.',
   },
   linkPreviews: {
     label: 'Link Previews',
     description: 'Show Open Graph preview cards below external links shared in chat.',
+  },
+  tickets: {
+    label: 'Ticketing',
+    description:
+      'Enable the customer-support ticketing module: inboxes, routing rules, agent queues, and bulk actions.',
   },
 }
 
@@ -780,8 +827,8 @@ export const LAB_SECTIONS: Array<{
 }> = [
   {
     title: 'Support',
-    description: 'Support your customers with live chat and a self-serve help center.',
-    flags: ['supportInbox', 'helpCenter', 'linkPreviews'],
+    description: 'Support your customers with Messenger and a self-serve help center.',
+    flags: ['supportInbox', 'tickets', 'helpCenter', 'linkPreviews'],
   },
   {
     title: 'Feedback',
