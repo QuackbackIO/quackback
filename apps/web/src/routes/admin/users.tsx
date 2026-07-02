@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import type { SegmentId } from '@quackback/ids'
 import { useSuspenseQuery } from '@tanstack/react-query'
@@ -34,7 +34,7 @@ const searchSchema = z.object({
 
 type SearchParams = z.infer<typeof searchSchema>
 
-function parseSearchToQueryParams(deps: SearchParams) {
+export function parseSearchToQueryParams(deps: SearchParams) {
   let verified: boolean | undefined
   if (deps.verified === 'true') verified = true
   else if (deps.verified === 'false') verified = false
@@ -81,6 +81,25 @@ function parseSearchToQueryParams(deps: SearchParams) {
   }
 }
 
+function shouldRedirectToCustomers(deps: SearchParams): boolean {
+  return (
+    !deps.search &&
+    !deps.verified &&
+    !deps.dateFrom &&
+    !deps.dateTo &&
+    !deps.emailDomain &&
+    !deps.postCount &&
+    !deps.voteCount &&
+    !deps.commentCount &&
+    !deps.customAttrs &&
+    !deps.includeAnonymous &&
+    !deps.selected &&
+    !deps.segments &&
+    !deps.invites &&
+    (!deps.sort || deps.sort === 'newest')
+  )
+}
+
 export const Route = createFileRoute('/admin/users')({
   validateSearch: searchSchema,
   loaderDeps: ({
@@ -97,6 +116,8 @@ export const Route = createFileRoute('/admin/users')({
       includeAnonymous,
       sort,
       segments,
+      selected,
+      invites,
     },
   }) => ({
     search,
@@ -111,9 +132,15 @@ export const Route = createFileRoute('/admin/users')({
     includeAnonymous,
     sort,
     segments,
+    selected,
+    invites,
   }),
   errorComponent: UsersErrorComponent,
   loader: async ({ deps, context }) => {
+    if (shouldRedirectToCustomers(deps)) {
+      throw redirect({ to: '/admin/customers/people' })
+    }
+
     // Protected route - principal is guaranteed by parent's beforeLoad auth check
     const { principal, queryClient } = context as {
       principal: NonNullable<typeof context.principal>

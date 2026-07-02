@@ -4,6 +4,16 @@
 
 const GITHUB_API = 'https://api.github.com'
 
+export class GitHubApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: string
+  ) {
+    super(`Failed to list GitHub repos: HTTP ${status}`)
+    this.name = 'GitHubApiError'
+  }
+}
+
 /**
  * List GitHub repositories accessible to the authenticated user.
  */
@@ -20,7 +30,7 @@ export async function listGitHubRepos(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to list GitHub repos: HTTP ${response.status}`)
+    throw new GitHubApiError(response.status, await response.text())
   }
 
   const data = (await response.json()) as Array<{
