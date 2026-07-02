@@ -129,6 +129,29 @@ export function WidgetShell({
   useEffect(() => {
     if (hideTabBar) hiddenWhileExpandedRef.current = panelExpanded
   }, [hideTabBar, panelExpanded])
+  // `hidden` is a dynamic variant so the exit can read the LATEST expansion
+  // state via AnimatePresence's `custom` (the exiting element's own props are
+  // frozen at its last visible render, when panelExpanded was still false).
+  // On expand the panel grows, so the bar clears the frame at once — a
+  // lingering fade would sit awkwardly over the growing canvas; the compact
+  // immersive thread keeps a short fade out.
+  const tabBarVariants = {
+    visible: {
+      opacity: 1,
+      transition: reduceMotion
+        ? { duration: 0 }
+        : {
+            delay: hiddenWhileExpandedRef.current ? 0.55 : 0.08,
+            duration: 0.25,
+            ease: 'easeOut' as const,
+          },
+    },
+    hidden: (expanded: boolean) => ({
+      opacity: 0,
+      transition:
+        reduceMotion || expanded ? { duration: 0 } : { duration: 0.16, ease: 'easeIn' as const },
+    }),
+  }
   const { user, isIdentified, hmacRequired, closeWidget } = useWidgetAuth()
 
   const onHome = activeTab === 'home' && !onBack
@@ -337,25 +360,15 @@ export function WidgetShell({
         className="relative z-10 border-t border-border/40 shrink-0 bg-background"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} custom={panelExpanded}>
           {showTabBar && (
             <motion.div
               key="tab-bar"
+              custom={panelExpanded}
+              variants={tabBarVariants}
               initial={{ opacity: 0 }}
-              animate={{
-                opacity: 1,
-                transition: reduceMotion
-                  ? { duration: 0 }
-                  : {
-                      delay: hiddenWhileExpandedRef.current ? 0.55 : 0.08,
-                      duration: 0.25,
-                      ease: 'easeOut',
-                    },
-              }}
-              exit={{
-                opacity: 0,
-                transition: reduceMotion ? { duration: 0 } : { duration: 0.16, ease: 'easeIn' },
-              }}
+              animate="visible"
+              exit="hidden"
             >
               <div className="flex">
                 {tabsToShow.map((tab) => {
