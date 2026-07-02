@@ -25,7 +25,13 @@ const mockSelectChain = {
   limit: vi.fn(),
 }
 
-vi.mock('@/lib/server/db', () => ({
+// Base the mock on the REAL module via importOriginal so every named export the
+// source-under-test transitively imports (tables, operators, etc.) resolves. The
+// `db` export is a lazy Proxy, so importOriginal opens NO database connection. The
+// spread satisfies transitive imports while our explicit `db`/operator/table
+// overrides below preserve the query-shape assertions this file depends on.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       posts: {
