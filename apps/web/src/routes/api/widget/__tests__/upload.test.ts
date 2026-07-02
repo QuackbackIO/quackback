@@ -10,8 +10,16 @@ vi.mock('@/lib/server/storage/s3', async () => {
   return createS3MockFactory()
 })
 
+// The route gates uploads on widget config; only `imageUploadsInWidget`
+// matters for these tests, so resolve it enabled.
+vi.mock('@/lib/server/domains/settings/settings.widget', () => ({
+  getWidgetConfig: vi.fn(),
+}))
+
 import { auth } from '@/lib/server/auth'
 import { isS3Configured, uploadObject } from '@/lib/server/storage/s3'
+import { getWidgetConfig } from '@/lib/server/domains/settings/settings.widget'
+import { DEFAULT_WIDGET_CONFIG } from '@/lib/server/domains/settings/settings.types'
 import { handleWidgetUpload } from '../upload'
 
 function makeRequest(file?: File, token?: string): Request {
@@ -35,6 +43,10 @@ describe('POST /api/widget/upload', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(isS3Configured).mockReturnValue(true)
+    vi.mocked(getWidgetConfig).mockResolvedValue({
+      ...DEFAULT_WIDGET_CONFIG,
+      imageUploadsInWidget: true,
+    })
   })
 
   it('returns 401 when there is no valid widget session', async () => {
@@ -42,6 +54,17 @@ describe('POST /api/widget/upload', () => {
     const res = await handleWidgetUpload({ request: makeRequest() })
     expect(res.status).toBe(401)
     expect(await res.json()).toMatchObject({ error: 'Unauthorized' })
+  })
+
+  it('returns 403 when image uploads are disabled for the widget', async () => {
+    authAs()
+    vi.mocked(getWidgetConfig).mockResolvedValueOnce({
+      ...DEFAULT_WIDGET_CONFIG,
+      imageUploadsInWidget: false,
+    })
+    const res = await handleWidgetUpload({ request: makeRequest(undefined, 'valid-token') })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'Image uploads are disabled' })
   })
 
   it('returns 503 when S3 is not configured', async () => {

@@ -16,12 +16,12 @@ interface AnonSweepJob {
   type: 'sweep-anonymous'
 }
 
-let initPromise: Promise<{ queue: Queue<AnonSweepJob>; worker: Worker<AnonSweepJob> }> | null = null
+let initPromise: Promise<{ queue: Queue; worker: Worker }> | null = null
 
 async function initializeQueue() {
   const connection = getQueueRedis()
 
-  const queue = new Queue<AnonSweepJob>(QUEUE_NAME, {
+  const queue = new Queue(QUEUE_NAME, {
     connection,
     defaultJobOptions: {
       attempts: 3,
@@ -31,13 +31,17 @@ async function initializeQueue() {
     },
   })
 
-  const worker = new Worker<AnonSweepJob>(
+  const worker = new Worker(
     QUEUE_NAME,
     async (job) => {
-      if (job.data.type === 'sweep-anonymous') {
+      const data = job.data as AnonSweepJob
+      if (data.type === 'sweep-anonymous') {
         const result = await sweepAnonymousPrincipals()
         if (result.deleted > 0 || result.candidates > 0) {
-          log.debug({ candidates: result.candidates, deleted: result.deleted }, 'anon-sweep run complete')
+          log.debug(
+            { candidates: result.candidates, deleted: result.deleted },
+            'anon-sweep run complete'
+          )
         }
       }
     },
