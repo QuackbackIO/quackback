@@ -9,13 +9,20 @@
 
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { db, and, gte, eq, asc, visitorStatsDaily, visitorTopStats } from '@/lib/server/db'
+import {
+  db,
+  and,
+  gte,
+  eq,
+  asc,
+  visitorStatsDaily,
+  visitorTopStats,
+  VISITOR_PERIODS,
+} from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
-
-const PERIOD_DAYS = { '7d': 7, '30d': 30, '90d': 90, '12m': 365 } as const
 
 export interface MetricTotal {
   current: number
@@ -43,7 +50,7 @@ export const getVisitorAnalyticsData = createServerFn({ method: 'GET' })
       return { enabled: false as const }
     }
 
-    const days = PERIOD_DAYS[period]
+    const days = VISITOR_PERIODS[period]
     const now = new Date()
     const startStr = toIsoDateOnly(new Date(now.getTime() - days * 86_400_000))
     const previousStartStr = toIsoDateOnly(new Date(now.getTime() - 2 * days * 86_400_000))

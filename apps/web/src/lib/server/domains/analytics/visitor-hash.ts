@@ -10,6 +10,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { getRedis } from '@/lib/server/redis'
 import { logger } from '@/lib/server/logger'
+import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
 const log = logger.child({ component: 'visitor-hash' })
 
@@ -17,8 +18,12 @@ const SALT_TTL_SECONDS = 48 * 60 * 60
 
 /** UTC calendar date (YYYY-MM-DD) used to key daily salts. */
 export function utcDateKey(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10)
+  return toIsoDateOnly(now)
 }
+
+// The salt is constant per UTC day, so the beacon hot path serves it from
+// process memory; Redis is only consulted on each pod's first beacon of a day.
+let cachedSalt: { dateKey: string; salt: string } | null = null
 
 /**
  * Get-or-create the salt for the given UTC day. Race-safe across pods:
@@ -30,12 +35,15 @@ export function utcDateKey(now: Date = new Date()): string {
  * rather than persist anything derived from raw identifiers without a salt.
  */
 export async function getDailySalt(now: Date = new Date()): Promise<string | null> {
-  const key = `visitor:salt:${utcDateKey(now)}`
+  const dateKey = utcDateKey(now)
+  if (cachedSalt?.dateKey === dateKey) return cachedSalt.salt
   try {
     const redis = getRedis()
     const fresh = randomBytes(32).toString('hex')
-    await redis.set(key, fresh, 'EX', SALT_TTL_SECONDS, 'NX')
-    return await redis.get(key)
+    await redis.set(`visitor:salt:${dateKey}`, fresh, 'EX', SALT_TTL_SECONDS, 'NX')
+    const salt = await redis.get(`visitor:salt:${dateKey}`)
+    if (salt) cachedSalt = { dateKey, salt }
+    return salt
   } catch (error) {
     log.error({ err: error }, 'daily salt unavailable, dropping event')
     return null

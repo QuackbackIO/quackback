@@ -23,6 +23,38 @@ const log = logger.child({ component: 'visitor-track' })
 const MAX_BODY_BYTES = 2048
 const BEACONS_PER_MINUTE_PER_IP = 120
 
+interface ParsedUa {
+  device: string | null
+  browser: string | null
+  os: string | null
+}
+
+// UA strings repeat heavily across a visitor's pageviews; cache the parse so
+// repeat beacons skip Bowser's regex walk. Bounded FIFO eviction.
+const uaCache = new Map<string, ParsedUa>()
+const UA_CACHE_MAX = 500
+
+function parseUserAgent(userAgent: string): ParsedUa {
+  const cached = uaCache.get(userAgent)
+  if (cached) return cached
+  let parsed: ParsedUa = { device: null, browser: null, os: null }
+  try {
+    const parser = Bowser.getParser(userAgent)
+    parsed = {
+      device: parser.getPlatformType() || 'desktop',
+      browser: parser.getBrowserName() || null,
+      os: parser.getOSName() || null,
+    }
+  } catch {
+    // Unparseable UA: keep nulls, the row is still countable.
+  }
+  if (uaCache.size >= UA_CACHE_MAX) {
+    uaCache.delete(uaCache.keys().next().value as string)
+  }
+  uaCache.set(userAgent, parsed)
+  return parsed
+}
+
 const beaconSchema = z.object({
   url: z.string().max(2000),
   referrer: z.string().max(2000).optional().default(''),
@@ -86,17 +118,7 @@ export async function recordPageView(request: Request): Promise<void> {
   if (!salt) return
   const visitorHash = computeVisitorHash({ salt, siteOrigin: url.origin, ip, userAgent })
 
-  let device: string | null = null
-  let browser: string | null = null
-  let os: string | null = null
-  try {
-    const parser = Bowser.getParser(userAgent)
-    device = parser.getPlatformType() || 'desktop'
-    browser = parser.getBrowserName() || null
-    os = parser.getOSName() || null
-  } catch {
-    // Unparseable UA: keep nulls, the row is still countable.
-  }
+  const { device, browser, os } = parseUserAgent(userAgent)
 
   try {
     await db.insert(pageViews).values({

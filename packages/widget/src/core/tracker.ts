@@ -41,8 +41,6 @@ export function createTracker(instanceUrl: string): Tracker {
     }
   }
 
-  const onNavigate = () => send()
-
   return {
     start() {
       if (active || optedOut()) return
@@ -53,14 +51,14 @@ export function createTracker(instanceUrl: string): Tracker {
       originalReplaceState = h.replaceState
       h.pushState = function (this: History, ...args: Parameters<History['pushState']>) {
         originalPushState!.apply(this, args)
-        onNavigate()
+        send()
       }
       h.replaceState = function (this: History, ...args: Parameters<History['replaceState']>) {
         originalReplaceState!.apply(this, args)
-        onNavigate()
+        send()
       }
-      window.addEventListener('popstate', onNavigate)
-      window.addEventListener('hashchange', onNavigate)
+      window.addEventListener('popstate', send)
+      window.addEventListener('hashchange', send)
 
       send()
     },
@@ -73,8 +71,8 @@ export function createTracker(instanceUrl: string): Tracker {
       if (originalReplaceState) h.replaceState = originalReplaceState
       originalPushState = null
       originalReplaceState = null
-      window.removeEventListener('popstate', onNavigate)
-      window.removeEventListener('hashchange', onNavigate)
+      window.removeEventListener('popstate', send)
+      window.removeEventListener('hashchange', send)
       lastHref = null
     },
   }

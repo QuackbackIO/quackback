@@ -31,7 +31,7 @@ export function useUsersFilters() {
       voteCount: search.voteCount,
       commentCount: search.commentCount,
       customAttrs: search.customAttrs,
-      lifecycle: search.lifecycle === 'leads' ? ('leads' as const) : undefined,
+      lifecycle: search.lifecycle,
       sort: search.sort,
       segmentIds,
     }

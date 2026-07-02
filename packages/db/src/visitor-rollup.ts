@@ -42,38 +42,39 @@ interface DayStats {
  * via GROUP BY, plus the 'all' scope where sessions collapse across surfaces.
  */
 async function computeDayStats(db: Database, date: string): Promise<DayStats[]> {
+  // A visit opens where a visitor's gap since their previous event exceeds
+  // the session gap. Both scopes (per-surface and cross-surface 'all') are
+  // computed from one pass via named windows.
   const result = await db.execute(sql`
     WITH scoped AS (
       SELECT surface, visitor_hash, occurred_at
       FROM page_views
       WHERE occurred_at >= ${date}::date AND occurred_at < ${date}::date + 1
     ),
-    surface_gaps AS (
-      SELECT surface,
-        CASE WHEN occurred_at - lag(occurred_at) OVER (PARTITION BY surface, visitor_hash ORDER BY occurred_at)
-          IS NOT DISTINCT FROM NULL OR occurred_at - lag(occurred_at) OVER (PARTITION BY surface, visitor_hash ORDER BY occurred_at) > interval '${sql.raw(SESSION_GAP)}'
-        THEN 1 ELSE 0 END AS is_new
+    gaps AS (
+      SELECT surface, visitor_hash,
+        CASE WHEN lag(occurred_at) OVER surface_w IS NULL
+          OR occurred_at - lag(occurred_at) OVER surface_w > interval '${sql.raw(SESSION_GAP)}'
+        THEN 1 ELSE 0 END AS surface_new,
+        CASE WHEN lag(occurred_at) OVER all_w IS NULL
+          OR occurred_at - lag(occurred_at) OVER all_w > interval '${sql.raw(SESSION_GAP)}'
+        THEN 1 ELSE 0 END AS all_new
       FROM scoped
-    ),
-    all_gaps AS (
-      SELECT
-        CASE WHEN occurred_at - lag(occurred_at) OVER (PARTITION BY visitor_hash ORDER BY occurred_at)
-          IS NOT DISTINCT FROM NULL OR occurred_at - lag(occurred_at) OVER (PARTITION BY visitor_hash ORDER BY occurred_at) > interval '${sql.raw(SESSION_GAP)}'
-        THEN 1 ELSE 0 END AS is_new
-      FROM scoped
+      WINDOW surface_w AS (PARTITION BY surface, visitor_hash ORDER BY occurred_at),
+             all_w AS (PARTITION BY visitor_hash ORDER BY occurred_at)
     )
-    SELECT s.surface AS surface,
-      count(DISTINCT s.visitor_hash)::int AS uniques,
+    SELECT surface,
+      count(DISTINCT visitor_hash)::int AS uniques,
       count(*)::int AS pageviews,
-      (SELECT coalesce(sum(is_new), 0) FROM surface_gaps g WHERE g.surface = s.surface)::int AS visits
-    FROM scoped s
-    GROUP BY s.surface
+      sum(surface_new)::int AS visits
+    FROM gaps
+    GROUP BY surface
     UNION ALL
     SELECT 'all' AS surface,
       count(DISTINCT visitor_hash)::int AS uniques,
       count(*)::int AS pageviews,
-      (SELECT coalesce(sum(is_new), 0) FROM all_gaps)::int AS visits
-    FROM scoped
+      sum(all_new)::int AS visits
+    FROM gaps
     HAVING count(*) > 0
   `)
   return Array.from(
@@ -126,66 +127,81 @@ async function computeTopStats(db: Database, fromDate: string, surface: string):
 export async function refreshVisitorAnalytics(db: Database, opts?: { now?: Date }): Promise<void> {
   const now = opts?.now ?? new Date()
 
-  for (const offset of [-1, 0]) {
-    const date = utcDay(now, offset)
-    const stats = await computeDayStats(db, date)
-    for (const surface of VISITOR_SURFACES) {
-      const row = stats.find((s) => s.surface === surface) ?? {
-        surface,
-        uniqueVisitors: 0,
-        pageviews: 0,
-        visits: 0,
-      }
-      // Days with no traffic still get zero rows only when recomputed (today
-      // or yesterday); truly empty historical days simply have no row.
-      if (row.pageviews === 0 && offset === -1) continue
+  // Daily rows: both days recompute concurrently, one multi-row upsert each.
+  await Promise.all(
+    [-1, 0].map(async (offset) => {
+      const date = utcDay(now, offset)
+      const stats = await computeDayStats(db, date)
+      const rows = VISITOR_SURFACES.map((surface) => {
+        const row = stats.find((s) => s.surface === surface)
+        return {
+          date,
+          surface,
+          uniqueVisitors: row?.uniqueVisitors ?? 0,
+          pageviews: row?.pageviews ?? 0,
+          visits: row?.visits ?? 0,
+          computedAt: new Date(),
+        }
+        // Days with no traffic get zero rows only while recomputed (today or
+        // yesterday); truly empty historical days simply have no row.
+      }).filter((row) => !(offset === -1 && row.pageviews === 0))
+      if (rows.length === 0) return
       await db
         .insert(visitorStatsDaily)
-        .values({ date, surface, ...toCounts(row), computedAt: new Date() })
+        .values(rows)
         .onConflictDoUpdate({
           target: [visitorStatsDaily.date, visitorStatsDaily.surface],
-          set: { ...toCounts(row), computedAt: new Date() },
+          set: {
+            uniqueVisitors: sql`excluded.unique_visitors`,
+            pageviews: sql`excluded.pageviews`,
+            visits: sql`excluded.visits`,
+            computedAt: sql`excluded.computed_at`,
+          },
         })
-    }
-  }
-
-  for (const [period, days] of Object.entries(VISITOR_PERIODS)) {
-    const fromDate = utcDay(now, -days)
-    const snapshots: (typeof visitorTopStats.$inferInsert)[] = []
-    for (const surface of VISITOR_SURFACES) {
-      const rows = await computeTopStats(db, fromDate, surface)
-      let currentDimension = ''
-      let rank = 0
-      for (const row of rows) {
-        if (row.dimension !== currentDimension) {
-          currentDimension = row.dimension
-          rank = 0
-        }
-        rank += 1
-        snapshots.push({
-          period,
-          surface,
-          dimension: row.dimension,
-          rank,
-          label: row.label,
-          count: row.visitors,
-          computedAt: new Date(),
-        })
-      }
-    }
-    await db.transaction(async (tx) => {
-      await tx.delete(visitorTopStats).where(sql`period = ${period}`)
-      if (snapshots.length > 0) {
-        await tx.insert(visitorTopStats).values(snapshots)
-      }
     })
-  }
-}
+  )
 
-function toCounts(row: DayStats): {
-  uniqueVisitors: number
-  pageviews: number
-  visits: number
-} {
-  return { uniqueVisitors: row.uniqueVisitors, pageviews: row.pageviews, visits: row.visits }
+  // Top snapshots: all (period, surface) scans are independent reads, so they
+  // run concurrently (bounded by the pool); each period then swaps its
+  // snapshot rows in one transaction.
+  await Promise.all(
+    Object.entries(VISITOR_PERIODS).map(async ([period, days]) => {
+      const fromDate = utcDay(now, -days)
+      const perSurface = await Promise.all(
+        VISITOR_SURFACES.map(async (surface) => ({
+          surface,
+          rows: await computeTopStats(db, fromDate, surface),
+        }))
+      )
+
+      const snapshots: (typeof visitorTopStats.$inferInsert)[] = []
+      for (const { surface, rows } of perSurface) {
+        let currentDimension = ''
+        let rank = 0
+        for (const row of rows) {
+          if (row.dimension !== currentDimension) {
+            currentDimension = row.dimension
+            rank = 0
+          }
+          rank += 1
+          snapshots.push({
+            period,
+            surface,
+            dimension: row.dimension,
+            rank,
+            label: row.label,
+            count: row.visitors,
+            computedAt: new Date(),
+          })
+        }
+      }
+
+      await db.transaction(async (tx) => {
+        await tx.delete(visitorTopStats).where(sql`period = ${period}`)
+        if (snapshots.length > 0) {
+          await tx.insert(visitorTopStats).values(snapshots)
+        }
+      })
+    })
+  )
 }
