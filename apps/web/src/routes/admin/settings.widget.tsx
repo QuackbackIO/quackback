@@ -829,7 +829,7 @@ function HomeCustomizationCard({
                     onBlur={(e) => {
                       const value = e.target.value.trim()
                       if (value === (card.title ?? '')) return
-                      updateCard(index, { title: value })
+                      updateCard(index, { title: value || undefined })
                     }}
                     disabled={isBusy}
                   />
@@ -841,7 +841,7 @@ function HomeCustomizationCard({
                     onBlur={(e) => {
                       const value = e.target.value.trim()
                       if (value === (card.subtitle ?? '')) return
-                      updateCard(index, { subtitle: value })
+                      updateCard(index, { subtitle: value || undefined })
                     }}
                     disabled={isBusy}
                   />

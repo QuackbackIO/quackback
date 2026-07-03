@@ -99,9 +99,16 @@ export function WidgetOverview({
   // the floating header.
   const overImage = home?.headerStyle === 'image' && !!home.heroImageUrl
   const heroActive = overImage || home?.headerStyle === 'gradient'
-  const cards = (home?.cards?.length ? home.cards : DEFAULT_WIDGET_HOME_CARDS).filter(
-    (c) => c.enabled !== false
-  )
+  // A blank custom title/subtitle means "unset" — the admin editor persists an
+  // empty string when a field is cleared, so normalise it back to the built-in
+  // default copy rather than rendering an empty card.
+  const cards = (home?.cards?.length ? home.cards : DEFAULT_WIDGET_HOME_CARDS)
+    .filter((c) => c.enabled !== false)
+    .map((c) => ({
+      ...c,
+      title: c.title?.trim() ? c.title : undefined,
+      subtitle: c.subtitle?.trim() ? c.subtitle : undefined,
+    }))
 
   /** Render one Home card by type; null when its surface is disabled. */
   function renderCard(card: WidgetHomeCard) {
