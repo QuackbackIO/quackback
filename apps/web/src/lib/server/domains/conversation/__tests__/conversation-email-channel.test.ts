@@ -5,6 +5,9 @@ import {
   inboundReplyToAddress,
   conversationIdFromInboundAddress,
   signConversationId,
+  mintOutboundMessageId,
+  outboundMessageIdDomain,
+  ownEmailDomains,
 } from '../conversation.email-channel'
 
 // 'whsec_' + base64('testsecret') / base64('othersecret').
@@ -103,5 +106,36 @@ describe('conversationIdFromInboundAddress', () => {
   it('returns null for a non-plus-addressed recipient', () => {
     expect(conversationIdFromInboundAddress('bob@example.com', ENV)).toBeNull()
     expect(conversationIdFromInboundAddress('support@tenaevexeo.resend.app', ENV)).toBeNull()
+  })
+})
+
+describe('outbound Message-ID threading', () => {
+  const FROM_ENV = { EMAIL_FROM: 'Support <noreply@acme.example>' }
+
+  it('derives the outbound host from EMAIL_FROM, falling back to the inbound domain', () => {
+    expect(outboundMessageIdDomain(FROM_ENV)).toBe('acme.example')
+    expect(outboundMessageIdDomain({ EMAIL_INBOUND_DOMAIN: 'x.resend.app' })).toBe('x.resend.app')
+    expect(outboundMessageIdDomain({})).toBeNull()
+  })
+
+  it('mints a conversation-scoped Message-ID on our own domain (bare, no brackets)', () => {
+    const id = mintOutboundMessageId(REAL_ID, FROM_ENV)!
+    expect(id).toMatch(/^c\.01kw8qxn1eeh4t2rek7varh032\.[A-Za-z0-9_-]+@acme\.example$/)
+    expect(id).not.toMatch(/[<>]/)
+  })
+
+  it('mints a fresh (unique) id each call', () => {
+    expect(mintOutboundMessageId(REAL_ID, FROM_ENV)).not.toBe(
+      mintOutboundMessageId(REAL_ID, FROM_ENV)
+    )
+  })
+
+  it('returns null when no sending domain is configured', () => {
+    expect(mintOutboundMessageId(REAL_ID, {})).toBeNull()
+  })
+
+  it('collects our own sending domains from EMAIL_FROM and the inbound domain', () => {
+    const domains = ownEmailDomains({ ...FROM_ENV, EMAIL_INBOUND_DOMAIN: 'x.resend.app' })
+    expect(domains).toEqual(new Set(['acme.example', 'x.resend.app']))
   })
 })

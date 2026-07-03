@@ -15,13 +15,15 @@
  * burn 13 characters of the RFC 5321 64-char local-part budget for no routing
  * value. The parser re-attaches it. The HMAC is still taken over the full id.
  */
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { ID_PREFIXES, type ConversationId } from '@quackback/ids'
+import { extractEmailAddress } from './conversation.email-inbound'
 
 type EnvLike = Record<string, string | undefined>
 
 const INBOUND_DOMAIN_ENV = 'EMAIL_INBOUND_DOMAIN'
 const INBOUND_SECRET_ENV = 'EMAIL_INBOUND_SIGNING_SECRET'
+const EMAIL_FROM_ENV = 'EMAIL_FROM'
 
 // `conversation_` — the constant TypeID prefix stripped from the local part on
 // the way out and re-attached on the way in.
@@ -102,4 +104,50 @@ export function conversationIdFromInboundAddress(
   const b = Buffer.from(expected)
   if (a.byteLength !== b.byteLength || !timingSafeEqual(a, b)) return null
   return id
+}
+
+// ============================================================================
+// Outbound Message-ID threading. Every notification email carries a
+// deterministic Message-ID whose host is one of our own sending domains and
+// whose local part embeds the conversation suffix (for debuggability) plus a
+// nonce (uniqueness across a thread). Routing back is by exact match against
+// the stored ids (see conversation.email-store.ts), not by parsing this — the
+// store is the authority, so no signature is needed on the id itself.
+// ============================================================================
+
+/** The domain part of an `addr` or `Name <addr>` value, lower-cased. Reuses the
+ *  inbound address parser (a single plausible addr-spec) and takes its host. */
+function domainOf(address: string | undefined): string | null {
+  const email = extractEmailAddress(address ?? null)
+  return email ? email.slice(email.lastIndexOf('@') + 1) : null
+}
+
+/** The host used for outbound Message-IDs: the sending identity's domain, else
+ *  the inbound domain. Null when neither is configured (no threading). */
+export function outboundMessageIdDomain(env: EnvLike = process.env): string | null {
+  return domainOf(env[EMAIL_FROM_ENV]) ?? env[INBOUND_DOMAIN_ENV] ?? null
+}
+
+/** Domains we send from — an inbound message whose Message-ID sits on one of
+ *  these is our own mail looping back, so the ingest core drops it. */
+export function ownEmailDomains(env: EnvLike = process.env): Set<string> {
+  const domains = new Set<string>()
+  const from = domainOf(env[EMAIL_FROM_ENV])
+  if (from) domains.add(from)
+  const inbound = env[INBOUND_DOMAIN_ENV]?.toLowerCase()
+  if (inbound) domains.add(inbound)
+  return domains
+}
+
+/** Mint a fresh outbound Message-ID for a conversation, bare (no angle
+ *  brackets — the send layer wraps it). Null when no sending domain is known. */
+export function mintOutboundMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  const suffix = conversationId.slice(CONVERSATION_PREFIX.length)
+  const nonce = randomBytes(9).toString('base64url')
+  return `c.${suffix}.${nonce}@${domain}`
 }

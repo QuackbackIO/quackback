@@ -109,6 +109,12 @@ function getResend(): Resend {
   return resendClient
 }
 
+/** Wrap a bare Message-ID in angle brackets for a header value (idempotent). */
+function angleId(id: string): string {
+  const bare = id.trim().replace(/^<|>$/g, '')
+  return `<${bare}>`
+}
+
 /**
  * Send an email using the configured transport (SMTP or Resend).
  * Falls back to console logging if neither is configured.
@@ -119,7 +125,19 @@ async function sendEmail(options: {
   react: React.ReactElement
   /** Conversation-specific reply address (e.g. plus-addressed inbound). */
   replyTo?: string
+  /** RFC 5322 threading: our deterministic Message-ID for this mail. */
+  messageId?: string
+  /** RFC 5322 threading: the parent Message-ID this mail replies to. */
+  inReplyTo?: string
+  /** RFC 5322 threading: the full References chain (oldest first). */
+  references?: string[]
 }): Promise<EmailResult> {
+  const threadingHeaders: Record<string, string> = {}
+  if (options.messageId) threadingHeaders['Message-ID'] = angleId(options.messageId)
+  if (options.inReplyTo) threadingHeaders['In-Reply-To'] = angleId(options.inReplyTo)
+  if (options.references && options.references.length > 0) {
+    threadingHeaders['References'] = options.references.map(angleId).join(' ')
+  }
   // Defense in depth: the synthetic anonymous placeholder domain
   // (temp-<id>@anon.quackback.io) is never deliverable. Callers sanitize via
   // realEmail(), but if one slips through, drop it here rather than bounce.
@@ -139,6 +157,9 @@ async function sendEmail(options: {
         subject: options.subject,
         html,
         replyTo: options.replyTo,
+        messageId: threadingHeaders['Message-ID'],
+        inReplyTo: threadingHeaders['In-Reply-To'],
+        references: threadingHeaders['References'],
       })
       log.info({ provider: 'smtp', message_id: result.messageId }, 'email sent')
     } catch (error) {
@@ -163,6 +184,9 @@ async function sendEmail(options: {
       subject: options.subject,
       react: options.react,
       replyTo: options.replyTo,
+      // Resend may reassign its own Message-ID, in which case plus-address
+      // routing carries the reply; In-Reply-To/References still thread the client.
+      ...(Object.keys(threadingHeaders).length > 0 ? { headers: threadingHeaders } : {}),
     })
     if (result.error) {
       log.error(
@@ -535,6 +559,14 @@ interface SendConversationMessageEmailParams {
   /** Conversation-specific reply address so a visitor's reply routes back to
    *  the right thread (inbound email channel). */
   replyTo?: string
+  /** RFC 5322 threading: our deterministic Message-ID for this mail (bare or
+   *  bracketed). Stored by the caller so a plus-address-stripped reply still
+   *  routes back via In-Reply-To/References. */
+  messageId?: string
+  /** RFC 5322 threading: the parent Message-ID this mail replies to. */
+  inReplyTo?: string
+  /** RFC 5322 threading: the full References chain (oldest first). */
+  references?: string[]
 }
 
 /**
@@ -554,6 +586,9 @@ export async function sendConversationMessageEmail(
     logoUrl,
     unsubscribeUrl,
     replyTo,
+    messageId,
+    inReplyTo,
+    references,
   } = params
 
   const isReply = direction === 'agent_reply'
@@ -604,6 +639,9 @@ export async function sendConversationMessageEmail(
       logoUrl,
     }),
     replyTo,
+    messageId,
+    inReplyTo,
+    references,
   })
 }
 

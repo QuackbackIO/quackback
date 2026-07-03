@@ -63,6 +63,7 @@ describe('REPOINT_STEPS registry', () => {
       'visitor_devices',
       'user_segments',
       'kb_article_feedback',
+      'channel_identities',
     ]) {
       expect(operations, `expected an update for ${table}`).toContain(`update:${table}`)
     }
@@ -73,6 +74,7 @@ describe('REPOINT_STEPS registry', () => {
     ['post_comment_reactions'],
     ['post_subscriptions'],
     ['kb_article_feedback'],
+    ['channel_identities'],
   ])('deletes colliding anon rows in %s before re-pointing', async (table) => {
     await repointPrincipalActivity(tx, FROM, TO)
 

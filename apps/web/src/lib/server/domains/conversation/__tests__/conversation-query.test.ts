@@ -7,7 +7,13 @@
  * listConversationsForAgent SQL builder is intentionally not exercised here.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationId, ConversationMessageId, PrincipalId, SegmentId } from '@quackback/ids'
+import type {
+  ConversationId,
+  ConversationMessageId,
+  PrincipalId,
+  SegmentId,
+  CompanyId,
+} from '@quackback/ids'
 import type { Conversation, ConversationMessage } from '@/lib/server/db'
 import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 
@@ -396,6 +402,28 @@ describe('listConversationsForAgent visitor filter', () => {
   it('does not constrain by visitor by default', async () => {
     await listConversationsForAgent({})
     expect(vi.mocked(eq).mock.calls.some((c) => c[1] === visitorId)).toBe(false)
+  })
+})
+
+describe('listConversationsForAgent company filter', () => {
+  const companyId = 'company_acme' as CompanyId
+
+  it('restricts to conversations whose visitor belongs to the company', async () => {
+    await listConversationsForAgent({ companyId })
+    // A subquery over principal pins the visitor to this company_id.
+    expect(vi.mocked(eq).mock.calls.some((c) => c[1] === companyId)).toBe(true)
+  })
+
+  it('does not constrain by company by default', async () => {
+    await listConversationsForAgent({})
+    expect(vi.mocked(eq).mock.calls.some((c) => c[1] === companyId)).toBe(false)
+  })
+
+  it('combines the company filter with a status filter', async () => {
+    await listConversationsForAgent({ companyId, status: 'open' })
+    const calls = vi.mocked(eq).mock.calls
+    expect(calls.some((c) => c[1] === companyId)).toBe(true)
+    expect(calls.some((c) => c[1] === 'open')).toBe(true)
   })
 })
 

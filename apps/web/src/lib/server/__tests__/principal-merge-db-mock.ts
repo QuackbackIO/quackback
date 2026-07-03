@@ -124,6 +124,12 @@ export function mockDbModule(): Record<string, unknown> {
       articleId: 'helpCenterArticleFeedback.articleId',
       __name: 'kb_article_feedback',
     },
+    channelIdentities: {
+      principalId: 'channelIdentities.principalId',
+      channel: 'channelIdentities.channel',
+      externalId: 'channelIdentities.externalId',
+      __name: 'channel_identities',
+    },
     principal: {
       id: 'principal.id',
       userId: 'principal.userId',

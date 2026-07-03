@@ -98,6 +98,18 @@ export const WORKER_REGISTRY: readonly WorkerEntry[] = [
         m.closeSnoozeSweepQueue()
       ),
   },
+  {
+    // Inbound email poller (IMAP, Layer 1). Init no-ops unless configured.
+    name: 'email-imap',
+    init: () =>
+      import('@/lib/server/domains/conversation/conversation.email-imap-queue').then((m) =>
+        m.initEmailImapWorker()
+      ),
+    close: () =>
+      import('@/lib/server/domains/conversation/conversation.email-imap-queue').then((m) =>
+        m.closeEmailImapQueue()
+      ),
+  },
 ]
 
 type WorkerBootState = 'pending' | 'running' | 'failed'

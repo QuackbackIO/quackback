@@ -15,10 +15,17 @@ const REPLY_TO = inboundReplyToAddress('conversation_abc')!
 
 const sendVisitorMessage = vi.fn()
 const assertConversationSendRate = vi.fn()
+const resolveConversationByMessageIds = vi.fn<(...a: unknown[]) => Promise<string | null>>()
+const resolvePrincipalIdByEmail = vi.fn<(...a: unknown[]) => Promise<string | null>>()
 let conversationRow: Record<string, unknown> | undefined
 let principalRow: Record<string, unknown> | undefined
 let userRow: Record<string, unknown> | undefined
 let dupeRows: Array<Record<string, unknown>> = []
+
+vi.mock('../conversation.email-store', () => ({
+  resolveConversationByMessageIds: (...a: unknown[]) => resolveConversationByMessageIds(...a),
+  resolvePrincipalIdByEmail: (...a: unknown[]) => resolvePrincipalIdByEmail(...a),
+}))
 
 vi.mock('../conversation.service', () => ({
   sendVisitorMessage: (...a: unknown[]) => sendVisitorMessage(...a),
@@ -85,6 +92,8 @@ beforeEach(() => {
   dupeRows = []
   sendVisitorMessage.mockResolvedValue({ created: false })
   assertConversationSendRate.mockResolvedValue(undefined)
+  resolveConversationByMessageIds.mockResolvedValue(null)
+  resolvePrincipalIdByEmail.mockResolvedValue(null)
 })
 
 describe('ingestInboundEmail', () => {
@@ -246,6 +255,109 @@ describe('ingestInboundEmail', () => {
     const result = await ingestInboundEmail(baseEvent)
 
     expect(result).toEqual({ status: 'rate_limited' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  describe('loop / auto-mail suppression', () => {
+    it('drops an Auto-Submitted (autoresponder) message before routing', async () => {
+      const result = await ingestInboundEmail({
+        ...baseEvent,
+        data: {
+          ...baseEvent.data,
+          headers: [...baseEvent.data.headers, { name: 'Auto-Submitted', value: 'auto-replied' }],
+        },
+      })
+
+      expect(result).toEqual({ status: 'suppressed' })
+      expect(sendVisitorMessage).not.toHaveBeenCalled()
+    })
+
+    it('drops bulk (Precedence) mail', async () => {
+      const result = await ingestInboundEmail({
+        ...baseEvent,
+        data: {
+          ...baseEvent.data,
+          headers: [...baseEvent.data.headers, { name: 'Precedence', value: 'bulk' }],
+        },
+      })
+
+      expect(result).toEqual({ status: 'suppressed' })
+    })
+
+    it('drops our own mail looping back (Message-ID on our own domain)', async () => {
+      // EMAIL_INBOUND_DOMAIN is one of our own domains; a Message-ID on it is a loop.
+      const result = await ingestInboundEmail({
+        ...baseEvent,
+        data: {
+          ...baseEvent.data,
+          headers: [{ name: 'Message-ID', value: '<loop-1@tenaevexeo.resend.app>' }],
+        },
+      })
+
+      expect(result).toEqual({ status: 'suppressed' })
+    })
+  })
+
+  describe('References fallback (plus-address stripped)', () => {
+    const strippedEvent = {
+      type: 'email.received',
+      data: {
+        to: ['support@tenaevexeo.resend.app'], // no plus-address
+        from: 'jane@example.com',
+        text: 'Following up here.',
+        headers: [
+          { name: 'Message-ID', value: '<reply-9@example.com>' },
+          { name: 'In-Reply-To', value: '<c.abc.n1@tenaevexeo.resend.app>' },
+        ],
+      },
+    }
+
+    it('routes via a stored outbound Message-ID when no plus-address is present', async () => {
+      resolveConversationByMessageIds.mockResolvedValue('conversation_abc')
+
+      const result = await ingestInboundEmail(strippedEvent)
+
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      expect(resolveConversationByMessageIds).toHaveBeenCalledWith([
+        'c.abc.n1@tenaevexeo.resend.app',
+      ])
+    })
+
+    it('drops when neither a plus-address nor a References match resolves', async () => {
+      resolveConversationByMessageIds.mockResolvedValue(null)
+
+      const result = await ingestInboundEmail(strippedEvent)
+
+      expect(result).toEqual({ status: 'no_conversation' })
+      expect(sendVisitorMessage).not.toHaveBeenCalled()
+    })
+  })
+
+  it('accepts a sender resolved to the visitor via a channel identity', async () => {
+    // From matches no known address, but a channel identity maps it to the
+    // conversation's visitor principal.
+    principalRow = { ...principalRow!, contactEmail: null }
+    resolvePrincipalIdByEmail.mockResolvedValue('principal_v')
+
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'jane.alias@example.com' },
+    })
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    expect(resolvePrincipalIdByEmail).toHaveBeenCalledWith('jane.alias@example.com')
+  })
+
+  it('drops a sender whose channel identity maps to a different principal', async () => {
+    principalRow = { ...principalRow!, contactEmail: null }
+    resolvePrincipalIdByEmail.mockResolvedValue('principal_other')
+
+    const result = await ingestInboundEmail({
+      ...baseEvent,
+      data: { ...baseEvent.data, from: 'someone.else@example.com' },
+    })
+
+    expect(result).toEqual({ status: 'from_mismatch' })
     expect(sendVisitorMessage).not.toHaveBeenCalled()
   })
 })

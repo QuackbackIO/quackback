@@ -42,6 +42,17 @@ vi.mock('@quackback/email', () => ({
     sendConversationMessageEmail(...a),
 }))
 
+// Outbound-email persistence (threading map + channel identities). No-op here;
+// exercised in its own suite. Keeps notify's fire-and-forget path off the db.
+const priorOutboundMessageIds = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => [])
+const recordOutboundEmail = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
+const recordEmailIdentity = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {})
+vi.mock('../conversation.email-store', () => ({
+  priorOutboundMessageIds: (...a: unknown[]) => priorOutboundMessageIds(...a),
+  recordOutboundEmail: (...a: unknown[]) => recordOutboundEmail(...a),
+  recordEmailIdentity: (...a: unknown[]) => recordEmailIdentity(...a),
+}))
+
 // Visitor deep links consult the portal-support gate; default to the widget
 // link (portal support off) so existing expectations hold.
 const isPortalSupportEnabled = vi.fn<() => Promise<boolean>>(async () => false)

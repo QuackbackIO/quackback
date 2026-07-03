@@ -42,6 +42,7 @@ import {
   visitorDevices,
   userSegments,
   helpCenterArticleFeedback,
+  channelIdentities,
   principal,
   eq,
   and,
@@ -303,6 +304,13 @@ export const REPOINT_STEPS: RepointStep[] = [
     'principal_id',
     ['article_id'],
     'Help-center article feedback; unique (article_id, principal_id). The identified vote wins: colliding anon rows are dropped.'
+  ),
+  collisionRepoint(
+    'channel_identities',
+    channelIdentities,
+    'principal_id',
+    ['channel', 'external_id'],
+    'Per-channel identities (email, ...); unique (channel, external_id). An address maps to one principal, so the identified owner wins: a colliding anon identity is dropped, the rest follow the person.'
   ),
   fillIfEmpty(
     'contact_email',

@@ -16,12 +16,43 @@ import { createNotificationsBatch } from '@/lib/server/domains/notifications/not
 import { buildHookContext } from '@/lib/server/events/hook-context'
 import { truncate } from '@/lib/shared/utils/string'
 import { resolveReplyRecipient } from './conversation.recipient'
-import { inboundReplyToAddress, isEmailInboundConfigured } from './conversation.email-channel'
+import {
+  inboundReplyToAddress,
+  isEmailInboundConfigured,
+  mintOutboundMessageId,
+} from './conversation.email-channel'
+import {
+  priorOutboundMessageIds,
+  recordOutboundEmail,
+  recordEmailIdentity,
+} from './conversation.email-store'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'conversation-notify' })
 
 const previewOf = (content: string) => truncate(content, 140)
+
+/**
+ * Threading headers for a visitor-facing conversation email: a fresh
+ * deterministic Message-ID plus the References chain from prior outbound mails
+ * (so mail clients thread the conversation, and a reply that strips the
+ * plus-address still routes home via In-Reply-To/References). Absent when no
+ * sending domain is configured.
+ */
+async function outboundThreading(conversationId: ConversationId): Promise<{
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+}> {
+  const messageId = mintOutboundMessageId(conversationId)
+  if (!messageId) return {}
+  const prior = await priorOutboundMessageIds(conversationId)
+  return {
+    messageId,
+    inReplyTo: prior[prior.length - 1],
+    references: prior.length > 0 ? prior : undefined,
+  }
+}
 
 /**
  * Where a conversation email deep-links to for the VISITOR: the portal Support
@@ -110,6 +141,54 @@ export async function notifyVisitorMessage(opts: {
 }
 
 /**
+ * Send one visitor-facing conversation email (an agent reply or an agent-started
+ * thread) and record its threading id + the recipient's channel identity, so a
+ * future email reply routes back and cold inbound resolves the address to the
+ * visitor. The two callers differ only in `direction`.
+ */
+async function sendVisitorConversationEmail(opts: {
+  conversationId: ConversationId
+  visitorPrincipalId: PrincipalId
+  recipient: string
+  direction: 'agent_reply' | 'agent_started'
+  senderName: string
+  content: string
+  ctaUrl: string
+  ctx: { workspaceName: string; logoUrl: string | null }
+}): Promise<void> {
+  // Only advertise a reply address we can actually receive on, so a visitor's
+  // email reply threads back into this conversation (inbound email channel).
+  const replyTo = isEmailInboundConfigured()
+    ? (inboundReplyToAddress(opts.conversationId) ?? undefined)
+    : undefined
+  const threading = await outboundThreading(opts.conversationId)
+  const { sendConversationMessageEmail } = await import('@quackback/email')
+  const result = await sendConversationMessageEmail({
+    to: opts.recipient,
+    direction: opts.direction,
+    senderName: opts.senderName,
+    messagePreview: previewOf(opts.content),
+    ctaUrl: opts.ctaUrl,
+    workspaceName: opts.ctx.workspaceName,
+    logoUrl: opts.ctx.logoUrl ?? undefined,
+    replyTo,
+    ...threading,
+  })
+  if (result && result.sent === false) {
+    log.warn(
+      { conversation_id: opts.conversationId, direction: opts.direction },
+      'conversation email not sent (provider returned sent:false)'
+    )
+  }
+  await Promise.all([
+    threading.messageId
+      ? recordOutboundEmail(threading.messageId, opts.conversationId)
+      : Promise.resolve(),
+    recordEmailIdentity(opts.recipient, opts.visitorPrincipalId),
+  ])
+}
+
+/**
  * Email an offline visitor when an agent replies. An identified visitor's
  * account email is preferred; an anonymous visitor is reachable only via the
  * pre-chat email they captured on the conversation.
@@ -142,33 +221,21 @@ export async function notifyAgentReply(opts: {
 
     const ctx = await buildHookContext()
     if (!ctx) return
-    const { sendConversationMessageEmail } = await import('@quackback/email')
     // Deep-link to the visitor's conversation surface (portal Support thread
     // when enabled, else the widget messenger view). The thread is surfaced from
     // the visitor's own session (or a re-identify in the host app), so the URL
     // only navigates — it carries no capability of its own.
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
-    // Only advertise a reply address we can actually receive on, so a visitor's
-    // email reply threads back into this conversation (inbound email channel).
-    const replyTo = isEmailInboundConfigured()
-      ? (inboundReplyToAddress(opts.conversationId) ?? undefined)
-      : undefined
-    const result = await sendConversationMessageEmail({
-      to: recipient,
+    await sendVisitorConversationEmail({
+      conversationId: opts.conversationId,
+      visitorPrincipalId: opts.visitorPrincipalId,
+      recipient,
       direction: 'agent_reply',
       senderName: opts.agentName,
-      messagePreview: previewOf(opts.content),
+      content: opts.content,
       ctaUrl,
-      workspaceName: ctx.workspaceName,
-      logoUrl: ctx.logoUrl ?? undefined,
-      replyTo,
+      ctx,
     })
-    if (result && result.sent === false) {
-      log.warn(
-        { conversation_id: opts.conversationId },
-        'agent-reply email not sent (provider returned sent:false)'
-      )
-    }
   } catch (err) {
     log.warn({ err }, 'notify agent reply failed')
   }
@@ -206,27 +273,17 @@ export async function notifyConversationStarted(opts: {
 
     const ctx = await buildHookContext()
     if (!ctx) return
-    const { sendConversationMessageEmail } = await import('@quackback/email')
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
-    const replyTo = isEmailInboundConfigured()
-      ? (inboundReplyToAddress(opts.conversationId) ?? undefined)
-      : undefined
-    const result = await sendConversationMessageEmail({
-      to: recipient,
+    await sendVisitorConversationEmail({
+      conversationId: opts.conversationId,
+      visitorPrincipalId: opts.visitorPrincipalId,
+      recipient,
       direction: 'agent_started',
       senderName: opts.agentName,
-      messagePreview: previewOf(opts.content),
+      content: opts.content,
       ctaUrl,
-      workspaceName: ctx.workspaceName,
-      logoUrl: ctx.logoUrl ?? undefined,
-      replyTo,
+      ctx,
     })
-    if (result && result.sent === false) {
-      log.warn(
-        { conversation_id: opts.conversationId },
-        'outbound message email not sent (provider returned sent:false)'
-      )
-    }
   } catch (err) {
     log.warn({ err }, 'notify conversation started failed')
   }
