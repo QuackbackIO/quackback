@@ -1,6 +1,4 @@
-import { createFileRoute, getRouteApi, notFound, Link } from '@tanstack/react-router'
-import { ArrowLeft, FileText } from 'lucide-react'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { createFileRoute, getRouteApi, notFound } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
 import { getPublicArticleBySlugFn } from '@/lib/server/functions/help-center'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
@@ -16,7 +14,7 @@ import {
 } from '@/components/help-center/help-center-article-utils'
 import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
-import { cn, stripMarkdownPreview } from '@/lib/shared/utils'
+import { stripMarkdownPreview } from '@/lib/shared/utils'
 import type { JSONContent } from '@tiptap/react'
 
 const helpCenterApi = getRouteApi('/_portal/hc')
@@ -125,47 +123,9 @@ function ArticleDetailPage() {
         </>
       )}
 
-      <div className="px-4 sm:px-6 md:px-8">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="relative flex justify-center gap-8 xl:gap-12">
-          {/* Left: articles in this category */}
-          {articles.length > 1 && (
-            <div className="hidden w-60 shrink-0 xl:block">
-              <aside className="sticky top-14 h-[calc(100vh-3.5rem)] hidden flex-col py-8 pl-4 pr-2 xl:flex">
-                <Link
-                  to={`/hc/categories/${categorySlug}` as '/hc'}
-                  className="mb-5 shrink-0 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
-                >
-                  <ArrowLeft className="h-4 w-4 shrink-0" />
-                  <span className="truncate">All {category.name}</span>
-                </Link>
-                <h4 className="mb-2 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  In this category
-                </h4>
-                <ScrollArea className="min-h-0 flex-1" scrollBarClassName="w-1.5">
-                  <ul className="space-y-0.5 overflow-x-hidden pr-2">
-                    {articles.map((a) => (
-                      <li key={a.id}>
-                        <Link
-                          to={`/hc/articles/${categorySlug}/${a.slug}` as '/hc'}
-                          className={cn(
-                            'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-[13px] leading-snug transition-colors',
-                            a.slug === article.slug
-                              ? 'bg-secondary text-foreground font-medium'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                          )}
-                        >
-                          <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-60" />
-                          <span>{a.title}</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </ScrollArea>
-              </aside>
-            </div>
-          )}
-
-          {/* Center: article */}
+          {/* Article */}
           <article className="min-w-0 max-w-2xl flex-1 py-10">
             <HelpCenterBreadcrumbs items={breadcrumbs.slice(0, -1)} />
 
@@ -229,7 +189,7 @@ function ArticleDetailPage() {
             <HelpCenterPrevNext categorySlug={categorySlug} prev={prev} next={next} />
           </article>
 
-          {/* Right: table of contents — always rendered to preserve layout balance */}
+          {/* Right: table of contents (scrollspy) */}
           <div className="hidden w-56 shrink-0 xl:block">
             <HelpCenterToc headings={headings} />
           </div>
