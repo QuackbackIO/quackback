@@ -13,6 +13,11 @@ import type { PermissionKey } from '@/lib/shared/permissions'
  * keeps `can` correct for the inline actor fixtures the policy layer builds
  * without threading a permission set through every one. When resolution becomes
  * assignment-derived, populated actors take precedence and the seams populate.
+ *
+ * This is a capability-level guard only: deciding WHICH rows an actor may act on
+ * ('own' / 'team' / 'all') is the job of the SQL `xFilter(actor)` predicates (see
+ * policy/tickets.ts `ticketFilter`, policy/conversations.ts `conversationFilter`),
+ * never this guard.
  */
 export function can(actor: Actor, permission: PermissionKey): boolean {
   return (actor.permissions ?? resolveActorPermissions(actor.role)).has(permission)

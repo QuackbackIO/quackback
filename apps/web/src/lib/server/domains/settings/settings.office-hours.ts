@@ -11,7 +11,6 @@
  * when the key is absent. Per-team schedules and holiday calendars are out of
  * scope for this object.
  */
-import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import {
   DEFAULT_OFFICE_HOURS_SCHEDULE,
@@ -20,7 +19,7 @@ import {
   officeHoursScheduleFromLegacyDays,
 } from '@/lib/shared/office-hours'
 import type { OfficeHoursSchedule, OfficeHoursScheduleInput } from '@/lib/shared/office-hours'
-import { requireSettings, wrapDbError, invalidateSettingsCache } from './settings.helpers'
+import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
 
 export { DEFAULT_OFFICE_HOURS_SCHEDULE, officeHoursIntervalSchema, officeHoursScheduleSchema }
 export type { OfficeHoursSchedule, OfficeHoursScheduleInput }
@@ -89,8 +88,8 @@ export async function getOfficeHoursSchedule(): Promise<OfficeHoursSchedule> {
 }
 
 /**
- * Persist the schedule. Read-modify-writes the whole `metadata` bag so sibling
- * keys (e.g. the telemetry instance id) survive.
+ * Persist the schedule into the shared `settings.metadata` bag (sibling keys —
+ * e.g. the telemetry instance id — survive the read-modify-write).
  */
 export async function updateOfficeHoursSchedule(
   input: OfficeHoursScheduleInput
@@ -98,21 +97,7 @@ export async function updateOfficeHoursSchedule(
   log.info('update office hours')
   try {
     const validated = officeHoursScheduleSchema.parse(input)
-    const org = await requireSettings()
-    let meta: Record<string, unknown> = {}
-    if (org.metadata) {
-      try {
-        meta = JSON.parse(org.metadata) as Record<string, unknown>
-      } catch {
-        meta = {}
-      }
-    }
-    meta[METADATA_KEY] = validated
-    await db
-      .update(settings)
-      .set({ metadata: JSON.stringify(meta) })
-      .where(eq(settings.id, org.id))
-    await invalidateSettingsCache()
+    await writeMetadataKey(METADATA_KEY, validated)
     return validated
   } catch (error) {
     log.error({ err: error }, 'update office hours failed')

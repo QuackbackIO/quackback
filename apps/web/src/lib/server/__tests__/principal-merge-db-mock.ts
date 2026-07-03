@@ -130,6 +130,10 @@ export function mockDbModule(): Record<string, unknown> {
       externalId: 'channelIdentities.externalId',
       __name: 'channel_identities',
     },
+    tickets: {
+      requesterPrincipalId: 'tickets.requesterPrincipalId',
+      __name: 'tickets',
+    },
     principal: {
       id: 'principal.id',
       userId: 'principal.userId',

@@ -43,6 +43,7 @@ import {
   userSegments,
   helpCenterArticleFeedback,
   channelIdentities,
+  tickets,
   principal,
   eq,
   and,
@@ -312,6 +313,12 @@ export const REPOINT_STEPS: RepointStep[] = [
     ['channel', 'external_id'],
     'Per-channel identities (email, ...); unique (channel, external_id). An address maps to one principal, so the identified owner wins: a colliding anon identity is dropped, the rest follow the person.'
   ),
+  simpleRepoint(
+    'tickets',
+    tickets,
+    'requester_principal_id',
+    'Ticket requester. A ticket filed while anonymous (portal/Messenger) follows the person on merge. Unlike conversations.visitor_principal_id (ON DELETE RESTRICT), this FK is ON DELETE SET NULL, so this re-point step (not the constraint) is what keeps the ticket attributed when the anonymous principal is torn down.'
+  ),
   fillIfEmpty(
     'contact_email',
     'Attribute consolidation, not a re-point: contact_email fills the target only when the target has none (user wins, lead fills gaps).'
@@ -348,6 +355,12 @@ export const REPOINT_STEPS: RepointStep[] = [
  */
 export const REPOINT_EXEMPTIONS: Record<string, string> = {
   // Team/agent actor columns (anonymous principals can never occupy them)
+  'tickets.assignee_principal_id':
+    'ticket assignees are team members; the merge source is anonymous',
+  'ticket_conversations.linked_by_principal_id':
+    'the actor who links a conversation to a ticket is a team member',
+  'ticket_links.linked_by_principal_id':
+    'the actor who links a tracker to a ticket is a team member',
   'posts.owner_principal_id': 'post owners are team members; the merge source is always anonymous',
   'posts.tracked_by_principal_id': 'tracking actor is a team member',
   'posts.deleted_by_principal_id': 'moderation actor is a team member',

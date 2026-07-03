@@ -7,7 +7,6 @@ import {
   conversations,
   conversationMessages,
   principal,
-  user,
   eq,
   and,
   or,
@@ -48,8 +47,9 @@ import {
 } from '@quackback/ids'
 import type { ConversationSort } from '@/lib/shared/conversation/views'
 import { getAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
+import { priorityRankSql } from '@/lib/server/utils/priority-rank'
+import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { aggregateReactions } from '@/lib/shared'
-import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { truncate } from '@/lib/shared/utils/string'
 import type {
   ConversationAuthorDTO,
@@ -67,42 +67,10 @@ import type {
 const MESSAGE_PAGE_SIZE = 30
 const INBOX_PAGE_SIZE = 25
 
-/** Batch-load principal display info, returning a lookup map. */
-export async function loadAuthors(
-  ids: ReadonlyArray<PrincipalId | null | undefined>
-): Promise<Map<PrincipalId, ConversationAuthorDTO>> {
-  const unique = [...new Set(ids.filter((id): id is PrincipalId => !!id))]
-  const map = new Map<PrincipalId, ConversationAuthorDTO>()
-  if (unique.length === 0) return map
-  // Resolve the avatar from the linked user (the canonical source, like the
-  // team-member list): an external image URL, or the public URL of an uploaded
-  // avatar (stored only as an S3 key), falling back to the principal's synced
-  // copy. principal.avatarUrl alone is not reliably kept in sync, so agents
-  // whose avatar lives only on the user row would otherwise show initials.
-  const rows = await db
-    .select({
-      id: principal.id,
-      displayName: principal.displayName,
-      avatarUrl: principal.avatarUrl,
-      userImage: user.image,
-      userImageKey: user.imageKey,
-    })
-    .from(principal)
-    .leftJoin(user, eq(user.id, principal.userId))
-    .where(inArray(principal.id, unique))
-  for (const row of rows) {
-    map.set(row.id, {
-      principalId: row.id,
-      displayName: row.displayName ?? null,
-      avatarUrl: row.userImage ?? getPublicUrlOrNull(row.userImageKey) ?? row.avatarUrl ?? null,
-    })
-  }
-  return map
-}
-
-export function fallbackAuthor(principalId: PrincipalId): ConversationAuthorDTO {
-  return { principalId, displayName: null, avatarUrl: null }
-}
+// loadAuthors/fallbackAuthor now live in the principals domain (principal
+// display is a principal concern). Re-exported here because the inbox, the
+// message stream, and their test mocks reference them from this module.
+export { loadAuthors, fallbackAuthor }
 
 /** Build an author DTO from a send-call author input (no DB round trip). */
 export function authorFromInput(input: {
@@ -786,7 +754,7 @@ export function sortDescriptorFor(sort: ConversationSort = 'recent'): SortDescri
 
 /** Numeric priority rank (text enum → orderable int) for the priority sort. */
 const PRIORITY_RANK: Record<string, number> = { urgent: 5, high: 4, medium: 3, low: 2, none: 1 }
-const priorityRankExpr = sql<number>`CASE ${conversations.priority} WHEN 'urgent' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END`
+const priorityRankExpr = priorityRankSql(conversations.priority)
 
 /** ORDER BY clause list for a sort. `id` breaks ties so keyset never dupes/skips. */
 function orderByForSort(sort: ConversationSort) {

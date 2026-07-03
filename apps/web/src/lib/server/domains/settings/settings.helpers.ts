@@ -2,7 +2,7 @@
  * Internal shared helpers for settings sub-modules.
  * NOT part of the public API — import from settings.service instead.
  */
-import { db } from '@/lib/server/db'
+import { db, eq, settings } from '@/lib/server/db'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import { NotFoundError, InternalError, ValidationError } from '@/lib/shared/errors'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
@@ -80,6 +80,25 @@ export function wrapDbError(operation: string, error: unknown): never {
 export async function invalidateSettingsCache(): Promise<void> {
   log.info('invalidating settings cache')
   await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
+}
+
+/**
+ * Read-modify-write one key in the `settings.metadata` JSON bag, preserving
+ * sibling keys, then bust the settings cache. Non-atomic (last write wins) —
+ * acceptable for the admin-driven settings families (office hours, tickets) that
+ * ride in this generic bag rather than a dedicated column.
+ *
+ * @internal
+ */
+export async function writeMetadataKey(key: string, value: unknown): Promise<void> {
+  const org = await requireSettings()
+  const meta = parseJsonOrNull<Record<string, unknown>>(org.metadata) ?? {}
+  meta[key] = value
+  await db
+    .update(settings)
+    .set({ metadata: JSON.stringify(meta) })
+    .where(eq(settings.id, org.id))
+  await invalidateSettingsCache()
 }
 
 /**
