@@ -8,6 +8,7 @@ import type {
   ConversationMessageId,
   ConversationTagId,
   PrincipalId,
+  TicketId,
 } from '@quackback/ids'
 
 // Sourced from the DB enum (CONVERSATION_STATUSES) via the browser-safe bridge,
@@ -93,7 +94,12 @@ export interface ConversationMessageCitation {
 /** A single rendered conversation message. `createdAt` is an ISO-8601 string. */
 export interface ConversationMessageDTO {
   id: ConversationMessageId
-  conversationId: ConversationId
+  /** The conversation this message belongs to, or null when it hangs off a
+   *  ticket instead (support platform §4.2). Exactly one of conversationId /
+   *  ticketId is set. */
+  conversationId: ConversationId | null
+  /** The ticket this message belongs to, or null for a conversation message. */
+  ticketId: TicketId | null
   senderType: MessageSenderType
   content: string
   createdAt: string
@@ -155,7 +161,9 @@ export interface AgentConversationMessageDTO extends ConversationMessageDTO {
  *  to preview it and jump to its conversation. */
 export interface FlaggedMessageDTO {
   messageId: ConversationMessageId
-  conversationId: ConversationId
+  /** Parent thread of the flagged message; exactly one is set. */
+  conversationId: ConversationId | null
+  ticketId: TicketId | null
   /** Plain-text preview of the flagged message. */
   preview: string
   /** Who wrote the flagged message. */

@@ -115,6 +115,7 @@ export function toMessageDTO(
   return {
     id: message.id,
     conversationId: message.conversationId,
+    ticketId: message.ticketId,
     senderType: message.senderType as MessageSenderType,
     content: message.content,
     createdAt: message.createdAt.toISOString(),
@@ -268,7 +269,10 @@ export async function listFlaggedMessages(
   const visitorNames = await loadAuthors(rows.map((r) => r.visitorPrincipalId))
   return rows.map((r) => ({
     messageId: r.messageId,
+    // Flagged messages come through an inner join on conversations, so these are
+    // conversation messages; ticket-thread flags surface with the customer loop.
     conversationId: r.conversationId,
+    ticketId: null,
     preview: truncate(r.content, 120),
     authorName: r.authorName ?? (r.senderType === 'agent' ? 'Agent' : 'Visitor'),
     conversationLabel: visitorNames.get(r.visitorPrincipalId)?.displayName ?? 'Visitor',
@@ -1050,7 +1054,8 @@ export async function listConversationsForAgent(
     )
     .groupBy(conversationMessages.conversationId)
   const unreadMap = new Map<string, number>()
-  for (const row of unreadRows) unreadMap.set(row.conversationId, row.c)
+  // The inner join on conversations guarantees a non-null conversation_id.
+  for (const row of unreadRows) unreadMap.set(row.conversationId!, row.c)
 
   // Labels for all rows, batched (one query). Inbox is agent-only.
   const tagMap = await loadConversationTagsForConversations(ids)

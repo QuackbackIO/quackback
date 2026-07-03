@@ -75,10 +75,14 @@ function conversationRef(c: Conversation): EventConversationRef {
   }
 }
 
-function messageData(m: ConversationMessage, author: ConversationAuthorInput): EventMessageData {
+function messageData(
+  m: ConversationMessage,
+  author: ConversationAuthorInput,
+  conversation: Conversation
+): EventMessageData {
   return {
     id: m.id,
-    conversationId: m.conversationId,
+    conversationId: conversation.id,
     senderType: m.senderType as 'visitor' | 'agent',
     authorPrincipalId: m.principalId ?? null,
     authorName: author.displayName ?? null,
@@ -115,7 +119,7 @@ export async function emitMessageCreated(
   await safe('message.created', () =>
     dispatchMessageCreated(
       toEventActor(actor, author),
-      messageData(message, author),
+      messageData(message, author, conversation),
       conversationRef(conversation)
     )
   )
@@ -130,7 +134,7 @@ export async function emitMessageNoteCreated(
   await safe('message.note_created', () =>
     dispatchMessageNoteCreated(
       toEventActor(actor, author),
-      messageData(message, author),
+      messageData(message, author, conversation),
       conversationRef(conversation)
     )
   )
@@ -144,7 +148,7 @@ export async function emitMessageDeleted(
   await safe('message.deleted', () =>
     dispatchMessageDeleted(
       toEventActor(actor),
-      { id: message.id, conversationId: message.conversationId },
+      { id: message.id, conversationId: conversation.id },
       conversationRef(conversation)
     )
   )

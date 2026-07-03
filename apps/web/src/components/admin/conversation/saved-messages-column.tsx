@@ -63,7 +63,7 @@ export function SavedMessagesColumn({
             <button
               key={m.messageId}
               type="button"
-              onClick={() => onSelect(m.conversationId, m.messageId)}
+              onClick={() => m.conversationId && onSelect(m.conversationId, m.messageId)}
               className={cn(
                 'flex w-full flex-col gap-0.5 border-b border-border/30 px-3 py-3 text-left transition-colors',
                 selectedConversationId === m.conversationId ? 'bg-muted/60' : 'hover:bg-muted/30'

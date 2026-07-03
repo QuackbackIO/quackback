@@ -23,6 +23,7 @@ function msg(
   return {
     id: 'conversation_msg_1' as ConversationMessageDTO['id'],
     conversationId: 'conversation_1' as ConversationMessageDTO['conversationId'],
+    ticketId: null,
     senderType: 'visitor',
     content: 'hi',
     createdAt: '2026-01-01T00:00:00Z',

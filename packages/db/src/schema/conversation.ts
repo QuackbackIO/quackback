@@ -9,11 +9,18 @@ import {
   boolean,
   primaryKey,
   foreignKey,
+  check,
+  customType,
 } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 import { teams } from './teams'
+// conversation <-> tickets is a mutual import cycle (tickets FKs conversations,
+// and conversation_messages FKs tickets). It is safe only because every
+// cross-table reference lives inside drizzle's deferred FK/relation callbacks;
+// keep `tickets` out of any module-eval-time (top-level) use here.
+import { tickets } from './tickets'
 import {
   CONVERSATION_STATUSES,
   MESSAGE_SENDER_TYPES,
@@ -26,6 +33,13 @@ import type {
   ConversationMessageMetadata,
   TiptapContent,
 } from '../types'
+
+// Full-text search vector (generated column), mirroring posts/kb.
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector'
+  },
+})
 
 /**
  * Support-inbox conversations — one thread between a visitor (anonymous or
@@ -159,7 +173,11 @@ export const conversationMessages = pgTable(
   'conversation_messages',
   {
     id: typeIdWithDefault('conversation_msg')('id').primaryKey(),
-    conversationId: typeIdColumn('conversation')('conversation_id').notNull(),
+    // Polymorphic parent: a message hangs off a conversation OR a ticket (support
+    // platform §4.2). Both nullable at the column level; the exactly-one CHECK
+    // below guarantees precisely one is set.
+    conversationId: typeIdColumnNullable('conversation')('conversation_id'),
+    ticketId: typeIdColumnNullable('ticket')('ticket_id'),
     // Nullable: system events (e.g. assignment notices) have no human author.
     principalId: typeIdColumnNullable('principal')('principal_id'),
     // Explicit sender side for rendering + authorization, independent of the
@@ -180,6 +198,10 @@ export const conversationMessages = pgTable(
     // Channel provenance (e.g. inbound email message-id for retry dedupe); null
     // for ordinary in-app messenger messages.
     metadata: jsonb('metadata').$type<ConversationMessageMetadata>(),
+    // FTS over message content; backs ticket search + the inbox FTS upgrade.
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      sql`to_tsvector('english', coalesce(content, ''))`
+    ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
     // Soft delete support, mirroring comments.
@@ -193,6 +215,16 @@ export const conversationMessages = pgTable(
       columns: [table.conversationId],
       foreignColumns: [conversations.id],
     }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_messages_ticket_id_fkey',
+      columns: [table.ticketId],
+      foreignColumns: [tickets.id],
+    }).onDelete('cascade'),
+    // Exactly one parent: a message belongs to a conversation XOR a ticket.
+    check(
+      'conversation_messages_parent_check',
+      sql`num_nonnulls(${table.conversationId}, ${table.ticketId}) = 1`
+    ),
     foreignKey({
       name: 'conversation_messages_principal_id_fkey',
       columns: [table.principalId],
@@ -210,8 +242,11 @@ export const conversationMessages = pgTable(
       table.createdAt,
       table.id
     ),
+    // Ticket-thread keyset pagination, mirroring the conversation index.
+    index('conversation_messages_ticket_created_idx').on(table.ticketId, table.createdAt, table.id),
     index('conversation_messages_principal_idx').on(table.principalId),
     index('conversation_messages_created_at_idx').on(table.createdAt),
+    index('conversation_messages_search_vector_idx').using('gin', table.searchVector),
     // Inbound-email dedupe: one message per provider Message-ID.
     uniqueIndex('conversation_messages_email_message_id_idx')
       .using('btree', sql`(metadata ->> 'emailMessageId')`)
@@ -452,6 +487,10 @@ export const conversationMessagesRelations = relations(conversationMessages, ({ 
   conversation: one(conversations, {
     fields: [conversationMessages.conversationId],
     references: [conversations.id],
+  }),
+  ticket: one(tickets, {
+    fields: [conversationMessages.ticketId],
+    references: [tickets.id],
   }),
   mentions: many(conversationMessageMentions),
   reactions: many(conversationMessageReactions),

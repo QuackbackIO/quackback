@@ -72,11 +72,15 @@ async function publishMessageUpdated(
     viewerPrincipalId,
     message.metadata?.postSuggestion ?? null
   )
-  publishAgentConversationEvent({
-    kind: 'message_updated',
-    conversationId: message.conversationId,
-    message: enriched,
-  })
+  // Conversation-thread messages fan out on the inbox channel; ticket-thread
+  // update routing arrives with the customer loop.
+  if (message.conversationId) {
+    publishAgentConversationEvent({
+      kind: 'message_updated',
+      conversationId: message.conversationId,
+      message: enriched,
+    })
+  }
   return { reactions: enriched.reactions, flaggedAt: enriched.flaggedAt }
 }
 

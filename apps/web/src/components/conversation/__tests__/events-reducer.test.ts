@@ -37,6 +37,7 @@ function baseMessage(id: string, overrides: Partial<ConversationMessageDTO> = {}
   return {
     id: id as ConversationMessageId,
     conversationId: CONV_ID,
+    ticketId: null,
     senderType: 'visitor',
     content: `msg ${id}`,
     createdAt: '2026-07-01T10:00:00.000Z',

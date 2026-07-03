@@ -365,9 +365,9 @@ export async function sendVisitorMessage(
     const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
     publishConversationUpdate(agentDTO.id, agentDTO)
   }
-  publishConversationEvent(messageDTO.conversationId, {
+  publishConversationEvent(txResult.conversation.id, {
     kind: 'message',
-    conversationId: messageDTO.conversationId,
+    conversationId: txResult.conversation.id,
     message: messageDTO,
   })
 
@@ -525,9 +525,9 @@ export async function startAgentConversation(
   // agent-only fields from the visitor's copy.
   const agentDTO = await conversationToDTO(txResult.conversation, 'agent')
   publishConversationUpdate(agentDTO.id, agentDTO)
-  publishConversationEvent(messageDTO.conversationId, {
+  publishConversationEvent(txResult.conversation.id, {
     kind: 'message',
-    conversationId: messageDTO.conversationId,
+    conversationId: txResult.conversation.id,
     message: messageDTO,
   })
 
@@ -626,9 +626,9 @@ export async function sendAgentMessage(
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
 
   publishConversationUpdate(conversationDTO.id, conversationDTO)
-  publishConversationEvent(messageDTO.conversationId, {
+  publishConversationEvent(txResult.conversation.id, {
     kind: 'message',
-    conversationId: messageDTO.conversationId,
+    conversationId: txResult.conversation.id,
     message: messageDTO,
   })
 
@@ -1221,8 +1221,12 @@ export async function deleteConversationMessage(
     .where(eq(conversationMessages.id, messageId))
     .limit(1)
   if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  // Exactly one parent, so a null conversation_id means a ticket-thread message;
+  // deletion for those arrives with the customer loop, not this conversation path.
+  if (!message.conversationId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  const conversationId = message.conversationId
 
-  const conversation = await loadConversationOr404(message.conversationId)
+  const conversation = await loadConversationOr404(conversationId)
 
   // System events (assignment notices) are status records, not user content —
   // no one deletes them. The guard also narrows senderType to visitor|agent.
@@ -1250,7 +1254,7 @@ export async function deleteConversationMessage(
 
   const deletedEvent = {
     kind: 'message_deleted' as const,
-    conversationId: message.conversationId,
+    conversationId,
     messageId,
   }
   // An internal note never reached the visitor, so its deletion must not either
@@ -1258,7 +1262,7 @@ export async function deleteConversationMessage(
   if (message.isInternal) {
     publishAgentConversationEvent(deletedEvent)
   } else {
-    publishConversationEvent(message.conversationId, deletedEvent)
+    publishConversationEvent(conversationId, deletedEvent)
   }
 
   // Internal-note deletion stays internal (no public webhook); mirror the
@@ -1499,9 +1503,9 @@ export async function appendAssistantReply(
   const messageDTO = toMessageDTO(txResult.message, authorFromInput(author), author.principalId)
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
   publishConversationUpdate(conversationDTO.id, conversationDTO)
-  publishConversationEvent(messageDTO.conversationId, {
+  publishConversationEvent(txResult.conversation.id, {
     kind: 'message',
-    conversationId: messageDTO.conversationId,
+    conversationId: txResult.conversation.id,
     message: messageDTO,
   })
   void emitMessageCreated(
