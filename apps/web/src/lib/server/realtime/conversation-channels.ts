@@ -89,6 +89,19 @@ export function publishAgentConversationEvent(event: ConversationStreamEvent): v
 }
 
 /**
+ * Publish an ephemeral event to the conversation channel ONLY (never the inbox).
+ * Used for the AI assistant's high-frequency turn signals (working status +
+ * streamed deltas): the visitor's live trace needs them, but fanning them to the
+ * inbox would churn every agent's list on each fragment.
+ */
+export function publishConversationOnlyEvent(
+  conversationId: ConversationId,
+  event: ConversationStreamEvent
+): void {
+  publish(conversationChannel(conversationId), event)
+}
+
+/**
  * Publish a conversation update to both channels with audience-appropriate
  * payloads: agents get the full DTO on the inbox channel, while the visitor's
  * conversation channel receives a copy with every agent-only field stripped

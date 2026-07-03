@@ -31,6 +31,10 @@ const NAMED_EVENTS = [
   // ever publishes this on the inbox channel, so the visitor stream never
   // receives it even though the event name is registered here.
   'message_updated',
+  // Ephemeral AI-assistant turn signals (conversation channel only). EventSource
+  // drops any named frame with no matching listener, so these MUST be registered.
+  'assistant_activity',
+  'assistant_delta',
 ] as const
 
 /**

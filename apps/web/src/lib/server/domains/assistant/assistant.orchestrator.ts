@@ -15,8 +15,10 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import {
   appendAssistantReply,
+  appendAssistantHandoffNote,
   executeAssistantHandoff,
 } from '@/lib/server/domains/conversation/conversation.service'
+import { publishConversationOnlyEvent } from '@/lib/server/realtime/conversation-channels'
 import {
   ensureAssistantPrincipal,
   getAssistantPrincipal,
@@ -92,11 +94,52 @@ export async function runAssistantTurnForConversation(
   const revived = await voidAssumedResolutionForConversation(conversationId)
   const active = revived ?? (await getActiveInvolvement(conversationId))
 
+  // Ephemeral turn signals for the widget's live trace + streamed answer. These
+  // go to the conversation channel ONLY (never the inbox) and are never
+  // persisted; the final reply below is the durable record. `assistant_delta`
+  // carries the FULL clean answer so far, reset per attempt via the `thinking`
+  // activity, so a retry or a dropped frame self-heals.
+  let streamed = ''
+  // Coalesce delta publishes: each carries the FULL answer so far, so publishing
+  // on every fragment is O(N^2) bytes + one Redis publish per token. Throttle to
+  // a smooth cadence — a dropped tail is harmless since the persisted reply is the
+  // ground truth that replaces the buffer moments later.
+  let lastDeltaAt = 0
+  const publishActivity = (status: 'thinking' | 'searching_kb' | 'reviewing_conversation') =>
+    publishConversationOnlyEvent(conversationId, {
+      kind: 'assistant_activity',
+      conversationId,
+      status,
+      at: new Date().toISOString(),
+    })
+
   const result = await runAssistantTurn({
     messages,
     assistantPrincipalId,
     conversationId,
     escalationAlreadyOffered: active?.escalationOfferedAt != null,
+    onActivity: (activity) => {
+      if (activity.kind === 'thinking') {
+        streamed = ''
+        publishActivity('thinking')
+      } else {
+        publishActivity(
+          activity.tool === 'search_knowledge' ? 'searching_kb' : 'reviewing_conversation'
+        )
+      }
+    },
+    onTextDelta: (delta) => {
+      streamed += delta
+      const now = Date.now()
+      if (now - lastDeltaAt < 90) return
+      lastDeltaAt = now
+      publishConversationOnlyEvent(conversationId, {
+        kind: 'assistant_delta',
+        conversationId,
+        text: streamed,
+        at: new Date(now).toISOString(),
+      })
+    },
   })
   // Suppressed by the engine's own silence check — nothing to persist.
   if (result.status !== 'answered') return
@@ -118,10 +161,12 @@ export async function runAssistantTurnForConversation(
     await appendAssistantReply(conversationId, buildAssistantHandoverMessage(schedule), author, {
       waiting: true,
     })
-    // Reply posted; record the hand-off and route it to a human in parallel
-    // (distinct rows — the involvement vs the conversation).
+    // Reply posted; record the hand-off, drop an agent-only note explaining why
+    // (so the teammate has context), and route it to a human — in parallel
+    // (distinct rows — the involvement vs the note vs the conversation).
     await Promise.all([
       recordHandoff(involvement.id, result.escalation.reason),
+      appendAssistantHandoffNote(conversationId, result.escalation.reason, author),
       executeAssistantHandoff(conversationId, result.escalation.reason),
     ])
     return
@@ -130,7 +175,10 @@ export async function runAssistantTurnForConversation(
   // Answer or offer: persist Quinn's reply (its text carries any offer), then
   // record the cited sources + stamp the inactivity clock (+ the single
   // escalation offer) in one involvement update.
-  await appendAssistantReply(conversationId, result.text, author, { waiting: false })
+  await appendAssistantReply(conversationId, result.text, author, {
+    waiting: false,
+    citations: result.citations,
+  })
   await recordAssistantAnswer(involvement.id, {
     sources: result.citations.map((c) => ({ type: c.type, id: c.id, title: c.title, url: c.url })),
     offeredEscalation: result.escalation?.mode === 'offer',

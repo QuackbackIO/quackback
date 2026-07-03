@@ -17,6 +17,8 @@ const base = {
   showEmpty: false,
   showSeen: false,
   showTyping: false,
+  assistantActivity: null,
+  assistantStream: '',
   showCsat: false,
 }
 
@@ -33,10 +35,10 @@ describe('buildConversationRows', () => {
 
   it('orders load-older, greeting, messages, then trailing seen/typing/csat', () => {
     const rows = buildConversationRows({
+      ...base,
       messages: [msg('m1')],
       hasMoreOlder: true,
       hasGreeting: true,
-      showEmpty: false,
       showSeen: true,
       showTyping: true,
       showCsat: true,
@@ -49,6 +51,18 @@ describe('buildConversationRows', () => {
       'typing',
       'csat',
     ])
+  })
+
+  it('shows the working trace, and the stream supersedes it once text arrives', () => {
+    const working = buildConversationRows({ ...base, assistantActivity: 'searching_kb' })
+    expect(working.map((r) => r.type)).toEqual(['assistant-activity'])
+
+    const streaming = buildConversationRows({
+      ...base,
+      assistantActivity: 'searching_kb',
+      assistantStream: 'Adding the widget…',
+    })
+    expect(streaming.map((r) => r.type)).toEqual(['assistant-stream'])
   })
 
   it('routes system messages to system rows (still keyed by id)', () => {

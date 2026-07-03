@@ -6,9 +6,17 @@ import {
   UsersIcon,
   ChatBubbleLeftRightIcon,
   GlobeAltIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 
-export type Section = 'overview' | 'visitors' | 'feedback' | 'support' | 'changelog' | 'users'
+export type Section =
+  | 'overview'
+  | 'visitors'
+  | 'feedback'
+  | 'support'
+  | 'ai'
+  | 'changelog'
+  | 'users'
 
 export interface SectionNavItem {
   key: Section
@@ -21,6 +29,7 @@ export const SECTION_NAV_ITEMS: SectionNavItem[] = [
   { key: 'visitors', label: 'Visitors', icon: GlobeAltIcon },
   { key: 'feedback', label: 'Feedback', icon: InboxIcon },
   { key: 'support', label: 'Support', icon: ChatBubbleLeftRightIcon },
+  { key: 'ai', label: 'Quinn AI', icon: SparklesIcon },
   { key: 'changelog', label: 'Changelog', icon: DocumentTextIcon },
   { key: 'users', label: 'Users', icon: UsersIcon },
 ]

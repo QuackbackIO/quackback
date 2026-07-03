@@ -25,6 +25,7 @@ import {
   MAX_CONVERSATION_MESSAGE_LENGTH,
   MAX_CONVERSATION_ATTACHMENTS,
   type ConversationAttachment,
+  type ConversationAssistantActivity,
 } from '@/lib/shared/conversation/types'
 import { officeHoursSnapshot } from '@/lib/shared/office-hours'
 import type { ConversationPresence } from '@/lib/shared/conversation/presence'
@@ -44,6 +45,7 @@ import {
 } from './auth-helpers'
 import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
 import { ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 
@@ -100,7 +102,10 @@ const listConversationsSchema = z.object({
   companyId: z.string().optional(),
   // 'mentions' = only conversations whose internal notes @-mention the
   // requesting agent (the principal is resolved server-side from auth).
-  view: z.enum(['all', 'mentions']).optional(),
+  // 'quinn' = only conversations Quinn engaged (see the `ai` bucket).
+  view: z.enum(['all', 'mentions', 'quinn']).optional(),
+  // Quinn-inbox sub-filter by involvement outcome; omitted = any Quinn-engaged.
+  ai: z.enum(['resolved', 'escalated', 'pending']).optional(),
   before: z.string().optional(),
 })
 
@@ -679,11 +684,52 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         companyId: data.companyId as CompanyId | undefined,
         // Always the requesting agent — never trust a client-supplied id here.
         mentionedPrincipalId: data.view === 'mentions' ? ctx.principal.id : undefined,
+        // Quinn view: a chosen bucket narrows to its statuses; none = any Quinn
+        // involvement (every bucket).
+        assistantStatuses:
+          data.view === 'quinn'
+            ? data.ai
+              ? AI_INBOX_BUCKETS[data.ai]
+              : Object.values(AI_INBOX_BUCKETS).flat()
+            : undefined,
         before: data.before,
       })
     } catch (error) {
       log.error({ err: error }, 'list conversations failed')
       throw error
+    }
+  })
+
+/** Conversation counts per Quinn-inbox bucket (Resolved / Escalated / Pending),
+ *  for the inbox nav badges. */
+export const fetchAssistantInboxCountsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+  const { countAssistantInboxBuckets } =
+    await import('@/lib/server/domains/assistant/assistant.involvement')
+  return countAssistantInboxBuckets()
+})
+
+/** Quinn's activity on one conversation for the agent details panel: outcome,
+ *  KB sources cited, escalation reason, CSAT. Null when Quinn never engaged. */
+export const getConversationAssistantActivityFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ conversationId: z.string() }))
+  .handler(async ({ data }): Promise<ConversationAssistantActivity | null> => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const { getLatestInvolvement } =
+      await import('@/lib/server/domains/assistant/assistant.involvement')
+    const inv = await getLatestInvolvement(data.conversationId as ConversationId)
+    if (!inv) return null
+    return {
+      outcome: inv.status,
+      handoffReason: inv.handoffReason,
+      sources: inv.sources.map((s) => ({
+        type: s.type,
+        id: s.id,
+        title: s.title ?? '',
+        url: s.url ?? '',
+      })),
+      rating: inv.rating,
+      answeredAt: inv.lastAssistantAnswerAt?.toISOString() ?? null,
     }
   })
 

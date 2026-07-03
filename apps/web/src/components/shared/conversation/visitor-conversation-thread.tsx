@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { buildConversationRows, type ConversationRow } from './conversation-rows'
+import { AssistantWorkingTrace, AssistantStreamingBubble } from './assistant-turn'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -13,6 +14,7 @@ import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { personalizeMessage, firstNameOf } from '@/lib/shared/conversation/personalize'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
+import { useAssistantTurn } from '@/lib/client/hooks/use-assistant-turn'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
@@ -186,6 +188,13 @@ export function VisitorConversationThread({
   const sendTyping = useTypingSender(conversationId, getAuthHeaders)
   const { remoteTyping, onLocalInput, onRemoteTyping, clearRemoteTyping } =
     useConversationTyping(sendTyping)
+  const {
+    assistantActivity,
+    assistantStream,
+    onAssistantActivity,
+    onAssistantDelta,
+    clearAssistantTurn,
+  } = useAssistantTurn()
 
   // No toast on visitor surfaces, so upload failures render as inline composer
   // text. uploadImage rejects on failure; the wrapper records the message.
@@ -360,14 +369,23 @@ export function VisitorConversationThread({
       }
       if (evt.kind === 'message' && evt.message.senderType === 'agent') {
         clearRemoteTyping()
+        clearAssistantTurn() // the persisted reply replaces the live trace/stream
         onAgentActivity?.() // an agent is clearly here right now
       } else if (evt.kind === 'typing' && evt.side === 'agent') {
         onRemoteTyping()
         onAgentActivity?.()
+      } else if (evt.kind === 'assistant_activity') {
+        onAssistantActivity(evt.status)
+      } else if (evt.kind === 'assistant_delta') {
+        onAssistantDelta(evt.text)
       }
     },
     onReconnect: () => void refreshMessages(),
   })
+
+  // Ephemeral turn state is component-local (not keyed by resetKey); drop it when
+  // switching threads so it can't bleed across conversations.
+  useEffect(() => clearAssistantTurn, [conversationId, clearAssistantTurn])
 
   // A star click records the rating immediately (so it's never lost), then the
   // surface offers an optional comment as a follow-up.
@@ -490,6 +508,8 @@ export function VisitorConversationThread({
         showEmpty,
         showSeen: lastVisitorSeen && !remoteTyping,
         showTyping: remoteTyping,
+        assistantActivity,
+        assistantStream,
         // Only while closed: a reopen (agent reply / new visitor message) must
         // drop the rating prompt, the comment follow-up, and the thanks notice.
         showCsat: conversationStatus === 'closed' && (showCsatPrompt || csatRating != null),
@@ -501,6 +521,8 @@ export function VisitorConversationThread({
       showEmpty,
       lastVisitorSeen,
       remoteTyping,
+      assistantActivity,
+      assistantStream,
       showCsatPrompt,
       csatRating,
       conversationStatus,
@@ -627,9 +649,11 @@ export function VisitorConversationThread({
           <VisitorMessageBubble
             side={isVisitor ? 'self' : 'peer'}
             authorName={isVisitor ? undefined : (m.author?.displayName ?? teamName ?? undefined)}
+            isAssistant={m.isAssistant}
             content={m.content}
             contentJson={m.contentJson}
             attachments={m.attachments}
+            citations={m.citations}
             time={formatTime(m.createdAt)}
             linkPreviews={linkPreviews}
             getAuthHeaders={getAuthHeaders}
@@ -657,6 +681,11 @@ export function VisitorConversationThread({
               id="widget.messenger.system.assigned"
               defaultMessage="Assigned to {name}"
               values={{ name: event.agentName ?? 'an agent' }}
+            />
+          ) : event?.kind === 'assistant_handoff' ? (
+            <FormattedMessage
+              id="widget.messenger.system.handoff"
+              defaultMessage="Connecting you to the team"
             />
           ) : (
             row.message.content
@@ -696,6 +725,13 @@ export function VisitorConversationThread({
             </div>
           </div>
         )
+      case 'assistant-activity':
+        // Quinn's live working trace (thinking → searching the knowledge base).
+        return <AssistantWorkingTrace status={row.status} />
+      case 'assistant-stream':
+        // Quinn's answer as it streams, before the persisted message lands.
+        return <AssistantStreamingBubble text={row.text} />
+
       case 'csat':
         return (
           <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 text-center">

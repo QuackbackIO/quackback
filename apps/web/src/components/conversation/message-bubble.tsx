@@ -25,7 +25,7 @@ import {
   LightBulbIcon,
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
-import { BookmarkIcon } from '@heroicons/react/24/outline'
+import { BookmarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Avatar } from '@/components/ui/avatar'
 import { ConversationAttachmentList } from '@/components/shared/conversation-attachments'
 import { ReactionChip } from '@/components/shared/reaction-chip'
@@ -49,7 +49,12 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type {
   AgentConversationMessageDTO,
   ConversationAttachment,
+  ConversationMessageCitation,
 } from '@/lib/shared/conversation/types'
+import {
+  AssistantSourcesTrace,
+  AssistantAnswer,
+} from '@/components/shared/conversation/assistant-turn'
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -105,6 +110,9 @@ interface VisitorMessageBubbleProps {
   /** Marks the author as the AI assistant in the attribution line. */
   isAssistant?: boolean
   attachments?: ConversationAttachment[]
+  /** KB sources for an AI reply. When present, a collapsed sources trace renders
+   *  above the bubble and inline [n] markers in `content` become citation dots. */
+  citations?: ConversationMessageCitation[]
   time?: string
   linkPreviews?: boolean
   getAuthHeaders?: () => Record<string, string>
@@ -188,6 +196,11 @@ export function AgentMessageBubble({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-xs font-semibold text-foreground">{authorName}</span>
+          {message.isAssistant && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+              <SparklesIcon className="h-3 w-3" /> AI
+            </span>
+          )}
           {isNote && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
               <PencilSquareIcon className="h-3 w-3" /> Internal note
@@ -247,6 +260,16 @@ export function AgentMessageBubble({
               className="mt-0.5 text-sm leading-relaxed text-foreground/90"
             />
           </EmbedHydration>
+        ) : message.isAssistant ? (
+          // Quinn's reply: render the same markdown + inline citations the customer
+          // sees (sources trace only when it grounded the answer), so the agent has
+          // full context — and uncited replies don't show raw markdown.
+          <div className="mt-0.5">
+            {message.citations.length > 0 && (
+              <AssistantSourcesTrace citations={message.citations} />
+            )}
+            <AssistantAnswer text={message.content} citations={message.citations} />
+          </div>
         ) : (
           message.content && (
             <div className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
@@ -389,6 +412,7 @@ export function VisitorMessageBubble({
   authorName,
   isAssistant = false,
   attachments,
+  citations,
   time,
   linkPreviews = false,
   getAuthHeaders,
@@ -396,8 +420,13 @@ export function VisitorMessageBubble({
 }: VisitorMessageBubbleProps) {
   const self = side === 'self'
   const jumbo = isJumboEmojiMessage(content, contentJson)
+  // Quinn's turns render as markdown-lite (the prompt encourages lists/bold), with
+  // inline citation dots + a sources trace only when the answer was grounded.
+  const isAiReply = !self && isAssistant
+  const cited = isAiReply && citations && citations.length > 0 ? citations : null
   return (
     <div className={self ? 'flex flex-col items-end' : 'flex flex-col items-start'}>
+      {cited && <AssistantSourcesTrace citations={cited} />}
       <div
         className={
           jumbo
@@ -426,9 +455,12 @@ export function VisitorMessageBubble({
             />
           </EmbedHydration>
         ) : (
-          content && (
+          content &&
+          (isAiReply ? (
+            <AssistantAnswer text={content} citations={cited ?? []} />
+          ) : (
             <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">{content}</div>
-          )
+          ))
         )}
         {attachments && attachments.length > 0 && (
           <ConversationAttachmentList attachments={attachments} />

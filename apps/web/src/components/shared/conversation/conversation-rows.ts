@@ -1,4 +1,7 @@
-import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type {
+  ConversationMessageDTO,
+  AssistantActivityStatus,
+} from '@/lib/shared/conversation/types'
 
 /**
  * A single virtualized row in the conversation thread. Messages are keyed by their id
@@ -13,6 +16,10 @@ export type ConversationRow =
   | { type: 'empty'; key: 'empty' }
   | { type: 'seen'; key: 'seen' }
   | { type: 'typing'; key: 'typing' }
+  // Ephemeral AI-assistant rows: the live working trace, or the answer as it
+  // streams (replaced by the persisted message row when the turn lands).
+  | { type: 'assistant-activity'; key: 'assistant-activity'; status: AssistantActivityStatus }
+  | { type: 'assistant-stream'; key: 'assistant-stream'; text: string }
   | { type: 'csat'; key: 'csat' }
 
 export interface ConversationRowsInput {
@@ -27,6 +34,10 @@ export interface ConversationRowsInput {
   showSeen: boolean
   /** Agent typing indicator. */
   showTyping: boolean
+  /** Quinn's current working status while its turn runs (null when idle). */
+  assistantActivity: AssistantActivityStatus | null
+  /** Quinn's answer as it streams, before the persisted message lands (''=none). */
+  assistantStream: string
   /** Post-conversation CSAT prompt / thanks. */
   showCsat: boolean
 }
@@ -49,6 +60,17 @@ export function buildConversationRows(input: ConversationRowsInput): Conversatio
   if (input.showEmpty) rows.push({ type: 'empty', key: 'empty' })
   if (input.showSeen) rows.push({ type: 'seen', key: 'seen' })
   if (input.showTyping) rows.push({ type: 'typing', key: 'typing' })
+  // Streamed answer supersedes the working trace once text arrives; both are
+  // dropped the moment the persisted assistant message enters `messages`.
+  if (input.assistantStream) {
+    rows.push({ type: 'assistant-stream', key: 'assistant-stream', text: input.assistantStream })
+  } else if (input.assistantActivity) {
+    rows.push({
+      type: 'assistant-activity',
+      key: 'assistant-activity',
+      status: input.assistantActivity,
+    })
+  }
   if (input.showCsat) rows.push({ type: 'csat', key: 'csat' })
   return rows
 }

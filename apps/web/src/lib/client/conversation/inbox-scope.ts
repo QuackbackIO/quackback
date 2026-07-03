@@ -15,7 +15,10 @@ import type {
 import type { ConversationStatus, ConversationPriority } from '@/lib/shared/conversation/types'
 import type { ConversationSort, ConversationViewListParams } from '@/lib/shared/conversation/views'
 
-export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions' | 'saved'
+export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions' | 'saved' | 'quinn'
+
+/** Quinn-inbox sub-filter by involvement outcome (Fin's Resolved/Escalated/Pending). */
+export type AiBucket = 'resolved' | 'escalated' | 'pending'
 
 /**
  * The active left-nav selection — one built-in view, one label, one segment,
@@ -49,6 +52,8 @@ export interface InboxSearch {
   /** Deep-link target message within `c` — scrolled to + flashed on open. */
   m?: string
   view?: InboxView
+  /** Quinn-view sub-filter by involvement outcome; omitted = any Quinn-engaged. */
+  ai?: AiBucket
   tag?: string
   segment?: string
   /** Per-team inbox scope (a team id). */
@@ -97,7 +102,8 @@ export function buildListParams(
   search: string,
   companyId?: CompanyId,
   sort?: ConversationSort,
-  customParams?: ConversationViewListParams
+  customParams?: ConversationViewListParams,
+  aiBucket?: AiBucket
 ) {
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const statusParam = status === 'all' ? undefined : status
@@ -137,6 +143,16 @@ export function buildListParams(
     }
   if (nav.view === 'mentions')
     return { view: 'mentions' as const, search: q, companyId: company, sort: sortParam }
+  if (nav.view === 'quinn')
+    return {
+      view: 'quinn' as const,
+      ai: aiBucket,
+      status: statusParam,
+      priority,
+      search: q,
+      companyId: company,
+      sort: sortParam,
+    }
   const assignee =
     nav.view === 'mine'
       ? ('mine' as const)

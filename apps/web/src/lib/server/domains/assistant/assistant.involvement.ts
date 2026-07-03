@@ -37,6 +37,41 @@ export type AssistantInvolvement = typeof assistantInvolvements.$inferSelect
  */
 export const ASSUMED_RESOLUTION_INACTIVITY_MINUTES = 10
 
+/**
+ * The Quinn-inbox buckets, mapped to involvement lifecycle statuses — the
+ * outcome vocabulary the "Quinn AI" inbox view filters and counts by (mirrors
+ * Fin's Resolved / Escalated / Pending folder views).
+ */
+export const AI_INBOX_BUCKETS = {
+  resolved: ['resolved_confirmed', 'resolved_assumed'],
+  escalated: ['handed_off'],
+  pending: ['active'],
+} as const satisfies Record<string, AssistantInvolvementStatus[]>
+
+export type AiInboxBucket = keyof typeof AI_INBOX_BUCKETS
+
+/**
+ * Conversation-count per Quinn-inbox bucket, for the inbox nav badges. One
+ * grouped scan of `assistant_involvements` (there is one row per conversation
+ * Quinn engaged), folded into the three buckets.
+ */
+export async function countAssistantInboxBuckets(
+  exec: Executor = db
+): Promise<Record<AiInboxBucket, number>> {
+  const rows = await exec
+    .select({ status: assistantInvolvements.status, n: sql<number>`count(*)::int` })
+    .from(assistantInvolvements)
+    .groupBy(assistantInvolvements.status)
+  const byStatus = new Map(rows.map((r) => [r.status, r.n]))
+  const sum = (statuses: readonly AssistantInvolvementStatus[]) =>
+    statuses.reduce((total, s) => total + (byStatus.get(s) ?? 0), 0)
+  return {
+    resolved: sum(AI_INBOX_BUCKETS.resolved),
+    escalated: sum(AI_INBOX_BUCKETS.escalated),
+    pending: sum(AI_INBOX_BUCKETS.pending),
+  }
+}
+
 // --------------------------------------------------------------- pure rules ---
 
 /** Context the outcome rules reason over (all supplied by the caller). */
@@ -144,7 +179,10 @@ export async function recordAssistantAnswer(
       lastAssistantAnswerAt: at,
       ...(input.offeredEscalation
         ? {
-            escalationOfferedAt: sql`COALESCE(${assistantInvolvements.escalationOfferedAt}, ${at})`,
+            // Interpolate an ISO string (not a raw Date): inside a `sql` template
+            // the column codec that maps Date -> timestamptz text is bypassed, so
+            // a bare Date reaches the driver and fails to serialize.
+            escalationOfferedAt: sql`COALESCE(${assistantInvolvements.escalationOfferedAt}, ${at.toISOString()}::timestamptz)`,
           }
         : {}),
     })

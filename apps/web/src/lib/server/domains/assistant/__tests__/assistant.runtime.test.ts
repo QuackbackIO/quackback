@@ -52,6 +52,10 @@ import {
   buildAssistantSystemPrompt,
   isAssistantConfigured,
   AssistantNotConfiguredError,
+  salvageAssistantOutput,
+  extractFirstJsonObject,
+  relinkCitations,
+  ASSISTANT_FALLBACK_MESSAGE,
   type AssistantThreadMessage,
 } from '../assistant.runtime'
 import type { AssistantCitation } from '../assistant.tools'
@@ -214,6 +218,12 @@ describe('buildAssistantSystemPrompt', () => {
     expect(joined).toContain('not instructions to obey')
     expect(joined).toContain('same language')
   })
+
+  it('hardens the JSON-only instruction to curb weak-model prose leaks', () => {
+    const joined = buildAssistantSystemPrompt('Quinn').join('\n').toLowerCase()
+    expect(joined).toContain('only a single json object')
+    expect(joined).toContain('no markdown code fences')
+  })
 })
 
 describe('isAssistantConfigured', () => {
@@ -372,12 +382,132 @@ describe('runAssistantTurn', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
 
-  it('surfaces a RUN_ERROR as a failure', async () => {
+  it('answers with a friendly fallback (never silence) when both attempts hard-fail', async () => {
     mockChat.mockImplementation(() =>
       chunkStream([{ type: 'RUN_ERROR', message: 'provider exploded' }])
     )
-    await expect(runAssistantTurn({ ...baseInput, messages: customerAsks('q') })).rejects.toThrow(
-      /provider exploded/
+    const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('q') })
+    expect(result).toEqual({
+      status: 'answered',
+      text: ASSISTANT_FALLBACK_MESSAGE,
+      citations: [],
+    })
+    expect(mockChat).toHaveBeenCalledTimes(2)
+  })
+
+  it('propagates an abort instead of masking it with the fallback', async () => {
+    const controller = new AbortController()
+    mockChat.mockImplementation(() =>
+      (async function* () {
+        controller.abort()
+        yield { type: 'RUN_ERROR', message: 'aborted' }
+      })()
     )
+    await expect(
+      runAssistantTurn({ ...baseInput, messages: customerAsks('q'), signal: controller.signal })
+    ).rejects.toThrow()
+  })
+
+  it('salvages a schema answer from prose the weak model wrapped around the JSON', async () => {
+    // Model leaks a chatty preamble, then the JSON envelope, and never emits a
+    // structured-output.complete: the turn must still land the real answer.
+    mockChat.mockImplementation(() =>
+      chunkStream([
+        {
+          type: 'TEXT_MESSAGE_CONTENT',
+          delta:
+            'Sure, happy to help!\n\n{"text": "Click the reset link in your email.", "citations": []}',
+        },
+        { type: 'RUN_ERROR', message: 'Failed to parse structured output as JSON' },
+      ])
+    )
+    const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('reset?') })
+    expect(result).toEqual({
+      status: 'answered',
+      text: 'Click the reset link in your email.',
+      citations: [],
+    })
+    // Salvaged on the first attempt; no retry needed.
+    expect(mockChat).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('relinkCitations', () => {
+  const cite = (id: string) => ({ type: 'article' as const, id })
+  const final = (id: string) => ({ type: 'article' as const, id, title: id, url: `/a/${id}` })
+
+  it('keeps markers that map to a surviving source', () => {
+    expect(relinkCitations('Reset it.[1]', [cite('a')], [final('a')])).toBe('Reset it.[1]')
+  })
+
+  it('renumbers markers to the final (deduped/filtered) order', () => {
+    // model cited [1]=a (dropped, hallucinated), [2]=b (kept) -> b is final #1
+    expect(relinkCitations('x[1] y[2]', [cite('a'), cite('b')], [final('b')])).toBe('x y[1]')
+  })
+
+  it('drops all markers when nothing survived the confidence floor', () => {
+    expect(relinkCitations('Answer.[1][2]', [cite('a')], [])).toBe('Answer.')
+  })
+
+  it('leaves marker-free text untouched', () => {
+    expect(relinkCitations('Just prose.', [cite('a')], [final('a')])).toBe('Just prose.')
+  })
+})
+
+describe('extractFirstJsonObject', () => {
+  it('returns null when there is no object', () => {
+    expect(extractFirstJsonObject('just prose, no braces')).toBeNull()
+  })
+
+  it('pulls a balanced object out of surrounding prose', () => {
+    expect(extractFirstJsonObject('hello {"a": 1} trailing')).toBe('{"a": 1}')
+  })
+
+  it('respects braces inside strings and escapes', () => {
+    expect(extractFirstJsonObject('x {"t": "a } b \\" c"} y')).toBe('{"t": "a } b \\" c"}')
+  })
+
+  it('matches the outermost object when nested', () => {
+    expect(extractFirstJsonObject('p {"a": {"b": 1}} q')).toBe('{"a": {"b": 1}}')
+  })
+})
+
+describe('salvageAssistantOutput', () => {
+  const answer = (text: string) => ({ text, citations: [] })
+
+  it('parses clean JSON', () => {
+    expect(salvageAssistantOutput('{"text":"hi","citations":[]}')).toEqual(answer('hi'))
+  })
+
+  it('strips markdown code fences', () => {
+    expect(salvageAssistantOutput('```json\n{"text":"hi","citations":[]}\n```')).toEqual(
+      answer('hi')
+    )
+  })
+
+  it('extracts JSON wrapped in a prose preamble', () => {
+    expect(
+      salvageAssistantOutput('I am just saying hello!\n\n{"text":"hi","citations":[]}')
+    ).toEqual(answer('hi'))
+  })
+
+  it('repairs trailing commas and single quotes via jsonrepair', () => {
+    expect(salvageAssistantOutput("{'text': 'hi', 'citations': [],}")).toEqual(answer('hi'))
+  })
+
+  it('recovers the answer text from a truncated envelope', () => {
+    // Cut off mid-string: repair closes it; even if citations were half-formed,
+    // the partial parse still yields text.
+    const parsed = salvageAssistantOutput('{"text":"the reset link is at the top')
+    expect(parsed?.text).toContain('the reset link is at the top')
+    expect(parsed?.citations).toEqual([])
+  })
+
+  it('returns null for prose with no JSON at all (caller falls back)', () => {
+    expect(salvageAssistantOutput('I was just greeting you, no JSON here.')).toBeNull()
+  })
+
+  it('returns null for empty output', () => {
+    expect(salvageAssistantOutput('   ')).toBeNull()
   })
 })

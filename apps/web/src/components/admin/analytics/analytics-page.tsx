@@ -59,6 +59,44 @@ function StatSection({ stats, children }: { stats: AnalyticsStatProps[]; childre
   )
 }
 
+/** Quinn's outcome split (Resolved / Escalated / Pending) as a proportional bar. */
+function AiOutcomeBreakdown({
+  ai,
+}: {
+  ai: { resolved: number; escalated: number; pending: number }
+}) {
+  const items = [
+    { label: 'Resolved', value: ai.resolved, className: 'bg-emerald-500' },
+    { label: 'Escalated', value: ai.escalated, className: 'bg-amber-500' },
+    { label: 'Pending', value: ai.pending, className: 'bg-primary' },
+  ]
+  const total = items.reduce((sum, i) => sum + i.value, 0) || 1
+  return (
+    <div className="space-y-3">
+      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+        {items.map((i) => (
+          <div
+            key={i.label}
+            className={i.className}
+            style={{ width: `${(i.value / total) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+        {items.map((i) => (
+          <div key={i.label} className="flex items-center gap-1.5 text-xs">
+            <span className={cn('h-2 w-2 rounded-full', i.className)} />
+            <span className="text-muted-foreground">{i.label}</span>
+            <span className="font-medium tabular-nums text-foreground">
+              {i.value.toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** Integer average, guarding divide-by-zero, with thousands separators. */
 function avgPerItem(total: number, count: number): string {
   return count > 0 ? Math.round(total / count).toLocaleString() : '0'
@@ -330,6 +368,33 @@ export function AnalyticsPage() {
                       ]}
                     >
                       <AnalyticsCsatDistribution distribution={data.csat.distribution} />
+                    </StatSection>
+                  ))}
+
+                {section === 'ai' &&
+                  (data.ai.involved === 0 ? (
+                    <Card className="overflow-hidden">
+                      <AnalyticsEmpty message="Quinn hasn't handled any conversations this period" />
+                    </Card>
+                  ) : (
+                    <StatSection
+                      stats={[
+                        {
+                          label: 'Conversations',
+                          value: data.ai.involved.toLocaleString(),
+                          caption: 'Quinn engaged',
+                        },
+                        { label: 'Resolution rate', value: `${data.ai.resolutionRate}%` },
+                        { label: 'Escalation rate', value: `${data.ai.escalationRate}%` },
+                        {
+                          label: 'AI CSAT',
+                          value:
+                            data.ai.ratingCount > 0 ? (data.ai.avgRating ?? 0).toFixed(1) : '—',
+                          suffix: data.ai.ratingCount > 0 ? '/ 5' : undefined,
+                        },
+                      ]}
+                    >
+                      <AiOutcomeBreakdown ai={data.ai} />
                     </StatSection>
                   ))}
 

@@ -89,3 +89,27 @@ export function validateAiConfig(): void {
 export function stripCodeFences(text: string): string {
   return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '')
 }
+
+/**
+ * Extra request-body options that keep a strict structured-output request
+ * (`response_format: json_schema`) reliable when the endpoint is OpenRouter.
+ * OpenRouter fans a single model out across many upstream providers, only some
+ * of which enforce the schema; the rest accept the parameter but may answer in
+ * free-form prose, so the structured request silently degrades and fails to
+ * parse. `require_parameters` restricts routing to providers that support every
+ * parameter in the request, the schema included. Returns nothing for any other
+ * endpoint, where a direct provider, gateway, or local server would reject or
+ * ignore an unknown `provider` field.
+ *
+ * Caveat: `require_parameters` gates on EVERY request parameter, so each must be
+ * one the upstream providers advertise. Cap output with `max_tokens`, not
+ * `max_completion_tokens` — no OpenRouter provider lists the latter, so pairing
+ * it with this option routes to zero endpoints (a 404 "no endpoints found").
+ */
+export function structuredOutputProviderOptions(): {
+  provider?: { require_parameters: true }
+} {
+  return config.openaiBaseUrl?.includes('openrouter.ai')
+    ? { provider: { require_parameters: true } }
+    : {}
+}

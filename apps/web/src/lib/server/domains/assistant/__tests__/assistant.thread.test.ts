@@ -28,6 +28,8 @@ function msg(
     createdAt: '2026-01-01T00:00:00Z',
     author,
     attachments: [],
+    citations: [],
+    isAssistant: false,
     isInternal: false,
     contentJson: null,
     viaEmail: false,

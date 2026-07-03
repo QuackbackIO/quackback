@@ -1044,6 +1044,13 @@
       "when": 1784765400000,
       "tag": "0148_conversation_views",
       "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1784765460000,
+      "tag": "0149_message_citations",
+      "breakpoints": true
     }
   ]
 }

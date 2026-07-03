@@ -9,13 +9,22 @@ import {
   FaceSmileIcon,
   FlagIcon,
   InboxArrowDownIcon,
+  SparklesIcon,
   TagIcon,
   UserCircleIcon,
 } from '@heroicons/react/24/outline'
 import type { ConversationId } from '@quackback/ids'
-import type { Channel, ConversationDTO } from '@/lib/shared/conversation/types'
+import {
+  HANDOFF_REASON_LABELS,
+  type Channel,
+  type ConversationDTO,
+  type AssistantInvolvementOutcome,
+} from '@/lib/shared/conversation/types'
 import { CONVERSATION_END_REASON_LABELS } from '@/lib/shared/conversation/types'
-import { listConversationsForUserFn } from '@/lib/server/functions/conversation'
+import {
+  listConversationsForUserFn,
+  getConversationAssistantActivityFn,
+} from '@/lib/server/functions/conversation'
 import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { PriorityControl } from './priority-control'
@@ -85,6 +94,37 @@ function Row({
   )
 }
 
+const RESOLVED_META = {
+  label: 'Resolved',
+  className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+}
+// Both resolution flavours (customer-confirmed + assumed-after-inactivity) read
+// as "Resolved" to the agent.
+const AI_OUTCOME_META: Record<AssistantInvolvementOutcome, { label: string; className: string }> = {
+  active: { label: 'Handling', className: 'bg-primary/10 text-primary' },
+  handed_off: {
+    label: 'Escalated',
+    className: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
+  },
+  resolved_confirmed: RESOLVED_META,
+  resolved_assumed: RESOLVED_META,
+  abandoned: { label: 'Abandoned', className: 'bg-muted text-muted-foreground' },
+}
+
+function AiOutcomePill({ outcome }: { outcome: AssistantInvolvementOutcome }) {
+  const meta = AI_OUTCOME_META[outcome]
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+        meta.className
+      )}
+    >
+      {meta.label}
+    </span>
+  )
+}
+
 /**
  * The conversation detail / "Manage" panel — the inbox's right column. Mirrors
  * the feedback post-detail metadata-sidebar: a floating bordered card with a
@@ -123,6 +163,13 @@ export function ConversationDetailPanel({
     queryKey: ['admin', 'inbox', 'user-conversations', visitorPrincipalId],
     queryFn: () => listConversationsForUserFn({ data: { principalId: visitorPrincipalId } }),
     enabled: isVisible && !!visitorPrincipalId,
+    staleTime: 30_000,
+  })
+  const { data: aiActivity } = useQuery({
+    queryKey: ['admin', 'inbox', 'assistant-activity', conversation.id],
+    queryFn: () =>
+      getConversationAssistantActivityFn({ data: { conversationId: conversation.id } }),
+    enabled: isVisible,
     staleTime: 30_000,
   })
 
@@ -333,6 +380,46 @@ export function ConversationDetailPanel({
               />
             )}
           </div>
+
+          {/* Quinn AI activity — outcome, escalation reason, sources, CSAT. */}
+          {aiActivity && (
+            <div className="space-y-2.5 border-t border-border/30 pt-4">
+              <div className="flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <SparklesIcon className="h-4 w-4" /> Quinn AI
+                </p>
+                <AiOutcomePill outcome={aiActivity.outcome} />
+              </div>
+              {aiActivity.outcome === 'handed_off' && aiActivity.handoffReason && (
+                <p className="text-xs text-muted-foreground">
+                  Escalated —{' '}
+                  {HANDOFF_REASON_LABELS[aiActivity.handoffReason] ?? aiActivity.handoffReason}
+                </p>
+              )}
+              {aiActivity.rating != null && (
+                <Row icon={FaceSmileIcon} label="AI CSAT">
+                  <span className="text-sm text-foreground">{aiActivity.rating}/5</span>
+                </Row>
+              )}
+              {aiActivity.sources.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground">Sources used</p>
+                  {aiActivity.sources.map((s) => (
+                    <a
+                      key={s.id}
+                      href={s.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground no-underline hover:text-foreground"
+                    >
+                      <ArrowTopRightOnSquareIcon className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{s.title || s.url}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Previous conversations */}
           {previous.length > 0 && (

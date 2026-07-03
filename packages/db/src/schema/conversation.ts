@@ -20,7 +20,12 @@ import {
   CHANNELS,
   CONVERSATION_PRIORITIES,
 } from '../types'
-import type { ConversationAttachment, ConversationMessageMetadata, TiptapContent } from '../types'
+import type {
+  ConversationAttachment,
+  ConversationMessageCitation,
+  ConversationMessageMetadata,
+  TiptapContent,
+} from '../types'
 
 /**
  * Support-inbox conversations — one thread between a visitor (anonymous or
@@ -169,6 +174,9 @@ export const conversationMessages = pgTable(
     isInternal: boolean('is_internal').notNull().default(false),
     // Image/file attachments (client-safe refs); null/empty for text-only messages.
     attachments: jsonb('attachments').$type<ConversationAttachment[]>(),
+    // KB sources the AI assistant grounded this reply in; the content carries
+    // inline [n] markers that index this ordered list. Null for human messages.
+    citations: jsonb('citations').$type<ConversationMessageCitation[]>(),
     // Channel provenance (e.g. inbound email message-id for retry dedupe); null
     // for ordinary in-app messenger messages.
     metadata: jsonb('metadata').$type<ConversationMessageMetadata>(),

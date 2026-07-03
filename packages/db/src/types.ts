@@ -360,13 +360,26 @@ export interface ConversationAttachment {
   size: number
 }
 
+// A source the AI assistant grounded a message in (conversation_messages.citations).
+// The message text carries inline [n] markers that index into this ordered list.
+export interface ConversationMessageCitation {
+  type: 'article' | 'post'
+  id: string
+  title: string
+  url: string
+}
+
 // Channel provenance stored on a conversation message (conversation_messages.metadata).
 // Null for ordinary in-app messenger messages; set when a message arrives over
 // another channel so the inbox can render it and dedupe provider retries.
 /** Author-less 'system' status events (conversation ended/reopened, assignment). */
 // NOTE: the stored kind values keep the chat_ prefix until the Phase B data
 // migration rewrites conversation_messages.metadata.
-export type ConversationSystemEventKind = 'chat_ended' | 'chat_reopened' | 'assigned'
+export type ConversationSystemEventKind =
+  | 'chat_ended'
+  | 'chat_reopened'
+  | 'assigned'
+  | 'assistant_handoff'
 
 export interface ConversationSystemEvent {
   kind: ConversationSystemEventKind

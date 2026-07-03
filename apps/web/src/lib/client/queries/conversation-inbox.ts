@@ -11,7 +11,11 @@
  */
 import { queryOptions } from '@tanstack/react-query'
 import type { ConversationId, CompanyId } from '@quackback/ids'
-import { listConversationsFn, getConversationFn } from '@/lib/server/functions/conversation'
+import {
+  listConversationsFn,
+  getConversationFn,
+  fetchAssistantInboxCountsFn,
+} from '@/lib/server/functions/conversation'
 import { fetchConversationTagsWithCountsFn } from '@/lib/server/functions/conversation-tags'
 import { fetchInboxSegmentsWithCountsFn } from '@/lib/server/functions/conversation-segments'
 import { listConversationViewsFn } from '@/lib/server/functions/conversation-views'
@@ -20,6 +24,7 @@ import {
   buildListParams,
   type InboxNavItem,
   type StatusFilter,
+  type AiBucket,
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
@@ -42,7 +47,10 @@ export const conversationInboxQueries = {
     // absent/default, so the loader's SSR prefetch keeps hydrating existing
     // scopes and the key-parity test still passes.
     sort?: ConversationSort,
-    customParams?: ConversationViewListParams
+    customParams?: ConversationViewListParams,
+    // Quinn-view sub-filter (Resolved / Escalated / Pending); only set on the
+    // 'quinn' scope, so it leaves every other scope's key byte-identical.
+    aiBucket?: AiBucket
   ) => {
     const baseKey = conversationKeys.agentConversationList(
       inboxNavKey(nav),
@@ -55,11 +63,21 @@ export const conversationInboxQueries = {
     const key = [...baseKey]
     if (sort && sort !== 'recent') key.push(`sort:${sort}`)
     if (companyId) key.push(companyId)
+    if (aiBucket) key.push(`ai:${aiBucket}`)
     return queryOptions({
       queryKey: key,
       queryFn: () =>
         listConversationsFn({
-          data: buildListParams(nav, status, priority, search, companyId, sort, customParams),
+          data: buildListParams(
+            nav,
+            status,
+            priority,
+            search,
+            companyId,
+            sort,
+            customParams,
+            aiBucket
+          ),
         }),
     })
   },
@@ -85,6 +103,14 @@ export const conversationInboxQueries = {
       queryKey: conversationKeys.agentTagCounts(),
       queryFn: () => fetchConversationTagsWithCountsFn(),
       staleTime: 60_000,
+    }),
+
+  /** Conversation counts per Quinn-inbox bucket (drives the Quinn sub-filter badges). */
+  assistantCounts: () =>
+    queryOptions({
+      queryKey: ['admin', 'inbox', 'assistant-counts'] as const,
+      queryFn: () => fetchAssistantInboxCountsFn(),
+      staleTime: 30_000,
     }),
 
   /** Segments + per-segment open-conversation counts (drives the nav Segments group). */

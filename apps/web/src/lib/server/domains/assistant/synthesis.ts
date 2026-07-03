@@ -13,7 +13,10 @@ import { chat, parsePartialJSON } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
-import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
+import {
+  isAiClientConfigured,
+  structuredOutputProviderOptions,
+} from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { logger } from '@/lib/server/logger'
@@ -181,7 +184,7 @@ async function runAttempt(
     outputSchema: answerSchema,
     stream: true,
     abortController: controller,
-    modelOptions: { max_completion_tokens: MAX_OUTPUT_TOKENS },
+    modelOptions: { max_tokens: MAX_OUTPUT_TOKENS, ...structuredOutputProviderOptions() },
   })
 
   let raw = ''

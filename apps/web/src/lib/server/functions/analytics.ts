@@ -23,7 +23,10 @@ import {
   changelogEntries,
   conversations,
   boards,
+  assistantInvolvements,
+  type AssistantInvolvementStatus,
 } from '@/lib/server/db'
+import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
@@ -45,6 +48,26 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
     const previousStartStr = toIsoDateOnly(previousStart)
     // Full-precision period start for timestamptz comparisons in raw SQL.
     const sinceIso = start.toISOString()
+
+    // Quinn AI metrics run concurrently with the main batch below (both started
+    // before either is awaited) — one grouped scan + one rating aggregate over
+    // involvements in the window (low volume, like CSAT, so no rollup table).
+    const aiMetricsPromise = Promise.all([
+      db
+        .select({ status: assistantInvolvements.status, n: sql<number>`count(*)::int` })
+        .from(assistantInvolvements)
+        .where(gte(assistantInvolvements.createdAt, start))
+        .groupBy(assistantInvolvements.status),
+      db
+        .select({
+          avg: sql<number | null>`avg(${assistantInvolvements.rating})::float`,
+          count: sql<number>`count(${assistantInvolvements.rating})::int`,
+        })
+        .from(assistantInvolvements)
+        .where(
+          and(gte(assistantInvolvements.createdAt, start), isNotNull(assistantInvolvements.rating))
+        ),
+    ])
 
     // -- Every query below depends only on the pure date/period values above,
     // never on another query's result, so they all run concurrently. The whole
@@ -445,6 +468,19 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         ? Math.min(100, Math.round((csatSummary.responseCount / closedCount) * 100))
         : 0
 
+    // -- Quinn AI metrics (queries started above) folded into the shared
+    // Resolved/Escalated/Pending buckets via AI_INBOX_BUCKETS, so the bucket
+    // vocabulary lives in one place (also used by the inbox filter + counts). --
+    const [aiRows, aiRatingRows] = await aiMetricsPromise
+    const aiByStatus = new Map(aiRows.map((r) => [r.status, r.n]))
+    const aiBucket = (statuses: readonly AssistantInvolvementStatus[]) =>
+      statuses.reduce((total, s) => total + (aiByStatus.get(s) ?? 0), 0)
+    const aiInvolved = aiRows.reduce((total, r) => total + r.n, 0)
+    const aiResolved = aiBucket(AI_INBOX_BUCKETS.resolved)
+    const aiEscalated = aiBucket(AI_INBOX_BUCKETS.escalated)
+    const aiPending = aiBucket(AI_INBOX_BUCKETS.pending)
+    const pct = (n: number) => (aiInvolved > 0 ? Math.round((n / aiInvolved) * 100) : 0)
+
     // -- Computed at timestamp --
     const computedAt = latestRow?.computedAt?.toISOString() ?? null
 
@@ -479,6 +515,16 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
           title: e.title,
           viewCount: e.viewCount,
         })),
+      },
+      ai: {
+        involved: aiInvolved,
+        resolved: aiResolved,
+        escalated: aiEscalated,
+        pending: aiPending,
+        resolutionRate: pct(aiResolved),
+        escalationRate: pct(aiEscalated),
+        avgRating: aiRatingRows[0]?.avg ?? null,
+        ratingCount: aiRatingRows[0]?.count ?? 0,
       },
       computedAt,
     }

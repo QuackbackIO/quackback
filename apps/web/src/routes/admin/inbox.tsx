@@ -55,6 +55,7 @@ import {
   type InboxNavItem,
   type InboxSearch,
   type StatusFilter,
+  type AiBucket,
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { listCompaniesFn } from '@/lib/server/functions/companies'
@@ -70,6 +71,53 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
+
+/** Quinn-view outcome sub-filter (Fin's All / Pending / Escalated / Resolved). */
+const QUINN_BUCKETS: { value: AiBucket | undefined; label: string }[] = [
+  { value: undefined, label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'escalated', label: 'Escalated' },
+  { value: 'resolved', label: 'Resolved' },
+]
+
+function QuinnBucketChips({
+  value,
+  counts,
+  onChange,
+}: {
+  value?: AiBucket
+  counts?: { resolved: number; escalated: number; pending: number }
+  onChange: (value?: AiBucket) => void
+}) {
+  const countFor = (v?: AiBucket): number | undefined => {
+    if (!counts) return undefined
+    return v ? counts[v] : counts.resolved + counts.escalated + counts.pending
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5 px-3 pb-2 pt-1">
+      {QUINN_BUCKETS.map((b) => {
+        const active = value === b.value
+        const n = countFor(b.value)
+        return (
+          <button
+            key={b.label}
+            type="button"
+            onClick={() => onChange(b.value)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+              active
+                ? 'bg-primary/15 text-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            {b.label}
+            {n != null && <span className="tabular-nums opacity-70">{n}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export const Route = createFileRoute('/admin/inbox')({
   // `?c=<conversationId>` deep-links a conversation open (e.g. from a user
@@ -122,6 +170,11 @@ export const Route = createFileRoute('/admin/inbox')({
     priority: PRIORITY_VALUES.includes(search.priority as ConversationPriority | 'all')
       ? (search.priority as ConversationPriority | 'all')
       : undefined,
+    // Quinn-view sub-filter by involvement outcome; only the canonical buckets.
+    ai:
+      search.ai === 'resolved' || search.ai === 'escalated' || search.ai === 'pending'
+        ? search.ai
+        : undefined,
     q: typeof search.q === 'string' && search.q ? search.q : undefined,
     // Carries the shared `?post=` modal target (the admin layout mounts the
     // modal) so clicking an embedded post in a conversation opens it without leaving the
@@ -150,6 +203,7 @@ export const Route = createFileRoute('/admin/inbox')({
     sort: search.sort,
     status: search.status,
     priority: search.priority,
+    ai: search.ai,
     q: search.q,
     c: search.c,
     company: search.company,
@@ -188,7 +242,9 @@ export const Route = createFileRoute('/admin/inbox')({
                 priority,
                 search,
                 company,
-                sort
+                sort,
+                undefined,
+                deps.ai
               )
             )
           ),
@@ -236,6 +292,7 @@ function InboxPage() {
     priority: urlPriority,
     q: urlQ,
     company: urlCompany,
+    ai: urlAi,
     post: urlPost,
   } = Route.useSearch()
 
@@ -410,12 +467,20 @@ function InboxPage() {
       search,
       urlCompany as CompanyId | undefined,
       sort,
-      customParams
+      customParams,
+      nav.kind === 'view' && nav.view === 'quinn' ? urlAi : undefined
     ),
     refetchInterval: 30_000, // polling fallback if the stream drops
     // Saved shows flagged messages (no list). A custom view can't run until its
     // rule set has loaded from the views list, so hold the query until then.
     enabled: !isSaved && (nav.kind !== 'custom' || !!activeView),
+  })
+
+  // Quinn-view sub-filter counts (only fetched while that view is open).
+  const isQuinnView = nav.kind === 'view' && nav.view === 'quinn'
+  const { data: assistantCounts } = useQuery({
+    ...conversationInboxQueries.assistantCounts(),
+    enabled: isQuinnView,
   })
 
   const conversations = listData?.conversations ?? []
@@ -794,10 +859,17 @@ function InboxPage() {
           onSelectNav={setNav}
           scopeLabel={scopeLabel}
           showRefinements={showRefinements}
-          // The company picker slots under the list header, appearing only when
-          // the workspace has companies to filter by.
+          // Quinn view: the outcome sub-filter chips (Fin's Resolved/Escalated/
+          // Pending). Otherwise the company picker, shown only when the workspace
+          // has companies to filter by.
           headerSlot={
-            companies && companies.length > 0 ? (
+            isQuinnView ? (
+              <QuinnBucketChips
+                value={urlAi}
+                counts={assistantCounts}
+                onChange={(ai) => updateSearch({ ai, c: undefined, m: undefined })}
+              />
+            ) : companies && companies.length > 0 ? (
               <CompanyInboxFilter
                 companies={companies}
                 value={urlCompany}

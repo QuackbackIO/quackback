@@ -12,6 +12,7 @@ import {
   PlusIcon,
   EllipsisHorizontalIcon,
   StarIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'
 import type { ConversationTagId, SegmentId, TeamId, ConversationViewId } from '@quackback/ids'
@@ -61,6 +62,7 @@ export const CONVERSATION_VIEWS = [
   { view: 'unassigned', label: 'Unassigned', Icon: InboxArrowDownIcon },
   { view: 'all', label: 'All', Icon: InboxIcon },
   { view: 'mentions', label: 'Mentions', Icon: AtSymbolIcon },
+  { view: 'quinn', label: 'Quinn AI', Icon: SparklesIcon },
   { view: 'saved', label: 'Saved for later', Icon: BookmarkIcon },
 ] as const
 
@@ -151,13 +153,15 @@ export function scopeLabelFor(
   if (nav.kind === 'custom') return views?.find((v) => v.id === nav.viewId)?.name ?? 'View'
   return nav.view === 'mentions'
     ? 'Mentions'
-    : nav.view === 'saved'
-      ? 'Saved for later'
-      : nav.view === 'mine'
-        ? 'Mine'
-        : nav.view === 'unassigned'
-          ? 'Unassigned'
-          : 'All conversations'
+    : nav.view === 'quinn'
+      ? 'Quinn AI'
+      : nav.view === 'saved'
+        ? 'Saved for later'
+        : nav.view === 'mine'
+          ? 'Mine'
+          : nav.view === 'unassigned'
+            ? 'Unassigned'
+            : 'All conversations'
 }
 
 // Mirrors the settings secondary-nav item aesthetic (settings-nav.tsx) so the

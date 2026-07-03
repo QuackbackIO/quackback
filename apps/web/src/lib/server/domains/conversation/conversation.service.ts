@@ -24,7 +24,7 @@ import {
   type ConversationSystemEvent,
 } from '@/lib/server/db'
 import { isTeamMember } from '@/lib/shared/roles'
-import type { ConversationAttachment, Team } from '@/lib/server/db'
+import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import type {
@@ -47,6 +47,7 @@ import type { Actor } from '@/lib/server/policy/types'
 import {
   MAX_CONVERSATION_MESSAGE_LENGTH,
   MAX_CONVERSATION_ATTACHMENTS,
+  HANDOFF_REASON_LABELS,
   type ConversationStatus,
   type ConversationPriority,
   type ConversationEndReason,
@@ -1460,7 +1461,7 @@ export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: { waiting: boolean }
+  opts: { waiting: boolean; citations?: ConversationMessageCitation[] }
 ): Promise<void> {
   const txResult = await db.transaction(async (tx) => {
     const [existing] = await tx
@@ -1476,6 +1477,7 @@ export async function appendAssistantReply(
         principalId: author.principalId,
         senderType: 'agent',
         content,
+        citations: opts.citations?.length ? opts.citations : null,
       })
       .returning()
     const nextStatus = applyAgentReopenStatus(existing.status)
@@ -1494,7 +1496,7 @@ export async function appendAssistantReply(
     return { conversation: updated, message }
   })
 
-  const messageDTO = toMessageDTO(txResult.message, authorFromInput(author))
+  const messageDTO = toMessageDTO(txResult.message, authorFromInput(author), author.principalId)
   const conversationDTO = await conversationToDTO(txResult.conversation, 'agent')
   publishConversationUpdate(conversationDTO.id, conversationDTO)
   publishConversationEvent(messageDTO.conversationId, {
@@ -1508,6 +1510,32 @@ export async function appendAssistantReply(
     txResult.message,
     txResult.conversation
   )
+}
+
+/**
+ * Post an agent-only internal note (authored by Quinn) recording why it handed
+ * off, so the teammate who picks the conversation up has context at a glance.
+ * Inbox channel only — it never reaches the visitor, mirroring `addNote`.
+ */
+export async function appendAssistantHandoffNote(
+  conversationId: ConversationId,
+  reason: string,
+  author: ConversationAuthorInput
+): Promise<void> {
+  const why = HANDOFF_REASON_LABELS[reason] ?? reason.replace(/_/g, ' ')
+  const content = `Handed off to the team — ${why}.`
+  const [message] = await db
+    .insert(conversationMessages)
+    .values({
+      conversationId,
+      principalId: author.principalId,
+      senderType: 'agent',
+      isInternal: true,
+      content,
+    })
+    .returning()
+  const messageDTO = toMessageDTO(message, authorFromInput(author), author.principalId)
+  publishAgentConversationEvent({ kind: 'message', conversationId, message: messageDTO })
 }
 
 /**
@@ -1531,6 +1559,11 @@ export async function executeAssistantHandoff(
     .set({ customAttributes: nextAttributes, status: 'open', updatedAt: new Date() })
     .where(eq(conversations.id, conversationId))
     .returning()
+  // A visitor-visible transition marker so the customer clearly sees the shift
+  // from Quinn to the human team (localized on the client via systemEvent.kind).
+  await emitSystemMessage(conversationId, 'Connecting you to the team', {
+    kind: 'assistant_handoff',
+  })
   const assigned = await assignRoutedConversation(updated)
   // assignRoutedConversation broadcasts the assigned DTO itself on success; when
   // routing declines, still surface the updated attributes/status to the inbox.

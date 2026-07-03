@@ -29,9 +29,11 @@ import {
   conversationMessageFlags,
   userSegments,
   segments,
+  assistantInvolvements,
   type Conversation,
   type ConversationMessage,
   type PostSuggestion,
+  type AssistantInvolvementStatus,
 } from '@/lib/server/db'
 import {
   toUuid,
@@ -45,6 +47,7 @@ import {
   type TeamId,
 } from '@quackback/ids'
 import type { ConversationSort } from '@/lib/shared/conversation/views'
+import { getAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
 import { aggregateReactions } from '@/lib/shared'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { truncate } from '@/lib/shared/utils/string'
@@ -138,7 +141,8 @@ export async function resolveAuthor(input: {
 
 export function toMessageDTO(
   message: ConversationMessage,
-  author: ConversationAuthorDTO | null
+  author: ConversationAuthorDTO | null,
+  assistantPrincipalId?: PrincipalId | null
 ): ConversationMessageDTO {
   return {
     id: message.id,
@@ -148,6 +152,8 @@ export function toMessageDTO(
     createdAt: message.createdAt.toISOString(),
     author,
     attachments: message.attachments ?? [],
+    citations: message.citations ?? [],
+    isAssistant: assistantPrincipalId != null && message.principalId === assistantPrincipalId,
     isInternal: message.isInternal,
     contentJson: message.contentJson ?? null,
     viaEmail: message.metadata?.source === 'email',
@@ -630,6 +636,20 @@ export async function findBackfillCursor(
  * pagination, returned oldest-first for rendering. `before` is a message id
  * cursor (fetch messages older than it).
  */
+// The assistant's service principal is a workspace singleton; memoize its id so
+// message loads can flag Quinn's turns (`isAssistant`) without a per-load lookup.
+// A resolved id is cached for the process; a null (Quinn not yet provisioned) is
+// re-checked periodically so enabling Quinn later heals without a restart.
+let cachedAssistantPrincipalId: PrincipalId | null = null
+let assistantPrincipalCheckedAt = 0
+async function assistantPrincipalIdOnce(): Promise<PrincipalId | null> {
+  if (cachedAssistantPrincipalId === null && Date.now() - assistantPrincipalCheckedAt > 60_000) {
+    cachedAssistantPrincipalId = (await getAssistantPrincipal())?.id ?? null
+    assistantPrincipalCheckedAt = Date.now()
+  }
+  return cachedAssistantPrincipalId
+}
+
 export async function listMessages(
   conversationId: ConversationId,
   opts?: { before?: string; limit?: number; includeInternal?: boolean }
@@ -666,7 +686,10 @@ export async function listMessages(
 
   const hasMore = rows.length > limit
   const page = hasMore ? rows.slice(0, limit) : rows
-  const authors = await loadAuthors(page.map((m) => m.principalId))
+  const [authors, assistantPrincipalId] = await Promise.all([
+    loadAuthors(page.map((m) => m.principalId)),
+    assistantPrincipalIdOnce(),
+  ])
   const ordered = [...page].reverse() // oldest-first for rendering
   // Stash the agent-only suggestion off each internal note's metadata while we
   // still have the raw rows, so the agent enrichment can attach it without a
@@ -682,7 +705,8 @@ export async function listMessages(
       // System events have a null principal and therefore no author.
       toMessageDTO(
         m,
-        m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null
+        m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null,
+        assistantPrincipalId
       )
     ),
     hasMore,
@@ -723,6 +747,9 @@ export interface ConversationListFilter {
    *  principal. Always the requesting agent — resolved server-side from auth,
    *  never client-supplied (it would leak who-mentioned-whom). */
   mentionedPrincipalId?: PrincipalId
+  /** "Quinn AI" view: only conversations with an `assistant_involvements` row in
+   *  ANY of these lifecycle statuses (Resolved / Escalated / Pending buckets). */
+  assistantStatuses?: AssistantInvolvementStatus[]
   /** Inbox ordering (default 'recent'). Keyset pagination adapts per sort. */
   sort?: ConversationSort
   /** Cursor: the previous page's last conversation id, re-resolved per sort. */
@@ -996,6 +1023,18 @@ export async function listConversationsForAgent(
                     eq(conversationMessages.isInternal, true)
                   )
                 )
+            )
+          : undefined,
+        // Quinn AI view: restrict to conversations Quinn engaged whose involvement
+        // is in one of the requested lifecycle buckets. Distinct subquery keeps the
+        // outer select shape (conversations only), like the mentions predicate.
+        filter.assistantStatuses && filter.assistantStatuses.length > 0
+          ? inArray(
+              conversations.id,
+              db
+                .selectDistinct({ id: assistantInvolvements.conversationId })
+                .from(assistantInvolvements)
+                .where(inArray(assistantInvolvements.status, filter.assistantStatuses))
             )
           : undefined,
         // Keyset comparison for the active sort (re-resolved cursor row). id is
