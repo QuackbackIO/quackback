@@ -69,6 +69,60 @@ describe('buildNavSections', () => {
     expect(support.items.map((i) => i.label)).toEqual(['Conversations', 'Office Hours', 'Teams'])
   })
 
+  it('adds Ticket types and Statuses and stages after Teams when supportTickets is on', () => {
+    const sections = buildNavSections({ supportInbox: true, supportTickets: true })
+    const support = sections.find((s) => s.label === 'Support')!
+    expect(support.items.map((i) => i.label)).toEqual([
+      'Conversations',
+      'Office Hours',
+      'Teams',
+      'Ticket types',
+      'Statuses and stages',
+    ])
+  })
+
+  it('places ticket items after Teams and before Help Center', () => {
+    const sections = buildNavSections({
+      helpCenter: true,
+      supportInbox: true,
+      supportTickets: true,
+    })
+    const support = sections.find((s) => s.label === 'Support')!
+    expect(support.items.map((i) => i.label)).toEqual([
+      'Conversations',
+      'Office Hours',
+      'Teams',
+      'Ticket types',
+      'Statuses and stages',
+      'Help Center',
+    ])
+  })
+
+  it('ticket items point at their settings routes', () => {
+    const sections = buildNavSections({ supportTickets: true })
+    const support = sections.find((s) => s.label === 'Support')!
+    expect(support.items.find((i) => i.label === 'Ticket types')!.to).toBe(
+      '/admin/settings/ticket-types'
+    )
+    expect(support.items.find((i) => i.label === 'Statuses and stages')!.to).toBe(
+      '/admin/settings/ticket-statuses'
+    )
+  })
+
+  it('omits ticket items when supportTickets is off', () => {
+    const sections = buildNavSections({ supportInbox: true })
+    const support = sections.find((s) => s.label === 'Support')!
+    const labels = support.items.map((i) => i.label)
+    expect(labels).not.toContain('Ticket types')
+    expect(labels).not.toContain('Statuses and stages')
+  })
+
+  it('shows a Support section with only ticket items when just supportTickets is on', () => {
+    const sections = buildNavSections({ supportTickets: true })
+    const support = sections.find((s) => s.label === 'Support')!
+    expect(support.items.map((i) => i.label)).toEqual(['Ticket types', 'Statuses and stages'])
+  })
+
   it('does not place Conversations under Customization', () => {
     const sections = buildNavSections({ supportInbox: true })
     const customization = sections.find((s) => s.label === 'Customization')!

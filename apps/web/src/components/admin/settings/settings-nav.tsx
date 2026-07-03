@@ -17,6 +17,8 @@ import {
   TagIcon,
   MegaphoneIcon,
   SparklesIcon,
+  TicketIcon,
+  QueueListIcon,
 } from '@heroicons/react/24/solid'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
@@ -36,6 +38,7 @@ interface NavSection {
 export function buildNavSections(flags?: {
   helpCenter?: boolean
   supportInbox?: boolean
+  supportTickets?: boolean
 }): NavSection[] {
   const sections: NavSection[] = [
     {
@@ -76,7 +79,7 @@ export function buildNavSections(flags?: {
     },
   ]
 
-  // Support — Conversations + Help Center bundled together, each gated on its own flag.
+  // Support — conversations, ticket config, and Help Center, each gated on its own flag.
   const supportItems: NavItem[] = [
     ...(flags?.supportInbox
       ? [
@@ -91,6 +94,16 @@ export function buildNavSections(flags?: {
             icon: ClockIcon,
           },
           { label: 'Teams', to: '/admin/settings/teams', icon: UserGroupIcon },
+        ]
+      : []),
+    ...(flags?.supportTickets
+      ? [
+          { label: 'Ticket types', to: '/admin/settings/ticket-types', icon: TicketIcon },
+          {
+            label: 'Statuses and stages',
+            to: '/admin/settings/ticket-statuses',
+            icon: QueueListIcon,
+          },
         ]
       : []),
     ...(flags?.helpCenter
