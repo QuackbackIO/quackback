@@ -5,6 +5,8 @@ import {
   listPublicCategoriesFn,
 } from '@/lib/server/functions/help-center'
 import { getSubcategories } from '@/components/help-center/help-center-utils'
+import { HelpCenterHero } from '@/components/help-center/help-center-hero'
+import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 
 export const Route = createFileRoute('/_portal/hc/categories/$categorySlug')({
   loader: async ({ params }) => {
@@ -38,5 +40,18 @@ export const Route = createFileRoute('/_portal/hc/categories/$categorySlug')({
       meta: [{ title: `${category.name} - Help Center` }],
     }
   },
-  component: () => <Outlet />,
+  component: CategoryLayout,
 })
+
+function CategoryLayout() {
+  const { settings } = Route.useRouteContext()
+  const askAiEnabled = !!settings?.featureFlags?.helpCenterAiAnswers
+  return (
+    <>
+      <HelpCenterHero variant="compact">
+        <HelpCenterHeroSearch askAiEnabled={askAiEnabled} />
+      </HelpCenterHero>
+      <Outlet />
+    </>
+  )
+}

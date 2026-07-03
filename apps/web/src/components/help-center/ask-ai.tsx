@@ -422,21 +422,38 @@ interface AskAiMarkdownProps {
   text: string
   citedSources: AskAiSourceMeta[]
   onSourceClick: (source: AskAiSourceMeta) => void
+  /** Render a streaming caret inline at the end of the last line. */
+  caret?: boolean
+}
+
+/** Thin, square typing caret that trails the streamed answer text. */
+function AnswerCaret() {
+  return (
+    <span
+      aria-hidden="true"
+      className="ms-0.5 inline-block h-[1em] w-px animate-pulse bg-primary/80 align-[-0.15em]"
+    />
+  )
 }
 
 /**
  * Markdown-lite answer rendering: paragraphs, ordered/bullet lists, bold, and
  * inline `[n]` citation links. No raw HTML.
  */
-function AskAiMarkdown({ text, citedSources, onSourceClick }: AskAiMarkdownProps) {
+function AskAiMarkdown({ text, citedSources, onSourceClick, caret = false }: AskAiMarkdownProps) {
   const blocks = parseMarkdownLite(text)
+  const lastBlock = blocks.length - 1
   return (
     <div className="space-y-2.5 text-sm text-foreground leading-relaxed">
+      {blocks.length === 0 && caret && <AnswerCaret />}
       {blocks.map((block, i) => {
+        const isLast = i === lastBlock
         if (block.kind === 'list') {
+          const lastItem = block.items.length - 1
           const items = block.items.map((item, j) => (
             <li key={j} className="ps-0.5">
               <InlineSpans spans={item} citedSources={citedSources} onSourceClick={onSourceClick} />
+              {caret && isLast && j === lastItem && <AnswerCaret />}
             </li>
           ))
           return block.ordered ? (
@@ -449,6 +466,7 @@ function AskAiMarkdown({ text, citedSources, onSourceClick }: AskAiMarkdownProps
             </ul>
           )
         }
+        const lastLine = block.lines.length - 1
         return (
           <p key={i}>
             {block.lines.map((line, j) => (
@@ -459,6 +477,7 @@ function AskAiMarkdown({ text, citedSources, onSourceClick }: AskAiMarkdownProps
                   citedSources={citedSources}
                   onSourceClick={onSourceClick}
                 />
+                {caret && isLast && j === lastLine && <AnswerCaret />}
               </span>
             ))}
           </p>
@@ -556,10 +575,8 @@ export function AskAiAnswerPanel({ state, onDismiss, onSourceClick }: AskAiAnswe
             text={state.answer}
             citedSources={state.citedSources}
             onSourceClick={onSourceClick}
+            caret={state.status === 'streaming'}
           />
-          {state.status === 'streaming' && (
-            <span className="inline-block w-1.5 h-3.5 ms-0.5 align-middle bg-primary/60 animate-pulse rounded-sm" />
-          )}
         </div>
       )}
 

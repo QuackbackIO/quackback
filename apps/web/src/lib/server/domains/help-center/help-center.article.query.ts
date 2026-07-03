@@ -291,6 +291,27 @@ export async function listPublicArticlesForCategory(categoryId: string) {
     .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
 }
 
+/**
+ * Top published articles across all public categories, ranked by view count.
+ * Powers the help-center homepage "Popular articles" list. Falls back to most
+ * recently published on ties (e.g. a fresh install where every count is 0).
+ */
+export async function listPopularPublicArticles(limit: number) {
+  return db
+    .select({
+      id: helpCenterArticles.id,
+      slug: helpCenterArticles.slug,
+      title: helpCenterArticles.title,
+      categorySlug: helpCenterCategories.slug,
+      categoryName: helpCenterCategories.name,
+    })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
+    .where(and(...helpCenterVisibilityConditions('public')))
+    .orderBy(desc(helpCenterArticles.viewCount), desc(helpCenterArticles.publishedAt))
+    .limit(limit)
+}
+
 export async function listPublicCategoryEditors(): Promise<
   Record<string, Array<{ name: string; avatarUrl: string | null }>>
 > {

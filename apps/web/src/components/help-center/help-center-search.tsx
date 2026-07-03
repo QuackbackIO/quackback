@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useIntl } from 'react-intl'
 import { MagnifyingGlassIcon, ArrowRightIcon } from '@heroicons/react/24/outline'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { contentPreview } from '@/lib/shared/utils/string'
 import {
@@ -93,30 +92,31 @@ export function HelpCenterHeroSearch({ askAiEnabled = false }: HelpCenterHeroSea
     },
   })
 
+  const placeholderText = askAiAvailable
+    ? intl.formatMessage({
+        id: 'helpAskAi.searchPlaceholder',
+        defaultMessage: 'Ask AI or search our help articles to find an answer',
+      })
+    : 'Search articles...'
+
   return (
-    <div ref={containerRef} className="relative w-full max-w-xl mx-auto">
-      <div className="relative">
-        <MagnifyingGlassIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-        <Input
+    <div ref={containerRef} role="search" className="relative w-full">
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted pl-5 pr-2 shadow-lg transition-[color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/20">
+        <MagnifyingGlassIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <input
+          id="hc-search"
           type="search"
-          placeholder={
-            askAiAvailable
-              ? intl.formatMessage({
-                  id: 'helpAskAi.searchPlaceholder',
-                  defaultMessage: 'Ask AI or search our help articles to find an answer',
-                })
-              : 'Search articles...'
-          }
+          aria-label={placeholderText}
+          placeholder={placeholderText}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => (results.length > 0 || (hasAskRow && !answerOpen)) && setShowResults(true)}
-          className="h-12 pl-12 pr-12 text-base rounded-xl shadow-sm border-border/60 bg-background"
+          autoComplete="off"
+          className="min-w-0 flex-1 bg-transparent py-4 text-base text-foreground outline-none placeholder:text-muted-foreground"
         />
         {isSearching && (
-          <div
-            className={`absolute top-1/2 -translate-y-1/2 ${hasAskRow ? 'right-12' : 'right-4'}`}
-          >
+          <div className="shrink-0 pr-1">
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
           </div>
         )}
@@ -128,9 +128,9 @@ export function HelpCenterHeroSearch({ askAiEnabled = false }: HelpCenterHeroSea
               id: 'helpAskAi.rowSubtitle',
               defaultMessage: 'Use AI to answer your question in seconds',
             })}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+            className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary text-primary-foreground transition-opacity hover:opacity-90"
           >
-            <ArrowRightIcon className="h-4 w-4 rtl:rotate-180" />
+            <ArrowRightIcon className="h-5 w-5 rtl:rotate-180" />
           </button>
         )}
       </div>

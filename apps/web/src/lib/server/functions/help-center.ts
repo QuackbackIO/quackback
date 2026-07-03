@@ -19,6 +19,7 @@ import {
   listArticles,
   listPublicArticles,
   listPublicArticlesForCategory,
+  listPopularPublicArticles,
   getArticleById,
   getPublicArticleBySlug,
   createArticle,
@@ -214,6 +215,12 @@ export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {
     return listPublicCategoryEditors()
+  })
+
+export const listPopularPublicArticlesFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ limit: z.number().int().min(1).max(20).optional() }))
+  .handler(async ({ data }) => {
+    return listPopularPublicArticles(data.limit ?? 6)
   })
 
 export const getArticleFn = createServerFn({ method: 'GET' })
