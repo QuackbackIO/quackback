@@ -39,13 +39,19 @@ vi.mock('../conversation.ratelimit', () => ({
   },
 }))
 
-vi.mock('@/lib/server/db', () => {
+// Spread the real db module (so every table export — including ones the email
+// pipeline added later, like channelAccounts — is present) and override ONLY
+// the `db` handle. Re-listing tables here is the banned pattern that broke when
+// channelAccounts landed; the operators/tables the code touches are ignored by
+// the custom select chain anyway.
+vi.mock('@/lib/server/db', async (importOriginal) => {
   const selectChain = {
     from: () => selectChain,
     where: () => selectChain,
     limit: async () => dupeRows,
   }
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       query: {
         conversations: { findFirst: async () => conversationRow },
@@ -54,12 +60,6 @@ vi.mock('@/lib/server/db', () => {
       },
       select: () => selectChain,
     },
-    eq: vi.fn(),
-    sql: Object.assign(() => ({}), { raw: () => ({}) }),
-    conversationMessages: { metadata: 'metadata' },
-    conversations: { id: 'id' },
-    principal: { id: 'id' },
-    user: { id: 'id' },
   }
 })
 

@@ -60,7 +60,11 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isPortalSupportEnabled: () => isPortalSupportEnabled(),
 }))
 
-vi.mock('@/lib/server/db', () => {
+// Spread the real db module (so every table export the notify path touches —
+// including channelAccounts, added with the email channel — is present) and
+// override ONLY the `db` handle. Re-listing tables here is the banned pattern
+// that broke when channelAccounts landed.
+vi.mock('@/lib/server/db', async (importOriginal) => {
   // A thenable chain. `.where()` resolves to the team rows (so a bare await on
   // the where() builder yields the array); `.limit()` resolves to the single
   // visitor row. `.then` makes the where() builder awaitable directly.
@@ -74,11 +78,8 @@ vi.mock('@/lib/server/db', () => {
     return c
   }
   return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: { select: () => chain() },
-    eq: vi.fn(),
-    inArray: vi.fn(),
-    principal: { id: 'id', userId: 'userId', role: 'role', type: 'type' },
-    user: { id: 'id', email: 'email', name: 'name' },
   }
 })
 
