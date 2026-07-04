@@ -157,6 +157,12 @@ export type SendingDomainId = TypeId<'sending_domain'>
 /** Office-hours schedule ID (§4.6) - e.g., office_hours_01h455vb4pex5vsknk084sn02q */
 export type OfficeHoursId = TypeId<'office_hours'>
 
+/** SLA policy ID (§4.6) - e.g., sla_policy_01h455vb4pex5vsknk084sn02q */
+export type SlaPolicyId = TypeId<'sla_policy'>
+
+/** SLA event ID (§4.6) - e.g., sla_event_01h455vb4pex5vsknk084sn02q */
+export type SlaEventId = TypeId<'sla_event'>
+
 /** Team ID - e.g., team_01h455vb4pex5vsknk084sn02q */
 export type TeamId = TypeId<'team'>
 
@@ -295,6 +301,8 @@ export interface EntityIdMap {
   channel_account: ChannelAccountId
   sending_domain: SendingDomainId
   office_hours: OfficeHoursId
+  sla_policy: SlaPolicyId
+  sla_event: SlaEventId
   team: TeamId
   team_member: TeamMemberId
   macro: MacroId

@@ -109,6 +109,8 @@ export type {
   ChannelAccountId,
   SendingDomainId,
   OfficeHoursId,
+  SlaPolicyId,
+  SlaEventId,
   // Feedback aggregation entities
   FeedbackSourceId,
   RawFeedbackItemId,
