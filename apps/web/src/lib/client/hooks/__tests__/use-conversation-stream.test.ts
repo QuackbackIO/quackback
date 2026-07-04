@@ -197,3 +197,128 @@ describe('useConversationStream', () => {
     expect(buildUrl).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('useConversationStream - polling fallback (Phase 6 R2)', () => {
+  it('poll mode never opens an EventSource and never mints a URL', async () => {
+    const buildUrl = vi.fn(async () => '/stream')
+    const poll = vi.fn(async () => {})
+    renderHook(() =>
+      useConversationStream({
+        buildUrl,
+        enabled: true,
+        onEvent: vi.fn(),
+        mode: 'poll',
+        poll,
+        pollIntervalMs: 5000,
+      })
+    )
+    await flush()
+
+    expect(MockEventSource.instances).toHaveLength(0)
+    expect(buildUrl).not.toHaveBeenCalled()
+    // Catches up immediately, then keeps polling on the interval.
+    expect(poll).toHaveBeenCalledTimes(1)
+    await advance(5000)
+    expect(poll).toHaveBeenCalledTimes(2)
+    await advance(5000)
+    expect(poll).toHaveBeenCalledTimes(3)
+  })
+
+  it('polls when the browser has no EventSource', async () => {
+    vi.stubGlobal('EventSource', undefined)
+    const poll = vi.fn(async () => {})
+    renderHook(() =>
+      useConversationStream({
+        buildUrl: async () => '/stream',
+        enabled: true,
+        onEvent: vi.fn(),
+        poll,
+        pollIntervalMs: 5000,
+      })
+    )
+    await flush()
+    expect(poll).toHaveBeenCalledTimes(1)
+    await advance(5000)
+    expect(poll).toHaveBeenCalledTimes(2)
+  })
+
+  it('degrades to polling after repeated SSE failures, then stops reconnecting', async () => {
+    const poll = vi.fn(async () => {})
+    renderHook(() =>
+      useConversationStream({
+        buildUrl: async () => '/stream',
+        enabled: true,
+        onEvent: vi.fn(),
+        poll,
+        pollIntervalMs: 5000,
+      })
+    )
+    await flush()
+    expect(MockEventSource.instances).toHaveLength(1)
+
+    // Four consecutive failures (no open in between). The first three schedule
+    // a reconnect (2s, 4s, 8s); the fourth crosses the threshold and degrades.
+    act(() => MockEventSource.instances[0].onerror?.())
+    await advance(2000)
+    act(() => MockEventSource.instances[1].onerror?.())
+    await advance(4000)
+    act(() => MockEventSource.instances[2].onerror?.())
+    await advance(8000)
+    expect(MockEventSource.instances).toHaveLength(4)
+    expect(poll).not.toHaveBeenCalled()
+
+    act(() => MockEventSource.instances[3].onerror?.())
+    await flush()
+    // Degraded: caught up immediately via poll, and no 5th EventSource opens
+    // even after a long wait.
+    expect(poll).toHaveBeenCalledTimes(1)
+    await advance(60_000)
+    expect(MockEventSource.instances).toHaveLength(4)
+    expect(poll.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('a successful open resets the failure count so a later blip does not degrade early', async () => {
+    const poll = vi.fn(async () => {})
+    renderHook(() =>
+      useConversationStream({
+        buildUrl: async () => '/stream',
+        enabled: true,
+        onEvent: vi.fn(),
+        poll,
+        pollIntervalMs: 5000,
+      })
+    )
+    await flush()
+
+    // Three failures, then a successful open (resets), then three more: still
+    // under the threshold, so it keeps streaming rather than polling.
+    for (let i = 0; i < 3; i++) {
+      act(() => MockEventSource.instances.at(-1)!.onerror?.())
+      await advance(30_000)
+    }
+    act(() => MockEventSource.instances.at(-1)!.onopen?.())
+    for (let i = 0; i < 3; i++) {
+      act(() => MockEventSource.instances.at(-1)!.onerror?.())
+      await advance(30_000)
+    }
+    expect(poll).not.toHaveBeenCalled()
+    expect(MockEventSource.instances.length).toBeGreaterThan(4)
+  })
+
+  it('without a poll callback it keeps retrying SSE (unchanged legacy behavior)', async () => {
+    renderHook(() =>
+      useConversationStream({
+        buildUrl: async () => '/stream',
+        enabled: true,
+        onEvent: vi.fn(),
+      })
+    )
+    await flush()
+    // Many failures, no poll callback -> never degrades, always reconnects.
+    for (let i = 0; i < 6; i++) {
+      act(() => MockEventSource.instances.at(-1)!.onerror?.())
+      await advance(30_000)
+    }
+    expect(MockEventSource.instances.length).toBeGreaterThan(6)
+  })
+})

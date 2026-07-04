@@ -360,6 +360,15 @@ export const config = {
     return process.env.PLATFORM_CREDENTIALS_SOURCE === 'env' ? 'env' : 'db'
   },
 
+  // Realtime chat transport, surfaced to clients via getWidgetCapabilitiesFn.
+  //   'live' (default) — SSE stream at /api/chat/stream.
+  //   'poll' — force the widget/portal onto the polling fallback for a
+  //            deployment behind a proxy that buffers or drops event streams.
+  // Direct process.env read (like helpCenterDev) so it works without a full config load.
+  get chatTransportMode(): 'live' | 'poll' {
+    return process.env.CHAT_TRANSPORT_MODE === 'poll' ? 'poll' : 'live'
+  },
+
   // Convenience
   get isDev() {
     return this.nodeEnv === 'development'

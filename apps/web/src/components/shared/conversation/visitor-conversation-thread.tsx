@@ -49,6 +49,7 @@ import {
   mintConversationStreamTokenFn,
   submitCsatFn,
 } from '@/lib/server/functions/conversation'
+import { getWidgetCapabilitiesFn } from '@/lib/server/functions/widget-capabilities'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -184,6 +185,15 @@ export function VisitorConversationThread({
   const agentReadAt = thread?.agentLastReadAt ?? null
   const conversationStatus = thread?.status ?? null
   const csatRating = thread?.csatRating ?? null
+
+  // Realtime transport for this deployment (boot handshake). 'poll' hosts and
+  // hosts where SSE degrades fall back to the polling refetch below. Cached for
+  // the session — it's a deployment property, not per-conversation.
+  const { data: capabilities } = useQuery({
+    queryKey: ['widget-capabilities'],
+    queryFn: () => getWidgetCapabilitiesFn(),
+    staleTime: Infinity,
+  })
 
   const sendTyping = useTypingSender(conversationId, getAuthHeaders)
   const { remoteTyping, onLocalInput, onRemoteTyping, clearRemoteTyping } =
@@ -345,6 +355,11 @@ export function VisitorConversationThread({
   useConversationStream({
     enabled: conversationId != null,
     resetKey: conversationId ?? '',
+    // 'poll' hosts skip SSE entirely; 'live' streams and degrades to the same
+    // refetch on repeated failure (the connection cap, an SSE-hostile proxy).
+    mode: capabilities?.chat.mode ?? 'live',
+    poll: refreshMessages,
+    pollIntervalMs: capabilities?.chat.pollIntervalMs,
     buildUrl: async () => {
       if (!conversationId) return null
       try {
