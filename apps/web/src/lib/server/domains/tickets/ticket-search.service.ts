@@ -21,7 +21,7 @@ import type { SQL } from 'drizzle-orm'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TicketId } from '@quackback/ids'
 import { ticketFilter } from '@/lib/server/policy/tickets'
-import { buildTicketContext, ticketToDTO } from './ticket.service'
+import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import type { TicketDTO } from './ticket.types'
 
 const DEFAULT_LIMIT = 25

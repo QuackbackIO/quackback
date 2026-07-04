@@ -10,13 +10,8 @@ import type { TicketId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
-import {
-  loadTicketOr404,
-  buildTicketContext,
-  ticketToDTO,
-  createTicketCore,
-  autoReopenOnRequesterReply,
-} from './ticket.service'
+import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
+import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import {
   insertTicketMessage,
   listTicketMessages,
