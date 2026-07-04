@@ -24,6 +24,24 @@ const WEEKDAY_INDEX: Record<string, number> = {
   Sat: 6,
 }
 
+// Intl.DateTimeFormat construction is expensive, and the SLA clock builds these
+// in a tight loop (up to hundreds of iterations, several formatters each). Cache
+// them by timezone + shape so each is constructed once per process.
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
+function cachedFormatter(
+  shape: string,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat {
+  const key = `${shape}|${timeZone}`
+  let formatter = formatterCache.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', ...options })
+    formatterCache.set(key, formatter)
+  }
+  return formatter
+}
+
 /** Minutes since local midnight for an 'HH:MM' string, or null when malformed. */
 function parseHHMM(value: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
@@ -37,12 +55,10 @@ function parseHHMM(value: string): number | null {
 /** The local weekday (0=Sun..6=Sat) + minutes-since-midnight for an instant in a
  *  timezone, DST-safe via Intl (it applies the zone's offset for that date). */
 function localParts(at: Date, timeZone: string): { day: number; minutes: number } {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const parts = cachedFormatter('dayMinute', timeZone, {
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
-    hourCycle: 'h23',
   }).formatToParts(at)
   const weekday = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun'
   const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10)
@@ -87,15 +103,13 @@ export function isWithinOfficeHours(
 /** The timezone's UTC offset in ms at an instant (local ahead of UTC = positive),
  *  read AT that instant via Intl so it is DST-correct. */
 function tzOffsetMs(timeZone: string, at: Date): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const parts = cachedFormatter('offset', timeZone, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hourCycle: 'h23',
   }).formatToParts(at)
   const g = (t: string): number => Number(parts.find((p) => p.type === t)?.value ?? 0)
   const asUtc = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second'))
@@ -126,13 +140,11 @@ function localDateParts(
   tz: string,
   at: Date
 ): { year: number; month0: number; day: number; weekday: number } {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
+  const parts = cachedFormatter('dateWeekday', tz, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     weekday: 'short',
-    hourCycle: 'h23',
   }).formatToParts(at)
   const g = (t: string): string => parts.find((p) => p.type === t)?.value ?? ''
   return {
