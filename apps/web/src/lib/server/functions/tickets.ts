@@ -98,6 +98,7 @@ export const getTicketFn = createServerFn({ method: 'GET' })
 const createTicketSchema = z.object({
   type: ticketTypeSchema,
   title: z.string().min(1).max(300),
+  description: z.string().max(4000).optional(),
   requesterPrincipalId: z.string().optional(),
   priority: prioritySchema.optional(),
   companyId: z.string().optional(),
@@ -114,6 +115,7 @@ export const createTicketFn = createServerFn({ method: 'POST' })
       {
         type: data.type,
         title: data.title,
+        description: data.description,
         requesterPrincipalId:
           data.requesterPrincipalId && isValidTypeId(data.requesterPrincipalId, 'principal')
             ? (data.requesterPrincipalId as PrincipalId)

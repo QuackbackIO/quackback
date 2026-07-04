@@ -19,6 +19,7 @@ import {
   desc,
   tickets,
   ticketStatuses,
+  conversationMessages,
   principal,
   teams,
   companies,
@@ -26,6 +27,7 @@ import {
   type TicketStatusEntity,
   type ConversationPriority,
 } from '@/lib/server/db'
+import { validateContent } from '@/lib/server/messages/message-core'
 import type { SQL } from 'drizzle-orm'
 import type { TicketId, TicketStatusId, PrincipalId, TeamId, CompanyId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
@@ -288,18 +290,39 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
     throw new InternalError('NO_DEFAULT_STATUS', 'No default ticket status is configured')
   }
 
-  const [created] = await db
-    .insert(tickets)
-    .values({
-      type: input.type,
-      title,
-      statusId: defaultStatus.id,
-      priority: input.priority ?? 'none',
-      requesterPrincipalId: input.requesterPrincipalId ?? null,
-      companyId: input.companyId ?? null,
-      customAttributes: input.customAttributes ?? {},
-    })
-    .returning()
+  const description = input.description?.trim()
+
+  const created = await db.transaction(async (tx) => {
+    const [ticket] = await tx
+      .insert(tickets)
+      .values({
+        type: input.type,
+        title,
+        statusId: defaultStatus.id,
+        priority: input.priority ?? 'none',
+        requesterPrincipalId: input.requesterPrincipalId ?? null,
+        companyId: input.companyId ?? null,
+        customAttributes: input.customAttributes ?? {},
+      })
+      .returning()
+
+    if (description) {
+      // The description opens the thread. It is the requester's ask when they
+      // file it themselves (senderType 'visitor'), or a teammate's summary when
+      // filing on someone's behalf ('agent'). Either way it is the opening
+      // message, not a reply, so it never stamps first_response_at.
+      const filedByRequester =
+        !!actor.principalId && actor.principalId === (input.requesterPrincipalId ?? null)
+      await tx.insert(conversationMessages).values({
+        ticketId: ticket.id,
+        principalId: actor.principalId,
+        senderType: filedByRequester ? 'visitor' : 'agent',
+        content: validateContent(description),
+      })
+    }
+    return ticket
+  })
+
   log.info({ ticket_id: created.id, type: created.type }, 'ticket created')
   return ticketRowToDTO(created)
 }

@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Avatar } from '@/components/ui/avatar'
 import {
   Select,
@@ -49,6 +50,7 @@ export function NewTicketDialog({
 }) {
   const [type, setType] = useState<TicketType>('customer')
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [requester, setRequester] = useState<Requester | null>(null)
 
   // A fresh open starts clean.
@@ -56,6 +58,7 @@ export function NewTicketDialog({
     if (open) {
       setType('customer')
       setTitle('')
+      setDescription('')
       setRequester(null)
     }
   }, [open])
@@ -69,6 +72,7 @@ export function NewTicketDialog({
       {
         type,
         title: title.trim(),
+        description: description.trim() || undefined,
         requesterPrincipalId: (requester?.principalId as PrincipalId | undefined) ?? null,
       },
       {
@@ -116,6 +120,17 @@ export function NewTicketDialog({
               onChange={(e) => setTitle(e.target.value)}
               maxLength={300}
               placeholder="Summarize the request…"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={4000}
+              rows={4}
+              placeholder="Add details (optional). This opens the ticket thread."
             />
           </div>
 

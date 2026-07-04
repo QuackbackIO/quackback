@@ -17,6 +17,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import { createTicket, setTicketStatus, assignTicket } from '../ticket.service'
+import { listTicketMessages } from '../ticket-message.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 
@@ -120,6 +121,60 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     expect(dto.stage.label).toBe('Received')
     expect(dto.resolvedAt).toBeNull()
     expect(dto.reopenedCount).toBe(0)
+  })
+
+  it('seeds the description as the opening thread message (agent, filed on behalf)', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const principalId = await seedTeammate()
+    const actor: Actor = {
+      principalId,
+      role: 'admin',
+      principalType: 'user',
+      segmentIds: new Set(),
+      permissions: resolveActorPermissions('admin'),
+    }
+    const dto = await createTicket(
+      { type: 'customer', title: 'Cannot log in', description: 'The login button does nothing' },
+      actor
+    )
+    const page = await listTicketMessages(dto.id, { includeInternal: true })
+    expect(page.messages).toHaveLength(1)
+    expect(page.messages[0].content).toBe('The login button does nothing')
+    // Filed by a teammate on someone's behalf -> opens as an agent message.
+    expect(page.messages[0].senderType).toBe('agent')
+  })
+
+  it('attributes the opening message to the requester when they file it themselves', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const principalId = await seedTeammate()
+    const actor: Actor = {
+      principalId,
+      role: 'admin',
+      principalType: 'user',
+      segmentIds: new Set(),
+      permissions: resolveActorPermissions('admin'),
+    }
+    const dto = await createTicket(
+      {
+        type: 'customer',
+        title: 'Help',
+        description: 'It broke',
+        requesterPrincipalId: principalId,
+      },
+      actor
+    )
+    const page = await listTicketMessages(dto.id, { includeInternal: true })
+    expect(page.messages[0].senderType).toBe('visitor')
+  })
+
+  it('seeds no opening message when the description is omitted', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const dto = await createTicket({ type: 'customer', title: 'Quiet ticket' }, adminActor())
+    const page = await listTicketMessages(dto.id, {})
+    expect(page.messages).toHaveLength(0)
   })
 
   it('closing stamps resolvedAt + firstResponseAt; reopening clears resolvedAt and counts the reopen', async () => {

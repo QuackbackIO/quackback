@@ -21,6 +21,10 @@ import type { ConversationAuthorDTO } from '@/lib/shared/conversation/types'
 export interface CreateTicketInput {
   type: TicketType
   title: string
+  /** Optional opening message that seeds the ticket thread (the basic-form
+   *  "description"). Authored by the requester when they file it themselves,
+   *  otherwise by the creating teammate. */
+  description?: string
   requesterPrincipalId?: PrincipalId | null
   priority?: ConversationPriority
   companyId?: CompanyId | null
