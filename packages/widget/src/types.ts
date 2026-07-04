@@ -111,6 +111,10 @@ export interface EventMap {
   }
   /** Fires when an anonymous user supplies an email inline. */
   'email-submitted': { email: string }
+  /** Total unread across the visitor's conversations changed. Lets a host page
+   *  mirror the count in its own UI (e.g. a nav badge), same value that drives
+   *  the launcher badge. */
+  unread: { count: number }
 }
 
 export type EventName = keyof EventMap

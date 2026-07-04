@@ -97,11 +97,16 @@ export function createSDK(): SDK {
       case 'quackback:close':
         dispatch('close')
         break
-      case 'quackback:unread':
+      case 'quackback:unread': {
         // Total unread from the iframe → the launcher badge (shown only while
         // closed). Coerced defensively; a bad payload clears the badge.
-        launcher?.setUnread(typeof msg.count === 'number' ? msg.count : 0)
+        const count = typeof msg.count === 'number' ? msg.count : 0
+        launcher?.setUnread(count)
+        // Also surface it to host SDK subscribers (Quackback.on('unread', ...))
+        // so a host can mirror the count in its own UI.
+        emitter.emit('unread', { count })
         break
+      }
       case 'quackback:expand': {
         // Long-form content (article/changelog detail) grows the panel.
         const m = msg as { expanded?: boolean }

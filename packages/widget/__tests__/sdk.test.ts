@@ -325,4 +325,24 @@ describe('sdk', () => {
     expect(document.querySelector('iframe[title="Feedback Widget"]')).toBeNull()
     expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
   })
+
+  it('an iframe unread count drives the launcher badge and unread subscribers', () => {
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    const handler = vi.fn()
+    sdk.dispatch('on', 'unread', handler)
+
+    window.dispatchEvent(
+      new MessageEvent('message', { origin: ORIGIN, data: { type: 'quackback:unread', count: 5 } })
+    )
+
+    // Host subscribers get the count...
+    expect(handler).toHaveBeenCalledWith({ count: 5 })
+    // ...and the launcher shows the badge.
+    const badge = (
+      document.querySelector('button[aria-label="Open feedback widget"]') as HTMLButtonElement
+    ).lastElementChild as HTMLElement
+    expect(badge.style.display).toBe('flex')
+    expect(badge.textContent).toBe('5')
+  })
 })
