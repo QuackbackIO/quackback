@@ -409,3 +409,28 @@ export const createMyTicketFn = createServerFn({ method: 'POST' })
     const { createMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
     return createMyTicket(actor, { title: data.title, description: data.description })
   })
+
+const searchSchema = z.object({
+  query: z.string(),
+  limit: z.number().int().min(1).max(50).optional(),
+})
+
+/** Admin ticket search (agent audience, scoped by ticketFilter). */
+export const searchTicketsFn = createServerFn({ method: 'GET' })
+  .validator(searchSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { searchTickets } = await import('@/lib/server/domains/tickets/ticket-search.service')
+    return searchTickets(actor, { query: data.query, audience: 'agent', limit: data.limit })
+  })
+
+/** Portal ticket search (requester audience: own customer tickets, no internals). */
+export const searchMyTicketsFn = createServerFn({ method: 'GET' })
+  .validator(searchSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    const actor = await policyActorFromAuth(ctx)
+    const { searchTickets } = await import('@/lib/server/domains/tickets/ticket-search.service')
+    return searchTickets(actor, { query: data.query, audience: 'requester', limit: data.limit })
+  })
