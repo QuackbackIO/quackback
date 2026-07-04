@@ -675,7 +675,9 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('suggest_post')
       expect(toolNames).toContain('share_post')
       expect(toolNames).toContain('set_conversation_status')
-      expect(toolNames).toHaveLength(33)
+      expect(toolNames).toContain('list_tickets')
+      expect(toolNames).toContain('get_ticket')
+      expect(toolNames).toHaveLength(35)
     })
 
     it('should handle resources/list request', async () => {
