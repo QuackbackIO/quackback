@@ -32,9 +32,10 @@ export type SlaApplied = {
   firstResponseDueAt: string | null
   nextResponseTargetSecs: number | null
   timeToCloseDueAt: string | null
-  // Lazy-eval outcome: when the first teammate reply landed (set by the breach
-  // evaluator), or null while still waiting.
+  // Lazy-eval outcomes: when the first teammate reply / the resolution landed
+  // (set by the breach evaluator), or null while that clock is still open.
   firstResponseAt?: string | null
+  resolvedAt?: string | null
 }
 
 /**
@@ -94,4 +95,79 @@ export async function applySlaToConversation(
   })
 
   return applied
+}
+
+/** The active SLA stamped on a conversation, or null when none is applied. */
+async function loadSlaApplied(conversationId: ConversationId): Promise<SlaApplied | null> {
+  const [row] = await db
+    .select({ slaApplied: conversations.slaApplied })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  return (row?.slaApplied as SlaApplied | undefined) ?? null
+}
+
+/** Persist a mutated stamp + append one clock event in a single spot (both writes
+ *  always travel together, so callers never leave the stamp and log out of sync). */
+async function commitClockEvent(
+  conversationId: ConversationId,
+  next: SlaApplied,
+  kind: string,
+  dueAt: string,
+  at: Date
+): Promise<void> {
+  const overdueMs = at.getTime() - new Date(dueAt).getTime()
+  await db
+    .update(conversations)
+    .set({ slaApplied: next, updatedAt: at })
+    .where(eq(conversations.id, conversationId))
+  await db.insert(slaEvents).values({
+    conversationId,
+    policyId: next.policyId,
+    kind,
+    meta: { dueAt, at: at.toISOString(), overdueSecs: Math.max(0, Math.round(overdueMs / 1000)) },
+  })
+}
+
+/**
+ * Record the first teammate reply against the first-response clock and log
+ * met/breached. Idempotent (only the first reply counts) and a no-op when no SLA
+ * is applied or the policy doesn't track first response. Note: pause-on-snooze is
+ * not yet reflected — the clock is the absolute deadline stamped at apply.
+ */
+export async function recordFirstResponse(
+  conversationId: ConversationId,
+  at: Date = new Date()
+): Promise<void> {
+  const applied = await loadSlaApplied(conversationId)
+  if (!applied || !applied.firstResponseDueAt || applied.firstResponseAt) return
+  const breached = at.getTime() > new Date(applied.firstResponseDueAt).getTime()
+  await commitClockEvent(
+    conversationId,
+    { ...applied, firstResponseAt: at.toISOString() },
+    breached ? 'first_response_breached' : 'first_response_met',
+    applied.firstResponseDueAt,
+    at
+  )
+}
+
+/**
+ * Record the conversation's resolution against the time-to-close clock and log
+ * met/breached. Idempotent and a no-op when no SLA is applied or the policy
+ * doesn't track time-to-close.
+ */
+export async function recordResolution(
+  conversationId: ConversationId,
+  at: Date = new Date()
+): Promise<void> {
+  const applied = await loadSlaApplied(conversationId)
+  if (!applied || !applied.timeToCloseDueAt || applied.resolvedAt) return
+  const breached = at.getTime() > new Date(applied.timeToCloseDueAt).getTime()
+  await commitClockEvent(
+    conversationId,
+    { ...applied, resolvedAt: at.toISOString() },
+    breached ? 'resolution_breached' : 'resolution_met',
+    applied.timeToCloseDueAt,
+    at
+  )
 }

@@ -23,7 +23,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import { createSlaPolicy } from '../sla-policy.service'
-import { applySlaToConversation } from '../sla.service'
+import { applySlaToConversation, recordFirstResponse, recordResolution } from '../sla.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -141,5 +141,69 @@ describe.skipIf(!fixture.available)('applySlaToConversation (real DB, rolled bac
       .from(slaEvents)
       .where(eq(slaEvents.conversationId, conversationId))
     expect(events).toHaveLength(2)
+  })
+
+  it('records a met first response inside the deadline (idempotent)', async () => {
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+    // Reply at 10:30, due 11:00 -> met.
+    await recordFirstResponse(conversationId, new Date('2026-01-05T10:30:00Z'))
+    // A second reply must not double-count.
+    await recordFirstResponse(conversationId, new Date('2026-01-05T10:45:00Z'))
+
+    const events = await testDb
+      .select()
+      .from(slaEvents)
+      .where(eq(slaEvents.conversationId, conversationId))
+    const fr = events.filter((e) => e.kind.startsWith('first_response'))
+    expect(fr).toHaveLength(1)
+    expect(fr[0].kind).toBe('first_response_met')
+    expect(fr[0].meta.overdueSecs).toBe(0)
+
+    const [conv] = await testDb
+      .select({ slaApplied: conversations.slaApplied })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    expect((conv.slaApplied as { firstResponseAt: string }).firstResponseAt).toBe(
+      '2026-01-05T10:30:00.000Z'
+    )
+  })
+
+  it('records a breached first response with the overdue seconds', async () => {
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+    // Reply at 11:10, due 11:00 -> breached by 600s.
+    await recordFirstResponse(conversationId, new Date('2026-01-05T11:10:00Z'))
+    const events = await testDb
+      .select()
+      .from(slaEvents)
+      .where(eq(slaEvents.conversationId, conversationId))
+    const fr = events.find((e) => e.kind.startsWith('first_response'))
+    expect(fr?.kind).toBe('first_response_breached')
+    expect(fr?.meta.overdueSecs).toBe(600)
+  })
+
+  it('records resolution against time-to-close, and is a no-op without an SLA', async () => {
+    const withSla = await seedConversation()
+    const policy = await createSlaPolicy({ name: 'Close', timeToCloseTargetSecs: 4 * 3600 })
+    await applySlaToConversation(withSla, policy.id, new Date('2026-01-05T10:00:00Z'))
+    // Resolved at 15:00, due 14:00 -> breached by 3600s.
+    await recordResolution(withSla, new Date('2026-01-05T15:00:00Z'))
+    const resEvents = await testDb
+      .select()
+      .from(slaEvents)
+      .where(eq(slaEvents.conversationId, withSla))
+    expect(resEvents.find((e) => e.kind.startsWith('resolution'))?.kind).toBe('resolution_breached')
+
+    // A conversation with no SLA applied -> both recorders are silent no-ops.
+    const noSla = await seedConversation()
+    await recordFirstResponse(noSla, new Date('2026-01-05T10:00:00Z'))
+    await recordResolution(noSla, new Date('2026-01-05T10:00:00Z'))
+    const none = await testDb.select().from(slaEvents).where(eq(slaEvents.conversationId, noSla))
+    expect(none).toHaveLength(0)
   })
 })
