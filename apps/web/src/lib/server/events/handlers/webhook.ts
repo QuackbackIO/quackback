@@ -7,11 +7,11 @@
  */
 
 import crypto from 'crypto'
-import dns from 'dns/promises'
 import type { HookHandler, HookResult, HookRunContext } from '../hook-types'
 import type { EventData } from '../types'
 import type { WebhookTarget, WebhookConfig } from '../integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
+import { safeFetch, SsrfError, TimeoutError } from '@/lib/server/content/ssrf-guard'
 import { isRetryableError } from '../hook-utils'
 import { claimHookDelivery } from '../hook-idempotency'
 import { logger } from '@/lib/server/logger'
@@ -22,69 +22,6 @@ const log = logger.child({ component: 'webhook' })
 
 const TIMEOUT_MS = 5_000 // 5s timeout for single attempt
 const USER_AGENT = 'Quackback-Webhook/1.0 (+https://quackback.io)'
-
-/**
- * Private IP ranges that should be blocked (SSRF protection).
- * Checked at delivery time to prevent DNS rebinding attacks.
- */
-const PRIVATE_IP_RANGES = [
-  /^127\./, // Loopback
-  /^10\./, // Class A private
-  /^172\.(1[6-9]|2[0-9]|3[01])\./, // Class B private
-  /^192\.168\./, // Class C private
-  /^169\.254\./, // Link-local
-  /^0\./, // "This" network
-  /^::1$/, // IPv6 loopback
-  /^f[cd]00:/i, // IPv6 private (fc00::/7 = fc00::/8 + fd00::/8)
-  /^fe80:/i, // IPv6 link-local
-  /^::ffff:(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.)/, // IPv4-mapped IPv6
-]
-
-/**
- * Check if an IP address is private/internal.
- */
-function isPrivateIP(ip: string): boolean {
-  return PRIVATE_IP_RANGES.some((pattern) => pattern.test(ip))
-}
-
-/**
- * Resolve hostname and verify it doesn't point to a private IP.
- * Returns the resolved IP to use for the actual request (prevents TOCTOU/DNS rebinding).
- */
-async function resolveAndValidateIP(
-  hostname: string
-): Promise<{ valid: boolean; ip?: string; error?: string }> {
-  try {
-    // Prefer IPv4 for broader compatibility
-    const addresses = await dns.resolve4(hostname).catch(() => [])
-
-    if (addresses.length === 0) {
-      // Try IPv6 if no IPv4
-      const addresses6 = await dns.resolve6(hostname).catch(() => [])
-      if (addresses6.length === 0) {
-        return { valid: false, error: 'Could not resolve hostname' }
-      }
-      // Check IPv6 addresses
-      for (const ip of addresses6) {
-        if (isPrivateIP(ip)) {
-          return { valid: false, error: `DNS resolves to private IP: ${ip}` }
-        }
-      }
-      return { valid: true, ip: `[${addresses6[0]}]` } // IPv6 needs brackets in URL
-    }
-
-    // Check IPv4 addresses
-    for (const ip of addresses) {
-      if (isPrivateIP(ip)) {
-        return { valid: false, error: `DNS resolves to private IP: ${ip}` }
-      }
-    }
-
-    return { valid: true, ip: addresses[0] }
-  } catch (error) {
-    return { valid: false, error: `DNS resolution failed: ${error}` }
-  }
-}
 
 export const webhookHook: HookHandler = {
   async run(
@@ -108,16 +45,6 @@ export const webhookHook: HookHandler = {
 
     log.debug({ event_type: event.type, url }, 'processing webhook')
 
-    // SSRF protection: Resolve and validate IP at delivery time
-    // Note: We validate the IP but use the original hostname for the request
-    // to ensure TLS certificates match. The TOCTOU window is minimal in practice.
-    const parsedUrl = new URL(url)
-    const ipCheck = await resolveAndValidateIP(parsedUrl.hostname)
-    if (!ipCheck.valid) {
-      log.error({ url, reason: ipCheck.error }, 'ssrf blocked')
-      return { success: false, error: ipCheck.error, shouldRetry: false }
-    }
-
     // Build payload
     const payload = JSON.stringify({
       id: `evt_${crypto.randomUUID().replace(/-/g, '')}`,
@@ -140,18 +67,16 @@ export const webhookHook: HookHandler = {
     }
 
     try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
-
-      const response = await fetch(url, {
+      // safeFetch is the single SSRF chokepoint: it validates the host, then
+      // pins the connection to the validated IP (no second DNS resolution),
+      // closing the TOCTOU the bare fetch left open, and never follows a
+      // redirect. Replaces this handler's own divergent private-IP guard.
+      const response = await safeFetch(url, {
         method: 'POST',
         headers,
         body: payload,
-        signal: controller.signal,
-        redirect: 'error', // Prevent SSRF via redirects to internal IPs
+        timeoutMs: TIMEOUT_MS,
       })
-
-      clearTimeout(timeoutId)
 
       if (response.ok) {
         log.info({ event_type: event.type, url }, 'webhook delivered')
@@ -165,11 +90,19 @@ export const webhookHook: HookHandler = {
       const retryable = response.status >= 500 || response.status === 429
       return { success: false, error, shouldRetry: retryable }
     } catch (error) {
-      let errorMsg = 'Unknown error'
-      if (error instanceof Error) {
-        errorMsg = error.name === 'AbortError' ? 'Request timeout' : error.message
+      // An SSRF-blocked target (private/internal IP, bad scheme) never becomes
+      // valid on retry — fail permanently, as the old pre-check did.
+      if (error instanceof SsrfError) {
+        log.error({ url, reason: error.message }, 'ssrf blocked')
+        return { success: false, error: error.message, shouldRetry: false }
+      }
+      // A timeout is transient — retry.
+      if (error instanceof TimeoutError) {
+        log.warn({ url }, 'webhook delivery timed out')
+        return { success: false, error: 'Request timeout', shouldRetry: true }
       }
 
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       log.error({ err: error, url }, 'webhook delivery failed')
       const retryable = isRetryableError(error)
       return { success: false, error: errorMsg, shouldRetry: retryable }

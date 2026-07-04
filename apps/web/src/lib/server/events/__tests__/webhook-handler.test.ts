@@ -7,8 +7,10 @@
  * - Request timeout handling
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import crypto from 'crypto'
+
+const h = vi.hoisted(() => ({ safeFetch: vi.fn(), claim: vi.fn(async () => true) }))
 
 // Mock the db import before importing the handler
 vi.mock('@/lib/server/db', () => ({
@@ -23,6 +25,17 @@ vi.mock('@/lib/server/db', () => ({
   eq: vi.fn(),
   sql: vi.fn(),
 }))
+
+// Keep the real SsrfError/TimeoutError classes (instanceof drives retry
+// classification); mock only the network call + the idempotency claim.
+vi.mock('@/lib/server/content/ssrf-guard', async (orig) => {
+  const actual = await orig<typeof import('@/lib/server/content/ssrf-guard')>()
+  return { ...actual, safeFetch: (...a: unknown[]) => h.safeFetch(...a) }
+})
+vi.mock('../hook-idempotency', () => ({ claimHookDelivery: (...a: unknown[]) => h.claim(...a) }))
+
+import { webhookHook } from '../handlers/webhook'
+import { SsrfError, TimeoutError } from '@/lib/server/content/ssrf-guard'
 
 describe('Webhook Handler', () => {
   describe('HMAC Signature Generation', () => {
@@ -69,72 +82,60 @@ describe('Webhook Handler', () => {
     })
   })
 
-  describe('SSRF Protection - Private IP Detection', () => {
-    const PRIVATE_IP_RANGES = [
-      /^127\./, // Loopback
-      /^10\./, // Class A private
-      /^172\.(1[6-9]|2[0-9]|3[01])\./, // Class B private
-      /^192\.168\./, // Class C private
-      /^169\.254\./, // Link-local
-      /^0\./, // "This" network
-      /^::1$/, // IPv6 loopback
-      /^f[cd]00:/i, // IPv6 private (fc00::/7 = fc00::/8 + fd00::/8)
-      /^fe80:/i, // IPv6 link-local
-    ]
+  // SSRF protection is now delegated to the central safeFetch guard (it validates
+  // the host + pins the connection to the validated IP, closing the TOCTOU the
+  // old per-handler dns pre-check left open). These exercise the real run() path.
+  describe('SSRF-safe delivery via safeFetch', () => {
+    const event = {
+      id: 'evt_1',
+      type: 'post.created',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user' },
+      data: { post: { id: 'post_1' } },
+    } as never
+    const target = { url: 'https://hooks.example.com/deliver' }
+    const config = { secret: 'whsec_test', webhookId: 'webhook_1' }
+    const resp = (status: number): Response =>
+      ({ ok: status >= 200 && status < 300, status }) as Response
 
-    function isPrivateIP(ip: string): boolean {
-      return PRIVATE_IP_RANGES.some((pattern) => pattern.test(ip))
-    }
+    beforeEach(() => {
+      vi.clearAllMocks()
+      h.claim.mockResolvedValue(true)
+    })
 
-    describe('IPv4 Private Ranges', () => {
-      it('blocks loopback addresses (127.x.x.x)', () => {
-        expect(isPrivateIP('127.0.0.1')).toBe(true)
-        expect(isPrivateIP('127.255.255.255')).toBe(true)
-      })
+    it('delivers through safeFetch (POST + signed headers), succeeding on 2xx', async () => {
+      h.safeFetch.mockResolvedValue(resp(200))
+      const res = await webhookHook.run!(event, target, config)
+      expect(res.success).toBe(true)
 
-      it('blocks Class A private (10.x.x.x)', () => {
-        expect(isPrivateIP('10.0.0.1')).toBe(true)
-        expect(isPrivateIP('10.255.255.255')).toBe(true)
-      })
+      const [url, init] = h.safeFetch.mock.calls[0]
+      expect(url).toBe(target.url)
+      expect(init.method).toBe('POST')
+      expect(init.headers['X-Quackback-Event']).toBe('post.created')
+      expect(init.headers['X-Quackback-Signature']).toMatch(/^sha256=/)
+    })
 
-      it('blocks Class B private (172.16-31.x.x)', () => {
-        expect(isPrivateIP('172.16.0.1')).toBe(true)
-        expect(isPrivateIP('172.31.255.255')).toBe(true)
-        // Outside range should be public
-        expect(isPrivateIP('172.15.0.1')).toBe(false)
-        expect(isPrivateIP('172.32.0.1')).toBe(false)
-      })
-
-      it('blocks Class C private (192.168.x.x)', () => {
-        expect(isPrivateIP('192.168.0.1')).toBe(true)
-        expect(isPrivateIP('192.168.255.255')).toBe(true)
-      })
-
-      it('blocks link-local (169.254.x.x)', () => {
-        expect(isPrivateIP('169.254.0.1')).toBe(true)
-        expect(isPrivateIP('169.254.255.255')).toBe(true)
-      })
-
-      it('allows public IPv4 addresses', () => {
-        expect(isPrivateIP('8.8.8.8')).toBe(false)
-        expect(isPrivateIP('1.1.1.1')).toBe(false)
-        expect(isPrivateIP('93.184.216.34')).toBe(false)
+    it('fails permanently (no retry) when safeFetch blocks an SSRF target', async () => {
+      h.safeFetch.mockRejectedValue(new SsrfError('ssrf-rejected'))
+      expect(await webhookHook.run!(event, target, config)).toMatchObject({
+        success: false,
+        shouldRetry: false,
       })
     })
 
-    describe('IPv6 Private Ranges', () => {
-      it('blocks IPv6 loopback (::1)', () => {
-        expect(isPrivateIP('::1')).toBe(true)
+    it('retries on a timeout', async () => {
+      h.safeFetch.mockRejectedValue(new TimeoutError(5000))
+      expect(await webhookHook.run!(event, target, config)).toMatchObject({
+        success: false,
+        shouldRetry: true,
       })
+    })
 
-      it('blocks IPv6 private (fc00::/7)', () => {
-        expect(isPrivateIP('fc00::1')).toBe(true)
-        expect(isPrivateIP('fd00::1')).toBe(true) // fd00::/8 is part of fc00::/7
-      })
-
-      it('blocks IPv6 link-local (fe80::/10)', () => {
-        expect(isPrivateIP('fe80::1')).toBe(true)
-      })
+    it('retries a 5xx but not a 4xx response', async () => {
+      h.safeFetch.mockResolvedValue(resp(503))
+      expect(await webhookHook.run!(event, target, config)).toMatchObject({ shouldRetry: true })
+      h.safeFetch.mockResolvedValue(resp(400))
+      expect(await webhookHook.run!(event, target, config)).toMatchObject({ shouldRetry: false })
     })
   })
 
