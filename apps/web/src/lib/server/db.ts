@@ -190,6 +190,10 @@ export {
   officeHoursSchedules,
   slaPolicies,
   slaEvents,
+  // Schema tables - workflows engine (support platform §4.6)
+  workflows,
+  workflowRuns,
+  workflowRunEvents,
   // Schema tables - integrations
   integrationEventMappings,
   integrationEventMappingsRelations,
@@ -363,6 +367,14 @@ export type {
 } from '@quackback/db'
 export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
 export type { SlaPolicy, SlaEvent } from '@quackback/db'
+export type {
+  Workflow,
+  WorkflowRun,
+  WorkflowRunEvent,
+  WorkflowClass,
+  WorkflowStatus,
+  WorkflowRunState,
+} from '@quackback/db'
 
 // Re-export types (for client components that need types without side effects)
 export * from '@quackback/db/types'

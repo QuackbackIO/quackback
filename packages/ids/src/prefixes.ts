@@ -66,6 +66,9 @@ export const ID_PREFIXES = {
   office_hours: 'office_hours',
   sla_policy: 'sla_policy',
   sla_event: 'sla_event',
+  workflow: 'workflow',
+  workflow_run: 'workflow_run',
+  workflow_run_event: 'workflow_run_event',
 
   // Integrations
   integration: 'integration',

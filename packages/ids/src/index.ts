@@ -111,6 +111,9 @@ export type {
   OfficeHoursId,
   SlaPolicyId,
   SlaEventId,
+  WorkflowId,
+  WorkflowRunId,
+  WorkflowRunEventId,
   // Feedback aggregation entities
   FeedbackSourceId,
   RawFeedbackItemId,

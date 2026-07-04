@@ -163,6 +163,15 @@ export type SlaPolicyId = TypeId<'sla_policy'>
 /** SLA event ID (§4.6) - e.g., sla_event_01h455vb4pex5vsknk084sn02q */
 export type SlaEventId = TypeId<'sla_event'>
 
+/** Workflow ID (§4.6) - e.g., workflow_01h455vb4pex5vsknk084sn02q */
+export type WorkflowId = TypeId<'workflow'>
+
+/** Workflow run ID (§4.6) - e.g., workflow_run_01h455vb4pex5vsknk084sn02q */
+export type WorkflowRunId = TypeId<'workflow_run'>
+
+/** Workflow run-event ID (§4.6) - e.g., workflow_run_event_01h455vb4pex5vsknk084sn02q */
+export type WorkflowRunEventId = TypeId<'workflow_run_event'>
+
 /** Team ID - e.g., team_01h455vb4pex5vsknk084sn02q */
 export type TeamId = TypeId<'team'>
 
@@ -303,6 +312,9 @@ export interface EntityIdMap {
   office_hours: OfficeHoursId
   sla_policy: SlaPolicyId
   sla_event: SlaEventId
+  workflow: WorkflowId
+  workflow_run: WorkflowRunId
+  workflow_run_event: WorkflowRunEventId
   team: TeamId
   team_member: TeamMemberId
   macro: MacroId
