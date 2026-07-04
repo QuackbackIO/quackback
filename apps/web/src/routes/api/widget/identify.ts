@@ -21,6 +21,8 @@ import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
 import { verifyHS256JWT } from '@/lib/server/widget/identity-token'
+import { getClientIp } from '@/lib/server/domains/api/rate-limit'
+import { checkWidgetIdentifyRateLimit } from '@/lib/server/auth/widget-rate-limit'
 import {
   validateAndCoerceAttributes,
   mergeMetadata,
@@ -143,6 +145,19 @@ export const Route = createFileRoute('/api/widget/identify')({
         const widgetConfig = await getWidgetConfig()
         if (!widgetConfig.enabled) {
           return jsonError('WIDGET_DISABLED', 'Widget is not enabled', 403)
+        }
+
+        // Bound identify attempts per client before any token work (Phase 6 R1):
+        // this endpoint is open, so it must not be an unmetered ssoToken oracle.
+        const rl = await checkWidgetIdentifyRateLimit(getClientIp(request.headers)).catch(() => ({
+          allowed: true,
+        }))
+        if (!rl.allowed) {
+          return jsonError(
+            'RATE_LIMITED',
+            'Too many identify attempts, please try again later',
+            429
+          )
         }
 
         let body: z.infer<typeof identifySchema>

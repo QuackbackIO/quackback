@@ -52,6 +52,11 @@ vi.mock('@/lib/server/auth/signin-rate-limit', () => ({
     mockCheckMagicLinkRateLimit(ip, email),
 }))
 
+const mockCheckAnonMintRateLimit = vi.fn()
+vi.mock('@/lib/server/auth/widget-rate-limit', () => ({
+  checkAnonMintRateLimit: (ip: string) => mockCheckAnonMintRateLimit(ip),
+}))
+
 const mockRecordAuditEvent = vi.fn(async (_spec: unknown) => undefined)
 vi.mock('@/lib/server/audit/log', () => ({
   recordAuditEvent: (spec: unknown) => mockRecordAuditEvent(spec),
@@ -134,6 +139,7 @@ beforeEach(() => {
   // The provider-registry mocks are seeded by the `tenant()` call above.
   mockCheckSignInRateLimit.mockResolvedValue({ allowed: true })
   mockCheckMagicLinkRateLimit.mockResolvedValue({ allowed: true })
+  mockCheckAnonMintRateLimit.mockResolvedValue({ allowed: true })
 })
 
 // ============================================================
@@ -535,5 +541,52 @@ describe('handleSignInPreCheck — sign-in rate-limit', () => {
     await handleSignInPreCheck(ctx)
     expect(mockCheckSignInRateLimit).toHaveBeenCalledWith(expect.any(String), 'a@b.com')
     expect(mockCheckMagicLinkRateLimit).not.toHaveBeenCalled()
+  })
+})
+
+// ============================================================
+// Anonymous-mint rate limit (widget /sign-in/anonymous)
+// ============================================================
+
+describe('handleSignInPreCheck — anonymous-mint rate-limit', () => {
+  it('bounds the mint per-IP, not per-email (the body carries no email)', async () => {
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    await handleSignInPreCheck(ctx)
+    expect(mockCheckAnonMintRateLimit).toHaveBeenCalledWith(expect.any(String))
+    // The email limiters are for credential/magic-link, not the mint.
+    expect(mockCheckSignInRateLimit).not.toHaveBeenCalled()
+    expect(mockCheckMagicLinkRateLimit).not.toHaveBeenCalled()
+  })
+
+  it('throws a 429 APIError with a Retry-After when the mint limiter caps', async () => {
+    mockCheckAnonMintRateLimit.mockResolvedValueOnce({ allowed: false, retryAfter: 90 })
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    const err = await handleSignInPreCheck(ctx).catch((e) => e)
+    expect((err as { name?: string }).name).toBe('APIError')
+    expect((err as { statusCode?: number }).statusCode).toBe(429)
+    expect((err as { body?: { code?: string } }).body?.code).toBe('rate_limited')
+    expect((err as { headers?: Record<string, string> }).headers?.['Retry-After']).toBe('90')
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('short-circuits before any tenant/DB work (mint never needs the domain policy)', async () => {
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    await handleSignInPreCheck(ctx)
+    expect(mockGetTenantSettings).not.toHaveBeenCalled()
+    expect(mockUserFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('fails open when the mint limiter throws (a cache blip must not block visitors)', async () => {
+    mockCheckAnonMintRateLimit.mockRejectedValueOnce(new Error('redis down'))
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    await handleSignInPreCheck(ctx)
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+
+  it('omits Retry-After when the mint limiter did not provide one', async () => {
+    mockCheckAnonMintRateLimit.mockResolvedValueOnce({ allowed: false })
+    const ctx = ctxFor('/sign-in/anonymous', {})
+    const err = await handleSignInPreCheck(ctx).catch((e) => e)
+    expect((err as { headers?: Record<string, string> }).headers?.['Retry-After']).toBeUndefined()
   })
 })

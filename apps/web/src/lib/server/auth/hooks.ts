@@ -36,6 +36,7 @@ import {
   checkMagicLinkSendRateLimit,
   type SignInRateLimiter,
 } from './signin-rate-limit'
+import { checkAnonMintRateLimit } from './widget-rate-limit'
 import {
   computeDeviceFingerprint,
   forgetDevice,
@@ -92,6 +93,10 @@ export function inferProvider(ctx: {
     case '/email-otp/send-verification-otp':
     case '/sign-in/email-otp':
       return 'magic-link'
+    case '/sign-in/anonymous':
+      // The widget's lazy anonymous-session mint. Carries no email, so it's
+      // rate-limited per-IP by handleSignInPreCheck, not selectSignInRateLimiter.
+      return 'anonymous'
     case '/sign-in/social': {
       const v = ctx.body?.provider
       return typeof v === 'string' ? v : null
@@ -188,6 +193,25 @@ export async function handleSignInPreCheck(ctx: {
   }
 
   if (NO_EMAIL_BEFORE_PATHS.has(ctx.path ?? '')) return
+
+  // The anonymous mint carries no email, so it can't ride the per-email
+  // limiters below — bound it per-IP here instead. Without this, the widget's
+  // open mint endpoint is an unmetered way to flood the session table.
+  if (provider === 'anonymous') {
+    const mintIp = getClientIp(getRequestHeaders())
+    const mintResult = await checkAnonMintRateLimit(mintIp).catch((error) => {
+      log.error({ err: error }, 'anon-mint rate-limit check threw; failing open')
+      return { allowed: true as const }
+    })
+    if (!mintResult.allowed) {
+      throw new APIError(
+        'TOO_MANY_REQUESTS',
+        { code: 'rate_limited', message: AUTH_BLOCK_MESSAGES.rate_limited },
+        mintResult.retryAfter ? { 'Retry-After': String(mintResult.retryAfter) } : undefined
+      )
+    }
+    return
+  }
 
   const body = ctx.body as { email?: unknown } | undefined
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : null
