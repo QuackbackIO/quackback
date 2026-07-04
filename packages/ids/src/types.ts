@@ -154,6 +154,9 @@ export type ChannelAccountId = TypeId<'channel_account'>
 /** Sending domain ID (§4.8) - e.g., sending_domain_01h455vb4pex5vsknk084sn02q */
 export type SendingDomainId = TypeId<'sending_domain'>
 
+/** Office-hours schedule ID (§4.6) - e.g., office_hours_01h455vb4pex5vsknk084sn02q */
+export type OfficeHoursId = TypeId<'office_hours'>
+
 /** Team ID - e.g., team_01h455vb4pex5vsknk084sn02q */
 export type TeamId = TypeId<'team'>
 
@@ -291,6 +294,7 @@ export interface EntityIdMap {
   ticket_status: TicketStatusId
   channel_account: ChannelAccountId
   sending_domain: SendingDomainId
+  office_hours: OfficeHoursId
   team: TeamId
   team_member: TeamMemberId
   macro: MacroId

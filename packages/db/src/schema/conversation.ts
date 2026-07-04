@@ -120,6 +120,9 @@ export const conversations = pgTable(
     // messenger/web_form; set to the workspace's inbound channel_account for
     // email. `set null` so a removed inbox leaves history rather than orphaning it.
     channelAccountId: typeIdColumnNullable('channel_account')('channel_account_id'),
+    // The one active SLA applied to this conversation (§4.6 reserved seam), or
+    // null. The Apply-SLA workflow action (a later slice) owns the shape.
+    slaApplied: jsonb('sla_applied').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },

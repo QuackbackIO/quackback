@@ -62,6 +62,9 @@ export const ID_PREFIXES = {
   channel_account: 'channel_account',
   sending_domain: 'sending_domain',
 
+  // Workflows + SLA + office hours (support platform §4.6)
+  office_hours: 'office_hours',
+
   // Integrations
   integration: 'integration',
   platform_cred: 'platform_cred',

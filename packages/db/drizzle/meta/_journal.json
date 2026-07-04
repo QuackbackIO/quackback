@@ -1072,6 +1072,13 @@
       "when": 1784765640000,
       "tag": "0152_email_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1784765700000,
+      "tag": "0153_office_hours",
+      "breakpoints": true
     }
   ]
 }

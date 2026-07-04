@@ -186,6 +186,8 @@ export {
   // Schema tables - email channel (support platform §4.8)
   channelAccounts,
   emailSendingDomains,
+  // Schema tables - office hours (support platform §4.6)
+  officeHoursSchedules,
   // Schema tables - integrations
   integrationEventMappings,
   integrationEventMappingsRelations,
@@ -357,6 +359,7 @@ export type {
   ChannelAccountConfig,
   SendingDomainDnsRecord,
 } from '@quackback/db'
+export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
 
 // Re-export types (for client components that need types without side effects)
 export * from '@quackback/db/types'

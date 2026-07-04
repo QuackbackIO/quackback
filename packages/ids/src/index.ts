@@ -108,6 +108,7 @@ export type {
   TicketStatusId,
   ChannelAccountId,
   SendingDomainId,
+  OfficeHoursId,
   // Feedback aggregation entities
   FeedbackSourceId,
   RawFeedbackItemId,
