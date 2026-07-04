@@ -24,7 +24,7 @@ import {
 } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
-import { resolveActorPermissions } from '@/lib/server/policy/permissions'
+import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import { applyAction } from './action.executor'
 import { walkWorkflow, type WorkflowGraph, type WalkResult } from './graph'
@@ -35,15 +35,32 @@ import { scheduleWorkflowResume } from './workflow-wait-queue'
 
 const log = logger.child({ component: 'workflow-engine' })
 
-/** The authority a workflow acts with: a service actor with admin permissions, so
- *  every catalogue action's canActAsAgent gate passes (like the full API key). */
+/**
+ * The bounded authority a workflow acts with: exactly the support actions the v1
+ * catalogue applies, named explicitly rather than inheriting the whole admin role
+ * — so the ceiling stays intentional and can't silently widen as admin grows. A
+ * workflow can act on conversations but nothing outside support.
+ */
+const AUTOMATION_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PERMISSIONS.CONVERSATION_VIEW,
+  PERMISSIONS.CONVERSATION_VIEW_ALL,
+  PERMISSIONS.CONVERSATION_REPLY, // the canActAsAgent gate every action passes
+  PERMISSIONS.CONVERSATION_ASSIGN,
+  PERMISSIONS.CONVERSATION_SET_STATUS,
+  PERMISSIONS.CONVERSATION_SET_TAGS,
+  PERMISSIONS.CONVERSATION_SET_ATTRIBUTES,
+  PERMISSIONS.SLA_MANAGE,
+])
+
 function workflowActor(): Actor {
   return {
     principalId: null,
     role: 'admin',
     principalType: 'service',
     segmentIds: new Set(),
-    permissions: resolveActorPermissions('admin'),
+    // The bounded set, not resolveActorPermissions('admin') — can() reads
+    // actor.permissions, so this is the effective ceiling.
+    permissions: new Set(AUTOMATION_PERMISSIONS),
   }
 }
 
