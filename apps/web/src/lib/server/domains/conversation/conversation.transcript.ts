@@ -8,6 +8,8 @@ import type { ConversationMessageDTO, MessageSenderType } from '@/lib/shared/con
 
 export interface TranscriptMeta {
   id: string
+  /** Header title; defaults to `Conversation {id}`. Tickets pass `Ticket #142`. */
+  heading?: string
   subject?: string | null
   status?: string | null
   channel?: string | null
@@ -47,7 +49,7 @@ export function renderConversationTranscript(
   meta: TranscriptMeta,
   messages: TranscriptMessage[]
 ): string {
-  const lines: string[] = [`# Conversation ${meta.id}`, '']
+  const lines: string[] = [`# ${meta.heading ?? `Conversation ${meta.id}`}`, '']
   if (meta.subject?.trim()) lines.push(`- Subject: ${meta.subject.trim()}`)
   if (meta.status) lines.push(`- Status: ${meta.status}`)
   if (meta.channel) lines.push(`- Channel: ${meta.channel}`)

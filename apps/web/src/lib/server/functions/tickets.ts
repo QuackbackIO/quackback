@@ -395,6 +395,52 @@ export const listTicketMessagesFn = createServerFn({ method: 'GET' })
     })
   })
 
+/**
+ * Export a ticket as a markdown transcript (agent-only — includes internal
+ * notes). Pages the full thread oldest-first and renders it with the shared
+ * transcript renderer. Returns the file body for the client to download.
+ */
+export const exportTicketTranscriptFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const { isTeamMember } = await import('@/lib/shared/roles')
+    if (!isTeamMember(ctx.principal.role)) {
+      throw new ForbiddenError('FORBIDDEN', 'Only team members can export a transcript')
+    }
+    const ticketId = data.ticketId as TicketId
+    const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+    const ticket = await getTicket(ticketId)
+    const { listTicketMessages } =
+      await import('@/lib/server/domains/tickets/ticket-message.service')
+
+    // Assemble the full thread oldest-first. listTicketMessages carries no
+    // nextCursor, so the oldest message of each (oldest-first) page is the
+    // before-cursor for the next, older page. Bounded loop.
+    const all: Awaited<ReturnType<typeof listTicketMessages>>['messages'] = []
+    let before: string | undefined
+    for (let i = 0; i < 500; i++) {
+      const page = await listTicketMessages(ticketId, { includeInternal: true, before })
+      all.unshift(...page.messages)
+      if (!page.hasMore || page.messages.length === 0) break
+      before = page.messages[0].id
+    }
+
+    const { renderConversationTranscript } =
+      await import('@/lib/server/domains/conversation/conversation.transcript')
+    const content = renderConversationTranscript(
+      {
+        id: ticketId,
+        heading: `Ticket ${ticket.reference}`,
+        subject: ticket.title,
+        status: ticket.status.name,
+        createdAt: ticket.createdAt,
+      },
+      all
+    )
+    return { filename: `ticket-${ticket.number}.md`, content, mimeType: 'text/markdown' }
+  })
+
 // ---------------------------------------------------------------------------
 // Requester-facing (portal) — a customer reads + replies on their OWN customer
 // tickets. No `ticket.*` permission: the domain gates on ownership. Any signed-in

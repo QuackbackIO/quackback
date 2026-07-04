@@ -2,24 +2,28 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
-import type { ConversationId } from '@quackback/ids'
-import { exportConversationTranscriptFn } from '@/lib/server/functions/conversation'
+
+interface TranscriptFile {
+  filename: string
+  content: string
+  mimeType: string
+}
 
 /**
- * Agent action: download the conversation as a markdown transcript (records,
- * compliance, handoff). The server renders the file; this just triggers the
- * browser download. Agent-only — the transcript includes internal notes.
+ * Agent action: download a thread as a markdown transcript (records, compliance,
+ * handoff). The server renders the file; this just triggers the browser
+ * download. Works for any thread — the caller supplies the loader (a
+ * conversation or ticket export fn). Agent-only: transcripts include internal
+ * notes.
  */
-export function ExportTranscriptButton({ conversationId }: { conversationId: ConversationId }) {
+export function ExportTranscriptButton({ load }: { load: () => Promise<TranscriptFile> }) {
   const [busy, setBusy] = useState(false)
 
   const onExport = async () => {
     if (busy) return
     setBusy(true)
     try {
-      const { filename, content, mimeType } = await exportConversationTranscriptFn({
-        data: { conversationId },
-      })
+      const { filename, content, mimeType } = await load()
       const url = URL.createObjectURL(new Blob([content], { type: `${mimeType};charset=utf-8` }))
       const a = document.createElement('a')
       a.href = url

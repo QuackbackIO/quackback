@@ -14,6 +14,8 @@ import {
   TicketPriorityControl,
 } from '@/components/admin/tickets/ticket-controls'
 import { TicketLinks } from '@/components/admin/tickets/ticket-links'
+import { ExportTranscriptButton } from '@/components/admin/conversation/export-transcript-button'
+import { exportTicketTranscriptFn } from '@/lib/server/functions/tickets'
 import { Avatar } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
@@ -97,6 +99,13 @@ export function TicketDetailPanel({
           {/* Tracker links (§4.9) */}
           <div className="space-y-2 border-t border-border/30 pt-4">
             <TicketLinks ticket={ticket} onChanged={onChanged} />
+          </div>
+
+          {/* Export */}
+          <div className="border-t border-border/30 pt-4">
+            <ExportTranscriptButton
+              load={() => exportTicketTranscriptFn({ data: { ticketId: ticket.id } })}
+            />
           </div>
 
           {/* Timeline */}

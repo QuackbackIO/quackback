@@ -92,6 +92,12 @@ describe('renderConversationTranscript', () => {
     expect(out).toContain('    - attachment: screenshot.png')
   })
 
+  it('uses a custom heading when provided (e.g. a ticket reference)', () => {
+    const out = renderConversationTranscript({ id: 'ticket_1', heading: 'Ticket #142' }, [])
+    expect(out).toContain('# Ticket #142')
+    expect(out).not.toContain('# Conversation')
+  })
+
   it('omits optional metadata when absent and marks an unknown open time', () => {
     const out = renderConversationTranscript({ id: 'c' }, [])
     expect(out).not.toContain('- Subject:')

@@ -24,6 +24,7 @@ import { CONVERSATION_END_REASON_LABELS } from '@/lib/shared/conversation/types'
 import {
   listConversationsForUserFn,
   getConversationAssistantActivityFn,
+  exportConversationTranscriptFn,
 } from '@/lib/server/functions/conversation'
 import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
@@ -307,7 +308,11 @@ export function ConversationDetailPanel({
                 <ConversationTagsEditor conversationId={conversation.id} tags={conversation.tags} />
               </div>
             </Row>
-            <ExportTranscriptButton conversationId={conversation.id} />
+            <ExportTranscriptButton
+              load={() =>
+                exportConversationTranscriptFn({ data: { conversationId: conversation.id } })
+              }
+            />
             <Row icon={InboxArrowDownIcon} label="Channel">
               <span className="text-sm font-medium text-foreground">
                 {CHANNEL_LABEL[conversation.channel]}
