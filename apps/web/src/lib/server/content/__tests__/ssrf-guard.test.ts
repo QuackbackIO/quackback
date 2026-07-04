@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { EventEmitter } from 'node:events'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
