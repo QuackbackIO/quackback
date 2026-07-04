@@ -5,6 +5,7 @@ import {
   SparklesIcon,
   NewspaperIcon,
   BellIcon,
+  TicketIcon,
 } from '@heroicons/react/24/solid'
 import type { NotificationType } from '@/lib/shared/types'
 
@@ -44,6 +45,11 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     icon: ChatBubbleLeftRightIcon,
     iconClass: 'text-teal-500',
     bgClass: 'bg-teal-500/10',
+  },
+  ticket_status_changed: {
+    icon: TicketIcon,
+    iconClass: 'text-blue-500',
+    bgClass: 'bg-blue-500/10',
   },
 }
 

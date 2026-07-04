@@ -75,6 +75,19 @@ export function NotificationItem({
     )
   }
 
+  // A ticket-stage change notifies the requester (portal); deep-link to the thread.
+  if (notification.type === 'ticket_status_changed' && notification.ticketId) {
+    return (
+      <Link
+        to="/support/ticket/$ticketId"
+        params={{ ticketId: notification.ticketId }}
+        onClick={handleClick}
+      >
+        {content}
+      </Link>
+    )
+  }
+
   const isAdminContext = pathname.startsWith('/admin')
   const fallbackTo = isAdminContext ? '/admin/notifications' : '/notifications'
 

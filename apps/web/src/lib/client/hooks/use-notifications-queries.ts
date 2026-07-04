@@ -35,6 +35,8 @@ export interface SerializedNotification {
   commentId: string | null
   /** Target conversation for conversation notifications (from metadata); null otherwise. */
   conversationId: string | null
+  /** Target ticket for ticket notifications (from metadata); null otherwise. */
+  ticketId: string | null
   readAt: string | null
   archivedAt: string | null
   createdAt: string

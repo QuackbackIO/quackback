@@ -43,6 +43,7 @@ import { formatTicketNumber, type TicketStageLabels } from '@/lib/shared/tickets
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
 import { getStageLabels } from '../settings/settings.tickets'
+import { createNotification } from '../notifications/notification.service'
 import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
 import type {
   CreateTicketInput,
@@ -386,8 +387,18 @@ export async function setTicketStatus(
   const newStage = resolveStage(target)
   const oldStage = current ? resolveStage(current) : null
   if (newStage && newStage !== oldStage) {
-    const labels = await getStageLabels()
-    await postTicketStatusEvent(id, labels[newStage])
+    const stageLabel = (await getStageLabels())[newStage]
+    await postTicketStatusEvent(id, stageLabel)
+    // Notify the requester's bell that their ticket progressed. The system-1
+    // email (§4.8) and the conversation echo ride this same crossing later.
+    if (existing.requesterPrincipalId) {
+      await createNotification({
+        principalId: existing.requesterPrincipalId,
+        type: 'ticket_status_changed',
+        title: `${updated.title} is now ${stageLabel}`,
+        metadata: { ticketId: id },
+      })
+    }
   }
 
   return ticketRowToDTO(updated)

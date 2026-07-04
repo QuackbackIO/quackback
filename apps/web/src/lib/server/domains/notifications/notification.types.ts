@@ -16,6 +16,7 @@ export type NotificationType =
   | 'changelog_published'
   | 'chat_message'
   | 'chat_mention'
+  | 'ticket_status_changed'
 
 /**
  * Input for creating a single notification

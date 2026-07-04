@@ -67,6 +67,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
           // Conversation notifications carry their target conversation in metadata so
           // the client can deep-link into the inbox.
           const conversationId = n.metadata?.conversationId
+          const ticketId = n.metadata?.ticketId
           return {
             id: n.id,
             principalId: n.principalId,
@@ -76,6 +77,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
             postId: n.postId,
             commentId: n.commentId,
             conversationId: typeof conversationId === 'string' ? conversationId : null,
+            ticketId: typeof ticketId === 'string' ? ticketId : null,
             readAt: n.readAt?.toISOString() ?? null,
             archivedAt: n.archivedAt?.toISOString() ?? null,
             createdAt: n.createdAt.toISOString(),

@@ -9,7 +9,16 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 import { createId, type PrincipalId, type TeamId, type UserId, type TicketId } from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { tickets, ticketStatuses, teams, principal, user, settings, eq } from '@/lib/server/db'
+import {
+  tickets,
+  ticketStatuses,
+  teams,
+  principal,
+  user,
+  settings,
+  inAppNotifications,
+  eq,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -211,6 +220,25 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     expect(
       page.messages.find((m) => m.systemEvent?.kind === 'ticket_status_changed')
     ).toBeUndefined()
+  })
+
+  it('a public_stage crossing notifies the requester bell', async () => {
+    await seedSettings()
+    const { closed } = await seedStatuses()
+    const actor = adminActor()
+    const requester = await seedTeammate()
+    const created = await createTicket(
+      { type: 'customer', title: 'Notify me', requesterPrincipalId: requester },
+      actor
+    )
+    await setTicketStatus(created.id, closed.id, actor) // received -> resolved
+    const notifs = await testDb
+      .select()
+      .from(inAppNotifications)
+      .where(eq(inAppNotifications.principalId, requester))
+    const ticketNotif = notifs.find((n) => n.type === 'ticket_status_changed')
+    expect(ticketNotif).toBeDefined()
+    expect((ticketNotif?.metadata as { ticketId?: string } | null)?.ticketId).toBe(created.id)
   })
 
   it('closing stamps resolvedAt + firstResponseAt; reopening clears resolvedAt and counts the reopen', async () => {
