@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vites
 import { type TeamId } from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { teams, channelAccounts, emailSendingDomains } from '@/lib/server/db'
+import { teams, channelAccounts, emailSendingDomains, eq } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -26,6 +26,7 @@ import {
   listChannelAccounts,
   softDeleteChannelAccount,
   resolveChannelAccountByRecipient,
+  resolveSendingAddress,
 } from '../channel-account.service'
 
 const fixture = await createDbTestFixture({
@@ -146,5 +147,37 @@ describe.skipIf(!fixture.available)('channel-account.service (real DB, rolled ba
 
     // ...and the partial-unique frees up, so a fresh inbound route can be created.
     await expect(createInboundRoute({ owningTeamId: teamId, config: {} })).resolves.toBeDefined()
+  })
+
+  it('resolveSendingAddress: assigned team, default-team fallback, then null', async () => {
+    const teamId = await seedTeam()
+    await createSendingAddress({
+      owningTeamId: teamId,
+      address: 'team@acme.com',
+      module: 'support',
+    })
+    // The conversation's assigned team's sending address wins.
+    expect(await resolveSendingAddress(teamId)).toBe('team@acme.com')
+
+    // With no assigned team, fall back to THE default team's sending address.
+    // (One default team is a workspace invariant, so set the address on the
+    // existing one rather than minting a second.)
+    const [defaultTeam] = await testDb
+      .select({ id: teams.id })
+      .from(teams)
+      .where(eq(teams.isDefault, true))
+      .limit(1)
+    if (defaultTeam) {
+      await createSendingAddress({
+        owningTeamId: defaultTeam.id as TeamId,
+        address: 'default@acme.com',
+        module: 'support',
+      })
+      expect(await resolveSendingAddress(null)).toBe('default@acme.com')
+    }
+
+    // A team with no sending address resolves null (caller uses EMAIL_FROM).
+    const bare = await seedTeam()
+    expect(await resolveSendingAddress(bare)).toBeNull()
   })
 })

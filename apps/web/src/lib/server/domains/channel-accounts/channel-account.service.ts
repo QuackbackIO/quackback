@@ -19,6 +19,7 @@ import {
   sql,
   channelAccounts,
   emailSendingDomains,
+  teams,
   type ChannelAccount,
   type EmailSendingDomain,
   type ChannelAccountConfig,
@@ -157,6 +158,30 @@ export async function getSendingAddress(
     )
     .limit(1)
   return row ?? null
+}
+
+/**
+ * The sending address an outbound message for a conversation should come from
+ * (§4.8): the conversation's assigned team's sending address for the module, else
+ * the default team's, else null so the caller falls back to the workspace default
+ * (EMAIL_FROM). The one place the outbound From is resolved.
+ */
+export async function resolveSendingAddress(
+  assignedTeamId: TeamId | null,
+  module: SendingModule = 'support'
+): Promise<string | null> {
+  let teamId = assignedTeamId
+  if (!teamId) {
+    const [def] = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(eq(teams.isDefault, true))
+      .limit(1)
+    teamId = def?.id ?? null
+  }
+  if (!teamId) return null
+  const account = await getSendingAddress(teamId, module)
+  return account?.address ?? null
 }
 
 export async function listChannelAccounts(owningTeamId: TeamId): Promise<ChannelAccount[]> {
