@@ -226,6 +226,15 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
  * Target resolution is awaited (~10-50ms). Hook execution runs in the background.
  */
 export async function processEvent(event: EventData): Promise<void> {
+  // Fire workflow triggers off the same event (§4.6). Fire-and-forget + fully
+  // error-isolated, and BEFORE the no-hook-targets early return so a workflow
+  // still runs when there are no webhook/notification subscribers. Lazily
+  // imported so the event core carries no static dependency on the workflow
+  // engine (a workflow fault stays isolated to this branch).
+  void import('@/lib/server/domains/workflows/event-trigger')
+    .then((m) => m.dispatchWorkflowsForEvent(event))
+    .catch((err) => log.error({ err, event_type: event.type }, 'workflow dispatch failed to load'))
+
   const targets = await getHookTargets(event)
   if (targets.length === 0) return
 
