@@ -138,6 +138,7 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
       { name: 'Roadmaps', description: 'Manage roadmaps' },
       { name: 'Changelog', description: 'Manage changelog entries' },
       { name: 'Conversations', description: 'Manage support conversations' },
+      { name: 'Tickets', description: 'Read support tickets' },
     ],
     paths: registeredPaths,
     components: {
