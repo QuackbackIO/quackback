@@ -33,17 +33,13 @@ import {
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import type { Actor } from '@/lib/server/policy/types'
 import { createSseStream, SSE_RESPONSE_HEADERS } from '@/lib/server/utils/sse'
+import { streamLimiter } from '@/lib/server/realtime/stream-connection-limit'
+import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'chat-stream' })
 
 const HEARTBEAT_MS = 20_000
-
-// Backstop against file-descriptor exhaustion on the single Bun process. The
-// polling fallback in the client keeps low-priority surfaces working if a
-// stream is refused here.
-const MAX_CONCURRENT_STREAMS = 500
-let openStreams = 0
 
 interface StreamPrincipal {
   principalId: PrincipalId
@@ -161,7 +157,14 @@ export const Route = createFileRoute('/api/chat/stream')({
           return new Response('Bad request', { status: 400 })
         }
 
-        if (openStreams >= MAX_CONCURRENT_STREAMS) {
+        // Last gate: reserve a concurrency slot (global + per-IP). Atomic
+        // check-and-hold, released by cleanup on every teardown path. An
+        // 'unknown' IP (unproxied host) is passed as undefined so a shared
+        // bucket can't false-positive real visitors — the global cap still
+        // bounds them.
+        const clientIp = getClientIp(request.headers)
+        const slot = streamLimiter.acquire(clientIp === 'unknown' ? undefined : clientIp)
+        if (!slot.ok) {
           return new Response('Too many streams', { status: 503 })
         }
 
@@ -181,7 +184,6 @@ export const Route = createFileRoute('/api/chat/stream')({
         let cleanup: () => Promise<void> = async () => {}
         const sse = createSseStream({ onCancel: () => cleanup() })
         let cleanedUp = false
-        let counted = false
         let presenceMarked = false
         let heartbeat: ReturnType<typeof setInterval> | null = null
         let unsubscribe: (() => Promise<void>) | null = null
@@ -210,13 +212,10 @@ export const Route = createFileRoute('/api/chat/stream')({
               await requeueUnansweredOnAgentOffline(me.principalId)
             }
           }
-          if (counted) openStreams = Math.max(0, openStreams - 1)
+          slot.release()
         }
 
         const run = async () => {
-          openStreams++
-          counted = true
-
           try {
             // Open comment + initial retry hint.
             sse.sendRaw(`retry: 3000\n\n`)

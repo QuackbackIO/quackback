@@ -79,6 +79,13 @@ vi.mock('@/lib/server/functions/portal-access', () => ({
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   requeueUnansweredOnAgentOffline: vi.fn(),
 }))
+const mockAcquireSlot = vi.fn()
+vi.mock('@/lib/server/realtime/stream-connection-limit', () => ({
+  streamLimiter: { acquire: (...a: unknown[]) => mockAcquireSlot(...a) },
+}))
+vi.mock('@/lib/server/domains/api/rate-limit', () => ({
+  getClientIp: () => '203.0.113.7',
+}))
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn() }) },
 }))
@@ -109,6 +116,7 @@ beforeEach(() => {
   mockClearPresence.mockResolvedValue(false)
   mockCanView.mockReturnValue({ allowed: true })
   mockPortalAccess.mockResolvedValue({ granted: true })
+  mockAcquireSlot.mockReturnValue({ ok: true, release: vi.fn() })
 })
 
 function tokenPrincipal(role: string, type = 'user') {
@@ -260,5 +268,40 @@ describe('GET /api/chat/stream - no scope', () => {
     tokenPrincipal('admin')
     const res = await GET({ request: req('?token=t') })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/chat/stream - connection cap (Phase 6 R1)', () => {
+  it('503s when the connection limiter refuses a slot', async () => {
+    tokenPrincipal('member')
+    mockAcquireSlot.mockReturnValueOnce({ ok: false, release: vi.fn() })
+    const res = await GET({ request: req('?scope=inbox') })
+    expect(res.status).toBe(503)
+    // Refused before any stream setup — presence must never be marked.
+    expect(mockMarkPresent).not.toHaveBeenCalled()
+  })
+
+  it('reserves the slot keyed on the client IP, only after auth + scope pass', async () => {
+    tokenPrincipal('member')
+    const res = await GET({ request: req('?scope=inbox') })
+    expect(res.status).toBe(200)
+    expect(mockAcquireSlot).toHaveBeenCalledWith('203.0.113.7')
+    await settleAndClose(res)
+  })
+
+  it('does NOT reserve a slot when auth fails (cap gate is the last gate)', async () => {
+    // No principal → 401 well before the cap gate, so no slot is consumed.
+    const res = await GET({ request: req('?scope=inbox') })
+    expect(res.status).toBe(401)
+    expect(mockAcquireSlot).not.toHaveBeenCalled()
+  })
+
+  it('releases the slot when the stream tears down', async () => {
+    const release = vi.fn()
+    mockAcquireSlot.mockReturnValue({ ok: true, release })
+    tokenPrincipal('member')
+    const res = await GET({ request: req('?scope=inbox') })
+    await settleAndClose(res)
+    await vi.waitFor(() => expect(release).toHaveBeenCalled())
   })
 })
