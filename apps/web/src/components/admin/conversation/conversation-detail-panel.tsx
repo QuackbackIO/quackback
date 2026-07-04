@@ -29,6 +29,7 @@ import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { PriorityControl } from './priority-control'
 import { AssigneeControl } from './assignee-control'
+import { ExportTranscriptButton } from './export-transcript-button'
 import { ConversationTagsEditor } from './conversation-tags-editor'
 import { StatusControl } from './status-control'
 import { NoEmailBadge } from './channel-badge'
@@ -306,6 +307,7 @@ export function ConversationDetailPanel({
                 <ConversationTagsEditor conversationId={conversation.id} tags={conversation.tags} />
               </div>
             </Row>
+            <ExportTranscriptButton conversationId={conversation.id} />
             <Row icon={InboxArrowDownIcon} label="Channel">
               <span className="text-sm font-medium text-foreground">
                 {CHANNEL_LABEL[conversation.channel]}

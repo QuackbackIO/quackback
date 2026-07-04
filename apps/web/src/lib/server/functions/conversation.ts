@@ -531,6 +531,64 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
     }
   })
 
+/**
+ * Export a conversation as a markdown transcript (agent-only — the transcript
+ * includes internal notes). Pages the full history oldest-first and renders it
+ * with the pure transcript renderer. Returns the file body for the client to
+ * download; nothing is written server-side.
+ */
+export const exportConversationTranscriptFn = createServerFn({ method: 'GET' })
+  .validator((d: unknown) => z.object({ conversationId: z.string() }).parse(d))
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+      // Belt-and-suspenders with the permission gate: internal notes must never
+      // reach a non-team principal, whatever a custom role was granted.
+      if (!isTeamMember(ctx.principal.role)) {
+        throw new ForbiddenError('FORBIDDEN', 'Only team members can export a transcript')
+      }
+      const conversationId = data.conversationId as ConversationId
+      const actor = await policyActorFromAuth(ctx)
+      const { assertConversationViewable } =
+        await import('@/lib/server/domains/conversation/conversation.service')
+      const conversation = await assertConversationViewable(conversationId, actor)
+      const { listMessages } = await import('@/lib/server/domains/conversation/conversation.query')
+
+      // Assemble the full history oldest-first. Each page (before-cursor) is a
+      // block older than the last, so prepend it. Bounded loop — even a very
+      // long thread is only a handful of 100-message pages.
+      const all: Awaited<ReturnType<typeof listMessages>>['messages'] = []
+      let before: string | undefined
+      for (let i = 0; i < 500; i++) {
+        const page = await listMessages(conversationId, {
+          includeInternal: true,
+          limit: 100,
+          before,
+        })
+        all.unshift(...page.messages)
+        if (!page.hasMore || !page.nextCursor) break
+        before = page.nextCursor
+      }
+
+      const { renderConversationTranscript } =
+        await import('@/lib/server/domains/conversation/conversation.transcript')
+      const content = renderConversationTranscript(
+        {
+          id: conversationId,
+          subject: conversation.subject,
+          status: conversation.status,
+          channel: conversation.channel,
+          createdAt: conversation.createdAt,
+        },
+        all
+      )
+      return { filename: `conversation-${conversationId}.md`, content, mimeType: 'text/markdown' }
+    } catch (error) {
+      log.error({ err: error }, 'export conversation transcript failed')
+      throw error
+    }
+  })
+
 /** Mark a conversation read up to now for the caller's side. */
 export const markConversationReadFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
