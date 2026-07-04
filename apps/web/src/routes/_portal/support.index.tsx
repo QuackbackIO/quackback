@@ -9,6 +9,7 @@ import { TimeAgo } from '@/components/ui/time-ago'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
+import { PortalTicketsList } from '@/components/portal/portal-tickets-list'
 
 export const Route = createFileRoute('/_portal/support/')({
   component: SupportListPage,
@@ -33,6 +34,9 @@ function SupportListPage() {
   const { session, settings } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
 
+  // Once support tickets are on, the portal surface IS Tickets (§4.2); the
+  // interim conversations list below retires with the cutover.
+  const supportTicketsEnabled = !!settings?.featureFlags?.supportTickets
   const supportEnabled =
     !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
 
@@ -42,9 +46,13 @@ function SupportListPage() {
   const { data, isLoading } = useQuery({
     queryKey: PORTAL_MY_CONVERSATIONS_QUERY_KEY,
     queryFn: () => getMyConversationsFn(),
-    enabled: supportEnabled && isLoggedIn,
+    enabled: supportEnabled && isLoggedIn && !supportTicketsEnabled,
     staleTime: 30_000,
   })
+
+  if (supportTicketsEnabled) {
+    return <PortalTicketsList isLoggedIn={isLoggedIn} />
+  }
 
   if (!supportEnabled) {
     return <Navigate to="/" />
