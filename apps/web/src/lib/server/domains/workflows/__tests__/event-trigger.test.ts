@@ -50,7 +50,7 @@ describe('eventToWorkflowTrigger', () => {
       conversationId: 'conversation_9',
       actorType: 'user',
       subjectPrincipalId: 'principal_visitor',
-      message: { body: 'I need help' },
+      message: { body: 'I need help', senderType: 'visitor' },
     })
   })
 

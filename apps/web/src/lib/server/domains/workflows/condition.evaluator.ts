@@ -25,7 +25,7 @@ export interface ConditionContext {
     waitingMinutes: number | null
     tagIds: string[]
   }
-  message?: { body: string } | null
+  message?: { body: string; senderType?: 'visitor' | 'agent' } | null
   person?: { segmentIds: string[] } | null
   /** Whether the workspace is within office hours at evaluation time. */
   officeHours?: boolean | null
@@ -76,6 +76,10 @@ function resolveField(field: string, ctx: ConditionContext): unknown {
       return ctx.conversation.tagIds
     case 'message.body':
       return ctx.message?.body ?? null
+    case 'message.sender':
+      // 'visitor' | 'agent' — lets a message-triggered workflow tell a customer
+      // message apart from a teammate reply (both raise message.created).
+      return ctx.message?.senderType ?? null
     case 'person.segments':
       return ctx.person?.segmentIds ?? []
     case 'office_hours':
@@ -100,17 +104,13 @@ function applyOp(actual: unknown, op: ConditionOperator, value: unknown): boolea
     case 'neq':
       return actual !== value
     case 'contains':
-      return (
+    case 'not_contains': {
+      const hit =
         typeof actual === 'string' &&
         typeof value === 'string' &&
         actual.toLowerCase().includes(value.toLowerCase())
-      )
-    case 'not_contains':
-      return !(
-        typeof actual === 'string' &&
-        typeof value === 'string' &&
-        actual.toLowerCase().includes(value.toLowerCase())
-      )
+      return op === 'contains' ? hit : !hit
+    }
     case 'gt':
     case 'gte':
     case 'lt':
@@ -121,13 +121,11 @@ function applyOp(actual: unknown, op: ConditionOperator, value: unknown): boolea
       if (Number.isNaN(a) || Number.isNaN(b)) return false
       return op === 'gt' ? a > b : op === 'gte' ? a >= b : op === 'lt' ? a < b : a <= b
     }
-    case 'includes_any': {
-      const have = asArray(actual)
-      return asArray(value).some((v) => have.includes(v))
-    }
+    case 'includes_any':
     case 'excludes_all': {
       const have = asArray(actual)
-      return !asArray(value).some((v) => have.includes(v))
+      const anyIn = asArray(value).some((v) => have.includes(v))
+      return op === 'includes_any' ? anyIn : !anyIn
     }
     case 'is_set':
       return !isBlank(actual)

@@ -44,7 +44,10 @@ export type WorkflowAction =
   | { type: 'add_tag'; tagId: ConversationTagId }
   | { type: 'remove_tag'; tagId: ConversationTagId }
   | { type: 'set_priority'; priority: ConversationPriority }
-  | { type: 'snooze'; until: Date | null } // null = until the customer next replies
+  // untilIso is an ISO timestamp (JSON-safe so it round-trips through the stored
+  // graph) or null = until the customer next replies. A relative wake time is
+  // resolved to an absolute one by the caller before it reaches here.
+  | { type: 'snooze'; untilIso: string | null }
   | { type: 'close' }
   | { type: 'apply_sla'; policyId: SlaPolicyId }
   | { type: 'set_attribute'; key: string; value: unknown }
@@ -76,7 +79,11 @@ export async function applyAction(
       await conversationService.setConversationPriority(conversationId, action.priority, actor)
       return `priority ${action.priority}`
     case 'snooze':
-      await conversationService.snoozeConversation(conversationId, action.until, actor)
+      await conversationService.snoozeConversation(
+        conversationId,
+        action.untilIso ? new Date(action.untilIso) : null,
+        actor
+      )
       return 'snoozed'
     case 'close':
       await conversationService.setConversationStatus(conversationId, 'closed', actor)

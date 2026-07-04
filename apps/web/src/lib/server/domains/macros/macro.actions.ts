@@ -47,7 +47,7 @@ function toWorkflowAction(action: MacroAction): WorkflowAction | null {
     case 'set_priority':
       return { type: 'set_priority', priority: action.priority }
     case 'snooze':
-      return { type: 'snooze', until: snoozeUntil(action.preset) }
+      return { type: 'snooze', untilIso: snoozeUntil(action.preset)?.toISOString() ?? null }
     case 'close':
       return { type: 'close' }
     case 'set_attribute':

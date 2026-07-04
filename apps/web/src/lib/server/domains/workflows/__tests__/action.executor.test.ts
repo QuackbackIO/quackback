@@ -89,12 +89,12 @@ describe('applyAction', () => {
     expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor)
   })
 
-  it('passes the snooze wake time (or null) straight through', async () => {
-    const until = new Date('2026-01-06T09:00:00Z')
-    expect(await applyAction({ type: 'snooze', until }, ctx)).toBe('snoozed')
-    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, until, actor)
+  it('resolves the serializable snooze wake time (or null) to a Date', async () => {
+    const untilIso = '2026-01-06T09:00:00.000Z'
+    expect(await applyAction({ type: 'snooze', untilIso }, ctx)).toBe('snoozed')
+    expect(snoozeConversation).toHaveBeenCalledWith(conversationId, new Date(untilIso), actor)
 
-    await applyAction({ type: 'snooze', until: null }, ctx)
+    await applyAction({ type: 'snooze', untilIso: null }, ctx)
     expect(snoozeConversation).toHaveBeenLastCalledWith(conversationId, null, actor)
   })
 

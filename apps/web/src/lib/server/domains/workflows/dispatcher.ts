@@ -27,8 +27,8 @@ export interface WorkflowTrigger {
   actorType: PrincipalType
   /** The person the run acts on, for per-person frequency caps. */
   subjectPrincipalId?: PrincipalId | null
-  /** The triggering message body, if the trigger carried one. */
-  message?: { body: string } | null
+  /** The triggering message (body + sender), if the trigger carried one. */
+  message?: { body: string; senderType?: 'visitor' | 'agent' } | null
 }
 
 export async function dispatchWorkflowTrigger(trigger: WorkflowTrigger): Promise<void> {
@@ -38,8 +38,18 @@ export async function dispatchWorkflowTrigger(trigger: WorkflowTrigger): Promise
   const live = await listLiveWorkflowsForTrigger(trigger.triggerType)
   if (live.length === 0) return
 
-  // Resolve the snapshot once; every workflow's conditions read the same instant.
-  const ctx = await resolveConditionContext(trigger.conversationId, { message: trigger.message })
+  const customerFacing = live.filter((w) => w.class === 'customer_facing')
+  const background = live.filter((w) => w.class === 'background')
+
+  // Resolve the snapshot once (every condition reads the same instant) and, only
+  // when there are customer_facing workflows, probe the exclusive lock — both are
+  // independent, so run them together.
+  const [ctx, alreadyLocked] = await Promise.all([
+    resolveConditionContext(trigger.conversationId, { message: trigger.message }),
+    customerFacing.length > 0
+      ? hasActiveCustomerFacingRun(trigger.conversationId)
+      : Promise.resolve(false),
+  ])
   if (!ctx) return
 
   const subject = trigger.subjectPrincipalId ?? null
@@ -48,8 +58,7 @@ export async function dispatchWorkflowTrigger(trigger: WorkflowTrigger): Promise
 
   // Customer-facing: exclusive. Skip entirely if one is already locked on this
   // conversation; otherwise the first that actually runs wins.
-  const customerFacing = live.filter((w) => w.class === 'customer_facing')
-  if (customerFacing.length > 0 && !(await hasActiveCustomerFacingRun(trigger.conversationId))) {
+  if (customerFacing.length > 0 && !alreadyLocked) {
     for (const wf of customerFacing) {
       if (!(await frequencyCapAllows(wf, subject))) continue
       const run = await start(wf)
@@ -58,7 +67,6 @@ export async function dispatchWorkflowTrigger(trigger: WorkflowTrigger): Promise
   }
 
   // Background: parallel, every cap-permitted workflow.
-  const background = live.filter((w) => w.class === 'background')
   await Promise.all(
     background.map(async (wf) => {
       if (await frequencyCapAllows(wf, subject)) await start(wf)

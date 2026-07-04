@@ -84,6 +84,13 @@ describe('evaluateCondition — leaves', () => {
     ok({ field: 'conversation.tags', op: 'is_empty' }, untagged)
   })
 
+  it('message.sender tells a customer message from a teammate reply', () => {
+    const fromVisitor = baseCtx({ message: { body: 'hi', senderType: 'visitor' } })
+    const fromAgent = baseCtx({ message: { body: 'hi', senderType: 'agent' } })
+    ok({ field: 'message.sender', op: 'eq', value: 'visitor' }, fromVisitor)
+    no({ field: 'message.sender', op: 'eq', value: 'visitor' }, fromAgent)
+  })
+
   it('office-hours boolean', () => {
     ok({ field: 'office_hours', op: 'eq', value: true }, baseCtx({ officeHours: true }))
     no({ field: 'office_hours', op: 'eq', value: true }, baseCtx({ officeHours: false }))

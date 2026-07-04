@@ -22,7 +22,7 @@ import type { ConditionContext } from './condition.evaluator'
  */
 export async function resolveConditionContext(
   conversationId: ConversationId,
-  opts: { message?: { body: string } | null; at?: Date } = {}
+  opts: { message?: { body: string; senderType?: 'visitor' | 'agent' } | null; at?: Date } = {}
 ): Promise<ConditionContext | null> {
   const at = opts.at ?? new Date()
   const [conv] = await db

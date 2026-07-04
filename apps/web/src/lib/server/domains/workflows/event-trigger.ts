@@ -55,7 +55,7 @@ export function eventToWorkflowTrigger(event: EventData): WorkflowTrigger | null
         subjectPrincipalId: (m.senderType === 'visitor'
           ? m.authorPrincipalId
           : null) as PrincipalId | null,
-        message: { body: m.content },
+        message: { body: m.content, senderType: m.senderType },
       }
     }
     default:
