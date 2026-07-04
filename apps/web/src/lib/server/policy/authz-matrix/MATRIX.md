@@ -485,7 +485,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/integrations/zendesk/functions.ts`::getZendeskConnectUrl | integration.manage |
 | `lib/server/integrations/zendesk/functions.ts`::searchZendeskUserFn | integration.view |
 
-### Public REST API (`withApiKeyAuth`) — 86 surfaces
+### Public REST API (`withApiKeyAuth`) — 89 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -564,6 +564,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/tags/$tagId.ts`::DELETE | tag.manage |
 | `routes/api/v1/tags/index.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/tags/index.ts`::POST | tag.manage |
+| `routes/api/v1/tickets/$ticketId.messages.ts`::GET | ticket.view |
+| `routes/api/v1/tickets/$ticketId.ts`::GET | ticket.view |
+| `routes/api/v1/tickets/index.ts`::GET | ticket.view |
 | `routes/api/v1/users/$principalId.ts`::GET | people.view |
 | `routes/api/v1/users/$principalId.ts`::PATCH | people.manage |
 | `routes/api/v1/users/$principalId.ts`::DELETE | people.manage |
@@ -590,15 +593,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-33 tools. "Team" = requires an admin/member role in addition to the scope.
+38 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
 | accept_suggestion | write:feedback | ✓ |
 | add_comment | write:feedback | · |
+| add_ticket_note | write:chat | ✓ |
 | create_article | write:article | ✓ |
 | create_changelog | write:changelog | ✓ |
 | create_post | write:feedback | · |
+| create_ticket | write:chat | ✓ |
 | delete_article | write:article | ✓ |
 | delete_changelog | write:changelog | ✓ |
 | delete_comment | write:feedback | · |
@@ -607,14 +612,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | get_conversation | read:chat | ✓ |
 | get_details | read:article, read:feedback | ✓ |
 | get_post_activity | read:feedback | ✓ |
+| get_ticket | read:chat | ✓ |
 | list_conversations | read:chat | ✓ |
 | list_suggestions | read:feedback | ✓ |
+| list_tickets | read:chat | ✓ |
 | manage_category | write:article | ✓ |
 | manage_roadmap_post | write:feedback | ✓ |
 | merge_post | write:feedback | ✓ |
 | proxy_vote | write:feedback | ✓ |
 | react_to_comment | write:feedback | · |
 | reply_to_conversation | write:chat | ✓ |
+| reply_to_ticket | write:chat | ✓ |
 | restore_post | write:feedback | ✓ |
 | restore_suggestion | write:feedback | ✓ |
 | search | read:article, read:feedback | ✓ |
@@ -640,7 +648,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-150 of 619 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+150 of 622 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
