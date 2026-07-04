@@ -15,7 +15,13 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { parseInboundEmail, extractReplyText, extractEmailAddress } from './chat.email-inbound'
+import { getReceivedEmail } from '@quackback/email'
+import {
+  parseInboundEmail,
+  extractReplyText,
+  extractEmailAddress,
+  htmlToText,
+} from './chat.email-inbound'
 import { conversationIdFromInboundAddress } from './chat.email-channel'
 import { assertChatSendRate, ChatRateLimitError } from './chat.ratelimit'
 import { sendVisitorMessage } from './chat.service'
@@ -63,7 +69,17 @@ export async function ingestInboundEmail(event: unknown): Promise<IngestInboundR
   })
   if (!conversation) return { status: 'no_conversation' }
 
-  const content = extractReplyText(parsed.text ?? '')
+  // Resend's `email.received` webhook is metadata-only: the body must be
+  // fetched from the Received Emails API (#320). Fetch after routing + dedupe
+  // so unroutable/duplicate deliveries never cost an API call; a transient
+  // fetch failure throws → the route 500s → Resend redelivers (idempotent).
+  let bodyText = parsed.text
+  if (bodyText === null && parsed.emailId) {
+    const full = await getReceivedEmail(parsed.emailId)
+    bodyText = full?.text ?? (full?.html ? htmlToText(full.html) : null)
+  }
+
+  const content = extractReplyText(bodyText ?? '')
   if (!content) return { status: 'empty' }
 
   const visitorPrincipalId = conversation.visitorPrincipalId as PrincipalId

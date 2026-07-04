@@ -13,6 +13,9 @@ export interface ParsedInboundEmail {
   text: string | null
   /** Provider Message-ID (header preferred, email id as fallback) for dedupe. */
   messageId: string | null
+  /** Provider email id (Resend `email_id`) — used to fetch the body when the
+   *  webhook payload is metadata-only (Resend `email.received`, #320). */
+  emailId: string | null
 }
 
 function asString(v: unknown): string | null {
@@ -72,8 +75,40 @@ export function parseInboundEmail(data: unknown): ParsedInboundEmail {
     from: asString(d.from),
     subject: asString(d.subject),
     text: asString(d.text),
-    messageId: readHeader(d.headers, 'message-id') ?? asString(d.email_id) ?? asString(d.id),
+    messageId:
+      readHeader(d.headers, 'message-id') ??
+      asString(d.message_id) ??
+      asString(d.email_id) ??
+      asString(d.id),
+    emailId: asString(d.email_id) ?? asString(d.id),
   }
+}
+
+/**
+ * Naive HTML→text for received emails that carry only an HTML body. Enough to
+ * feed extractReplyText — block tags become newlines, entities are unescaped.
+ */
+export function htmlToText(html: string): string {
+  return (
+    html
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&quot;/gi, '"')
+      .replace(/&amp;/gi, '&') // last, so &amp;lt; unescapes only one level
+      .replace(/[ \t]+\n/g, '\n')
+      // Strip per-line leading whitespace left by inline-tag removal — the
+      // quote separators extractReplyText cuts on are ^-anchored.
+      .replace(/^[ \t]+/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  )
 }
 
 // Lines that mark the start of quoted history from common mail clients. These

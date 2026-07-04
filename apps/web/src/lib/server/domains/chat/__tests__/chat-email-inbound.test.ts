@@ -4,7 +4,12 @@
  * message is just what the visitor actually wrote.
  */
 import { describe, it, expect } from 'vitest'
-import { parseInboundEmail, extractReplyText, extractEmailAddress } from '../chat.email-inbound'
+import {
+  parseInboundEmail,
+  extractReplyText,
+  extractEmailAddress,
+  htmlToText,
+} from '../chat.email-inbound'
 
 describe('parseInboundEmail', () => {
   it('normalizes an array `to`, reads `from`/`subject`/`text`, and the Message-ID header', () => {
@@ -49,6 +54,41 @@ describe('parseInboundEmail', () => {
     expect(parsed.toAddresses).toEqual([])
     expect(parsed.from).toBeNull()
     expect(parsed.messageId).toBeNull()
+    expect(parsed.emailId).toBeNull()
+  })
+
+  it('captures the provider email id, and message_id outranks it for dedupe', () => {
+    const withBoth = parseInboundEmail({
+      to: ['x@y.com'],
+      from: 'a@b.com',
+      email_id: 'em_1',
+      message_id: '<mid@provider>',
+    })
+    expect(withBoth.messageId).toBe('<mid@provider>')
+    expect(withBoth.emailId).toBe('em_1')
+
+    // A Message-ID header still wins for dedupe; emailId is unaffected by it.
+    const withHeader = parseInboundEmail({
+      to: ['x@y.com'],
+      headers: [{ name: 'Message-ID', value: '<hdr@mail>' }],
+      email_id: 'em_2',
+    })
+    expect(withHeader.messageId).toBe('<hdr@mail>')
+    expect(withHeader.emailId).toBe('em_2')
+  })
+})
+
+describe('htmlToText', () => {
+  it('converts block/br boundaries to newlines, strips tags, and unescapes entities', () => {
+    const text = htmlToText(
+      '<div>Line one<br>Line &amp; two</div><style>.x{color:red}</style><script>evil()</script>'
+    )
+    expect(text).toBe('Line one\nLine & two')
+  })
+
+  it('produces text that extractReplyText can strip quoted history from', () => {
+    const text = htmlToText('<p>Fresh reply</p><p>On Mon wrote:</p><p>&gt; old quoted</p>')
+    expect(extractReplyText(text)).toBe('Fresh reply')
   })
 })
 
