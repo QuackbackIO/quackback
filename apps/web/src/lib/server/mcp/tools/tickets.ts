@@ -1,8 +1,9 @@
 /**
  * Support-platform ticket tools: read the ticket list + a single ticket with its
- * thread. Team-only agent surfaces, gated on the chat scope (tickets share the
- * conversation scopes — see api-key-scopes). Read-only for now; write tools
- * (reply, status) are a later slice.
+ * thread, and write (open a ticket, reply, add an internal note). Team-only
+ * agent surfaces gated on the chat scopes — tickets share the conversation
+ * scopes (see api-key-scopes): reads need read:chat, writes need write:chat.
+ * Status changes + assignment need an id-discovery tool first; a later slice.
  */
 
 import { z } from 'zod'
