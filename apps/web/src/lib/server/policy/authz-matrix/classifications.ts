@@ -94,6 +94,17 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'author deletes their own conversation message'
   ),
 
+  // Requester tickets (portal): a signed-in requester reads + replies on their
+  // OWN customer tickets; ownership is enforced in the requester service.
+  'lib/server/functions/tickets.ts::listMyTicketsFn': END_USER('requester lists their own tickets'),
+  'lib/server/functions/tickets.ts::getMyTicketFn': END_USER('requester reads their own ticket'),
+  'lib/server/functions/tickets.ts::getMyTicketThreadFn': END_USER(
+    'requester reads their own ticket thread'
+  ),
+  'lib/server/functions/tickets.ts::replyToMyTicketFn': END_USER(
+    'requester replies on their own ticket'
+  ),
+
   // Comments / reactions: end-user create + own-edit/delete.
   'lib/server/functions/comments.ts::createCommentFn': END_USER('end-user posts a comment'),
   'lib/server/functions/comments.ts::addReactionFn': END_USER('end-user adds a reaction'),

@@ -49,11 +49,22 @@ function requireAgentPrincipal(actor: Actor): PrincipalId {
   return actor.principalId
 }
 
-async function insertTicketMessage(
+interface InsertTicketMessageOpts {
+  senderType: 'agent' | 'visitor'
+  isInternal: boolean
+  /** Stamp first_response_at (once) — true only for an agent reply. */
+  stampFirstResponse: boolean
+}
+
+/**
+ * Low-level ticket-message write, shared by the agent reply/note paths and the
+ * requester reply path. The CALLER owns authorization (agent permission vs
+ * requester ownership); this only validates, inserts, and lightly denormalizes.
+ */
+export async function insertTicketMessage(
   input: SendTicketMessageInput,
   principalId: PrincipalId,
-  isInternal: boolean,
-  stampFirstResponse: boolean
+  opts: InsertTicketMessageOpts
 ): Promise<ConversationMessageDTO> {
   const attachments = validateAttachments(input.attachments)
   const safeContentJson = input.contentJson ? sanitizeTiptapContent(input.contentJson) : null
@@ -70,10 +81,10 @@ async function insertTicketMessage(
       .values({
         ticketId: input.ticketId,
         principalId,
-        senderType: 'agent',
+        senderType: opts.senderType,
         content,
         contentJson: safeContentJson,
-        isInternal,
+        isInternal: opts.isInternal,
         attachments: attachments.length > 0 ? attachments : null,
       })
       .returning()
@@ -81,8 +92,8 @@ async function insertTicketMessage(
     await tx
       .update(tickets)
       .set({
-        // A reply is the first response (stamped once); an internal note is not.
-        firstResponseAt: stampFirstResponse
+        // Only an agent reply is a "first response"; a note or a requester reply is not.
+        firstResponseAt: opts.stampFirstResponse
           ? firstResponseStamp(existing.firstResponseAt, true, row.createdAt)
           : undefined,
         updatedAt: row.createdAt,
@@ -103,7 +114,11 @@ export async function sendTicketMessage(
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
-  const message = await insertTicketMessage(input, principalId, false, true)
+  const message = await insertTicketMessage(input, principalId, {
+    senderType: 'agent',
+    isInternal: false,
+    stampFirstResponse: true,
+  })
   return { message }
 }
 
@@ -114,7 +129,11 @@ export async function addTicketNote(
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_NOTE, 'add a note to this ticket')
   const principalId = requireAgentPrincipal(actor)
-  const message = await insertTicketMessage(input, principalId, true, false)
+  const message = await insertTicketMessage(input, principalId, {
+    senderType: 'agent',
+    isInternal: true,
+    stampFirstResponse: false,
+  })
   return { message }
 }
 

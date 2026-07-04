@@ -346,3 +346,48 @@ export const listTicketMessagesFn = createServerFn({ method: 'GET' })
       includeInternal: isTeamMember(ctx.principal.role),
     })
   })
+
+// ---------------------------------------------------------------------------
+// Requester-facing (portal) — a customer reads + replies on their OWN customer
+// tickets. No `ticket.*` permission: the domain gates on ownership. Any signed-in
+// user may call these; they only ever reach tickets they filed.
+// ---------------------------------------------------------------------------
+
+export const listMyTicketsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const ctx = await requireAuth()
+  const actor = await policyActorFromAuth(ctx)
+  const { listMyTickets } = await import('@/lib/server/domains/tickets/requester.service')
+  return listMyTickets(actor)
+})
+
+export const getMyTicketFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    const actor = await policyActorFromAuth(ctx)
+    const { getMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
+    return getMyTicket(actor, data.ticketId as TicketId)
+  })
+
+export const getMyTicketThreadFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string(), before: z.string().optional() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    const actor = await policyActorFromAuth(ctx)
+    const { getMyTicketThread } = await import('@/lib/server/domains/tickets/requester.service')
+    return getMyTicketThread(actor, data.ticketId as TicketId, { before: data.before })
+  })
+
+export const replyToMyTicketFn = createServerFn({ method: 'POST' })
+  .validator(sendTicketMessageSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    const actor = await policyActorFromAuth(ctx)
+    const { replyToMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
+    return replyToMyTicket(actor, {
+      ticketId: data.ticketId as TicketId,
+      content: data.content,
+      contentJson: data.contentJson ?? null,
+      attachments: data.attachments as ConversationAttachment[] | undefined,
+    })
+  })
