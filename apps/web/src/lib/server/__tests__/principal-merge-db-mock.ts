@@ -134,6 +134,14 @@ export function mockDbModule(): Record<string, unknown> {
       requesterPrincipalId: 'tickets.requesterPrincipalId',
       __name: 'tickets',
     },
+    workflowRuns: {
+      subjectPrincipalId: 'workflowRuns.subjectPrincipalId',
+      __name: 'workflow_runs',
+    },
+    workflowRunEvents: {
+      subjectPrincipalId: 'workflowRunEvents.subjectPrincipalId',
+      __name: 'workflow_run_events',
+    },
     principal: {
       id: 'principal.id',
       userId: 'principal.userId',

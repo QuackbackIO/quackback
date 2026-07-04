@@ -44,6 +44,8 @@ import {
   helpCenterArticleFeedback,
   channelIdentities,
   tickets,
+  workflowRuns,
+  workflowRunEvents,
   principal,
   eq,
   and,
@@ -259,6 +261,18 @@ export const REPOINT_STEPS: RepointStep[] = [
     'principal_id',
     'Message authorship. ON DELETE RESTRICT, same as conversations.'
   ),
+  simpleRepoint(
+    'workflow_runs',
+    workflowRuns,
+    'subject_principal_id',
+    'The person a workflow run acted on — usually the conversation visitor, so it follows them on merge like their conversations do (ON DELETE SET NULL would otherwise strand the run).'
+  ),
+  simpleRepoint(
+    'workflow_run_events',
+    workflowRunEvents,
+    'subject_principal_id',
+    'Freq-cap ledger subject: re-pointing keeps a once-per-person workflow capped after the visitor identifies (else the merge nulls the history and the cap resets).'
+  ),
   collisionRepoint(
     'post_subscriptions',
     postSubscriptions,
@@ -409,6 +423,7 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
   'conversation_view_pins.principal_id':
     'view pins belong to team members; the merge source is always anonymous',
   'macros.created_by_principal_id': 'macro authors are team members, never anonymous',
+  'workflows.created_by': 'workflow authors are team members, never anonymous',
 }
 
 /**
