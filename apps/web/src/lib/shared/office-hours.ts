@@ -92,8 +92,9 @@ export const officeHoursScheduleSchema = z.object({
 
 export type OfficeHoursScheduleInput = z.infer<typeof officeHoursScheduleSchema>
 
-/** Minutes since local midnight for an "HH:MM" string; NaN if malformed. */
-function parseHm(hm: string): number {
+/** Minutes since local midnight for an "HH:MM" string; NaN if malformed. Exported
+ *  as a primitive the office-hours service reuses. */
+export function parseHm(hm: string): number {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hm ?? '')
   if (!m) return NaN
   const h = Number(m[1])
@@ -110,18 +111,31 @@ interface ZonedParts {
   day: number
 }
 
-/** The wall-clock parts of `at` in `tz`. Throws if `tz` is unknown. */
-function zonedParts(tz: string, at: Date): ZonedParts {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    weekday: 'short',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(at)
+// Intl.DateTimeFormat construction is expensive and the SLA clock calls zonedParts
+// in a loop, so the formatter is built once per timezone.
+const zonedFormatterCache = new Map<string, Intl.DateTimeFormat>()
+function zonedFormatter(tz: string): Intl.DateTimeFormat {
+  let f = zonedFormatterCache.get(tz)
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      weekday: 'short',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+    zonedFormatterCache.set(tz, f)
+  }
+  return f
+}
+
+/** The wall-clock parts of `at` in `tz`. Throws if `tz` is unknown. Exported as a
+ *  primitive the office-hours service's SLA clock reuses. */
+export function zonedParts(tz: string, at: Date): ZonedParts {
+  const parts = zonedFormatter(tz).formatToParts(at)
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
   let hour = Number(get('hour'))
   // Some runtimes emit "24" for midnight under hour12:false; normalize to 0.
@@ -159,7 +173,7 @@ function wallKey(tz: string, at: Date): string {
  * repeated times take the earlier occurrence — bracketing the target with the
  * offsets 12h either side of it, which straddles any single DST transition.
  */
-function zonedWallClockToUtc(
+export function zonedWallClockToUtc(
   year: number,
   month: number,
   day: number,
