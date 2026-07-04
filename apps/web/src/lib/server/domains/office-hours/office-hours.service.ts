@@ -12,6 +12,7 @@ import {
   type OfficeHoursSchedule,
   type OfficeHoursInterval,
 } from '@/lib/server/db'
+import type { OfficeHoursId } from '@quackback/ids'
 
 const WEEKDAY_INDEX: Record<string, number> = {
   Sun: 0,
@@ -185,6 +186,16 @@ export function addOfficeHoursSeconds(
 // ---------------------------------------------------------------------------
 // The one workspace schedule (v1)
 // ---------------------------------------------------------------------------
+
+/** A schedule by id (e.g. the one an SLA policy pins), or null. */
+export async function getScheduleById(id: OfficeHoursId): Promise<OfficeHoursSchedule | null> {
+  const [row] = await db
+    .select()
+    .from(officeHoursSchedules)
+    .where(eq(officeHoursSchedules.id, id))
+    .limit(1)
+  return row ?? null
+}
 
 /** The workspace's default schedule, or null when none is configured (= 24/7). */
 export async function getDefaultSchedule(): Promise<OfficeHoursSchedule | null> {
