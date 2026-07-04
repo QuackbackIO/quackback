@@ -43,10 +43,22 @@ export interface AssistantToolContext {
   conversationId: ConversationId | null
   /** Sources surfaced by search_knowledge this run, keyed by id, for citation assembly. */
   sources: Map<string, AssistantCitation>
+  /** search_knowledge calls made this attempt, for the server-side search budget. */
+  searchCalls: number
 }
 
 /** Per-article snippet budget handed to the model (full content stays server-side). */
 const KNOWLEDGE_SNIPPET_CHARS = 1200
+
+/**
+ * Hard per-attempt budget on search_knowledge. Prompt discipline alone does not
+ * hold — a model that dislikes its results keeps reformulating until the
+ * iteration cap kills the whole turn with no answer (observed as fallback
+ * replies). Past the budget the tool returns no articles and an explicit
+ * instruction to answer from what was already retrieved, which deterministically
+ * ends the exploration while keeping everything already in context usable.
+ */
+export const SEARCH_BUDGET_PER_TURN = 3
 
 /** Recent messages get_conversation_context returns. */
 const CONTEXT_MESSAGE_LIMIT = 20
@@ -71,6 +83,7 @@ export const searchKnowledgeTool = toolDefinition({
         snippet: z.string(),
       })
     ),
+    note: z.string().optional(),
   }),
 })
 
@@ -93,6 +106,15 @@ export function createAssistantTools() {
   const searchKnowledge = searchKnowledgeTool.server<AssistantToolContext>(
     async (args, toolCtx) => {
       const ctx = toolCtx.context
+      // Server-side search budget: end the exploration deterministically rather
+      // than letting reformulation loops exhaust the iteration cap.
+      ctx.searchCalls += 1
+      if (ctx.searchCalls > SEARCH_BUDGET_PER_TURN) {
+        return {
+          articles: [],
+          note: 'Search limit reached for this turn. Answer the customer now using only the articles already retrieved; if none were relevant, say you do not know and offer to connect a human.',
+        }
+      }
       // Audience-scoped from day one: the citation set can never exceed what the
       // viewer could already see.
       const articles = await retrieveKbArticles(args.query, { audience: ctx.audience })

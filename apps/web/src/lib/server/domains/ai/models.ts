@@ -52,7 +52,7 @@ export function getChatModel(feature: ChatFeature): string | null {
     interpretation: config.aiInterpretationModel,
     merge: config.aiMergeModel,
     helpCenterAnswers: config.aiHelpCenterModel,
-    assistant: undefined,
+    assistant: config.aiAssistantModel,
   }
   return resolveModel(overrides[feature], config.aiChatModel)
 }

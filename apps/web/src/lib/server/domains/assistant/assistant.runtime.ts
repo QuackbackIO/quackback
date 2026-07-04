@@ -111,8 +111,15 @@ export function isAssistantConfigured(): boolean {
   )
 }
 
-/** Cap on the agentic loop; enough for a search-then-answer round trip. */
-export const ASSISTANT_MAX_ITERATIONS = 4
+/**
+ * Cap on the agentic loop. Sized for the worst legitimate exploration —
+ * search, conversation context, a refined search, and the final answer, with
+ * headroom — because exhausting it mid-exploration yields no answer at all
+ * (observed as intermittent fallback replies at 4 when a model split its tool
+ * calls across rounds). The prompt separately caps searches at two, so the
+ * budget bounds cost without being the thing that cuts an answer short.
+ */
+export const ASSISTANT_MAX_ITERATIONS = 6
 
 /** Output budget: constrained decoding on small models needs headroom. */
 const MAX_OUTPUT_TOKENS = 1024
@@ -326,8 +333,10 @@ export function buildAssistantSystemPrompt(assistantName: string): string[] {
     `You are ${assistantName}, an AI support agent. Answer the customer using ONLY facts found by the search_knowledge tool.`,
     'Rules:',
     '- Always call search_knowledge before answering a question, and cite the article ids it returns.',
+    '- Use tools efficiently: call search_knowledge at most twice per turn (refine the query once if the first search misses), and get_conversation_context at most once. Then answer with what you have — more searching will not help.',
     '- Cite only ids returned by a tool this turn; never invent ids. List each source you use in the "citations" array, and mark where it supports the answer by writing its 1-based position in that array inline as [1], [2] right after the claim it supports. Do not use markdown links.',
     '- If the tools return nothing relevant (below the confidence floor), say you do not know and offer to connect a human or to capture the request as feedback. Never guess or free-associate.',
+    '- If the customer asks about a capability the sources do not mention, say plainly that you could not find it / it does not appear to be available BEFORE describing any related alternative. Do not imply support for something the sources do not state.',
     '- Set "escalation" with a reason when the customer explicitly asks for a human, shows strong frustration, repeats the same issue, the answer is low-confidence, or the topic is a safety matter. Decide THAT to escalate and why; do not decide where.',
     '- Keep the answer short and factual: at most 120 words. You may use short paragraphs, bullet or numbered lists, and **bold** for key terms where it helps readability. No headings, tables, images, or HTML.',
     '- Reply in the same language as the customer.',
@@ -384,6 +393,10 @@ async function runAttempt(
     agentLoopStrategy: maxIterations(ASSISTANT_MAX_ITERATIONS),
     stream: true,
     abortController: controller,
+    // NOTE: do not add sampling params (e.g. temperature) here. The provider
+    // options gate routing on providers advertising EVERY param in the request
+    // (require_parameters), so a param many providers don't advertise silently
+    // shrinks the pool to none and the turn dies with no output.
     modelOptions: { max_tokens: MAX_OUTPUT_TOKENS, ...structuredOutputProviderOptions() },
   })
 
@@ -483,12 +496,14 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     audience,
     conversationId: input.conversationId ?? null,
     sources: new Map<string, AssistantCitation>(),
+    searchCalls: 0,
   }
   const systemPrompts = buildAssistantSystemPrompt('Quinn')
 
   const attemptOnce = async (attempt: number): Promise<AssistantOutput | null> => {
-    // Fresh ledger per attempt so a retry's citations reflect its own tools.
+    // Fresh ledger + search budget per attempt so a retry starts clean.
     toolContext.sources.clear()
+    toolContext.searchCalls = 0
     const result = await withUsageLogging(
       {
         pipelineStep: 'assistant',

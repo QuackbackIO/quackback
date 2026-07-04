@@ -33,6 +33,7 @@ function ctx(overrides: Partial<AssistantToolContext> = {}): AssistantToolContex
     audience: 'public',
     conversationId: null,
     sources: new Map<string, AssistantCitation>(),
+    searchCalls: 0,
     ...overrides,
   }
 }
@@ -79,6 +80,25 @@ describe('search_knowledge', () => {
     }
     expect(out.articles).toEqual([])
     expect(c.sources.size).toBe(0)
+  })
+
+  it('ends exploration past the per-turn search budget with an answer-now note', async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    const c = ctx()
+    const search = findTool('search_knowledge')
+    for (let i = 0; i < 3; i++) await search.execute({ query: `q${i}` }, toolCtx(c))
+    expect(mockRetrieve).toHaveBeenCalledTimes(3)
+
+    const out = (await search.execute({ query: 'q4' }, toolCtx(c))) as {
+      articles: unknown[]
+      note?: string
+    }
+    // The budgeted call performs no retrieval and instructs the model to answer.
+    expect(mockRetrieve).toHaveBeenCalledTimes(3)
+    expect(out.articles).toEqual([])
+    expect(out.note).toMatch(/answer/i)
+    // Ledger keeps everything already retrieved for citation assembly.
+    expect(c.sources.has('kb_article_1')).toBe(true)
   })
 })
 
