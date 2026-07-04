@@ -42,6 +42,8 @@ import {
   linkTicketToTracker,
   unlinkTicketFromTracker,
   listLinkedTicketIds,
+  listLinkedTickets,
+  getTrackerForTicket,
 } from '../ticket-links.service'
 import { listTicketMessages } from '../ticket-message.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
@@ -211,6 +213,27 @@ describe.skipIf(!fixture.available)('ticket-links.service (real DB, rolled back)
     await linkTicketToTracker(tracker, customer, actor)
     await unlinkTicketFromTracker(tracker, customer, actor)
     expect(await listLinkedTicketIds(tracker)).toEqual([])
+  })
+
+  it('listLinkedTickets + getTrackerForTicket resolve the two link directions as DTOs', async () => {
+    await seedSettings()
+    await seedDefaultStatus()
+    const actor = await seedActor()
+    const tracker = await makeTicket('tracker', actor)
+    const customer = await makeTicket('customer', actor)
+    await linkTicketToTracker(tracker, customer, actor)
+
+    // Forward: the tracker's linked customer tickets, as DTOs.
+    const linked = await listLinkedTickets(tracker)
+    expect(linked.map((t) => t.id)).toEqual([customer])
+    expect(linked[0].type).toBe('customer')
+
+    // Reverse: the tracker a customer ticket belongs to.
+    const owner = await getTrackerForTicket(customer)
+    expect(owner?.id).toBe(tracker)
+    // An unlinked ticket has no tracker.
+    const loner = await makeTicket('customer', actor)
+    expect(await getTrackerForTicket(loner)).toBeNull()
   })
 
   it('a tracker stage crossing cascades its status onto the linked customer tickets', async () => {

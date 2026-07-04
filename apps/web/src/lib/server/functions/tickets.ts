@@ -181,6 +181,53 @@ export const setTicketPriorityFn = createServerFn({ method: 'POST' })
   })
 
 // ---------------------------------------------------------------------------
+// Tracker links (§4.9)
+// ---------------------------------------------------------------------------
+
+/** The links for a ticket detail: a tracker's linked customer tickets, or the
+ *  tracker a customer ticket belongs to. Reads on TICKET_VIEW. */
+export const getTicketLinksFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const { getTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+    const { getTrackerForTicket, listLinkedTickets } =
+      await import('@/lib/server/domains/tickets/ticket-links.service')
+    const ticketId = data.ticketId as TicketId
+    const ticket = await getTicket(ticketId)
+    if (ticket.type === 'tracker') {
+      return { tracker: null, linked: await listLinkedTickets(ticketId) }
+    }
+    return { tracker: await getTrackerForTicket(ticketId), linked: [] }
+  })
+
+export const linkTicketToTrackerFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ trackerTicketId: z.string(), ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
+    const actor = await policyActorFromAuth(ctx)
+    const { linkTicketToTracker } =
+      await import('@/lib/server/domains/tickets/ticket-links.service')
+    await linkTicketToTracker(data.trackerTicketId as TicketId, data.ticketId as TicketId, actor)
+    return { success: true }
+  })
+
+export const unlinkTicketFromTrackerFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ trackerTicketId: z.string(), ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
+    const actor = await policyActorFromAuth(ctx)
+    const { unlinkTicketFromTracker } =
+      await import('@/lib/server/domains/tickets/ticket-links.service')
+    await unlinkTicketFromTracker(
+      data.trackerTicketId as TicketId,
+      data.ticketId as TicketId,
+      actor
+    )
+    return { success: true }
+  })
+
+// ---------------------------------------------------------------------------
 // Status management (settings UI)
 // ---------------------------------------------------------------------------
 

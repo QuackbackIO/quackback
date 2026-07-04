@@ -6,7 +6,16 @@
  * tracker's status onto its linked tickets rides setTicketStatus in
  * ticket.service and consumes listLinkedTicketIds here.
  */
-import { db, eq, and, conversationMessages, ticketLinks } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  and,
+  isNull,
+  inArray,
+  conversationMessages,
+  ticketLinks,
+  tickets,
+} from '@/lib/server/db'
 import type { TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
@@ -16,6 +25,8 @@ import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
 import { loadTicketOr404 } from './ticket.service'
+import { buildTicketContext, ticketToDTO } from './ticket.dto'
+import type { TicketDTO } from './ticket.types'
 
 const log = logger.child({ component: 'ticket-links' })
 
@@ -118,4 +129,48 @@ export async function listLinkedTicketIds(trackerTicketId: TicketId): Promise<Ti
       and(eq(ticketLinks.trackerTicketId, trackerTicketId), eq(ticketLinks.relation, 'tracks'))
     )
   return rows.map((r) => r.id)
+}
+
+/** The customer tickets a tracker tracks, as full DTOs (for the tracker detail). */
+export async function listLinkedTickets(trackerTicketId: TicketId): Promise<TicketDTO[]> {
+  const rows = await db
+    .select()
+    .from(tickets)
+    .where(
+      and(
+        isNull(tickets.deletedAt),
+        inArray(
+          tickets.id,
+          db
+            .select({ id: ticketLinks.linkedTicketId })
+            .from(ticketLinks)
+            .where(
+              and(
+                eq(ticketLinks.trackerTicketId, trackerTicketId),
+                eq(ticketLinks.relation, 'tracks')
+              )
+            )
+        )
+      )
+    )
+  const ctx = await buildTicketContext(rows)
+  return rows.map((r) => ticketToDTO(r, ctx))
+}
+
+/** The tracker a customer ticket belongs to (reverse lookup), or null. */
+export async function getTrackerForTicket(linkedTicketId: TicketId): Promise<TicketDTO | null> {
+  const [link] = await db
+    .select({ trackerId: ticketLinks.trackerTicketId })
+    .from(ticketLinks)
+    .where(and(eq(ticketLinks.linkedTicketId, linkedTicketId), eq(ticketLinks.relation, 'tracks')))
+    .limit(1)
+  if (!link) return null
+  const [row] = await db
+    .select()
+    .from(tickets)
+    .where(and(eq(tickets.id, link.trackerId), isNull(tickets.deletedAt)))
+    .limit(1)
+  if (!row) return null
+  const ctx = await buildTicketContext([row])
+  return ticketToDTO(row, ctx)
 }
