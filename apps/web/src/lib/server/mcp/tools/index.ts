@@ -1,7 +1,7 @@
 /**
  * MCP Tools for Quackback
  *
- * 38 tools calling domain services directly (no HTTP self-loop), grouped by
+ * 40 tools calling domain services directly (no HTTP self-loop), grouped by
  * resource module. Each tool declares its authorization contract — `{ scope,
  * teamOnly, feature }` — on `registerTool` (see ./helpers), except the two
  * cross-entity lookup tools (search, get_details) which gate per-branch.
@@ -22,7 +22,8 @@
  *                    reply_to_conversation, suggest_post, share_post,
  *                    set_conversation_status
  * - tickets.ts       list_tickets, get_ticket, create_ticket,
- *                    reply_to_ticket, add_ticket_note
+ *                    reply_to_ticket, add_ticket_note, link_ticket,
+ *                    unlink_ticket
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'

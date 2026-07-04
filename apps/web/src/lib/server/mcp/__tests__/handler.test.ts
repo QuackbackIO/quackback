@@ -680,7 +680,9 @@ describe('MCP HTTP Handler', () => {
       expect(toolNames).toContain('create_ticket')
       expect(toolNames).toContain('reply_to_ticket')
       expect(toolNames).toContain('add_ticket_note')
-      expect(toolNames).toHaveLength(38)
+      expect(toolNames).toContain('link_ticket')
+      expect(toolNames).toContain('unlink_ticket')
+      expect(toolNames).toHaveLength(40)
     })
 
     it('should handle resources/list request', async () => {

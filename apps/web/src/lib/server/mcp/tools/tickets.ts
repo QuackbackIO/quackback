@@ -271,4 +271,52 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
       })
     },
   })
+
+  registerTool<{ trackerTicketId: string; ticketId: string }>(server, auth, {
+    name: 'link_ticket',
+    description: `Link a customer ticket to a tracker so the tracker's stage changes cascade onto it. The tracker must be type "tracker" and the ticket type "customer"; a customer ticket belongs to at most one tracker. Returns the tracker's linked tickets.
+
+Example: link_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "ticket_01customer..." })`,
+    schema: {
+      trackerTicketId: z.string().describe('The tracker ticket TypeID'),
+      ticketId: z.string().describe('The customer ticket TypeID to track'),
+    },
+    annotations: WRITE,
+    scope: 'write:chat',
+    teamOnly: true,
+    handler: async (args) => {
+      const { linkTicketToTracker, listLinkedTicketIds } =
+        await import('@/lib/server/domains/tickets/ticket-links.service')
+      const trackerTicketId = args.trackerTicketId as TicketId
+      await linkTicketToTracker(trackerTicketId, args.ticketId as TicketId, mcpAgentActor(auth))
+      return jsonResult({
+        trackerTicketId,
+        linkedTicketIds: await listLinkedTicketIds(trackerTicketId),
+      })
+    },
+  })
+
+  registerTool<{ trackerTicketId: string; ticketId: string }>(server, auth, {
+    name: 'unlink_ticket',
+    description: `Remove a customer ticket from a tracker. Returns the tracker's remaining linked tickets.
+
+Example: unlink_ticket({ trackerTicketId: "ticket_01tracker...", ticketId: "ticket_01customer..." })`,
+    schema: {
+      trackerTicketId: z.string().describe('The tracker ticket TypeID'),
+      ticketId: z.string().describe('The linked customer ticket TypeID'),
+    },
+    annotations: WRITE,
+    scope: 'write:chat',
+    teamOnly: true,
+    handler: async (args) => {
+      const { unlinkTicketFromTracker, listLinkedTicketIds } =
+        await import('@/lib/server/domains/tickets/ticket-links.service')
+      const trackerTicketId = args.trackerTicketId as TicketId
+      await unlinkTicketFromTracker(trackerTicketId, args.ticketId as TicketId, mcpAgentActor(auth))
+      return jsonResult({
+        trackerTicketId,
+        linkedTicketIds: await listLinkedTicketIds(trackerTicketId),
+      })
+    },
+  })
 }

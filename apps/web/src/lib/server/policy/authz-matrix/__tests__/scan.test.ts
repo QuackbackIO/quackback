@@ -265,9 +265,9 @@ describe('scanMcpTools — tool authorization extraction', () => {
 })
 
 describe('scanAllMcpTools — live tool modules', () => {
-  it('finds all 38 tools across the tool modules, each with at least one scope', () => {
+  it('finds all 40 tools across the tool modules, each with at least one scope', () => {
     const tools = scanAllMcpTools(SRC_ROOT)
-    expect(tools).toHaveLength(38)
+    expect(tools).toHaveLength(40)
     expect(tools.filter((t) => t.scopes.length === 0)).toEqual([])
   })
 })

@@ -18,6 +18,14 @@ vi.mock('@/lib/server/domains/tickets/ticket-message.service', () => ({
   sendTicketMessage: (...a: unknown[]) => mockSendMessage(...a),
   addTicketNote: (...a: unknown[]) => mockAddNote(...a),
 }))
+const mockLink = vi.fn()
+const mockUnlink = vi.fn()
+const mockListLinked = vi.fn()
+vi.mock('@/lib/server/domains/tickets/ticket-links.service', () => ({
+  linkTicketToTracker: (...a: unknown[]) => mockLink(...a),
+  unlinkTicketFromTracker: (...a: unknown[]) => mockUnlink(...a),
+  listLinkedTicketIds: (...a: unknown[]) => mockListLinked(...a),
+}))
 
 import { registerTicketTools } from '../tickets'
 import type { McpAuthContext } from '../../types'
@@ -77,8 +85,10 @@ describe('ticket MCP tools', () => {
       'add_ticket_note',
       'create_ticket',
       'get_ticket',
+      'link_ticket',
       'list_tickets',
       'reply_to_ticket',
+      'unlink_ticket',
     ])
   })
 
@@ -188,6 +198,35 @@ describe('ticket MCP tools', () => {
     await collect(teamAuth).get('add_ticket_note')!({ ticketId: 'ticket_1', content: 'internal' })
     expect(mockAddNote).toHaveBeenCalledTimes(1)
     expect(mockSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('link_ticket links a customer ticket to a tracker and returns the linked ids', async () => {
+    mockLink.mockResolvedValue(undefined)
+    mockListLinked.mockResolvedValue(['ticket_customer'])
+    const out = await collect(teamAuth).get('link_ticket')!({
+      trackerTicketId: 'ticket_tracker',
+      ticketId: 'ticket_customer',
+    })
+    expect(mockLink).toHaveBeenCalledWith(
+      'ticket_tracker',
+      'ticket_customer',
+      expect.objectContaining({ principalId: 'principal_key' })
+    )
+    expect(parse(out)).toEqual({
+      trackerTicketId: 'ticket_tracker',
+      linkedTicketIds: ['ticket_customer'],
+    })
+  })
+
+  it('unlink_ticket removes the link', async () => {
+    mockUnlink.mockResolvedValue(undefined)
+    mockListLinked.mockResolvedValue([])
+    const out = await collect(teamAuth).get('unlink_ticket')!({
+      trackerTicketId: 'ticket_tracker',
+      ticketId: 'ticket_customer',
+    })
+    expect(mockUnlink).toHaveBeenCalledTimes(1)
+    expect(parse(out).linkedTicketIds).toEqual([])
   })
 
   it('write tools require the write:chat scope, not just read:chat', async () => {
