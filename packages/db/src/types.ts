@@ -400,6 +400,7 @@ export type ConversationSystemEventKind =
   | 'assigned'
   | 'assistant_handoff'
   | 'ticket_status_changed'
+  | 'ticket_linked'
 
 export interface ConversationSystemEvent {
   kind: ConversationSystemEventKind
@@ -408,6 +409,8 @@ export interface ConversationSystemEvent {
   /** Customer-facing stage label for 'ticket_status_changed' (never the raw
    *  internal status name). */
   stageLabel?: string
+  /** Tracker reference (e.g. "#12") for 'ticket_linked' — team-only. */
+  trackerReference?: string
 }
 
 // An agent-only suggestion (carried on an internal note) to track a resolved
