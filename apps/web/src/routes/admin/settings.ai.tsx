@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
+import { WorkflowsManager } from '@/components/admin/automation/workflows-manager'
 
 export const Route = createFileRoute('/admin/settings/ai')({
   loader: async ({ context }) => {
@@ -52,6 +53,8 @@ function AiSettingsPage() {
           avatarUrl: assistant?.avatarUrl ?? '',
         }}
       />
+
+      <WorkflowsManager />
     </div>
   )
 }
