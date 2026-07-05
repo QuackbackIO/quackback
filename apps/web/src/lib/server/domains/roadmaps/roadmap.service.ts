@@ -21,7 +21,8 @@ import {
   postRoadmaps,
   type Roadmap,
 } from '@/lib/server/db'
-import { toUuid, type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
+import type { RoadmapId, PostId, PrincipalId } from '@quackback/ids'
+import { positionCaseSql } from '@/lib/server/utils'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { logger } from '@/lib/server/logger'
@@ -190,15 +191,9 @@ export async function reorderRoadmaps(roadmapIds: RoadmapId[]): Promise<void> {
   log.debug({ count: roadmapIds.length }, 'reorder roadmaps')
   if (roadmapIds.length === 0) return
 
-  // Build CASE WHEN clause for batch update
-  const cases = roadmapIds
-    .map((id, i) => sql`WHEN ${roadmaps.id} = ${toUuid(id)} THEN ${sql.raw(String(i))}`)
-    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-
-  // Single UPDATE with CASE expression
   await db
     .update(roadmaps)
-    .set({ position: sql`CASE ${cases} END` })
+    .set({ position: positionCaseSql(roadmaps.id, roadmapIds) })
     .where(inArray(roadmaps.id, roadmapIds))
 }
 
@@ -312,15 +307,9 @@ export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<vo
 
   if (input.postIds.length === 0) return
 
-  // Build CASE WHEN clause for batch update
-  const cases = input.postIds
-    .map((id, i) => sql`WHEN ${postRoadmaps.postId} = ${toUuid(id)} THEN ${sql.raw(String(i))}`)
-    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-
-  // Single UPDATE with CASE expression
   await db
     .update(postRoadmaps)
-    .set({ position: sql`CASE ${cases} END` })
+    .set({ position: positionCaseSql(postRoadmaps.postId, input.postIds) })
     .where(
       and(eq(postRoadmaps.roadmapId, input.roadmapId), inArray(postRoadmaps.postId, input.postIds))
     )

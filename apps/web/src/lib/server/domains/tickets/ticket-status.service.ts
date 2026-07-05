@@ -22,7 +22,8 @@ import {
   type TicketStatusCategory,
   type TicketStage,
 } from '@/lib/server/db'
-import { toUuid, type TicketStatusId } from '@quackback/ids'
+import type { TicketStatusId } from '@quackback/ids'
+import { positionCaseSql } from '@/lib/server/utils'
 import { slugify } from '@/lib/shared/utils'
 import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
@@ -163,14 +164,9 @@ export async function reorderTicketStatuses(orderedIds: TicketStatusId[]): Promi
   if (!orderedIds || orderedIds.length === 0) {
     throw new ValidationError('VALIDATION_ERROR', 'Status IDs are required')
   }
-  // Positions are inlined (sql.raw) because the driver can bind integers as text,
-  // which then mismatches the integer column in a CASE (mirrors reorderStatuses).
-  const cases = orderedIds
-    .map((id, i) => sql`WHEN ${ticketStatuses.id} = ${toUuid(id)} THEN ${sql.raw(String(i))}`)
-    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
   await db
     .update(ticketStatuses)
-    .set({ position: sql`CASE ${cases} END` })
+    .set({ position: positionCaseSql(ticketStatuses.id, orderedIds) })
     .where(inArray(ticketStatuses.id, orderedIds))
 }
 

@@ -11,6 +11,7 @@
 
 import { db, eq, and, isNull, inArray, sql, posts, postStatuses, asc } from '@/lib/server/db'
 import { toUuid, type PostStatusId } from '@quackback/ids'
+import { positionCaseSql } from '@/lib/server/utils'
 import {
   NotFoundError,
   ValidationError,
@@ -246,17 +247,9 @@ export async function reorderStatuses(ids: PostStatusId[]): Promise<void> {
     throw new ValidationError('VALIDATION_ERROR', 'Status IDs are required')
   }
 
-  // Build CASE WHEN clause for batch update
-  // Position values are inlined (sql.raw) because parameterized integers
-  // can be sent as text by the driver, causing type mismatch with the integer column
-  const cases = ids
-    .map((id, i) => sql`WHEN ${postStatuses.id} = ${toUuid(id)} THEN ${sql.raw(String(i))}`)
-    .reduce((acc, curr) => sql`${acc} ${curr}`, sql``)
-
-  // Single UPDATE with CASE expression
   await db
     .update(postStatuses)
-    .set({ position: sql`CASE ${cases} END` })
+    .set({ position: positionCaseSql(postStatuses.id, ids) })
     .where(inArray(postStatuses.id, ids))
 }
 
