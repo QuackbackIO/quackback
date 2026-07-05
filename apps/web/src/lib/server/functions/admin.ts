@@ -1214,6 +1214,12 @@ export const segmentConditionSchema = z.object({
     'last_active_days_ago',
     'signup_source',
     'principal_type',
+    // Company predicates (§K3), resolved through principal.company_id.
+    'company_plan',
+    'company_mrr',
+    'company_size',
+    'company_industry',
+    'company_attr',
   ]),
   operator: z.enum([
     'eq',

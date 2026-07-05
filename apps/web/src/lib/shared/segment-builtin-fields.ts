@@ -32,8 +32,9 @@ export interface BuiltinField {
    * - 'attribute': a stored property on the user record (shown in User Attributes view)
    * - 'account': account-level facts (principal type, account age) — segment rules only
    * - 'activity': engagement counts — segment rules only
+   * - 'company': standard fields on the person's company (via principal.company_id)
    */
-  group: 'attribute' | 'account' | 'activity'
+  group: 'attribute' | 'account' | 'activity' | 'company'
   /** Short description shown as a tooltip or helper text */
   description?: string
   /** Enum fields: list of accepted values rendered as a select input */
@@ -252,6 +253,38 @@ export const BUILTIN_FIELDS = [
       { value: 'is_set', label: 'has any' },
       { value: 'is_not_set', label: 'has none' },
     ],
+  },
+  {
+    key: 'company_plan',
+    label: 'Company plan',
+    type: 'string',
+    group: 'company',
+    description: "The plan label on the person's company.",
+    // evaluator: companyTextConditionSql — full string default (NULL-safe neq)
+  },
+  {
+    key: 'company_mrr',
+    label: 'Company monthly spend',
+    type: 'number',
+    group: 'company',
+    description: "The company's monthly spend in whole currency units.",
+    // evaluator: OPERATOR_SQL over (mrr_cents / 100.0) + presence — matches number default
+  },
+  {
+    key: 'company_size',
+    label: 'Company size',
+    type: 'string',
+    group: 'company',
+    description: "The size field on the person's company (e.g. '11-50').",
+    // evaluator: companyTextConditionSql — full string default (NULL-safe neq)
+  },
+  {
+    key: 'company_industry',
+    label: 'Company industry',
+    type: 'string',
+    group: 'company',
+    description: "The industry field on the person's company.",
+    // evaluator: companyTextConditionSql — full string default (NULL-safe neq)
   },
 ] as const satisfies readonly BuiltinField[]
 

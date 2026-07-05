@@ -41,11 +41,95 @@ function stringOperatorSql(
 }
 
 /**
+ * Build a condition over a nullable company text column (`co.` alias — see the
+ * LEFT JOIN in resolveMatchingPrincipals). Semantics mirror the locale/country
+ * built-ins: neq is NULL-safe (a person with no company, or a company without
+ * the field, satisfies "is not X"), and is_set / is_not_set test presence.
+ */
+function companyTextConditionSql(
+  columnName: string,
+  operator: string,
+  value: string | number | boolean | (string | number)[] | undefined
+): ReturnType<typeof sql> | null {
+  const field = sql.raw(`co.${columnName}`)
+  if (operator === 'is_set') return sql`${field} IS NOT NULL`
+  if (operator === 'is_not_set') return sql`${field} IS NULL`
+  if (operator === 'in') {
+    const values = Array.isArray(value) ? value : []
+    if (values.length === 0) return null
+    const placeholders = sql.join(
+      values.map((v) => sql`${String(v)}`),
+      sql`, `
+    )
+    return sql`${field} IN (${placeholders})`
+  }
+  const strResult = stringOperatorSql(field, operator, value)
+  if (strResult) return strResult
+  const sqlOp = OPERATOR_SQL[operator]
+  if (!sqlOp) return null
+  if (operator === 'neq') {
+    return sql`(${field} IS NULL OR ${field} != ${String(value)})`
+  }
+  return sql`${field} ${sql.raw(sqlOp)} ${String(value)}`
+}
+
+/**
  * Build a SQL condition fragment for a single rule condition.
  * Returns a SQL template or null if the condition is unsupported.
  */
 function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> | null {
   const { attribute, operator, value } = condition
+
+  // Company predicates (§K3), resolved through the `co` LEFT JOIN
+  // (principal.company_id -> companies). Handled up front because each helper
+  // covers the full operator set including presence and 'in'.
+  if (
+    attribute === 'company_plan' ||
+    attribute === 'company_size' ||
+    attribute === 'company_industry'
+  ) {
+    const column = {
+      company_plan: 'plan',
+      company_size: 'size',
+      company_industry: 'industry',
+    }[attribute]
+    return companyTextConditionSql(column, operator, value)
+  }
+
+  if (attribute === 'company_mrr') {
+    // The rule speaks whole currency units (what the directory shows);
+    // the column stores minor units.
+    if (operator === 'is_set') return sql`co.mrr_cents IS NOT NULL`
+    if (operator === 'is_not_set') return sql`co.mrr_cents IS NULL`
+    const sqlOp = OPERATOR_SQL[operator]
+    if (!sqlOp) return null
+    return sql`(co.mrr_cents / 100.0) ${sql.raw(sqlOp)} ${Number(value)}`
+  }
+
+  if (attribute === 'company_attr') {
+    const key = condition.metadataKey
+    if (!key) return null
+    const field = sql`(co.custom_attributes::jsonb->>${key})`
+    if (operator === 'is_set') return sql`${field} IS NOT NULL`
+    if (operator === 'is_not_set') return sql`${field} IS NULL`
+    if (operator === 'in') {
+      const values = Array.isArray(value) ? value : []
+      if (values.length === 0) return null
+      const placeholders = sql.join(
+        values.map((v) => sql`${String(v)}`),
+        sql`, `
+      )
+      return sql`${field} IN (${placeholders})`
+    }
+    const strResult = stringOperatorSql(field, operator, value)
+    if (strResult) return strResult
+    const sqlOp = OPERATOR_SQL[operator]
+    if (!sqlOp) return null
+    if (typeof value === 'number') {
+      return sql`${field}::numeric ${sql.raw(sqlOp)} ${value}`
+    }
+    return sql`${field} ${sql.raw(sqlOp)} ${String(value)}`
+  }
 
   // Handle is_set / is_not_set
   if (operator === 'is_set' || operator === 'is_not_set') {
@@ -295,11 +379,13 @@ async function resolveMatchingPrincipals(rules: SegmentRules): Promise<string[]>
 
   // Audience = identified end-users: role 'user' on a human principal
   // (type='user'). The type guard excludes anonymous visitors, who also carry
-  // role='user' but must not match segments.
+  // role='user' but must not match segments. The companies LEFT JOIN feeds the
+  // company_* predicates; people without a company keep a NULL co row.
   const rows = await db.execute(sql`
     SELECT p.id
     FROM principal p
     INNER JOIN "user" u ON u.id = p.user_id
+    LEFT JOIN companies co ON co.id = p.company_id
     WHERE p.role = 'user'
       AND p.type = 'user'
       AND p.user_id IS NOT NULL

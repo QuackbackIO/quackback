@@ -22,6 +22,7 @@ import {
 import { useRemovePortalUser } from '@/lib/client/mutations'
 import { useSegments, type SegmentListItem } from '@/lib/client/hooks/use-segments-queries'
 import { useUserAttributes } from '@/lib/client/hooks/use-user-attributes-queries'
+import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import {
   useCreateSegment,
   useUpdateSegment,
@@ -149,6 +150,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
   // Segments data
   const { data: segments, isLoading: isLoadingSegments } = useSegments()
   const { data: customAttributes } = useUserAttributes()
+  const { data: companyAttributes } = useCompanyAttributes()
 
   // Segment mutations
   const createSegment = useCreateSegment()
@@ -215,7 +217,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
           ? {
               match: values.rules.match,
               conditions: values.rules.conditions.map((c) =>
-                serializeCondition(c, customAttributes)
+                serializeCondition(c, customAttributes, companyAttributes)
               ),
             }
           : undefined,
@@ -238,7 +240,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             ? {
                 match: values.rules.match,
                 conditions: values.rules.conditions.map((c) =>
-                  serializeCondition(c, customAttributes)
+                  serializeCondition(c, customAttributes, companyAttributes)
                 ),
               }
             : null
@@ -356,6 +358,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
         onSubmit={handleCreateSegment}
         isPending={createSegment.isPending}
         customAttributes={customAttributes}
+        companyAttributes={companyAttributes}
       />
 
       {/* Edit dialog */}
@@ -373,7 +376,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
                   ? {
                       match: editTarget.rules.match,
                       conditions: editTarget.rules.conditions.map((c: SegmentCondition) =>
-                        deserializeCondition(c, customAttributes)
+                        deserializeCondition(c, customAttributes, companyAttributes)
                       ) as unknown as RuleCondition[],
                     }
                   : { match: 'all', conditions: [] },
@@ -383,6 +386,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
         onSubmit={handleUpdateSegment}
         isPending={updateSegment.isPending}
         customAttributes={customAttributes}
+        companyAttributes={companyAttributes}
       />
 
       {/* Delete confirm */}

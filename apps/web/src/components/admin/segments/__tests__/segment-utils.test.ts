@@ -17,6 +17,7 @@ import {
 import type { RuleCondition } from '../segment-form'
 import type { SegmentCondition } from '@/lib/shared/db-types'
 import type { UserAttributeItem } from '@/lib/client/hooks/use-user-attributes-queries'
+import type { CompanyAttributeItem } from '@/lib/client/hooks/use-company-attributes-queries'
 
 const CUSTOM_ATTR_PREFIX = '__custom__'
 
@@ -401,5 +402,75 @@ describe('backward compatibility — legacy attributes still deserialize', () =>
     expect(s.attribute).toBe('metadata_key')
     expect(s.metadataKey).toBe('mrr')
     expect(s.value).toBe(1000)
+  })
+})
+
+// ============================================
+// Company predicates (§K3)
+// ============================================
+
+const COMPANY_ATTR_PREFIX = '__company_attr__'
+
+// Same shape as UserAttributeItem apart from the id brand; the cast keeps the
+// shared mockAttr helper usable for both definition kinds.
+const mockCompanyAttributes = [
+  mockAttr({ key: 'region', type: 'string' }),
+  mockAttr({ key: 'seats', type: 'number' }),
+] as unknown as CompanyAttributeItem[]
+
+describe('company predicate round-trips', () => {
+  it('serializes company_mrr values as numbers', () => {
+    const c: RuleCondition = { attribute: 'company_mrr', operator: 'gte', value: '500' }
+    const s = serializeCondition(c)
+    expect(s.attribute).toBe('company_mrr')
+    expect(s.value).toBe(500)
+  })
+
+  it('passes company standard string fields through untouched', () => {
+    const c: RuleCondition = { attribute: 'company_plan', operator: 'eq', value: 'Scale' }
+    const s = serializeCondition(c)
+    expect(s.attribute).toBe('company_plan')
+    expect(s.value).toBe('Scale')
+  })
+
+  it('serializes a __company_attr__* condition to company_attr + metadataKey with typed value', () => {
+    const c: RuleCondition = {
+      attribute: `${COMPANY_ATTR_PREFIX}seats`,
+      operator: 'gte',
+      value: '50',
+    }
+    const s = serializeCondition(c, mockCustomAttributes, mockCompanyAttributes)
+    expect(s.attribute).toBe('company_attr')
+    expect(s.metadataKey).toBe('seats')
+    expect(s.value).toBe(50)
+  })
+
+  it('deserializes a company_attr condition back to the prefixed form', () => {
+    const c: SegmentCondition = {
+      attribute: 'company_attr',
+      operator: 'eq',
+      value: 'eu',
+      metadataKey: 'region',
+    }
+    const d = deserializeCondition(c, mockCustomAttributes, mockCompanyAttributes)
+    expect(d.attribute).toBe(`${COMPANY_ATTR_PREFIX}region`)
+    expect(d.metadataKey).toBe('region')
+    expect(d.value).toBe('eu')
+  })
+
+  it('round-trips a company custom attribute condition', () => {
+    const original: RuleCondition = {
+      attribute: `${COMPANY_ATTR_PREFIX}region`,
+      operator: 'eq',
+      value: 'eu',
+    }
+    const serialized = serializeCondition(original, mockCustomAttributes, mockCompanyAttributes)
+    const deserialized = deserializeCondition(
+      serialized as SegmentCondition,
+      mockCustomAttributes,
+      mockCompanyAttributes
+    )
+    expect(deserialized.attribute).toBe(original.attribute)
+    expect(deserialized.value).toBe(original.value)
   })
 })

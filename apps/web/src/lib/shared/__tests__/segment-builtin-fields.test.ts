@@ -10,7 +10,12 @@ import {
 import type { SegmentRuleAttribute } from '@/lib/server/db'
 
 const ALLOWED_TYPES: ReadonlyArray<BuiltinField['type']> = ['string', 'number', 'boolean', 'date']
-const ALLOWED_GROUPS: ReadonlyArray<BuiltinField['group']> = ['attribute', 'account', 'activity']
+const ALLOWED_GROUPS: ReadonlyArray<BuiltinField['group']> = [
+  'attribute',
+  'account',
+  'activity',
+  'company',
+]
 
 describe('BUILTIN_FIELDS registry well-formedness', () => {
   it('is a non-empty array', () => {
@@ -66,10 +71,23 @@ describe('BUILTIN_FIELDS registry well-formedness', () => {
       'last_active_days_ago',
       'signup_source',
       'principal_type',
+      'company_plan',
+      'company_mrr',
+      'company_size',
+      'company_industry',
     ]
     for (const key of expected) {
       expect(keys.has(key), `expected key "${key}" to be in BUILTIN_FIELDS`).toBe(true)
     }
+  })
+
+  it('company-group fields are exactly the four standard company predicates', () => {
+    const companyKeys = BUILTIN_FIELDS.filter((f) => f.group === 'company').map((f) => f.key)
+    expect(companyKeys.sort()).toEqual(
+      ['company_industry', 'company_mrr', 'company_plan', 'company_size'].sort()
+    )
+    // company_attr is the custom-attribute mechanism, not a listed field.
+    expect(companyKeys).not.toContain('company_attr')
   })
 
   it('does NOT include display_name (dropped — redundant with name for portal users)', () => {
