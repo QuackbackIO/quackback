@@ -24,8 +24,10 @@ import {
 } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
+import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
+import { isUniqueViolation } from '@/lib/server/utils'
 import { applyAction } from './action.executor'
 import { walkWorkflow, type WorkflowGraph, type WalkResult } from './graph'
 import type { ConditionContext } from './condition.evaluator'
@@ -53,15 +55,7 @@ const AUTOMATION_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
 ])
 
 function workflowActor(): Actor {
-  return {
-    principalId: null,
-    role: 'admin',
-    principalType: 'service',
-    segmentIds: new Set(),
-    // The bounded set, not resolveActorPermissions('admin') — can() reads
-    // actor.permissions, so this is the effective ceiling.
-    permissions: new Set(AUTOMATION_PERMISSIONS),
-  }
+  return boundedServiceActor(AUTOMATION_PERMISSIONS)
 }
 
 /** Read the stored graph defensively — a malformed shape becomes an empty graph
@@ -96,10 +90,14 @@ export interface RunWorkflowOptions {
 
 /**
  * Run one workflow against a conversation. Walks the graph, runs the planned
- * actions, and records a workflow_run + timeline. Returns null (no run created)
- * when the walk produces no actions and isn't waiting — an entry that matches
- * nothing is a silent no-op. On a wait the run is left in state 'waiting' with the
- * resume node in its cursor; Slice 5e schedules the timer and resumes.
+ * actions, and records a workflow_run + timeline. Returns null when the walk
+ * produces no actions and isn't waiting (an entry that matches nothing is a
+ * silent no-op) OR when the customer_facing exclusive lock was lost: the
+ * dispatcher's hasActiveCustomerFacingRun is only a cheap pre-check, so two
+ * triggers can both pass it and race here — the partial unique index on
+ * workflow_runs is the real lock, and losing that race (a 23505) is treated the
+ * same as never having matched. On a wait the run is left in state 'waiting'
+ * with the resume node in its cursor; Slice 5e schedules the timer and resumes.
  */
 export async function runWorkflow(
   workflow: Workflow,
@@ -110,15 +108,32 @@ export async function runWorkflow(
   if (plan.actions.length === 0 && plan.status !== 'waiting') return null
 
   const subjectPrincipalId = opts.subjectPrincipalId ?? null
-  const [run] = await db
-    .insert(workflowRuns)
-    .values({
-      workflowId: workflow.id,
-      conversationId: opts.conversationId,
-      subjectPrincipalId,
-      state: 'running',
+  let run: WorkflowRun
+  try {
+    // In its own transaction (a savepoint if the caller is already in one) so a
+    // lost race here rolls back just this insert, not a surrounding transaction
+    // (a caught unique violation would otherwise abort an enclosing one).
+    run = await db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(workflowRuns)
+        .values({
+          workflowId: workflow.id,
+          conversationId: opts.conversationId,
+          subjectPrincipalId,
+          state: 'running',
+          customerFacing: workflow.class === 'customer_facing',
+        })
+        .returning()
+      return inserted
     })
-    .returning()
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err
+    log.debug(
+      { workflowId: workflow.id, conversationId: opts.conversationId },
+      'customer_facing lock lost to a concurrent run, skipping'
+    )
+    return null
+  }
   await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'started')
 
   return applyPlanAndSettle(run, workflow, plan, opts.conversationId, subjectPrincipalId)

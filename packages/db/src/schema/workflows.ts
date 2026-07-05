@@ -7,7 +7,17 @@
  * is the audit + per-person frequency-cap ledger. Per-tenant DB, no workspace
  * column.
  */
-import { pgTable, text, integer, jsonb, timestamp, index, foreignKey } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  integer,
+  jsonb,
+  timestamp,
+  boolean,
+  index,
+  uniqueIndex,
+  foreignKey,
+} from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
@@ -68,6 +78,11 @@ export const workflowRuns = pgTable(
     conversationId: typeIdColumnNullable('conversation')('conversation_id'),
     subjectPrincipalId: typeIdColumnNullable('principal')('subject_principal_id'),
     state: text('state').$type<WorkflowRunState>().notNull().default('running'),
+    // Denormalized from workflows.class at insert time (not read via a join) so
+    // the exclusive-lock index below can enforce it on this row alone —
+    // hasActiveCustomerFacingRun is a cheap read-only pre-check, not the lock
+    // itself, and two triggers can both pass it before either inserts.
+    customerFacing: boolean('customer_facing').notNull().default(false),
     cursor: jsonb('cursor')
       .$type<Record<string, unknown>>()
       .notNull()
@@ -95,6 +110,12 @@ export const workflowRuns = pgTable(
       .on(table.conversationId, table.state)
       .where(sql`"conversation_id" IS NOT NULL`),
     index('workflow_runs_state_idx').on(table.state),
+    // The exclusive lock itself: at most one running/waiting customer_facing run
+    // per conversation, enforced by Postgres. The pre-check in dispatcher.guards
+    // can't close the TOCTOU gap on its own; this index is what actually does.
+    uniqueIndex('workflow_runs_exclusive_customer_facing_idx')
+      .on(table.conversationId)
+      .where(sql`"state" IN ('running', 'waiting') AND "customer_facing"`),
   ]
 )
 

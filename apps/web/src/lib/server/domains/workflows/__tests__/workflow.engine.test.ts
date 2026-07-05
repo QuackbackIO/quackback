@@ -20,6 +20,7 @@ import {
   eq,
 } from '@/lib/server/db'
 import type { ConditionContext } from '../condition.evaluator'
+import type { WorkflowGraph } from '../graph'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -41,7 +42,10 @@ import { runWorkflow, resumeWorkflowRun, interruptWaitingRuns } from '../workflo
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
-    await db.select({ id: workflowRuns.id }).from(workflowRuns).limit(0)
+    await db
+      .select({ id: workflowRuns.id, customerFacing: workflowRuns.customerFacing })
+      .from(workflowRuns)
+      .limit(0)
     await db.select({ id: conversations.id }).from(conversations).limit(0)
   },
 })
@@ -272,5 +276,82 @@ describe.skipIf(!fixture.available)('runWorkflow (real DB, rolled back)', () => 
       'completed',
       'started',
     ])
+  })
+
+  it('enforces the customer_facing exclusive lock at the DB level: a lock-lost race is skipped, not thrown', async () => {
+    const conversationId = await seedConversation()
+    const wf = await createWorkflow({
+      name: 'CF workflow',
+      class: 'customer_facing',
+      triggerType: 'conversation.created',
+      // A wait keeps the first run in state 'waiting' (still exclusive) rather
+      // than settling straight to 'done', so the second call actually contends
+      // for the lock instead of finding it already released.
+      graph: {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          { id: 'w', type: 'wait', seconds: 3600 },
+          { id: 'a', type: 'action', action: { type: 'close' } },
+        ],
+        edges: [
+          { from: 't', to: 'w' },
+          { from: 'w', to: 'a' },
+        ],
+      },
+    })
+
+    // Both calls would pass hasActiveCustomerFacingRun's read (there is nothing
+    // to see yet) — exactly what two triggers firing close together
+    // (conversation.created + the first message.created) would do. Run
+    // sequentially (this fixture's single connection can't safely interleave two
+    // concurrent nested transactions) so the second call deterministically hits
+    // the same insert-time conflict a true race would produce; the DB's partial
+    // unique index, not the read-only pre-check, is what must decide.
+    const first = await runWorkflow(wf, ctx(), { conversationId })
+    const second = await runWorkflow(wf, ctx(), { conversationId })
+    expect(first?.state).toBe('waiting')
+    expect(second).toBeNull() // lock lost, skipped rather than thrown
+
+    const rows = await testDb
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.conversationId, conversationId))
+    expect(rows).toHaveLength(1)
+    expect(rows[0].customerFacing).toBe(true)
+  })
+
+  it('a background-class run on the same conversation still inserts fine alongside a customer_facing run', async () => {
+    const conversationId = await seedConversation()
+    const graph: WorkflowGraph = {
+      nodes: [
+        { id: 't', type: 'trigger' },
+        { id: 'a', type: 'action', action: { type: 'close' } },
+      ],
+      edges: [{ from: 't', to: 'a' }],
+    }
+    const cf = await createWorkflow({
+      name: 'CF workflow',
+      class: 'customer_facing',
+      triggerType: 'conversation.created',
+      graph,
+    })
+    const bg = await createWorkflow({
+      name: 'BG workflow',
+      class: 'background',
+      triggerType: 'conversation.created',
+      graph,
+    })
+
+    const cfRun = await runWorkflow(cf, ctx(), { conversationId })
+    const bgRun = await runWorkflow(bg, ctx(), { conversationId })
+    expect(cfRun).not.toBeNull()
+    expect(bgRun).not.toBeNull() // the exclusive index only scopes customer_facing rows
+
+    const rows = await testDb
+      .select()
+      .from(workflowRuns)
+      .where(eq(workflowRuns.conversationId, conversationId))
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.customerFacing).sort()).toEqual([false, true])
   })
 })
