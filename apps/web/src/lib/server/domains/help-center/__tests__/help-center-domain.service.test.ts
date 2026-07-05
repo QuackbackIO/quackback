@@ -12,10 +12,13 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 const mockResolve4 = vi.fn()
 const mockResolve6 = vi.fn()
 
-vi.mock('node:dns/promises', () => ({
-  resolve4: (...args: unknown[]) => mockResolve4(...args),
-  resolve6: (...args: unknown[]) => mockResolve6(...args),
-}))
+vi.mock('node:dns/promises', () => {
+  const resolve4 = (...args: unknown[]) => mockResolve4(...args)
+  const resolve6 = (...args: unknown[]) => mockResolve6(...args)
+  // node:dns/promises carries a default export; vitest's ESM interop needs it
+  // present on the mock alongside the named exports the service imports.
+  return { default: { resolve4, resolve6 }, resolve4, resolve6 }
+})
 
 const {
   resolveHelpCenterDomainRedirect,
@@ -118,19 +121,31 @@ describe('resolveHelpCenterBaseUrl', () => {
 
   it('falls back to BASE_URL when the domain is unverified', () => {
     expect(
-      resolveHelpCenterBaseUrl({ domainConfig: unverifiedDomain, currentHost: 'help.acme.com', fallback })
+      resolveHelpCenterBaseUrl({
+        domainConfig: unverifiedDomain,
+        currentHost: 'help.acme.com',
+        fallback,
+      })
     ).toBe(fallback)
   })
 
   it('falls back to BASE_URL when the request did not arrive on the custom domain', () => {
     expect(
-      resolveHelpCenterBaseUrl({ domainConfig: verifiedDomain, currentHost: 'app.quackback.io', fallback })
+      resolveHelpCenterBaseUrl({
+        domainConfig: verifiedDomain,
+        currentHost: 'app.quackback.io',
+        fallback,
+      })
     ).toBe(fallback)
   })
 
   it('uses the custom domain when the request arrived on it and it is verified', () => {
     expect(
-      resolveHelpCenterBaseUrl({ domainConfig: verifiedDomain, currentHost: 'help.acme.com', fallback })
+      resolveHelpCenterBaseUrl({
+        domainConfig: verifiedDomain,
+        currentHost: 'help.acme.com',
+        fallback,
+      })
     ).toBe('https://help.acme.com')
   })
 })
@@ -173,9 +188,11 @@ describe('checkHelpCenterDomainStatus', () => {
 describe('setHelpCenterDomain', () => {
   beforeEach(() => {
     mockUpdateHelpCenterConfig.mockReset()
-    mockUpdateHelpCenterConfig.mockImplementation(async (input: { domain: HelpCenterDomainConfig }) => ({
-      domain: input.domain,
-    }))
+    mockUpdateHelpCenterConfig.mockImplementation(
+      async (input: { domain: HelpCenterDomainConfig }) => ({
+        domain: input.domain,
+      })
+    )
   })
 
   it('normalizes and persists a new domain, resetting verification', async () => {
@@ -216,9 +233,11 @@ describe('verifyHelpCenterDomain', () => {
     mockGetHelpCenterConfig.mockResolvedValue({ domain: unverifiedDomain })
     mockResolve4.mockResolvedValue(['1.2.3.4'])
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
-    mockUpdateHelpCenterConfig.mockImplementation(async (input: { domain: HelpCenterDomainConfig }) => ({
-      domain: input.domain,
-    }))
+    mockUpdateHelpCenterConfig.mockImplementation(
+      async (input: { domain: HelpCenterDomainConfig }) => ({
+        domain: input.domain,
+      })
+    )
 
     const { config, status } = await verifyHelpCenterDomain()
     expect(status.verified).toBe(true)
@@ -233,9 +252,11 @@ describe('verifyHelpCenterDomain', () => {
     mockResolve4.mockRejectedValue(new Error('ENOTFOUND'))
     mockResolve6.mockRejectedValue(new Error('ENOTFOUND'))
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('down')) as unknown as typeof fetch
-    mockUpdateHelpCenterConfig.mockImplementation(async (input: { domain: HelpCenterDomainConfig }) => ({
-      domain: input.domain,
-    }))
+    mockUpdateHelpCenterConfig.mockImplementation(
+      async (input: { domain: HelpCenterDomainConfig }) => ({
+        domain: input.domain,
+      })
+    )
 
     const { config, status } = await verifyHelpCenterDomain()
     expect(status.verified).toBe(false)
