@@ -111,6 +111,17 @@ describe('buildNavSections', () => {
     ])
   })
 
+  it('Changelog accordion is always present (core product) and last in Products', () => {
+    for (const flags of [undefined, { helpCenter: true, supportInbox: true }] as const) {
+      const sections = buildNavSections(flags)
+      const products = itemLabels(sections, 'Products')
+      expect(products[products.length - 1]).toBe('Changelog')
+    }
+    expect(groupKids(buildNavSections(), 'Products', 'Changelog')).toEqual([
+      { label: 'Settings', to: '/admin/settings/changelog' },
+    ])
+  })
+
   it('SLA policies points at the sla URL', () => {
     const sections = buildNavSections({ supportInbox: true })
     const sla = groupKids(sections, 'Products', 'Support').find((k) => k.label === 'SLA policies')!

@@ -111,6 +111,13 @@ export function buildNavSections(flags?: {
     })
   }
 
+  // Changelog is a core product (no flag).
+  products.push({
+    label: 'Changelog',
+    icon: MegaphoneIcon,
+    kids: [{ label: 'Settings', to: '/admin/settings/changelog', icon: MegaphoneIcon }],
+  })
+
   return [
     { label: 'Products', items: products },
     {
