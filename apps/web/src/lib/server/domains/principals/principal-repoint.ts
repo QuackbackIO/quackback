@@ -432,6 +432,12 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'view pins belong to team members; the merge source is always anonymous',
   'macros.created_by_principal_id': 'macro authors are team members, never anonymous',
   'workflows.created_by': 'workflow authors are team members, never anonymous',
+  'assistant_guidance_rules.created_by_id':
+    'guidance rule authors are team members, never anonymous',
+  'assistant_pending_actions.decided_by_id':
+    'the agent who approves/rejects a pending action is a team member, never anonymous',
+  'assistant_tool_calls.principal_id':
+    'the actor attributed to a tool call is a team member or the assistant itself, never the anonymous merge source',
   'import_runs.initiated_by_principal_id':
     'import runs are launched by admins (route requires the admin role); the merge source is always anonymous',
 }

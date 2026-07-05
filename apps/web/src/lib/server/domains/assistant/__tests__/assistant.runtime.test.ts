@@ -60,7 +60,7 @@ import {
   ASSISTANT_FALLBACK_MESSAGE,
   type AssistantThreadMessage,
 } from '../assistant.runtime'
-import type { AssistantCitation } from '../assistant.tools'
+import type { AssistantCitation } from '../assistant.toolspec'
 
 /** Async-iterable of scripted chunks. */
 function chunkStream(chunks: unknown[]) {

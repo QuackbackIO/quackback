@@ -68,6 +68,8 @@ export { buildAssistantHandoverMessage } from './assistant.handover'
 export {
   ASSISTANT_TOOL_SPECS,
   resolveToolSpecs,
+  searchKnowledgeTool,
+  getConversationContextTool,
   SEARCH_BUDGET_PER_TURN,
   type ToolRiskClass,
   type ToolControlMode,
@@ -76,8 +78,35 @@ export {
   type AssistantToolContext,
 } from './assistant.toolspec'
 
+// Quinn — customization + action plumbing (guidance rules, approval queue,
+// tool-call audit); the execution pipeline wires these into the tool assembler.
+export {
+  createGuidanceRule,
+  listGuidanceRules,
+  updateGuidanceRule,
+  reorderGuidanceRules,
+  deleteGuidanceRule,
+  GUIDANCE_MAX_ENABLED_PER_SURFACE,
+  GUIDANCE_CHAR_BUDGET,
+  type AssistantGuidanceRule,
+} from './guidance.service'
+export {
+  proposePendingAction,
+  decidePendingAction,
+  markPendingActionExecuted,
+  markPendingActionFailed,
+  expireStalePendingActions,
+  type AssistantPendingAction,
+} from './pending-actions.service'
+export {
+  claimToolCall,
+  finalizeToolCall,
+  recordDeniedToolCall,
+  type AssistantToolCall,
+} from './tool-audit'
+
 // Quinn — tools + runtime
-export { searchKnowledgeTool, getConversationContextTool, createAssistantTools } from './assistant.tools'
+export { createAssistantTools } from './assistant.tools'
 export {
   runAssistantTurn,
   isAssistantConfigured,

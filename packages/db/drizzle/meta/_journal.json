@@ -1142,6 +1142,27 @@
       "when": 1784766240000,
       "tag": "0162_workflow_run_exclusive_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "7",
+      "when": 1784766300000,
+      "tag": "0163_assistant_guidance_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 164,
+      "version": "7",
+      "when": 1784766360000,
+      "tag": "0164_assistant_pending_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1784766420000,
+      "tag": "0165_assistant_tool_calls",
+      "breakpoints": true
     }
   ]
 }

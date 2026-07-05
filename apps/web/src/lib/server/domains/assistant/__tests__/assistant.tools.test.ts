@@ -13,11 +13,8 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   listMessages: (...args: unknown[]) => mockListMessages(...args),
 }))
 
-import {
-  createAssistantTools,
-  type AssistantCitation,
-  type AssistantToolContext,
-} from '../assistant.tools'
+import { createAssistantTools } from '../assistant.tools'
+import type { AssistantCitation, AssistantToolContext } from '../assistant.toolspec'
 
 // The tool array is heterogeneous; expose a loosely-typed execute for the test.
 function findTool(name: string): { execute: (args: unknown, ctx: unknown) => Promise<unknown> } {

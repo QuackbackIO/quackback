@@ -346,6 +346,14 @@ export {
   ASSISTANT_INVOLVEMENT_TRIGGERS,
   ASSISTANT_INVOLVEMENT_STATUSES,
   ASSISTANT_HANDOFF_REASONS,
+  // Schema tables - assistant guidance rules
+  assistantGuidanceRules,
+  // Schema tables - assistant pending actions
+  assistantPendingActions,
+  ASSISTANT_PENDING_ACTION_STATUSES,
+  // Schema tables - assistant tool-call audit log
+  assistantToolCalls,
+  ASSISTANT_TOOL_CALL_STATUSES,
   // Schema tables - RBAC
   roles,
   permissions,
@@ -374,6 +382,8 @@ export type {
   AssistantInvolvementStatus,
   AssistantInvolvementTrigger,
   AssistantHandoffReason,
+  AssistantPendingActionStatus,
+  AssistantToolCallStatus,
   MacroScope,
   MacroPriority,
   MacroSnoozePreset,

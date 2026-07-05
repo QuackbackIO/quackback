@@ -154,6 +154,15 @@ export type CompanyId = TypeId<'company'>
 /** Assistant involvement ID - e.g., assistant_involvement_01h455vb4pex5vsknk084sn02q */
 export type AssistantInvolvementId = TypeId<'assistant_involvement'>
 
+/** Assistant guidance rule ID - e.g., assistant_guidance_01h455vb4pex5vsknk084sn02q */
+export type AssistantGuidanceRuleId = TypeId<'assistant_guidance'>
+
+/** Assistant pending action ID - e.g., assistant_action_01h455vb4pex5vsknk084sn02q */
+export type AssistantPendingActionId = TypeId<'assistant_action'>
+
+/** Assistant tool-call audit ID - e.g., assistant_tool_call_01h455vb4pex5vsknk084sn02q */
+export type AssistantToolCallId = TypeId<'assistant_tool_call'>
+
 /** Ticket ID - e.g., ticket_01h455vb4pex5vsknk084sn02q */
 export type TicketId = TypeId<'ticket'>
 
@@ -330,6 +339,9 @@ export interface EntityIdMap {
   page_view: PageViewId
   company: CompanyId
   assistant_involvement: AssistantInvolvementId
+  assistant_guidance: AssistantGuidanceRuleId
+  assistant_action: AssistantPendingActionId
+  assistant_tool_call: AssistantToolCallId
   ticket: TicketId
   ticket_status: TicketStatusId
   channel_account: ChannelAccountId

@@ -29,11 +29,8 @@ import { logger } from '@/lib/server/logger'
 import type { AssistantHandoffReason } from '@/lib/server/db'
 import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { HelpCenterAudience } from '@/lib/server/domains/help-center/help-center-search.service'
-import {
-  createAssistantTools,
-  type AssistantCitation,
-  type AssistantToolContext,
-} from './assistant.tools'
+import { createAssistantTools } from './assistant.tools'
+import type { AssistantCitation, AssistantToolContext } from './assistant.toolspec'
 
 const log = logger.child({ component: 'assistant-runtime' })
 
