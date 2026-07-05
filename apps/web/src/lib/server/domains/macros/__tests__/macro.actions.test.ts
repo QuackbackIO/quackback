@@ -12,6 +12,7 @@ const {
   snoozeConversation,
   setConversationStatus,
   attachTag,
+  setConversationAttribute,
 } = vi.hoisted(() => ({
   assignConversation: vi.fn(),
   assignTeam: vi.fn(),
@@ -19,6 +20,7 @@ const {
   snoozeConversation: vi.fn(),
   setConversationStatus: vi.fn(),
   attachTag: vi.fn(),
+  setConversationAttribute: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
@@ -31,11 +33,18 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
 vi.mock('@/lib/server/domains/conversation/conversation-tag.service', () => ({
   attachTag,
 }))
+vi.mock('@/lib/server/domains/conversation-attributes/set-attribute.service', () => ({
+  setConversationAttribute,
+}))
 
 import { applyMacroActions } from '../macro.actions'
 
 const conversationId = 'conversation_1' as ConversationId
-const actor = { principalId: 'principal_a', role: 'admin' } as unknown as Actor
+const actor = {
+  principalId: 'principal_a',
+  role: 'admin',
+  principalType: 'user',
+} as unknown as Actor
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -74,13 +83,19 @@ describe('applyMacroActions', () => {
     expect(snoozeConversation).toHaveBeenCalledWith(conversationId, null, actor)
   })
 
-  it('skips the deferred set_attribute action with no dispatch', async () => {
+  it('applies set_attribute as the invoking teammate (macros run as the agent)', async () => {
     const applied = await applyMacroActions(
       conversationId,
       [{ type: 'set_attribute', key: 'plan', value: 'scale' }],
       actor
     )
-    expect(applied).toEqual([])
+    expect(setConversationAttribute).toHaveBeenCalledWith(
+      { conversationId },
+      'plan',
+      'scale',
+      'teammate'
+    )
+    expect(applied).toEqual(['set plan'])
   })
 
   it('continues past a failing action', async () => {

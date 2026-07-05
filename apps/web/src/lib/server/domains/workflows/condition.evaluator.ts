@@ -12,6 +12,7 @@
  * deliberately defensive — an unknown field or a type-mismatched compare yields
  * false rather than throwing, so a malformed graph can never crash a run.
  */
+import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
 
 /** The resolved snapshot conditions read. Optional branches are absent when the
  *  trigger has no message/person/etc. in scope (a leaf over an absent branch
@@ -24,6 +25,9 @@ export interface ConditionContext {
     /** Minutes the customer has been waiting on a reply; null = nobody waiting. */
     waitingMinutes: number | null
     tagIds: string[]
+    /** Raw custom_attributes ({ v, src, at } envelopes or bare legacy values);
+     *  `conversation.attr.<key>` predicates read through readAttributeValue. */
+    attributes?: Record<string, unknown>
   }
   message?: { body: string; senderType?: 'visitor' | 'agent' } | null
   person?: { segmentIds: string[] } | null
@@ -79,9 +83,21 @@ export const CONDITION_FIELDS = [
   'csat.rating',
 ] as const
 
+/**
+ * Dynamic attribute predicates: `conversation.attr.<key>` resolves the value
+ * stored under `<key>` in the conversation's custom_attributes (envelopes
+ * unwrapped, bare legacy values passed through). The authoring validation
+ * accepts this prefix alongside the static catalogue.
+ */
+export const ATTRIBUTE_FIELD_PREFIX = 'conversation.attr.'
+
 /** Pull the value a `field` names out of the resolved context (undefined = the
  *  field isn't known, which every operator treats as a non-match). */
 function resolveField(field: string, ctx: ConditionContext): unknown {
+  if (field.startsWith(ATTRIBUTE_FIELD_PREFIX)) {
+    const key = field.slice(ATTRIBUTE_FIELD_PREFIX.length)
+    return readAttributeValue(ctx.conversation.attributes?.[key])?.v
+  }
   switch (field) {
     case 'conversation.status':
       return ctx.conversation.status

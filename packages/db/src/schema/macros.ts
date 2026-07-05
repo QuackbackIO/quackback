@@ -22,11 +22,17 @@ export type MacroPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 /** Snooze targets a macro can defer a conversation to. */
 export type MacroSnoozePreset = 'until_reply' | 'tomorrow' | 'next_week'
 
+/** The JSON value shapes a set_attribute action can carry, by field type:
+ *  text/date/select store strings (select stores the option id), number a
+ *  number, checkbox a boolean, multi_select an array of option ids; null
+ *  unsets. */
+export type MacroAttributeValue = string | number | boolean | string[] | null
+
 /**
  * A bundled action a macro runs against the conversation it is used in. Stored
- * as a jsonb array; the discriminant is `type`. `assign_team` and
- * `set_attribute` are reserved shapes (no conversation service applies them
- * yet) — see applyMacroActions.
+ * as a jsonb array; the discriminant is `type`. `set_attribute` carries the
+ * typed JSON value the definition-validated writer applies — see
+ * applyMacroActions.
  */
 export type MacroAction =
   | { type: 'assign_agent'; principalId: string }
@@ -35,7 +41,7 @@ export type MacroAction =
   | { type: 'set_priority'; priority: MacroPriority }
   | { type: 'snooze'; preset: MacroSnoozePreset }
   | { type: 'close' }
-  | { type: 'set_attribute'; key: string; value: string }
+  | { type: 'set_attribute'; key: string; value: MacroAttributeValue }
 
 export const macros = pgTable('macros', {
   id: typeIdWithDefault('macro')('id').primaryKey(),

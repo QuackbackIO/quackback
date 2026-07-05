@@ -34,6 +34,11 @@ import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tags'
 import { listSlaPolicyOptionsFn } from '@/lib/server/functions/sla'
+import {
+  conversationAttributeQueries,
+  type ConversationAttributeItem,
+} from '@/lib/client/queries/conversation-attributes'
+import { AttributeValueInput } from '@/components/admin/conversation/attribute-value-input'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -209,6 +214,9 @@ interface CanvasData {
   tags: EntityOption[]
   /** Live SLA policies for the Apply-SLA picker, with their targets line. */
   slaPolicies: { id: string; name: string; targetsSummary: string }[]
+  /** Live attribute definitions (full shape: the value editor needs field
+   *  type + options, not just id/name). */
+  attributes: ConversationAttributeItem[]
   labels: EntityLabels
   makeStep: (kind: TreeStep['kind']) => TreeStep
   justInserted: string | null
@@ -246,6 +254,7 @@ function WorkflowCanvas({
     queryFn: () => listSlaPolicyOptionsFn(),
     staleTime: 60_000,
   })
+  const { data: attributes } = useQuery(conversationAttributeQueries.live())
   const [justInserted, setJustInserted] = useState<string | null>(null)
 
   const data = useMemo<CanvasData>(() => {
@@ -258,6 +267,7 @@ function WorkflowCanvas({
       teams: teamOptions,
       tags: tagOptions,
       slaPolicies: slaOptions,
+      attributes: attributes ?? [],
       labels: {
         members: toMap(memberOptions),
         teams: toMap(teamOptions),
@@ -268,7 +278,7 @@ function WorkflowCanvas({
       justInserted,
       markInserted: setJustInserted,
     }
-  }, [members, teams, tags, slaPolicies, tree, justInserted])
+  }, [members, teams, tags, slaPolicies, attributes, tree, justInserted])
 
   return (
     <CanvasContext.Provider value={data}>
@@ -867,7 +877,7 @@ function ActionEditor({
   action: GraphAction
   onChange: (action: GraphAction) => void
 }) {
-  const { members, teams, tags, slaPolicies } = useCanvas()
+  const { members, teams, tags, slaPolicies, attributes } = useCanvas()
 
   const setSnoozeUntil = (mode: 'reply' | 'datetime') => {
     if (mode === 'reply') return onChange({ type: 'snooze', untilIso: null })
@@ -1010,22 +1020,48 @@ function ActionEditor({
 
       {action.type === 'set_attribute' && (
         <>
-          <Field label="Attribute key">
-            <Input
+          <Field label="Attribute">
+            <EntitySelect
               value={action.key}
-              onChange={(e) => onChange({ ...action, key: e.target.value })}
-              placeholder="plan"
-              className="h-8 text-sm"
+              placeholder="Choose attribute"
+              items={attributes.map((d) => ({ id: d.key, name: d.label }))}
+              // Reset the value on a definition switch: types differ.
+              onChange={(key) => onChange({ ...action, key, value: null })}
             />
           </Field>
-          <Field label="Value">
-            <Input
-              value={attributeValueText(action.value)}
-              onChange={(e) => onChange({ ...action, value: parseAttributeValue(e.target.value) })}
-              placeholder="vip"
-              className="h-8 text-sm"
-            />
-          </Field>
+          {(() => {
+            const def = attributes.find((d) => d.key === action.key)
+            if (def) {
+              return (
+                <Field label="Value">
+                  <AttributeValueInput
+                    definition={def}
+                    value={action.value}
+                    onChange={(value) => onChange({ ...action, value })}
+                    className="w-full"
+                  />
+                </Field>
+              )
+            }
+            // A stored graph can reference a key with no live definition
+            // (archived, or authored before the registry): keep the raw
+            // JSON-typed input so the node stays editable.
+            if (action.key) {
+              return (
+                <Field label="Value">
+                  <Input
+                    value={attributeValueText(action.value)}
+                    onChange={(e) =>
+                      onChange({ ...action, value: parseAttributeValue(e.target.value) })
+                    }
+                    placeholder="vip"
+                    className="h-8 text-sm"
+                  />
+                </Field>
+              )
+            }
+            return null
+          })()}
         </>
       )}
 

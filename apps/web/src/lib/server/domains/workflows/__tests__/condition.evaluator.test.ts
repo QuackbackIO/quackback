@@ -17,6 +17,13 @@ const baseCtx = (over: Partial<ConditionContext> = {}): ConditionContext => ({
     priority: 'high',
     waitingMinutes: 45,
     tagIds: ['ctag_vip', 'ctag_billing'],
+    attributes: {
+      // Envelope-shaped (the write path) and bare legacy values both resolve.
+      plan: { v: 'pro', src: 'teammate', at: '2026-07-05T00:00:00.000Z' },
+      seats: { v: 12, src: 'workflow', at: '2026-07-05T00:00:00.000Z' },
+      areas: { v: ['opt_billing'], src: 'ai', at: '2026-07-05T00:00:00.000Z' },
+      legacy_note: 'bare',
+    },
     ...over.conversation,
   },
   message: over.message === undefined ? { body: 'My card was double charged' } : over.message,
@@ -100,6 +107,37 @@ describe('evaluateCondition — leaves', () => {
     no({ field: 'nope.unknown', op: 'eq', value: 'x' })
     no({ field: 'conversation.status', op: 'gt', value: 3 }) // 'open' is not numeric
     no({ field: 'message.body', op: 'gt', value: 3 })
+  })
+
+  it('attribute predicates (conversation.attr.<key>) unwrap value envelopes', () => {
+    ok({ field: 'conversation.attr.plan', op: 'eq', value: 'pro' })
+    no({ field: 'conversation.attr.plan', op: 'eq', value: 'starter' })
+    ok({ field: 'conversation.attr.plan', op: 'neq', value: 'starter' })
+    ok({ field: 'conversation.attr.plan', op: 'is_set' })
+    no({ field: 'conversation.attr.plan', op: 'is_empty' })
+    // Unset key: is_empty holds, everything else is a non-match.
+    ok({ field: 'conversation.attr.missing', op: 'is_empty' })
+    no({ field: 'conversation.attr.missing', op: 'is_set' })
+    no({ field: 'conversation.attr.missing', op: 'eq', value: 'pro' })
+  })
+
+  it('attribute predicates compare numbers and match multi-select arrays', () => {
+    ok({ field: 'conversation.attr.seats', op: 'gt', value: 10 })
+    no({ field: 'conversation.attr.seats', op: 'lt', value: 10 })
+    ok({ field: 'conversation.attr.seats', op: 'eq', value: 12 })
+    ok({ field: 'conversation.attr.areas', op: 'includes_any', value: ['opt_billing'] })
+    no({ field: 'conversation.attr.areas', op: 'includes_any', value: ['opt_auth'] })
+  })
+
+  it('attribute predicates read bare legacy values (no envelope)', () => {
+    ok({ field: 'conversation.attr.legacy_note', op: 'eq', value: 'bare' })
+    ok({ field: 'conversation.attr.legacy_note', op: 'is_set' })
+  })
+
+  it('attribute predicates never match when the snapshot has no attributes', () => {
+    const bare = baseCtx({ conversation: { ...baseCtx().conversation, attributes: undefined } })
+    no({ field: 'conversation.attr.plan', op: 'eq', value: 'pro' }, bare)
+    ok({ field: 'conversation.attr.plan', op: 'is_empty' }, bare)
   })
 })
 

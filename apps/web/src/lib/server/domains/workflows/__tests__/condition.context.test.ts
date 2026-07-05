@@ -68,6 +68,7 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
         priority: 'high',
         waitingSince,
         csatRating: 4,
+        customAttributes: { plan: { v: 'pro', src: 'teammate', at: '2026-01-05T09:00:00Z' } },
       })
       .returning()
 
@@ -96,6 +97,9 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(ctx!.conversation.priority).toBe('high')
     expect(ctx!.conversation.waitingMinutes).toBe(30)
     expect(ctx!.conversation.tagIds).toEqual([tagId])
+    expect(ctx!.conversation.attributes).toEqual({
+      plan: { v: 'pro', src: 'teammate', at: '2026-01-05T09:00:00Z' },
+    })
     expect(ctx!.person!.segmentIds).toEqual([segmentId])
     expect(ctx!.csatRating).toBe(4)
     expect(ctx!.message).toEqual({ body: 'Please help' })
@@ -108,6 +112,7 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
             { field: 'conversation.waiting_minutes', op: 'gt', value: 15 },
             { field: 'person.segments', op: 'includes_any', value: [segmentId] },
             { field: 'message.body', op: 'contains', value: 'help' },
+            { field: 'conversation.attr.plan', op: 'eq', value: 'pro' },
           ],
         },
         ctx!

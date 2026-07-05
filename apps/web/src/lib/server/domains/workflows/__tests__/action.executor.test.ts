@@ -26,6 +26,7 @@ const {
   attachTag,
   detachTag,
   applySlaToConversation,
+  setConversationAttribute,
 } = vi.hoisted(() => ({
   assignConversation: vi.fn(),
   assignTeam: vi.fn(),
@@ -35,6 +36,7 @@ const {
   attachTag: vi.fn(),
   detachTag: vi.fn(),
   applySlaToConversation: vi.fn(),
+  setConversationAttribute: vi.fn(),
 }))
 
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
@@ -49,11 +51,18 @@ vi.mock('@/lib/server/domains/conversation/conversation-tag.service', () => ({
   detachTag,
 }))
 vi.mock('@/lib/server/domains/sla/sla.service', () => ({ applySlaToConversation }))
+vi.mock('@/lib/server/domains/conversation-attributes/set-attribute.service', () => ({
+  setConversationAttribute,
+}))
 
 import { applyAction, type WorkflowContext } from '../action.executor'
 
 const conversationId = 'conversation_1' as ConversationId
-const actor = { principalId: 'principal_a', role: 'admin' } as unknown as Actor
+const actor = {
+  principalId: 'principal_a',
+  role: 'admin',
+  principalType: 'user',
+} as unknown as Actor
 const ctx: WorkflowContext = { conversationId, actor }
 
 beforeEach(() => {
@@ -105,10 +114,31 @@ describe('applyAction', () => {
     expect(applySlaToConversation).toHaveBeenCalledWith(conversationId, 'sla_policy_1')
   })
 
-  it('no-ops the deferred set_attribute action (null label, no dispatch)', async () => {
-    expect(
-      await applyAction({ type: 'set_attribute', key: 'plan', value: 'scale' }, ctx)
-    ).toBeNull()
+  it('applies set_attribute through the shared writer with actor-derived provenance', async () => {
+    // A human actor (macros run as the invoking agent) records src teammate.
+    expect(await applyAction({ type: 'set_attribute', key: 'plan', value: 'scale' }, ctx)).toBe(
+      'set plan'
+    )
+    expect(setConversationAttribute).toHaveBeenCalledWith(
+      { conversationId },
+      'plan',
+      'scale',
+      'teammate'
+    )
+
+    // The engine's synthetic service actor records src workflow.
+    const engineActor = {
+      principalId: null,
+      role: 'admin',
+      principalType: 'service',
+    } as unknown as Actor
+    await applyAction({ type: 'set_attribute', key: 'plan', value: 7 }, { conversationId, actor: engineActor })
+    expect(setConversationAttribute).toHaveBeenLastCalledWith(
+      { conversationId },
+      'plan',
+      7,
+      'workflow'
+    )
   })
 
   it('propagates a service failure to the caller', async () => {

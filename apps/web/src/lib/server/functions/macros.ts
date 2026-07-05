@@ -39,7 +39,9 @@ const macroActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_attribute'),
     key: z.string().min(1).max(80),
-    value: z.string().max(500),
+    // The JSON value shapes per field type; validation AGAINST the definition
+    // (option ids, number finiteness) happens in the domain writer at apply.
+    value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]),
   }),
 ])
 

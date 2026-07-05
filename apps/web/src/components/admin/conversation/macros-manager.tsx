@@ -5,8 +5,10 @@
  * with a variables helper row, and a builder for the bundled actions.
  *
  * Only the actions a conversation service can actually run are offered here
- * (assign agent, assign team, add tag, set priority, snooze, close);
- * set_attribute is reserved in the data model but not yet applicable.
+ * (assign agent, assign team, add tag, set priority, snooze, close, set
+ * attribute). set_attribute pairs a definition picker with a typed value
+ * input; the apply path validates against the definition and records the
+ * invoking agent as the writer.
  */
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -17,6 +19,8 @@ import type { MacroAction, MacroScope } from '@/lib/shared/db-types'
 import { macrosQuery } from '@/lib/client/queries/macros'
 import { useCreateMacro, useUpdateMacro, useDeleteMacro } from '@/lib/client/mutations/macros'
 import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tags'
+import { conversationAttributeQueries } from '@/lib/client/queries/conversation-attributes'
+import { AttributeValueInput } from './attribute-value-input'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { MACRO_VARIABLES } from '@/lib/shared/conversation/macros'
@@ -69,6 +73,7 @@ const ACTION_TYPES = [
   { value: 'set_priority', label: 'Set priority' },
   { value: 'snooze', label: 'Snooze' },
   { value: 'close', label: 'Close conversation' },
+  { value: 'set_attribute', label: 'Set attribute' },
 ] as const
 
 type OfferedActionType = (typeof ACTION_TYPES)[number]['value']
@@ -88,6 +93,8 @@ function defaultAction(type: OfferedActionType): MacroAction {
       return { type: 'snooze', preset: 'until_reply' }
     case 'close':
       return { type: 'close' }
+    case 'set_attribute':
+      return { type: 'set_attribute', key: '', value: null }
   }
 }
 
@@ -172,6 +179,7 @@ function MacroEditorDialog({ macro, onClose }: { macro: MacroRow | null; onClose
     staleTime: 60_000,
   })
   const { data: teams } = useInboxTeams()
+  const { data: attributeDefs } = useQuery(conversationAttributeQueries.live())
 
   const saving = create.isPending || update.isPending
 
@@ -202,11 +210,12 @@ function MacroEditorDialog({ macro, onClose }: { macro: MacroRow | null; onClose
       toast.error('Name and body are required')
       return
     }
-    // Drop rows the admin left unfilled (no agent/tag chosen).
+    // Drop rows the admin left unfilled (no agent/tag/attribute chosen).
     const cleanedActions = actions.filter((a) => {
       if (a.type === 'assign_agent') return Boolean(a.principalId)
       if (a.type === 'assign_team') return Boolean(a.teamId)
       if (a.type === 'add_tag') return Boolean(a.tagId)
+      if (a.type === 'set_attribute') return Boolean(a.key)
       return true
     })
     const input = { name: trimmedName, body, scope, actions: cleanedActions }
@@ -378,6 +387,33 @@ function MacroEditorDialog({ macro, onClose }: { macro: MacroRow | null; onClose
                 )}
 
                 {action.type === 'close' && <div className="flex-1" />}
+
+                {action.type === 'set_attribute' && (
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <EntitySelect
+                      value={action.key}
+                      placeholder="Choose attribute"
+                      items={(attributeDefs ?? []).map((d) => ({ id: d.key, name: d.label }))}
+                      onChange={(key) =>
+                        // Reset the value on a definition switch: types differ.
+                        updateAction(i, { type: 'set_attribute', key, value: null })
+                      }
+                    />
+                    {(() => {
+                      const def = (attributeDefs ?? []).find((d) => d.key === action.key)
+                      return def ? (
+                        <AttributeValueInput
+                          definition={def}
+                          value={action.value}
+                          onChange={(value) =>
+                            updateAction(i, { type: 'set_attribute', key: action.key, value })
+                          }
+                          className="min-w-0 flex-1"
+                        />
+                      ) : null
+                    })()}
+                  </div>
+                )}
 
                 <button
                   type="button"

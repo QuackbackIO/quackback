@@ -7,7 +7,11 @@
  * the types so the two can't silently drift.
  */
 import { z } from 'zod'
-import { CONDITION_FIELDS, type WorkflowCondition } from './condition.evaluator'
+import {
+  ATTRIBUTE_FIELD_PREFIX,
+  CONDITION_FIELDS,
+  type WorkflowCondition,
+} from './condition.evaluator'
 
 const conditionOperator = z.enum([
   'eq',
@@ -25,8 +29,18 @@ const conditionOperator = z.enum([
 ])
 
 const conditionLeaf = z.object({
-  // Validated against the evaluator's field catalogue so a typo is caught on save.
-  field: z.enum(CONDITION_FIELDS),
+  // Validated against the evaluator's field catalogue so a typo is caught on
+  // save. Attribute predicates are dynamic (conversation.attr.<key>) so they
+  // pass by prefix instead of the static enum.
+  field: z.union([
+    z.enum(CONDITION_FIELDS),
+    z
+      .string()
+      .refine(
+        (f) => f.startsWith(ATTRIBUTE_FIELD_PREFIX) && f.length > ATTRIBUTE_FIELD_PREFIX.length,
+        { message: 'Unknown condition field' }
+      ),
+  ]),
   op: conditionOperator,
   value: z.unknown().optional(),
 })

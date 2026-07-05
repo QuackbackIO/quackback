@@ -12,7 +12,9 @@
  *
  * Author-bearing actions (send message / add note as a persona), the CSAT
  * request, ticket conversion, and `wait` are engine-coupled and land with the
- * engine slice; `set_attribute` waits on a general conversation attribute setter.
+ * engine slice. `set_attribute` writes through the shared domain writer, with
+ * provenance derived from the actor: a macro runs as the invoking agent
+ * (src teammate), the engine's service actor records src workflow.
  */
 import type {
   ConversationId,
@@ -27,6 +29,7 @@ import type { Actor } from '@/lib/server/policy/types'
 import * as conversationService from '@/lib/server/domains/conversation/conversation.service'
 import * as tagService from '@/lib/server/domains/conversation/conversation-tag.service'
 import { applySlaToConversation } from '@/lib/server/domains/sla/sla.service'
+import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 
 /** What an action runs against: the target conversation + the acting principal
  *  (the teammate for a macro, a workflow service actor for the engine). The
@@ -92,7 +95,14 @@ export async function applyAction(
       await applySlaToConversation(conversationId, action.policyId)
       return 'SLA applied'
     case 'set_attribute':
-      // Deferred: no general conversation custom-attribute setter yet.
-      return null
+      // Provenance follows the actor: the engine's synthetic service actor is
+      // a workflow write; a human actor (macro) is the invoking teammate.
+      await setConversationAttribute(
+        { conversationId },
+        action.key,
+        action.value,
+        actor.principalType === 'service' ? 'workflow' : 'teammate'
+      )
+      return `set ${action.key}`
   }
 }
