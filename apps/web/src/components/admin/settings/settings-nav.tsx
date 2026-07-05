@@ -144,7 +144,18 @@ export function buildNavSections(flags?: {
     },
     {
       label: 'Data',
-      items: [{ label: 'People', to: '/admin/settings/people', icon: UserGroupIcon }],
+      items: [
+        { label: 'People', to: '/admin/settings/people', icon: UserGroupIcon },
+        ...(flags?.supportInbox
+          ? [
+              {
+                label: 'Conversations',
+                to: '/admin/settings/conversation-data',
+                icon: ChatBubbleLeftIcon,
+              },
+            ]
+          : []),
+      ],
     },
   ]
 }
