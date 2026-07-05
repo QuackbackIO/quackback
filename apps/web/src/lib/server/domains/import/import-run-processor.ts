@@ -31,8 +31,9 @@ export interface ImportCommitJobData {
  * flips the run to `running`, delegates to the existing CSV pipeline, then
  * writes back totals + the capped error report. A thrown error anywhere in
  * this path fails the run rather than the process — the worker registry's
- * job-level retry is disabled for this queue (see import-queue.ts) because a
- * retry without idempotence would double-import already-created rows.
+ * job-level retry is disabled for this queue (see import-queue.ts): source-id
+ * idempotence only covers rows that carry one, so a blind retry could still
+ * double-import the rest of the batch.
  */
 export async function runImportCommitJob(data: ImportCommitJobData): Promise<void> {
   const { runId, source, input } = data
@@ -47,7 +48,7 @@ export async function runImportCommitJob(data: ImportCommitJobData): Promise<voi
       {
         rows: input.totalRows,
         created: result.imported,
-        updated: 0,
+        updated: result.updated,
         skipped: result.skipped,
         errors: result.errors.length,
       },

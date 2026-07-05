@@ -16,18 +16,24 @@ const MAX_REQUEST_SIZE = MAX_FILE_SIZE + 64 * 1024
 const MAX_ROWS = 10000
 
 /**
- * POST /api/import - upload a CSV and enqueue it for async processing.
+ * POST /api/import - upload a CSV, dry-run or enqueue it for async processing.
  * Authenticates before touching the body: a cheap Content-Length pre-check
  * rejects oversized uploads with 413 before the multipart body is buffered.
  *
- * Async since §I1: the pipeline used to run in-request and return counts
- * synchronously. It now creates an `import_runs` row, enqueues the commit
- * job, and returns the run id immediately (202) — the caller polls
- * GET /api/import/runs/{id} for status, totals, and the error report.
+ * `mode=dry_run` (§I2) validates and resolves every row without writing
+ * anything and returns the preview summary directly (200) — the wizard's
+ * mapping steps run before this call, so the file has already been remapped
+ * onto the canonical headers by the time it reaches here.
+ *
+ * `mode=commit` (default, §I1) is async: it creates an `import_runs` row,
+ * enqueues the commit job, and returns the run id immediately (202) — the
+ * caller polls GET /api/import/runs/{id} for status, totals, and the error
+ * report.
  */
 export async function handleImportPost(request: Request): Promise<Response> {
   const { validateApiWorkspaceAccess } = await import('@/lib/server/functions/workspace')
   const { canAccess } = await import('@/lib/server/auth')
+  const { previewImport } = await import('@/lib/server/domains/import/import-preview')
   const { createImportRun } = await import('@/lib/server/domains/import/import-run.service')
   const { enqueueImportCommitJob } = await import('@/lib/server/domains/import/import-queue')
   const { getBoardById, listBoards } = await import('@/lib/server/domains/boards/board.service')
@@ -56,8 +62,15 @@ export async function handleImportPost(request: Request): Promise<Response> {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const boardIdParam = formData.get('boardId') as string | null
+    const modeParam = formData.get('mode') as string | null
+    const mode = modeParam === 'dry_run' ? 'dry_run' : 'commit'
+    const sourceParam = formData.get('source') as string | null
+    const source = sourceParam === 'uservoice' || sourceParam === 'canny' ? sourceParam : 'csv'
 
-    log.info({ file_name: file?.name || 'none', file_size: file?.size || 0 }, 'csv import started')
+    log.info(
+      { file_name: file?.name || 'none', file_size: file?.size || 0, mode },
+      'csv import started'
+    )
 
     // Validate file
     if (!file) {
@@ -141,8 +154,6 @@ export async function handleImportPost(request: Request): Promise<Response> {
       return Response.json({ error: `File exceeds maximum of ${MAX_ROWS} rows` }, { status: 400 })
     }
 
-    log.info({ total_rows: totalRows }, 'queuing import rows')
-
     // Encode CSV as base64 for the import service
     const csvContent = Buffer.from(csvText).toString('base64')
 
@@ -153,13 +164,21 @@ export async function handleImportPost(request: Request): Promise<Response> {
       initiatedByPrincipalId: validation.principal.id,
     }
 
+    if (mode === 'dry_run') {
+      log.info({ total_rows: totalRows }, 'previewing import rows')
+      const preview = await previewImport(importData)
+      return Response.json(preview)
+    }
+
+    log.info({ total_rows: totalRows }, 'queuing import rows')
+
     const run = await createImportRun({
-      source: 'csv',
+      source,
       fileName: file.name,
       initiatedByPrincipalId: validation.principal.id,
     })
 
-    await enqueueImportCommitJob({ runId: run.id, source: 'csv', input: importData })
+    await enqueueImportCommitJob({ runId: run.id, source, input: importData })
 
     log.info({ run_id: run.id }, 'csv import enqueued')
     return Response.json({ runId: run.id, status: run.status, totalRows }, { status: 202 })

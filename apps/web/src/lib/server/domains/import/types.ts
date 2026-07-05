@@ -35,12 +35,53 @@ export interface ImportRowError {
  * CSV import result
  */
 export interface ImportResult {
-  /** Number of posts successfully imported */
+  /** Number of posts newly created */
   imported: number
+  /** Number of existing posts updated via source-id idempotence (§I2) */
+  updated: number
   /** Number of rows skipped due to errors */
   skipped: number
   /** List of errors encountered during import */
   errors: ImportRowError[]
   /** List of tag names that were auto-created */
   createdTags: string[]
+}
+
+/**
+ * A single row in the dry-run preview's capped sample (§I2).
+ */
+export interface ImportPreviewRow {
+  /** Row number (1-indexed, excluding header) */
+  row: number
+  title: string
+  /** Resolved board slug, or null when the row falls back to the default board */
+  board: string | null
+  /** Resolved status name, or null when the row falls back to the default status */
+  status: string | null
+  /** Author email/name, or "Imported user" when unattributed */
+  author: string
+  /** True when this author does not exist yet and would be created on commit */
+  isNewAuthor: boolean
+  voteCount: number
+  /** Whether commit would create a new post or update one matched by source_id */
+  action: 'create' | 'update'
+}
+
+/**
+ * Dry-run preview result (§I2): validates and resolves every row without
+ * writing anything.
+ */
+export interface ImportPreview {
+  totalRows: number
+  counts: {
+    byBoard: Record<string, number>
+    byStatus: Record<string, number>
+    byAuthor: Record<string, number>
+  }
+  /** Capped sample of resolved rows for display */
+  sample: ImportPreviewRow[]
+  /** Per-row validation errors (capped) */
+  errors: ImportRowError[]
+  /** Count of rows that would UPDATE an existing post via source-id match */
+  updatedCount: number
 }

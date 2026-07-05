@@ -44,6 +44,7 @@ describe('runImportCommitJob', () => {
   it('creates the batch tag, marks the run running, then completes it with totals', async () => {
     hoisted.processImport.mockResolvedValue({
       imported: 4,
+      updated: 0,
       skipped: 1,
       errors: [{ row: 3, message: 'bad row' }],
       createdTags: [],
@@ -62,6 +63,24 @@ describe('runImportCommitJob', () => {
       [{ row: 3, message: 'bad row' }]
     )
     expect(hoisted.failImportRun).not.toHaveBeenCalled()
+  })
+
+  it('passes through the updated count from source-id idempotence matches', async () => {
+    hoisted.processImport.mockResolvedValue({
+      imported: 2,
+      updated: 3,
+      skipped: 0,
+      errors: [],
+      createdTags: [],
+    })
+
+    await runImportCommitJob({ runId: 'import_run_updated' as never, source: 'csv', input: BASE_INPUT })
+
+    expect(hoisted.completeImportRun).toHaveBeenCalledWith(
+      'import_run_updated',
+      { rows: 5, created: 2, updated: 3, skipped: 0, errors: 0 },
+      []
+    )
   })
 
   it('fails the run when the pipeline throws', async () => {

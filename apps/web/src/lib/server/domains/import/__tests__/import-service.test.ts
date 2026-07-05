@@ -1,7 +1,8 @@
 /**
- * Tests for the CSV import batch pipeline's auto-tag wiring (§I1): every post
- * a commit run creates must also carry the run's batch tag, alongside
- * whatever tags the row itself specified.
+ * Tests for the CSV import batch pipeline (§I1/§I2): the auto-tag wiring
+ * (every post a commit run creates also carries the run's batch tag) and
+ * source-id idempotence (a matched external link updates instead of
+ * duplicating).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { PrincipalId } from '@quackback/ids'
@@ -10,8 +11,13 @@ const hoisted = vi.hoisted(() => ({
   findFirstPostStatuses: vi.fn(),
   findManyPostStatuses: vi.fn(),
   findManyPostTags: vi.fn(),
+  findManyBoards: vi.fn(),
+  findManyPostExternalLinks: vi.fn(),
   insertValues: vi.fn(),
   onConflictDoNothing: vi.fn(),
+  updateSet: vi.fn(),
+  updateWhere: vi.fn(),
+  deleteWhere: vi.fn(),
 }))
 
 vi.mock('@/lib/server/db', () => ({
@@ -24,6 +30,12 @@ vi.mock('@/lib/server/db', () => ({
       postTags: {
         findMany: hoisted.findManyPostTags,
       },
+      boards: {
+        findMany: hoisted.findManyBoards,
+      },
+      postExternalLinks: {
+        findMany: hoisted.findManyPostExternalLinks,
+      },
     },
     insert: (_table: unknown) => ({
       values: (...args: unknown[]) => {
@@ -31,12 +43,24 @@ vi.mock('@/lib/server/db', () => ({
         return { onConflictDoNothing: hoisted.onConflictDoNothing }
       },
     }),
+    update: (_table: unknown) => ({
+      set: (...args: unknown[]) => {
+        hoisted.updateSet(...args)
+        return { where: hoisted.updateWhere }
+      },
+    }),
+    delete: (_table: unknown) => ({
+      where: hoisted.deleteWhere,
+    }),
   },
-  posts: {},
+  posts: { id: 'posts.id' },
   postTags: {},
-  postTagAssignments: {},
+  postTagAssignments: { postId: 'post_tag_assignments.post_id' },
   postStatuses: { isDefault: 'is_default', slug: 'slug' },
+  postExternalLinks: { integrationType: 'integration_type', externalId: 'external_id' },
   eq: (...args: unknown[]) => ({ eq: args }),
+  and: (...args: unknown[]) => ({ and: args }),
+  inArray: (...args: unknown[]) => ({ inArray: args }),
 }))
 
 import { processBatch } from '../import-service'
@@ -46,54 +70,111 @@ function fakeResolver(principalId: PrincipalId): ImportUserResolver {
   return {
     resolve: vi.fn().mockResolvedValue(principalId),
     flushPendingCreates: vi.fn().mockResolvedValue(0),
+    get pendingCount() {
+      return 0
+    },
   } as unknown as ImportUserResolver
 }
 
-describe('processBatch — batch auto-tag', () => {
+describe('processBatch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     hoisted.findFirstPostStatuses.mockResolvedValue(undefined)
     hoisted.findManyPostStatuses.mockResolvedValue([])
     hoisted.findManyPostTags.mockResolvedValue([])
+    hoisted.findManyBoards.mockResolvedValue([])
+    hoisted.findManyPostExternalLinks.mockResolvedValue([])
     hoisted.onConflictDoNothing.mockResolvedValue(undefined)
+    hoisted.updateWhere.mockResolvedValue(undefined)
+    hoisted.deleteWhere.mockResolvedValue(undefined)
   })
 
-  it('applies the batch tag to every created post alongside its own tags', async () => {
-    const rows = [{ title: 'Row one', content: 'Body one', tags: 'feature' }]
+  describe('batch auto-tag', () => {
+    it('applies the batch tag to every created post alongside its own tags', async () => {
+      const rows = [{ title: 'Row one', content: 'Body one', tags: 'feature' }]
 
-    await processBatch(
-      rows,
-      'board_1' as never,
-      0,
-      fakeResolver('principal_fallback' as PrincipalId),
-      'principal_fallback' as PrincipalId,
-      'post_tag_batch' as never
-    )
+      await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        fakeResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId,
+        'post_tag_batch' as never
+      )
 
-    // First insert() call is the new tag ("feature"); the assignments insert
-    // is the last insert() call and must include the batch tag for the post.
-    const assignmentsCall = hoisted.insertValues.mock.calls.at(-1)![0] as {
-      postId: string
-      tagId: string
-    }[]
-    expect(assignmentsCall).toEqual(
-      expect.arrayContaining([expect.objectContaining({ tagId: 'post_tag_batch' })])
-    )
+      // First insert() call is the new tag ("feature"); the assignments insert
+      // is the last insert() call and must include the batch tag for the post.
+      const assignmentsCall = hoisted.insertValues.mock.calls.at(-1)![0] as {
+        postId: string
+        tagId: string
+      }[]
+      expect(assignmentsCall).toEqual(
+        expect.arrayContaining([expect.objectContaining({ tagId: 'post_tag_batch' })])
+      )
+    })
+
+    it('omits the batch tag entirely when none is passed (dry-run / legacy path)', async () => {
+      const rows = [{ title: 'Row one', content: 'Body one' }]
+
+      await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        fakeResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId
+      )
+
+      // No row tags and no batch tag: the assignments insert never runs, so
+      // only the posts insert happens (no tags to create either).
+      expect(hoisted.insertValues).toHaveBeenCalledTimes(1)
+    })
   })
 
-  it('omits the batch tag entirely when none is passed (dry-run / legacy path)', async () => {
-    const rows = [{ title: 'Row one', content: 'Body one' }]
+  describe('source-id idempotence', () => {
+    it('creates a new post and an external link when the source_id has not been seen before', async () => {
+      hoisted.findManyPostExternalLinks.mockResolvedValue([])
+      const rows = [{ title: 'Row one', content: 'Body one', source_id: 'ext-1' }]
 
-    await processBatch(
-      rows,
-      'board_1' as never,
-      0,
-      fakeResolver('principal_fallback' as PrincipalId),
-      'principal_fallback' as PrincipalId
-    )
+      const result = await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        fakeResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId
+      )
 
-    // No row tags and no batch tag: the assignments insert never runs, so
-    // only the posts insert happens (no tags to create either).
-    expect(hoisted.insertValues).toHaveBeenCalledTimes(1)
+      expect(result.imported).toBe(1)
+      expect(result.updated).toBe(0)
+      // posts insert + post_external_links insert
+      const postExternalLinkCall = hoisted.insertValues.mock.calls.find((call) => {
+        const arg = call[0] as { integrationType?: string }[] | { integrationType?: string }
+        return Array.isArray(arg)
+          ? arg.some((row) => row.integrationType === 'import')
+          : arg.integrationType === 'import'
+      })
+      expect(postExternalLinkCall).toBeDefined()
+    })
+
+    it('updates the existing post instead of creating a duplicate when source_id matches', async () => {
+      hoisted.findManyPostExternalLinks.mockResolvedValue([
+        { externalId: 'ext-1', postId: 'post_existing' },
+      ])
+      const rows = [{ title: 'Updated title', content: 'Updated body', source_id: 'ext-1' }]
+
+      const result = await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        fakeResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId
+      )
+
+      expect(result.imported).toBe(0)
+      expect(result.updated).toBe(1)
+      expect(hoisted.updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Updated title', content: 'Updated body' })
+      )
+      expect(hoisted.deleteWhere).toHaveBeenCalled()
+    })
   })
 })

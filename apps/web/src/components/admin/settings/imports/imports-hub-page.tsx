@@ -5,7 +5,7 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BackLink } from '@/components/ui/back-link'
 import { Button } from '@/components/ui/button'
 import { ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
-import { QuickImportUploader } from './quick-import-uploader'
+import { ImportWizard } from './import-wizard'
 import { ImportHistoryList } from './import-history-list'
 
 export function ImportsHubPage() {
@@ -24,7 +24,7 @@ export function ImportsHubPage() {
         title="Imports"
         description="Upload a CSV of posts, or pull from a tool you already use."
       >
-        <QuickImportUploader />
+        <ImportWizard />
         <div className="mt-6 border-t border-border/50 pt-4 space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">Migrating from another tool</p>
           <p className="text-xs text-muted-foreground">

@@ -1,29 +1,30 @@
 /**
- * CSV import processing service.
+ * CSV import commit pipeline.
  *
- * This module contains the business logic for CSV import processing.
+ * Creates tags/posts (and, for rows carrying a source_id that matches a
+ * prior import's post_external_links row, UPDATES the existing post instead
+ * of duplicating it — §I2 idempotence). Row validation/resolution is shared
+ * with the dry-run preview via `import-row-resolver.ts`.
  */
 
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { db, posts, postTags, postTagAssignments, postStatuses, eq } from '@/lib/server/db'
+import { db, posts, postTags, postTagAssignments, postExternalLinks, eq, and, inArray } from '@/lib/server/db'
 import {
   boardIdSchema,
   createId,
   type BoardId,
-  type PrincipalId,
   type PostId,
   type PostTagId,
-  type PostStatusId,
+  type PrincipalId,
 } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
 import type { ImportInput, ImportResult, ImportRowError } from './types'
 import { ImportUserResolver } from './user-resolver'
+import { BATCH_SIZE, IMPORT_LINK_TYPE, loadRowContext, resolveRows } from './import-row-resolver'
 
 // Constants
 export const MAX_ERRORS = 100
-export const MAX_TAGS_PER_POST = 20
-export const BATCH_SIZE = 100
 
 /**
  * Job data validation schema
@@ -35,53 +36,11 @@ export const jobDataSchema = z.object({
 })
 
 /**
- * CSV row validation schema
- */
-export const csvRowSchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 characters or less'),
-  content: z.string().max(10000, 'Content must be 10000 characters or less'),
-  status: z.string().optional(),
-  tags: z.string().optional(),
-  board: z.string().optional(),
-  author_name: z.string().optional(),
-  author_email: z.string().email().optional().or(z.literal('')),
-  vote_count: z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val) return 0
-      const num = parseInt(val, 10)
-      return isNaN(num) || num < 0 ? 0 : num
-    }),
-  created_at: z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val) return new Date()
-      const date = new Date(val)
-      return isNaN(date.getTime()) ? new Date() : date
-    }),
-})
-
-interface ProcessedRow {
-  title: string
-  content: string
-  boardId: BoardId
-  statusId: PostStatusId | null
-  status: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed'
-  authorName: string | null
-  authorEmail: string | null
-  voteCount: number
-  createdAt: Date
-  tagNames: string[]
-  principalId: PrincipalId
-}
-
-/**
  * Result from processing a single batch of rows.
  */
 export interface BatchResult {
   imported: number
+  updated: number
   skipped: number
   errors: ImportRowError[]
   createdTags: string[]
@@ -128,7 +87,9 @@ export function validateImportInput(
  * Process a batch of CSV rows.
  *
  * This is the core business logic that processes a batch of rows,
- * creating tags and posts in the database.
+ * creating tags and posts in the database. Rows carrying a `source_id` that
+ * matches a prior import's post_external_links row are UPDATED in place
+ * instead of creating a duplicate (§I2 idempotence).
  *
  * Note: This implementation is compatible with neon-http driver which does NOT
  * support interactive transactions. We pre-generate all IDs using TypeIDs (UUIDv7)
@@ -144,137 +105,66 @@ export async function processBatch(
 ): Promise<BatchResult> {
   const result: BatchResult = {
     imported: 0,
+    updated: 0,
     skipped: 0,
     errors: [],
     createdTags: [],
   }
 
-  // Fetch initial data outside of any transaction (neon-http compatible)
-  // Get default status for the organization
-  const defaultStatus = await db.query.postStatuses.findFirst({
-    where: eq(postStatuses.isDefault, true),
-  })
-
-  // Get all existing statuses for lookup
-  const existingStatuses = await db.query.postStatuses.findMany()
-  const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
-
-  // Get all existing tags for lookup (we only need id for junction records)
-  const existingTags = await db.query.postTags.findMany()
-  const tagMap = new Map<string, { id: PostTagId }>(
-    existingTags.map((t) => [t.name.toLowerCase(), { id: t.id as PostTagId }])
-  )
-
-  // Collect all unique tag names that need to be created
+  const ctx = await loadRowContext()
   const tagsToCreate = new Set<string>()
 
-  // Validate and prepare rows
-  const validRows: { row: ProcessedRow; index: number }[] = []
+  const { validRows, errors, skipped } = await resolveRows(
+    rows,
+    defaultBoardId,
+    startIndex,
+    userResolver,
+    fallbackPrincipalId,
+    ctx,
+    tagsToCreate
+  )
+  result.errors = errors
+  result.skipped = skipped
 
-  for (let i = 0; i < rows.length; i++) {
-    const rowIndex = startIndex + i + 1 // 1-indexed, excluding header
-    const rawRow = rows[i]
-
-    // Validate row
-    const parseResult = csvRowSchema.safeParse(rawRow)
-    if (!parseResult.success) {
-      result.errors.push({
-        row: rowIndex,
-        message: parseResult.error.issues[0].message,
-        field: parseResult.error.issues[0].path[0] as string,
-      })
-      result.skipped++
-      continue
-    }
-
-    const row = parseResult.data
-
-    // Resolve status
-    let statusId: PostStatusId | null = (defaultStatus?.id ?? null) as PostStatusId | null
-    let legacyStatus: 'open' | 'under_review' | 'planned' | 'in_progress' | 'complete' | 'closed' =
-      'open'
-
-    if (row.status) {
-      const status = statusMap.get(row.status.toLowerCase())
-      if (status) {
-        statusId = status.id as PostStatusId
-        // Map to legacy status based on category
-        if (status.category === 'complete') legacyStatus = 'complete'
-        else if (status.category === 'closed') legacyStatus = 'closed'
-        else if (status.slug === 'planned') legacyStatus = 'planned'
-        else if (status.slug === 'in-progress' || status.slug === 'in_progress')
-          legacyStatus = 'in_progress'
-        else if (status.slug === 'under-review' || status.slug === 'under_review')
-          legacyStatus = 'under_review'
-      }
-    }
-
-    // Parse tags (limit to MAX_TAGS_PER_POST)
-    const tagNames = row.tags
-      ? row.tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter((t) => t.length > 0 && t.length <= 50)
-          .slice(0, MAX_TAGS_PER_POST)
+  // Idempotence: match rows carrying a source_id against prior import links.
+  const sourceIds = validRows.map(({ row }) => row.sourceId).filter((id): id is string => !!id)
+  const existingLinks =
+    sourceIds.length > 0
+      ? await db.query.postExternalLinks.findMany({
+          where: and(
+            eq(postExternalLinks.integrationType, IMPORT_LINK_TYPE),
+            inArray(postExternalLinks.externalId, sourceIds)
+          ),
+        })
       : []
+  const existingBySourceId = new Map(existingLinks.map((l) => [l.externalId, l.postId]))
 
-    // Check for new tags
-    for (const tagName of tagNames) {
-      if (!tagMap.has(tagName.toLowerCase())) {
-        tagsToCreate.add(tagName)
-      }
-    }
-
-    // Resolve author email to a principalId (creates user+principal if needed)
-    const principalId = await userResolver.resolve(
-      row.author_email || null,
-      row.author_name || null,
-      fallbackPrincipalId
-    )
-
-    validRows.push({
-      row: {
-        title: row.title,
-        content: row.content,
-        boardId: defaultBoardId, // Always use the specified board
-        statusId,
-        status: legacyStatus,
-        authorName: row.author_name || null,
-        authorEmail: row.author_email || null,
-        voteCount: row.vote_count,
-        createdAt: row.created_at,
-        tagNames,
-        principalId,
-      },
-      index: rowIndex,
-    })
-  }
+  const toInsert = validRows.filter(
+    ({ row }) => !row.sourceId || !existingBySourceId.has(row.sourceId)
+  )
+  const toUpdate = validRows.filter(({ row }) => row.sourceId && existingBySourceId.has(row.sourceId))
 
   // Pre-generate IDs for all new tags (neon-http compatible approach)
   const tagsToCreateArray = Array.from(tagsToCreate)
   const newTagIds = tagsToCreateArray.map(() => createId('post_tag'))
-
-  // Build tag map with pre-generated IDs for new tags
   const newTagsWithIds = tagsToCreateArray.map((name, index) => ({
     id: newTagIds[index],
     name,
-    color: '#6b7280', // Default gray color
+    color: '#6b7280',
   }))
-
-  // Add pre-generated tag IDs to the tag map before inserting
+  const tagMap = ctx.tagMap
   for (const newTag of newTagsWithIds) {
     tagMap.set(newTag.name.toLowerCase(), { id: newTag.id })
   }
 
-  // Pre-generate IDs for all posts
-  const postIds = validRows.map(() => createId('post'))
+  // Pre-generate IDs for genuinely new posts only.
+  const newPostIds = toInsert.map(() => createId('post'))
 
   // Flush any pending user+member creations before inserting posts
   await userResolver.flushPendingCreates()
 
-  // Build all post data with pre-generated IDs
-  const postsToInsert = validRows.map(({ row }, index) => ({
-    id: postIds[index],
+  const postsToInsert = toInsert.map(({ row }, index) => ({
+    id: newPostIds[index],
     boardId: row.boardId,
     title: row.title,
     content: row.content,
@@ -285,44 +175,76 @@ export async function processBatch(
     updatedAt: row.createdAt,
   }))
 
-  // Build all post-tag junction records (we now know all IDs upfront)
+  const externalLinksToInsert = toInsert
+    .map(({ row }, index) => ({ row, postId: newPostIds[index] }))
+    .filter(({ row }) => !!row.sourceId)
+    .map(({ row, postId }) => ({
+      id: createId('post_external_link'),
+      postId,
+      integrationType: IMPORT_LINK_TYPE,
+      externalId: row.sourceId!,
+      status: 'active',
+    }))
+
   const postTagsToInsert: { postId: PostId; tagId: PostTagId }[] = []
-
-  for (let i = 0; i < validRows.length; i++) {
-    const { row } = validRows[i]
-    const postId = postIds[i]
-
+  for (let i = 0; i < toInsert.length; i++) {
+    const { row } = toInsert[i]
+    const postId = newPostIds[i]
     for (const tagName of row.tagNames) {
       const tag = tagMap.get(tagName.toLowerCase())
-      if (tag) {
-        postTagsToInsert.push({ postId, tagId: tag.id })
-      }
+      if (tag) postTagsToInsert.push({ postId, tagId: tag.id })
     }
-
-    // Auto-tag: every post the run creates also carries the run's batch tag
-    // (import-{source}-{date}), so the batch is findable and reversible.
-    if (batchTagId) {
-      postTagsToInsert.push({ postId, tagId: batchTagId })
-    }
+    if (batchTagId) postTagsToInsert.push({ postId, tagId: batchTagId })
   }
 
-  // Execute sequential inserts (no interactive transaction needed)
   // Insert new tags first
   if (newTagsWithIds.length > 0) {
     await db.insert(postTags).values(newTagsWithIds)
     result.createdTags = tagsToCreateArray
   }
 
-  // Insert posts
+  // Insert genuinely new posts
   if (postsToInsert.length > 0) {
     await db.insert(posts).values(postsToInsert)
-    result.imported = validRows.length
+    result.imported = postsToInsert.length
   }
 
-  // Insert post-tag relationships
+  if (externalLinksToInsert.length > 0) {
+    await db.insert(postExternalLinks).values(externalLinksToInsert)
+  }
+
   if (postTagsToInsert.length > 0) {
     await db.insert(postTagAssignments).values(postTagsToInsert).onConflictDoNothing()
   }
+
+  // Update rows matched by source_id: re-import overwrites content/status/
+  // votes and replaces the tag set (including the batch tag) rather than
+  // creating a duplicate post.
+  for (const { row } of toUpdate) {
+    const postId = existingBySourceId.get(row.sourceId!)!
+    await db
+      .update(posts)
+      .set({
+        title: row.title,
+        content: row.content,
+        statusId: row.statusId,
+        voteCount: row.voteCount,
+        updatedAt: new Date(),
+      })
+      .where(eq(posts.id, postId))
+
+    await db.delete(postTagAssignments).where(eq(postTagAssignments.postId, postId))
+    const updateTagRows: { postId: PostId; tagId: PostTagId }[] = []
+    for (const tagName of row.tagNames) {
+      const tag = tagMap.get(tagName.toLowerCase())
+      if (tag) updateTagRows.push({ postId, tagId: tag.id })
+    }
+    if (batchTagId) updateTagRows.push({ postId, tagId: batchTagId })
+    if (updateTagRows.length > 0) {
+      await db.insert(postTagAssignments).values(updateTagRows).onConflictDoNothing()
+    }
+  }
+  result.updated = toUpdate.length
 
   return result
 }
@@ -333,6 +255,7 @@ export async function processBatch(
 export function mergeResults(current: ImportResult, batch: BatchResult): ImportResult {
   return {
     imported: current.imported + batch.imported,
+    updated: current.updated + batch.updated,
     skipped: current.skipped + batch.skipped,
     errors: [...current.errors, ...batch.errors].slice(0, MAX_ERRORS),
     createdTags: [...new Set([...current.createdTags, ...batch.createdTags])],
@@ -349,7 +272,7 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
   }
 
   const rows = parseCSV(data.csvContent)
-  let result: ImportResult = { imported: 0, skipped: 0, errors: [], createdTags: [] }
+  let result: ImportResult = { imported: 0, updated: 0, skipped: 0, errors: [], createdTags: [] }
 
   // Single UserResolver instance shared across all batches (caches email->principalId lookups)
   const userResolver = new ImportUserResolver()

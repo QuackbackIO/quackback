@@ -17,6 +17,7 @@ const hoisted = vi.hoisted(() => ({
   mockEnqueueImportCommitJob: vi.fn(),
   mockGetBoardById: vi.fn(),
   mockListBoards: vi.fn(),
+  mockPreviewImport: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/workspace', () => ({
@@ -33,6 +34,10 @@ vi.mock('@/lib/server/domains/import/import-run.service', () => ({
 
 vi.mock('@/lib/server/domains/import/import-queue', () => ({
   enqueueImportCommitJob: hoisted.mockEnqueueImportCommitJob,
+}))
+
+vi.mock('@/lib/server/domains/import/import-preview', () => ({
+  previewImport: hoisted.mockPreviewImport,
 }))
 
 vi.mock('@/lib/server/domains/boards/board.service', () => ({
@@ -54,8 +59,17 @@ const csvFile = (csv: string): FakeFile => ({
 })
 
 /** Request stub exposing a spy-able formData so tests can assert the body was never read. */
-function makeRequest(opts: { contentLength?: number; file?: FakeFile | null }) {
-  const form = { get: (key: string) => (key === 'file' ? (opts.file ?? null) : null) }
+function makeRequest(opts: {
+  contentLength?: number
+  file?: FakeFile | null
+  fields?: Record<string, string>
+}) {
+  const form = {
+    get: (key: string) => {
+      if (key === 'file') return opts.file ?? null
+      return opts.fields?.[key] ?? null
+    },
+  }
   const headers = new Headers()
   if (opts.contentLength !== undefined) headers.set('content-length', String(opts.contentLength))
   const formData = vi.fn(async () => form)
@@ -169,5 +183,37 @@ describe('POST /api/import — post-parse backstop', () => {
     expect(res.status).toBe(400)
     const body = (await res.json()) as { error: string }
     expect(body.error).toBe('No file provided')
+  })
+})
+
+describe('POST /api/import — mode=dry_run (§I2)', () => {
+  it('returns the preview synchronously instead of enqueuing a run', async () => {
+    hoisted.mockPreviewImport.mockResolvedValue({
+      totalRows: 1,
+      counts: { byBoard: {}, byStatus: {}, byAuthor: {} },
+      sample: [],
+      errors: [],
+      updatedCount: 0,
+    })
+    const { request } = makeRequest({ file: csvFile(VALID_CSV), fields: { mode: 'dry_run' } })
+
+    const res = await handleImportPost(request)
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { totalRows: number }
+    expect(body.totalRows).toBe(1)
+    expect(hoisted.mockPreviewImport).toHaveBeenCalledTimes(1)
+    expect(hoisted.mockCreateImportRun).not.toHaveBeenCalled()
+    expect(hoisted.mockEnqueueImportCommitJob).not.toHaveBeenCalled()
+  })
+
+  it('still enqueues a run when mode is omitted (defaults to commit)', async () => {
+    const { request } = makeRequest({ file: csvFile(VALID_CSV) })
+
+    const res = await handleImportPost(request)
+
+    expect(res.status).toBe(202)
+    expect(hoisted.mockPreviewImport).not.toHaveBeenCalled()
+    expect(hoisted.mockEnqueueImportCommitJob).toHaveBeenCalled()
   })
 })
