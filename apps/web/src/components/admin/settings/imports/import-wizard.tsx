@@ -34,6 +34,13 @@ import {
 import type { ImportRunListItem } from './import-history-list'
 
 type Step = 'upload' | 'mapping' | 'value-mapping' | 'dry-run' | 'committing' | 'done' | 'failed'
+type Source = 'csv' | 'uservoice' | 'canny'
+
+interface ImportVoterRecord {
+  email: string
+  name?: string | null
+  createdAt?: string
+}
 
 const CREATE_NEW = '__create_new__'
 const IN_FLIGHT_RUN_STATUSES = new Set(['pending', 'dry_run', 'running'])
@@ -70,6 +77,11 @@ export function ImportWizard() {
   const [step, setStep] = useState<Step>('upload')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const [source, setSource] = useState<Source>('csv')
+  const [cannyApiKey, setCannyApiKey] = useState('')
+  const [caveats, setCaveats] = useState<string[]>([])
+  const [voters, setVoters] = useState<Record<string, ImportVoterRecord[]>>({})
 
   const [fileName, setFileName] = useState<string | null>(null)
   const [headers, setHeaders] = useState<string[]>([])
@@ -110,6 +122,10 @@ export function ImportWizard() {
   function reset() {
     setStep('upload')
     setError(null)
+    setSource('csv')
+    setCannyApiKey('')
+    setCaveats([])
+    setVoters({})
     setFileName(null)
     setHeaders([])
     setRows([])
@@ -123,6 +139,20 @@ export function ImportWizard() {
     setRunId(null)
   }
 
+  /** Loads a canonical CSV (from a plain upload or a detect() response) into the mapping step. */
+  function loadCanonicalCsv(csvText: string, name: string) {
+    const { headers: parsedHeaders, rows: parsedRows } = parseCsvFile(csvText)
+    if (parsedRows.length === 0) {
+      setError('No rows found')
+      return
+    }
+    setFileName(name)
+    setHeaders(parsedHeaders)
+    setRows(parsedRows)
+    setFieldMapping(autoMapFields(parsedHeaders))
+    setStep('mapping')
+  }
+
   async function handleFileSelect(file: File) {
     setError(null)
     if (!file.type.includes('csv') && !file.name.endsWith('.csv')) {
@@ -134,18 +164,56 @@ export function ImportWizard() {
       return
     }
 
-    const text = await file.text()
-    const { headers: parsedHeaders, rows: parsedRows } = parseCsvFile(text)
-    if (parsedRows.length === 0) {
-      setError('CSV file is empty')
+    if (source === 'uservoice') {
+      await runDetect(() => {
+        const formData = new FormData()
+        formData.append('source', 'uservoice')
+        formData.append('file', file)
+        return formData
+      }, file.name)
       return
     }
 
-    setFileName(file.name)
-    setHeaders(parsedHeaders)
-    setRows(parsedRows)
-    setFieldMapping(autoMapFields(parsedHeaders))
-    setStep('mapping')
+    const text = await file.text()
+    loadCanonicalCsv(text, file.name)
+  }
+
+  /** Calls /api/import/detect and loads the returned canonical CSV + voters/caveats. */
+  async function runDetect(buildFormData: () => FormData, name: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/import/detect', { method: 'POST', body: buildFormData() })
+      const data = (await response.json()) as {
+        csv?: string
+        voters?: Record<string, ImportVoterRecord[]>
+        caveats?: string[]
+        error?: string
+      }
+      if (!response.ok || !data.csv) {
+        throw new Error(data.error || 'Failed to read the export')
+      }
+      setVoters(data.voters ?? {})
+      setCaveats(data.caveats ?? [])
+      loadCanonicalCsv(data.csv, name)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to read the export')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleFetchCanny() {
+    if (!cannyApiKey.trim()) {
+      setError('A Canny API key is required')
+      return
+    }
+    void runDetect(() => {
+      const formData = new FormData()
+      formData.append('source', 'canny')
+      formData.append('apiKey', cannyApiKey.trim())
+      return formData
+    }, 'canny-export.csv')
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -221,16 +289,26 @@ export function ImportWizard() {
     }
   }
 
+  /** Shared upload fields both dry-run and commit send: the file, target board, source, and real voters. */
+  function buildImportFormData(csv: string, mode: 'dry_run' | 'commit'): FormData {
+    const formData = new FormData()
+    formData.append('file', new File([csv], fileName ?? 'import.csv', { type: 'text/csv' }))
+    if (defaultBoardId) formData.append('boardId', defaultBoardId)
+    formData.append('mode', mode)
+    formData.append('source', source)
+    if (Object.keys(voters).length > 0) {
+      formData.append('votersJson', JSON.stringify(voters))
+    }
+    return formData
+  }
+
   async function runDryRun(resolvedStatus: ValueMapping, resolvedBoard: ValueMapping) {
     if (!fieldMapping) return
     setBusy(true)
     setError(null)
     try {
       const csv = buildRemappedCsv(rows, fieldMapping, resolvedStatus, resolvedBoard)
-      const formData = new FormData()
-      formData.append('file', new File([csv], fileName ?? 'import.csv', { type: 'text/csv' }))
-      if (defaultBoardId) formData.append('boardId', defaultBoardId)
-      formData.append('mode', 'dry_run')
+      const formData = buildImportFormData(csv, 'dry_run')
 
       const response = await fetch('/api/import', { method: 'POST', body: formData })
       const data = (await response.json()) as ImportPreview & { error?: string }
@@ -251,10 +329,7 @@ export function ImportWizard() {
     setBusy(true)
     setError(null)
     try {
-      const formData = new FormData()
-      formData.append('file', new File([remappedCsv], fileName ?? 'import.csv', { type: 'text/csv' }))
-      if (defaultBoardId) formData.append('boardId', defaultBoardId)
-      formData.append('mode', 'commit')
+      const formData = buildImportFormData(remappedCsv, 'commit')
 
       const response = await fetch('/api/import', { method: 'POST', body: formData })
       const data = (await response.json()) as { runId?: string; error?: string }
@@ -281,23 +356,61 @@ export function ImportWizard() {
   if (step === 'upload') {
     return (
       <div className="space-y-4">
-        <div
-          className="border-2 border-dashed border-border/50 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => e.target.files?.[0] && void handleFileSelect(e.target.files[0])}
-          />
-          <ArrowUpTrayIcon className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Drop a CSV file here or click to browse</p>
-          <p className="text-xs text-muted-foreground mt-1">Maximum 10MB, up to 10,000 rows</p>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground shrink-0">Source</span>
+          <Select value={source} onValueChange={(value) => setSource(value as Source)}>
+            <SelectTrigger className="w-full sm:w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="csv">CSV file</SelectItem>
+              <SelectItem value="uservoice">UserVoice export</SelectItem>
+              <SelectItem value="canny">Canny (API key)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+
+        {source === 'canny' ? (
+          <div className="space-y-2">
+            <input
+              type="password"
+              value={cannyApiKey}
+              onChange={(e) => setCannyApiKey(e.target.value)}
+              placeholder="Canny API key"
+              className="w-full rounded-lg border border-border/50 bg-background px-3 py-2 text-sm"
+            />
+            <Button onClick={handleFetchCanny} disabled={busy}>
+              {busy && <ArrowPathIcon className="size-4 animate-spin" />}
+              Fetch from Canny
+            </Button>
+          </div>
+        ) : (
+          <div
+            className="border-2 border-dashed border-border/50 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && void handleFileSelect(e.target.files[0])}
+            />
+            {busy ? (
+              <ArrowPathIcon className="h-10 w-10 text-muted-foreground mx-auto mb-3 animate-spin" />
+            ) : (
+              <ArrowUpTrayIcon className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+            )}
+            <p className="text-sm text-muted-foreground">
+              {source === 'uservoice'
+                ? 'Drop the UserVoice full suggestions export here, or click to browse'
+                : 'Drop a CSV file here or click to browse'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Maximum 10MB, up to 10,000 rows</p>
+          </div>
+        )}
 
         {boardsQuery.data && boardsQuery.data.length > 0 && (
           <div className="flex items-center gap-2">
@@ -324,10 +437,12 @@ export function ImportWizard() {
           </div>
         )}
 
-        <Button variant="outline" onClick={downloadTemplate}>
-          <ArrowDownTrayIcon className="size-4" />
-          Download template
-        </Button>
+        {source === 'csv' && (
+          <Button variant="outline" onClick={downloadTemplate}>
+            <ArrowDownTrayIcon className="size-4" />
+            Download template
+          </Button>
+        )}
       </div>
     )
   }
@@ -339,6 +454,13 @@ export function ImportWizard() {
         <p className="text-sm text-muted-foreground">
           {fileName}: matched known columns automatically. Adjust any that look wrong.
         </p>
+        {caveats.length > 0 && (
+          <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+            {caveats.map((c, i) => (
+              <p key={i}>{c}</p>
+            ))}
+          </div>
+        )}
         <div className="space-y-2">
           {CANONICAL_FIELDS.map((field) => (
             <div key={field.key} className="flex items-center gap-3">

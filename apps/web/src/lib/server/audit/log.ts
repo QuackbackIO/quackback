@@ -95,6 +95,8 @@ export type AuditEventType =
   | 'portal.access.denied' // OWASP authz_fail — gate denied an authenticated visitor
   | 'auth.signin.failed' // OWASP authn_login_fail — twin of auth.signin.success
   | 'portal.invite.expired' // emitted by the daily sweep for pending invites past their expiry
+  // Imports & exports hub (§I3): full-content conversation/ticket export
+  | 'export.conversations.downloaded'
 
 export type AuditEventOutcome = 'success' | 'failure'
 

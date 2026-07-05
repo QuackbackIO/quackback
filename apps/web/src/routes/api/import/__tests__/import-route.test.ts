@@ -217,3 +217,34 @@ describe('POST /api/import — mode=dry_run (§I2)', () => {
     expect(hoisted.mockEnqueueImportCommitJob).toHaveBeenCalled()
   })
 })
+
+describe('POST /api/import — votersJson (§I3)', () => {
+  it('parses votersJson and threads it onto the enqueued job input', async () => {
+    const voters = { 'idea-1': [{ email: 'alice@example.com' }] }
+    const { request } = makeRequest({
+      file: csvFile(VALID_CSV),
+      fields: { source: 'uservoice', votersJson: JSON.stringify(voters) },
+    })
+
+    const res = await handleImportPost(request)
+
+    expect(res.status).toBe(202)
+    expect(hoisted.mockEnqueueImportCommitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'uservoice', input: expect.objectContaining({ voters }) })
+    )
+  })
+
+  it('ignores malformed votersJson rather than failing the request', async () => {
+    const { request } = makeRequest({
+      file: csvFile(VALID_CSV),
+      fields: { votersJson: 'not json' },
+    })
+
+    const res = await handleImportPost(request)
+
+    expect(res.status).toBe(202)
+    expect(hoisted.mockEnqueueImportCommitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ input: expect.objectContaining({ voters: undefined }) })
+    )
+  })
+})

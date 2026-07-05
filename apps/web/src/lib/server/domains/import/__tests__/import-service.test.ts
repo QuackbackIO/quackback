@@ -58,6 +58,7 @@ vi.mock('@/lib/server/db', () => ({
   postTagAssignments: { postId: 'post_tag_assignments.post_id' },
   postStatuses: { isDefault: 'is_default', slug: 'slug' },
   postExternalLinks: { integrationType: 'integration_type', externalId: 'external_id' },
+  postVotes: { postId: 'post_votes.post_id', sourceType: 'post_votes.source_type' },
   eq: (...args: unknown[]) => ({ eq: args }),
   and: (...args: unknown[]) => ({ and: args }),
   inArray: (...args: unknown[]) => ({ inArray: args }),
@@ -69,6 +70,22 @@ import type { ImportUserResolver } from '../user-resolver'
 function fakeResolver(principalId: PrincipalId): ImportUserResolver {
   return {
     resolve: vi.fn().mockResolvedValue(principalId),
+    flushPendingCreates: vi.fn().mockResolvedValue(0),
+    get pendingCount() {
+      return 0
+    },
+  } as unknown as ImportUserResolver
+}
+
+/** Resolves each distinct email to its own principal id, for voter tests. */
+function emailKeyedResolver(fallback: PrincipalId): ImportUserResolver {
+  const byEmail = new Map<string, PrincipalId>()
+  return {
+    resolve: vi.fn(async (email: string | null) => {
+      if (!email) return fallback
+      if (!byEmail.has(email)) byEmail.set(email, `principal_${email}` as PrincipalId)
+      return byEmail.get(email)!
+    }),
     flushPendingCreates: vi.fn().mockResolvedValue(0),
     get pendingCount() {
       return 0
@@ -175,6 +192,94 @@ describe('processBatch', () => {
         expect.objectContaining({ title: 'Updated title', content: 'Updated body' })
       )
       expect(hoisted.deleteWhere).toHaveBeenCalled()
+    })
+  })
+
+  describe('real voter import (§I3)', () => {
+    it('creates real post_votes rows and sets voteCount from the deduped voter count', async () => {
+      hoisted.findManyPostExternalLinks.mockResolvedValue([])
+      const rows = [{ title: 'Dark mode', content: 'Please', source_id: 'idea-1', vote_count: '99' }]
+      const voters = {
+        'idea-1': [
+          { email: 'alice@example.com' },
+          { email: 'bob@example.com' },
+          { email: 'alice@example.com' }, // duplicate email, deduped
+        ],
+      }
+
+      const result = await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        emailKeyedResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId,
+        undefined,
+        voters
+      )
+
+      expect(result.imported).toBe(1)
+      // vote_count column (99) is ignored in favor of the real, deduped count.
+      const postInsertCall = hoisted.insertValues.mock.calls.find((call) => {
+        const arg = call[0] as { title?: string }[]
+        return Array.isArray(arg) && arg[0]?.title === 'Dark mode'
+      })!
+      expect((postInsertCall[0] as { voteCount: number }[])[0].voteCount).toBe(2)
+
+      const voteInsertCall = hoisted.insertValues.mock.calls.find((call) => {
+        const arg = call[0] as { sourceType?: string }[]
+        return Array.isArray(arg) && arg[0]?.sourceType === 'import'
+      })
+      expect(voteInsertCall).toBeDefined()
+      const voteRows = voteInsertCall![0] as { principalId: string }[]
+      expect(voteRows).toHaveLength(2)
+    })
+
+    it('falls back to vote-count backfill when no voters entry exists for the row', async () => {
+      hoisted.findManyPostExternalLinks.mockResolvedValue([])
+      const rows = [{ title: 'No voters here', content: 'Body', source_id: 'idea-2', vote_count: '5' }]
+
+      await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        emailKeyedResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId,
+        undefined,
+        { 'idea-1': [{ email: 'alice@example.com' }] } // keyed to a different row
+      )
+
+      const postInsertCall = hoisted.insertValues.mock.calls.find((call) => {
+        const arg = call[0] as { title?: string }[]
+        return Array.isArray(arg) && arg[0]?.title === 'No voters here'
+      })!
+      expect((postInsertCall[0] as { voteCount: number }[])[0].voteCount).toBe(5)
+    })
+
+    it('replaces prior import-sourced votes when updating a matched row', async () => {
+      hoisted.findManyPostExternalLinks.mockResolvedValue([
+        { externalId: 'idea-1', postId: 'post_existing' },
+      ])
+      const rows = [{ title: 'Dark mode v2', content: 'Please', source_id: 'idea-1' }]
+      const voters = { 'idea-1': [{ email: 'carol@example.com' }] }
+
+      const result = await processBatch(
+        rows,
+        'board_1' as never,
+        0,
+        emailKeyedResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId,
+        undefined,
+        voters
+      )
+
+      expect(result.updated).toBe(1)
+      expect(hoisted.updateSet).toHaveBeenCalledWith(expect.objectContaining({ voteCount: 1 }))
+      expect(hoisted.deleteWhere).toHaveBeenCalled()
+      const voteInsertCall = hoisted.insertValues.mock.calls.find((call) => {
+        const arg = call[0] as { sourceType?: string }[]
+        return Array.isArray(arg) && arg[0]?.sourceType === 'import'
+      })
+      expect(voteInsertCall).toBeDefined()
     })
   })
 })

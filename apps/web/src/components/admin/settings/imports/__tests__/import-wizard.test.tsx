@@ -35,6 +35,31 @@ vi.mock('@/lib/server/functions/statuses', () => ({
   createStatusFn: (...args: unknown[]) => createStatusFn(...args),
 }))
 
+// Radix Select relies on pointer-capture/scrollIntoView APIs jsdom/happy-dom
+// don't implement; swap in a native <select> so source/value-mapping choices
+// are just fireEvent.change, matching the pattern in monday-config.test.tsx.
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value: string
+    onValueChange: (v: string) => void
+    children: React.ReactNode
+  }) => (
+    <select value={value} onChange={(e) => onValueChange(e.target.value)}>
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
+}))
+
 function renderWizard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -197,6 +222,79 @@ describe('<ImportWizard> happy path', () => {
     const [call] = createStatusFn.mock.calls[0] as [{ data: { name: string } }]
     expect(call.data.name).toBe('Planned')
 
+    await screen.findByText('Dark mode')
+  })
+})
+
+describe('<ImportWizard> UserVoice source (§I3)', () => {
+  it('detects the export, surfaces the caveat, and threads real voters through to commit', async () => {
+    const voters = { '1': [{ email: 'alice@example.com' }] }
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/import/detect') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              csv: 'title,content\nDark mode,Please add it\n',
+              voters,
+              caveats: ['This export only includes ideas that received at least one vote.'],
+            }),
+            { status: 200 }
+          )
+        )
+      }
+      if (url === '/api/import' && init) {
+        const body = init.body as FormData
+        if (body.get('mode') === 'dry_run') {
+          expect(body.get('source')).toBe('uservoice')
+          expect(JSON.parse(body.get('votersJson') as string)).toEqual(voters)
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                totalRows: 1,
+                counts: { byBoard: {}, byStatus: {}, byAuthor: {} },
+                sample: [
+                  {
+                    row: 1,
+                    title: 'Dark mode',
+                    board: null,
+                    status: null,
+                    author: 'Imported user',
+                    isNewAuthor: false,
+                    voteCount: 0,
+                    action: 'create',
+                  },
+                ],
+                errors: [],
+                updatedCount: 0,
+              }),
+              { status: 200 }
+            )
+          )
+        }
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    })
+
+    renderWizard()
+
+    await screen.findByText('Drop a CSV file here or click to browse')
+
+    const sourceSelect = screen.getByDisplayValue('CSV file')
+    fireEvent.change(sourceSelect, { target: { value: 'uservoice' } })
+
+    await screen.findByText(/UserVoice full suggestions export/)
+
+    const file = makeCsvFile('ideaId,ideaTitle,userEmailAddress\n1,Dark mode,alice@example.com\n')
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [file] } })
+
+    // Mapping step renders the canonical (already-normalized) fields and the caveat.
+    await screen.findByText(/matched known columns automatically/)
+    expect(screen.getByText(/at least one vote/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    // Dry run confirms the request carried source=uservoice + votersJson (asserted above).
     await screen.findByText('Dark mode')
   })
 })

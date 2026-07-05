@@ -157,11 +157,26 @@ export async function handleImportPost(request: Request): Promise<Response> {
     // Encode CSV as base64 for the import service
     const csvContent = Buffer.from(csvText).toString('base64')
 
+    // Real per-row voters (§I3), carried alongside a UserVoice/Canny-detected
+    // upload. Malformed JSON is treated the same as "not provided" — voters
+    // are a value-add on top of the CSV's own vote_count column, never a
+    // hard requirement.
+    const votersJson = formData.get('votersJson') as string | null
+    let voters: ImportInput['voters']
+    if (votersJson) {
+      try {
+        voters = JSON.parse(votersJson) as ImportInput['voters']
+      } catch {
+        log.warn('ignoring malformed votersJson field')
+      }
+    }
+
     const importData: ImportInput = {
       boardId: targetBoardId!,
       csvContent,
       totalRows,
       initiatedByPrincipalId: validation.principal.id,
+      voters,
     }
 
     if (mode === 'dry_run') {

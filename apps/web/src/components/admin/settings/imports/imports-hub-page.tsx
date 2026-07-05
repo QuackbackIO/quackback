@@ -1,5 +1,11 @@
 import { Link } from '@tanstack/react-router'
-import { DocumentTextIcon, ShieldCheckIcon, CircleStackIcon } from '@heroicons/react/24/outline'
+import {
+  DocumentTextIcon,
+  ShieldCheckIcon,
+  CircleStackIcon,
+  UserGroupIcon,
+  ChatBubbleLeftRightIcon,
+} from '@heroicons/react/24/outline'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BackLink } from '@/components/ui/back-link'
@@ -40,6 +46,18 @@ export function ImportsHubPage() {
             <a href="/api/export">
               <DocumentTextIcon className="size-4" />
               Export posts (CSV)
+            </a>
+          </Button>
+          <Button variant="outline" asChild className="justify-start">
+            <a href="/api/export/users">
+              <UserGroupIcon className="size-4" />
+              Export users (CSV)
+            </a>
+          </Button>
+          <Button variant="outline" asChild className="justify-start">
+            <a href="/api/export/conversations">
+              <ChatBubbleLeftRightIcon className="size-4" />
+              Export conversations (JSONL)
             </a>
           </Button>
           <Button variant="outline" asChild className="justify-start">

@@ -9,19 +9,33 @@
 
 import Papa from 'papaparse'
 import { z } from 'zod'
-import { db, posts, postTags, postTagAssignments, postExternalLinks, eq, and, inArray } from '@/lib/server/db'
+import {
+  db,
+  posts,
+  postTags,
+  postTagAssignments,
+  postExternalLinks,
+  postVotes,
+  eq,
+  and,
+  inArray,
+} from '@/lib/server/db'
 import {
   boardIdSchema,
   createId,
   type BoardId,
   type PostId,
   type PostTagId,
+  type PostVoteId,
   type PrincipalId,
 } from '@quackback/ids'
 import { ValidationError } from '@/lib/shared/errors'
-import type { ImportInput, ImportResult, ImportRowError } from './types'
+import type { ImportInput, ImportResult, ImportRowError, ImportVoterRecord } from './types'
 import { ImportUserResolver } from './user-resolver'
 import { BATCH_SIZE, IMPORT_LINK_TYPE, loadRowContext, resolveRows } from './import-row-resolver'
+
+/** integration_type/sourceType tag on post_votes rows this pipeline creates. */
+const VOTE_SOURCE_TYPE = 'import'
 
 // Constants
 export const MAX_ERRORS = 100
@@ -101,7 +115,8 @@ export async function processBatch(
   startIndex: number,
   userResolver: ImportUserResolver,
   fallbackPrincipalId: PrincipalId,
-  batchTagId?: PostTagId | null
+  batchTagId?: PostTagId | null,
+  voters?: Record<string, ImportVoterRecord[]>
 ): Promise<BatchResult> {
   const result: BatchResult = {
     imported: 0,
@@ -160,20 +175,51 @@ export async function processBatch(
   // Pre-generate IDs for genuinely new posts only.
   const newPostIds = toInsert.map(() => createId('post'))
 
+  // Real per-row voters (§I3): resolve each voter to a principal BEFORE the
+  // flush below so their user+member rows land in the same batch insert.
+  // Rows whose source_id has no entry here fall back to vote-count backfill.
+  const votersBySourceId = new Map<string, { principalId: PrincipalId; createdAt: Date | null }[]>()
+  if (voters) {
+    for (const { row } of validRows) {
+      if (!row.sourceId) continue
+      const rowVoters = voters[row.sourceId]
+      if (!rowVoters?.length) continue
+      const seen = new Set<PrincipalId>()
+      const resolved: { principalId: PrincipalId; createdAt: Date | null }[] = []
+      for (const voter of rowVoters) {
+        const principalId = await userResolver.resolve(
+          voter.email,
+          voter.name ?? null,
+          fallbackPrincipalId
+        )
+        if (seen.has(principalId)) continue
+        seen.add(principalId)
+        resolved.push({
+          principalId,
+          createdAt: voter.createdAt ? new Date(voter.createdAt) : null,
+        })
+      }
+      votersBySourceId.set(row.sourceId, resolved)
+    }
+  }
+
   // Flush any pending user+member creations before inserting posts
   await userResolver.flushPendingCreates()
 
-  const postsToInsert = toInsert.map(({ row }, index) => ({
-    id: newPostIds[index],
-    boardId: row.boardId,
-    title: row.title,
-    content: row.content,
-    statusId: row.statusId,
-    principalId: row.principalId,
-    voteCount: row.voteCount,
-    createdAt: row.createdAt,
-    updatedAt: row.createdAt,
-  }))
+  const postsToInsert = toInsert.map(({ row }, index) => {
+    const rowVoters = row.sourceId ? votersBySourceId.get(row.sourceId) : undefined
+    return {
+      id: newPostIds[index],
+      boardId: row.boardId,
+      title: row.title,
+      content: row.content,
+      statusId: row.statusId,
+      principalId: row.principalId,
+      voteCount: rowVoters ? rowVoters.length : row.voteCount,
+      createdAt: row.createdAt,
+      updatedAt: row.createdAt,
+    }
+  })
 
   const externalLinksToInsert = toInsert
     .map(({ row }, index) => ({ row, postId: newPostIds[index] }))
@@ -187,6 +233,13 @@ export async function processBatch(
     }))
 
   const postTagsToInsert: { postId: PostId; tagId: PostTagId }[] = []
+  const postVotesToInsert: {
+    id: PostVoteId
+    postId: PostId
+    principalId: PrincipalId
+    sourceType: string
+    createdAt: Date
+  }[] = []
   for (let i = 0; i < toInsert.length; i++) {
     const { row } = toInsert[i]
     const postId = newPostIds[i]
@@ -195,6 +248,17 @@ export async function processBatch(
       if (tag) postTagsToInsert.push({ postId, tagId: tag.id })
     }
     if (batchTagId) postTagsToInsert.push({ postId, tagId: batchTagId })
+
+    const rowVoters = row.sourceId ? votersBySourceId.get(row.sourceId) : undefined
+    for (const voter of rowVoters ?? []) {
+      postVotesToInsert.push({
+        id: createId('post_vote'),
+        postId,
+        principalId: voter.principalId,
+        sourceType: VOTE_SOURCE_TYPE,
+        createdAt: voter.createdAt ?? row.createdAt,
+      })
+    }
   }
 
   // Insert new tags first
@@ -217,21 +281,48 @@ export async function processBatch(
     await db.insert(postTagAssignments).values(postTagsToInsert).onConflictDoNothing()
   }
 
+  if (postVotesToInsert.length > 0) {
+    await db.insert(postVotes).values(postVotesToInsert).onConflictDoNothing()
+  }
+
   // Update rows matched by source_id: re-import overwrites content/status/
   // votes and replaces the tag set (including the batch tag) rather than
   // creating a duplicate post.
   for (const { row } of toUpdate) {
     const postId = existingBySourceId.get(row.sourceId!)!
+    const rowVoters = row.sourceId ? votersBySourceId.get(row.sourceId) : undefined
     await db
       .update(posts)
       .set({
         title: row.title,
         content: row.content,
         statusId: row.statusId,
-        voteCount: row.voteCount,
+        voteCount: rowVoters ? rowVoters.length : row.voteCount,
         updatedAt: new Date(),
       })
       .where(eq(posts.id, postId))
+
+    if (rowVoters) {
+      // Replace this post's prior import-sourced votes with the fresh set —
+      // mirrors the tag-replacement behavior below rather than accumulating.
+      await db
+        .delete(postVotes)
+        .where(and(eq(postVotes.postId, postId), eq(postVotes.sourceType, VOTE_SOURCE_TYPE)))
+      if (rowVoters.length > 0) {
+        await db
+          .insert(postVotes)
+          .values(
+            rowVoters.map((voter) => ({
+              id: createId('post_vote'),
+              postId,
+              principalId: voter.principalId,
+              sourceType: VOTE_SOURCE_TYPE,
+              createdAt: voter.createdAt ?? row.createdAt,
+            }))
+          )
+          .onConflictDoNothing()
+      }
+    }
 
     await db.delete(postTagAssignments).where(eq(postTagAssignments.postId, postId))
     const updateTagRows: { postId: PostId; tagId: PostTagId }[] = []
@@ -285,7 +376,8 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
       i,
       userResolver,
       data.initiatedByPrincipalId,
-      data.batchTagId
+      data.batchTagId,
+      data.voters
     )
     result = mergeResults(result, batchResult)
   }

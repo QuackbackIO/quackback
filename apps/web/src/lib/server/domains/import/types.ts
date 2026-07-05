@@ -1,6 +1,20 @@
 import type { BoardId, PrincipalId, PostTagId } from '@quackback/ids'
 
 /**
+ * A real voter record carried alongside a source-id row (§I3). When a row's
+ * source_id has an entry here, commit creates real post_votes rows for each
+ * voter instead of just backfilling posts.vote_count from the CSV — the
+ * honest "votes-only" fallback for sources that don't carry individual
+ * voter identities.
+ */
+export interface ImportVoterRecord {
+  email: string
+  name?: string | null
+  /** ISO timestamp, when the source provides one. */
+  createdAt?: string
+}
+
+/**
  * CSV import input
  */
 export interface ImportInput {
@@ -17,6 +31,8 @@ export interface ImportInput {
    * legacy per-board synchronous path and for dry runs, which never write.
    */
   batchTagId?: PostTagId | null
+  /** Real per-row voter records keyed by source_id (§I3). See ImportVoterRecord. */
+  voters?: Record<string, ImportVoterRecord[]>
 }
 
 /**
