@@ -92,6 +92,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | team.manage | support | ✓ | · |
 | workflow.manage | support | ✓ | · |
 | channel_account.manage | support | ✓ | · |
+| assistant.manage | ai | ✓ | · |
+| connector.manage | ai | ✓ | · |
 
 ## 2. Surfaces and their enforced authorization
 

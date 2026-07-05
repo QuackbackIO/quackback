@@ -118,6 +118,10 @@ export const PERMISSIONS = {
   TEAM_MANAGE: 'team.manage',
   WORKFLOW_MANAGE: 'workflow.manage',
   CHANNEL_ACCOUNT_MANAGE: 'channel_account.manage',
+
+  // ai
+  ASSISTANT_MANAGE: 'assistant.manage',
+  CONNECTOR_MANAGE: 'connector.manage',
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -138,6 +142,7 @@ export const PERMISSION_CATEGORIES = [
   'analytics',
   'integration',
   'support',
+  'ai',
 ] as const
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number]
@@ -177,6 +182,8 @@ export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.TEAM_MANAGE,
   PERMISSIONS.WORKFLOW_MANAGE,
   PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  PERMISSIONS.ASSISTANT_MANAGE,
+  PERMISSIONS.CONNECTOR_MANAGE,
 ]
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
@@ -315,4 +322,6 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   { key: PERMISSIONS.TEAM_MANAGE, category: 'support' },
   { key: PERMISSIONS.WORKFLOW_MANAGE, category: 'support' },
   { key: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE, category: 'support' },
+  { key: PERMISSIONS.ASSISTANT_MANAGE, category: 'ai' },
+  { key: PERMISSIONS.CONNECTOR_MANAGE, category: 'ai' },
 ]

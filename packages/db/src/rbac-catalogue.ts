@@ -130,6 +130,10 @@ export const PERMISSIONS = {
   TEAM_MANAGE: 'team.manage', // manage teams + membership (workspace-admin)
   WORKFLOW_MANAGE: 'workflow.manage', // create / update / delete / status workflows (workspace-admin)
   CHANNEL_ACCOUNT_MANAGE: 'channel_account.manage', // manage connected inbox channels (workspace-admin; was inbox.manage)
+
+  // category 'ai'
+  ASSISTANT_MANAGE: 'assistant.manage', // manage AI assistant behavior, guidance, and action controls
+  CONNECTOR_MANAGE: 'connector.manage', // manage data connectors for external actions
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -152,6 +156,7 @@ export const PERMISSION_CATEGORIES = [
   'analytics',
   'integration',
   'support',
+  'ai',
 ] as const
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number]
@@ -550,6 +555,17 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
     category: 'support',
     description: 'Manage connected inbox channels (email / widget accounts)',
   },
+
+  {
+    key: PERMISSIONS.ASSISTANT_MANAGE,
+    category: 'ai',
+    description: 'Manage AI assistant behavior, guidance, and action controls',
+  },
+  {
+    key: PERMISSIONS.CONNECTOR_MANAGE,
+    category: 'ai',
+    description: 'Manage data connectors for external actions',
+  },
 ]
 
 // --------------------------------------------------------------- presets ---
@@ -592,6 +608,9 @@ export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.TEAM_MANAGE,
   PERMISSIONS.WORKFLOW_MANAGE,
   PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
+  // AI infrastructure config (admin-only)
+  PERMISSIONS.ASSISTANT_MANAGE,
+  PERMISSIONS.CONNECTOR_MANAGE,
 ]
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
