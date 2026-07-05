@@ -935,6 +935,10 @@ export interface FeatureFlags {
   visitorAnalytics: boolean
   /** Durable first-party device id: connects visitors to leads and users across visits */
   visitorDeviceTracking: boolean
+  /** AI assistant actions: closing conversations, creating tickets, etc. with per-action controls */
+  assistantActions: boolean
+  /** External API integrations for the AI assistant to look up or update data in other systems */
+  dataConnectors: boolean
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -946,6 +950,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   linkPreviews: false,
   visitorAnalytics: false,
   visitorDeviceTracking: false,
+  assistantActions: false,
+  dataConnectors: false,
 }
 
 /**
@@ -992,6 +998,16 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       'Remember returning visitors with a first-party device id so their activity connects to leads and users. Stores an identifier in the browser; check your privacy requirements before enabling.',
   },
+  assistantActions: {
+    label: 'Assistant actions',
+    description:
+      'Let the AI assistant take actions such as closing conversations or creating tickets, with per-action controls and approvals.',
+  },
+  dataConnectors: {
+    label: 'Data connectors',
+    description:
+      'Define external API calls the AI assistant can use to look up or update data in other systems.',
+  },
 }
 
 /**
@@ -1019,5 +1035,10 @@ export const LAB_SECTIONS: Array<{
     title: 'Analytics',
     description: 'Understand who visits your portal and widget, privately and without cookies.',
     flags: ['visitorAnalytics', 'visitorDeviceTracking'],
+  },
+  {
+    title: 'AI',
+    description: 'Enable your AI assistant to automate workflows and integrate with external data sources.',
+    flags: ['assistantActions', 'dataConnectors'],
   },
 ]
