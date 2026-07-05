@@ -18,6 +18,12 @@ interface LinkedPost {
   } | null
 }
 
+interface CategoryBadge {
+  id: string
+  name: string
+  color: string
+}
+
 interface ChangelogEntryCardProps {
   id: ChangelogId
   title: string
@@ -25,6 +31,7 @@ interface ChangelogEntryCardProps {
   contentJson: TiptapContent | null
   publishedAt: string
   linkedPosts: LinkedPost[]
+  categories?: CategoryBadge[]
   className?: string
 }
 
@@ -43,6 +50,7 @@ export function ChangelogEntryCard({
   contentJson,
   publishedAt,
   linkedPosts,
+  categories = [],
   className,
 }: ChangelogEntryCardProps) {
   return (
@@ -60,6 +68,21 @@ export function ChangelogEntryCard({
         <time dateTime={publishedAt} className="md:hidden text-sm text-muted-foreground mb-4 block">
           {formatDate(publishedAt)}
         </time>
+
+        {/* Category labels */}
+        {categories.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {categories.map((category) => (
+              <span
+                key={category.id}
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                style={{ backgroundColor: category.color + '1a', color: category.color }}
+              >
+                {category.name}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Title with permalink */}
         <Link

@@ -36,6 +36,7 @@ import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
+import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'settings' })
@@ -912,6 +913,37 @@ export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
       return await updateOfficeHoursSchedule(data)
     } catch (error) {
       log.error({ err: error }, 'update office hours failed')
+      throw error
+    }
+  })
+
+// ============================================
+// Changelog Settings Operations
+// ============================================
+
+export const fetchChangelogSettingsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetch changelog settings')
+  try {
+    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+    const { getChangelogSettings } = await import('@/lib/server/domains/settings/settings.changelog')
+    return await getChangelogSettings()
+  } catch (error) {
+    log.error({ err: error }, 'fetch changelog settings failed')
+    throw error
+  }
+})
+
+export const updateChangelogSettingsFn = createServerFn({ method: 'POST' })
+  .validator(changelogSettingsSchema)
+  .handler(async ({ data }) => {
+    log.info(data, 'update changelog settings')
+    try {
+      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+      const { updateChangelogSettings } =
+        await import('@/lib/server/domains/settings/settings.changelog')
+      return await updateChangelogSettings(data)
+    } catch (error) {
+      log.error({ err: error }, 'update changelog settings failed')
       throw error
     }
   })

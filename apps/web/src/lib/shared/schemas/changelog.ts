@@ -24,8 +24,11 @@ export const createChangelogSchema = z.object({
   content: z.string(),
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
+  categoryIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
   displayDate: z.coerce.date().nullable().optional(),
+  /** Publish-time "Send email to subscribers" checkbox; default true. */
+  notify: z.boolean().optional(),
 })
 
 /**
@@ -37,8 +40,11 @@ export const updateChangelogSchema = z.object({
   content: z.string().optional(),
   contentJson: tiptapContentSchema.nullable().optional(),
   linkedPostIds: z.array(z.string()).optional(),
+  categoryIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),
   displayDate: z.coerce.date().nullable().optional(),
+  /** Publish-time "Send email to subscribers" checkbox; default true. */
+  notify: z.boolean().optional(),
 })
 
 /**

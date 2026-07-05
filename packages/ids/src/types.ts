@@ -49,6 +49,12 @@ export type RoadmapId = TypeId<'roadmap'>
 /** Changelog entry ID - e.g., changelog_01h455vb4pex5vsknk084sn02q */
 export type ChangelogId = TypeId<'changelog'>
 
+/** Changelog category (label) ID - e.g., changelog_category_01h455vb4pex5vsknk084sn02q */
+export type ChangelogCategoryId = TypeId<'changelog_category'>
+
+/** Changelog subscription ID - e.g., changelog_sub_01h455vb4pex5vsknk084sn02q */
+export type ChangelogSubscriptionId = TypeId<'changelog_sub'>
+
 /** Support-inbox conversation ID - e.g., conversation_01h455vb4pex5vsknk084sn02q */
 export type ConversationId = TypeId<'conversation'>
 
@@ -339,6 +345,8 @@ export interface EntityIdMap {
   post_merge_suggestion: PostMergeSuggestionId
   roadmap: RoadmapId
   changelog: ChangelogId
+  changelog_category: ChangelogCategoryId
+  changelog_sub: ChangelogSubscriptionId
   conversation: ConversationId
   conversation_message: ConversationMessageId
   conversation_tag: ConversationTagId

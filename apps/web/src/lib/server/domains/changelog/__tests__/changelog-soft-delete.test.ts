@@ -36,6 +36,7 @@ vi.mock('@/lib/server/db', () => ({
       postStatuses: {
         findMany: (...args: unknown[]) => mockStatusesFindMany(...args),
       },
+      changelogEntryCategories: { findMany: vi.fn().mockResolvedValue([]) },
     },
     select: (...args: unknown[]) => mockSelect(...args),
     update: () => ({
@@ -54,6 +55,8 @@ vi.mock('@/lib/server/db', () => ({
   },
   changelogEntries: changelogEntriesTable,
   changelogEntryPosts: { changelogEntryId: 'changelog_entry_id', postId: 'post_id' },
+  changelogEntryCategories: { changelogEntryId: 'changelog_entry_id', categoryId: 'category_id' },
+  changelogCategories: { id: 'id', name: 'name' },
   posts: {
     id: 'posts.id',
     title: 'posts.title',

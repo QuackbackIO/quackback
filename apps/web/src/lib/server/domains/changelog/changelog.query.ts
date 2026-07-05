@@ -21,6 +21,7 @@ import {
 } from '@/lib/server/db'
 import type { BoardId, ChangelogId, PrincipalId, PostId, PostStatusId } from '@quackback/ids'
 import { computeStatus } from './changelog.service'
+import { getCategoriesForEntries } from './changelog-category.service'
 import type {
   ListChangelogParams,
   ChangelogEntryWithDetails,
@@ -145,9 +146,13 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
     statuses.forEach((s) => statusMap.set(s.id, { name: s.name, color: s.color }))
   }
 
+  // Categories (labels) for all entries.
+  const categoriesMap = await getCategoriesForEntries(entryIds)
+
   // Transform to output format
   const result: ChangelogEntryWithDetails[] = items.map((entry) => {
     const entryLinkedPosts = linkedPostsMap.get(entry.id) ?? []
+    const entryCategories = categoriesMap.get(entry.id) ?? []
     return {
       id: entry.id,
       title: entry.title,
@@ -165,6 +170,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
         voteCount: lp.post.voteCount,
         status: lp.post.statusId ? (statusMap.get(lp.post.statusId) ?? null) : null,
       })),
+      categories: entryCategories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
       status: computeStatus(entry.publishedAt),
     }
   })

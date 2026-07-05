@@ -3,10 +3,17 @@
  */
 
 import type { TiptapContent } from '@/lib/server/db'
-import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
+import type { ChangelogId, ChangelogCategoryId, PrincipalId, PostId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 
 export type { PublishState } from '@/lib/shared/schemas/changelog'
+
+/** Category summary attached to an entry (admin + public projections). */
+export interface ChangelogCategorySummary {
+  id: ChangelogCategoryId
+  name: string
+  color: string
+}
 
 // ============================================================================
 // Input Types
@@ -21,9 +28,18 @@ export interface CreateChangelogInput {
   contentJson?: TiptapContent | null
   /** IDs of posts to link to this changelog entry */
   linkedPostIds?: PostId[]
+  /** IDs of categories (labels) to attach to this changelog entry */
+  categoryIds?: ChangelogCategoryId[]
   /** Publish state */
   publishState: PublishState
   displayDate?: Date | null
+  /**
+   * Whether publishing this entry should dispatch the subscriber
+   * notification. Defaults to true; false stamps `notifiedAt` without
+   * sending (the atomic-claim idempotence still applies — see
+   * notifyChangelogPublished).
+   */
+  notify?: boolean
 }
 
 /**
@@ -35,9 +51,13 @@ export interface UpdateChangelogInput {
   contentJson?: TiptapContent | null
   /** IDs of posts to link (replaces existing links) */
   linkedPostIds?: PostId[]
+  /** IDs of categories to attach (replaces existing links) */
+  categoryIds?: ChangelogCategoryId[]
   /** Publish state (if changing) */
   publishState?: PublishState
   displayDate?: Date | null
+  /** See {@link CreateChangelogInput.notify}. */
+  notify?: boolean
 }
 
 /**
@@ -73,6 +93,8 @@ export interface ChangelogEntryWithDetails {
   author: ChangelogAuthor | null
   /** Linked posts */
   linkedPosts: ChangelogLinkedPost[]
+  /** Attached categories (labels) */
+  categories: ChangelogCategorySummary[]
   /** Computed status based on publishedAt */
   status: 'draft' | 'scheduled' | 'published'
 }
@@ -118,6 +140,7 @@ export interface PublicChangelogEntry {
   contentJson: TiptapContent | null
   publishedAt: Date
   linkedPosts: PublicChangelogLinkedPost[]
+  categories: ChangelogCategorySummary[]
 }
 
 /**

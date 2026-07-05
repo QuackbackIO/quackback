@@ -65,8 +65,11 @@ export function PortalHeader({
     !!settings?.featureFlags?.helpCenter && !!settings?.helpCenterConfig?.enabled
   const supportEnabled =
     !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+  // Default true so a workspace that never customized this setting keeps
+  // the changelog tab it had before this toggle existed.
+  const changelogEnabled = settings?.changelogConfig?.portalTabEnabled ?? true
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
-  const navItems = buildNavItems({ helpCenterEnabled, supportEnabled })
+  const navItems = buildNavItems({ helpCenterEnabled, supportEnabled, changelogEnabled })
 
   // Hide Log in / Sign up when no portal sign-in surface is usable.
   // Team members can still reach /admin/login directly. Counts any registered

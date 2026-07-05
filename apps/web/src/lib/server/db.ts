@@ -214,6 +214,12 @@ export {
   changelogEntriesRelations,
   changelogEntryPosts,
   changelogEntryPostsRelations,
+  changelogCategories,
+  changelogCategoriesRelations,
+  changelogEntryCategories,
+  changelogEntryCategoriesRelations,
+  changelogSubscriptions,
+  changelogSubscriptionsRelations,
   // Schema tables - conversations
   conversations,
   conversationsRelations,
@@ -376,6 +382,7 @@ export type {
   SendingDomainDnsRecord,
 } from '@quackback/db'
 export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
+export type { ChangelogSubscriptionSource } from '@quackback/db'
 export type { SlaPolicy, SlaEvent } from '@quackback/db'
 export type {
   ImportRunSource,

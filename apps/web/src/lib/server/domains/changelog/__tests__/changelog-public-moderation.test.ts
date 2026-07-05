@@ -41,6 +41,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
       postStatuses: {
         findMany: (...args: unknown[]) => mockStatusesFindMany(...args),
       },
+      changelogEntryCategories: { findMany: vi.fn().mockResolvedValue([]) },
     },
     select: (...args: unknown[]) => mockSelect(...args),
     // getPublicChangelogById records a view via a fire-and-forget update.

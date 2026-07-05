@@ -63,6 +63,7 @@ function ChangelogEntryPage() {
           contentJson={entry.contentJson}
           publishedAt={entry.publishedAt}
           linkedPosts={entry.linkedPosts}
+          categories={entry.categories}
         />
       </div>
     </div>

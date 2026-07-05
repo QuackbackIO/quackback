@@ -1,10 +1,13 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { contentPreview } from '@/lib/shared/utils/string'
-import { publicChangelogQueries } from '@/lib/client/queries/changelog'
+import { cn } from '@/lib/shared/utils'
+import { publicChangelogQueries, changelogCategoryQueries } from '@/lib/client/queries/changelog'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
+import type { ChangelogCategoryId } from '@quackback/ids'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -24,8 +27,19 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
     publicChangelogQueries.list()
   )
+  const { data: categories = [] } = useQuery(changelogCategoryQueries.list())
+  const [activeCategoryId, setActiveCategoryId] = useState<ChangelogCategoryId | null>(null)
 
-  const entries = data?.pages.flatMap((page) => page.items) ?? []
+  const allEntries = data?.pages.flatMap((page) => page.items) ?? []
+
+  const categoriesInUse = useMemo(() => {
+    const usedIds = new Set(allEntries.flatMap((e) => e.categories.map((c) => c.id)))
+    return categories.filter((c) => usedIds.has(c.id))
+  }, [categories, allEntries])
+
+  const entries = activeCategoryId
+    ? allEntries.filter((e) => e.categories.some((c) => c.id === activeCategoryId))
+    : allEntries
 
   const sentinelRef = useInfiniteScroll({
     hasMore: hasNextPage ?? false,
@@ -43,7 +57,7 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
     )
   }
 
-  if (entries.length === 0) {
+  if (allEntries.length === 0) {
     return (
       <div className="flex flex-col h-full items-center justify-center py-10 text-center px-4">
         <NewspaperIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
@@ -78,28 +92,69 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
           )}
         </header>
 
-        <div className="space-y-2">
-          {entries.map((entry) => (
+        {categoriesInUse.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1 px-1">
             <button
-              key={entry.id}
               type="button"
-              onClick={() => onEntrySelect?.(entry.id)}
-              className="w-full text-start rounded-xl border border-border/50 bg-card hover:bg-muted/30 transition-colors px-3.5 py-3 cursor-pointer"
+              onClick={() => setActiveCategoryId(null)}
+              className={cn(
+                'rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+                activeCategoryId === null
+                  ? 'bg-foreground text-background'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/70'
+              )}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <time className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
-                  {formatDate(entry.publishedAt)}
-                </time>
-              </div>
-              <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug">
-                {entry.title}
-              </h3>
-              <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">
-                {contentPreview(entry.content, 120)}
-              </p>
+              <FormattedMessage id="widget.changelog.filter.all" defaultMessage="All" />
             </button>
-          ))}
-        </div>
+            {categoriesInUse.map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setActiveCategoryId(category.id)}
+                className="rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors"
+                style={{
+                  backgroundColor:
+                    activeCategoryId === category.id ? category.color : category.color + '1a',
+                  color: activeCategoryId === category.id ? '#fff' : category.color,
+                }}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {entries.length === 0 ? (
+          <p className="px-1 py-6 text-center text-xs text-muted-foreground">
+            <FormattedMessage
+              id="widget.changelog.emptyFiltered"
+              defaultMessage="No updates in this category yet"
+            />
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {entries.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => onEntrySelect?.(entry.id)}
+                className="w-full text-start rounded-xl border border-border/50 bg-card hover:bg-muted/30 transition-colors px-3.5 py-3 cursor-pointer"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <time className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
+                    {formatDate(entry.publishedAt)}
+                  </time>
+                </div>
+                <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug">
+                  {entry.title}
+                </h3>
+                <p className="text-xs text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">
+                  {contentPreview(entry.content, 120)}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
 
         {hasNextPage && (
           <div ref={sentinelRef} className="flex justify-center py-2">

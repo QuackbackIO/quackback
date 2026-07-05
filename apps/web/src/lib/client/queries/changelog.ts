@@ -12,6 +12,8 @@ import {
   listPublicChangelogsFn,
   getPublicChangelogFn,
 } from '@/lib/server/functions/changelog'
+import { listChangelogCategoriesFn } from '@/lib/server/functions/changelog-categories'
+import { fetchChangelogSettingsFn } from '@/lib/server/functions/settings'
 
 const STALE_TIME_SHORT = 30 * 1000
 const STALE_TIME_MEDIUM = 60 * 1000
@@ -28,6 +30,32 @@ export const changelogKeys = {
   public: () => [...changelogKeys.all, 'public'] as const,
   publicList: () => [...changelogKeys.public(), 'list'] as const,
   publicDetail: (id: ChangelogId) => [...changelogKeys.public(), 'detail', id] as const,
+  categories: () => [...changelogKeys.all, 'categories'] as const,
+  settings: () => [...changelogKeys.all, 'settings'] as const,
+}
+
+/**
+ * Changelog categories (labels). Public read (no auth required) — powers
+ * the admin multi-select, the Labels settings card, and the public/widget
+ * filter chips from a single query.
+ */
+export const changelogCategoryQueries = {
+  list: () =>
+    queryOptions({
+      queryKey: changelogKeys.categories(),
+      queryFn: () => listChangelogCategoriesFn(),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+}
+
+/** Admin-only changelog settings (Settings > Changelog, `changelog.manage`). */
+export const changelogSettingsQueries = {
+  get: () =>
+    queryOptions({
+      queryKey: changelogKeys.settings(),
+      queryFn: () => fetchChangelogSettingsFn(),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
 }
 
 /**

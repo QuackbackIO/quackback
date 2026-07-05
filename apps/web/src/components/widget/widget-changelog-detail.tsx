@@ -60,6 +60,19 @@ export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
           <time className="text-[11px] text-muted-foreground/60 uppercase tracking-wide">
             {formatDate(entry.publishedAt)}
           </time>
+          {entry.categories.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {entry.categories.map((category) => (
+                <span
+                  key={category.id}
+                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  style={{ backgroundColor: category.color + '1a', color: category.color }}
+                >
+                  {category.name}
+                </span>
+              ))}
+            </div>
+          )}
           <WidgetPortalTitle title={entry.title} onClick={handleViewOnPortal} />
 
           <div className="mt-3">

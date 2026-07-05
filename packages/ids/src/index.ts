@@ -79,6 +79,8 @@ export type {
   PostNoteId,
   RoadmapId,
   ChangelogId,
+  ChangelogCategoryId,
+  ChangelogSubscriptionId,
   ConversationId,
   ConversationMessageId,
   ConversationTagId,

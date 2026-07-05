@@ -15,7 +15,7 @@ import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { JSONContent } from '@tiptap/react'
-import type { PostId } from '@quackback/ids'
+import type { PostId, ChangelogCategoryId } from '@quackback/ids'
 
 // Mobile-only version of the sidebar content for the sheet
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
@@ -28,6 +28,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [open, setOpen] = useState(false)
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
+  const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
+  const [notify, setNotify] = useState(true)
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
@@ -72,6 +74,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     form.reset()
     setContentJson(null)
     setLinkedPostIds([])
+    setCategoryIds([])
+    setNotify(true)
     setPublishState({ type: 'draft' })
     setDisplayDateOverride(undefined)
     createChangelogMutation.reset()
@@ -84,7 +88,9 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
         linkedPostIds,
+        categoryIds,
         publishState,
+        notify,
         ...(publishState.type === 'published' &&
           displayDateOverride !== undefined && { displayDate: displayDateOverride }),
       },
@@ -160,6 +166,10 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                 onPublishStateChange={handlePublishStateChange}
                 linkedPostIds={linkedPostIds}
                 onLinkedPostsChange={setLinkedPostIds}
+                categoryIds={categoryIds}
+                onCategoriesChange={setCategoryIds}
+                notify={notify}
+                onNotifyChange={setNotify}
                 displayDateValue={displayDateOverride}
                 onDisplayDateChange={handleDisplayDateChange}
                 onDisplayDateClear={handleDisplayDateClear}
@@ -190,6 +200,10 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                       onPublishStateChange={handlePublishStateChange}
                       linkedPostIds={linkedPostIds}
                       onLinkedPostsChange={setLinkedPostIds}
+                      categoryIds={categoryIds}
+                      onCategoriesChange={setCategoryIds}
+                      notify={notify}
+                      onNotifyChange={setNotify}
                       displayDateValue={displayDateOverride}
                       onDisplayDateChange={handleDisplayDateChange}
                       onDisplayDateClear={handleDisplayDateClear}

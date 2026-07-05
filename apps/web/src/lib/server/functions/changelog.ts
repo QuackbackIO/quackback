@@ -5,12 +5,12 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
-import type { BoardId, ChangelogId, PostId } from '@quackback/ids'
+import type { BoardId, ChangelogCategoryId, ChangelogId, PostId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { NotFoundError } from '@/lib/shared/errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { requireAuth } from './auth-helpers'
+import { requireAuth, getOptionalAuth, policyActorFromAuth } from './auth-helpers'
 import { resolvePortalAccessForRequest } from './portal-access'
 import {
   createChangelog,
@@ -23,6 +23,7 @@ import {
   getPublicChangelogById,
   listPublicChangelogs,
 } from '@/lib/server/domains/changelog/changelog.public'
+import { isChangelogAudienceGranted } from '@/lib/server/domains/changelog/changelog.audience'
 import type { PublishState } from '@/lib/server/domains/changelog'
 import { z } from 'zod'
 import {
@@ -61,8 +62,10 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
           content: data.content,
           contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : null,
           linkedPostIds: (data.linkedPostIds ?? []) as PostId[],
+          categoryIds: data.categoryIds as ChangelogCategoryId[] | undefined,
           publishState: data.publishState as PublishState,
           ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
+          notify: data.notify,
         },
         {
           principalId: auth.principal.id,
@@ -98,8 +101,10 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
         content: data.content,
         contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
         linkedPostIds: data.linkedPostIds as PostId[] | undefined,
+        categoryIds: data.categoryIds as ChangelogCategoryId[] | undefined,
         publishState: data.publishState as PublishState | undefined,
         ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
+        notify: data.notify,
       })
 
       return {
@@ -217,7 +222,20 @@ export const getPublicChangelogFn = createServerFn({ method: 'GET' })
         )
       }
 
-      const entry = await getPublicChangelogById(data.id as ChangelogId)
+      const authCtx = await getOptionalAuth()
+      const actor = await policyActorFromAuth(authCtx)
+
+      // Changelog audience gate (Settings > Changelog > Visibility): same
+      // not-found shape as a missing entry when audience='authenticated'.
+      if (!(await isChangelogAudienceGranted(actor))) {
+        log.debug('changelog audience denied')
+        throw new NotFoundError(
+          'CHANGELOG_NOT_FOUND',
+          `Published changelog entry with ID ${data.id} not found`
+        )
+      }
+
+      const entry = await getPublicChangelogById(data.id as ChangelogId, actor)
 
       return {
         ...entry,
@@ -244,10 +262,21 @@ export const listPublicChangelogsFn = createServerFn({ method: 'GET' })
         return { items: [], nextCursor: null, hasMore: false }
       }
 
-      const result = await listPublicChangelogs({
-        cursor: data.cursor,
-        limit: data.limit,
-      })
+      const authCtx = await getOptionalAuth()
+      const actor = await policyActorFromAuth(authCtx)
+
+      if (!(await isChangelogAudienceGranted(actor))) {
+        log.debug('changelog audience denied, returning empty list')
+        return { items: [], nextCursor: null, hasMore: false }
+      }
+
+      const result = await listPublicChangelogs(
+        {
+          cursor: data.cursor,
+          limit: data.limit,
+        },
+        actor
+      )
 
       return {
         ...result,

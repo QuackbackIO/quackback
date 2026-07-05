@@ -18,6 +18,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
       changelogEntryPosts: {
         findMany: (...args: unknown[]) => mockChangelogEntryPostsFindMany(...args),
       },
+      changelogEntryCategories: { findMany: vi.fn().mockResolvedValue([]) },
       principal: { findFirst: vi.fn().mockResolvedValue(null) },
       postStatuses: { findFirst: vi.fn().mockResolvedValue(null) },
     },

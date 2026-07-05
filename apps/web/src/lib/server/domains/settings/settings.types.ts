@@ -9,6 +9,7 @@ import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
 import type { WidgetTranslations } from '@/lib/shared/widget/translations'
+import type { ChangelogSettings } from '@/lib/shared/changelog-settings'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -794,6 +795,8 @@ export interface TenantSettings {
   publicPortalConfig: PublicPortalConfig
   /** Help center configuration */
   helpCenterConfig: HelpCenterConfig
+  /** Changelog audience/nav/collaboration/email settings */
+  changelogConfig: ChangelogSettings
   /** Public widget config (no secret, safe for client) */
   publicWidgetConfig: PublicWidgetConfig
   /** Feature flags for experimental features */

@@ -27,6 +27,8 @@ export const ID_PREFIXES = {
   // Planning domain
   roadmap: 'roadmap',
   changelog: 'changelog',
+  changelog_category: 'changelog_category',
+  changelog_sub: 'changelog_sub',
 
   // Conversations (support inbox)
   conversation: 'conversation',

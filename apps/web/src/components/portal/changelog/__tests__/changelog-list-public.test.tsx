@@ -4,12 +4,18 @@ import { render, screen } from '@testing-library/react'
 import { IntlProvider } from 'react-intl'
 
 // The public changelog list renders an empty state when there are no entries.
-// We mock the infinite query so the component takes the empty branch without a
-// live data layer.
+// We mock the infinite query (entries) and the plain query (category filter
+// chips) so the component takes the empty branch without a live data layer
+// or a QueryClientProvider.
 const mockUseInfiniteQuery = vi.fn()
+const mockUseQuery = vi.fn(() => ({ data: [] }))
 vi.mock('@tanstack/react-query', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-query')>()
-  return { ...actual, useInfiniteQuery: () => mockUseInfiniteQuery() }
+  return {
+    ...actual,
+    useInfiniteQuery: () => mockUseInfiniteQuery(),
+    useQuery: () => mockUseQuery(),
+  }
 })
 
 import { ChangelogListPublic } from '../changelog-list-public'

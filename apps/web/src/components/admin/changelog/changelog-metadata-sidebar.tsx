@@ -1,6 +1,6 @@
 import { SidebarContainer, SidebarSkeleton } from '@/components/shared/sidebar-primitives'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
-import type { PostId } from '@quackback/ids'
+import type { PostId, ChangelogCategoryId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 
 export { SidebarSkeleton as ChangelogMetadataSidebarSkeleton }
@@ -10,6 +10,10 @@ interface ChangelogMetadataSidebarProps {
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
+  categoryIds: ChangelogCategoryId[]
+  onCategoriesChange: (categoryIds: ChangelogCategoryId[]) => void
+  notify: boolean
+  onNotifyChange: (notify: boolean) => void
   authorName?: string | null
   publishedAt?: string | null
   displayDateValue?: Date
@@ -22,6 +26,10 @@ export function ChangelogMetadataSidebar({
   onPublishStateChange,
   linkedPostIds,
   onLinkedPostsChange,
+  categoryIds,
+  onCategoriesChange,
+  notify,
+  onNotifyChange,
   authorName,
   publishedAt,
   displayDateValue,
@@ -35,6 +43,10 @@ export function ChangelogMetadataSidebar({
         onPublishStateChange={onPublishStateChange}
         linkedPostIds={linkedPostIds}
         onLinkedPostsChange={onLinkedPostsChange}
+        categoryIds={categoryIds}
+        onCategoriesChange={onCategoriesChange}
+        notify={notify}
+        onNotifyChange={onNotifyChange}
         authorName={authorName}
         publishedAt={publishedAt}
         displayDateValue={displayDateValue}

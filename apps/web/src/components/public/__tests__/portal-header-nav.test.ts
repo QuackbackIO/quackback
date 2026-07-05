@@ -21,4 +21,18 @@ describe('buildNavItems', () => {
     const items = buildNavItems({ helpCenterEnabled: true, supportEnabled: true })
     expect(items.map((i) => i.to)).toEqual(['/', '/roadmap', '/changelog', '/hc', '/support'])
   })
+
+  it('drops Changelog when its portal nav toggle is off', () => {
+    const items = buildNavItems({
+      helpCenterEnabled: false,
+      supportEnabled: false,
+      changelogEnabled: false,
+    })
+    expect(items.map((i) => i.to)).toEqual(['/', '/roadmap'])
+  })
+
+  it('keeps Changelog by default when changelogEnabled is omitted', () => {
+    const items = buildNavItems({ helpCenterEnabled: false, supportEnabled: false })
+    expect(items.map((i) => i.to)).toContain('/changelog')
+  })
 })

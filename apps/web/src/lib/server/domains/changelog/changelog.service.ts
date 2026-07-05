@@ -33,6 +33,7 @@ import {
   type EventActor,
 } from '@/lib/server/events/dispatch'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
+import { setEntryCategories, getCategoriesForEntries } from './changelog-category.service'
 import { logger } from '@/lib/server/logger'
 
 import { isSameDay } from 'date-fns'
@@ -120,10 +121,18 @@ export async function createChangelog(
     await linkPostsToChangelog(entry.id, input.linkedPostIds)
   }
 
-  // Dispatch event or schedule delayed job based on publish state
+  // Link categories if provided
+  if (input.categoryIds && input.categoryIds.length > 0) {
+    await setEntryCategories(entry.id, input.categoryIds)
+  }
+
+  // Dispatch event or schedule delayed job based on publish state. `notify`
+  // defaults true; false stamps notifiedAt without dispatching (see
+  // notifyChangelogPublished).
+  const notify = input.notify ?? true
   const actor = buildEventActor({ principalId: author.principalId })
   if (input.publishState.type === 'published') {
-    notifyChangelogPublished(entry.id, actor).catch((err) =>
+    notifyChangelogPublished(entry.id, actor, notify).catch((err) =>
       log.error({ err }, 'failed to dispatch changelog published event')
     )
   } else if (input.publishState.type === 'scheduled' && publishedAt) {
@@ -133,7 +142,7 @@ export async function createChangelog(
         jobId: `changelog-publish--${entry.id}`,
         handler: '__changelog_publish__',
         delayMs,
-        payload: { changelogId: entry.id, principalId: author.principalId },
+        payload: { changelogId: entry.id, principalId: author.principalId, notify },
         actor,
       }).catch((err) => log.error({ err }, 'failed to schedule changelog publish job'))
     }
@@ -227,18 +236,24 @@ export async function updateChangelog(
     }
   }
 
+  // Update linked categories if provided (full replace)
+  if (input.categoryIds !== undefined) {
+    await setEntryCategories(id, input.categoryIds)
+  }
+
   // Handle event dispatch / scheduling when publish state changes
   if (input.publishState !== undefined) {
     const jobId = `changelog-publish--${id}`
     const actor = existing.principalId
       ? buildEventActor({ principalId: existing.principalId })
       : { type: 'service' as const, displayName: 'system' }
+    const notify = input.notify ?? true
 
     if (input.publishState.type === 'published') {
       // Cancel any pending scheduled job, then announce. The helper's atomic
       // claim makes this a no-op if the entry was already announced.
       cancelScheduledDispatch(jobId).catch(() => {})
-      notifyChangelogPublished(id, actor).catch((err) =>
+      notifyChangelogPublished(id, actor, notify).catch((err) =>
         log.error({ err }, 'failed to dispatch changelog published event')
       )
     } else if (input.publishState.type === 'scheduled') {
@@ -250,7 +265,7 @@ export async function updateChangelog(
             jobId,
             handler: '__changelog_publish__',
             delayMs,
-            payload: { changelogId: id, principalId: existing.principalId },
+            payload: { changelogId: id, principalId: existing.principalId, notify },
             actor,
           }).catch((err) => log.error({ err }, 'failed to schedule changelog publish job'))
         }
@@ -361,6 +376,14 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     })
   )
 
+  // Categories (labels) attached to this entry.
+  const categoriesMap = await getCategoriesForEntries([id])
+  const categories = (categoriesMap.get(id) ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    color: c.color,
+  }))
+
   return {
     id: entry.id,
     title: entry.title,
@@ -373,6 +396,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     updatedAt: entry.updatedAt,
     author,
     linkedPosts,
+    categories,
     status: computeStatus(entry.publishedAt),
   }
 }
@@ -406,11 +430,19 @@ function liveUnnotifiedConditions(now: Date) {
  * concurrent publish paths and the reconciler never double-notify. If the
  * dispatch fails the claim is released so the reconciler retries later.
  *
- * Returns true when this call sent the announcement, false otherwise.
+ * `notify=false` (the publish-time "Send email to subscribers" checkbox,
+ * unchecked) still performs the atomic claim — so the entry is marked
+ * announced and the reconciler leaves it alone forever — but skips the
+ * actual dispatch. This preserves the idempotence invariant: an entry is
+ * claimed at most once, dispatched or not.
+ *
+ * Returns true when this call claimed the entry (dispatched or silently
+ * claimed), false when another caller had already claimed it.
  */
 export async function notifyChangelogPublished(
   id: ChangelogId,
-  actor: EventActor
+  actor: EventActor,
+  notify: boolean = true
 ): Promise<boolean> {
   const now = new Date()
   const [claimed] = await db
@@ -420,6 +452,8 @@ export async function notifyChangelogPublished(
     .returning()
 
   if (!claimed) return false
+
+  if (!notify) return true
 
   try {
     const linkedPosts = await db.query.changelogEntryPosts.findMany({

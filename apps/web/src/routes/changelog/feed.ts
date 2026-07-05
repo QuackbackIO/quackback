@@ -15,12 +15,16 @@ export const Route = createFileRoute('/changelog/feed')({
           { publicChangelogConditions },
           { getSettingsBrandingData },
           { resolvePortalAccessForRequest },
+          { isChangelogAudienceGranted },
+          { getOptionalAuth, policyActorFromAuth },
         ] = await Promise.all([
           import('@/lib/server/config'),
           import('@/lib/server/db'),
           import('@/lib/server/domains/changelog/changelog.public'),
           import('@/lib/server/settings-utils'),
           import('@/lib/server/functions/portal-access'),
+          import('@/lib/server/domains/changelog/changelog.audience'),
+          import('@/lib/server/functions/auth-helpers'),
         ])
 
         const effectiveDisplayDate = sql<Date>`coalesce(${changelogEntries.displayDate}, ${changelogEntries.publishedAt})`
@@ -35,14 +39,22 @@ export const Route = createFileRoute('/changelog/feed')({
         // Mirror sitemap.xml: a denied caller gets a valid but empty feed.
         const access = await resolvePortalAccessForRequest()
 
-        const entries = access.granted
-          ? await db
-              .select()
-              .from(changelogEntries)
-              .where(and(...publicChangelogConditions(new Date())))
-              .orderBy(desc(effectiveDisplayDate))
-              .limit(50)
-          : []
+        // Changelog audience gate (Settings > Changelog > Visibility):
+        // 'authenticated' hides the feed from anonymous fetchers too.
+        const actor = access.granted
+          ? await policyActorFromAuth(await getOptionalAuth())
+          : null
+        const audienceGranted = actor ? await isChangelogAudienceGranted(actor) : false
+
+        const entries =
+          access.granted && audienceGranted
+            ? await db
+                .select()
+                .from(changelogEntries)
+                .where(and(...publicChangelogConditions(new Date())))
+                .orderBy(desc(effectiveDisplayDate))
+                .limit(50)
+            : []
 
         // Per-caller portal-access decisions can't share a public CDN
         // cache: a granted caller would seed the cache with content that

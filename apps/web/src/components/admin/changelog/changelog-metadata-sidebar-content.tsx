@@ -25,15 +25,22 @@ import {
   ListItemRemoveButton,
   type StatusOption,
 } from '@/components/shared/sidebar-primitives'
+import { ChangelogCategorySelect } from './changelog-category-select'
+import { changelogSettingsQueries } from '@/lib/client/queries/changelog'
 import { cn, tomorrowAt } from '@/lib/shared/utils'
-import type { PostId } from '@quackback/ids'
+import type { PostId, ChangelogCategoryId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
+import { TagIcon, EnvelopeIcon } from '@heroicons/react/24/outline'
 
 interface ChangelogMetadataSidebarContentProps {
   publishState: PublishState
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
+  categoryIds: ChangelogCategoryId[]
+  onCategoriesChange: (categoryIds: ChangelogCategoryId[]) => void
+  notify: boolean
+  onNotifyChange: (notify: boolean) => void
   authorName?: string | null
   publishedAt?: string | null
   displayDateValue?: Date
@@ -52,6 +59,10 @@ export function ChangelogMetadataSidebarContent({
   onPublishStateChange,
   linkedPostIds,
   onLinkedPostsChange,
+  categoryIds,
+  onCategoriesChange,
+  notify,
+  onNotifyChange,
   authorName,
   publishedAt,
   displayDateValue,
@@ -60,6 +71,12 @@ export function ChangelogMetadataSidebarContent({
 }: ChangelogMetadataSidebarContentProps) {
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
+
+  // Emails-disabled workspace kill switch — the "Send email to
+  // subscribers" checkbox is meaningless (and hidden) when nothing can send.
+  const { data: changelogSettings } = useQuery(changelogSettingsQueries.get())
+  const emailsDisabled = changelogSettings?.emailsDisabled ?? false
+  const willSendEmail = publishState.type === 'published' || publishState.type === 'scheduled'
 
   // Default scheduled time to tomorrow at 9am
   const [scheduledDateTime, setScheduledDateTime] = useState<Date>(() => {
@@ -188,6 +205,27 @@ export function ChangelogMetadataSidebarContent({
           />
         </div>
       )}
+
+      {/* Send email to subscribers - shown whenever this save will publish or
+          schedule (both paths dispatch through notifyChangelogPublished).
+          Unchecked stamps notifiedAt without sending. */}
+      {willSendEmail && !emailsDisabled && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            <EnvelopeIcon className="h-4 w-4" />
+            Send email to subscribers
+          </span>
+          <Checkbox checked={notify} onCheckedChange={(checked) => onNotifyChange(checked === true)} />
+        </div>
+      )}
+
+      {/* Labels (categories) */}
+      <div className="space-y-2">
+        <SidebarRow icon={<TagIcon className="h-4 w-4" />} label="Labels">
+          {null}
+        </SidebarRow>
+        <ChangelogCategorySelect value={categoryIds} onChange={onCategoriesChange} />
+      </div>
 
       {/* Linked Posts - single unified section */}
       <div className="space-y-2">

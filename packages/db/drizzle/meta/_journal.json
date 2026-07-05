@@ -1109,6 +1109,13 @@
       "breakpoints": true
     },
     {
+      "idx": 158,
+      "version": "7",
+      "when": 1784766000000,
+      "tag": "0158_changelog_settings",
+      "breakpoints": true
+    },
+    {
       "idx": 160,
       "version": "7",
       "when": 1784766120000,

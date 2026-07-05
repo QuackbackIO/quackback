@@ -158,6 +158,9 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     query: {
       principal: { findFirst: vi.fn().mockResolvedValue(null) },
       user: { findFirst: vi.fn().mockResolvedValue(null) },
+      // changelog.ts's public handlers resolve the audience gate via
+      // getChangelogSettings(), which reads this row's metadata bag.
+      settings: { findFirst: vi.fn().mockResolvedValue({ id: 'workspace_1', metadata: null }) },
     },
   },
   eq: vi.fn(),
