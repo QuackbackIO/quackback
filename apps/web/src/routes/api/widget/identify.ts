@@ -29,6 +29,9 @@ import {
 } from '@/lib/server/domains/users/user.attributes'
 import { reconcileWidgetMemberships } from '@/lib/server/domains/segments/segment-membership.service'
 import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'widget-identify' })
 
 // Identify is verified-only: a session for a real user is minted exclusively
 // from an ssoToken signed by the customer's own backend with the widget
@@ -342,6 +345,18 @@ export const Route = createFileRoute('/api/widget/identify')({
           principalId,
           desiredSegmentIds: resolvedSegmentIds,
         })
+
+        // Changelog auto-subscribe touchpoint (Changelog Settings §2): a
+        // verified widget identify is one of the cheapest "we now know this
+        // person" moments — already resolving/creating the principal on this
+        // request. No-op when changelog.autoSubscribe is off or the row
+        // already exists.
+        const { ensureAutoSubscribed } = await import(
+          '@/lib/server/domains/changelog/changelog-subscription.service'
+        )
+        ensureAutoSubscribed(principalId).catch((err) =>
+          log.error({ err }, 'failed to auto-subscribe to changelog on widget identify')
+        )
 
         // If the widget had a previous anonymous session, merge its activity.
         // Ownership check: the caller must send the previousToken as both a body

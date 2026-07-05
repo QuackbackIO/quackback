@@ -734,9 +734,12 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
 // ============================================================================
 
 /**
- * Get subscriber targets for changelog.published events.
- * Looks up all posts linked to the changelog, gets their subscribers,
- * and deduplicates across posts.
+ * Get subscriber targets for changelog.published events: the UNION of the
+ * dedicated `changelog_subscriptions` table (primary, opt-out source) and
+ * the legacy linked-post subscribers (additive — "subscribers of a feature
+ * also hear it shipped"). An explicit changelog unsubscribe always wins over
+ * the linked-post source, even for a principal who never had a
+ * `changelog_subscriptions` row: {@link unsubscribeChangelog} upserts one.
  */
 async function getChangelogSubscriberTargets(
   event: EventData,
@@ -747,8 +750,19 @@ async function getChangelogSubscriberTargets(
   const changelogId = event.data.changelog.id
   if (!changelogId) return []
 
-  // Look up linked posts
-  const { changelogEntryPosts, eq: eqOp } = await import('@/lib/server/db')
+  const { changelogEntryPosts, changelogSubscriptions, isNull, isNotNull, eq: eqOp } =
+    await import('@/lib/server/db')
+  const { getChangelogSettings } = await import(
+    '@/lib/server/domains/settings/settings.changelog'
+  )
+  const { resolveSendingAddress } = await import(
+    '@/lib/server/domains/channel-accounts/channel-account.service'
+  )
+  const { batchGenerateChangelogUnsubscribeTokens } = await import(
+    '@/lib/server/domains/subscriptions/subscription.service'
+  )
+
+  // 1. Legacy linked-post subscribers (additive source).
   const linkedPosts = await db.query.changelogEntryPosts.findMany({
     where: eqOp(
       changelogEntryPosts.changelogEntryId,
@@ -756,18 +770,56 @@ async function getChangelogSubscriberTargets(
     ),
     columns: { postId: true },
   })
-
-  if (linkedPosts.length === 0) return []
-
   const postIds = linkedPosts.map((lp) => lp.postId)
 
-  // Get subscribers for all linked posts, deduplicated
-  const allSubscribers: Map<string, Subscriber> = new Map()
+  const linkedPostSubscribers: Map<string, Subscriber> = new Map()
   for (const postId of postIds) {
-    const subscribers = await getSubscribersForEvent(postId, 'status_change')
-    for (const sub of subscribers) {
-      if (!allSubscribers.has(sub.principalId)) {
-        allSubscribers.set(sub.principalId, sub)
+    const subs = await getSubscribersForEvent(postId, 'status_change')
+    for (const sub of subs) {
+      if (!linkedPostSubscribers.has(sub.principalId)) {
+        linkedPostSubscribers.set(sub.principalId, sub)
+      }
+    }
+  }
+
+  // 2. Dedicated changelog_subscriptions table (primary source).
+  const subscriptionRows = await db
+    .select({
+      principalId: changelogSubscriptions.principalId,
+      userId: principal.userId,
+      email: user.email,
+      name: user.name,
+    })
+    .from(changelogSubscriptions)
+    .innerJoin(principal, eqOp(changelogSubscriptions.principalId, principal.id))
+    .innerJoin(user, eqOp(principal.userId, user.id))
+    .where(and(isNull(changelogSubscriptions.unsubscribedAt), isNotNull(user.email)))
+
+  const allSubscribers: Map<string, Subscriber> = new Map()
+  for (const row of subscriptionRows) {
+    if (!row.email) continue
+    allSubscribers.set(row.principalId, {
+      principalId: row.principalId,
+      userId: row.userId!,
+      email: row.email,
+      name: row.name,
+      reason: 'manual',
+      notifyComments: false,
+      notifyStatusChanges: true,
+    })
+  }
+
+  // An explicit changelog unsubscribe (a row with unsubscribedAt set) must
+  // exclude a principal from the additive linked-post source too.
+  if (linkedPostSubscribers.size > 0) {
+    const optOutRows = await db
+      .select({ principalId: changelogSubscriptions.principalId })
+      .from(changelogSubscriptions)
+      .where(isNotNull(changelogSubscriptions.unsubscribedAt))
+    const optOutIds = new Set<string>(optOutRows.map((r) => r.principalId))
+    for (const [id, sub] of linkedPostSubscribers) {
+      if (!allSubscribers.has(id) && !optOutIds.has(id)) {
+        allSubscribers.set(id, sub)
       }
     }
   }
@@ -775,7 +827,7 @@ async function getChangelogSubscriberTargets(
   const subscribers = [...allSubscribers.values()]
   log.debug(
     { count: subscribers.length, post_count: postIds.length, changelog_id: changelogId },
-    'found unique subscribers across linked posts'
+    'found unique changelog subscribers (dedicated + linked-post union)'
   )
   if (subscribers.length === 0) return []
 
@@ -790,24 +842,25 @@ async function getChangelogSubscriberTargets(
   // Build changelog URL
   const changelogUrl = `${context.portalBaseUrl}/changelog`
 
-  // Email targets
-  const principalIds = nonActorSubscribers.map((s) => s.principalId)
-  const prefsMap = await batchGetNotificationPreferences(principalIds)
-
-  const eligibleSubscribers = nonActorSubscribers.filter((subscriber) => {
-    const prefs = prefsMap.get(subscriber.principalId)
-    return prefs && shouldSendEmail('post.status_changed', prefs)
-  })
+  // Email targets — gated on the workspace's emailMuted preference and the
+  // changelog.emailsDisabled kill switch (in-app notification targets below
+  // are unaffected by emailsDisabled — that switch is email-specific).
+  const { emailsDisabled } = await getChangelogSettings()
+  const eligibleSubscribers = emailsDisabled
+    ? []
+    : await (async () => {
+        const principalIds = nonActorSubscribers.map((s) => s.principalId)
+        const prefsMap = await batchGetNotificationPreferences(principalIds)
+        return nonActorSubscribers.filter((subscriber) => {
+          const prefs = prefsMap.get(subscriber.principalId)
+          return prefs ? !prefs.emailMuted : true
+        })
+      })()
 
   if (eligibleSubscribers.length > 0) {
-    // Use the first linked post for unsubscribe tokens
-    const firstPostId = postIds[0]
-    const tokenMap = await batchGenerateUnsubscribeTokens(
-      eligibleSubscribers.map((s) => ({
-        principalId: s.principalId,
-        postId: firstPostId,
-        action: 'unsubscribe_post' as const,
-      }))
+    const from = (await resolveSendingAddress(null, 'changelog')) ?? undefined
+    const tokenMap = await batchGenerateChangelogUnsubscribeTokens(
+      eligibleSubscribers.map((s) => s.principalId)
     )
 
     for (const subscriber of eligibleSubscribers) {
@@ -824,6 +877,7 @@ async function getChangelogSubscriberTargets(
           changelogUrl,
           contentPreview: event.data.changelog.contentPreview,
           eventType: 'changelog.published',
+          from,
         },
       })
     }

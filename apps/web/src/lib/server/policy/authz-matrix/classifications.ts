@@ -72,6 +72,17 @@ const DYNAMIC_PERMISSION = (
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
+  // Changelog self-serve subscribe/unsubscribe + status: any authenticated
+  // principal manages their own changelog email subscription.
+  'lib/server/functions/changelog-subscriptions.ts::subscribeToChangelogFn': END_USER(
+    'signed-in caller subscribes themself to changelog emails'
+  ),
+  'lib/server/functions/changelog-subscriptions.ts::unsubscribeFromChangelogFn': END_USER(
+    'signed-in caller unsubscribes themself from changelog emails'
+  ),
+  'lib/server/functions/changelog-subscriptions.ts::getMyChangelogSubscriptionFn': END_USER(
+    'signed-in caller reads their own changelog subscription status'
+  ),
   // Visitor conversations (widget + portal): any authenticated principal; team-vs-visitor
   // scope is refined inside each handler (see NOT_A_GATE entries below).
   'lib/server/functions/conversation.ts::sendConversationMessageFn': END_USER(

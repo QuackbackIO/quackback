@@ -186,6 +186,16 @@ export async function captureVisitorContactEmail(
       .set({ visitorEmail: email })
       .where(and(eq(conversations.id, conversationId), isNull(conversations.visitorEmail)))
   })
+
+  // Changelog auto-subscribe touchpoint (Changelog Settings §2): "conversation
+  // contact" — the moment a previously-anonymous visitor's email becomes known.
+  const { ensureAutoSubscribed } = await import(
+    '@/lib/server/domains/changelog/changelog-subscription.service'
+  )
+  ensureAutoSubscribed(conversation.visitorPrincipalId).catch((err) =>
+    log.error({ err }, 'failed to auto-subscribe to changelog on contact capture')
+  )
+
   return { captured: true }
 }
 

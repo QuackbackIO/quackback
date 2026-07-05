@@ -46,6 +46,7 @@ import {
   tickets,
   workflowRuns,
   workflowRunEvents,
+  changelogSubscriptions,
   principal,
   eq,
   and,
@@ -355,6 +356,13 @@ export const REPOINT_STEPS: RepointStep[] = [
   fillIfEmpty(
     'blocked_by_principal_id',
     'Attribute consolidation, not a re-point: the blocking team actor moves with blocked_at so the audit trail survives the merge (only filled when the target was not itself blocked).'
+  ),
+  collisionRepoint(
+    'changelog_subscriptions',
+    changelogSubscriptions,
+    'principal_id',
+    [],
+    'Changelog subscriber state; unique on principal_id alone. An anon visitor auto-subscribed via contact capture should not lose that on merge, so it transfers to the target — but only when the target has no row of its own (the identified subscription/unsubscribe state wins).'
   ),
 ]
 

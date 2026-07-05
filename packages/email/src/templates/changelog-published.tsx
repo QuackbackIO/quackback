@@ -27,9 +27,7 @@ export function ChangelogPublishedEmail({
     >
       {/* Content */}
       <Heading style={typography.h1}>New update published</Heading>
-      <Text style={typography.text}>
-        {organizationName} just published an update related to your feedback.
-      </Text>
+      <Text style={typography.text}>{organizationName} just published a product update.</Text>
 
       {/* Changelog Title */}
       <Section
@@ -59,7 +57,7 @@ export function ChangelogPublishedEmail({
 
       {/* Footer */}
       <NotificationFooter
-        reason="You received this email because you submitted or subscribed to feedback related to this update."
+        reason="You received this email because you're subscribed to changelog updates."
         unsubscribeUrl={unsubscribeUrl}
       />
     </EmailLayout>

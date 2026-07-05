@@ -766,6 +766,9 @@ interface SendChangelogPublishedParams {
   workspaceName: string
   unsubscribeUrl: string
   logoUrl?: string
+  /** Send from the changelog module's sending address (§4.8) instead of the
+   *  branded EMAIL_FROM. Absent = the workspace default. */
+  from?: string
 }
 
 export async function sendChangelogPublishedEmail(
@@ -779,6 +782,7 @@ export async function sendChangelogPublishedEmail(
     workspaceName,
     unsubscribeUrl,
     logoUrl,
+    from,
   } = params
 
   if (getProvider() === 'console') {
@@ -800,6 +804,7 @@ export async function sendChangelogPublishedEmail(
       unsubscribeUrl,
       logoUrl,
     }),
+    from,
   })
 }
 

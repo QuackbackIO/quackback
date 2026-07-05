@@ -48,6 +48,7 @@ import {
   BlockPersonControl,
   usePersonBlockStatus,
 } from '@/components/admin/users/block-person-control'
+import { ChangelogSubscriptionControl } from '@/components/admin/users/changelog-subscription-control'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
@@ -689,6 +690,14 @@ export function UserDetail({
             canManage={canManageUsers}
           />
         </div>
+
+        {/* Changelog emails */}
+        {canManageUsers && (
+          <div className="border-t border-border/50 pt-4">
+            <h3 className="text-sm font-medium mb-3">Notifications</h3>
+            <ChangelogSubscriptionControl principalId={user.principalId as PrincipalId} />
+          </div>
+        )}
 
         {/* Support conversations */}
         <UserConversations principalId={user.principalId as PrincipalId} />

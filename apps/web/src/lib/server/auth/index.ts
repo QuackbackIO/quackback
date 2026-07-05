@@ -342,7 +342,7 @@ async function createAuth() {
             // Race-safe lazy create (the factory's onConflictDoNothing subsumes
             // the prior explicit findFirst guard). Always 'user' — team access is
             // via invitations only.
-            const { created } = await ensurePrincipalForUser({
+            const { principal: createdPrincipal, created } = await ensurePrincipalForUser({
               userId,
               role: 'user',
               type: isAnonymous ? 'anonymous' : 'user',
@@ -357,6 +357,18 @@ async function createAuth() {
                 { user_id: user.id, role: 'user', type: isAnonymous ? 'anonymous' : 'user' },
                 'created principal record'
               )
+              // Changelog auto-subscribe touchpoint (Changelog Settings §2):
+              // "first portal interaction" — a brand-new portal account,
+              // covering password/magic-link/OAuth/OTP signup in one place.
+              // Anonymous placeholder accounts are skipped (no real email yet).
+              if (!isAnonymous) {
+                const { ensureAutoSubscribed } = await import(
+                  '@/lib/server/domains/changelog/changelog-subscription.service'
+                )
+                ensureAutoSubscribed(createdPrincipal.id as PrincipalId).catch((err) =>
+                  log.error({ err }, 'failed to auto-subscribe to changelog on signup')
+                )
+              }
             }
           },
         },

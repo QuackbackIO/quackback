@@ -71,6 +71,7 @@ export const emailHook: HookHandler = {
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
           logoUrl: cfg.logoUrl,
+          from: changelogCfg.from as string | undefined,
         })
       } else {
         return { success: false, error: `Unsupported event type: ${event.type}` }

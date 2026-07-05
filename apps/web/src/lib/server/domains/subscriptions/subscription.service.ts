@@ -424,6 +424,51 @@ export async function generateUnsubscribeToken(
 export type UnsubscribeAction = 'unsubscribe_post' | 'unsubscribe_all'
 
 /**
+ * Generate an unsubscribe token for the changelog email footer link.
+ * Workspace-level (no postId) — mirrors `unsubscribe_all`'s shape but scopes
+ * the opt-out to changelog emails only, leaving post/comment/status-change
+ * subscriptions untouched.
+ */
+export async function generateChangelogUnsubscribeToken(principalId: PrincipalId): Promise<string> {
+  const token = randomUUID()
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+  await db.insert(unsubscribeTokens).values({
+    token,
+    principalId,
+    postId: null,
+    action: 'unsubscribe_changelog',
+    expiresAt,
+  })
+
+  return token
+}
+
+/**
+ * Batch generate changelog unsubscribe tokens for multiple principals.
+ * Returns a Map of principalId -> token.
+ */
+export async function batchGenerateChangelogUnsubscribeTokens(
+  principalIds: PrincipalId[]
+): Promise<Map<PrincipalId, string>> {
+  if (principalIds.length === 0) return new Map()
+
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+  const tokens = principalIds.map((principalId) => ({
+    token: randomUUID(),
+    principalId,
+    postId: null,
+    action: 'unsubscribe_changelog' as const,
+    expiresAt,
+  }))
+
+  await db.insert(unsubscribeTokens).values(tokens)
+
+  return new Map(tokens.map((t) => [t.principalId, t.token]))
+}
+
+/**
  * Batch generate unsubscribe tokens for multiple principals.
  * Returns a Map of principalId -> token.
  */
@@ -513,6 +558,13 @@ export async function processUnsubscribeToken(token: string): Promise<{
     case 'unsubscribe_all':
       await updateNotificationPreferences(tokenRecord.principalId, { emailMuted: true })
       break
+    case 'unsubscribe_changelog': {
+      const { unsubscribeChangelog } = await import(
+        '@/lib/server/domains/changelog/changelog-subscription.service'
+      )
+      await unsubscribeChangelog(tokenRecord.principalId)
+      break
+    }
   }
 
   return {

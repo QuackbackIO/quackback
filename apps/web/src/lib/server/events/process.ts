@@ -330,6 +330,8 @@ export async function removeDelayedJob(jobId: string): Promise<void> {
 async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>): Promise<void> {
   const changelogId = hookConfig.changelogId as string | undefined
   const principalId = hookConfig.principalId as string | undefined
+  // Defaults true so a job scheduled before this field existed still sends.
+  const notify = hookConfig.notify !== false
   if (!changelogId) return
 
   const { notifyChangelogPublished } =
@@ -340,7 +342,7 @@ async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>
     ? buildEventActor({ principalId: principalId as import('@quackback/ids').PrincipalId })
     : { type: 'service' as const, displayName: 'scheduler' }
 
-  await notifyChangelogPublished(changelogId as import('@quackback/ids').ChangelogId, actor)
+  await notifyChangelogPublished(changelogId as import('@quackback/ids').ChangelogId, actor, notify)
 }
 
 /**
