@@ -56,17 +56,22 @@ export function regconfigForLocale(locale: string): string {
 }
 
 /**
- * SQL `CASE <localeExpr> WHEN ... THEN '<regconfig>' ... ELSE 'english' END::regconfig`,
+ * SQL `CASE <localeExpr> WHEN ... THEN '<regconfig>'::regconfig ... END`,
  * generated from {@link LOCALE_TO_REGCONFIG} so the generated tsvector column
  * and the raw migration SQL can never drift apart. Safe to inline directly
  * (no interpolated user input -- every value comes from the static map).
+ *
+ * The cast sits INSIDE each branch: casting a string literal to regconfig is
+ * folded to a constant at parse time, which keeps the whole CASE immutable.
+ * Casting the CASE RESULT (text -> regconfig at runtime) is only STABLE and
+ * Postgres rejects it in GENERATED columns (42P17).
  */
 export function localeRegconfigCaseSql(localeExpr: string): string {
   const whens = Object.entries(LOCALE_TO_REGCONFIG)
     .filter(([, cfg]) => cfg !== 'english')
-    .map(([locale, cfg]) => `WHEN '${locale}' THEN '${cfg}'`)
+    .map(([locale, cfg]) => `WHEN '${locale}' THEN '${cfg}'::regconfig`)
     .join(' ')
-  return `CASE ${localeExpr} ${whens} ELSE 'english' END::regconfig`
+  return `CASE ${localeExpr} ${whens} ELSE 'english'::regconfig END`
 }
 
 // ============================================

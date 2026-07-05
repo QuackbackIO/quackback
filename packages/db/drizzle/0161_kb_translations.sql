@@ -15,7 +15,7 @@ CREATE TABLE "kb_article_translations" (
 	"content" text DEFAULT '' NOT NULL,
 	"content_json" jsonb,
 	"status" text DEFAULT 'draft' NOT NULL,
-	"search_vector" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector(CASE locale WHEN 'de' THEN 'german' WHEN 'fr' THEN 'french' WHEN 'es' THEN 'spanish' WHEN 'ar' THEN 'arabic' WHEN 'ru' THEN 'russian' WHEN 'pt-br' THEN 'portuguese' WHEN 'zh-cn' THEN 'simple' WHEN 'zh-tw' THEN 'simple' ELSE 'english' END::regconfig, coalesce(title, '')), 'A') || setweight(to_tsvector(CASE locale WHEN 'de' THEN 'german' WHEN 'fr' THEN 'french' WHEN 'es' THEN 'spanish' WHEN 'ar' THEN 'arabic' WHEN 'ru' THEN 'russian' WHEN 'pt-br' THEN 'portuguese' WHEN 'zh-cn' THEN 'simple' WHEN 'zh-tw' THEN 'simple' ELSE 'english' END::regconfig, coalesce(content, '')), 'B')) STORED,
+	"search_vector" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector(CASE locale WHEN 'de' THEN 'german'::regconfig WHEN 'fr' THEN 'french'::regconfig WHEN 'es' THEN 'spanish'::regconfig WHEN 'ar' THEN 'arabic'::regconfig WHEN 'ru' THEN 'russian'::regconfig WHEN 'pt-br' THEN 'portuguese'::regconfig WHEN 'zh-cn' THEN 'simple'::regconfig WHEN 'zh-tw' THEN 'simple'::regconfig ELSE 'english'::regconfig END, coalesce(title, '')), 'A') || setweight(to_tsvector(CASE locale WHEN 'de' THEN 'german'::regconfig WHEN 'fr' THEN 'french'::regconfig WHEN 'es' THEN 'spanish'::regconfig WHEN 'ar' THEN 'arabic'::regconfig WHEN 'ru' THEN 'russian'::regconfig WHEN 'pt-br' THEN 'portuguese'::regconfig WHEN 'zh-cn' THEN 'simple'::regconfig WHEN 'zh-tw' THEN 'simple'::regconfig ELSE 'english'::regconfig END, coalesce(content, '')), 'B')) STORED,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
