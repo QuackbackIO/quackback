@@ -131,6 +131,8 @@ export type {
   KbArticleId,
   KbArticleFeedbackId,
   HcRedirectRuleId,
+  KbArticleTranslationId,
+  KbCategoryTranslationId,
   // Auth entities
   WorkspaceId,
   UserId,

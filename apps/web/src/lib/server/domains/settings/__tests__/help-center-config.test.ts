@@ -71,6 +71,7 @@ describe('HelpCenterConfig', () => {
         homepageTitle: 'Get Help',
         homepageDescription: 'Browse our docs',
         domain: { domain: null, verifiedAt: null },
+        locales: { default: 'en', additional: [], chrome: {} },
         seo: {
           metaDescription: 'Help center',
           sitemapEnabled: true,

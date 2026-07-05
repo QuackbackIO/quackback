@@ -12,6 +12,7 @@ import {
   type AskAiSourceMeta,
 } from '@/components/help-center/ask-ai'
 import { useKbSearch, type KbSearchArticle } from '@/components/help-center/use-kb-search'
+import { localizedHcPath } from '@/lib/shared/help-center-url'
 
 // ============================================================================
 // Hero Search (landing page)
@@ -20,9 +21,13 @@ import { useKbSearch, type KbSearchArticle } from '@/components/help-center/use-
 interface HelpCenterHeroSearchProps {
   /** Surface hook: the route decides whether Ask AI may be offered. */
   askAiEnabled?: boolean
+  /** Content locale (domains/languages §2). Omitted = default locale. The
+   *  widget passes its own UI locale here; portal /hc routes pass the
+   *  route's locale param. */
+  locale?: string
 }
 
-export function HelpCenterHeroSearch({ askAiEnabled = false }: HelpCenterHeroSearchProps) {
+export function HelpCenterHeroSearch({ askAiEnabled = false, locale }: HelpCenterHeroSearchProps) {
   const intl = useIntl()
   const [query, setQuery] = useState('')
   const [showResults, setShowResults] = useState(false)
@@ -32,6 +37,7 @@ export function HelpCenterHeroSearch({ askAiEnabled = false }: HelpCenterHeroSea
   const { results, isSearching } = useKbSearch({
     query,
     limit: 8,
+    locale,
     // With Ask AI available the dropdown also opens on zero results: the
     // pinned Ask-AI row is the no-results affordance.
     onResults: (articles) => setShowResults(articles.length > 0 || askAiAvailable),
@@ -57,12 +63,17 @@ export function HelpCenterHeroSearch({ askAiEnabled = false }: HelpCenterHeroSea
   const handleResultClick = (result: KbSearchArticle) => {
     setShowResults(false)
     setQuery('')
-    window.location.href = `/hc/articles/${result.category.slug}/${result.slug}`
+    const path = `/hc/articles/${result.category.slug}/${result.slug}`
+    window.location.href = locale ? localizedHcPath(locale, path) : path
   }
 
-  const handleSourceClick = useCallback((source: AskAiSourceMeta) => {
-    window.location.href = `/hc/articles/${source.categorySlug}/${source.slug}`
-  }, [])
+  const handleSourceClick = useCallback(
+    (source: AskAiSourceMeta) => {
+      const path = `/hc/articles/${source.categorySlug}/${source.slug}`
+      window.location.href = locale ? localizedHcPath(locale, path) : path
+    },
+    [locale]
+  )
 
   const {
     askAiState,

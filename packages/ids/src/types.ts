@@ -237,6 +237,12 @@ export type KbArticleFeedbackId = TypeId<'kb_article_feedback'>
 /** Help center redirect rule ID - e.g., hc_redirect_rule_01h455vb4pex5vsknk084sn02q */
 export type HcRedirectRuleId = TypeId<'hc_redirect_rule'>
 
+/** Article translation ID - e.g., kb_article_translation_01h455vb4pex5vsknk084sn02q */
+export type KbArticleTranslationId = TypeId<'kb_article_translation'>
+
+/** Category translation ID - e.g., kb_category_translation_01h455vb4pex5vsknk084sn02q */
+export type KbCategoryTranslationId = TypeId<'kb_category_translation'>
+
 // ============================================
 // Auth Entity IDs (Better-auth)
 // ============================================
@@ -385,6 +391,8 @@ export interface EntityIdMap {
   kb_article: KbArticleId
   kb_article_feedback: KbArticleFeedbackId
   hc_redirect_rule: HcRedirectRuleId
+  kb_article_translation: KbArticleTranslationId
+  kb_category_translation: KbCategoryTranslationId
 }
 
 /**

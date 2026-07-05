@@ -9,10 +9,16 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   getHelpCenterConfig,
   updateHelpCenterConfig,
+  enableHelpCenterLocale,
+  disableHelpCenterLocale,
+  updateHelpCenterLocaleChrome,
 } from '@/lib/server/domains/settings/settings.service'
 import {
   updateHelpCenterConfigSchema,
   updateHelpCenterSeoSchema,
+  enableHelpCenterLocaleSchema,
+  disableHelpCenterLocaleSchema,
+  updateHelpCenterLocaleChromeSchema,
 } from '@/lib/shared/schemas/help-center'
 
 // ============================================================================
@@ -41,4 +47,29 @@ export const updateHelpCenterSeoFn = createServerFn({ method: 'POST' })
     return updateHelpCenterConfig({
       seo: { ...current.seo, ...data },
     })
+  })
+
+// ============================================================================
+// Help Center Locale Server Functions (domains/languages §2)
+// ============================================================================
+
+export const enableHelpCenterLocaleFn = createServerFn({ method: 'POST' })
+  .validator(enableHelpCenterLocaleSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    return enableHelpCenterLocale(data)
+  })
+
+export const disableHelpCenterLocaleFn = createServerFn({ method: 'POST' })
+  .validator(disableHelpCenterLocaleSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    return disableHelpCenterLocale(data.locale)
+  })
+
+export const updateHelpCenterLocaleChromeFn = createServerFn({ method: 'POST' })
+  .validator(updateHelpCenterLocaleChromeSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    return updateHelpCenterLocaleChrome(data)
   })

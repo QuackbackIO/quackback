@@ -34,7 +34,9 @@ export function WidgetHelp({ onArticleSelect, onCategorySelect }: WidgetHelpProp
   const topLevelCategories = categoriesQuery.data ? getTopLevelCategories(categoriesQuery.data) : []
 
   const askAiAvailable = useAskAiAvailable()
-  const { results, isSearching } = useKbSearch({ query: search, limit: 10 })
+  // Widget locale passthrough (domains/languages §2): the search API falls
+  // back to the default locale server-side if this locale isn't enabled.
+  const { results, isSearching } = useKbSearch({ query: search, limit: 10, locale: intl.locale })
   const {
     askAiState,
     selectedIndex,

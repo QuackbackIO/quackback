@@ -10,13 +10,17 @@ import {
   db,
   helpCenterArticles,
   helpCenterCategories,
+  helpCenterArticleTranslations,
+  helpCenterCategoryTranslations,
   and,
   eq,
   isNull,
   isNotNull,
   lte,
   sql,
+  regconfigForLocale,
 } from '@/lib/server/db'
+import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { generateKbQueryEmbedding } from './help-center-embedding.service'
 
 export const KEYWORD_WEIGHT = 0.4
@@ -63,6 +67,23 @@ export function orTermsTsQuery(query: string) {
     .filter((w) => w && !CORPUS_STOPWORDS.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')))
     .join(' or ')
   return sql`websearch_to_tsquery('english', ${orQuery})`
+}
+
+/**
+ * Same OR-of-terms construction as {@link orTermsTsQuery}, but keyed off a
+ * locale's regconfig (domains/languages §2) instead of hardcoded 'english' --
+ * used against kb_article_translations.search_vector, which is itself
+ * generated with the same per-locale config (see LOCALE_TO_REGCONFIG /
+ * localeRegconfigCaseSql in packages/db/src/schema/kb.ts).
+ */
+export function orTermsTsQueryForLocale(query: string, locale: string) {
+  const orQuery = query
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w && !CORPUS_STOPWORDS.has(w.toLowerCase().replace(/[^a-z0-9]/g, '')))
+    .join(' or ')
+  const regconfig = regconfigForLocale(locale)
+  return sql`websearch_to_tsquery(${regconfig}::regconfig, ${orQuery})`
 }
 
 /** Which slice of the knowledge base a caller may see. */
@@ -341,4 +362,109 @@ async function keywordOnlyQuery(query: string, limit: number): Promise<HybridSea
     categoryName: r.categoryName,
     score: Number(r.score),
   }))
+}
+
+// ============================================================================
+// Per-locale search (domains/languages §2)
+// ============================================================================
+
+/**
+ * Keyword-only search over kb_article_translations for an ADDITIONAL locale.
+ * Embeddings stay default-locale only (a cost decision, not a correctness
+ * one), so there is no semantic component here -- this is the per-locale
+ * analogue of {@link keywordOnlyQuery}, not of the full hybrid query.
+ * Only published translations of published, public, non-deleted articles
+ * are eligible (the shared visibility predicate still gates the base row).
+ */
+async function keywordOnlyQueryForLocale(
+  query: string,
+  locale: string,
+  limit: number
+): Promise<HybridSearchResult[]> {
+  const tsQuery = orTermsTsQueryForLocale(query, locale)
+
+  const results = await db
+    .select({
+      id: helpCenterArticles.id,
+      slug: helpCenterArticles.slug,
+      title: helpCenterArticleTranslations.title,
+      description: helpCenterArticleTranslations.description,
+      content: helpCenterArticleTranslations.content,
+      categoryId: helpCenterArticles.categoryId,
+      categorySlug: helpCenterCategories.slug,
+      categoryName: sql<string>`COALESCE(NULLIF(${helpCenterCategoryTranslations.name}, ''), ${helpCenterCategories.name})`,
+      score: sql<number>`ts_rank(${helpCenterArticleTranslations.searchVector}, ${tsQuery})`.as(
+        'score'
+      ),
+    })
+    .from(helpCenterArticleTranslations)
+    .innerJoin(
+      helpCenterArticles,
+      eq(helpCenterArticleTranslations.articleId, helpCenterArticles.id)
+    )
+    .innerJoin(
+      helpCenterCategories,
+      sql`${helpCenterArticles.categoryId} = ${helpCenterCategories.id}`
+    )
+    .leftJoin(
+      helpCenterCategoryTranslations,
+      and(
+        eq(helpCenterCategoryTranslations.categoryId, helpCenterCategories.id),
+        eq(helpCenterCategoryTranslations.locale, locale)
+      )
+    )
+    .where(
+      and(
+        eq(helpCenterArticleTranslations.locale, locale),
+        eq(helpCenterArticleTranslations.status, 'published'),
+        ...helpCenterVisibilityConditions('public'),
+        sql`${helpCenterArticleTranslations.searchVector} @@ ${tsQuery}`,
+        sql`ts_rank(${helpCenterArticleTranslations.searchVector}, ${tsQuery}) > ${KEYWORD_RANK_FLOOR}`
+      )
+    )
+    .orderBy(sql`score DESC`)
+    .limit(limit)
+
+  return results.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    title: r.title,
+    description: r.description,
+    content: r.content,
+    categoryId: r.categoryId,
+    categorySlug: r.categorySlug,
+    categoryName: r.categoryName,
+    score: Number(r.score),
+  }))
+}
+
+/**
+ * Locale-dispatching entry point for the public /hc search box. The default
+ * locale keeps the full hybrid (keyword + semantic) search unchanged;
+ * additional locales get keyword-only search against their translations.
+ */
+export async function hybridSearchForLocale(
+  query: string,
+  locale: string,
+  limit = 10
+): Promise<HybridSearchResult[]> {
+  if (locale === DEFAULT_LOCALE) return hybridSearch(query, limit)
+  return keywordOnlyQueryForLocale(query, locale, limit)
+}
+
+/**
+ * A caller-supplied locale (portal route param, widget's own UI locale) is
+ * only honored when that locale is actually enabled for this help center --
+ * otherwise every translation-table query would just come back empty and
+ * search would silently look broken. Falls back to the default locale.
+ */
+export function resolveSearchLocale(
+  requestedLocale: string | undefined,
+  enabledAdditionalLocales: string[],
+  defaultLocale: string
+): string {
+  if (requestedLocale && enabledAdditionalLocales.includes(requestedLocale)) {
+    return requestedLocale
+  }
+  return defaultLocale
 }

@@ -6,6 +6,7 @@
 
 import { z } from 'zod'
 import { tiptapContentSchema } from './posts'
+import { SUPPORTED_LOCALES } from '../i18n'
 
 // ============================================================================
 // Category Schemas
@@ -105,10 +106,13 @@ export const articleFeedbackSchema = z.object({
 
 export const getCategoryBySlugSchema = z.object({
   slug: z.string().min(1),
+  /** Omitted/undefined = the default locale (domains/languages §2). */
+  locale: z.string().optional(),
 })
 
 export const getArticleBySlugSchema = z.object({
   slug: z.string().min(1),
+  locale: z.string().optional(),
 })
 
 export const unpublishArticleSchema = z.object({
@@ -147,6 +151,79 @@ export const updateHelpCenterSeoSchema = z.object({
 /** Setting the domain to null clears it (and any verification). */
 export const updateHelpCenterDomainSchema = z.object({
   domain: z.string().max(253).nullable(),
+})
+
+// ============================================================================
+// Locale Schemas (domains/languages §2)
+// ============================================================================
+
+const supportedLocaleSchema = z.enum(SUPPORTED_LOCALES)
+
+export const helpCenterLocaleChromeSchema = z.object({
+  homepageTitle: z.string().max(200),
+  homepageDescription: z.string().max(500),
+  searchPlaceholder: z.string().max(200),
+})
+
+/** Enabling requires the full chrome bundle -- a non-empty title is enforced server-side. */
+export const enableHelpCenterLocaleSchema = z.object({
+  locale: supportedLocaleSchema,
+  chrome: helpCenterLocaleChromeSchema,
+})
+
+export const disableHelpCenterLocaleSchema = z.object({
+  locale: supportedLocaleSchema,
+})
+
+export const updateHelpCenterLocaleChromeSchema = z.object({
+  locale: supportedLocaleSchema,
+  chrome: helpCenterLocaleChromeSchema.partial(),
+})
+
+// ============================================================================
+// Translation Schemas (domains/languages §2)
+// ============================================================================
+
+export const getArticleTranslationSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+})
+
+export const upsertArticleTranslationSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+  title: z.string().max(200),
+  description: z.string().max(300).optional(),
+  content: z.string(),
+  contentJson: tiptapContentSchema.nullable().optional(),
+})
+
+export const setArticleTranslationStatusSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+  status: z.enum(['draft', 'published']),
+})
+
+export const deleteArticleTranslationSchema = z.object({
+  articleId: z.string().min(1),
+  locale: supportedLocaleSchema,
+})
+
+export const getCategoryTranslationSchema = z.object({
+  categoryId: z.string().min(1),
+  locale: supportedLocaleSchema,
+})
+
+export const upsertCategoryTranslationSchema = z.object({
+  categoryId: z.string().min(1),
+  locale: supportedLocaleSchema,
+  name: z.string().max(200),
+  description: z.string().max(2000).optional(),
+})
+
+export const deleteCategoryTranslationSchema = z.object({
+  categoryId: z.string().min(1),
+  locale: supportedLocaleSchema,
 })
 
 // ============================================================================

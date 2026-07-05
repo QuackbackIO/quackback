@@ -28,6 +28,48 @@ const vector = customType<{ data: number[] }>({
 })
 
 // ============================================
+// Locale -> Postgres text-search config (domains/languages §2)
+// ============================================
+
+/**
+ * Locale -> Postgres regconfig for per-locale keyword FTS. Stock Postgres
+ * ships no CJK tokenizer, so zh-cn/zh-tw fall back to 'simple' (whitespace/
+ * punctuation tokenizing, no stemming) rather than a language-specific
+ * config. This is the single source of truth: {@link localeRegconfigCaseSql}
+ * generates the migration's GENERATED column expression from it, and the
+ * help-center search service imports it to build matching tsquery calls.
+ */
+export const LOCALE_TO_REGCONFIG: Record<string, string> = {
+  en: 'english',
+  de: 'german',
+  fr: 'french',
+  es: 'spanish',
+  ar: 'arabic',
+  ru: 'russian',
+  'pt-br': 'portuguese',
+  'zh-cn': 'simple',
+  'zh-tw': 'simple',
+}
+
+export function regconfigForLocale(locale: string): string {
+  return LOCALE_TO_REGCONFIG[locale] ?? 'english'
+}
+
+/**
+ * SQL `CASE <localeExpr> WHEN ... THEN '<regconfig>' ... ELSE 'english' END::regconfig`,
+ * generated from {@link LOCALE_TO_REGCONFIG} so the generated tsvector column
+ * and the raw migration SQL can never drift apart. Safe to inline directly
+ * (no interpolated user input -- every value comes from the static map).
+ */
+export function localeRegconfigCaseSql(localeExpr: string): string {
+  const whens = Object.entries(LOCALE_TO_REGCONFIG)
+    .filter(([, cfg]) => cfg !== 'english')
+    .map(([locale, cfg]) => `WHEN '${locale}' THEN '${cfg}'`)
+    .join(' ')
+  return `CASE ${localeExpr} ${whens} ELSE 'english' END::regconfig`
+}
+
+// ============================================
 // Help Center Categories
 // ============================================
 
@@ -152,6 +194,67 @@ export const helpCenterRedirectRules = pgTable(
 )
 
 // ============================================
+// Translations (domains/languages §2)
+// ============================================
+
+/**
+ * Per-article translation variants (not chrome-only): default locale content
+ * lives on kb_articles itself; every additional locale is a row here.
+ * `status` is independent of the base article's publishedAt -- a translation
+ * can be a draft while the base article is published, or vice versa. Only
+ * `published` translations are visible on the public /hc/{locale} site.
+ */
+export const helpCenterArticleTranslations = pgTable(
+  'kb_article_translations',
+  {
+    id: typeIdWithDefault('kb_article_translation')('id').primaryKey(),
+    articleId: typeIdColumn('kb_article')('article_id')
+      .notNull()
+      .references(() => helpCenterArticles.id, { onDelete: 'cascade' }),
+    locale: text('locale').notNull(),
+    title: text('title').notNull().default(''),
+    description: text('description'),
+    content: text('content').notNull().default(''),
+    contentJson: jsonb('content_json').$type<TiptapContent>(),
+    status: text('status').$type<'draft' | 'published'>().notNull().default('draft'),
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      sql`setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(title, '')), 'A') || setweight(to_tsvector(${sql.raw(localeRegconfigCaseSql('locale'))}, coalesce(content, '')), 'B')`
+    ),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('kb_article_translations_unique_idx').on(table.articleId, table.locale),
+    index('kb_article_translations_locale_idx').on(table.locale),
+    index('kb_article_translations_search_vector_idx').using('gin', table.searchVector),
+  ]
+)
+
+/**
+ * Per-category translation variants. No `status` column -- a category's
+ * presence in a locale is purely "does a translation row with a non-empty
+ * name exist", per the homepage visibility gate (domains/languages §1).
+ */
+export const helpCenterCategoryTranslations = pgTable(
+  'kb_category_translations',
+  {
+    id: typeIdWithDefault('kb_category_translation')('id').primaryKey(),
+    categoryId: typeIdColumn('kb_category')('category_id')
+      .notNull()
+      .references(() => helpCenterCategories.id, { onDelete: 'cascade' }),
+    locale: text('locale').notNull(),
+    name: text('name').notNull().default(''),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('kb_category_translations_unique_idx').on(table.categoryId, table.locale),
+    index('kb_category_translations_locale_idx').on(table.locale),
+  ]
+)
+
+// ============================================
 // Relations
 // ============================================
 
@@ -163,6 +266,7 @@ export const helpCenterCategoriesRelations = relations(helpCenterCategories, ({ 
   }),
   children: many(helpCenterCategories, { relationName: 'categoryParent' }),
   articles: many(helpCenterArticles),
+  translations: many(helpCenterCategoryTranslations),
 }))
 
 export const helpCenterArticlesRelations = relations(helpCenterArticles, ({ one, many }) => ({
@@ -176,6 +280,7 @@ export const helpCenterArticlesRelations = relations(helpCenterArticles, ({ one,
     relationName: 'helpCenterArticleAuthor',
   }),
   feedback: many(helpCenterArticleFeedback),
+  translations: many(helpCenterArticleTranslations),
 }))
 
 export const helpCenterArticleFeedbackRelations = relations(
@@ -189,6 +294,26 @@ export const helpCenterArticleFeedbackRelations = relations(
       fields: [helpCenterArticleFeedback.principalId],
       references: [principal.id],
       relationName: 'helpCenterFeedbackPrincipal',
+    }),
+  })
+)
+
+export const helpCenterArticleTranslationsRelations = relations(
+  helpCenterArticleTranslations,
+  ({ one }) => ({
+    article: one(helpCenterArticles, {
+      fields: [helpCenterArticleTranslations.articleId],
+      references: [helpCenterArticles.id],
+    }),
+  })
+)
+
+export const helpCenterCategoryTranslationsRelations = relations(
+  helpCenterCategoryTranslations,
+  ({ one }) => ({
+    category: one(helpCenterCategories, {
+      fields: [helpCenterCategoryTranslations.categoryId],
+      references: [helpCenterCategories.id],
     }),
   })
 )

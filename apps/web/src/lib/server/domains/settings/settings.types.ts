@@ -706,11 +706,49 @@ export const DEFAULT_HELP_CENTER_DOMAIN_CONFIG: HelpCenterDomainConfig = {
  * Help center configuration
  * Controls the inline knowledge base behavior (always public, always inside the portal)
  */
+/** Per-locale UI chrome for an ADDITIONAL (non-default) help-center locale. */
+export interface HelpCenterLocaleChromeStrings {
+  homepageTitle: string
+  homepageDescription: string
+  searchPlaceholder: string
+}
+
+export const DEFAULT_HELP_CENTER_LOCALE_CHROME: HelpCenterLocaleChromeStrings = {
+  homepageTitle: '',
+  homepageDescription: '',
+  searchPlaceholder: '',
+}
+
+/**
+ * Help center locales (domains/languages §2). The default locale is
+ * unprefixed (`/hc/...`) and keeps using the top-level `homepageTitle`/
+ * `homepageDescription` above -- it needs no chrome entry of its own.
+ * Additional locales are URL-prefixed (`/hc/{locale}/...`) and require a
+ * `chrome` entry with a non-empty `homepageTitle` before they can be
+ * enabled (Intercom-style validation): a locale with no title strings has
+ * nothing to show on its own homepage.
+ */
+export interface HelpCenterLocalesConfig {
+  /** Always the app's DEFAULT_LOCALE; not independently configurable in v1. */
+  default: string
+  /** Enabled additional locale codes, each a SupportedLocale. */
+  additional: string[]
+  /** Chrome strings for additional locales, keyed by locale code. */
+  chrome: Record<string, HelpCenterLocaleChromeStrings>
+}
+
+export const DEFAULT_HELP_CENTER_LOCALES_CONFIG: HelpCenterLocalesConfig = {
+  default: 'en',
+  additional: [],
+  chrome: {},
+}
+
 export interface HelpCenterConfig {
   enabled: boolean
   homepageTitle: string
   homepageDescription: string
   domain: HelpCenterDomainConfig
+  locales: HelpCenterLocalesConfig
   seo: HelpCenterSeoConfig
 }
 
@@ -719,6 +757,7 @@ export const DEFAULT_HELP_CENTER_CONFIG: HelpCenterConfig = {
   homepageTitle: 'How can we help?',
   homepageDescription: 'Search our knowledge base or browse by category',
   domain: DEFAULT_HELP_CENTER_DOMAIN_CONFIG,
+  locales: DEFAULT_HELP_CENTER_LOCALES_CONFIG,
   seo: DEFAULT_HELP_CENTER_SEO_CONFIG,
 }
 

@@ -22,9 +22,25 @@ import {
   useVerifyHelpCenterDomain,
   useCreateHelpCenterRedirectRule,
   useDeleteHelpCenterRedirectRule,
+  useEnableHelpCenterLocale,
+  useDisableHelpCenterLocale,
+  useUpdateHelpCenterLocaleChrome,
 } from '@/lib/client/mutations/settings'
 import { listArticlesFn } from '@/lib/server/functions/help-center'
+import { SUPPORTED_LOCALES, type SupportedLocale } from '@/lib/shared/i18n'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+
+const LOCALE_LABELS: Record<string, string> = {
+  en: 'English',
+  de: 'Deutsch',
+  fr: 'Français',
+  es: 'Español',
+  ar: 'العربية',
+  ru: 'Русский',
+  'pt-br': 'Português (Brasil)',
+  'zh-cn': '简体中文',
+  'zh-tw': '繁體中文',
+}
 
 interface DomainsLanguagesTabProps {
   config: HelpCenterConfig
@@ -36,6 +52,7 @@ export function DomainsLanguagesTab({ config }: DomainsLanguagesTabProps) {
       <DomainCard domain={config.domain} />
       <RedirectRulesCard />
       <IndexingCard indexable={config.seo.indexable} />
+      <LocalesCard locales={config.locales} />
     </div>
   )
 }
@@ -325,5 +342,160 @@ function IndexingCard({ indexable }: { indexable: boolean }) {
         </div>
       </div>
     </SettingsCard>
+  )
+}
+
+// ============================================================================
+// Locales
+// ============================================================================
+
+function LocalesCard({ locales }: { locales: HelpCenterConfig['locales'] }) {
+  const enableLocale = useEnableHelpCenterLocale()
+  const disableLocale = useDisableHelpCenterLocale()
+  const candidates = SUPPORTED_LOCALES.filter(
+    (l) => l !== locales.default && !locales.additional.includes(l)
+  )
+  const [pendingLocale, setPendingLocale] = useState<SupportedLocale | ''>('')
+
+  return (
+    <SettingsCard
+      title="Languages"
+      description="Add a locale to translate articles and categories into it"
+    >
+      <div className="space-y-4">
+        <ul className="space-y-2">
+          <li className="flex items-center justify-between rounded-lg border border-border/50 p-3">
+            <span className="text-sm font-medium">
+              {LOCALE_LABELS[locales.default] ?? locales.default}
+            </span>
+            <span className="text-xs text-muted-foreground">Default</span>
+          </li>
+          {locales.additional.map((locale) => (
+            <LocaleRow
+              key={locale}
+              locale={locale}
+              chrome={locales.chrome[locale]}
+              onDisable={() => disableLocale.mutate(locale as SupportedLocale)}
+              disabling={disableLocale.isPending}
+            />
+          ))}
+        </ul>
+
+        {candidates.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Select
+              value={pendingLocale}
+              onValueChange={(v) => setPendingLocale(v as SupportedLocale)}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Add a language..." />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {LOCALE_LABELS[l] ?? l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!pendingLocale || enableLocale.isPending}
+              onClick={() => {
+                if (!pendingLocale) return
+                enableLocale.mutate(
+                  {
+                    locale: pendingLocale,
+                    chrome: {
+                      homepageTitle: 'How can we help?',
+                      homepageDescription: '',
+                      searchPlaceholder: '',
+                    },
+                  },
+                  { onSuccess: () => setPendingLocale('') }
+                )
+              }}
+            >
+              <InlineSpinner visible={enableLocale.isPending} />
+              Add
+            </Button>
+          </div>
+        )}
+        {enableLocale.isError && (
+          <p className="text-xs text-destructive">
+            {enableLocale.error instanceof Error
+              ? enableLocale.error.message
+              : 'Could not enable that locale'}
+          </p>
+        )}
+      </div>
+    </SettingsCard>
+  )
+}
+
+function LocaleRow({
+  locale,
+  chrome,
+  onDisable,
+  disabling,
+}: {
+  locale: string
+  chrome: HelpCenterConfig['locales']['chrome'][string] | undefined
+  onDisable: () => void
+  disabling: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [homepageTitle, setHomepageTitle] = useState(chrome?.homepageTitle ?? '')
+  const [homepageDescription, setHomepageDescription] = useState(chrome?.homepageDescription ?? '')
+  const [searchPlaceholder, setSearchPlaceholder] = useState(chrome?.searchPlaceholder ?? '')
+  const updateChrome = useUpdateHelpCenterLocaleChrome()
+
+  return (
+    <li className="rounded-lg border border-border/50 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">{LOCALE_LABELS[locale] ?? locale}</span>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>
+            {editing ? 'Close' : 'Edit chrome'}
+          </Button>
+          <Button variant="ghost" size="sm" disabled={disabling} onClick={onDisable}>
+            <TrashIcon className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      {editing && (
+        <div className="mt-3 space-y-2">
+          <Input
+            value={homepageTitle}
+            onChange={(e) => setHomepageTitle(e.target.value)}
+            placeholder="Homepage title"
+          />
+          <Input
+            value={homepageDescription}
+            onChange={(e) => setHomepageDescription(e.target.value)}
+            placeholder="Homepage description"
+          />
+          <Input
+            value={searchPlaceholder}
+            onChange={(e) => setSearchPlaceholder(e.target.value)}
+            placeholder="Search placeholder"
+          />
+          <Button
+            size="sm"
+            disabled={updateChrome.isPending || !homepageTitle.trim()}
+            onClick={() =>
+              updateChrome.mutate({
+                locale: locale as SupportedLocale,
+                chrome: { homepageTitle, homepageDescription, searchPlaceholder },
+              })
+            }
+          >
+            <InlineSpinner visible={updateChrome.isPending} />
+            Save
+          </Button>
+        </div>
+      )}
+    </li>
   )
 }

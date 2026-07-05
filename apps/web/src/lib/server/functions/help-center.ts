@@ -9,7 +9,6 @@ import { requireAuth, getOptionalAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listCategories,
-  listPublicCategories,
   listPublicCategoryEditors,
   getCategoryById,
   createCategory,
@@ -18,10 +17,8 @@ import {
   restoreCategory,
   listArticles,
   listPublicArticles,
-  listPublicArticlesForCategory,
   listPopularPublicArticles,
   getArticleById,
-  getPublicArticleBySlug,
   createArticle,
   updateArticle,
   publishArticle,
@@ -96,9 +93,12 @@ export const listCategoriesFn = createServerFn({ method: 'GET' })
   })
 
 export const listPublicCategoriesFn = createServerFn({ method: 'GET' })
-  .validator(z.object({}))
-  .handler(async () => {
-    const categories = await listPublicCategories()
+  .validator(z.object({ locale: z.string().optional() }))
+  .handler(async ({ data }) => {
+    const { listPublicCategoriesForLocale } =
+      await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const categories = await listPublicCategoriesForLocale(data.locale ?? DEFAULT_LOCALE)
     return categories.map(serializeCategory)
   })
 
@@ -113,12 +113,17 @@ export const getCategoryFn = createServerFn({ method: 'GET' })
 export const getPublicCategoryBySlugFn = createServerFn({ method: 'GET' })
   .validator(getCategoryBySlugSchema)
   .handler(async ({ data }) => {
-    // Use the public variant so categories an admin marked private aren't
+    // Use the locale-aware public lookup so categories an admin marked
+    // private, or that have no translation in the requested locale, aren't
     // reachable by direct-slug lookup. The route serves unauthenticated
     // help-center traffic.
-    const { getPublicCategoryBySlug } =
-      await import('@/lib/server/domains/help-center/help-center.category.service')
-    const category = await getPublicCategoryBySlug(data.slug)
+    const { getPublicCategoryBySlugForLocale } =
+      await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const category = await getPublicCategoryBySlugForLocale(
+      data.slug,
+      data.locale ?? DEFAULT_LOCALE
+    )
     return serializeCategory(category)
   })
 
@@ -202,9 +207,15 @@ export const listPublicArticlesFn = createServerFn({ method: 'GET' })
   })
 
 export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ categoryId: z.string() }))
+  .validator(z.object({ categoryId: z.string(), locale: z.string().optional() }))
   .handler(async ({ data }) => {
-    const articles = await listPublicArticlesForCategory(data.categoryId)
+    const { listPublicArticlesForCategoryLocale } =
+      await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const articles = await listPublicArticlesForCategoryLocale(
+      data.categoryId,
+      data.locale ?? DEFAULT_LOCALE
+    )
     return articles.map((a) => ({
       ...a,
       publishedAt: toIsoStringOrNull(a.publishedAt),
@@ -234,7 +245,10 @@ export const getArticleFn = createServerFn({ method: 'GET' })
 export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
   .validator(getArticleBySlugSchema)
   .handler(async ({ data }) => {
-    const article = await getPublicArticleBySlug(data.slug)
+    const { getPublicArticleBySlugForLocale } =
+      await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const article = await getPublicArticleBySlugForLocale(data.slug, data.locale ?? DEFAULT_LOCALE)
     const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
     return publicArticle
   })
@@ -307,10 +321,19 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
 
 export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(
-    z.object({ query: z.string().min(1), limit: z.number().int().min(1).max(20).optional() })
+    z.object({
+      query: z.string().min(1),
+      limit: z.number().int().min(1).max(20).optional(),
+      locale: z.string().optional(),
+    })
   )
   .handler(async ({ data }) => {
-    const { hybridSearch } =
-      await import('@/lib/server/domains/help-center/help-center-search.service')
-    return hybridSearch(data.query, data.limit ?? 10)
+    const [{ hybridSearchForLocale, resolveSearchLocale }, { getHelpCenterConfig }] =
+      await Promise.all([
+        import('@/lib/server/domains/help-center/help-center-search.service'),
+        import('@/lib/server/domains/settings/settings.service'),
+      ])
+    const config = await getHelpCenterConfig()
+    const locale = resolveSearchLocale(data.locale, config.locales.additional, config.locales.default)
+    return hybridSearchForLocale(data.query, locale, data.limit ?? 10)
   })

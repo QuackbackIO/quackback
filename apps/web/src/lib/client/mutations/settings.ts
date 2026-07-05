@@ -25,6 +25,9 @@ import {
 import {
   updateHelpCenterConfigFn,
   updateHelpCenterSeoFn,
+  enableHelpCenterLocaleFn,
+  disableHelpCenterLocaleFn,
+  updateHelpCenterLocaleChromeFn,
 } from '@/lib/server/functions/help-center-settings'
 import {
   updateHelpCenterDomainFn,
@@ -294,6 +297,39 @@ export function useUpdateHelpCenterSeo() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateHelpCenterSeoFn>[0]['data']) =>
       updateHelpCenterSeoFn({ data }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
+  })
+}
+
+export function useEnableHelpCenterLocale() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof enableHelpCenterLocaleFn>[0]['data']) =>
+      enableHelpCenterLocaleFn({ data }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
+  })
+}
+
+export function useDisableHelpCenterLocale() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (locale: Parameters<typeof disableHelpCenterLocaleFn>[0]['data']['locale']) =>
+      disableHelpCenterLocaleFn({ data: { locale } }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
+  })
+}
+
+export function useUpdateHelpCenterLocaleChrome() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateHelpCenterLocaleChromeFn>[0]['data']) =>
+      updateHelpCenterLocaleChromeFn({ data }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: settingsQueries.helpCenterConfig().queryKey }),
   })

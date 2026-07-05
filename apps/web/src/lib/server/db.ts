@@ -333,6 +333,12 @@ export {
   helpCenterArticleFeedback,
   helpCenterArticleFeedbackRelations,
   helpCenterRedirectRules,
+  helpCenterArticleTranslations,
+  helpCenterArticleTranslationsRelations,
+  helpCenterCategoryTranslations,
+  helpCenterCategoryTranslationsRelations,
+  LOCALE_TO_REGCONFIG,
+  regconfigForLocale,
   // Schema tables - push devices
   pushDevices,
   // Schema tables - assistant (Quinn) involvement record

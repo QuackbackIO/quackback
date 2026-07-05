@@ -30,7 +30,145 @@ import {
   getCategoryDepth,
   getSubtreeMaxDepth,
 } from '@/lib/shared/help-center-tree'
+import { settingsQueries } from '@/lib/client/queries/settings'
+import {
+  getCategoryTranslationStatusesFn,
+  listCategoryTranslationsFn,
+  upsertCategoryTranslationFn,
+  deleteCategoryTranslationFn,
+} from '@/lib/server/functions/help-center-translations'
+import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import type { KbCategoryId } from '@quackback/ids'
+import type { SupportedLocale } from '@/lib/shared/i18n'
+
+const LOCALE_LABELS: Record<string, string> = {
+  de: 'Deutsch',
+  fr: 'Français',
+  es: 'Español',
+  ar: 'العربية',
+  ru: 'Русский',
+  'pt-br': 'Português (Brasil)',
+  'zh-cn': '简体中文',
+  'zh-tw': '繁體中文',
+}
+
+/** Compact per-locale name/description editor (domains/languages §2). No
+ *  draft/published status for categories -- a non-empty name IS translated. */
+function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId }) {
+  const configQuery = useQuery(settingsQueries.helpCenterConfig())
+  const additionalLocales = configQuery.data?.locales?.additional ?? []
+  const [locale, setLocale] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [translated, setTranslated] = useState(false)
+
+  const statusesQuery = useQuery({
+    queryKey: ['help-center', 'category-translation-statuses', categoryId],
+    queryFn: () => getCategoryTranslationStatusesFn({ data: { categoryId } }),
+  })
+
+  useEffect(() => {
+    if (!locale && additionalLocales.length > 0) setLocale(additionalLocales[0])
+  }, [locale, additionalLocales])
+
+  useEffect(() => {
+    if (!locale) return
+    let cancelled = false
+    async function load() {
+      const translations = await listCategoryTranslationsFn({ data: { categoryId } })
+      if (cancelled) return
+      const existing = translations.find((t) => t.locale === locale)
+      setName(existing?.name ?? '')
+      setDescription(existing?.description ?? '')
+      setTranslated(!!existing?.name?.trim())
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [categoryId, locale])
+
+  if (additionalLocales.length === 0) return null
+
+  async function handleSave() {
+    if (!locale) return
+    setSaving(true)
+    try {
+      await upsertCategoryTranslationFn({
+        data: {
+          categoryId,
+          locale: locale as SupportedLocale,
+          name,
+          description: description || undefined,
+        },
+      })
+      setTranslated(!!name.trim())
+      void statusesQuery.refetch()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!locale) return
+    setSaving(true)
+    try {
+      await deleteCategoryTranslationFn({ data: { categoryId, locale: locale as SupportedLocale } })
+      setName('')
+      setDescription('')
+      setTranslated(false)
+      void statusesQuery.refetch()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border/50 p-3">
+      <div className="flex items-center justify-between">
+        <Label>Translations</Label>
+        <Select value={locale ?? undefined} onValueChange={setLocale}>
+          <SelectTrigger size="sm" className="h-7 w-36 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {additionalLocales.map((l) => (
+              <SelectItem key={l} value={l}>
+                {LOCALE_LABELS[l] ?? l}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Translated name"
+      />
+      <Input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Translated description (optional)"
+      />
+      <div className="flex justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={saving || !translated}
+          onClick={handleDelete}
+        >
+          Clear
+        </Button>
+        <Button type="button" size="sm" disabled={saving || !name.trim()} onClick={handleSave}>
+          <InlineSpinner visible={saving} />
+          Save translation
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 const DEFAULT_ICON = 'FolderIcon'
 
@@ -270,6 +408,8 @@ export function CategoryFormDialog({
             </div>
             <Switch checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
+
+          {isEdit && <CategoryTranslationsSection categoryId={initialValues.id} />}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

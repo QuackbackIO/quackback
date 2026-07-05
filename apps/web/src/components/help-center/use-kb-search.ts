@@ -19,10 +19,15 @@ const CACHE_SIZE = 30
 export function useKbSearch({
   query,
   limit,
+  locale,
   onResults,
 }: {
   query: string
   limit: number
+  /** Omitted = default locale. The widget passes its own UI locale through
+   *  (domains/languages §2); an unrecognized/not-enabled locale falls back
+   *  to default server-side. */
+  locale?: string
   /** Fired with the articles of each completed search (cache hits included);
    *  not fired when the query is blank. */
   onResults?: (articles: KbSearchArticle[]) => void
@@ -36,13 +41,14 @@ export function useKbSearch({
   onResultsRef.current = onResults
 
   const doSearch = useCallback(
-    async (q: string) => {
+    async (q: string, loc: string | undefined) => {
       if (!q.trim()) {
         setResults([])
         return
       }
 
-      const cached = cacheRef.current.get(q)
+      const cacheKey = `${loc ?? ''}:${q}`
+      const cached = cacheRef.current.get(cacheKey)
       if (cached) {
         setResults(cached)
         onResultsRef.current?.(cached)
@@ -60,12 +66,14 @@ export function useKbSearch({
 
       setIsSearching(true)
       try {
-        const res = await fetch(`/api/widget/kb-search?q=${encodeURIComponent(q)}&limit=${limit}`, {
+        const params = new URLSearchParams({ q, limit: String(limit) })
+        if (loc) params.set('locale', loc)
+        const res = await fetch(`/api/widget/kb-search?${params.toString()}`, {
           signal: controller.signal,
         })
         const data = await res.json()
         const articles: KbSearchArticle[] = data.data?.articles ?? []
-        cacheRef.current.set(q, articles)
+        cacheRef.current.set(cacheKey, articles)
         setResults(articles)
         onResultsRef.current?.(articles)
       } catch (e) {
@@ -78,9 +86,9 @@ export function useKbSearch({
   )
 
   useEffect(() => {
-    const timer = setTimeout(() => void doSearch(query), DEBOUNCE_MS)
+    const timer = setTimeout(() => void doSearch(query, locale), DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [query, doSearch])
+  }, [query, locale, doSearch])
 
   return { results, isSearching }
 }

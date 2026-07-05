@@ -16,6 +16,8 @@ export type {
   HelpCenterConfig,
   HelpCenterDomainConfig,
   HelpCenterSeoConfig,
+  HelpCenterLocalesConfig,
+  HelpCenterLocaleChromeStrings,
   AuthConfig,
   VerifiedDomain,
 } from '@/lib/server/domains/settings'

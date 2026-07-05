@@ -53,6 +53,31 @@ describe('sitemap helpers', () => {
       expect(xml).not.toContain('<priority>')
       expect(xml).not.toContain('<changefreq>')
     })
+
+    it('omits the xhtml namespace and alternate links when no url has alternates', () => {
+      const xml = buildSitemap([{ loc: 'https://example.com' }])
+      expect(xml).not.toContain('xmlns:xhtml')
+      expect(xml).not.toContain('xhtml:link')
+    })
+
+    it('emits hreflang alternate links and the xhtml namespace when present', () => {
+      const xml = buildSitemap([
+        {
+          loc: 'https://example.com/hc',
+          alternates: [
+            { hreflang: 'de', href: 'https://example.com/hc/de' },
+            { hreflang: 'x-default', href: 'https://example.com/hc' },
+          ],
+        },
+      ])
+      expect(xml).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+      expect(xml).toContain(
+        '<xhtml:link rel="alternate" hreflang="de" href="https://example.com/hc/de" />'
+      )
+      expect(xml).toContain(
+        '<xhtml:link rel="alternate" hreflang="x-default" href="https://example.com/hc" />'
+      )
+    })
   })
 
   describe('buildSitemapIndex', () => {

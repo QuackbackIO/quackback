@@ -4,7 +4,7 @@
 -- orphaned rules explicitly on hard delete, since a single FK can't span two tables.
 -- Many rules may point at the same target; `path` itself is the unique key.
 CREATE TABLE "hc_redirect_rules" (
-	"id" text PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY NOT NULL,
 	"path" text NOT NULL,
 	"target_type" text NOT NULL,
 	"target_id" text NOT NULL,

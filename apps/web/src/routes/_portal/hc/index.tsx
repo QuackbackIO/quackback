@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 import { HelpCenterCategoryGrid } from '@/components/help-center/help-center-category-grid'
@@ -8,13 +8,44 @@ import {
   listPublicCategoriesFn,
   listPopularPublicArticlesFn,
 } from '@/lib/server/functions/help-center'
+import { resolveHcLandingLocale } from '@/lib/shared/help-center-url'
+import { HC_LOCALE_COOKIE } from '@/components/help-center/help-center-locale-switcher'
 import type { HelpCenterConfig } from '@/lib/shared/types/settings'
 
 const DEFAULT_TITLE = 'How can we help?'
 const DEFAULT_DESCRIPTION =
   'Search our guides or ask AI for an instant answer. Real answers, fast, no ticket required.'
 
+/**
+ * Only meaningful during SSR (browser-detect needs the real request headers/
+ * cookies); a client-side nav that already landed here has nothing to detect.
+ */
+async function landingLocaleRedirectTarget(helpCenterConfig?: HelpCenterConfig): Promise<string | null> {
+  const additional = helpCenterConfig?.locales?.additional ?? []
+  if (additional.length === 0) return null
+  try {
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const headers = getRequestHeaders()
+    const cookieHeader = headers.get('cookie') ?? ''
+    const cookieMatch = new RegExp(`${HC_LOCALE_COOKIE}=([^;]+)`).exec(cookieHeader)
+    return resolveHcLandingLocale({
+      cookieLocale: cookieMatch?.[1] ?? null,
+      acceptLanguage: headers.get('accept-language'),
+      enabledAdditionalLocales: additional,
+      defaultLocale: helpCenterConfig?.locales?.default ?? 'en',
+    })
+  } catch {
+    return null
+  }
+}
+
 export const Route = createFileRoute('/_portal/hc/')({
+  beforeLoad: async ({ context }) => {
+    const { settings } = context
+    const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined
+    const target = await landingLocaleRedirectTarget(helpCenterConfig)
+    if (target) throw redirect({ to: `/hc/${target}` as '/', replace: true })
+  },
   loader: async ({ context }) => {
     const { settings } = context
     const helpCenterConfig = settings?.helpCenterConfig as HelpCenterConfig | undefined

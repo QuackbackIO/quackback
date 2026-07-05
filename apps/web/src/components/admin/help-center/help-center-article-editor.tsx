@@ -6,7 +6,12 @@ import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { Loader2 } from 'lucide-react'
 import { ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { CategoryIcon } from '@/components/help-center/category-icon'
-import { ArrowTopRightOnSquareIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline'
+import {
+  ArrowTopRightOnSquareIcon,
+  EllipsisHorizontalIcon,
+  LanguageIcon,
+} from '@heroicons/react/24/outline'
+import { ArticleTranslationsDialog } from '@/components/admin/help-center/article-translations-dialog'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -56,6 +61,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   const navigate = useNavigate()
   const { upload: uploadImage } = useImageUpload({ prefix: 'help-center' })
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
+  const [translationsOpen, setTranslationsOpen] = useState(false)
   const hasInitialized = useRef(false)
 
   const updateArticleMutation = useUpdateArticle()
@@ -234,6 +240,17 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                 </SelectContent>
               </Select>
 
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTranslationsOpen(true)}
+                className="h-8 rounded-full text-xs px-3"
+              >
+                <LanguageIcon className="h-3.5 w-3.5" />
+                Translations
+              </Button>
+
               {isPublished ? (
                 <div className="flex items-center gap-1">
                   {publicArticleUrl && (
@@ -381,6 +398,11 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
           </div>
         </ScrollArea>
       </form>
+      <ArticleTranslationsDialog
+        articleId={articleId}
+        open={translationsOpen}
+        onOpenChange={setTranslationsOpen}
+      />
     </Form>
   )
 }

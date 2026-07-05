@@ -9,9 +9,17 @@
 
 export const MAX_URLS_PER_SITEMAP = 50_000
 
+export interface SitemapAlternate {
+  /** A locale code, or the literal 'x-default' for the unprefixed fallback. */
+  hreflang: string
+  href: string
+}
+
 export interface SitemapUrl {
   loc: string
   lastmod?: string
+  /** Cross-locale hreflang links (domains/languages §2, help-center only). */
+  alternates?: SitemapAlternate[]
 }
 
 export function escapeXml(str: string): string {
@@ -19,16 +27,24 @@ export function escapeXml(str: string): string {
 }
 
 export function buildSitemap(urls: SitemapUrl[]): string {
+  const hasAlternates = urls.some((u) => u.alternates && u.alternates.length > 0)
   const urlEntries = urls
-    .map(
-      (u) => `  <url>
-    <loc>${escapeXml(u.loc)}</loc>${u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ''}
+    .map((u) => {
+      const alternates = (u.alternates ?? [])
+        .map(
+          (a) =>
+            `\n    <xhtml:link rel="alternate" hreflang="${escapeXml(a.hreflang)}" href="${escapeXml(a.href)}" />`
+        )
+        .join('')
+      return `  <url>
+    <loc>${escapeXml(u.loc)}</loc>${u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ''}${alternates}
   </url>`
-    )
+    })
     .join('\n')
 
+  const xhtmlNs = hasAlternates ? ' xmlns:xhtml="http://www.w3.org/1999/xhtml"' : ''
   return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"${xhtmlNs}>
 ${urlEntries}
 </urlset>`
 }

@@ -1,5 +1,8 @@
-import { createFileRoute, notFound, redirect, Outlet } from '@tanstack/react-router'
+import { createFileRoute, notFound, redirect, Outlet, useRouterState } from '@tanstack/react-router'
 import { resolveHelpCenterDomainRedirect } from '@/lib/server/domains/help-center/help-center-domain.service'
+import { HelpCenterLocaleSwitcher } from '@/components/help-center/help-center-locale-switcher'
+import { parseHcLocalePath } from '@/lib/shared/help-center-url'
+import { isRtlLocale } from '@/lib/shared/i18n'
 import type { FeatureFlags, HelpCenterConfig } from '@/lib/shared/types/settings'
 
 /**
@@ -54,8 +57,24 @@ export const Route = createFileRoute('/_portal/hc')({
 })
 
 function HelpCenterLayoutRoute() {
+  const { helpCenterConfig } = Route.useLoaderData()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const additionalLocales = helpCenterConfig?.locales?.additional ?? []
+  const defaultLocale = helpCenterConfig?.locales?.default ?? 'en'
+  const { locale, canonicalPath } = parseHcLocalePath(pathname, additionalLocales)
+
   return (
-    <div className="flex flex-1 min-h-0">
+    <div className="flex flex-1 min-h-0 flex-col" dir={isRtlLocale(locale) ? 'rtl' : 'ltr'}>
+      {additionalLocales.length > 0 && (
+        <div className="flex justify-end px-4 py-2 sm:px-6">
+          <HelpCenterLocaleSwitcher
+            currentLocale={locale}
+            defaultLocale={defaultLocale}
+            additionalLocales={additionalLocales}
+            canonicalPath={canonicalPath}
+          />
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         <Outlet />
       </div>

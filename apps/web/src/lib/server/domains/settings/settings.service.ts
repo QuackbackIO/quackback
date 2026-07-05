@@ -8,7 +8,7 @@ import {
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
-import { ValidationError } from '@/lib/shared/errors'
+import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -27,6 +27,8 @@ import type {
   TenantSettings,
   SettingsBrandingData,
   HelpCenterConfig,
+  HelpCenterLocalesConfig,
+  HelpCenterLocaleChromeStrings,
   VerifiedDomain,
 } from './settings.types'
 import {
@@ -710,6 +712,76 @@ export async function updateHelpCenterConfig(
     log.error({ err: error }, 'update help center config failed')
     wrapDbError('update help center config', error)
   }
+}
+
+/**
+ * Enable an additional help-center locale (domains/languages §2). Requires a
+ * non-empty homepage title (Intercom-style validation: a locale with no
+ * chrome strings has nothing to show on its own homepage). Idempotent --
+ * re-enabling an already-enabled locale just replaces its chrome.
+ */
+export async function enableHelpCenterLocale(input: {
+  locale: string
+  chrome: HelpCenterLocaleChromeStrings
+}): Promise<HelpCenterLocalesConfig> {
+  if (!input.chrome.homepageTitle.trim()) {
+    throw new ValidationError(
+      'HC_LOCALE_TITLE_REQUIRED',
+      'Enabling a locale requires a homepage title'
+    )
+  }
+  const current = await getHelpCenterConfig()
+  if (input.locale === current.locales.default) {
+    throw new ValidationError('HC_LOCALE_IS_DEFAULT', 'The default locale is always enabled')
+  }
+  const additional = current.locales.additional.includes(input.locale)
+    ? current.locales.additional
+    : [...current.locales.additional, input.locale]
+  const updated = await updateHelpCenterConfig({
+    locales: {
+      ...current.locales,
+      additional,
+      chrome: { ...current.locales.chrome, [input.locale]: input.chrome },
+    },
+  })
+  return updated.locales
+}
+
+/** Disabling a locale keeps its translation rows (re-enabling picks them back up). */
+export async function disableHelpCenterLocale(locale: string): Promise<HelpCenterLocalesConfig> {
+  const current = await getHelpCenterConfig()
+  const updated = await updateHelpCenterConfig({
+    locales: {
+      ...current.locales,
+      additional: current.locales.additional.filter((l) => l !== locale),
+    },
+  })
+  return updated.locales
+}
+
+export async function updateHelpCenterLocaleChrome(input: {
+  locale: string
+  chrome: Partial<HelpCenterLocaleChromeStrings>
+}): Promise<HelpCenterLocalesConfig> {
+  const current = await getHelpCenterConfig()
+  if (!current.locales.additional.includes(input.locale)) {
+    throw new NotFoundError('HC_LOCALE_NOT_ENABLED', 'That locale is not enabled')
+  }
+  const existingChrome = current.locales.chrome[input.locale] ?? {
+    homepageTitle: '',
+    homepageDescription: '',
+    searchPlaceholder: '',
+  }
+  const updated = await updateHelpCenterConfig({
+    locales: {
+      ...current.locales,
+      chrome: {
+        ...current.locales.chrome,
+        [input.locale]: { ...existingChrome, ...input.chrome },
+      },
+    },
+  })
+  return updated.locales
 }
 
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {

@@ -1,6 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { hybridSearch } from '@/lib/server/domains/help-center/help-center-search.service'
+import { isFeatureEnabled, getHelpCenterConfig } from '@/lib/server/domains/settings/settings.service'
+import {
+  hybridSearchForLocale,
+  resolveSearchLocale,
+} from '@/lib/server/domains/help-center/help-center-search.service'
 import {
   enforcePerIpLimit,
   widgetCorsHeaders,
@@ -36,7 +39,13 @@ export async function handleKbSearch({ request }: { request: Request }): Promise
   if (limited) return limited
 
   try {
-    const results = await hybridSearch(q, limit)
+    // The widget passes its own UI locale through (domains/languages §2); an
+    // unrecognized or not-enabled locale silently falls back to default
+    // rather than searching an empty translation table.
+    const requestedLocale = url.searchParams.get('locale') ?? undefined
+    const config = await getHelpCenterConfig()
+    const locale = resolveSearchLocale(requestedLocale, config.locales.additional, config.locales.default)
+    const results = await hybridSearchForLocale(q, locale, limit)
 
     const articles = results.map((a) => ({
       id: a.id,
