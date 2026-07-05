@@ -45,6 +45,48 @@ vi.mock('@/lib/server/domains/ai/usage-log', () => ({
   withUsageLogging: (...args: unknown[]) => mockWithUsageLogging(...args),
 }))
 
+// Assistant actions off (the shipped default): the runtime gets the
+// byte-identical legacy tool set with no control-mode pipeline involved.
+const mockIsFeatureEnabled = vi.fn()
+vi.mock('@/lib/server/domains/settings/settings.service', () => ({
+  isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...args),
+}))
+
+// Surface instructions + guidance rules are only read when actions are on
+// (asserted explicitly below); default to nothing saved.
+const mockGetAssistantSurfaces = vi.fn()
+// assembleAssistantTools also reads tool controls from this module once
+// actions are on; stub it so the "flag on" prompt-assembly tests (which
+// exercise the real tool assembly) don't need to know about tool controls.
+const mockGetAssistantToolControls = vi.fn()
+vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
+  getAssistantSurfaces: (...args: unknown[]) => mockGetAssistantSurfaces(...args),
+  getAssistantToolControls: (...args: unknown[]) => mockGetAssistantToolControls(...args),
+}))
+
+const mockListGuidanceRules = vi.fn()
+vi.mock('../guidance.service', () => ({
+  listGuidanceRules: (...args: unknown[]) => mockListGuidanceRules(...args),
+  GUIDANCE_MAX_ENABLED_PER_SURFACE: 20,
+  GUIDANCE_CHAR_BUDGET: 4000,
+}))
+
+// Keep the real tool assembly by default (tool wiring is exercised for real
+// elsewhere in this file); the registry-derived activity filter tests below
+// swap in a fake tool set to prove the filter isn't hardcoded to the two
+// built-in tool names.
+const mockAssembleAssistantTools = vi.hoisted(() => vi.fn())
+const realAssembleAssistantToolsRef = vi.hoisted(() => ({
+  current: undefined as unknown as (...args: unknown[]) => unknown,
+}))
+vi.mock('../assistant.tools', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../assistant.tools')>()
+  realAssembleAssistantToolsRef.current = actual.assembleAssistantTools as (
+    ...args: unknown[]
+  ) => unknown
+  return { ...actual, assembleAssistantTools: (...args: unknown[]) => mockAssembleAssistantTools(...args) }
+})
+
 import {
   runAssistantTurn,
   respondEligible,
@@ -52,6 +94,8 @@ import {
   decideEscalation,
   isSubstantiveAnswer,
   buildAssistantSystemPrompt,
+  buildSurfaceInstructionsPrompt,
+  buildGuidancePrompt,
   isAssistantConfigured,
   AssistantNotConfiguredError,
   salvageAssistantOutput,
@@ -91,6 +135,13 @@ beforeEach(() => {
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   mockConfig.aiChatModel = 'test-model'
   mockConfig.aiHelpCenterModel = undefined
+  mockIsFeatureEnabled.mockResolvedValue(false)
+  mockGetAssistantSurfaces.mockResolvedValue({})
+  mockGetAssistantToolControls.mockResolvedValue({})
+  mockListGuidanceRules.mockResolvedValue([])
+  mockAssembleAssistantTools.mockImplementation((...args: unknown[]) =>
+    realAssembleAssistantToolsRef.current(...args)
+  )
   lastLoggedMetadata = undefined
   mockWithUsageLogging.mockImplementation(
     async (
@@ -229,6 +280,59 @@ describe('buildAssistantSystemPrompt', () => {
     const joined = buildAssistantSystemPrompt('Quinn').join('\n').toLowerCase()
     expect(joined).toContain('only a single json object')
     expect(joined).toContain('no markdown code fences')
+  })
+})
+
+describe('buildSurfaceInstructionsPrompt', () => {
+  it('returns null when there are no instructions to add', () => {
+    expect(buildSurfaceInstructionsPrompt(undefined)).toBeNull()
+    expect(buildSurfaceInstructionsPrompt(null)).toBeNull()
+    expect(buildSurfaceInstructionsPrompt('   ')).toBeNull()
+  })
+
+  it('carries the instructions text, framed to yield to the base rules on conflict', () => {
+    const block = buildSurfaceInstructionsPrompt('Always mention our refund policy.')
+    expect(block).toContain('Always mention our refund policy.')
+    expect(block!.toLowerCase()).toContain('rules above')
+  })
+
+  it('contains no em dashes', () => {
+    const block = buildSurfaceInstructionsPrompt('Be concise.')
+    expect(block).not.toContain('—')
+  })
+})
+
+describe('buildGuidancePrompt', () => {
+  const rule = (title: string, body: string) => ({ title, body })
+
+  it('returns null when there are no rules', () => {
+    expect(buildGuidancePrompt([])).toBeNull()
+  })
+
+  it('folds in each rule title + body, framed to yield to the base rules on conflict', () => {
+    const block = buildGuidancePrompt([rule('Refunds', 'Always mention the refund policy.')])
+    expect(block).toContain('Refunds')
+    expect(block).toContain('Always mention the refund policy.')
+    expect(block!.toLowerCase()).toContain('rules above')
+  })
+
+  it('contains no em dashes', () => {
+    const block = buildGuidancePrompt([rule('Tone', 'Stay upbeat.')])
+    expect(block).not.toContain('—')
+  })
+
+  it('caps at 20 enabled rules, in position order', () => {
+    const rules = Array.from({ length: 25 }, (_, i) => rule(`Rule ${i}`, 'body'))
+    const block = buildGuidancePrompt(rules)
+    expect(block).toContain('Rule 19')
+    expect(block).not.toContain('Rule 20')
+  })
+
+  it('drops whole rules past the char budget, in position order (never truncates one)', () => {
+    const nearBudget = 'x'.repeat(3990)
+    const block = buildGuidancePrompt([rule('First', nearBudget), rule('Second', 'short body')])
+    expect(block).toContain('First')
+    expect(block).not.toContain('Second')
   })
 })
 
@@ -386,6 +490,9 @@ describe('runAssistantTurn', () => {
     const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('q') })
     expect(result.status === 'answered' && result.text).toBe('Second try.')
     expect(mockChat).toHaveBeenCalledTimes(2)
+    // Prompt assembly and tool assembly each read the flag once per turn, not
+    // per attempt: a retry reuses the same assembled prompt and tool set.
+    expect(mockIsFeatureEnabled).toHaveBeenCalledTimes(2)
   })
 
   it('answers with a friendly fallback (never silence) when both attempts hard-fail', async () => {
@@ -511,6 +618,119 @@ describe('runAssistantTurn', () => {
     })
     // Salvaged on the first attempt; no retry needed.
     expect(mockChat).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('runAssistantTurn: prompt assembly (surface instructions + guidance)', () => {
+  function systemPromptsFromLastCall(): string[] {
+    const opts = mockChat.mock.calls.at(-1)?.[0] as { systemPrompts: string[] }
+    return opts.systemPrompts
+  }
+
+  it('flag off: systemPrompts is byte-identical to the base prompt alone, no config fetched', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(false)
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    expect(systemPromptsFromLastCall()).toEqual(buildAssistantSystemPrompt('Quinn'))
+    expect(mockGetAssistantSurfaces).not.toHaveBeenCalled()
+    expect(mockListGuidanceRules).not.toHaveBeenCalled()
+  })
+
+  it('flag on but nothing saved: still byte-identical to the base prompt', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true)
+    mockGetAssistantSurfaces.mockResolvedValue({})
+    mockListGuidanceRules.mockResolvedValue([])
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    expect(systemPromptsFromLastCall()).toEqual(buildAssistantSystemPrompt('Quinn'))
+  })
+
+  it('assembles base -> surface instructions -> guidance, in that order', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true)
+    mockGetAssistantSurfaces.mockResolvedValue({ widget: { instructions: 'Be extra warm.' } })
+    mockListGuidanceRules.mockResolvedValue([{ title: 'Refunds', body: 'Mention the policy.' }])
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'widget' })
+
+    const prompts = systemPromptsFromLastCall()
+    expect(prompts).toHaveLength(3)
+    expect(prompts[0]).toEqual(buildAssistantSystemPrompt('Quinn')[0])
+    expect(prompts[1]).toContain('Be extra warm.')
+    expect(prompts[2]).toContain('Refunds')
+  })
+
+  it('scopes the guidance query to the turn surface, defaulting to widget', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true)
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+    expect(mockListGuidanceRules).toHaveBeenCalledWith({ enabledOnly: true, surface: 'widget' })
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'email' })
+    expect(mockListGuidanceRules).toHaveBeenCalledWith({ enabledOnly: true, surface: 'email' })
+  })
+
+  it('fetches surfaces + guidance in parallel, once per turn, before the attempt loop', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true)
+    // First stream yields nothing structured, forcing the documented retry.
+    mockChat
+      .mockReturnValueOnce(chunkStream([{ type: 'RUN_FINISHED', usage: undefined }]))
+      .mockReturnValueOnce(chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    // Config is turn-scoped, not per-attempt: a retry must not re-fetch it.
+    expect(mockGetAssistantSurfaces).toHaveBeenCalledTimes(1)
+    expect(mockListGuidanceRules).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('runAssistantTurn: registry-derived tool activity (E-6)', () => {
+  it('surfaces a tool-call activity for any name present in the assembled tool set', async () => {
+    mockAssembleAssistantTools.mockResolvedValue([
+      { name: 'future_tool', description: 'x', execute: async () => ({}) },
+    ])
+    mockChat.mockImplementation(() =>
+      chunkStream([
+        { type: 'TOOL_CALL_START', toolCallName: 'future_tool' },
+        ...completeRun({ text: 'ok', citations: [] }),
+      ])
+    )
+
+    const activities: Array<{ kind: string; tool?: string }> = []
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('hi'),
+      onActivity: (a) => activities.push(a),
+    })
+
+    expect(activities).toContainEqual({ kind: 'tool', tool: 'future_tool' })
+  })
+
+  it('ignores a tool-call chunk for a name outside the assembled tool set', async () => {
+    mockAssembleAssistantTools.mockResolvedValue([
+      { name: 'search_knowledge', description: 'x', execute: async () => ({}) },
+    ])
+    mockChat.mockImplementation(() =>
+      chunkStream([
+        { type: 'TOOL_CALL_START', toolCallName: 'not_assembled' },
+        ...completeRun({ text: 'ok', citations: [] }),
+      ])
+    )
+
+    const activities: Array<{ kind: string; tool?: string }> = []
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('hi'),
+      onActivity: (a) => activities.push(a),
+    })
+
+    expect(activities.some((a) => a.kind === 'tool')).toBe(false)
   })
 })
 

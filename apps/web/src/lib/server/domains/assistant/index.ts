@@ -70,6 +70,8 @@ export {
   resolveToolSpecs,
   searchKnowledgeTool,
   getConversationContextTool,
+  makeAssistantToolContext,
+  assistantGateEnvelopeSchema,
   SEARCH_BUDGET_PER_TURN,
   type ToolRiskClass,
   type ToolControlMode,
@@ -106,7 +108,7 @@ export {
 } from './tool-audit'
 
 // Quinn — tools + runtime
-export { createAssistantTools } from './assistant.tools'
+export { assembleAssistantTools } from './assistant.tools'
 export {
   runAssistantTurn,
   isAssistantConfigured,

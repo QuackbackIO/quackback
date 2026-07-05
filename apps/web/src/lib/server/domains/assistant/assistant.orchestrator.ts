@@ -106,6 +106,11 @@ export async function runAssistantTurnForConversation(
   const revived = await voidAssumedResolutionForConversation(conversationId)
   const active = revived ?? (await getActiveInvolvement(conversationId))
 
+  // The customer message this turn answers, for the write-tool idempotency
+  // key: a retried turn over the same message must key the same way.
+  const latestCustomerMessageId =
+    threadRows.filter((m) => m.senderType === 'visitor').at(-1)?.id ?? null
+
   // Ephemeral turn signals for the widget's live trace + streamed answer. These
   // go to the conversation channel ONLY (never the inbox) and are never
   // persisted; the final reply below is the durable record. `assistant_delta`
@@ -129,6 +134,9 @@ export async function runAssistantTurnForConversation(
     messages,
     assistantPrincipalId,
     conversationId,
+    surface: 'widget',
+    involvementId: active?.id ?? null,
+    latestCustomerMessageId,
     escalationAlreadyOffered: active?.escalationOfferedAt != null,
     onActivity: (activity) => {
       if (activity.kind === 'thinking') {

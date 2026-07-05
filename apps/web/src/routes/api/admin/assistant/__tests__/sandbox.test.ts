@@ -103,4 +103,19 @@ describe('POST /api/admin/assistant/sandbox', () => {
       data: { text: 'Here you go.', citations: [], escalation: null },
     })
   })
+
+  it('defaults the surface to widget when the request omits it', async () => {
+    await handleSandbox({ request: makeRequest(validBody) })
+    expect(mockRunAssistantTurn).toHaveBeenCalledWith(expect.objectContaining({ surface: 'widget' }))
+  })
+
+  it('passes an explicit surface through to the engine', async () => {
+    await handleSandbox({ request: makeRequest({ ...validBody, surface: 'email' }) })
+    expect(mockRunAssistantTurn).toHaveBeenCalledWith(expect.objectContaining({ surface: 'email' }))
+  })
+
+  it('400s on an unknown surface', async () => {
+    const res = await handleSandbox({ request: makeRequest({ ...validBody, surface: 'bogus' }) })
+    expect(res.status).toBe(400)
+  })
 })

@@ -13,7 +13,7 @@ const assistantMock = vi.hoisted(() => ({
   getAssistantPrincipal: vi.fn(async () => ({ id: 'principal_assistant' })),
   voidAssumedResolutionForConversation: vi.fn(async () => null),
   loadConversationThread: vi.fn(async () => [
-    { senderType: 'visitor', content: 'hi', author: null },
+    { id: 'conversation_message_1', senderType: 'visitor', content: 'hi', author: null },
   ]),
   mapRowsToThreadMessages: vi.fn(() => [{ sender: 'customer', content: 'hi' }]),
   respondEligible: vi.fn(() => true),
@@ -163,7 +163,7 @@ beforeEach(() => {
   assistantMock.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_assistant' })
   assistantMock.voidAssumedResolutionForConversation.mockResolvedValue(null)
   assistantMock.loadConversationThread.mockResolvedValue([
-    { senderType: 'visitor', content: 'hi', author: null },
+    { id: 'conversation_message_1', senderType: 'visitor', content: 'hi', author: null },
   ])
   assistantMock.mapRowsToThreadMessages.mockReturnValue([{ sender: 'customer', content: 'hi' }])
   assistantMock.respondEligible.mockReturnValue(true)
@@ -285,6 +285,38 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
     await runAssistantTurnForConversation(CONV)
     expect(assistantMock.runAssistantTurn).toHaveBeenCalledWith(
       expect.objectContaining({ escalationAlreadyOffered: true })
+    )
+  })
+
+  it('threads the active involvement id and the latest customer message id into the engine', async () => {
+    assistantMock.getActiveInvolvement.mockResolvedValue({
+      id: 'assistant_involvement_1',
+      escalationOfferedAt: new Date(),
+    })
+    assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
+    await runAssistantTurnForConversation(CONV)
+    expect(assistantMock.runAssistantTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        involvementId: 'assistant_involvement_1',
+        latestCustomerMessageId: 'conversation_message_1',
+      })
+    )
+  })
+
+  it('passes involvementId null before the first involvement opens', async () => {
+    assistantMock.getActiveInvolvement.mockResolvedValue(null)
+    assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
+    await runAssistantTurnForConversation(CONV)
+    expect(assistantMock.runAssistantTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ involvementId: null })
+    )
+  })
+
+  it('threads the widget surface into the engine', async () => {
+    assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
+    await runAssistantTurnForConversation(CONV)
+    expect(assistantMock.runAssistantTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: 'widget' })
     )
   })
 })

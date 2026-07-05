@@ -71,6 +71,30 @@ describe('assistant.toolspec registry completeness', () => {
     }
   })
 
+  // The model runtime validates execute results against outputSchema AFTER the
+  // pipeline wrapper runs. If a definition's schema rejects the gate envelopes,
+  // pending-approval / denied / duplicate / failed / simulated results reach
+  // the model as a generic validation error and the note never gets relayed.
+  it('every definition outputSchema admits the pipeline gate envelopes', () => {
+    const envelopes = [
+      { status: 'pending_approval', note: 'x' },
+      { status: 'denied', note: 'x' },
+      { status: 'skipped_duplicate', note: 'x' },
+      { status: 'failed', note: 'x' },
+      { simulated: true, summary: 'x' },
+    ]
+    for (const spec of specs) {
+      const schema = (spec.definition as { outputSchema?: { parse: (v: unknown) => unknown } })
+        .outputSchema
+      expect(schema, `${spec.name} has no outputSchema`).toBeDefined()
+      for (const envelope of envelopes) {
+        expect(
+          () => schema!.parse(envelope),
+          `${spec.name} outputSchema rejects ${JSON.stringify(envelope)}`
+        ).not.toThrow()
+      }
+    }
+  })
 })
 
 describe('search_knowledge spec', () => {
@@ -112,10 +136,17 @@ describe('get_conversation_context spec', () => {
 })
 
 describe('resolveToolSpecs', () => {
-  it('returns exactly the two read specs that exist today', () => {
+  it('returns exactly the read and write specs that exist today', () => {
     const names = resolveToolSpecs()
       .map((s) => s.name)
       .sort()
-    expect(names).toEqual(['get_conversation_context', 'search_knowledge'])
+    expect(names).toEqual([
+      'capture_feedback',
+      'create_ticket',
+      'end_conversation',
+      'get_conversation_context',
+      'search_knowledge',
+      'set_attribute',
+    ])
   })
 })

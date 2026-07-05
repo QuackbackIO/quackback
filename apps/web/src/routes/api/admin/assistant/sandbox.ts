@@ -21,6 +21,7 @@ import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { createSseStream, SSE_RESPONSE_HEADERS } from '@/lib/server/utils/sse'
 import { logger } from '@/lib/server/logger'
 import { SANDBOX_EVENTS } from '@/lib/shared/assistant/sandbox-contract'
+import { ASSISTANT_SURFACES } from '@/lib/shared/assistant/surfaces'
 
 const log = logger.child({ component: 'assistant-sandbox' })
 
@@ -37,6 +38,9 @@ const requestSchema = z.object({
     )
     .min(1)
     .max(MAX_MESSAGES),
+  // Lets the admin preview a non-default surface's saved instructions +
+  // guidance scoping; defaults to the messenger widget.
+  surface: z.enum(ASSISTANT_SURFACES).default('widget'),
 })
 
 function jsonError(status: number, code: string, message: string): Response {
@@ -82,6 +86,7 @@ export async function handleSandbox({ request }: { request: Request }): Promise<
         messages: parsed.messages,
         assistantPrincipalId: assistant.id,
         conversationId: null,
+        surface: parsed.surface,
         signal: request.signal,
         onTextDelta: (text) => sse.send(SANDBOX_EVENTS.delta, { text }),
       })
