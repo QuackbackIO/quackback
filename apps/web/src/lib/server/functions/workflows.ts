@@ -1,11 +1,11 @@
 /**
  * Server functions for workflows (support platform §4.6): the AI & Automation
- * manager's CRUD + lifecycle. Gated on routing.manage — workflows ARE the routing
- * engine, so they reuse that permission (no new key). Graph + trigger settings are
- * validated on write via the shared schemas so a malformed automation is rejected
- * at the boundary rather than stored and silently no-op'd by the engine. Returns
- * JSON-safe DTOs (Dates -> ISO, ids as plain strings), the shape server functions
- * serialize.
+ * manager's CRUD + lifecycle. Reads stay on routing.manage (workflows are part of
+ * the routing surface); mutations gate on the dedicated workflow.manage key. Graph
+ * + trigger settings are validated on write via the shared schemas so a malformed
+ * automation is rejected at the boundary rather than stored and silently no-op'd
+ * by the engine. Returns JSON-safe DTOs (Dates -> ISO, ids as plain strings), the
+ * shape server functions serialize.
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
@@ -108,7 +108,7 @@ export const getWorkflowFn = createServerFn({ method: 'GET' })
 export const createWorkflowFn = createServerFn({ method: 'POST' })
   .validator(createSchema)
   .handler(async ({ data }): Promise<WorkflowDTO> => {
-    const ctx = await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    const ctx = await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
     return serializeWorkflow(
       await createWorkflow({
         name: data.name,
@@ -125,7 +125,7 @@ export const createWorkflowFn = createServerFn({ method: 'POST' })
 export const updateWorkflowFn = createServerFn({ method: 'POST' })
   .validator(updateSchema)
   .handler(async ({ data }): Promise<WorkflowDTO> => {
-    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
     return serializeWorkflow(
       await updateWorkflow(data.id as WorkflowId, {
         name: data.name,
@@ -141,14 +141,14 @@ export const updateWorkflowFn = createServerFn({ method: 'POST' })
 export const setWorkflowStatusFn = createServerFn({ method: 'POST' })
   .validator(setStatusSchema)
   .handler(async ({ data }): Promise<WorkflowDTO> => {
-    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
     return serializeWorkflow(await setWorkflowStatus(data.id as WorkflowId, data.status))
   })
 
 export const deleteWorkflowFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }): Promise<{ id: string }> => {
-    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
     await softDeleteWorkflow(data.id as WorkflowId)
     return { id: data.id }
   })

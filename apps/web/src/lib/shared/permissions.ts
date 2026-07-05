@@ -116,6 +116,7 @@ export const PERMISSIONS = {
   SLA_MANAGE: 'sla.manage',
   ROUTING_MANAGE: 'routing.manage',
   TEAM_MANAGE: 'team.manage',
+  WORKFLOW_MANAGE: 'workflow.manage',
   CHANNEL_ACCOUNT_MANAGE: 'channel_account.manage',
 } as const
 
@@ -174,6 +175,7 @@ export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.SLA_MANAGE,
   PERMISSIONS.ROUTING_MANAGE,
   PERMISSIONS.TEAM_MANAGE,
+  PERMISSIONS.WORKFLOW_MANAGE,
   PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
 ]
 
@@ -311,5 +313,6 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   { key: PERMISSIONS.SLA_MANAGE, category: 'support' },
   { key: PERMISSIONS.ROUTING_MANAGE, category: 'support' },
   { key: PERMISSIONS.TEAM_MANAGE, category: 'support' },
+  { key: PERMISSIONS.WORKFLOW_MANAGE, category: 'support' },
   { key: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE, category: 'support' },
 ]

@@ -90,11 +90,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | sla.manage | support | ✓ | · |
 | routing.manage | support | ✓ | · |
 | team.manage | support | ✓ | · |
+| workflow.manage | support | ✓ | · |
 | channel_account.manage | support | ✓ | · |
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 407 surfaces
+### Server functions (`requireAuth`) — 415 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -371,6 +372,14 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::updateOfficeHoursFn | settings.manage |
 | `lib/server/functions/settings.ts`::getEmailChannelStatusFn | settings.manage |
 | `lib/server/functions/settings.ts`::updateModerationDefaultFn | settings.moderation |
+| `lib/server/functions/sla.ts`::listSlaPoliciesFn | sla.manage |
+| `lib/server/functions/sla.ts`::listSlaPolicyOptionsFn | conversation.view |
+| `lib/server/functions/sla.ts`::listSlaScheduleOptionsFn | sla.manage |
+| `lib/server/functions/sla.ts`::createSlaPolicyFn | sla.manage |
+| `lib/server/functions/sla.ts`::updateSlaPolicyFn | sla.manage |
+| `lib/server/functions/sla.ts`::archiveSlaPolicyFn | sla.manage |
+| `lib/server/functions/sla.ts`::restoreSlaPolicyFn | sla.manage |
+| `lib/server/functions/sla.ts`::removeConversationSlaFn | conversation.set_status |
 | `lib/server/functions/sso-test.ts`::startSsoTestFn | auth.manage |
 | `lib/server/functions/sso-test.ts`::getSsoTestResultFn | auth.manage |
 | `lib/server/functions/sso.ts`::clearSsoClientSecretFn | auth.manage |
@@ -455,10 +464,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/webhooks.ts`::rotateWebhookSecretFn | webhook.manage |
 | `lib/server/functions/workflows.ts`::listWorkflowsFn | routing.manage |
 | `lib/server/functions/workflows.ts`::getWorkflowFn | routing.manage |
-| `lib/server/functions/workflows.ts`::createWorkflowFn | routing.manage |
-| `lib/server/functions/workflows.ts`::updateWorkflowFn | routing.manage |
-| `lib/server/functions/workflows.ts`::setWorkflowStatusFn | routing.manage |
-| `lib/server/functions/workflows.ts`::deleteWorkflowFn | routing.manage |
+| `lib/server/functions/workflows.ts`::createWorkflowFn | workflow.manage |
+| `lib/server/functions/workflows.ts`::updateWorkflowFn | workflow.manage |
+| `lib/server/functions/workflows.ts`::setWorkflowStatusFn | workflow.manage |
+| `lib/server/functions/workflows.ts`::deleteWorkflowFn | workflow.manage |
 | `lib/server/integrations/asana/functions.ts`::getAsanaConnectUrl | integration.manage |
 | `lib/server/integrations/asana/functions.ts`::fetchAsanaProjectsFn | integration.manage |
 | `lib/server/integrations/azure-devops/functions.ts`::connectAzureDevOpsFn | integration.manage |
@@ -671,7 +680,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-152 of 643 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+152 of 651 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

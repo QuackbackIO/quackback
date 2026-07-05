@@ -128,6 +128,7 @@ export const PERMISSIONS = {
   SLA_MANAGE: 'sla.manage', // manage SLA policies (workspace-admin)
   ROUTING_MANAGE: 'routing.manage', // manage routing rules (workspace-admin)
   TEAM_MANAGE: 'team.manage', // manage teams + membership (workspace-admin)
+  WORKFLOW_MANAGE: 'workflow.manage', // create / update / delete / status workflows (workspace-admin)
   CHANNEL_ACCOUNT_MANAGE: 'channel_account.manage', // manage connected inbox channels (workspace-admin; was inbox.manage)
 } as const
 
@@ -540,6 +541,11 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
     description: 'Manage teams and membership',
   },
   {
+    key: PERMISSIONS.WORKFLOW_MANAGE,
+    category: 'support',
+    description: 'Manage workflows and automation',
+  },
+  {
     key: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
     category: 'support',
     description: 'Manage connected inbox channels (email / widget accounts)',
@@ -584,6 +590,7 @@ export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.SLA_MANAGE,
   PERMISSIONS.ROUTING_MANAGE,
   PERMISSIONS.TEAM_MANAGE,
+  PERMISSIONS.WORKFLOW_MANAGE,
   PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
 ]
 
