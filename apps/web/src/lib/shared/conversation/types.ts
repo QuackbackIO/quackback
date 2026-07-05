@@ -156,6 +156,14 @@ export interface AgentConversationMessageDTO extends ConversationMessageDTO {
   /** Agent-only AI suggestion to track this conversation as a post; null
    *  otherwise. Never on the base DTO, so it never reaches the visitor. */
   postSuggestion: { boardId: string; title: string; content: string } | null
+  /** Agent-only pointer to a Quinn write-tool proposal awaiting approval,
+   *  surfaced on the internal note that announced it. Just enough to render the
+   *  card and look up the live pending-action row for its current status — the
+   *  row, not this pointer, is the source of truth. Optional (unlike
+   *  `postSuggestion`) because the realtime `message` event carries the base DTO
+   *  without agent enrichment; a live-pushed note picks it up once the thread
+   *  next reloads. Never on the base DTO, so it never reaches the visitor. */
+  assistantPendingAction?: { pendingActionId: string; toolName: string; summary: string }
 }
 
 /** A flagged ("Saved for later") message for the per-agent saved feed: enough

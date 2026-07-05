@@ -1,6 +1,7 @@
-import { Link, useRouterState } from '@tanstack/react-router'
-import { SparklesIcon, BoltIcon, BeakerIcon } from '@heroicons/react/24/solid'
+import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
+import { SparklesIcon, BoltIcon, BeakerIcon, CircleStackIcon } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
 
 interface NavItem {
   label: string
@@ -8,20 +9,37 @@ interface NavItem {
   icon: typeof SparklesIcon
 }
 
-const navItems: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   { label: 'Assistant', to: '/admin/automation/assistant', icon: SparklesIcon },
   { label: 'Workflows', to: '/admin/automation/workflows', icon: BoltIcon },
   { label: 'Sandbox', to: '/admin/automation/sandbox', icon: BeakerIcon },
 ]
 
+/** Data connectors only appears once its flag is on, mirroring the flag-gated
+ *  items in settings-nav.tsx's buildNavSections. */
+export function buildAutomationNavItems(flags?: { dataConnectors?: boolean }): NavItem[] {
+  const items = [...BASE_NAV_ITEMS]
+  if (flags?.dataConnectors) {
+    items.push({
+      label: 'Data connectors',
+      to: '/admin/automation/connectors',
+      icon: CircleStackIcon,
+    })
+  }
+  return items
+}
+
 /**
  * Left sub-nav for the AI & Automation area. Flat (no accordions, unlike
- * SettingsNav's Products group) since the area only has three pages today;
+ * SettingsNav's Products group) since the area only has a few pages today;
  * Knowledge joins later per SUPPORT-PLATFORM-SPEC §4.7 Track Q. Reuses the
  * SettingsNav card/link styling idioms so the area feels native.
  */
 export function AutomationNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const { settings } = useRouteContext({ from: '__root__' })
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+  const navItems = buildAutomationNavItems(flags)
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/20 bg-gradient-to-b from-foreground/[0.04] to-transparent">

@@ -32,6 +32,7 @@ import {
   type Conversation,
   type ConversationMessage,
   type PostSuggestion,
+  type AssistantPendingActionSurface,
   type AssistantInvolvementStatus,
 } from '@/lib/server/db'
 import {
@@ -186,12 +187,15 @@ async function loadFlagsForMessages(
  * The post suggestion is supplied in-memory via `postSuggestions` (built by
  * `listMessages` from the rows it already loaded) — it is NOT re-read here, so
  * there's no second `SELECT metadata` round-trip. The map is keyed by message id
- * and only ever carries internal-note suggestions.
+ * and only ever carries internal-note suggestions. `pendingActionPointers`
+ * mirrors it for Quinn's approval-gated proposals: a pointer only, not the
+ * live status — the approval card re-fetches the pending-action row itself.
  */
 export async function enrichMessagesForAgent(
   messages: ConversationMessageDTO[],
   viewerPrincipalId: PrincipalId,
-  postSuggestions: Map<ConversationMessageId, PostSuggestion>
+  postSuggestions: Map<ConversationMessageId, PostSuggestion>,
+  pendingActionPointers: Map<ConversationMessageId, AssistantPendingActionSurface> = new Map()
 ): Promise<AgentConversationMessageDTO[]> {
   const ids = messages.map((m) => m.id)
   const [reactions, flags] = await Promise.all([
@@ -203,6 +207,7 @@ export async function enrichMessagesForAgent(
     reactions: reactions.get(m.id) ?? [],
     flaggedAt: flags.get(m.id) ?? null,
     postSuggestion: postSuggestions.get(m.id) ?? null,
+    assistantPendingAction: pendingActionPointers.get(m.id) ?? undefined,
   }))
 }
 
@@ -639,6 +644,11 @@ export interface MessagePage {
    *  client response — the suggestion is agent-only. Empty whenever internal
    *  notes aren't loaded (every visitor path). */
   postSuggestions: Map<ConversationMessageId, PostSuggestion>
+  /** Agent-only pending-action pointers carried on internal notes, keyed by
+   *  message id — the same in-memory idiom as `postSuggestions` (no extra
+   *  query). Consumed by `enrichMessagesForAgent`; MUST NOT be serialized to a
+   *  client response. Empty whenever internal notes aren't loaded. */
+  pendingActionPointers: Map<ConversationMessageId, AssistantPendingActionSurface>
 }
 
 /**
@@ -729,9 +739,12 @@ export async function listMessages(
   // second `SELECT metadata` round-trip. `toMessageDTO` deliberately drops the
   // metadata, so this map is the only carrier — and it never leaves the server.
   const postSuggestions = new Map<ConversationMessageId, PostSuggestion>()
+  const pendingActionPointers = new Map<ConversationMessageId, AssistantPendingActionSurface>()
   for (const m of page) {
     const suggestion = m.metadata?.postSuggestion
     if (m.isInternal && suggestion) postSuggestions.set(m.id, suggestion)
+    const pendingAction = m.metadata?.assistantPendingAction
+    if (m.isInternal && pendingAction) pendingActionPointers.set(m.id, pendingAction)
   }
   return {
     messages: ordered.map((m) =>
@@ -745,6 +758,7 @@ export async function listMessages(
     hasMore,
     nextCursor: page.length > 0 ? page[page.length - 1].id : null,
     postSuggestions,
+    pendingActionPointers,
   }
 }
 

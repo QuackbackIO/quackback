@@ -555,18 +555,23 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
       await assertConversationViewable(data.conversationId as ConversationId, actor)
       const isTeam = isTeamMember(ctx.principal.role)
       // Agents keep seeing internal notes when paging older messages; visitors never do.
-      // The agent-only `postSuggestions` map is pulled out here so it's consumed by
-      // the enrichment and never serialized into the response.
-      const { postSuggestions, ...page } = await listMessages(
+      // The agent-only `postSuggestions`/`pendingActionPointers` maps are pulled out
+      // here so they're consumed by the enrichment and never serialized into the response.
+      const { postSuggestions, pendingActionPointers, ...page } = await listMessages(
         data.conversationId as ConversationId,
         { before: data.before, includeInternal: isTeam }
       )
-      // Team members get the agent-only reaction/flag/suggestion enrichment on
-      // older messages too; the visitor path returns the clean base DTOs.
+      // Team members get the agent-only reaction/flag/suggestion/pending-action
+      // enrichment on older messages too; the visitor path returns the clean base DTOs.
       if (isTeam) {
         return {
           ...page,
-          messages: await enrichMessagesForAgent(page.messages, ctx.principal.id, postSuggestions),
+          messages: await enrichMessagesForAgent(
+            page.messages,
+            ctx.principal.id,
+            postSuggestions,
+            pendingActionPointers
+          ),
         }
       }
       return page
@@ -882,13 +887,14 @@ export const getConversationFn = createServerFn({ method: 'GET' })
         listMessages(conversation.id, { before: data.before, includeInternal: true }),
       ])
       // Upgrade to AgentConversationMessageDTO[] by attaching the agent-only reaction +
-      // flag + post-suggestion fields. This enrichment runs ONLY on the agent
-      // thread path; no visitor path calls it, so those fields can't reach the
-      // widget. The suggestion map rides in-memory off `listMessages` (no re-read).
+      // flag + post-suggestion + pending-action fields. This enrichment runs ONLY on
+      // the agent thread path; no visitor path calls it, so those fields can't reach
+      // the widget. Both maps ride in-memory off `listMessages` (no re-read).
       const messages = await enrichMessagesForAgent(
         page.messages,
         ctx.principal.id,
-        page.postSuggestions
+        page.postSuggestions,
+        page.pendingActionPointers
       )
       return { conversation: dto, messages, hasMore: page.hasMore }
     } catch (error) {

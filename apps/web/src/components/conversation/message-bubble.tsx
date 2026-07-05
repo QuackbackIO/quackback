@@ -55,6 +55,7 @@ import {
   AssistantSourcesTrace,
   AssistantAnswer,
 } from '@/components/shared/conversation/assistant-turn'
+import { PendingActionCard } from '@/components/conversation/pending-action-card'
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -174,6 +175,10 @@ export function AgentMessageBubble({
   // entry into the convert dialog. Captured as a const so the click handler can
   // safely pass the narrowed (non-null) value into `onTrackSuggestion`.
   const suggestion = isNote ? message.postSuggestion : null
+  // Agent-only pointer to a Quinn write-tool proposal awaiting approval
+  // (populated only on the internal note that announced it); the card fetches
+  // the live pending-action row itself, so this only needs to render once.
+  const pendingAction = isNote ? message.assistantPendingAction : null
 
   return (
     <div
@@ -250,6 +255,12 @@ export function AgentMessageBubble({
                   <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Track as feedback
                 </button>
               </div>
+            )}
+            {pendingAction && (
+              <PendingActionCard
+                pendingActionId={pendingAction.pendingActionId}
+                summary={pendingAction.summary}
+              />
             )}
           </>
         ) : isJumboEmojiMessage(message.content, message.contentJson) ? (

@@ -1,11 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { SparklesIcon } from '@heroicons/react/24/solid'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { AssistantIdentityCard } from '@/components/admin/automation/assistant-identity-card'
 import { SupportPerformanceCard } from '@/components/admin/automation/support-performance-card'
+import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
+import { ToolControlsCard } from '@/components/admin/automation/tool-controls-card'
+import { SurfaceInstructionsCard } from '@/components/admin/automation/surface-instructions-card'
 
 export const Route = createFileRoute('/admin/automation/assistant')({
   loader: async ({ context }) => {
@@ -23,6 +27,8 @@ export const Route = createFileRoute('/admin/automation/assistant')({
 function AssistantPage() {
   const widgetConfigQuery = useSuspenseQuery(settingsQueries.widgetConfig())
   const assistant = widgetConfigQuery.data.messenger?.assistant
+  const { settings } = Route.useRouteContext()
+  const flags = settings?.featureFlags as FeatureFlags | undefined
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -45,6 +51,19 @@ function AssistantPage() {
       />
 
       <SupportPerformanceCard />
+
+      {flags?.assistantActions ? (
+        <>
+          <GuidanceRulesCard />
+          <ToolControlsCard />
+          <SurfaceInstructionsCard />
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Enable Assistant actions in Labs to configure guidance rules, tool controls, and surface
+          instructions.
+        </p>
+      )}
     </div>
   )
 }

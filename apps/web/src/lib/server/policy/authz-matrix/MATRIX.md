@@ -97,7 +97,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 473 surfaces
+### Server functions (`requireAuth`) — 480 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -146,6 +146,13 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/api-keys.ts`::revokeApiKeyFn | api_key.manage |
 | `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | conversation.view |
 | `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | conversation.view |
+| `lib/server/functions/assistant-guidance.ts`::listGuidanceRulesFn | assistant.manage |
+| `lib/server/functions/assistant-guidance.ts`::createGuidanceRuleFn | assistant.manage |
+| `lib/server/functions/assistant-guidance.ts`::updateGuidanceRuleFn | assistant.manage |
+| `lib/server/functions/assistant-guidance.ts`::reorderGuidanceRulesFn | assistant.manage |
+| `lib/server/functions/assistant-guidance.ts`::deleteGuidanceRuleFn | assistant.manage |
+| `lib/server/functions/assistant-guidance.ts`::listAssistantToolsFn | assistant.manage |
+| `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | conversation.view |
 | `lib/server/functions/assistant-settings.ts`::getAssistantSettingsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantToolControlsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantSurfacesFn | assistant.manage |
@@ -742,7 +749,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-158 of 717 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+158 of 724 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
