@@ -33,6 +33,9 @@ import {
   updateAssistantToolControls,
   getAssistantSurfaces,
   updateAssistantSurfaces,
+  getAssistantBasics,
+  updateAssistantBasics,
+  getAssistantConfig,
 } from '../settings.assistant'
 
 function settingsRow(metadata: Record<string, unknown> | null = null) {
@@ -141,5 +144,77 @@ describe('assistant surfaces', () => {
   it('normalizes whitespace-only instructions to the key being dropped', async () => {
     const result = await updateAssistantSurfaces({ widget: { instructions: '   ' } })
     expect(result).toEqual({})
+  })
+})
+
+describe('assistant basics', () => {
+  it('returns {} when unset', async () => {
+    expect(await getAssistantBasics()).toEqual({})
+  })
+
+  it('resolves a previously saved preset', async () => {
+    hoisted.mockRequireSettings.mockResolvedValue(
+      settingsRow({ assistantBasics: { tone: 'friendly', length: 'concise' } })
+    )
+    expect(await getAssistantBasics()).toEqual({ tone: 'friendly', length: 'concise' })
+  })
+
+  it('roundtrips a write through writeMetadataKey', async () => {
+    const result = await updateAssistantBasics({ tone: 'professional', length: 'thorough' })
+    expect(result).toEqual({ tone: 'professional', length: 'thorough' })
+    expect(hoisted.mockWriteMetadataKey).toHaveBeenCalledWith('assistantBasics', {
+      tone: 'professional',
+      length: 'thorough',
+    })
+  })
+
+  it('accepts a partial preset (tone only, or length only)', async () => {
+    expect(await updateAssistantBasics({ tone: 'neutral' })).toEqual({ tone: 'neutral' })
+    expect(await updateAssistantBasics({ length: 'standard' })).toEqual({ length: 'standard' })
+  })
+
+  it('accepts an empty object, clearing any saved preset', async () => {
+    const result = await updateAssistantBasics({})
+    expect(result).toEqual({})
+    expect(hoisted.mockWriteMetadataKey).toHaveBeenCalledWith('assistantBasics', {})
+  })
+
+  it('rejects an invalid tone value', async () => {
+    await expect(updateAssistantBasics({ tone: 'sarcastic' } as never)).rejects.toThrow()
+    expect(hoisted.mockWriteMetadataKey).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid length value', async () => {
+    await expect(updateAssistantBasics({ length: 'novel' } as never)).rejects.toThrow()
+    expect(hoisted.mockWriteMetadataKey).not.toHaveBeenCalled()
+  })
+
+  it('leaves sibling metadata keys untouched (writeMetadataKey owns the merge)', async () => {
+    await updateAssistantBasics({ tone: 'friendly' })
+    expect(hoisted.mockWriteMetadataKey).toHaveBeenCalledTimes(1)
+    expect(hoisted.mockWriteMetadataKey).toHaveBeenCalledWith('assistantBasics', { tone: 'friendly' })
+  })
+})
+
+describe('getAssistantConfig', () => {
+  it('resolves all three namespaces off a single settings read', async () => {
+    hoisted.mockRequireSettings.mockResolvedValue(
+      settingsRow({
+        assistantToolControls: { end_conversation: 'approval' },
+        assistantSurfaces: { widget: { instructions: 'Be concise.' } },
+        assistantBasics: { tone: 'friendly', length: 'concise' },
+      })
+    )
+
+    expect(await getAssistantConfig()).toEqual({
+      toolControls: { end_conversation: 'approval' },
+      surfaces: { widget: { instructions: 'Be concise.' } },
+      basics: { tone: 'friendly', length: 'concise' },
+    })
+    expect(hoisted.mockRequireSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves to empty defaults when nothing is saved', async () => {
+    expect(await getAssistantConfig()).toEqual({ toolControls: {}, surfaces: {}, basics: {} })
   })
 })

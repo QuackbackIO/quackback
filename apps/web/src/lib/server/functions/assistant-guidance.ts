@@ -9,18 +9,21 @@ import { createServerFn } from '@tanstack/react-start'
 import type { AssistantGuidanceRuleId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ASSISTANT_SURFACES } from '@/lib/shared/assistant/surfaces'
+import { ASSISTANT_GUIDANCE_CATEGORIES } from '@/lib/shared/assistant/guidance-categories'
 import { logger } from '@/lib/server/logger'
 import { requireAuth } from './auth-helpers'
 
 const log = logger.child({ component: 'assistant-guidance' })
 
 const surfacesSchema = z.array(z.enum(ASSISTANT_SURFACES)).nullable().optional()
+const categorySchema = z.enum(ASSISTANT_GUIDANCE_CATEGORIES).optional()
 
 const createGuidanceRuleSchema = z.object({
   title: z.string().min(1).max(80),
   body: z.string().min(1).max(1000),
   enabled: z.boolean().optional(),
   surfaces: surfacesSchema,
+  category: categorySchema,
 })
 
 const updateGuidanceRuleSchema = z.object({
@@ -29,6 +32,7 @@ const updateGuidanceRuleSchema = z.object({
   body: z.string().min(1).max(1000).optional(),
   enabled: z.boolean().optional(),
   surfaces: surfacesSchema,
+  category: categorySchema,
 })
 
 const reorderGuidanceRulesSchema = z.object({
@@ -65,6 +69,7 @@ export const createGuidanceRuleFn = createServerFn({ method: 'POST' })
         body: data.body,
         enabled: data.enabled,
         surfaces: data.surfaces,
+        category: data.category,
         createdById: ctx.principal.id,
       })
     } catch (error) {
@@ -85,6 +90,7 @@ export const updateGuidanceRuleFn = createServerFn({ method: 'POST' })
         body: data.body,
         enabled: data.enabled,
         surfaces: data.surfaces,
+        category: data.category,
       })
     } catch (error) {
       log.error({ err: error }, 'update guidance rule failed')

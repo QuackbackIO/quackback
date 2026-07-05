@@ -1,7 +1,8 @@
-/** Assistant customization mutations: guidance-rule CRUD/reorder, tool controls, and surface instructions. */
+/** Assistant customization mutations: guidance-rule CRUD/reorder, tool controls, surface instructions, and the Basics preset. */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { AssistantGuidanceRuleId } from '@quackback/ids'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
+import type { AssistantGuidanceCategory } from '@/lib/shared/assistant/guidance-categories'
 import {
   createGuidanceRuleFn,
   updateGuidanceRuleFn,
@@ -11,6 +12,7 @@ import {
 import {
   updateAssistantToolControlsFn,
   updateAssistantSurfacesFn,
+  updateAssistantBasicsFn,
 } from '@/lib/server/functions/assistant-settings'
 import { assistantKeys } from '@/lib/client/queries/assistant'
 
@@ -20,6 +22,7 @@ export interface GuidanceRuleInput {
   enabled?: boolean
   /** Empty/omitted = every surface. */
   surfaces?: AssistantSurface[] | null
+  category?: AssistantGuidanceCategory
 }
 
 export function useCreateGuidanceRule() {
@@ -69,6 +72,15 @@ export function useUpdateAssistantSurfaces() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateAssistantSurfacesFn>[0]['data']) =>
       updateAssistantSurfacesFn({ data }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: assistantKeys.settings() }),
+  })
+}
+
+export function useUpdateAssistantBasics() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateAssistantBasicsFn>[0]['data']) =>
+      updateAssistantBasicsFn({ data }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: assistantKeys.settings() }),
   })
 }

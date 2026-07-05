@@ -1170,6 +1170,20 @@
       "when": 1784766480000,
       "tag": "0166_data_connectors",
       "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "7",
+      "when": 1784766540000,
+      "tag": "0167_guidance_categories",
+      "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1784766600000,
+      "tag": "0168_assistant_analytics_indexes",
+      "breakpoints": true
     }
   ]
 }

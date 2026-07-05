@@ -71,15 +71,16 @@ vi.mock('@/lib/server/domains/connectors/connector.toolspec', () => ({
   listEnabledConnectorToolSpecs: vi.fn().mockResolvedValue([]),
 }))
 
-// Surface instructions + guidance rules are only read when actions are on
-// (asserted explicitly below); default to nothing saved.
-const mockGetAssistantSurfaces = vi.fn()
-// assembleAssistantTools also reads tool controls from this module once
-// actions are on; stub it so the "flag on" prompt-assembly tests (which
-// exercise the real tool assembly) don't need to know about tool controls.
+// Surfaces, basics, tool controls, and guidance rules are only read when
+// actions are on (asserted explicitly below); default to nothing saved.
+// getAssistantConfig is the runtime's one-read-per-turn entry point;
+// getAssistantToolControls stays stubbed too so a test can prove the real
+// assembleAssistantTools never falls back to fetching it on its own once the
+// runtime already has controls in hand.
+const mockGetAssistantConfig = vi.fn()
 const mockGetAssistantToolControls = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
-  getAssistantSurfaces: (...args: unknown[]) => mockGetAssistantSurfaces(...args),
+  getAssistantConfig: (...args: unknown[]) => mockGetAssistantConfig(...args),
   getAssistantToolControls: (...args: unknown[]) => mockGetAssistantToolControls(...args),
 }))
 
@@ -114,6 +115,7 @@ import {
   isSubstantiveAnswer,
   buildAssistantSystemPrompt,
   buildSurfaceInstructionsPrompt,
+  buildBasicsPrompt,
   buildGuidancePrompt,
   isAssistantConfigured,
   AssistantNotConfiguredError,
@@ -155,7 +157,7 @@ beforeEach(() => {
   mockConfig.aiChatModel = 'test-model'
   mockConfig.aiHelpCenterModel = undefined
   mockIsFeatureEnabled.mockResolvedValue(false)
-  mockGetAssistantSurfaces.mockResolvedValue({})
+  mockGetAssistantConfig.mockResolvedValue({ toolControls: {}, surfaces: {}, basics: {} })
   mockGetAssistantToolControls.mockResolvedValue({})
   mockListGuidanceRules.mockResolvedValue([])
   mockAssembleAssistantTools.mockImplementation((...args: unknown[]) =>
@@ -317,6 +319,40 @@ describe('buildSurfaceInstructionsPrompt', () => {
 
   it('contains no em dashes', () => {
     const block = buildSurfaceInstructionsPrompt('Be concise.')
+    expect(block).not.toContain('—')
+  })
+})
+
+describe('buildBasicsPrompt', () => {
+  it('returns null when neither tone nor length is set', () => {
+    expect(buildBasicsPrompt(undefined)).toBeNull()
+    expect(buildBasicsPrompt(null)).toBeNull()
+    expect(buildBasicsPrompt({})).toBeNull()
+  })
+
+  it('renders a tone-only directive', () => {
+    expect(buildBasicsPrompt({ tone: 'friendly' })).toBe('Write in a friendly tone.')
+  })
+
+  it('renders a length-only directive', () => {
+    expect(buildBasicsPrompt({ length: 'concise' })).toBe('Keep answers concise.')
+  })
+
+  it('renders both as two sentences, tone then length', () => {
+    expect(buildBasicsPrompt({ tone: 'friendly', length: 'concise' })).toBe(
+      'Write in a friendly tone. Keep answers concise.'
+    )
+  })
+
+  it('covers every tone and length value', () => {
+    expect(buildBasicsPrompt({ tone: 'neutral' })).toBe('Write in a neutral tone.')
+    expect(buildBasicsPrompt({ tone: 'professional' })).toBe('Write in a professional tone.')
+    expect(buildBasicsPrompt({ length: 'standard' })).toBe('Keep answers to a standard length.')
+    expect(buildBasicsPrompt({ length: 'thorough' })).toBe('Give thorough, detailed answers.')
+  })
+
+  it('contains no em dashes', () => {
+    const block = buildBasicsPrompt({ tone: 'professional', length: 'thorough' })
     expect(block).not.toContain('—')
   })
 })
@@ -640,7 +676,7 @@ describe('runAssistantTurn', () => {
   })
 })
 
-describe('runAssistantTurn: prompt assembly (surface instructions + guidance)', () => {
+describe('runAssistantTurn: prompt assembly (basics + surface instructions + guidance)', () => {
   function systemPromptsFromLastCall(): string[] {
     const opts = mockChat.mock.calls.at(-1)?.[0] as { systemPrompts: string[] }
     return opts.systemPrompts
@@ -653,13 +689,13 @@ describe('runAssistantTurn: prompt assembly (surface instructions + guidance)', 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
 
     expect(systemPromptsFromLastCall()).toEqual(buildAssistantSystemPrompt('Quinn'))
-    expect(mockGetAssistantSurfaces).not.toHaveBeenCalled()
+    expect(mockGetAssistantConfig).not.toHaveBeenCalled()
     expect(mockListGuidanceRules).not.toHaveBeenCalled()
   })
 
   it('flag on but nothing saved: still byte-identical to the base prompt', async () => {
     mockActionsFlag(true)
-    mockGetAssistantSurfaces.mockResolvedValue({})
+    mockGetAssistantConfig.mockResolvedValue({ toolControls: {}, surfaces: {}, basics: {} })
     mockListGuidanceRules.mockResolvedValue([])
     mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
 
@@ -668,9 +704,33 @@ describe('runAssistantTurn: prompt assembly (surface instructions + guidance)', 
     expect(systemPromptsFromLastCall()).toEqual(buildAssistantSystemPrompt('Quinn'))
   })
 
-  it('assembles base -> surface instructions -> guidance, in that order', async () => {
+  it('assembles base -> basics -> surface instructions -> guidance, in that order', async () => {
     mockActionsFlag(true)
-    mockGetAssistantSurfaces.mockResolvedValue({ widget: { instructions: 'Be extra warm.' } })
+    mockGetAssistantConfig.mockResolvedValue({
+      toolControls: {},
+      basics: { tone: 'friendly', length: 'concise' },
+      surfaces: { widget: { instructions: 'Be extra warm.' } },
+    })
+    mockListGuidanceRules.mockResolvedValue([{ title: 'Refunds', body: 'Mention the policy.' }])
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'widget' })
+
+    const prompts = systemPromptsFromLastCall()
+    expect(prompts).toHaveLength(4)
+    expect(prompts[0]).toEqual(buildAssistantSystemPrompt('Quinn')[0])
+    expect(prompts[1]).toBe('Write in a friendly tone. Keep answers concise.')
+    expect(prompts[2]).toContain('Be extra warm.')
+    expect(prompts[3]).toContain('Refunds')
+  })
+
+  it('adds no basics element when nothing is saved, even with surface + guidance present', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantConfig.mockResolvedValue({
+      toolControls: {},
+      basics: {},
+      surfaces: { widget: { instructions: 'Be extra warm.' } },
+    })
     mockListGuidanceRules.mockResolvedValue([{ title: 'Refunds', body: 'Mention the policy.' }])
     mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
 
@@ -678,7 +738,6 @@ describe('runAssistantTurn: prompt assembly (surface instructions + guidance)', 
 
     const prompts = systemPromptsFromLastCall()
     expect(prompts).toHaveLength(3)
-    expect(prompts[0]).toEqual(buildAssistantSystemPrompt('Quinn')[0])
     expect(prompts[1]).toContain('Be extra warm.')
     expect(prompts[2]).toContain('Refunds')
   })
@@ -694,7 +753,7 @@ describe('runAssistantTurn: prompt assembly (surface instructions + guidance)', 
     expect(mockListGuidanceRules).toHaveBeenCalledWith({ enabledOnly: true, surface: 'email' })
   })
 
-  it('fetches surfaces + guidance in parallel, once per turn, before the attempt loop', async () => {
+  it('fetches assistant config + guidance in parallel, once per turn, before the attempt loop', async () => {
     mockActionsFlag(true)
     // First stream yields nothing structured, forcing the documented retry.
     mockChat
@@ -704,8 +763,23 @@ describe('runAssistantTurn: prompt assembly (surface instructions + guidance)', 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
 
     // Config is turn-scoped, not per-attempt: a retry must not re-fetch it.
-    expect(mockGetAssistantSurfaces).toHaveBeenCalledTimes(1)
+    expect(mockGetAssistantConfig).toHaveBeenCalledTimes(1)
     expect(mockListGuidanceRules).toHaveBeenCalledTimes(1)
+  })
+
+  it('shares the one getAssistantConfig read with tool assembly: assembleAssistantTools never re-fetches controls', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantConfig.mockResolvedValue({
+      toolControls: { search_knowledge: 'disabled' },
+      surfaces: {},
+      basics: {},
+    })
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    expect(mockGetAssistantConfig).toHaveBeenCalledTimes(1)
+    expect(mockGetAssistantToolControls).not.toHaveBeenCalled()
   })
 })
 

@@ -458,6 +458,8 @@ export interface AssistantIdentityConfig {
   avatarUrl?: string
   /** Whether the assistant actually replies (vs. identity-only). Default false. */
   respond?: boolean
+  /** Whether to show an "AI" label after the assistant name. Default false. */
+  showAiLabel?: boolean
 }
 
 export interface MessengerConfig {

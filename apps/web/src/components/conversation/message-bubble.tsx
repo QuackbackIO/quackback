@@ -114,6 +114,8 @@ interface VisitorMessageBubbleProps {
   authorName?: string
   /** Marks the author as the AI assistant in the attribution line. */
   isAssistant?: boolean
+  /** Show an "AI" label badge after the assistant name. */
+  showAiLabel?: boolean
   attachments?: ConversationAttachment[]
   /** KB sources for an AI reply. When present, a collapsed sources trace renders
    *  above the bubble and inline [n] markers in `content` become citation dots. */
@@ -429,6 +431,7 @@ export function VisitorMessageBubble({
   side = 'peer',
   authorName,
   isAssistant = false,
+  showAiLabel = false,
   attachments,
   citations,
   time,
@@ -493,21 +496,28 @@ export function VisitorMessageBubble({
       </div>
       {/* Attribution below the bubble — team/assistant side only. */}
       {!self && (authorName || time) && (
-        <p className="mt-1 px-1 text-[11px] text-muted-foreground/70">
-          {authorName}
-          {isAssistant && (
-            <>
-              {' · '}
-              <FormattedMessage id="widget.messenger.aiAgent" defaultMessage="AI Agent" />
-            </>
+        <div className="mt-1 px-1 flex items-center gap-1">
+          <p className="text-[11px] text-muted-foreground/70">
+            {authorName}
+            {isAssistant && !showAiLabel && (
+              <>
+                {' · '}
+                <FormattedMessage id="widget.messenger.aiAgent" defaultMessage="AI Agent" />
+              </>
+            )}
+            {time && (
+              <>
+                {' · '}
+                {time}
+              </>
+            )}
+          </p>
+          {isAssistant && showAiLabel && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+              AI
+            </span>
           )}
-          {time && (
-            <>
-              {' · '}
-              {time}
-            </>
-          )}
-        </p>
+        </div>
       )}
     </div>
   )

@@ -27,6 +27,14 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { CheckboxGroup } from '@/components/ui/checkbox-group'
+import { CollapsibleSection } from '@/components/ui/collapsible'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +46,11 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { cn } from '@/lib/shared/utils'
 import { ASSISTANT_SURFACES, ASSISTANT_SURFACE_LABELS } from '@/lib/shared/assistant/surfaces'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
+import {
+  ASSISTANT_GUIDANCE_CATEGORIES,
+  ASSISTANT_GUIDANCE_CATEGORY_LABELS,
+} from '@/lib/shared/assistant/guidance-categories'
+import type { AssistantGuidanceCategory } from '@/lib/shared/assistant/guidance-categories'
 import type { AssistantGuidanceRule } from '@/lib/server/domains/assistant/guidance.service'
 import { assistantQueries } from '@/lib/client/queries/assistant'
 import {
@@ -67,6 +80,15 @@ function surfaceLabel(surfaces: AssistantGuidanceRule['surfaces']): string {
   return known.map((s) => ASSISTANT_SURFACE_LABELS[s].label).join(', ')
 }
 
+const KNOWN_CATEGORIES: readonly string[] = ASSISTANT_GUIDANCE_CATEGORIES
+
+// The column is a plain text field (validated at the service layer), so a
+// stored value is narrowed here rather than trusted; an unrecognized value
+// (e.g. a category retired from the catalogue) buckets under "Other".
+function toKnownCategory(category: AssistantGuidanceRule['category']): AssistantGuidanceCategory {
+  return KNOWN_CATEGORIES.includes(category) ? (category as AssistantGuidanceCategory) : 'other'
+}
+
 export function GuidanceRulesCard() {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -74,6 +96,9 @@ export function GuidanceRulesCard() {
   const [rules, setRules] = useState<AssistantGuidanceRule[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<AssistantGuidanceRule | null>(null)
+  // Category a new rule (editingRule === null) opens the dialog pre-selected
+  // to, set by the section whose "+ New" button was clicked.
+  const [newRuleCategory, setNewRuleCategory] = useState<AssistantGuidanceCategory>('other')
   const [deletingRule, setDeletingRule] = useState<AssistantGuidanceRule | null>(null)
   const [reordering, setReordering] = useState(false)
 
@@ -86,6 +111,22 @@ export function GuidanceRulesCard() {
 
   const charBudget = rulesQuery.data?.charBudget ?? FALLBACK_CHAR_BUDGET
   const enabledChars = rules.filter((r) => r.enabled).reduce((sum, r) => sum + r.body.length, 0)
+
+  // Grouped for display only — each rule keeps its index in the flat, position-
+  // ordered `rules` array so reorder (which is not category-aware) still moves
+  // the underlying list correctly.
+  const rulesByCategory = ASSISTANT_GUIDANCE_CATEGORIES.map((category) => ({
+    category,
+    rules: rules
+      .map((rule, index) => ({ rule, index }))
+      .filter(({ rule }) => toKnownCategory(rule.category) === category),
+  }))
+
+  function openAddDialog(category: AssistantGuidanceCategory) {
+    setEditingRule(null)
+    setNewRuleCategory(category)
+    setDialogOpen(true)
+  }
 
   const createRule = useCreateGuidanceRule()
   const updateRule = useUpdateGuidanceRule()
@@ -140,6 +181,7 @@ export function GuidanceRulesCard() {
     body: string
     enabled: boolean
     surfaces: AssistantSurface[] | null
+    category: AssistantGuidanceCategory
   }) {
     if (editingRule) {
       const saved = await updateRule.mutateAsync({ id: editingRule.id, ...input })
@@ -161,92 +203,104 @@ export function GuidanceRulesCard() {
         contentClassName="p-4"
       >
         <div className="space-y-1">
-          {rules.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No guidance rules yet. Add your first rule to steer how the assistant responds.
-            </p>
-          )}
-
-          {rules.map((rule, index) => (
-            <div
-              key={rule.id}
-              className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
-            >
-              <div className="flex flex-col -my-1">
-                <button
-                  type="button"
-                  className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
-                  onClick={() => move(index, -1)}
-                  disabled={index === 0 || reordering}
-                  aria-label={`Move ${rule.title} up`}
-                >
-                  <ChevronUpIcon className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
-                  onClick={() => move(index, 1)}
-                  disabled={index === rules.length - 1 || reordering}
-                  aria-label={`Move ${rule.title} down`}
-                >
-                  <ChevronDownIcon className="h-3 w-3" />
-                </button>
-              </div>
-
-              <Switch
-                checked={rule.enabled}
-                onCheckedChange={() => handleToggleEnabled(rule)}
-                className="scale-90"
-                aria-label={`Enable ${rule.title}`}
-              />
-
-              <span className="text-sm font-medium truncate">{rule.title}</span>
-
-              <Badge variant="outline" className="shrink-0">
-                {surfaceLabel(rule.surfaces)}
-              </Badge>
-
-              <span className="flex-1" />
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
-                onClick={() => {
-                  setEditingRule(rule)
-                  setDialogOpen(true)
-                }}
-                title="Edit guidance rule"
+          {rulesByCategory.map(({ category, rules: groupRules }) => (
+            <div key={category} data-testid={`guidance-category-${category}`}>
+              <CollapsibleSection
+                title={ASSISTANT_GUIDANCE_CATEGORY_LABELS[category].label}
+                description={ASSISTANT_GUIDANCE_CATEGORY_LABELS[category].description}
+                defaultOpen
+                headerClassName="px-2 py-2"
+                contentClassName="px-0 pb-2 pt-0"
+                headerAction={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 text-muted-foreground"
+                    onClick={() => openAddDialog(category)}
+                  >
+                    <PlusIcon className="h-3 w-3" />
+                    New
+                  </Button>
+                }
               >
-                <PencilSquareIcon className="h-3.5 w-3.5" />
-              </Button>
+                {groupRules.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-3">
+                    No rules in this category yet.
+                  </p>
+                ) : (
+                  groupRules.map(({ rule, index }) => (
+                    <div
+                      key={rule.id}
+                      className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
+                    >
+                      <div className="flex flex-col -my-1">
+                        <button
+                          type="button"
+                          className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
+                          onClick={() => move(index, -1)}
+                          disabled={index === 0 || reordering}
+                          aria-label={`Move ${rule.title} up`}
+                        >
+                          <ChevronUpIcon className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
+                          onClick={() => move(index, 1)}
+                          disabled={index === rules.length - 1 || reordering}
+                          aria-label={`Move ${rule.title} down`}
+                        >
+                          <ChevronDownIcon className="h-3 w-3" />
+                        </button>
+                      </div>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                onClick={() => setDeletingRule(rule)}
-                title="Delete guidance rule"
-              >
-                <TrashIcon className="h-3.5 w-3.5" />
-              </Button>
+                      <Switch
+                        checked={rule.enabled}
+                        onCheckedChange={() => handleToggleEnabled(rule)}
+                        className="scale-90"
+                        aria-label={`Enable ${rule.title}`}
+                      />
+
+                      <span className="text-sm font-medium truncate">{rule.title}</span>
+
+                      <Badge variant="outline" className="shrink-0">
+                        {surfaceLabel(rule.surfaces)}
+                      </Badge>
+
+                      <span className="flex-1" />
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                        onClick={() => {
+                          setEditingRule(rule)
+                          setDialogOpen(true)
+                        }}
+                        title="Edit guidance rule"
+                      >
+                        <PencilSquareIcon className="h-3.5 w-3.5" />
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                        onClick={() => setDeletingRule(rule)}
+                        title="Delete guidance rule"
+                      >
+                        <TrashIcon className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </CollapsibleSection>
             </div>
           ))}
 
-          <button
-            className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 w-full text-muted-foreground"
-            onClick={() => {
-              setEditingRule(null)
-              setDialogOpen(true)
-            }}
-          >
-            <PlusIcon className="h-3 w-3" />
-            <span className="text-sm">Add guidance rule</span>
-            {reordering && <ArrowPathIcon className="h-3 w-3 animate-spin ms-1" />}
-          </button>
-
-          <p className="text-xs text-muted-foreground pt-2">
+          <p className="text-xs text-muted-foreground pt-2 flex items-center gap-1">
             {enabledChars} / {charBudget} characters used across enabled rules
+            {reordering && <ArrowPathIcon className="h-3 w-3 animate-spin ms-1" />}
           </p>
         </div>
       </SettingsCard>
@@ -255,6 +309,7 @@ export function GuidanceRulesCard() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         rule={editingRule}
+        defaultCategory={newRuleCategory}
         enabledCharsExcludingSelf={
           enabledChars - (editingRule?.enabled ? editingRule.body.length : 0)
         }
@@ -279,6 +334,8 @@ interface GuidanceRuleDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   rule: AssistantGuidanceRule | null
+  /** Category a new rule (rule === null) opens pre-selected to; ignored when editing. */
+  defaultCategory: AssistantGuidanceCategory
   /** Chars already committed by other enabled rules, for the live budget meter. */
   enabledCharsExcludingSelf: number
   charBudget: number
@@ -287,6 +344,7 @@ interface GuidanceRuleDialogProps {
     body: string
     enabled: boolean
     surfaces: AssistantSurface[] | null
+    category: AssistantGuidanceCategory
   }) => Promise<void>
 }
 
@@ -294,6 +352,7 @@ function GuidanceRuleDialog({
   open,
   onOpenChange,
   rule,
+  defaultCategory,
   enabledCharsExcludingSelf,
   charBudget,
   onSave,
@@ -302,6 +361,7 @@ function GuidanceRuleDialog({
   const [body, setBody] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [surfaces, setSurfaces] = useState<AssistantSurface[]>([])
+  const [category, setCategory] = useState<AssistantGuidanceCategory>('other')
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -313,9 +373,10 @@ function GuidanceRuleDialog({
       setBody(rule?.body ?? '')
       setEnabled(rule?.enabled ?? true)
       setSurfaces(toKnownSurfaces(rule?.surfaces ?? null))
+      setCategory(rule ? toKnownCategory(rule.category) : defaultCategory)
       setError(null)
     }
-  }, [open, rule])
+  }, [open, rule, defaultCategory])
 
   const liveTotal = enabledCharsExcludingSelf + (enabled ? body.length : 0)
   const overBudget = liveTotal > charBudget
@@ -341,6 +402,7 @@ function GuidanceRuleDialog({
         body: trimmedBody,
         enabled,
         surfaces: surfaces.length > 0 ? surfaces : null,
+        category,
       })
       onOpenChange(false)
     } catch (err) {
@@ -368,6 +430,25 @@ function GuidanceRuleDialog({
               maxLength={TITLE_MAX}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="guidance-category">Category</Label>
+            <Select
+              value={category}
+              onValueChange={(value) => setCategory(value as AssistantGuidanceCategory)}
+            >
+              <SelectTrigger id="guidance-category" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ASSISTANT_GUIDANCE_CATEGORIES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {ASSISTANT_GUIDANCE_CATEGORY_LABELS[value].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

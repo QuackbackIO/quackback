@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const FIXTURE_RULES = [
@@ -16,6 +16,7 @@ const FIXTURE_RULES = [
     body: 'Always mention our 30-day refund policy.',
     enabled: true,
     surfaces: null,
+    category: 'content_sources',
     position: 0,
     createdById: null,
     createdAt: new Date(),
@@ -27,6 +28,7 @@ const FIXTURE_RULES = [
     body: 'Be concise.',
     enabled: false,
     surfaces: ['widget'],
+    category: 'communication_style',
     position: 1,
     createdById: null,
     createdAt: new Date(),
@@ -45,6 +47,11 @@ vi.mock('@/lib/server/functions/assistant-guidance', () => ({
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
 }))
+
+// Radix Select relies on pointer-capture/scrollIntoView APIs jsdom/happy-dom
+// don't implement; swap in the shared native-select test double so the
+// category picker can be exercised with a plain change event.
+vi.mock('@/components/ui/select', async () => import('@/test/radix-select'))
 
 import { GuidanceRulesCard } from '../guidance-rules-card'
 
@@ -77,5 +84,56 @@ describe('GuidanceRulesCard', () => {
   it('shows the char budget meter', async () => {
     renderWithClient(<GuidanceRulesCard />)
     expect(await screen.findByText(/\/ 4000 characters used across enabled rules/)).toBeInTheDocument()
+  })
+})
+
+describe('category grouping', () => {
+  it('renders a section for every category in catalogue order', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+    expect(screen.getByText('Communication style')).toBeInTheDocument()
+    expect(screen.getByText('Context and clarification')).toBeInTheDocument()
+    expect(screen.getByText('Content and sources')).toBeInTheDocument()
+    expect(screen.getByText('Spam')).toBeInTheDocument()
+    expect(screen.getByText('Other')).toBeInTheDocument()
+  })
+
+  it('places each rule under its own category section', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+
+    expect(
+      within(screen.getByTestId('guidance-category-content_sources')).getByText('Refund policy')
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('guidance-category-communication_style')).getByText('Widget tone')
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('guidance-category-communication_style')).queryByText(
+        'Refund policy'
+      )
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows an empty hint for a category with no rules', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+
+    expect(
+      within(screen.getByTestId('guidance-category-spam')).getByText(
+        'No rules in this category yet.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('pre-selects the section\'s category when its "+ New" button is clicked', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+
+    fireEvent.click(
+      within(screen.getByTestId('guidance-category-spam')).getByRole('button', { name: /New/i })
+    )
+
+    expect(await screen.findByLabelText('Category')).toHaveValue('spam')
   })
 })

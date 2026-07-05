@@ -38,9 +38,57 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
     expect(rule.enabled).toBe(true)
     expect(rule.surfaces).toBeNull()
     expect(rule.position).toBe(0)
+    expect(rule.category).toBe('other')
 
     const rules = await listGuidanceRules()
     expect(rules.map((r) => r.id)).toEqual([rule.id])
+    expect(rules[0].category).toBe('other')
+  })
+
+  it('creates a rule with an explicit category', async () => {
+    const rule = await createGuidanceRule({
+      title: 'Tone',
+      body: 'Be warm and concise.',
+      category: 'communication_style',
+    })
+    expect(rule.category).toBe('communication_style')
+
+    const [listed] = await listGuidanceRules()
+    expect(listed.category).toBe('communication_style')
+  })
+
+  it('rejects an unknown category at the service layer', async () => {
+    await expect(
+      createGuidanceRule({
+        title: 'Bad category',
+        body: 'Body text.',
+        category: 'not_a_real_category' as never,
+      })
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
+  it('updates a rule category', async () => {
+    const rule = await createGuidanceRule({ title: 'Recategorize me', body: 'Body text.' })
+    const updated = await updateGuidanceRule(rule.id, { category: 'spam' })
+    expect(updated?.category).toBe('spam')
+  })
+
+  it('rejects an unknown category on update', async () => {
+    const rule = await createGuidanceRule({ title: 'Recategorize me', body: 'Body text.' })
+    await expect(
+      updateGuidanceRule(rule.id, { category: 'not_a_real_category' as never })
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+  })
+
+  it('defaults category to other for a legacy row inserted without one', async () => {
+    const [row] = await testDb
+      .insert(assistantGuidanceRules)
+      .values({ title: 'Legacy row', body: 'Predates categories.' })
+      .returning()
+    expect(row.category).toBe('other')
+
+    const [listed] = await listGuidanceRules()
+    expect(listed.category).toBe('other')
   })
 
   it('scopes the list to a surface; a null-surfaces rule matches every surface', async () => {

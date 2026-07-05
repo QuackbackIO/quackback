@@ -16,7 +16,13 @@ import { useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
 export function AssistantIdentityCard({
   initial,
 }: {
-  initial: { enabled: boolean; respond: boolean; name: string; avatarUrl: string }
+  initial: {
+    enabled: boolean
+    respond: boolean
+    name: string
+    avatarUrl: string
+    showAiLabel?: boolean
+  }
 }) {
   const router = useRouter()
   const updateWidgetConfig = useUpdateWidgetConfig()
@@ -27,6 +33,7 @@ export function AssistantIdentityCard({
   const [respond, setRespond] = useState(initial.respond)
   const [name, setName] = useState(initial.name)
   const [avatarUrl, setAvatarUrl] = useState(initial.avatarUrl)
+  const [showAiLabel, setShowAiLabel] = useState(initial.showAiLabel ?? false)
   // Last persisted values, so blur only saves actual changes.
   const [savedName, setSavedName] = useState(initial.name)
   const [savedAvatarUrl, setSavedAvatarUrl] = useState(initial.avatarUrl)
@@ -34,7 +41,7 @@ export function AssistantIdentityCard({
   const isBusy = saving || isPending
 
   async function save(
-    updates: { enabled?: boolean; respond?: boolean; name?: string; avatarUrl?: string },
+    updates: { enabled?: boolean; respond?: boolean; name?: string; avatarUrl?: string; showAiLabel?: boolean },
     revert: () => void
   ) {
     setSaving(true)
@@ -162,6 +169,30 @@ export function AssistantIdentityCard({
                 <p className="text-xs text-muted-foreground">
                   Falls back to the assistant&apos;s initial when empty.
                 </p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
+                <div>
+                  <Label htmlFor="assistant-show-ai-label" className="text-sm font-medium cursor-pointer">
+                    Show AI label
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Adds an AI label after the assistant name so customers know they are talking to an assistant.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <InlineSpinner visible={isBusy} />
+                  <Switch
+                    id="assistant-show-ai-label"
+                    checked={showAiLabel}
+                    onCheckedChange={(checked) => {
+                      setShowAiLabel(checked)
+                      void save({ showAiLabel: checked }, () => setShowAiLabel(!checked))
+                    }}
+                    disabled={isBusy}
+                    aria-label="Show AI label"
+                  />
+                </div>
               </div>
             </div>
           </>

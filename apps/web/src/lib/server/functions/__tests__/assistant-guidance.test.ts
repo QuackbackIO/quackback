@@ -146,6 +146,15 @@ describe('createGuidanceRuleFn', () => {
     expect(hoisted.createGuidanceRule).not.toHaveBeenCalled()
   })
 
+  it('rejects an unknown category at the boundary', async () => {
+    await expect(
+      createGuidanceRuleFn({
+        data: { title: 'Title', body: 'Body.', category: 'not_a_real_category' } as never,
+      })
+    ).rejects.toThrow()
+    expect(hoisted.createGuidanceRule).not.toHaveBeenCalled()
+  })
+
   it('passes a valid rule through with the caller as creator', async () => {
     hoisted.createGuidanceRule.mockResolvedValue({ id: 'assistant_guidance_1' })
     const result = await createGuidanceRuleFn({
@@ -157,8 +166,19 @@ describe('createGuidanceRuleFn', () => {
       body: 'Always mention it.',
       enabled: undefined,
       surfaces: ['widget'],
+      category: undefined,
       createdById: 'principal_admin',
     })
+  })
+
+  it('passes an explicit category through', async () => {
+    hoisted.createGuidanceRule.mockResolvedValue({ id: 'assistant_guidance_1' })
+    await createGuidanceRuleFn({
+      data: { title: 'Tone', body: 'Be warm.', category: 'communication_style' },
+    })
+    expect(hoisted.createGuidanceRule).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'communication_style' })
+    )
   })
 })
 
@@ -166,6 +186,15 @@ describe('updateGuidanceRuleFn', () => {
   it('rejects an unknown surface at the boundary', async () => {
     await expect(
       updateGuidanceRuleFn({ data: { id: 'assistant_guidance_1', surfaces: ['sms'] } as never })
+    ).rejects.toThrow()
+    expect(hoisted.updateGuidanceRule).not.toHaveBeenCalled()
+  })
+
+  it('rejects an unknown category at the boundary', async () => {
+    await expect(
+      updateGuidanceRuleFn({
+        data: { id: 'assistant_guidance_1', category: 'not_a_real_category' } as never,
+      })
     ).rejects.toThrow()
     expect(hoisted.updateGuidanceRule).not.toHaveBeenCalled()
   })
@@ -181,7 +210,17 @@ describe('updateGuidanceRuleFn', () => {
       body: undefined,
       enabled: false,
       surfaces: undefined,
+      category: undefined,
     })
+  })
+
+  it('passes an explicit category patch through', async () => {
+    hoisted.updateGuidanceRule.mockResolvedValue({ id: 'assistant_guidance_1', category: 'spam' })
+    await updateGuidanceRuleFn({ data: { id: 'assistant_guidance_1', category: 'spam' } })
+    expect(hoisted.updateGuidanceRule).toHaveBeenCalledWith(
+      'assistant_guidance_1',
+      expect.objectContaining({ category: 'spam' })
+    )
   })
 })
 

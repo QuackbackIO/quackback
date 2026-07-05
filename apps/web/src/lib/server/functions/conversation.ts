@@ -380,6 +380,7 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
           ? {
               name: messengerConfig.assistant.name?.trim() || 'Quinn',
               avatarUrl: messengerConfig.assistant.avatarUrl || null,
+              showAiLabel: messengerConfig.assistant.showAiLabel ?? false,
             }
           : null,
         // Whether we already have a contact email for this visitor.

@@ -28,10 +28,10 @@ vi.mock('@tanstack/react-start', () => ({
 
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
-  getAssistantToolControls: vi.fn(),
+  getAssistantConfig: vi.fn(),
   updateAssistantToolControls: vi.fn(),
-  getAssistantSurfaces: vi.fn(),
   updateAssistantSurfaces: vi.fn(),
+  updateAssistantBasics: vi.fn(),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
@@ -39,27 +39,27 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.req
 // only the DB-touching get/update fns are replaced.
 vi.mock('@/lib/server/domains/settings/settings.assistant', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/domains/settings/settings.assistant')>()),
-  getAssistantToolControls: hoisted.getAssistantToolControls,
+  getAssistantConfig: hoisted.getAssistantConfig,
   updateAssistantToolControls: hoisted.updateAssistantToolControls,
-  getAssistantSurfaces: hoisted.getAssistantSurfaces,
   updateAssistantSurfaces: hoisted.updateAssistantSurfaces,
+  updateAssistantBasics: hoisted.updateAssistantBasics,
 }))
 
 import {
   getAssistantSettingsFn,
   updateAssistantToolControlsFn,
   updateAssistantSurfacesFn,
+  updateAssistantBasicsFn,
 } from '../assistant-settings'
 
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue({ principal: { id: 'principal_admin' } })
-  hoisted.getAssistantToolControls.mockResolvedValue({})
-  hoisted.getAssistantSurfaces.mockResolvedValue({})
+  hoisted.getAssistantConfig.mockResolvedValue({ toolControls: {}, surfaces: {}, basics: {} })
 })
 
 describe('permission gates', () => {
-  it('all three fns gate on assistant.manage', async () => {
+  it('all four fns gate on assistant.manage', async () => {
     await getAssistantSettingsFn()
     expect(hoisted.requireAuth).toHaveBeenLastCalledWith({
       permission: PERMISSIONS.ASSISTANT_MANAGE,
@@ -76,25 +76,36 @@ describe('permission gates', () => {
     expect(hoisted.requireAuth).toHaveBeenLastCalledWith({
       permission: PERMISSIONS.ASSISTANT_MANAGE,
     })
+
+    hoisted.updateAssistantBasics.mockResolvedValue({})
+    await updateAssistantBasicsFn({ data: {} })
+    expect(hoisted.requireAuth).toHaveBeenLastCalledWith({
+      permission: PERMISSIONS.ASSISTANT_MANAGE,
+    })
   })
 
   it('propagates an auth rejection without touching the domain layer', async () => {
     hoisted.requireAuth.mockRejectedValue(new Error('Access denied'))
     await expect(getAssistantSettingsFn()).rejects.toThrow('Access denied')
-    expect(hoisted.getAssistantToolControls).not.toHaveBeenCalled()
+    expect(hoisted.getAssistantConfig).not.toHaveBeenCalled()
   })
 })
 
 describe('getAssistantSettingsFn', () => {
-  it('returns both namespaces in one call', async () => {
-    hoisted.getAssistantToolControls.mockResolvedValue({ end_conversation: 'approval' })
-    hoisted.getAssistantSurfaces.mockResolvedValue({ widget: { instructions: 'Be concise.' } })
+  it('returns all three namespaces off a single getAssistantConfig call', async () => {
+    hoisted.getAssistantConfig.mockResolvedValue({
+      toolControls: { end_conversation: 'approval' },
+      surfaces: { widget: { instructions: 'Be concise.' } },
+      basics: { tone: 'friendly', length: 'concise' },
+    })
 
     const result = await getAssistantSettingsFn()
     expect(result).toEqual({
       toolControls: { end_conversation: 'approval' },
       surfaces: { widget: { instructions: 'Be concise.' } },
+      basics: { tone: 'friendly', length: 'concise' },
     })
+    expect(hoisted.getAssistantConfig).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -132,5 +143,26 @@ describe('updateAssistantSurfacesFn', () => {
       data: { widget: { instructions: 'Be concise.' } },
     })
     expect(result).toEqual({ widget: { instructions: 'Be concise.' } })
+  })
+})
+
+describe('updateAssistantBasicsFn', () => {
+  it('rejects an invalid tone at the boundary before reaching the domain layer', async () => {
+    await expect(
+      updateAssistantBasicsFn({ data: { tone: 'sarcastic' } as never })
+    ).rejects.toThrow()
+    expect(hoisted.updateAssistantBasics).not.toHaveBeenCalled()
+  })
+
+  it('passes a valid preset through to the domain layer', async () => {
+    hoisted.updateAssistantBasics.mockResolvedValue({ tone: 'friendly', length: 'concise' })
+    const result = await updateAssistantBasicsFn({
+      data: { tone: 'friendly', length: 'concise' },
+    })
+    expect(result).toEqual({ tone: 'friendly', length: 'concise' })
+    expect(hoisted.updateAssistantBasics).toHaveBeenCalledWith({
+      tone: 'friendly',
+      length: 'concise',
+    })
   })
 })

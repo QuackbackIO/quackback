@@ -255,6 +255,13 @@ describe('assembleAssistantTools: assistant actions flag', () => {
     expect(mockIsFeatureEnabled).toHaveBeenCalledWith('dataConnectors')
     expect(mockGetAssistantToolControls).toHaveBeenCalledTimes(1)
   })
+
+  it('accepts pre-fetched controls, skipping its own settings read', async () => {
+    mockActionsFlag(true)
+    const tools = await assembleAssistantTools(ctx(), undefined, { search_knowledge: 'disabled' })
+    expect(tools.map((t) => t.name)).not.toContain('search_knowledge')
+    expect(mockGetAssistantToolControls).not.toHaveBeenCalled()
+  })
 })
 
 describe('assembleAssistantTools: control-mode gating', () => {

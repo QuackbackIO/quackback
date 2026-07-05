@@ -148,9 +148,11 @@ export function VisitorConversationThread({
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
   // AI-assistant display identity (fronts new conversations); null when disabled.
-  const [assistant, setAssistant] = useState<{ name: string; avatarUrl: string | null } | null>(
-    null
-  )
+  const [assistant, setAssistant] = useState<{
+    name: string
+    avatarUrl: string | null
+    showAiLabel?: boolean
+  } | null>(null)
   // Pre-chat email capture (anonymous visitors). Data-driven: identified
   // visitors come back with visitorHasEmail=true, so the prompt never shows.
   // Whether an offline reply could actually reach this visitor by email — drives
@@ -653,6 +655,7 @@ export function VisitorConversationThread({
             side="peer"
             authorName={assistant?.name ?? teamName ?? undefined}
             isAssistant={!!assistant}
+            showAiLabel={assistant?.showAiLabel}
             content={personalizeMessage(welcomeMessage ?? '', firstName)}
             embedOpenMode={embedOpenMode}
           />
@@ -665,6 +668,7 @@ export function VisitorConversationThread({
             side={isVisitor ? 'self' : 'peer'}
             authorName={isVisitor ? undefined : (m.author?.displayName ?? teamName ?? undefined)}
             isAssistant={m.isAssistant}
+            showAiLabel={m.isAssistant ? assistant?.showAiLabel : undefined}
             content={m.content}
             contentJson={m.contentJson}
             attachments={m.attachments}

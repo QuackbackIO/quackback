@@ -13,7 +13,7 @@ export const assistantKeys = {
   tools: () => ['assistant', 'tools'] as const,
 }
 
-/** Assistant customization settings queries: tool controls, surface instructions, guidance rules, and the tool catalogue. */
+/** Assistant customization settings queries: tool controls, surface instructions, the Basics preset, guidance rules, and the tool catalogue. */
 export const assistantQueries = {
   settings: () =>
     queryOptions({

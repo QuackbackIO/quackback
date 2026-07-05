@@ -79,6 +79,8 @@ export const assistantToolCalls = pgTable(
       table.conversationId,
       table.createdAt
     ),
+    // Drives the Quinn performance dashboard's succeeded-actions date-range scan.
+    index('assistant_tool_calls_status_created_at_idx').on(table.status, table.createdAt),
     // Partial so two NULL idempotency keys (calls with no stable key) never conflict.
     uniqueIndex('assistant_tool_calls_idempotency_key_idx')
       .on(table.idempotencyKey)

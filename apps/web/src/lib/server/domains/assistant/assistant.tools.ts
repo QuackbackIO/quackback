@@ -16,7 +16,10 @@
  */
 import { createHash } from 'node:crypto'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { getAssistantToolControls } from '@/lib/server/domains/settings/settings.assistant'
+import {
+  getAssistantToolControls,
+  type AssistantToolControls,
+} from '@/lib/server/domains/settings/settings.assistant'
 import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import type { ConversationId } from '@quackback/ids'
@@ -240,10 +243,14 @@ function toLegacyServerTool(spec: AssistantToolSpec, ctx: AssistantToolContext) 
  *
  * `specs` defaults to the live catalogue; tests inject a fixed list to
  * exercise write-risk behavior the current catalogue doesn't ship yet.
+ * `controls` defaults to fetching the saved tool-controls map; the runtime
+ * passes the one it already read this turn (via `getAssistantConfig`) so
+ * assembly never re-reads the settings row on its own.
  */
 export async function assembleAssistantTools(
   ctx: AssistantToolContext,
-  specs?: readonly AssistantToolSpec[]
+  specs?: readonly AssistantToolSpec[],
+  controls?: AssistantToolControls
 ) {
   const actionsEnabled = await isFeatureEnabled('assistantActions')
   if (!actionsEnabled) {
@@ -257,9 +264,9 @@ export async function assembleAssistantTools(
   }
 
   const resolvedSpecs = specs ?? (await resolveToolSpecs())
-  const controls = await getAssistantToolControls()
+  const resolvedControls = controls ?? (await getAssistantToolControls())
   return resolvedSpecs
-    .map((spec) => ({ spec, mode: resolveMode(spec, controls[spec.name]) }))
+    .map((spec) => ({ spec, mode: resolveMode(spec, resolvedControls[spec.name]) }))
     .filter((entry) => entry.mode !== 'disabled')
     .map(({ spec, mode }) =>
       spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))

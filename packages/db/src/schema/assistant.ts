@@ -78,6 +78,8 @@ export const assistantInvolvements = pgTable(
     index('assistant_involvements_active_answer_idx')
       .on(t.lastAssistantAnswerAt)
       .where(sql`${t.status} = 'active'`),
+    // Drives the Quinn performance dashboard's date-range scan.
+    index('assistant_involvements_created_at_idx').on(t.createdAt),
   ]
 )
 

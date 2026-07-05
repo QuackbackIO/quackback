@@ -7,6 +7,8 @@ import { PageHeader } from '@/components/shared/page-header'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { AssistantIdentityCard } from '@/components/admin/automation/assistant-identity-card'
 import { SupportPerformanceCard } from '@/components/admin/automation/support-performance-card'
+import { QuinnPerformanceCard } from '@/components/admin/automation/quinn-performance-card'
+import { AssistantBasicsCard } from '@/components/admin/automation/assistant-basics-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
 import { ToolControlsCard } from '@/components/admin/automation/tool-controls-card'
 import { SurfaceInstructionsCard } from '@/components/admin/automation/surface-instructions-card'
@@ -47,13 +49,16 @@ function AssistantPage() {
           respond: assistant?.respond ?? false,
           name: assistant?.name ?? 'Quinn',
           avatarUrl: assistant?.avatarUrl ?? '',
+          showAiLabel: assistant?.showAiLabel ?? false,
         }}
       />
 
       <SupportPerformanceCard />
+      <QuinnPerformanceCard />
 
       {flags?.assistantActions ? (
         <>
+          <AssistantBasicsCard />
           <GuidanceRulesCard />
           <ToolControlsCard />
           <SurfaceInstructionsCard />

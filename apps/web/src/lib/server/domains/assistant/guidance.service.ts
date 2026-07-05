@@ -20,6 +20,10 @@ import type { AssistantGuidanceRuleId, PrincipalId } from '@quackback/ids'
 import { positionCaseSql } from '@/lib/server/utils'
 import { ValidationError } from '@/lib/shared/errors'
 import { ASSISTANT_SURFACES, type AssistantSurface } from '@/lib/shared/assistant/surfaces'
+import {
+  ASSISTANT_GUIDANCE_CATEGORIES,
+  type AssistantGuidanceCategory,
+} from '@/lib/shared/assistant/guidance-categories'
 
 export type AssistantGuidanceRule = typeof assistantGuidanceRules.$inferSelect
 
@@ -39,6 +43,8 @@ export interface GuidanceRuleInput {
   /** NULL/omitted = every surface; otherwise an allowlist of AssistantSurface values. */
   surfaces?: AssistantSurface[] | null
   position?: number
+  /** Groups the rule in the admin list; defaults to 'other'. */
+  category?: AssistantGuidanceCategory
 }
 
 function validateGuidanceRuleInput(input: Partial<GuidanceRuleInput>): void {
@@ -69,6 +75,9 @@ function validateGuidanceRuleInput(input: Partial<GuidanceRuleInput>): void {
       }
     }
   }
+  if (input.category !== undefined && !ASSISTANT_GUIDANCE_CATEGORIES.includes(input.category)) {
+    throw new ValidationError('VALIDATION_ERROR', `Unknown category: ${input.category}`)
+  }
 }
 
 export async function createGuidanceRule(
@@ -83,6 +92,7 @@ export async function createGuidanceRule(
       enabled: input.enabled ?? true,
       surfaces: input.surfaces ?? null,
       position: input.position ?? 0,
+      category: input.category ?? 'other',
       createdById: input.createdById ?? null,
     })
     .returning()
@@ -121,6 +131,7 @@ export async function updateGuidanceRule(
   if (patch.enabled !== undefined) values.enabled = patch.enabled
   if (patch.surfaces !== undefined) values.surfaces = patch.surfaces
   if (patch.position !== undefined) values.position = patch.position
+  if (patch.category !== undefined) values.category = patch.category
   const [row] = await db
     .update(assistantGuidanceRules)
     .set(values)
