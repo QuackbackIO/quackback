@@ -399,7 +399,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/subscriptions.ts`::adminUpdateVoterSubscriptionFn | post.vote_on_behalf |
 | `lib/server/functions/support-reporting.ts`::slaAttainmentFn | analytics.view |
 | `lib/server/functions/support-reporting.ts`::workflowEffectivenessFn | analytics.view |
-| `lib/server/functions/teams.ts`::listTeamsFn | conversation.view |
+| `lib/server/functions/teams.ts`::listTeamsFn | member.view |
 | `lib/server/functions/teams.ts`::listTeamsAdminFn | team.manage |
 | `lib/server/functions/teams.ts`::listTeamMembersFn | team.manage |
 | `lib/server/functions/teams.ts`::listAssignableTeammatesFn | team.manage |

@@ -1,10 +1,11 @@
 /**
- * Server functions for teams (support platform §4.12).
+ * Server functions for teams (the workspace org-unit; TEAMS-ORG-UNIT-SPEC).
  *
- * Reads for the inbox sidebar (`listTeamsFn`) are gated on `conversation.view`,
- * so every agent who can see the inbox can see the team inboxes. Management
+ * Reads (`listTeamsFn`) are gated on `member.view`: teams are internal-only
+ * roster metadata backing the inbox sidebar and, later, board pickers, so the
+ * roster/picker read permission is the right gate. Management
  * (create/update/delete/membership) is gated on `team.manage`, a workspace-admin
- * key that already exists in the RBAC catalogue. No new catalogue keys.
+ * key. No new catalogue keys.
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
@@ -92,11 +93,11 @@ const teamInputSchema = z.object({
 const updateTeamSchema = teamInputSchema.partial().extend({ id: z.string() })
 
 /**
- * The inbox-sidebar list: teams with member counts, for any agent who can view
- * the inbox. CONTRACT: [{ id, name, icon, color, memberCount }].
+ * The team list for sidebars and pickers, with member counts.
+ * CONTRACT: [{ id, name, icon, color, memberCount }].
  */
 export const listTeamsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+  await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
   const teams = await listTeams()
   return teams.map(serializeListItem)
 })

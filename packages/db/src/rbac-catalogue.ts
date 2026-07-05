@@ -537,7 +537,7 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   {
     key: PERMISSIONS.TEAM_MANAGE,
     category: 'support',
-    description: 'Manage support teams and membership',
+    description: 'Manage teams and membership',
   },
   {
     key: PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,

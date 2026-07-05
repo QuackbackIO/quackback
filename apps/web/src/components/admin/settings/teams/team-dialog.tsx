@@ -44,9 +44,16 @@ interface TeamDialogProps {
   onOpenChange: (open: boolean) => void
   /** The team being edited, or undefined to create a new one. */
   team?: TeamDTO
+  /** The assignment method is the support facet; hidden when the inbox is off. */
+  showAssignmentMethod?: boolean
 }
 
-export function TeamDialog({ open, onOpenChange, team }: TeamDialogProps) {
+export function TeamDialog({
+  open,
+  onOpenChange,
+  team,
+  showAssignmentMethod = true,
+}: TeamDialogProps) {
   const queryClient = useQueryClient()
   const isEdit = !!team
 
@@ -104,7 +111,8 @@ export function TeamDialog({ open, onOpenChange, team }: TeamDialogProps) {
         icon: icon.trim() || null,
         color: color.trim() || null,
         description: description.trim() || null,
-        assignmentMethod,
+        // Preserve the stored method when the support facet is hidden.
+        ...(showAssignmentMethod ? { assignmentMethod } : {}),
       }
       const saved = isEdit
         ? await updateTeamFn({ data: { id: team!.id, ...payload } })
@@ -179,24 +187,26 @@ export function TeamDialog({ open, onOpenChange, team }: TeamDialogProps) {
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="team-method">Assignment method</Label>
-            <Select
-              value={assignmentMethod}
-              onValueChange={(v) => setAssignmentMethod(v as TeamAssignmentMethod)}
-            >
-              <SelectTrigger id="team-method">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TEAM_ASSIGNMENT_METHODS.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {METHOD_LABELS[m]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {showAssignmentMethod && (
+            <div className="space-y-1.5">
+              <Label htmlFor="team-method">Assignment method</Label>
+              <Select
+                value={assignmentMethod}
+                onValueChange={(v) => setAssignmentMethod(v as TeamAssignmentMethod)}
+              >
+                <SelectTrigger id="team-method">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEAM_ASSIGNMENT_METHODS.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {METHOD_LABELS[m]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Members</Label>

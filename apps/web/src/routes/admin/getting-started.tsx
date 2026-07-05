@@ -19,7 +19,7 @@ export interface OnboardingTask {
   title: string
   description: string
   isCompleted: boolean
-  href: '/admin/settings/boards' | '/admin/settings/team' | '/admin/settings'
+  href: '/admin/settings/boards' | '/admin/settings/members' | '/admin/settings'
   actionLabel: string
   completedLabel: string
 }
@@ -60,7 +60,7 @@ function GettingStartedPage() {
       title: 'Invite team members',
       description: 'Add your team to collaborate on feedback management',
       isCompleted: status.memberCount > 1,
-      href: '/admin/settings/team',
+      href: '/admin/settings/members',
       actionLabel: 'Invite Members',
       completedLabel: 'Manage Team',
     },
