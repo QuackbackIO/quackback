@@ -169,13 +169,15 @@ describe('buildNavSections', () => {
     expect(!isNavGroup(security) && security.to).toBe('/admin/settings/security/authentication')
   })
 
-  it('Data contains People (always) and Conversations under supportInbox', () => {
-    expect(itemLabels(buildNavSections(), 'Data')).toEqual(['People'])
+  it('Data contains People and Imports & exports (always), Conversations under supportInbox', () => {
+    expect(itemLabels(buildNavSections(), 'Data')).toEqual(['People', 'Imports & exports'])
     const sections = buildNavSections({ supportInbox: true })
-    expect(itemLabels(sections, 'Data')).toEqual(['People', 'Conversations'])
+    expect(itemLabels(sections, 'Data')).toEqual(['People', 'Conversations', 'Imports & exports'])
     const s = sections.find((x) => x.label === 'Data')!
     const conv = s.items.find((i) => i.label === 'Conversations')!
     expect(!isNavGroup(conv) && conv.to).toBe('/admin/settings/conversation-data')
+    const imports = s.items.find((i) => i.label === 'Imports & exports')!
+    expect(!isNavGroup(imports) && imports.to).toBe('/admin/settings/imports')
   })
 
   it('never lists Teams as a nav item (teams live inside Members & Teams)', () => {

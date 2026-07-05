@@ -20,6 +20,7 @@ import {
   QueueListIcon,
   EnvelopeIcon,
   DocumentDuplicateIcon,
+  ArrowDownTrayIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
@@ -146,6 +147,7 @@ export function buildNavSections(flags?: {
               },
             ]
           : []),
+        { label: 'Imports & exports', to: '/admin/settings/imports', icon: ArrowDownTrayIcon },
       ],
     },
   ]
