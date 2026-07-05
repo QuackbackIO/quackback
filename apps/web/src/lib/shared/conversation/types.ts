@@ -173,6 +173,31 @@ export interface FlaggedMessageDTO {
   flaggedAt: string
 }
 
+/**
+ * The active SLA on a conversation, projected from the engine's applied
+ * snapshot for the inbox chip + breach sort. Agent-only: the DTO builder nulls
+ * it on visitor paths and the SSE publish strips it from the visitor copy.
+ */
+export interface ConversationSlaDTO {
+  policyId: string
+  policyName: string
+  appliedAt: string
+  /** Absolute, office-hours-aware first-response deadline; null when the
+   *  policy doesn't track first response. */
+  firstResponseDueAt: string | null
+  /** When the first teammate reply settled the clock, or null while open. */
+  firstResponseAt: string | null
+  /** Next-response deadline while the customer is waiting on a reply; null
+   *  when nobody is waiting or the policy doesn't track it. */
+  nextResponseDueAt: string | null
+  /** Absolute time-to-close deadline; null when untracked. */
+  timeToCloseDueAt: string | null
+  /** When the resolution settled the close clock, or null while open. */
+  resolvedAt: string | null
+  /** Whether this policy pauses its clocks while the conversation is snoozed. */
+  pauseOnSnooze: boolean
+}
+
 /** A conversation row as surfaced to clients (inbox list + thread header). */
 export interface ConversationDTO {
   id: ConversationId
@@ -213,6 +238,9 @@ export interface ConversationDTO {
   endNote: string | null
   /** Conversation labels (agent-managed); empty when untagged. Agent-only. */
   tags: ConversationTagDTO[]
+  /** The active SLA's clocks (agent-only); null when no policy is applied.
+   *  Stripped on visitor-facing payloads. */
+  sla: ConversationSlaDTO | null
 }
 
 /** Human labels for each end reason, for the end-conversation dialog + the

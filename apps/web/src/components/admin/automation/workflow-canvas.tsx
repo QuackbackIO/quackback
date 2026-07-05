@@ -33,6 +33,7 @@ import { cn } from '@/lib/shared/utils'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tags'
+import { listSlaPolicyOptionsFn } from '@/lib/server/functions/sla'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -206,6 +207,8 @@ interface CanvasData {
   members: EntityOption[]
   teams: EntityOption[]
   tags: EntityOption[]
+  /** Live SLA policies for the Apply-SLA picker, with their targets line. */
+  slaPolicies: { id: string; name: string; targetsSummary: string }[]
   labels: EntityLabels
   makeStep: (kind: TreeStep['kind']) => TreeStep
   justInserted: string | null
@@ -238,22 +241,34 @@ function WorkflowCanvas({
     queryFn: () => fetchConversationTagsFn(),
     staleTime: 60_000,
   })
+  const { data: slaPolicies } = useQuery({
+    queryKey: ['admin', 'sla-policy-options'],
+    queryFn: () => listSlaPolicyOptionsFn(),
+    staleTime: 60_000,
+  })
   const [justInserted, setJustInserted] = useState<string | null>(null)
 
   const data = useMemo<CanvasData>(() => {
     const memberOptions = (members ?? []).map((m) => ({ id: m.id, name: m.name ?? 'Unnamed' }))
     const teamOptions = (teams ?? []).map((t) => ({ id: t.id, name: t.name }))
     const tagOptions = (tags ?? []).map((t) => ({ id: t.id, name: t.name }))
+    const slaOptions = slaPolicies ?? []
     return {
       members: memberOptions,
       teams: teamOptions,
       tags: tagOptions,
-      labels: { members: toMap(memberOptions), teams: toMap(teamOptions), tags: toMap(tagOptions) },
+      slaPolicies: slaOptions,
+      labels: {
+        members: toMap(memberOptions),
+        teams: toMap(teamOptions),
+        tags: toMap(tagOptions),
+        slaPolicies: toMap(slaOptions),
+      },
       makeStep: (kind) => createStep(tree, kind),
       justInserted,
       markInserted: setJustInserted,
     }
-  }, [members, teams, tags, tree, justInserted])
+  }, [members, teams, tags, slaPolicies, tree, justInserted])
 
   return (
     <CanvasContext.Provider value={data}>
@@ -852,7 +867,7 @@ function ActionEditor({
   action: GraphAction
   onChange: (action: GraphAction) => void
 }) {
-  const { members, teams, tags } = useCanvas()
+  const { members, teams, tags, slaPolicies } = useCanvas()
 
   const setSnoozeUntil = (mode: 'reply' | 'datetime') => {
     if (mode === 'reply') return onChange({ type: 'snooze', untilIso: null })
@@ -964,14 +979,32 @@ function ActionEditor({
       )}
 
       {action.type === 'apply_sla' && (
-        <Field label="SLA policy ID">
-          {/* TODO: swap for an SLA policy picker once a client query exists. */}
-          <Input
-            value={action.policyId}
-            onChange={(e) => onChange({ ...action, policyId: e.target.value })}
-            placeholder="slapol_…"
-            className="h-8 font-mono text-xs"
-          />
+        <Field label="SLA policy">
+          <Select
+            value={action.policyId || undefined}
+            onValueChange={(policyId) => onChange({ ...action, policyId })}
+          >
+            <SelectTrigger size="sm" className="w-full">
+              <SelectValue placeholder="Choose SLA policy" />
+            </SelectTrigger>
+            <SelectContent>
+              {slaPolicies.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <span className="flex flex-col items-start">
+                    <span>{p.name}</span>
+                    <span className="text-xs text-muted-foreground">{p.targetsSummary}</span>
+                  </span>
+                </SelectItem>
+              ))}
+              {/* A stored id that no longer resolves (archived / imported JSON)
+                  stays selectable so the step doesn't render blank. */}
+              {action.policyId && !slaPolicies.some((p) => p.id === action.policyId) && (
+                <SelectItem value={action.policyId}>
+                  <span className="font-mono text-xs">{action.policyId}</span>
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </Field>
       )}
 

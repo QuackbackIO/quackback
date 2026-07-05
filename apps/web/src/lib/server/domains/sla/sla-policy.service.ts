@@ -40,6 +40,11 @@ export async function listSlaPolicies(): Promise<SlaPolicy[]> {
     .orderBy(desc(slaPolicies.createdAt))
 }
 
+/** Every policy, live and archived, newest first (the settings page's list). */
+export async function listSlaPoliciesIncludingArchived(): Promise<SlaPolicy[]> {
+  return db.select().from(slaPolicies).orderBy(desc(slaPolicies.createdAt))
+}
+
 export async function getSlaPolicy(id: SlaPolicyId): Promise<SlaPolicy | null> {
   const [row] = await db
     .select()
@@ -85,4 +90,12 @@ export async function softDeleteSlaPolicy(id: SlaPolicyId): Promise<void> {
     .update(slaPolicies)
     .set({ deletedAt: now, updatedAt: now })
     .where(and(eq(slaPolicies.id, id), isNull(slaPolicies.deletedAt)))
+}
+
+/** Un-archive: clears deletedAt so the policy can be applied again. */
+export async function restoreSlaPolicy(id: SlaPolicyId): Promise<void> {
+  await db
+    .update(slaPolicies)
+    .set({ deletedAt: null, updatedAt: new Date() })
+    .where(eq(slaPolicies.id, id))
 }

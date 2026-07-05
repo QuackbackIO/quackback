@@ -7,7 +7,14 @@
  * Lazy breach evaluation (the next sub-step) reads `sla_applied` and appends to
  * the append-only `sla_events` log.
  */
-import { db, eq, conversations, slaEvents, type SlaPolicy } from '@/lib/server/db'
+import {
+  db,
+  eq,
+  conversations,
+  slaEvents,
+  type Conversation,
+  type SlaPolicy,
+} from '@/lib/server/db'
 import type { ConversationId, SlaPolicyId } from '@quackback/ids'
 import { getSlaPolicy } from './sla-policy.service'
 import {
@@ -36,6 +43,10 @@ export type SlaApplied = {
   // (set by the breach evaluator), or null while that clock is still open.
   firstResponseAt?: string | null
   resolvedAt?: string | null
+  // Snapshot of the policy's pause rule so the inbox chip can show a paused
+  // state without a join back to the policy. Stamps written before this field
+  // existed read as true (the policy default).
+  pauseOnSnooze?: boolean
 }
 
 /**
@@ -77,6 +88,7 @@ export async function applySlaToConversation(
       ? addOfficeHoursSeconds(schedule, at, policy.timeToCloseTargetSecs).toISOString()
       : null,
     firstResponseAt: null,
+    pauseOnSnooze: policy.pauseOnSnooze,
   }
 
   await db
@@ -170,4 +182,30 @@ export async function recordResolution(
     applied.timeToCloseDueAt,
     at
   )
+}
+
+/**
+ * Manually remove the active SLA (the agent's overflow action): clear the
+ * stamp and log a 'removed' event so reporting can tell removal apart from
+ * completion. A no-op (null) when nothing is applied; otherwise returns the
+ * updated row so the caller can broadcast the fresh DTO.
+ */
+export async function removeSlaFromConversation(
+  conversationId: ConversationId,
+  at: Date = new Date()
+): Promise<Conversation | null> {
+  const applied = await loadSlaApplied(conversationId)
+  if (!applied) return null
+  const [row] = await db
+    .update(conversations)
+    .set({ slaApplied: null, updatedAt: at })
+    .where(eq(conversations.id, conversationId))
+    .returning()
+  await db.insert(slaEvents).values({
+    conversationId,
+    policyId: applied.policyId,
+    kind: 'removed',
+    meta: { at: at.toISOString() },
+  })
+  return row ?? null
 }

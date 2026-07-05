@@ -679,6 +679,7 @@ export interface EntityLabels {
   members?: ReadonlyMap<string, string>
   teams?: ReadonlyMap<string, string>
   tags?: ReadonlyMap<string, string>
+  slaPolicies?: ReadonlyMap<string, string>
 }
 
 const shortId = (id: string): string => (id.length > 14 ? `${id.slice(0, 14)}…` : id)
@@ -705,7 +706,7 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
     case 'close':
       return 'Close the conversation'
     case 'apply_sla':
-      return `Apply SLA ${action.policyId ? shortId(action.policyId) : '…'}`
+      return `Apply SLA ${named(action.policyId, labels.slaPolicies, '…')}`
     case 'set_attribute':
       return action.key ? `Set ${action.key}` : 'Set an attribute…'
   }
