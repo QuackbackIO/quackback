@@ -12,11 +12,14 @@ import {
   eq,
   and,
   isNull,
+  isNotNull,
   asc,
   sql,
   conversationTags,
   conversationTagAssignments,
   conversations,
+  workflows,
+  macros,
   type ConversationTag,
 } from '@/lib/server/db'
 import type { ConversationTagId, ConversationId } from '@quackback/ids'
@@ -92,12 +95,25 @@ export async function createConversationTag(input: {
   // could race the find above. onConflictDoUpdate resurrects a soft-deleted
   // same-name row (clearing deletedAt) and resolves the race to one winning row,
   // so this never surfaces a raw unique-violation.
-  const [created] = await db
-    .insert(conversationTags)
-    .values({ name, color })
-    .onConflictDoUpdate({ target: conversationTags.name, set: { deletedAt: null } })
-    .returning()
-  return created
+  try {
+    const [created] = await db
+      .insert(conversationTags)
+      .values({ name, color })
+      .onConflictDoUpdate({ target: conversationTags.name, set: { deletedAt: null } })
+      .returning()
+    return created
+  } catch (err) {
+    // A raced CASE-VARIANT insert conflicts on the lower(name) unique index,
+    // which ON CONFLICT (name) can't absorb. Resolve find-or-create style: the
+    // winner's row is the tag this call meant.
+    if (isUniqueViolation(err)) {
+      const winner = await db.query.conversationTags.findFirst({
+        where: sql`lower(${conversationTags.name}) = ${name.toLowerCase()}`,
+      })
+      if (winner) return winner
+    }
+    throw err
+  }
 }
 
 /** All non-deleted conversation tags, ordered by name. */
@@ -211,11 +227,91 @@ export async function updateConversationTag(
 }
 
 /**
- * Soft-delete a conversation tag. The row stays (so history isn't rewritten) but is
- * filtered from every list by the `deleted_at IS NULL` predicate; any existing
- * conversation_tags rows pointing at it become inert.
+ * Every tag (live + archived) with its TOTAL conversation usage, for the
+ * settings Tags tab. Distinct from listConversationTagsWithCounts, whose
+ * open-only counts drive the inbox nav badge.
+ */
+export async function listAllConversationTagsWithUsage(): Promise<
+  (ConversationTagDTO & { count: number; archived: boolean })[]
+> {
+  const rows = await db
+    .select({
+      id: conversationTags.id,
+      name: conversationTags.name,
+      color: conversationTags.color,
+      deletedAt: conversationTags.deletedAt,
+      count: sql<number>`count(${conversationTagAssignments.conversationId})::int`,
+    })
+    .from(conversationTags)
+    .leftJoin(
+      conversationTagAssignments,
+      eq(conversationTagAssignments.conversationTagId, conversationTags.id)
+    )
+    .groupBy(
+      conversationTags.id,
+      conversationTags.name,
+      conversationTags.color,
+      conversationTags.deletedAt
+    )
+    .orderBy(asc(conversationTags.name))
+  return rows.map((r) => ({ ...toDTO(r), count: r.count, archived: r.deletedAt !== null }))
+}
+
+/**
+ * The LIVE automations that reference a tag: live workflows (graph actions
+ * add_tag/remove_tag or conversation.tags conditions) and macros (bundled
+ * add_tag actions). Both store the branded tag id inside jsonb, so a
+ * serialized containment scan covers every node shape, present and future
+ * (typeids are globally unique strings, so a false positive is not a
+ * realistic risk). Draft/paused workflows don't block: only running
+ * automations can break.
+ */
+export async function findTagAutomationReferences(
+  id: ConversationTagId
+): Promise<{ workflows: string[]; macros: string[] }> {
+  const [workflowRows, macroRows] = await Promise.all([
+    db
+      .select({ name: workflows.name, graph: workflows.graph })
+      .from(workflows)
+      .where(and(eq(workflows.status, 'live'), isNull(workflows.deletedAt))),
+    db
+      .select({ name: macros.name, actions: macros.actions })
+      .from(macros)
+      .where(isNull(macros.deletedAt)),
+  ])
+  return {
+    workflows: workflowRows
+      .filter((w) => JSON.stringify(w.graph ?? {}).includes(id))
+      .map((w) => w.name),
+    macros: macroRows
+      .filter((m) => JSON.stringify(m.actions ?? []).includes(id))
+      .map((m) => m.name),
+  }
+}
+
+/** Throw TAG_IN_USE naming every live automation that references the tag. */
+async function assertTagUnreferenced(id: ConversationTagId): Promise<void> {
+  const refs = await findTagAutomationReferences(id)
+  const names = [
+    ...refs.workflows.map((n) => `workflow "${n}"`),
+    ...refs.macros.map((n) => `macro "${n}"`),
+  ]
+  if (names.length > 0) {
+    throw new ValidationError(
+      'TAG_IN_USE',
+      `This tag is used by ${names.join(', ')}. Update those automations first.`
+    )
+  }
+}
+
+/**
+ * Archive (soft-delete) a conversation tag. The row stays (so history isn't
+ * rewritten) but is filtered from every list by the `deleted_at IS NULL`
+ * predicate; existing assignments become inert and the name stays reserved.
+ * Refused while a live workflow or macro references the tag.
  */
 export async function deleteConversationTag(id: ConversationTagId): Promise<void> {
+  await assertTagUnreferenced(id)
   const result = await db
     .update(conversationTags)
     .set({ deletedAt: new Date() })
@@ -223,6 +319,39 @@ export async function deleteConversationTag(id: ConversationTagId): Promise<void
     .returning()
   if (result.length === 0)
     throw new NotFoundError('TAG_NOT_FOUND', `Conversation tag ${id} not found`)
+}
+
+/**
+ * Bring an archived tag back into pickers and history. No name conflict is
+ * possible: the case-insensitive unique index spans archived rows, so the
+ * name stayed reserved the whole time.
+ */
+export async function restoreConversationTag(id: ConversationTagId): Promise<ConversationTagDTO> {
+  const [row] = await db
+    .update(conversationTags)
+    .set({ deletedAt: null })
+    .where(and(eq(conversationTags.id, id), isNotNull(conversationTags.deletedAt)))
+    .returning()
+  if (!row) throw new NotFoundError('TAG_NOT_FOUND', `Conversation tag ${id} not found`)
+  return toDTO(row)
+}
+
+/**
+ * Permanently delete a tag. Only offered BEHIND archive (the two-step keeps
+ * a misclick recoverable) and refused while automations reference it.
+ * Assignments cascade with the row, so historic conversations simply lose
+ * the label.
+ */
+export async function hardDeleteConversationTag(id: ConversationTagId): Promise<void> {
+  const existing = await db.query.conversationTags.findFirst({
+    where: eq(conversationTags.id, id),
+  })
+  if (!existing) throw new NotFoundError('TAG_NOT_FOUND', `Conversation tag ${id} not found`)
+  if (!existing.deletedAt) {
+    throw new ValidationError('TAG_NOT_ARCHIVED', 'Archive the tag before deleting it permanently')
+  }
+  await assertTagUnreferenced(id)
+  await db.delete(conversationTags).where(eq(conversationTags.id, id))
 }
 
 /** Tags applied to one conversation (non-deleted), ordered by name. */

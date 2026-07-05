@@ -95,7 +95,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 415 surfaces
+### Server functions (`requireAuth`) — 424 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -185,12 +185,21 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/companies.ts`::deleteCompanyFn | company.manage |
 | `lib/server/functions/companies.ts`::attachPrincipalToCompanyFn | company.manage |
 | `lib/server/functions/companies.ts`::detachPrincipalFromCompanyFn | company.manage |
+| `lib/server/functions/conversation-attributes.ts`::listConversationAttributesFn | conversation.view |
+| `lib/server/functions/conversation-attributes.ts`::createConversationAttributeFn | conversation.manage |
+| `lib/server/functions/conversation-attributes.ts`::updateConversationAttributeFn | conversation.manage |
+| `lib/server/functions/conversation-attributes.ts`::archiveConversationAttributeFn | conversation.manage |
+| `lib/server/functions/conversation-attributes.ts`::restoreConversationAttributeFn | conversation.manage |
+| `lib/server/functions/conversation-attributes.ts`::setConversationAttributeValueFn | conversation.set_attributes |
 | `lib/server/functions/conversation-segments.ts`::fetchInboxSegmentsWithCountsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsWithCountsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::createConversationTagFn | conversation.manage_tags |
 | `lib/server/functions/conversation-tags.ts`::updateConversationTagFn | conversation.manage_tags |
 | `lib/server/functions/conversation-tags.ts`::deleteConversationTagFn | conversation.manage_tags |
+| `lib/server/functions/conversation-tags.ts`::listConversationTagsForSettingsFn | conversation.manage_tags |
+| `lib/server/functions/conversation-tags.ts`::restoreConversationTagFn | conversation.manage_tags |
+| `lib/server/functions/conversation-tags.ts`::hardDeleteConversationTagFn | conversation.manage_tags |
 | `lib/server/functions/conversation-tags.ts`::addConversationTagFn | conversation.set_tags |
 | `lib/server/functions/conversation-tags.ts`::removeConversationTagFn | conversation.set_tags |
 | `lib/server/functions/conversation-views.ts`::listConversationViewsFn | conversation.view |
@@ -680,7 +689,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-152 of 651 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+152 of 660 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

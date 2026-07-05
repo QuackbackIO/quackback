@@ -14,9 +14,12 @@ import { ForbiddenError } from '@/lib/shared/errors'
 import {
   listConversationTags,
   listConversationTagsWithCounts,
+  listAllConversationTagsWithUsage,
   createConversationTag,
   updateConversationTag,
   deleteConversationTag,
+  restoreConversationTag,
+  hardDeleteConversationTag,
   attachTag,
   detachTag,
   listTagsForConversation,
@@ -101,12 +104,37 @@ export const updateConversationTagFn = createServerFn({ method: 'POST' })
     })
   })
 
-/** Soft-delete a conversation label. */
+/** Archive (soft-delete) a conversation label; refused while automations use it. */
 export const deleteConversationTagFn = createServerFn({ method: 'POST' })
   .validator(deleteConversationTagSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_TAGS })
     await deleteConversationTag(data.id as ConversationTagId)
+    return { id: data.id as ConversationTagId }
+  })
+
+/** Every label (archived included) with total usage, for the settings tab. */
+export const listConversationTagsForSettingsFn = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_TAGS })
+    return listAllConversationTagsWithUsage()
+  }
+)
+
+/** Bring an archived label back into pickers. */
+export const restoreConversationTagFn = createServerFn({ method: 'POST' })
+  .validator(deleteConversationTagSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_TAGS })
+    return restoreConversationTag(data.id as ConversationTagId)
+  })
+
+/** Permanently delete an ARCHIVED label (two-step: archive first). */
+export const hardDeleteConversationTagFn = createServerFn({ method: 'POST' })
+  .validator(deleteConversationTagSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_TAGS })
+    await hardDeleteConversationTag(data.id as ConversationTagId)
     return { id: data.id as ConversationTagId }
   })
 
