@@ -1,18 +1,24 @@
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRightOnRectangleIcon, GlobeAltIcon } from '@heroicons/react/24/solid'
+import {
+  ArrowRightOnRectangleIcon,
+  GlobeAltIcon,
+  DocumentTextIcon,
+} from '@heroicons/react/24/solid'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortalAuthTab } from './portal-auth-tab'
 import { SignInProvidersTab } from './sign-in-providers-tab'
+import { AuditLogPage } from './audit-log-page'
 import type { AuthConfig, PortalConfig } from '@/lib/shared/types/settings'
 
 /**
- * The Security/authentication page tabs split by concern, not by surface:
+ * The Access & Security page tabs split by concern, not by surface:
  *  - `portal-access` — who can view the portal (visibility, domains, invites, segments, widget)
  *  - `sign-in`       — authentication providers for both surfaces in one place
  *                       (password + 2FA enforcement, magic link, social, custom OIDC)
  *                       with per-surface toggles inline.
+ *  - `audit-log`     — what admins changed (compliance review + CSV export).
  */
-export type AuthTab = 'portal-access' | 'sign-in'
+export type AuthTab = 'portal-access' | 'sign-in' | 'audit-log'
 
 interface AuthSettingsProps {
   /** Current selected tab. URL-driven via `?tab=` so the choice is
@@ -74,6 +80,10 @@ export function AuthSettings({
           <ArrowRightOnRectangleIcon />
           Sign-in
         </TabsTrigger>
+        <TabsTrigger value="audit-log">
+          <DocumentTextIcon />
+          Audit log
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="portal-access">
@@ -86,6 +96,10 @@ export function AuthSettings({
           credentialStatus={credentialStatus}
           customOidcProviderTier={customOidcProviderTier}
         />
+      </TabsContent>
+
+      <TabsContent value="audit-log">
+        <AuditLogPage />
       </TabsContent>
     </Tabs>
   )
