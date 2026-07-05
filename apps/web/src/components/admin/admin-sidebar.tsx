@@ -14,6 +14,7 @@ import {
   BookOpenIcon,
   ChartBarIcon,
   QuestionMarkCircleIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
@@ -70,6 +71,7 @@ const navItems = [
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
+  { label: 'AI & Automation', href: '/admin/automation/assistant', icon: SparklesIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
 ]
 
@@ -133,6 +135,8 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
     if (item.href === '/admin/help-center') return flags?.helpCenter ?? false
     if (item.href === '/admin/inbox') return flags?.supportInbox ?? false
     if (item.href === '/admin/tickets') return flags?.supportTickets ?? false
+    // AI & Automation is admin-only, same gate as the settings cog below.
+    if (item.href === '/admin/automation/assistant') return isAdmin
     return true
   })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)

@@ -16,12 +16,10 @@ import {
   BookOpenIcon,
   TagIcon,
   MegaphoneIcon,
-  SparklesIcon,
   TicketIcon,
   QueueListIcon,
   EnvelopeIcon,
   DocumentDuplicateIcon,
-  BoltIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
@@ -52,10 +50,11 @@ export function isNavGroup(entry: NavEntry): entry is NavGroup {
 }
 
 /**
- * The settings IA (SETTINGS-IA-SPEC Option B): four stable sections. Flags hide
+ * The settings IA (SETTINGS-IA-SPEC Option B): three stable sections. Flags hide
  * ITEMS (or whole product accordions), never sections, so the sidebar layout
  * does not reflow when a flag flips - Products always renders because Feedback
- * is always on.
+ * is always on. AI & Automation lives outside settings entirely, as its own
+ * main-nav area at /admin/automation (M5).
  */
 export function buildNavSections(flags?: {
   helpCenter?: boolean
@@ -113,14 +112,6 @@ export function buildNavSections(flags?: {
 
   return [
     { label: 'Products', items: products },
-    {
-      label: 'AI & Automation',
-      items: [
-        { label: 'Assistant', to: '/admin/settings/ai', icon: SparklesIcon },
-        { label: 'Workflows', to: '/admin/settings/workflows', icon: BoltIcon },
-        { label: 'Sandbox', to: '/admin/settings/ai/sandbox', icon: BeakerIcon },
-      ],
-    },
     {
       label: 'Workspace',
       items: [

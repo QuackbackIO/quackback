@@ -25,7 +25,7 @@ function allLabels(sections: ReturnType<typeof buildNavSections>): string[] {
 }
 
 describe('buildNavSections', () => {
-  it('always renders the four sections in order, regardless of flags', () => {
+  it('always renders the three sections in order, regardless of flags', () => {
     for (const flags of [
       undefined,
       {},
@@ -33,13 +33,20 @@ describe('buildNavSections', () => {
       { supportInbox: true },
     ]) {
       const sections = buildNavSections(flags)
-      expect(sections.map((s) => s.label)).toEqual([
-        'Products',
-        'AI & Automation',
-        'Workspace',
-        'Data',
-      ])
+      expect(sections.map((s) => s.label)).toEqual(['Products', 'Workspace', 'Data'])
     }
+  })
+
+  it('has no AI & Automation section (elevated to its own main-nav area)', () => {
+    const sections = buildNavSections({
+      helpCenter: true,
+      supportInbox: true,
+      supportTickets: true,
+    })
+    expect(sections.map((s) => s.label)).not.toContain('AI & Automation')
+    expect(allLabels(sections)).not.toContain('Assistant')
+    expect(allLabels(sections)).not.toContain('Workflows')
+    expect(allLabels(sections)).not.toContain('Sandbox')
   })
 
   it('Products always contains the Feedback accordion with its four pages', () => {
@@ -108,18 +115,6 @@ describe('buildNavSections', () => {
     const sections = buildNavSections({ supportInbox: true })
     const sla = groupKids(sections, 'Products', 'Support').find((k) => k.label === 'SLA policies')!
     expect(sla.to).toBe('/admin/settings/sla')
-  })
-
-  it('AI & Automation contains Assistant, Workflows and Sandbox', () => {
-    const sections = buildNavSections()
-    expect(itemLabels(sections, 'AI & Automation')).toEqual(['Assistant', 'Workflows', 'Sandbox'])
-  })
-
-  it('Workflows points at the standalone workflows URL', () => {
-    const sections = buildNavSections()
-    const s = sections.find((x) => x.label === 'AI & Automation')!
-    const workflows = s.items.find((i) => i.label === 'Workflows')!
-    expect(!isNavGroup(workflows) && workflows.to).toBe('/admin/settings/workflows')
   })
 
   it('Workspace contains the administration pages in order (flags off)', () => {
@@ -203,7 +198,14 @@ describe('buildNavSections', () => {
   it('retired section names are gone (Administration, Customization, Customers, Support section)', () => {
     const sections = buildNavSections({ helpCenter: true, supportInbox: true })
     const sectionLabels = sections.map((s) => s.label)
-    for (const retired of ['Administration', 'Customization', 'Customers', 'Support', 'General']) {
+    for (const retired of [
+      'Administration',
+      'Customization',
+      'Customers',
+      'Support',
+      'General',
+      'AI & Automation',
+    ]) {
       expect(sectionLabels).not.toContain(retired)
     }
   })

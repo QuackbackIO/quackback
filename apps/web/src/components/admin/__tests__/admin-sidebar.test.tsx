@@ -70,3 +70,19 @@ describe('AdminSidebar — settings cog visibility', () => {
     expect(container.querySelectorAll('a[href="/admin/settings"]').length).toBe(0)
   })
 })
+
+describe('AdminSidebar — AI & Automation visibility', () => {
+  afterEach(() => cleanup())
+
+  it('shows AI & Automation to admins, linking to the assistant page', () => {
+    const { container } = renderSidebar('admin')
+    expect(
+      container.querySelectorAll('a[href="/admin/automation/assistant"]').length
+    ).toBeGreaterThan(0)
+  })
+
+  it('hides AI & Automation from non-admin team members', () => {
+    const { container } = renderSidebar('member')
+    expect(container.querySelectorAll('a[href="/admin/automation/assistant"]').length).toBe(0)
+  })
+})
