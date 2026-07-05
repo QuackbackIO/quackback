@@ -12,7 +12,6 @@ import {
   PaintBrushIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import {
@@ -33,11 +32,7 @@ import { tags } from '@lezer/highlight'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
-import {
-  BrandingLayout,
-  BrandingControlsPanel,
-  BrandingPreviewPanel,
-} from '@/components/admin/settings/branding/branding-layout'
+import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ThemePreview } from '@/components/admin/settings/branding/theme-preview'
 import {
   useBrandingState,
@@ -47,8 +42,6 @@ import { oklchColor } from '@/components/admin/settings/branding/oklch-color-ext
 import { primaryPresetIds, themePresets, type ThemeConfig } from '@/lib/shared/theme'
 import { useSettingsLogo } from '@/lib/client/hooks/use-settings-queries'
 import { useUploadWorkspaceLogo, useDeleteWorkspaceLogo } from '@/lib/client/mutations/settings'
-import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
-import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 
 // ==============================================
 // Custom CodeMirror theme using admin portal CSS variables
@@ -134,11 +127,9 @@ export const Route = createFileRoute('/admin/settings/branding')({
 })
 
 function BrandingPage() {
-  const { settings, managedFieldPaths } = Route.useRouteContext()
-  const workspaceNameManaged = isPathManagedFromBootstrap(
-    MANAGED_PATHS.WORKSPACE_NAME,
-    managedFieldPaths ?? []
-  )
+  const { settings } = Route.useRouteContext()
+  // Display-only: the name is edited on Workspace > General.
+  const workspaceName = settings?.name || ''
   const { data: brandingConfig = {} } = useSuspenseQuery(settingsQueries.branding())
   const { data: logoData } = useSuspenseQuery(settingsQueries.logo())
   const { data: customCss = '' } = useSuspenseQuery(settingsQueries.customCss())
@@ -152,182 +143,102 @@ function BrandingPage() {
     initialCustomCss: customCss,
   })
 
-  // Workspace name state
-  const [workspaceName, setWorkspaceName] = useState(settings?.name || '')
-  const [isSavingName, setIsSavingName] = useState(false)
-  const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Timer cleanup on unmount to prevent state updates after unmount
-  useEffect(() => {
-    return () => {
-      if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current)
-    }
-  }, [])
-
-  // Debounced workspace name save
-  const handleNameChange = (value: string) => {
-    setWorkspaceName(value)
-    if (nameTimeoutRef.current) {
-      clearTimeout(nameTimeoutRef.current)
-    }
-    nameTimeoutRef.current = setTimeout(async () => {
-      if (value.trim() && value !== settings?.name) {
-        setIsSavingName(true)
-        try {
-          await updateWorkspaceNameFn({ data: { name: value.trim() } })
-        } catch {
-          toast.error('Failed to update workspace name')
-        } finally {
-          setIsSavingName(false)
-        }
-      }
-    }, 800)
-  }
-
   return (
-    <>
-      <div className="space-y-6 max-w-5xl">
-        <div className="lg:hidden">
-          <BackLink to="/admin/settings">Settings</BackLink>
-        </div>
-        <PageHeader
-          icon={PaintBrushIcon}
-          title="Branding"
-          description="Customize your portal's appearance and branding"
-        />
+    <div className="space-y-6">
+      <div className="lg:hidden">
+        <BackLink to="/admin/settings">Settings</BackLink>
+      </div>
+      <PageHeader
+        icon={PaintBrushIcon}
+        title="Branding"
+        description="Customize your portal's appearance and branding"
+      />
 
-        {/* Two-Column Layout */}
-        <BrandingLayout>
-          <BrandingControlsPanel>
-            {/* Identity Section */}
-            <div className="p-4 sm:p-6 space-y-4">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Identity</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  How your brand appears in the portal header
-                </p>
-              </div>
+      {/* Full-screen editor: controls left, live preview right (sticky). */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] gap-6 items-start">
+        <div className="space-y-4 min-w-0">
+          <SettingsCard title="Identity" description="How your brand appears in the portal header">
+            <div className="flex items-start gap-4">
+              <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
+              <p className="flex-1 self-center text-xs text-muted-foreground">
+                The workspace name is edited under General settings.
+              </p>
+            </div>
+          </SettingsCard>
 
-              <div className="flex items-start gap-4">
-                <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
-                <div className="flex-1 space-y-1.5">
-                  <Label htmlFor="workspace-name" className="text-xs text-muted-foreground">
-                    Workspace Name
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="workspace-name"
-                      value={workspaceName}
-                      onChange={(e) => handleNameChange(e.target.value)}
-                      placeholder="My Workspace"
-                      disabled={workspaceNameManaged}
-                    />
-                    {isSavingName && (
-                      <ArrowPathIcon className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          <SettingsCard
+            title="Theme Mode"
+            description="Control how light/dark mode works for portal visitors"
+          >
+            <Select value={state.themeMode} onValueChange={state.setThemeMode}>
+              <SelectTrigger className="w-full h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">User choice (allow toggle)</SelectItem>
+                <SelectItem value="light">Light only</SelectItem>
+                <SelectItem value="dark">Dark only</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsCard>
+
+          <SettingsCard title="Theme" description="Choose a preset to set your portal's color palette">
+            <div className="grid grid-cols-3 gap-2">
+              {primaryPresetIds.map((presetId) => {
+                const preset = themePresets[presetId]
+                if (!preset) return null
+                const isActive = state.activePresetId === presetId
+                return (
+                  <button
+                    key={presetId}
+                    onClick={() => state.setPreset(presetId)}
+                    className={cn(
+                      'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
+                      isActive
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
+                        : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
                     )}
-                  </div>
-                  {workspaceNameManaged && (
-                    <p className="text-xs text-muted-foreground">
-                      Managed by your administrator&apos;s config — edit there.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Theme Mode Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Theme Mode</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Control how light/dark mode works for portal visitors
-                </p>
-              </div>
-
-              <Select value={state.themeMode} onValueChange={state.setThemeMode}>
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">User choice (allow toggle)</SelectItem>
-                  <SelectItem value="light">Light only</SelectItem>
-                  <SelectItem value="dark">Dark only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Theme Preset Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Theme</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Choose a preset to set your portal's color palette
-                </p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                {primaryPresetIds.map((presetId) => {
-                  const preset = themePresets[presetId]
-                  if (!preset) return null
-                  const isActive = state.activePresetId === presetId
-                  return (
-                    <button
-                      key={presetId}
-                      onClick={() => state.setPreset(presetId)}
-                      className={cn(
-                        'flex flex-col items-center gap-1.5 px-2 py-2.5 rounded-lg border text-center text-xs font-medium transition-colors min-w-0',
-                        isActive
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary text-foreground'
-                          : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-muted/50'
-                      )}
-                    >
-                      <div
-                        className="h-5 w-5 rounded-full border border-border/50"
-                        style={{ backgroundColor: preset.color }}
-                      />
-                      <span className="w-full truncate">{preset.name}</span>
-                      <span className="w-full text-xs text-muted-foreground leading-tight">
-                        {preset.description}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Typography Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Typography</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">Font and corner styling</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Font</Label>
-                  <Select
-                    value={state.currentFontId}
-                    onValueChange={(id) => {
-                      const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
-                      if (selectedFont) state.setFont(selectedFont.value)
-                    }}
                   >
-                    <SelectTrigger className="w-full h-10">
-                      <SelectValue>
-                        <span style={{ fontFamily: state.font }}>
-                          {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
-                            'Select font'}
-                        </span>
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[300px]">
-                      <FontSelectGroup category="Sans Serif" />
-                      <FontSelectGroup category="Serif" />
-                      <FontSelectGroup category="Monospace" />
-                      <FontSelectGroup category="System" />
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <div
+                      className="h-5 w-5 rounded-full border border-border/50"
+                      style={{ backgroundColor: preset.color }}
+                    />
+                    <span className="w-full truncate">{preset.name}</span>
+                    <span className="w-full text-xs text-muted-foreground leading-tight">
+                      {preset.description}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </SettingsCard>
+
+          <SettingsCard title="Typography" description="Font and corner styling">
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Font</Label>
+                <Select
+                  value={state.currentFontId}
+                  onValueChange={(id) => {
+                    const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
+                    if (selectedFont) state.setFont(selectedFont.value)
+                  }}
+                >
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue>
+                      <span style={{ fontFamily: state.font }}>
+                        {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||
+                          'Select font'}
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    <FontSelectGroup category="Sans Serif" />
+                    <FontSelectGroup category="Serif" />
+                    <FontSelectGroup category="Monospace" />
+                    <FontSelectGroup category="System" />
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
@@ -350,108 +261,108 @@ function BrandingPage() {
                 </div>
               </div>
             </div>
+          </SettingsCard>
 
-            {/* CSS Editor Section */}
-            <div className="p-4 sm:p-6 space-y-4 border-t border-border">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Theme CSS</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Your full theme stylesheet. Design at{' '}
-                  <a
-                    href="https://tweakcn.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    tweakcn.com
-                  </a>
-                </p>
-              </div>
-
-              <CodeMirror
-                value={state.cssText}
-                onChange={state.setCssText}
-                height="280px"
-                theme="none"
-                extensions={adminEditorExtensions}
-                basicSetup={{
-                  lineNumbers: false,
-                  foldGutter: false,
-                  highlightActiveLine: false,
-                  bracketMatching: true,
-                  closeBrackets: true,
-                  autocompletion: true,
-                  tabSize: 2,
-                }}
-                className={cn(
-                  'overflow-hidden rounded-md border border-input',
-                  '[&_.cm-editor]:!outline-none',
-                  '[&_.cm-editor.cm-focused]:ring-1 [&_.cm-editor.cm-focused]:ring-ring',
-                  '[&_.cm-scroller]:overflow-auto'
-                )}
-              />
-            </div>
-
-            {/* Save Button */}
-            <div className="p-4 sm:p-6 border-t border-border">
-              <Button onClick={state.saveTheme} disabled={state.isSaving} className="w-full h-10">
-                {state.isSaving ? (
-                  <>
-                    <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : state.saveSuccess ? (
-                  <>
-                    <CheckIcon className="mr-2 h-4 w-4" />
-                    Saved!
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
-              </Button>
-            </div>
-          </BrandingControlsPanel>
-
-          <BrandingPreviewPanel
-            label="Preview"
-            headerRight={
-              <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md">
-                <button
-                  onClick={() => state.setPreviewMode('light')}
-                  disabled={state.previewModeDisabled === 'light'}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                    state.previewMode === 'light'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                    state.previewModeDisabled === 'light' && 'opacity-40 cursor-not-allowed'
-                  )}
-                >
-                  <SunIcon className="h-3 w-3" />
-                  Light
-                </button>
-                <button
-                  onClick={() => state.setPreviewMode('dark')}
-                  disabled={state.previewModeDisabled === 'dark'}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all',
-                    state.previewMode === 'dark'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                    state.previewModeDisabled === 'dark' && 'opacity-40 cursor-not-allowed'
-                  )}
-                >
-                  <MoonIcon className="h-3 w-3" />
-                  Dark
-                </button>
-              </div>
+          <SettingsCard
+            title="Theme CSS"
+            description="Your full theme stylesheet — edit the raw variables"
+            action={
+              <a
+                href="https://tweakcn.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Design at tweakcn.com
+              </a>
             }
           >
-            <ThemePreview previewMode={state.previewMode} cssVariables={state.parsedCssVariables} />
-          </BrandingPreviewPanel>
-        </BrandingLayout>
+            <CodeMirror
+              value={state.cssText}
+              onChange={state.setCssText}
+              height="280px"
+              theme="none"
+              extensions={adminEditorExtensions}
+              basicSetup={{
+                lineNumbers: false,
+                foldGutter: false,
+                highlightActiveLine: false,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                tabSize: 2,
+              }}
+              className={cn(
+                'overflow-hidden rounded-md border border-input',
+                '[&_.cm-editor]:!outline-none',
+                '[&_.cm-editor.cm-focused]:ring-1 [&_.cm-editor.cm-focused]:ring-ring',
+                '[&_.cm-scroller]:overflow-auto'
+              )}
+            />
+          </SettingsCard>
+
+          {/* Sticky save bar so theme changes are always committable while scrolling. */}
+          <div className="sticky bottom-4 z-10">
+            <Button
+              onClick={state.saveTheme}
+              disabled={state.isSaving}
+              className="w-full h-11 shadow-lg"
+            >
+              {state.isSaving ? (
+                <>
+                  <ArrowPathIcon className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : state.saveSuccess ? (
+                <>
+                  <CheckIcon className="mr-2 h-4 w-4" />
+                  Saved!
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="xl:sticky xl:top-6 min-w-0 self-start">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-sm font-medium">Preview</span>
+            <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+              <button
+                onClick={() => state.setPreviewMode('light')}
+                disabled={state.previewModeDisabled === 'light'}
+                className={cn(
+                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  state.previewMode === 'light'
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                  state.previewModeDisabled === 'light' && 'opacity-40 cursor-not-allowed'
+                )}
+              >
+                <SunIcon className="h-3.5 w-3.5" />
+                Light
+              </button>
+              <button
+                onClick={() => state.setPreviewMode('dark')}
+                disabled={state.previewModeDisabled === 'dark'}
+                className={cn(
+                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  state.previewMode === 'dark'
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                  state.previewModeDisabled === 'dark' && 'opacity-40 cursor-not-allowed'
+                )}
+              >
+                <MoonIcon className="h-3.5 w-3.5" />
+                Dark
+              </button>
+            </div>
+          </div>
+          <ThemePreview previewMode={state.previewMode} cssVariables={state.parsedCssVariables} />
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
