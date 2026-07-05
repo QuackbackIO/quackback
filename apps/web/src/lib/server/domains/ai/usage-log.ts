@@ -130,7 +130,7 @@ export async function withUsageLogging<T>(
 // Retention cleanup
 // ---------------------------------------------------------------------------
 
-const AI_USAGE_RETENTION_DAYS = 90
+export const AI_USAGE_RETENTION_DAYS = 90
 const PIPELINE_LOG_RETENTION_DAYS = 180
 
 export async function cleanupExpiredLogs(): Promise<{

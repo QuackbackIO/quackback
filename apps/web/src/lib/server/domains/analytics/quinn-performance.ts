@@ -20,6 +20,7 @@ import {
   conversations,
   type AssistantInvolvementStatus,
 } from '@/lib/server/db'
+import { ratePctOrNull } from '@/lib/shared/percent'
 
 export interface QuinnInvolvementRow {
   status: AssistantInvolvementStatus
@@ -55,7 +56,11 @@ const isResolved = (status: AssistantInvolvementStatus): boolean =>
 const isHandedOff = (status: AssistantInvolvementStatus): boolean =>
   (AI_INBOX_BUCKETS.escalated as readonly AssistantInvolvementStatus[]).includes(status)
 
-const pct = (n: number, d: number): number => (d > 0 ? Math.round((n / d) * 100) : 0)
+// Quinn's rate tiles always render a number rather than a placeholder, so this
+// coalesces the shared helper's null (nothing to divide by) down to 0 — unlike
+// guidance-stats.ts and quinn-tools.ts, which surface that "no data yet" case
+// to the UI as null.
+const pct = (n: number, d: number): number => ratePctOrNull(n, d) ?? 0
 
 export function summarizeQuinnPerformance(
   involvementRows: QuinnInvolvementRow[],

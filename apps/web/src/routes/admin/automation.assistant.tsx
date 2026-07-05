@@ -8,6 +8,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { AssistantIdentityCard } from '@/components/admin/automation/assistant-identity-card'
 import { SupportPerformanceCard } from '@/components/admin/automation/support-performance-card'
 import { QuinnPerformanceCard } from '@/components/admin/automation/quinn-performance-card'
+import { QuinnToolsCard } from '@/components/admin/automation/quinn-tools-card'
 import { AssistantBasicsCard } from '@/components/admin/automation/assistant-basics-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
 import { ToolControlsCard } from '@/components/admin/automation/tool-controls-card'
@@ -55,6 +56,7 @@ function AssistantPage() {
 
       <SupportPerformanceCard />
       <QuinnPerformanceCard />
+      <QuinnToolsCard />
 
       {flags?.assistantActions ? (
         <>

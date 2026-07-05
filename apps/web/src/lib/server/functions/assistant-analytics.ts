@@ -4,19 +4,14 @@
  * automation/assistant page. Read-only, gated on analytics.view like the rest
  * of the analytics surface.
  */
-import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { getQuinnPerformance } from '@/lib/server/domains/analytics/quinn-performance'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-
-const rangeSchema = z.object({
-  from: z.string().datetime(),
-  to: z.string().datetime(),
-})
+import { dateRangeSchema } from '@/lib/shared/schemas'
 
 export const getQuinnPerformanceFn = createServerFn({ method: 'GET' })
-  .validator(rangeSchema)
+  .validator(dateRangeSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
     return getQuinnPerformance(new Date(data.from), new Date(data.to))

@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AreaChart, Area, XAxis } from 'recharts'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
-import { MetricTile, useLast30DaysRange, pct } from './metric-tile'
+import { MetricTile, useLast30DaysRange, pct, asRate } from './metric-tile'
 import { quinnPerformanceQuery } from '@/lib/client/queries/assistant-analytics'
 
 const TREND_CHART_CONFIG: ChartConfig = {
@@ -47,10 +47,6 @@ function TrendSparkline({ data }: { data: Array<{ date: string; involvements: nu
   )
 }
 
-/** Quinn's summary rates arrive pre-rounded 0-100 (see QuinnPerformanceSummary); the shared `pct` formatter takes 0-1, so scale down at the call site. */
-const asRate = (value: number | undefined): number | undefined =>
-  value === undefined ? undefined : value / 100
-
 export function QuinnPerformanceCard() {
   const range = useLast30DaysRange()
   const { data } = useQuery(quinnPerformanceQuery(range.from, range.to))
@@ -70,7 +66,9 @@ export function QuinnPerformanceCard() {
           label="Resolution rate"
           value={pct(asRate(data?.resolutionRate))}
           sub={
-            data ? `${data.resolvedConfirmed} confirmed / ${data.resolvedAssumed} assumed` : undefined
+            data
+              ? `${data.resolvedConfirmed} confirmed / ${data.resolvedAssumed} assumed`
+              : undefined
           }
         />
         <MetricTile

@@ -61,7 +61,9 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
  * off unless a test opts in.
  */
 function mockActionsFlag(enabled: boolean) {
-  mockIsFeatureEnabled.mockImplementation(async (flag: string) => flag === 'assistantActions' && enabled)
+  mockIsFeatureEnabled.mockImplementation(
+    async (flag: string) => flag === 'assistantActions' && enabled
+  )
 }
 
 // Defensive: with mockActionsFlag in place dataConnectors always resolves
@@ -104,7 +106,10 @@ vi.mock('../assistant.tools', async (importOriginal) => {
   realAssembleAssistantToolsRef.current = actual.assembleAssistantTools as (
     ...args: unknown[]
   ) => unknown
-  return { ...actual, assembleAssistantTools: (...args: unknown[]) => mockAssembleAssistantTools(...args) }
+  return {
+    ...actual,
+    assembleAssistantTools: (...args: unknown[]) => mockAssembleAssistantTools(...args),
+  }
 })
 
 import {
@@ -167,7 +172,11 @@ beforeEach(() => {
   mockWithUsageLogging.mockImplementation(
     async (
       params: { metadata?: Record<string, unknown> },
-      fn: () => Promise<{ result: unknown; retryCount: number; metadata?: Record<string, unknown> }>,
+      fn: () => Promise<{
+        result: unknown
+        retryCount: number
+        metadata?: Record<string, unknown>
+      }>,
       extract: (result: unknown) => unknown
     ) => {
       const { result, metadata } = await fn()
@@ -358,36 +367,54 @@ describe('buildBasicsPrompt', () => {
 })
 
 describe('buildGuidancePrompt', () => {
-  const rule = (title: string, body: string) => ({ title, body })
+  const rule = (id: string, title: string, body: string) => ({ id: id as never, title, body })
 
-  it('returns null when there are no rules', () => {
-    expect(buildGuidancePrompt([])).toBeNull()
+  it('returns a null block and empty ruleIds when there are no rules', () => {
+    expect(buildGuidancePrompt([])).toEqual({ block: null, ruleIds: [] })
   })
 
   it('folds in each rule title + body, framed to yield to the base rules on conflict', () => {
-    const block = buildGuidancePrompt([rule('Refunds', 'Always mention the refund policy.')])
+    const { block } = buildGuidancePrompt([
+      rule('assistant_guidance_1', 'Refunds', 'Always mention the refund policy.'),
+    ])
     expect(block).toContain('Refunds')
     expect(block).toContain('Always mention the refund policy.')
     expect(block!.toLowerCase()).toContain('rules above')
   })
 
+  it('returns the id of each rule actually folded in', () => {
+    const { ruleIds } = buildGuidancePrompt([
+      rule('assistant_guidance_1', 'Refunds', 'Always mention the refund policy.'),
+      rule('assistant_guidance_2', 'Tone', 'Stay upbeat.'),
+    ])
+    expect(ruleIds).toEqual(['assistant_guidance_1', 'assistant_guidance_2'])
+  })
+
   it('contains no em dashes', () => {
-    const block = buildGuidancePrompt([rule('Tone', 'Stay upbeat.')])
+    const { block } = buildGuidancePrompt([rule('assistant_guidance_1', 'Tone', 'Stay upbeat.')])
     expect(block).not.toContain('—')
   })
 
-  it('caps at 20 enabled rules, in position order', () => {
-    const rules = Array.from({ length: 25 }, (_, i) => rule(`Rule ${i}`, 'body'))
-    const block = buildGuidancePrompt(rules)
+  it('caps at 20 enabled rules, in position order, and ruleIds mirrors the cap', () => {
+    const rules = Array.from({ length: 25 }, (_, i) =>
+      rule(`assistant_guidance_${i}`, `Rule ${i}`, 'body')
+    )
+    const { block, ruleIds } = buildGuidancePrompt(rules)
     expect(block).toContain('Rule 19')
     expect(block).not.toContain('Rule 20')
+    expect(ruleIds).toHaveLength(20)
+    expect(ruleIds).not.toContain('assistant_guidance_20')
   })
 
-  it('drops whole rules past the char budget, in position order (never truncates one)', () => {
+  it('drops whole rules past the char budget, in position order (never truncates one), and ruleIds mirrors it', () => {
     const nearBudget = 'x'.repeat(3990)
-    const block = buildGuidancePrompt([rule('First', nearBudget), rule('Second', 'short body')])
+    const { block, ruleIds } = buildGuidancePrompt([
+      rule('assistant_guidance_1', 'First', nearBudget),
+      rule('assistant_guidance_2', 'Second', 'short body'),
+    ])
     expect(block).toContain('First')
     expect(block).not.toContain('Second')
+    expect(ruleIds).toEqual(['assistant_guidance_1'])
   })
 })
 
@@ -652,6 +679,48 @@ describe('runAssistantTurn', () => {
     expect(lastLoggedMetadata?.answerKind).toBe('escalated')
   })
 
+  it('records guidanceRuleIds in the usage-log metadata for rules folded into the prompt', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantConfig.mockResolvedValue({ toolControls: {}, surfaces: {}, basics: {} })
+    mockListGuidanceRules.mockResolvedValue([
+      { id: 'assistant_guidance_1', title: 'Refunds', body: 'Mention the policy.' },
+      { id: 'assistant_guidance_2', title: 'Tone', body: 'Stay upbeat.' },
+    ])
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    expect(lastLoggedMetadata?.guidanceRuleIds).toEqual([
+      'assistant_guidance_1',
+      'assistant_guidance_2',
+    ])
+  })
+
+  it('omits guidanceRuleIds from the usage-log metadata (byte-identical) when actions are off', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(false)
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    expect(lastLoggedMetadata).not.toHaveProperty('guidanceRuleIds')
+    expect(lastLoggedMetadata).toEqual({
+      conversationId: null,
+      attempt: 0,
+      answerKind: 'no_sources',
+    })
+  })
+
+  it('omits guidanceRuleIds from the usage-log metadata when actions are on but no rule survives', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantConfig.mockResolvedValue({ toolControls: {}, surfaces: {}, basics: {} })
+    mockListGuidanceRules.mockResolvedValue([])
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    expect(lastLoggedMetadata).not.toHaveProperty('guidanceRuleIds')
+  })
+
   it('salvages a schema answer from prose the weak model wrapped around the JSON', async () => {
     // Model leaks a chatty preamble, then the JSON envelope, and never emits a
     // structured-output.complete: the turn must still land the real answer.
@@ -711,7 +780,9 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
       basics: { tone: 'friendly', length: 'concise' },
       surfaces: { widget: { instructions: 'Be extra warm.' } },
     })
-    mockListGuidanceRules.mockResolvedValue([{ title: 'Refunds', body: 'Mention the policy.' }])
+    mockListGuidanceRules.mockResolvedValue([
+      { id: 'assistant_guidance_1', title: 'Refunds', body: 'Mention the policy.' },
+    ])
     mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'widget' })
@@ -731,7 +802,9 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
       basics: {},
       surfaces: { widget: { instructions: 'Be extra warm.' } },
     })
-    mockListGuidanceRules.mockResolvedValue([{ title: 'Refunds', body: 'Mention the policy.' }])
+    mockListGuidanceRules.mockResolvedValue([
+      { id: 'assistant_guidance_1', title: 'Refunds', body: 'Mention the policy.' },
+    ])
     mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'widget' })

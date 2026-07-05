@@ -97,7 +97,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 482 surfaces
+### Server functions (`requireAuth`) — 485 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -147,6 +147,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-actions.ts`::approveAssistantActionFn | conversation.view |
 | `lib/server/functions/assistant-actions.ts`::rejectAssistantActionFn | conversation.view |
 | `lib/server/functions/assistant-analytics.ts`::getQuinnPerformanceFn | analytics.view |
+| `lib/server/functions/assistant-guidance-stats.ts`::getGuidanceRuleStatsFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::listGuidanceRulesFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::createGuidanceRuleFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::updateGuidanceRuleFn | assistant.manage |
@@ -158,6 +159,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-settings.ts`::updateAssistantToolControlsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantSurfacesFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantBasicsFn | assistant.manage |
+| `lib/server/functions/assistant-tools-analytics.ts`::getQuinnToolMetricsFn | analytics.view |
+| `lib/server/functions/assistant-tools-analytics.ts`::getConnectorHealthFn | analytics.view |
 | `lib/server/functions/audit-log.ts`::listAuditEventsFn | audit.view |
 | `lib/server/functions/auth-provider-credentials.ts`::saveAuthProviderCredentialsFn | auth.manage |
 | `lib/server/functions/auth-provider-credentials.ts`::deleteAuthProviderCredentialsFn | auth.manage |
@@ -751,7 +754,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-158 of 726 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+158 of 729 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

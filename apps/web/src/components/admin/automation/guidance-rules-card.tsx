@@ -59,6 +59,7 @@ import {
   useDeleteGuidanceRule,
   useReorderGuidanceRules,
 } from '@/lib/client/mutations/assistant'
+import { pct, asRate } from './metric-tile'
 
 const TITLE_MAX = 80
 const BODY_MAX = 1000
@@ -93,6 +94,7 @@ export function GuidanceRulesCard() {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const rulesQuery = useQuery(assistantQueries.guidanceRules())
+  const statsQuery = useQuery(assistantQueries.guidanceRuleStats())
   const [rules, setRules] = useState<AssistantGuidanceRule[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<AssistantGuidanceRule | null>(null)
@@ -268,6 +270,15 @@ export function GuidanceRulesCard() {
                       </Badge>
 
                       <span className="flex-1" />
+
+                      <div className="hidden shrink-0 items-center gap-3 text-xs text-muted-foreground tabular-nums sm:flex">
+                        <span title="Turns this rule was folded into the assistant's prompt">
+                          {statsQuery.data?.[rule.id] ? statsQuery.data[rule.id].used : '—'} used
+                        </span>
+                        <span title="Share of those conversations that resolved">
+                          {pct(asRate(statsQuery.data?.[rule.id]?.resolvedPct))} resolved
+                        </span>
+                      </div>
 
                       <Button
                         variant="ghost"
@@ -467,12 +478,7 @@ function GuidanceRuleDialog({
               rows={4}
               required
             />
-            <p
-              className={cn(
-                'text-xs',
-                overBudget ? 'text-destructive' : 'text-muted-foreground'
-              )}
-            >
+            <p className={cn('text-xs', overBudget ? 'text-destructive' : 'text-muted-foreground')}>
               {liveTotal} / {charBudget} characters used across enabled rules
               {overBudget && '. Over budget: the assistant may drop lower-priority rules.'}
             </p>

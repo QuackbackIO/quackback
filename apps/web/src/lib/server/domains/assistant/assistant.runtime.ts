@@ -411,31 +411,45 @@ export function buildSurfaceInstructionsPrompt(
 ): string | null {
   const trimmed = instructions?.trim()
   if (!trimmed) return null
-  return [yieldToBaseFraming('additional instructions a workspace admin set for this surface'), trimmed].join(
-    '\n'
-  )
+  return [
+    yieldToBaseFraming('additional instructions a workspace admin set for this surface'),
+    trimmed,
+  ].join('\n')
+}
+
+/** `buildGuidancePrompt`'s result: the composed block plus which rules made it in. */
+export interface GuidancePromptResult {
+  /** The composed guidance block, or null when no rule survived the budget. */
+  block: string | null
+  /** Ids of the rules actually folded in, position-ordered — the guidance-stats reporting query keys off these. */
+  ruleIds: string[]
 }
 
 /**
  * Build the workspace guidance block from already-listed, surface-scoped
  * enabled rules (in position order). Caps at `GUIDANCE_MAX_ENABLED_PER_SURFACE`
  * rules and `GUIDANCE_CHAR_BUDGET` total characters, dropping whole rules past
- * either limit rather than truncating one mid-sentence. Returns null when
+ * either limit rather than truncating one mid-sentence. `block` is null when
  * nothing survives (no rules, or the very first rule already exceeds budget).
  */
 export function buildGuidancePrompt(
-  rules: readonly Pick<AssistantGuidanceRule, 'title' | 'body'>[]
-): string | null {
+  rules: readonly Pick<AssistantGuidanceRule, 'id' | 'title' | 'body'>[]
+): GuidancePromptResult {
   const lines: string[] = []
+  const ruleIds: string[] = []
   let used = 0
   for (const rule of rules.slice(0, GUIDANCE_MAX_ENABLED_PER_SURFACE)) {
     const line = `- ${rule.title}: ${rule.body}`
     if (used + line.length > GUIDANCE_CHAR_BUDGET) break
     lines.push(line)
+    ruleIds.push(rule.id)
     used += line.length
   }
-  if (lines.length === 0) return null
-  return [yieldToBaseFraming('workspace guidance set by admins'), ...lines].join('\n')
+  if (lines.length === 0) return { block: null, ruleIds: [] }
+  return {
+    block: [yieldToBaseFraming('workspace guidance set by admins'), ...lines].join('\n'),
+    ruleIds,
+  }
 }
 
 // ------------------------------------------------------------------- the loop ---
@@ -458,10 +472,7 @@ interface AttemptResult {
  * escalation reason, no_sources when retrieval never surfaced a citation
  * candidate this attempt, otherwise a normal answer.
  */
-function deriveAnswerKind(
-  attempt: AttemptResult,
-  toolContext: AssistantToolContext
-): AiAnswerKind {
+function deriveAnswerKind(attempt: AttemptResult, toolContext: AssistantToolContext): AiAnswerKind {
   const final = attempt.final as { escalation?: unknown } | null
   if (final?.escalation) return 'escalated'
   if (toolContext.sources.size === 0) return 'no_sources'
@@ -623,6 +634,11 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const systemPrompts = buildAssistantSystemPrompt('Quinn')
   const actionsEnabled = await isFeatureEnabled('assistantActions')
   let toolControls: AssistantToolControls | undefined
+  // Ids of the guidance rules actually folded into this turn's prompt (after
+  // the budget cap), logged onto every attempt below for the per-rule
+  // used/resolved stats. Empty when actions are off or nothing survived, so
+  // the usage-log metadata carries no guidanceRuleIds key in that case.
+  let guidanceRuleIds: string[] = []
   if (actionsEnabled) {
     const surface = input.surface ?? 'widget'
     const [config, guidanceRules] = await Promise.all([
@@ -634,8 +650,9 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     if (basicsBlock) systemPrompts.push(basicsBlock)
     const surfaceBlock = buildSurfaceInstructionsPrompt(config.surfaces[surface]?.instructions)
     if (surfaceBlock) systemPrompts.push(surfaceBlock)
-    const guidanceBlock = buildGuidancePrompt(guidanceRules)
-    if (guidanceBlock) systemPrompts.push(guidanceBlock)
+    const guidance = buildGuidancePrompt(guidanceRules)
+    if (guidance.block) systemPrompts.push(guidance.block)
+    guidanceRuleIds = guidance.ruleIds
   }
 
   // Tool wiring (flag + control modes) is turn-scoped config, not per-attempt
@@ -654,10 +671,21 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
         pipelineStep: 'assistant',
         callType: 'chat_completion',
         model,
-        metadata: { conversationId: input.conversationId ?? null, attempt },
+        metadata: {
+          conversationId: input.conversationId ?? null,
+          attempt,
+          ...(guidanceRuleIds.length > 0 ? { guidanceRuleIds } : {}),
+        },
       },
       async () => {
-        const attemptResult = await runAttempt(model, systemPrompts, tools, toolNames, toolContext, input)
+        const attemptResult = await runAttempt(
+          model,
+          systemPrompts,
+          tools,
+          toolNames,
+          toolContext,
+          input
+        )
         return {
           result: attemptResult,
           retryCount: 0,

@@ -44,6 +44,14 @@ vi.mock('@/lib/server/functions/assistant-guidance', () => ({
   reorderGuidanceRulesFn: vi.fn(),
 }))
 
+const mockGetGuidanceRuleStatsFn = vi.fn(async () => ({
+  assistant_guidance_1: { used: 12, resolved: 9, resolvedPct: 75 },
+  // assistant_guidance_2 has no stats row — the "no data yet" placeholder path.
+}))
+vi.mock('@/lib/server/functions/assistant-guidance-stats', () => ({
+  getGuidanceRuleStatsFn: () => mockGetGuidanceRuleStatsFn(),
+}))
+
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
 }))
@@ -83,7 +91,25 @@ describe('GuidanceRulesCard', () => {
 
   it('shows the char budget meter', async () => {
     renderWithClient(<GuidanceRulesCard />)
-    expect(await screen.findByText(/\/ 4000 characters used across enabled rules/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/\/ 4000 characters used across enabled rules/)
+    ).toBeInTheDocument()
+  })
+})
+
+describe('per-rule effectiveness stats', () => {
+  it('shows the used count and resolved % for a rule with stats', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+    expect(await screen.findByText('12 used')).toBeInTheDocument()
+    expect(await screen.findByText('75% resolved')).toBeInTheDocument()
+  })
+
+  it('shows the placeholder for a rule with no stats yet', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Widget tone')
+    expect(await screen.findByText('— used')).toBeInTheDocument()
+    expect(await screen.findByText('— resolved')).toBeInTheDocument()
   })
 })
 
