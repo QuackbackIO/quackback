@@ -86,6 +86,35 @@ export default tseslint.config(
       ],
     },
   },
+  // Page routes are client-bundled (via routeTree.gen), so server logic must
+  // cross through createServerFn bridges in lib/server/functions. Anything
+  // else drags server modules (db/redis/settings) into the client graph, which
+  // import-protection rejects at request time — this rule fails it at lint
+  // time instead. Pure helpers belong in lib/shared.
+  {
+    files: ["**/src/routes/**/*.tsx"],
+    ignores: ["**/src/routes/**/__tests__/**"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/lib/server/*",
+                "@/lib/server/**",
+                "!@/lib/server/functions",
+                "!@/lib/server/functions/**",
+              ],
+              allowTypeImports: true,
+              message:
+                "Route files are client-bundled. Call server logic through a createServerFn in '@/lib/server/functions/*', or move pure helpers to '@/lib/shared/*'.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Service file size limits
   {
     files: ["**/server/domains/**/*.{ts,tsx}"],

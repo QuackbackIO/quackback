@@ -1,5 +1,7 @@
 import { createFileRoute, notFound, redirect, Outlet, useRouterState } from '@tanstack/react-router'
-import { resolveHelpCenterDomainRedirect } from '@/lib/server/domains/help-center/help-center-domain.service'
+import { createIsomorphicFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { resolveHelpCenterDomainRedirect } from '@/lib/shared/help-center-domain'
 import { HelpCenterLocaleSwitcher } from '@/components/help-center/help-center-locale-switcher'
 import { parseHcLocalePath } from '@/lib/shared/help-center-url'
 import { isRtlLocale } from '@/lib/shared/i18n'
@@ -8,16 +10,19 @@ import type { FeatureFlags, HelpCenterConfig } from '@/lib/shared/types/settings
 /**
  * Only meaningful during SSR -- request headers aren't available on the
  * client, and a client-side nav that's already on the right host has
- * nothing to redirect. Swallow failures rather than block the page.
+ * nothing to redirect. The isomorphic split keeps the server-only header
+ * import out of the client bundle (import-protection denies it there);
+ * swallow failures rather than block the page.
  */
-async function currentRequestHost(): Promise<string | null> {
-  try {
-    const { getRequestHeaders } = await import('@tanstack/react-start/server')
-    return getRequestHeaders().get('host')
-  } catch {
-    return null
-  }
-}
+const currentRequestHost = createIsomorphicFn()
+  .client((): string | null => null)
+  .server((): string | null => {
+    try {
+      return getRequestHeaders().get('host')
+    } catch {
+      return null
+    }
+  })
 
 export const Route = createFileRoute('/_portal/hc')({
   beforeLoad: async ({ context, location }) => {
@@ -32,7 +37,7 @@ export const Route = createFileRoute('/_portal/hc')({
     // Full-coverage 301: every /hc/* route is nested under this layout, so
     // this is the single place the default-host -> verified-custom-domain
     // redirect needs to live (domains/languages §1).
-    const currentHost = await currentRequestHost()
+    const currentHost = currentRequestHost()
     const target = resolveHelpCenterDomainRedirect({
       domainConfig: helpCenterConfig.domain,
       currentHost,

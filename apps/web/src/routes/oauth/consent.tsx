@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 import { Button } from '@/components/ui/button'
-import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
+import { API_KEY_SCOPES } from '@/lib/shared/api-key-scopes'
 import { ExternalLink, Globe, ShieldCheck } from 'lucide-react'
 
 const searchSchema = z.object({
