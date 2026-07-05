@@ -14,6 +14,11 @@ export interface CreateCompanyInput {
   externalId?: string | null
   plan?: string | null
   mrrCents?: number | null
+  size?: string | null
+  website?: string | null
+  industry?: string | null
+  /** Record origin: 'api' (default) or 'manual' (agent qualification). */
+  source?: 'api' | 'manual'
   customAttributes?: Record<string, unknown>
 }
 
@@ -23,7 +28,19 @@ export interface UpdateCompanyInput {
   externalId?: string | null
   plan?: string | null
   mrrCents?: number | null
+  size?: string | null
+  website?: string | null
+  industry?: string | null
   customAttributes?: Record<string, unknown>
+}
+
+/** Inbox-sidebar qualification: create-or-attach by name for an unattached contact. */
+export interface QualifyCompanyInput {
+  principalId: string
+  name: string
+  size?: string | null
+  website?: string | null
+  industry?: string | null
 }
 
 /** A company plus the number of people linked to it (for the directory list). */
@@ -47,6 +64,8 @@ export interface CompanyListFilter {
   plan?: string
   /** Monthly spend in whole currency units, compared against mrr_cents / 100. */
   mrr?: { op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq'; value: number }
+  /** Standard-column predicates (whitelisted: source, size, website, industry). */
+  fields?: CompanyAttrFilter[]
   /** Custom attribute predicates over the jsonb blob. */
   attrs?: CompanyAttrFilter[]
 }

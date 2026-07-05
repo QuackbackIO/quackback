@@ -94,6 +94,7 @@ export type {
   // User segmentation
   SegmentId,
   UserAttributeId,
+  CompanyAttributeId,
   // AI entities
   SentimentId,
   PostActivityId,

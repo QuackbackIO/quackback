@@ -19,6 +19,13 @@ import { Avatar } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { adminQueries } from '@/lib/client/queries/admin'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -35,7 +42,8 @@ import {
   detachPrincipalFromCompanyFn,
   type CompanyDTO,
 } from '@/lib/server/functions/companies'
-import { formatMonthlySpend } from '@/components/admin/users/companies-view'
+import { formatMonthlySpend, SourceBadge } from '@/components/admin/users/companies-view'
+import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 
 function companyKeys(companyId: string) {
   return {
@@ -51,6 +59,9 @@ interface StandardFieldsDraft {
   externalId: string
   plan: string
   monthlySpend: string
+  size: string
+  website: string
+  industry: string
 }
 
 function draftFromCompany(company: CompanyDTO): StandardFieldsDraft {
@@ -59,6 +70,9 @@ function draftFromCompany(company: CompanyDTO): StandardFieldsDraft {
     externalId: company.externalId ?? '',
     plan: company.plan ?? '',
     monthlySpend: company.mrrCents != null ? String(company.mrrCents / 100) : '',
+    size: company.size ?? '',
+    website: company.website ?? '',
+    industry: company.industry ?? '',
   }
 }
 
@@ -360,6 +374,163 @@ function ActivitySection({ companyId }: { companyId: CompanyId }) {
   )
 }
 
+/**
+ * Typed editors over companies.custom_attributes, driven by the company
+ * attribute definitions. Keys without a definition render read-only so
+ * API-synced data is never hidden. Edits are global: every attached person's
+ * view reflects them.
+ */
+function CompanyAttributesPanel({
+  company,
+  canManage,
+}: {
+  company: CompanyDTO
+  canManage: boolean
+}) {
+  const queryClient = useQueryClient()
+  const { data: definitions } = useCompanyAttributes()
+  const values = company.customAttributes ?? {}
+  const [draft, setDraft] = useState<Record<string, string> | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const defs = definitions ?? []
+  const definedKeys = new Set(defs.map((d) => d.key))
+  const extraEntries = Object.entries(values).filter(([key]) => !definedKeys.has(key))
+
+  if (defs.length === 0 && extraEntries.length === 0) return null
+
+  const valueAsString = (key: string): string => {
+    const v = values[key]
+    if (v == null) return ''
+    return typeof v === 'object' ? JSON.stringify(v) : String(v)
+  }
+
+  const startEditing = () => {
+    const initial: Record<string, string> = {}
+    for (const def of defs) initial[def.key] = valueAsString(def.key)
+    setDraft(initial)
+  }
+
+  const save = async () => {
+    if (!draft) return
+    setSaving(true)
+    try {
+      const next: Record<string, unknown> = { ...values }
+      for (const def of defs) {
+        const raw = (draft[def.key] ?? '').trim()
+        if (raw === '') {
+          delete next[def.key]
+          continue
+        }
+        if (def.type === 'number' || def.type === 'currency') {
+          const num = Number(raw)
+          if (Number.isNaN(num)) {
+            toast.error(`${def.label} must be a number`)
+            setSaving(false)
+            return
+          }
+          next[def.key] = num
+        } else if (def.type === 'boolean') {
+          next[def.key] = raw === 'true'
+        } else {
+          next[def.key] = raw
+        }
+      }
+      await updateCompanyFn({ data: { id: company.id, customAttributes: next } })
+      await queryClient.invalidateQueries({ queryKey: companyKeys(company.id).detail })
+      setDraft(null)
+      toast.success('Attributes updated')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update attributes')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="border-t border-border/50 pt-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-medium">Custom attributes</h3>
+        {canManage &&
+          defs.length > 0 &&
+          (draft ? (
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setDraft(null)}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving}>
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          ) : (
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={startEditing}>
+              <PencilIcon className="h-3 w-3 mr-1" />
+              Edit
+            </Button>
+          ))}
+      </div>
+      <div className="rounded-lg border border-border/50 bg-card px-3 py-1">
+        {defs.map((def) =>
+          draft ? (
+            <div key={def.key} className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
+              <span className="w-36 shrink-0 text-xs text-muted-foreground">{def.label}</span>
+              {def.type === 'boolean' ? (
+                <Select
+                  value={draft[def.key] || 'unset'}
+                  onValueChange={(v) => setDraft({ ...draft, [def.key]: v === 'unset' ? '' : v })}
+                >
+                  <SelectTrigger className="h-8 flex-1 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unset">Not set</SelectItem>
+                    <SelectItem value="true">True</SelectItem>
+                    <SelectItem value="false">False</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={draft[def.key] ?? ''}
+                  onChange={(e) => setDraft({ ...draft, [def.key]: e.target.value })}
+                  type={def.type === 'number' || def.type === 'currency' ? 'number' : 'text'}
+                  placeholder={def.type === 'date' ? 'YYYY-MM-DD' : 'Not set'}
+                  className="h-8 text-sm"
+                />
+              )}
+            </div>
+          ) : (
+            <FieldRow key={def.key} label={def.label}>
+              {values[def.key] != null ? (
+                def.type === 'currency' && typeof values[def.key] === 'number' ? (
+                  (values[def.key] as number).toLocaleString('en-US', {
+                    style: 'currency',
+                    currency: def.currencyCode ?? 'USD',
+                  })
+                ) : (
+                  valueAsString(def.key)
+                )
+              ) : (
+                <span className="text-muted-foreground/60">Not set</span>
+              )}
+            </FieldRow>
+          )
+        )}
+        {extraEntries.map(([key, value]) => (
+          <FieldRow key={key} label={key}>
+            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+          </FieldRow>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 interface CompanyDetailProps {
   companyId: string
   onClose: () => void
@@ -410,6 +581,9 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
           externalId: draft.externalId.trim() || null,
           plan: draft.plan.trim() || null,
           mrrCents,
+          size: draft.size.trim() || null,
+          website: draft.website.trim() || null,
+          industry: draft.industry.trim() || null,
         },
       })
       await Promise.all([
@@ -465,8 +639,6 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
     )
   }
 
-  const customAttrEntries = Object.entries(company.customAttributes ?? {})
-
   return (
     <div className="max-w-5xl mx-auto w-full">
       {backHeader}
@@ -487,9 +659,12 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
             ) : (
               <h2 className="truncate text-lg font-semibold text-foreground">{company.name}</h2>
             )}
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              {company.domain ?? 'No domain'} · Created{' '}
-              <TimeAgo date={new Date(company.createdAt)} />
+            <p className="mt-0.5 flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="min-w-0 truncate">
+                {company.domain ?? 'No domain'} · Created{' '}
+                <TimeAgo date={new Date(company.createdAt)} />
+              </span>
+              <SourceBadge source={company.source} />
             </p>
           </div>
           {canManage && !isEditing && (
@@ -536,6 +711,9 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
                   { key: 'externalId', label: 'External ID', placeholder: 'crm-123' },
                   { key: 'plan', label: 'Plan', placeholder: 'Scale' },
                   { key: 'monthlySpend', label: 'Monthly spend (USD)', placeholder: '499' },
+                  { key: 'size', label: 'Size', placeholder: '11-50' },
+                  { key: 'website', label: 'Website', placeholder: 'https://acme.com' },
+                  { key: 'industry', label: 'Industry', placeholder: 'SaaS' },
                 ] as const
               ).map((field) => (
                 <div key={field.key} className="flex items-center gap-3">
@@ -556,6 +734,15 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
                 {company.plan ?? <span className="text-muted-foreground/60">Not set</span>}
               </FieldRow>
               <FieldRow label="Monthly spend">{formatMonthlySpend(company.mrrCents)}</FieldRow>
+              <FieldRow label="Size">
+                {company.size ?? <span className="text-muted-foreground/60">Not set</span>}
+              </FieldRow>
+              <FieldRow label="Website">
+                {company.website ?? <span className="text-muted-foreground/60">Not set</span>}
+              </FieldRow>
+              <FieldRow label="Industry">
+                {company.industry ?? <span className="text-muted-foreground/60">Not set</span>}
+              </FieldRow>
               <FieldRow label="External ID">
                 {company.externalId ?? <span className="text-muted-foreground/60">Not set</span>}
               </FieldRow>
@@ -564,18 +751,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
         </div>
 
         {/* Custom attributes */}
-        {customAttrEntries.length > 0 && (
-          <div className="border-t border-border/50 pt-4">
-            <h3 className="mb-3 text-sm font-medium">Custom attributes</h3>
-            <div className="rounded-lg border border-border/50 bg-card px-3 py-1">
-              {customAttrEntries.map(([key, value]) => (
-                <FieldRow key={key} label={key}>
-                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                </FieldRow>
-              ))}
-            </div>
-          </div>
-        )}
+        <CompanyAttributesPanel company={company} canManage={canManage} />
 
         {/* Members */}
         <MembersSection companyId={company.id as CompanyId} canManage={canManage} />

@@ -111,6 +111,9 @@ export type SegmentId = TypeId<'segment'>
 /** User attribute definition ID - e.g., user_attr_01h455vb4pex5vsknk084sn02q */
 export type UserAttributeId = TypeId<'user_attr'>
 
+/** Company attribute definition ID - e.g., company_attr_01h455vb4pex5vsknk084sn02q */
+export type CompanyAttributeId = TypeId<'company_attr'>
+
 // RBAC
 export type RoleId = TypeId<'role'>
 export type PermissionId = TypeId<'perm'>
@@ -297,6 +300,7 @@ export interface EntityIdMap {
   post_note: PostNoteId
   segment: SegmentId
   user_attr: UserAttributeId
+  company_attr: CompanyAttributeId
   role: RoleId
   permission: PermissionId
   role_permission: RolePermissionId

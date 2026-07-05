@@ -1100,6 +1100,13 @@
       "when": 1784765880000,
       "tag": "0156_conversation_attributes",
       "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "7",
+      "when": 1784765940000,
+      "tag": "0157_companies_directory",
+      "breakpoints": true
     }
   ]
 }

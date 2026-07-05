@@ -109,6 +109,35 @@ describe.skipIf(!fixture.available)('company directory queries (real DB, rolled 
       expect(seatHits.map((c) => c.id)).not.toContain(us.id)
     })
 
+    it('filters by standard-column field predicates (source, industry)', async () => {
+      const tag = suffix()
+      const manual = await createCompany({ name: `Manual ${tag}`, source: 'manual' })
+      const api = await createCompany({ name: `Api ${tag}`, industry: 'Fintech' })
+
+      const sourceHits = await listCompanies({
+        fields: [{ key: 'source', op: 'eq', value: 'manual' }],
+      })
+      expect(sourceHits.map((c) => c.id)).toContain(manual.id)
+      expect(sourceHits.map((c) => c.id)).not.toContain(api.id)
+
+      const industryHits = await listCompanies({
+        fields: [{ key: 'industry', op: 'contains', value: 'fin' }],
+      })
+      expect(industryHits.map((c) => c.id)).toContain(api.id)
+      expect(industryHits.map((c) => c.id)).not.toContain(manual.id)
+    })
+
+    it('ignores field predicates on non-whitelisted columns', async () => {
+      const tag = suffix()
+      const company = await createCompany({ name: `Safe ${tag}` })
+      // 'name' is not a filterable field key; the predicate is dropped, not applied.
+      const hits = await listCompanies({
+        search: `Safe ${tag}`,
+        fields: [{ key: 'name', op: 'eq', value: 'nope' }],
+      })
+      expect(hits.map((c) => c.id)).toContain(company.id)
+    })
+
     it('keeps the member count with filters applied', async () => {
       const tag = suffix()
       const company = await createCompany({ name: `Counted ${tag}` })

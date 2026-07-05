@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import { buildCompaniesExportUrl } from '@/lib/shared/company-filters'
 import { createCompanyFn, type CompanyWithMemberCountDTO } from '@/lib/server/functions/companies'
 
@@ -44,6 +45,22 @@ export function formatMonthlySpend(mrrCents: number | null): string {
     currency: 'USD',
     maximumFractionDigits: 0,
   })
+}
+
+/** Record-origin badge: 'api' (SDK/REST sync) vs 'manual' (agent qualification). */
+export function SourceBadge({ source }: { source: 'api' | 'manual' }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+        source === 'manual'
+          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500'
+          : 'bg-muted text-muted-foreground'
+      )}
+    >
+      {source}
+    </span>
+  )
 }
 
 const MRR_OPERATORS = [
@@ -71,6 +88,94 @@ function splitParts(encoded?: string): string[] {
   return (encoded ?? '').split(',').filter(Boolean)
 }
 
+const STRING_FIELD_OPERATORS = [
+  { value: 'eq', label: 'equals' },
+  { value: 'neq', label: 'not equals' },
+  { value: 'contains', label: 'contains' },
+  { value: 'is_set', label: 'is set' },
+  { value: 'is_not_set', label: 'is not set' },
+]
+
+/** One text/number/boolean predicate editor for a filter key. */
+function FilterPredicateInput({
+  attrKey,
+  kind,
+  onApply,
+}: {
+  attrKey: string
+  kind: 'string' | 'number' | 'boolean'
+  onApply: (encoded: string) => void
+}) {
+  const isNumeric = kind === 'number'
+  const isBool = kind === 'boolean'
+  const operators = isNumeric ? MRR_OPERATORS : isBool ? [{ value: 'eq', label: 'is' }] : STRING_FIELD_OPERATORS
+  const [op, setOp] = useState(operators[0].value)
+  const [value, setValue] = useState(isBool ? 'true' : '')
+  const isPresenceOp = op === 'is_set' || op === 'is_not_set'
+  const canApply = isPresenceOp || !!value.trim()
+
+  const apply = () => {
+    if (!canApply) return
+    onApply(`${attrKey}:${op}:${isPresenceOp ? '' : value.trim()}`)
+  }
+
+  return (
+    <div className="p-2 space-y-2">
+      <Select value={op} onValueChange={setOp}>
+        <SelectTrigger className="h-7 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {operators.map((o) => (
+            <SelectItem key={o.value} value={o.value} className="text-xs">
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {!isPresenceOp &&
+        (isBool ? (
+          <Select value={value} onValueChange={setValue}>
+            <SelectTrigger className="h-7 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true" className="text-xs">
+                True
+              </SelectItem>
+              <SelectItem value="false" className="text-xs">
+                False
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            type={isNumeric ? 'number' : 'text'}
+            className="h-7 text-xs"
+            placeholder={isNumeric ? '0' : 'value'}
+            value={value}
+            autoFocus={!isNumeric}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') apply()
+            }}
+          />
+        ))}
+      <Button size="sm" className="w-full h-7 text-xs" disabled={!canApply} onClick={apply}>
+        Apply
+      </Button>
+    </div>
+  )
+}
+
+/** The standard-column filter categories (plan/mrr handled specially by kind). */
+const STANDARD_FILTER_CATEGORIES: { key: string; label: string; kind: 'string' | 'number' }[] = [
+  { key: 'plan', label: 'Plan', kind: 'string' },
+  { key: 'mrr', label: 'Monthly spend', kind: 'number' },
+  { key: 'size', label: 'Size', kind: 'string' },
+  { key: 'industry', label: 'Industry', kind: 'string' },
+]
+
 function AddCompanyFilterButton({
   companyAttrs,
   onChange,
@@ -79,20 +184,19 @@ function AddCompanyFilterButton({
   onChange: (encoded: string | undefined) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [category, setCategory] = useState<'plan' | 'mrr' | null>(null)
-  const [planValue, setPlanValue] = useState('')
-  const [mrrOp, setMrrOp] = useState('gte')
-  const [mrrValue, setMrrValue] = useState('')
+  const [category, setCategory] = useState<{
+    key: string
+    label: string
+    kind: 'string' | 'number' | 'boolean' | 'source'
+  } | null>(null)
+  const { data: companyAttributes } = useCompanyAttributes()
 
   const parts = splitParts(companyAttrs)
-  const hasPlan = parts.some((p) => p.startsWith('plan:'))
-  const hasMrr = parts.some((p) => p.startsWith('mrr:'))
+  const usedKeys = new Set(parts.map((p) => p.split(':')[0]))
 
   const close = () => {
     setOpen(false)
     setCategory(null)
-    setPlanValue('')
-    setMrrValue('')
   }
 
   const apply = (encoded: string) => {
@@ -100,7 +204,20 @@ function AddCompanyFilterButton({
     close()
   }
 
-  if (hasPlan && hasMrr) return null
+  const availableStandard = STANDARD_FILTER_CATEGORIES.filter((c) => !usedKeys.has(c.key))
+  const sourceAvailable = !usedKeys.has('source')
+  const availableCustom = (companyAttributes ?? []).filter((a) => !usedKeys.has(a.key))
+
+  if (availableStandard.length === 0 && !sourceAvailable && availableCustom.length === 0) {
+    return null
+  }
+
+  const attrKind = (type: string): 'string' | 'number' | 'boolean' =>
+    type === 'number' || type === 'currency' || type === 'date'
+      ? 'number'
+      : type === 'boolean'
+        ? 'boolean'
+        : 'string'
 
   return (
     <Popover
@@ -125,87 +242,89 @@ function AddCompanyFilterButton({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-52 p-0">
         {category === null ? (
-          <div className="py-1">
-            {!hasPlan && (
+          <div className="py-1 max-h-[350px] overflow-y-auto">
+            {availableStandard.map((cat) => (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => setCategory(cat)}
+                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  {cat.key === 'mrr' ? (
+                    <BanknotesIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <TagIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                  {cat.label}
+                </span>
+                <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
+              </button>
+            ))}
+            {sourceAvailable && (
               <button
                 type="button"
-                onClick={() => setCategory('plan')}
+                onClick={() => setCategory({ key: 'source', label: 'Source', kind: 'source' })}
                 className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
               >
                 <span className="flex items-center gap-2">
                   <TagIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                  Plan
+                  Source
                 </span>
                 <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
               </button>
             )}
-            {!hasMrr && (
-              <button
-                type="button"
-                onClick={() => setCategory('mrr')}
-                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
-              >
-                <span className="flex items-center gap-2">
-                  <BanknotesIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                  Monthly spend
-                </span>
-                <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
-              </button>
+            {availableCustom.length > 0 && (
+              <>
+                <div className="border-b border-border/30 my-1" />
+                <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Custom attributes
+                </div>
+                {availableCustom.map((attr) => (
+                  <button
+                    key={attr.key}
+                    type="button"
+                    onClick={() =>
+                      setCategory({ key: attr.key, label: attr.label, kind: attrKind(attr.type) })
+                    }
+                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <TagIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      {attr.label}
+                    </span>
+                    <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                ))}
+              </>
             )}
-          </div>
-        ) : category === 'plan' ? (
-          <div className="p-2 space-y-2">
-            <Input
-              className="h-7 text-xs"
-              placeholder="Scale"
-              value={planValue}
-              autoFocus
-              onChange={(e) => setPlanValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && planValue.trim()) apply(`plan:eq:${planValue.trim()}`)
-              }}
-            />
-            <Button
-              size="sm"
-              className="w-full h-7 text-xs"
-              disabled={!planValue.trim()}
-              onClick={() => apply(`plan:eq:${planValue.trim()}`)}
-            >
-              Apply
-            </Button>
           </div>
         ) : (
-          <div className="p-2 space-y-2">
-            <Select value={mrrOp} onValueChange={setMrrOp}>
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MRR_OPERATORS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              type="number"
-              className="h-7 text-xs"
-              placeholder="0"
-              value={mrrValue}
-              onChange={(e) => setMrrValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && mrrValue) apply(`mrr:${mrrOp}:${mrrValue}`)
-              }}
-            />
-            <Button
-              size="sm"
-              className="w-full h-7 text-xs"
-              disabled={!mrrValue}
-              onClick={() => apply(`mrr:${mrrOp}:${mrrValue}`)}
+          <div>
+            <button
+              type="button"
+              onClick={() => setCategory(null)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[10px] text-muted-foreground hover:text-foreground border-b border-border/50"
             >
-              Apply
-            </Button>
+              <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
+              {category.label}
+            </button>
+            {category.kind === 'source' ? (
+              <div className="py-1">
+                {(['api', 'manual'] as const).map((source) => (
+                  <button
+                    key={source}
+                    type="button"
+                    onClick={() => apply(`source:eq:${source}`)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs capitalize hover:bg-muted/50 transition-colors"
+                  >
+                    {source}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <FilterPredicateInput attrKey={category.key} kind={category.kind} onApply={apply} />
+            )}
           </div>
         )}
       </PopoverContent>
@@ -460,6 +579,7 @@ export function CompaniesView({
               <span className="w-24 text-left">Plan</span>
               <span className="w-24 text-right">Monthly spend</span>
               <span className="w-16 text-right">People</span>
+              <span className="w-16 text-right">Source</span>
             </div>
             {companies.map((company) => (
               <button
@@ -491,6 +611,9 @@ export function CompaniesView({
                 </span>
                 <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                   {company.memberCount}
+                </span>
+                <span className="w-16 shrink-0 text-right hidden sm:block">
+                  <SourceBadge source={company.source} />
                 </span>
               </button>
             ))}

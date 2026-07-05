@@ -5,6 +5,7 @@ import { UserGroupIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { UserAttributesList } from '@/components/admin/settings/user-attributes/user-attributes-list'
+import { CompanyAttributesList } from '@/components/admin/settings/company-attributes/company-attributes-list'
 import { SegmentList } from '@/components/admin/segments/segment-list'
 
 export const Route = createFileRoute('/admin/settings/people')({
@@ -12,6 +13,7 @@ export const Route = createFileRoute('/admin/settings/people')({
     const { queryClient } = context
     await Promise.all([
       queryClient.ensureQueryData(adminQueries.userAttributes()),
+      queryClient.ensureQueryData(adminQueries.companyAttributes()),
       queryClient.ensureQueryData(adminQueries.segments()),
     ])
     return {}
@@ -21,6 +23,7 @@ export const Route = createFileRoute('/admin/settings/people')({
 
 function PeoplePage() {
   const attrsQuery = useSuspenseQuery(adminQueries.userAttributes())
+  const companyAttrsQuery = useSuspenseQuery(adminQueries.companyAttributes())
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -30,13 +33,14 @@ function PeoplePage() {
       <PageHeader
         icon={UserGroupIcon}
         title="People"
-        description="Custom attributes and segments for the people who use your portal."
+        description="Custom attributes and segments for the people and companies who use your portal."
       />
 
-      {/* Both lists render their own SettingsCard internally so the
+      {/* Each list renders its own SettingsCard internally so the
        *  header actions (New attribute / New segment / Re-evaluate)
        *  live in the card header next to the title. */}
       <UserAttributesList initialAttributes={attrsQuery.data} />
+      <CompanyAttributesList initialAttributes={companyAttrsQuery.data} />
       <SegmentList />
     </div>
   )

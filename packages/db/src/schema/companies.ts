@@ -24,6 +24,15 @@ export const companies = pgTable(
     plan: text('plan'),
     // Monthly recurring revenue in minor units (cents), for sidebar context.
     mrrCents: integer('mrr_cents'),
+    // Qualification standard fields (§K2): free-text, editable from the inbox
+    // sidebar for an unattached contact and from the company profile.
+    size: text('size'),
+    website: text('website'),
+    industry: text('industry'),
+    // How the record came to exist: 'api' (SDK/REST/CRM sync) or 'manual'
+    // (agent qualification). ONE record type with a source column — never a
+    // separate "qualification company" shadow object.
+    source: text('source').$type<'api' | 'manual'>().notNull().default('api'),
     // Arbitrary CRM-synced attributes.
     customAttributes: jsonb('custom_attributes')
       .$type<Record<string, unknown>>()

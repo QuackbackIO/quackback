@@ -35,6 +35,7 @@ import type {
   CompanyActivityCounts,
   CreateCompanyInput,
   UpdateCompanyInput,
+  QualifyCompanyInput,
 } from './company.types'
 
 const log = logger.child({ component: 'companies' })
@@ -77,6 +78,10 @@ export async function createCompany(input: CreateCompanyInput): Promise<Company>
         externalId: nullableTrim(input.externalId),
         plan: nullableTrim(input.plan),
         mrrCents: input.mrrCents ?? null,
+        size: nullableTrim(input.size),
+        website: nullableTrim(input.website),
+        industry: nullableTrim(input.industry),
+        source: input.source ?? 'api',
         customAttributes: input.customAttributes ?? {},
       })
       .returning()
@@ -97,6 +102,9 @@ export async function updateCompany(id: CompanyId, input: UpdateCompanyInput): P
   if (input.externalId !== undefined) updateData.externalId = nullableTrim(input.externalId)
   if (input.plan !== undefined) updateData.plan = nullableTrim(input.plan)
   if (input.mrrCents !== undefined) updateData.mrrCents = input.mrrCents
+  if (input.size !== undefined) updateData.size = nullableTrim(input.size)
+  if (input.website !== undefined) updateData.website = nullableTrim(input.website)
+  if (input.industry !== undefined) updateData.industry = nullableTrim(input.industry)
   if (input.customAttributes !== undefined) updateData.customAttributes = input.customAttributes
 
   if (Object.keys(updateData).length === 0) {
@@ -170,6 +178,34 @@ function attrConditionSql(attr: CompanyAttrFilter): ReturnType<typeof sql> | nul
 
 const MRR_OPERATOR_SQL = { eq: '=', gt: '>', gte: '>=', lt: '<', lte: '<=' } as const
 
+/** Standard columns the directory may filter with string operators. */
+const FILTERABLE_COLUMNS = {
+  source: () => companies.source,
+  size: () => companies.size,
+  website: () => companies.website,
+  industry: () => companies.industry,
+} as const
+
+/** One string predicate over a whitelisted standard column. */
+function columnConditionSql(field: CompanyAttrFilter): ReturnType<typeof sql> | null {
+  const column = FILTERABLE_COLUMNS[field.key as keyof typeof FILTERABLE_COLUMNS]?.()
+  if (!column) return null
+  switch (field.op) {
+    case 'eq':
+      return sql`LOWER(${column}) = LOWER(${field.value})`
+    case 'neq':
+      return sql`(${column} IS NULL OR LOWER(${column}) != LOWER(${field.value}))`
+    case 'contains':
+      return sql`${column} ILIKE ${'%' + field.value + '%'}`
+    case 'is_set':
+      return sql`${column} IS NOT NULL`
+    case 'is_not_set':
+      return sql`${column} IS NULL`
+    default:
+      return null
+  }
+}
+
 /** List companies with their linked-people counts, ordered by name. */
 export async function listCompanies(
   filter: CompanyListFilter = {}
@@ -191,6 +227,10 @@ export async function listCompanies(
     // The filter speaks whole currency units (what agents see in the list);
     // the column stores minor units.
     conditions.push(sql`(${companies.mrrCents} / 100.0) ${sql.raw(op)} ${Number(filter.mrr.value)}`)
+  }
+  for (const field of filter.fields ?? []) {
+    const cond = columnConditionSql(field)
+    if (cond) conditions.push(cond)
   }
   for (const attr of filter.attrs ?? []) {
     const cond = attrConditionSql(attr)
@@ -250,6 +290,50 @@ export async function getForPrincipal(principalId: PrincipalId): Promise<Company
     .where(eq(principal.id, principalId))
     .limit(1)
   return row?.company ?? null
+}
+
+/**
+ * Inbox-sidebar qualification (§K2): committing a company name for a contact
+ * creates-or-attaches by case-insensitive name match. A new record is born
+ * with `source: 'manual'`; a matched record keeps its source, and any
+ * qualification fields the agent provided are written through (company
+ * attribute edits are global — every attached person sees them).
+ */
+export async function qualifyCompany(input: QualifyCompanyInput): Promise<Company> {
+  const name = input.name?.trim()
+  if (!name) {
+    throw new ValidationError('VALIDATION_ERROR', 'Company name is required')
+  }
+
+  const [match] = await db
+    .select()
+    .from(companies)
+    .where(sql`LOWER(${companies.name}) = LOWER(${name})`)
+    .orderBy(asc(companies.createdAt))
+    .limit(1)
+
+  let company: Company
+  if (match) {
+    const updates: UpdateCompanyInput = {}
+    if (nullableTrim(input.size)) updates.size = input.size
+    if (nullableTrim(input.website)) updates.website = input.website
+    if (nullableTrim(input.industry)) updates.industry = input.industry
+    company =
+      Object.keys(updates).length > 0
+        ? await updateCompany(match.id as CompanyId, updates)
+        : match
+  } else {
+    company = await createCompany({
+      name,
+      size: input.size,
+      website: input.website,
+      industry: input.industry,
+      source: 'manual',
+    })
+  }
+
+  await attachPrincipal(company.id as CompanyId, input.principalId as PrincipalId)
+  return company
 }
 
 /** Link a person to a company (verifying the company exists first). */

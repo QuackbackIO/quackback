@@ -24,16 +24,22 @@ function parseFilter(url: URL) {
     }
   }
 
-  const attrs: { key: string; op: string; value: string }[] = []
-  const attrsRaw = url.searchParams.get('attrs')
-  if (attrsRaw) {
-    for (const part of attrsRaw.split(',').filter(Boolean)) {
+  const parseTriples = (raw: string | null) => {
+    const out: { key: string; op: string; value: string }[] = []
+    for (const part of (raw ?? '').split(',').filter(Boolean)) {
       const [key, op, ...rest] = part.split(':')
-      if (key && op) attrs.push({ key, op, value: rest.join(':') })
+      if (key && op) out.push({ key, op, value: rest.join(':') })
     }
+    return out.length > 0 ? out : undefined
   }
 
-  return { search, plan, mrr, attrs: attrs.length > 0 ? attrs : undefined }
+  return {
+    search,
+    plan,
+    mrr,
+    fields: parseTriples(url.searchParams.get('fields')),
+    attrs: parseTriples(url.searchParams.get('attrs')),
+  }
 }
 
 export const Route = createFileRoute('/api/export/companies')({

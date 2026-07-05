@@ -9,6 +9,7 @@ export {
   getForPrincipal,
   attachPrincipal,
   detachPrincipal,
+  qualifyCompany,
 } from './company.service'
 export type {
   Company,
@@ -20,4 +21,5 @@ export type {
   CompanyActivityCounts,
   CreateCompanyInput,
   UpdateCompanyInput,
+  QualifyCompanyInput,
 } from './company.types'

@@ -26,6 +26,15 @@ describe('parseCompanyFilterParts', () => {
     })
   })
 
+  it('routes the standard-column keys (source, size, website, industry) to column predicates', () => {
+    expect(parseCompanyFilterParts('source:eq:manual,industry:contains:fin')).toEqual({
+      fields: [
+        { key: 'source', op: 'eq', value: 'manual' },
+        { key: 'industry', op: 'contains', value: 'fin' },
+      ],
+    })
+  })
+
   it('parses mixed parts and preserves colons inside values', () => {
     expect(parseCompanyFilterParts('plan:eq:Scale,mrr:lt:500,ref:eq:a:b')).toEqual({
       plan: 'Scale',
@@ -45,12 +54,16 @@ describe('buildCompaniesExportUrl', () => {
   })
 
   it('encodes search and decomposed filter parts', () => {
-    const url = buildCompaniesExportUrl('acme', 'plan:eq:Scale,mrr:gte:100,region:eq:eu')
+    const url = buildCompaniesExportUrl(
+      'acme',
+      'plan:eq:Scale,mrr:gte:100,region:eq:eu,source:eq:manual'
+    )
     const parsed = new URL(url, 'http://x')
     expect(parsed.pathname).toBe('/api/export/companies')
     expect(parsed.searchParams.get('search')).toBe('acme')
     expect(parsed.searchParams.get('plan')).toBe('Scale')
     expect(parsed.searchParams.get('mrr')).toBe('gte:100')
     expect(parsed.searchParams.get('attrs')).toBe('region:eq:eu')
+    expect(parsed.searchParams.get('fields')).toBe('source:eq:manual')
   })
 })

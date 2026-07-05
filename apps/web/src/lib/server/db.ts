@@ -279,6 +279,8 @@ export {
   type CurrencyCode,
   // Schema tables - user attributes
   userAttributeDefinitions,
+  // Schema tables - company attributes
+  companyAttributeDefinitions,
   // Schema tables - feedback aggregation
   feedbackSources,
   feedbackSourcesRelations,

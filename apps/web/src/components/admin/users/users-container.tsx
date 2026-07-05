@@ -116,6 +116,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
           search: filters.search,
           plan: companyFilterParts.plan,
           mrr: companyFilterParts.mrr,
+          fields: companyFilterParts.fields,
           attrs: companyFilterParts.attrs,
         },
       }),
