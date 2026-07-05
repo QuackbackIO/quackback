@@ -10,7 +10,6 @@ import { getEmailChannelStatusFn } from '@/lib/server/functions/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
-import { MacrosManager } from '@/components/admin/conversation/macros-manager'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -282,13 +281,6 @@ function ConversationsSettingsPage() {
             </p>
           </div>
         </div>
-      </SettingsCard>
-
-      <SettingsCard
-        title="Macros"
-        description="Reusable replies with variables and bundled actions agents can apply from the composer."
-      >
-        <MacrosManager />
       </SettingsCard>
 
       <EmailChannelStatusCard />

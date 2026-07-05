@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
-import { WorkflowsManager } from '@/components/admin/automation/workflows-manager'
 import { SupportPerformanceCard } from '@/components/admin/automation/support-performance-card'
 
 export const Route = createFileRoute('/admin/settings/ai')({
@@ -54,8 +53,6 @@ function AiSettingsPage() {
           avatarUrl: assistant?.avatarUrl ?? '',
         }}
       />
-
-      <WorkflowsManager />
 
       <SupportPerformanceCard />
     </div>

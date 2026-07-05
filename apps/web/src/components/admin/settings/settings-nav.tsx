@@ -20,6 +20,8 @@ import {
   TicketIcon,
   QueueListIcon,
   EnvelopeIcon,
+  DocumentDuplicateIcon,
+  BoltIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
@@ -81,7 +83,9 @@ export function buildNavSections(flags?: {
             to: '/admin/settings/conversations',
             icon: ChatBubbleLeftRightIcon,
           },
+          { label: 'Macros', to: '/admin/settings/macros', icon: DocumentDuplicateIcon },
           { label: 'Office Hours', to: '/admin/settings/office-hours', icon: ClockIcon },
+          { label: 'SLA policies', to: '/admin/settings/sla', icon: ShieldCheckIcon },
         ]
       : []),
     ...(flags?.supportTickets
@@ -113,6 +117,7 @@ export function buildNavSections(flags?: {
       label: 'AI & Automation',
       items: [
         { label: 'Assistant', to: '/admin/settings/ai', icon: SparklesIcon },
+        { label: 'Workflows', to: '/admin/settings/workflows', icon: BoltIcon },
         { label: 'Sandbox', to: '/admin/settings/ai/sandbox', icon: BeakerIcon },
       ],
     },

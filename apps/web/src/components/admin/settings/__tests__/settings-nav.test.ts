@@ -58,11 +58,13 @@ describe('buildNavSections', () => {
     expect(itemLabels(sections, 'Products')).not.toContain('Support')
   })
 
-  it('Support shows Messenger and Office Hours under supportInbox', () => {
+  it('Support shows Messenger, Macros, Office Hours and SLA policies under supportInbox', () => {
     const sections = buildNavSections({ supportInbox: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
       'Messenger',
+      'Macros',
       'Office Hours',
+      'SLA policies',
     ])
   })
 
@@ -70,7 +72,9 @@ describe('buildNavSections', () => {
     const sections = buildNavSections({ supportInbox: true, supportTickets: true })
     expect(groupKids(sections, 'Products', 'Support').map((k) => k.label)).toEqual([
       'Messenger',
+      'Macros',
       'Office Hours',
+      'SLA policies',
       'Ticket types',
       'Ticket statuses & stages',
     ])
@@ -100,9 +104,22 @@ describe('buildNavSections', () => {
     ])
   })
 
-  it('AI & Automation contains Assistant and Sandbox', () => {
+  it('SLA policies points at the sla URL', () => {
+    const sections = buildNavSections({ supportInbox: true })
+    const sla = groupKids(sections, 'Products', 'Support').find((k) => k.label === 'SLA policies')!
+    expect(sla.to).toBe('/admin/settings/sla')
+  })
+
+  it('AI & Automation contains Assistant, Workflows and Sandbox', () => {
     const sections = buildNavSections()
-    expect(itemLabels(sections, 'AI & Automation')).toEqual(['Assistant', 'Sandbox'])
+    expect(itemLabels(sections, 'AI & Automation')).toEqual(['Assistant', 'Workflows', 'Sandbox'])
+  })
+
+  it('Workflows points at the standalone workflows URL', () => {
+    const sections = buildNavSections()
+    const s = sections.find((x) => x.label === 'AI & Automation')!
+    const workflows = s.items.find((i) => i.label === 'Workflows')!
+    expect(!isNavGroup(workflows) && workflows.to).toBe('/admin/settings/workflows')
   })
 
   it('Workspace contains the administration pages in order (flags off)', () => {
