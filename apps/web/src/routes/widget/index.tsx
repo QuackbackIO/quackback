@@ -198,6 +198,9 @@ export const Route = createFileRoute('/widget/')({
       },
       // Home surface customisation (greeting, hero style, quick-link cards).
       home: settings?.publicWidgetConfig?.home ?? null,
+      // Per-locale copy overrides; the Home surface resolves greeting/subtitle
+      // against the visitor's locale client-side.
+      translations: settings?.publicWidgetConfig?.translations ?? null,
       // Workspace logo for the Home header (branding config).
       logoUrl: settings?.brandingData?.logoUrl ?? null,
       // Top help articles for the Home search card (public; SSR'd).
@@ -286,6 +289,7 @@ function WidgetPage() {
     portalAccess,
     portalOrigin,
     home,
+    translations,
     logoUrl,
     topArticles,
     teamName,
@@ -633,6 +637,7 @@ function WidgetPage() {
           <WidgetOverview
             tabs={tabs}
             home={home}
+            translations={translations ?? undefined}
             assistant={assistant}
             team={team}
             topArticles={topArticles}

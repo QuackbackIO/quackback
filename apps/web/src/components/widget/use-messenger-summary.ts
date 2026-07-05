@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useIntl } from 'react-intl'
 import { useWidgetAuth } from './widget-auth-provider'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { getMyConversationFn } from '@/lib/server/functions/conversation'
@@ -32,11 +33,12 @@ export const conversationSummaryKey = (sessionVersion: number | string) =>
 export function useConversationSummary(enabled: boolean): ConversationSummary {
   const { sessionVersion } = useWidgetAuth()
   const presence = useConversationPresence(enabled)
+  const { locale } = useIntl()
 
   const { data } = useQuery({
     queryKey: conversationSummaryKey(sessionVersion),
     queryFn: async () => {
-      const res = await getMyConversationFn({ headers: getWidgetAuthHeaders() })
+      const res = await getMyConversationFn({ data: { locale }, headers: getWidgetAuthHeaders() })
       return { conversation: res.conversation ?? null, teamName: res.teamName }
     },
     enabled,

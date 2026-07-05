@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { renderHook } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntlProvider } from 'react-intl'
 
 // The hook only reads `sessionVersion` off the auth context.
 vi.mock('../widget-auth-provider', () => ({
@@ -25,7 +26,11 @@ function seeded(seed?: unknown) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   if (seed !== undefined) qc.setQueryData(CONVERSATION_PRESENCE_QUERY_KEY, seed)
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}>
+      <IntlProvider locale="en" messages={{}}>
+        {children}
+      </IntlProvider>
+    </QueryClientProvider>
   )
 }
 

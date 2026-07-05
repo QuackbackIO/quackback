@@ -818,6 +818,17 @@ const updateWidgetConfigSchema = z.object({
     .optional(),
   messenger: messengerConfigInputSchema.optional(),
   home: widgetHomeConfigSchema.optional(),
+  translations: z
+    .record(
+      z.string().max(20),
+      z.object({
+        welcomeMessage: z.string().max(1000).optional(),
+        offlineMessage: z.string().max(1000).optional(),
+        greeting: z.string().max(120).optional(),
+        subtitle: z.string().max(200).optional(),
+      })
+    )
+    .optional(),
 })
 
 export const updateWidgetConfigFn = createServerFn({ method: 'POST' })

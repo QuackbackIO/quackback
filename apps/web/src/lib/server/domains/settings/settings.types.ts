@@ -8,6 +8,7 @@
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Role } from '@/lib/shared/roles'
 import type { OfficeHoursConfig } from '@/lib/shared/conversation/types'
+import type { WidgetTranslations } from '@/lib/shared/widget/translations'
 
 // =============================================================================
 // Auth Configuration (Team sign-in settings)
@@ -588,6 +589,9 @@ export interface WidgetConfig {
   messenger?: MessengerConfig
   /** Home surface customisation (greeting, hero style, quick-link cards). */
   home?: WidgetHomeConfig
+  /** Per-locale overrides of the customer-facing copy (welcome/offline message,
+   *  home greeting/subtitle). The base fields are the fallback. */
+  translations?: WidgetTranslations
 }
 
 /**
@@ -596,7 +600,7 @@ export interface WidgetConfig {
  */
 export type PublicWidgetConfig = Pick<
   WidgetConfig,
-  'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'home' | 'launcherGreeting'
+  'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'home' | 'launcherGreeting' | 'translations'
 > & {
   /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
@@ -642,6 +646,7 @@ export interface UpdateWidgetConfigInput {
   }
   messenger?: Partial<MessengerConfig>
   home?: WidgetHomeConfig
+  translations?: WidgetTranslations
 }
 
 // =============================================================================

@@ -62,6 +62,9 @@ export async function updateWidgetConfig(input: UpdateWidgetConfigInput): Promis
     const org = await requireSettings()
     const existing = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
     const updated = deepMerge(existing, input as Partial<WidgetConfig>)
+    // The translations map replaces wholesale — deepMerge would union locale
+    // keys, so a removed locale or a cleared field could never disappear.
+    if (input.translations !== undefined) updated.translations = input.translations
     await db
       .update(settings)
       .set({ widgetConfig: JSON.stringify(updated) })
@@ -101,6 +104,9 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       home: publicHomeConfig(config.home),
       // Project only client-safe messenger fields; routing is agent-only.
       messenger: publicMessengerConfig(config.messenger ?? DEFAULT_MESSENGER_CONFIG),
+      // Per-locale copy overrides — client-safe (customer-facing strings the
+      // widget resolves against its own locale for the Home surface).
+      translations: config.translations,
     }
   } catch (error) {
     log.error({ err: error }, 'get public widget config failed')

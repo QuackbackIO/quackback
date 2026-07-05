@@ -57,6 +57,8 @@ import type {
   WidgetCardAudience,
   WidgetHomeConfig,
 } from '@/lib/shared/types/settings'
+import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
+import type { WidgetContentTranslation, WidgetTranslations } from '@/lib/shared/widget/translations'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/widget')({
@@ -143,6 +145,8 @@ function WidgetSettingsPage() {
           />
 
           <AssistantLinkCard assistant={config.messenger?.assistant} />
+
+          <WidgetTranslationsCard translations={config.translations} />
         </div>
 
         <div className="xl:sticky xl:top-6 min-w-0 xl:h-[calc(100vh-7.5rem)] flex flex-col">
@@ -915,6 +919,113 @@ function HomeCustomizationCard({
 }
 
 /** Cross-link to the AI & Automation page (assistant identity lives there). */
+const TRANSLATABLE_LOCALES = SUPPORTED_LOCALES.filter((l) => l !== 'en')
+const LOCALE_LABEL: Record<string, string> = {
+  de: 'German',
+  fr: 'French',
+  es: 'Spanish',
+  ar: 'Arabic',
+  ru: 'Russian',
+  'pt-br': 'Portuguese (Brazil)',
+  'zh-cn': 'Chinese (Simplified)',
+  'zh-tw': 'Chinese (Traditional)',
+}
+const TRANSLATION_FIELDS: { key: keyof WidgetContentTranslation; placeholder: string }[] = [
+  { key: 'welcomeMessage', placeholder: 'Welcome message' },
+  { key: 'offlineMessage', placeholder: 'Offline message' },
+  { key: 'greeting', placeholder: 'Home greeting' },
+  { key: 'subtitle', placeholder: 'Home subtitle' },
+]
+
+function WidgetTranslationsCard({ translations }: { translations?: WidgetTranslations }) {
+  const updateWidgetConfig = useUpdateWidgetConfig()
+  const [draft, setDraft] = useState<WidgetTranslations>(translations ?? {})
+  const [saving, setSaving] = useState(false)
+  const configured = Object.keys(draft)
+  const available = TRANSLATABLE_LOCALES.filter((l) => !configured.includes(l))
+
+  async function commit(next: WidgetTranslations) {
+    setDraft(next)
+    setSaving(true)
+    try {
+      await updateWidgetConfig.mutateAsync({ translations: next })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SettingsCard
+      title="Translations"
+      description="Localise the customer-facing copy. Visitors see it in their browser language; the default copy is the fallback."
+    >
+      <div className="space-y-3">
+        {configured.length === 0 && (
+          <p className="text-xs text-muted-foreground">No translations yet.</p>
+        )}
+        {configured.map((locale) => (
+          <div key={locale} className="space-y-2 rounded-lg border border-border/50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{LOCALE_LABEL[locale] ?? locale}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={() => {
+                  const next = { ...draft }
+                  delete next[locale]
+                  void commit(next)
+                }}
+                disabled={saving}
+              >
+                Remove
+              </Button>
+            </div>
+            {TRANSLATION_FIELDS.map((f) => (
+              <Input
+                key={f.key}
+                defaultValue={draft[locale]?.[f.key] ?? ''}
+                placeholder={f.placeholder}
+                maxLength={1000}
+                className="h-8 text-xs"
+                disabled={saving}
+                onBlur={(e) => {
+                  const value = e.target.value.trim()
+                  if (value === (draft[locale]?.[f.key] ?? '')) return
+                  const entry: WidgetContentTranslation = {
+                    ...(draft[locale] ?? {}),
+                    [f.key]: value || undefined,
+                  }
+                  void commit({ ...draft, [locale]: entry })
+                }}
+              />
+            ))}
+          </div>
+        ))}
+        {available.length > 0 && (
+          <Select
+            value=""
+            onValueChange={(l) => void commit({ ...draft, [l]: {} })}
+            disabled={saving}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Add a language" />
+            </SelectTrigger>
+            <SelectContent>
+              {available.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {LOCALE_LABEL[l] ?? l}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+    </SettingsCard>
+  )
+}
+
 function AssistantLinkCard({
   assistant,
 }: {

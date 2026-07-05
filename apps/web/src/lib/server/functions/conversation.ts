@@ -334,32 +334,40 @@ export const getWidgetTeamAvatarsFn = createServerFn({ method: 'GET' }).handler(
 //  - omitted        → the visitor's active/most-recent thread (default)
 //  - a conversation → that thread, if the caller owns it (else greeting state)
 //  - null           → "new": config + greeting with no thread
-const myConversationSchema = z.object({ conversationId: z.string().nullish() }).optional()
+const myConversationSchema = z
+  .object({ conversationId: z.string().nullish(), locale: z.string().max(20).optional() })
+  .optional()
 
 /** The current visitor's active conversation + first page of messages. */
 export const getMyConversationFn = createServerFn({ method: 'GET' })
   .validator(myConversationSchema)
   .handler(async ({ data }) => {
     try {
-      const { getMessengerConfig } = await import('@/lib/server/domains/settings/settings.widget')
+      const { getMessengerConfig, getWidgetConfig } =
+        await import('@/lib/server/domains/settings/settings.widget')
       const { isConversationsEnabled } =
         await import('@/lib/server/domains/settings/settings.support')
       const { getSettings } = await import('./workspace')
       const { isEmailConfigured } = await import('@quackback/email')
       const { canEmailVisitor } = await import('@/lib/shared/conversation/reply-capability')
-      const [enabled, messengerConfig, appSettings] = await Promise.all([
+      const { widgetTranslationFor } = await import('@/lib/shared/widget/translations')
+      const [enabled, messengerConfig, appSettings, widgetConfig] = await Promise.all([
         isConversationsEnabled(),
         getMessengerConfig(),
         getSettings(),
+        getWidgetConfig(),
       ])
+      // Per-locale copy override for this visitor's language (base copy is the
+      // fallback).
+      const t = widgetTranslationFor(widgetConfig.translations, data?.locale)
       const emailConfigured = isEmailConfigured()
       // Note: team-availability presence is NOT returned here. The widget reads it
       // from the shared useConversationPresence query (getConversationPresenceFn) so every surface
       // agrees and only one poll runs — this fn is just the visitor's thread.
       const base = {
         enabled,
-        welcomeMessage: messengerConfig.welcomeMessage ?? null,
-        offlineMessage: messengerConfig.offlineMessage ?? null,
+        welcomeMessage: t.welcomeMessage || messengerConfig.welcomeMessage || null,
+        offlineMessage: t.offlineMessage || messengerConfig.offlineMessage || null,
         // Falls back to the workspace name (as the settings help text promises)
         // when no team name is set.
         teamName: messengerConfig.teamName?.trim() || appSettings?.name || null,

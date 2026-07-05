@@ -273,7 +273,7 @@ export function VisitorConversationThread({
             ? (createdConversationIdRef.current ?? null)
             : (conversationTarget ?? undefined)
         const res = await getMyConversationFn({
-          data: { conversationId: effectiveTarget },
+          data: { conversationId: effectiveTarget, locale: intl.locale },
           headers: getAuthHeaders(),
         })
         if (cancelled) return
