@@ -1,5 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { EnvelopeIcon } from '@heroicons/react/24/outline'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { EmailChannelSettings } from '@/components/admin/channels/email-channel-settings'
@@ -10,10 +11,20 @@ export const Route = createFileRoute('/admin/settings/channels')({
     await requireWorkspaceRole({ data: { allowedRoles: ['admin'] } })
     return {}
   },
-  component: ChannelsSettingsPage,
+  component: ChannelsSettingsRoute,
 })
 
-/** Email channel settings (§4.8): inbound routing, sending addresses, domains. */
+/** Gate behind the `supportInbox` flag, mirroring the messenger settings page. */
+function ChannelsSettingsRoute() {
+  const { settings } = Route.useRouteContext()
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+  if (!flags?.supportInbox) {
+    return <Navigate to="/admin/settings" />
+  }
+  return <ChannelsSettingsPage />
+}
+
+/** Email routing and identity (§4.8): the inbound route plus per-module sending addresses and domains. */
 function ChannelsSettingsPage() {
   return (
     <div className="space-y-6 max-w-3xl">
@@ -22,8 +33,8 @@ function ChannelsSettingsPage() {
       </div>
       <PageHeader
         icon={EnvelopeIcon}
-        title="Email channel"
-        description="Route inbound support email and send replies from your own addresses"
+        title="Emails"
+        description="Route inbound support email and choose the addresses each product sends from"
       />
       <EmailChannelSettings />
     </div>

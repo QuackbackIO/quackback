@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useTransition } from 'react'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter, Navigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { BookOpenIcon } from '@heroicons/react/24/solid'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateHelpCenterConfig } from '@/lib/client/mutations/settings'
-import type { HelpCenterConfig } from '@/lib/shared/types/settings'
+import type { HelpCenterConfig, FeatureFlags } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/help-center')({
   loader: async ({ context }) => {
@@ -22,8 +22,18 @@ export const Route = createFileRoute('/admin/settings/help-center')({
     await queryClient.ensureQueryData(settingsQueries.helpCenterConfig())
     return {}
   },
-  component: HelpCenterSettingsPage,
+  component: HelpCenterSettingsRoute,
 })
+
+/** Gate behind the `helpCenter` flag; the wrapper keeps the check above the page hooks. */
+function HelpCenterSettingsRoute() {
+  const { settings } = Route.useRouteContext()
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+  if (!flags?.helpCenter) {
+    return <Navigate to="/admin/settings" />
+  }
+  return <HelpCenterSettingsPage />
+}
 
 function HelpCenterSettingsPage() {
   const router = useRouter()

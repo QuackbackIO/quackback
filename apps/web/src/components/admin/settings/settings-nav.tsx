@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useRouterState, useRouteContext } from '@tanstack/react-router'
 import {
   Cog6ToothIcon,
@@ -8,10 +8,10 @@ import {
   PaintBrushIcon,
   PuzzlePieceIcon,
   ChatBubbleLeftRightIcon,
+  ChatBubbleLeftIcon,
   ClockIcon,
   CommandLineIcon,
   ShieldCheckIcon,
-  DocumentTextIcon,
   BeakerIcon,
   BookOpenIcon,
   TagIcon,
@@ -19,8 +19,9 @@ import {
   SparklesIcon,
   TicketIcon,
   QueueListIcon,
+  EnvelopeIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/solid'
-import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types'
 
@@ -30,47 +31,40 @@ interface NavItem {
   icon: typeof Cog6ToothIcon
 }
 
-interface NavSection {
+/** A product accordion inside the Products section (Feedback, Support, ...). */
+interface NavGroup {
   label: string
-  items: NavItem[]
+  icon: typeof Cog6ToothIcon
+  kids: NavItem[]
 }
 
+type NavEntry = NavItem | NavGroup
+
+interface NavSection {
+  label: string
+  items: NavEntry[]
+}
+
+export function isNavGroup(entry: NavEntry): entry is NavGroup {
+  return 'kids' in entry
+}
+
+/**
+ * The settings IA (SETTINGS-IA-SPEC Option B): four stable sections. Flags hide
+ * ITEMS (or whole product accordions), never sections, so the sidebar layout
+ * does not reflow when a flag flips - Products always renders because Feedback
+ * is always on.
+ */
 export function buildNavSections(flags?: {
   helpCenter?: boolean
   supportInbox?: boolean
   supportTickets?: boolean
 }): NavSection[] {
-  const sections: NavSection[] = [
-    {
-      label: 'Administration',
-      items: [
-        { label: 'Members', to: '/admin/settings/team', icon: UsersIcon },
-        { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
-        {
-          label: 'Security',
-          to: '/admin/settings/security/authentication',
-          icon: ShieldCheckIcon,
-        },
-        {
-          label: 'Audit log',
-          to: '/admin/settings/security/audit-log',
-          icon: DocumentTextIcon,
-        },
-        { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
-        { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
-      ],
-    },
-    {
-      label: 'Customization',
-      items: [
-        { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
-        { label: 'Portal', to: '/admin/settings/portal', icon: MegaphoneIcon },
-        { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
-      ],
-    },
+  const products: NavEntry[] = [
     {
       label: 'Feedback',
-      items: [
+      icon: ChatBubbleLeftIcon,
+      kids: [
         { label: 'Boards', to: '/admin/settings/boards', icon: Squares2X2Icon },
         { label: 'Statuses', to: '/admin/settings/statuses', icon: Cog6ToothIcon },
         { label: 'Tags', to: '/admin/settings/tags', icon: TagIcon },
@@ -79,55 +73,75 @@ export function buildNavSections(flags?: {
     },
   ]
 
-  // Support — conversations, ticket config, and Help Center, each gated on its own flag.
-  const supportItems: NavItem[] = [
+  const supportKids: NavItem[] = [
     ...(flags?.supportInbox
       ? [
           {
-            label: 'Conversations',
+            label: 'Messenger',
             to: '/admin/settings/conversations',
             icon: ChatBubbleLeftRightIcon,
           },
-          {
-            label: 'Office Hours',
-            to: '/admin/settings/office-hours',
-            icon: ClockIcon,
-          },
-          { label: 'Teams', to: '/admin/settings/teams', icon: UserGroupIcon },
+          { label: 'Office Hours', to: '/admin/settings/office-hours', icon: ClockIcon },
         ]
       : []),
     ...(flags?.supportTickets
       ? [
           { label: 'Ticket types', to: '/admin/settings/ticket-types', icon: TicketIcon },
           {
-            label: 'Statuses and stages',
+            label: 'Ticket statuses & stages',
             to: '/admin/settings/ticket-statuses',
             icon: QueueListIcon,
           },
         ]
       : []),
-    ...(flags?.helpCenter
-      ? [{ label: 'Help Center', to: '/admin/settings/help-center', icon: BookOpenIcon }]
-      : []),
   ]
-  if (supportItems.length > 0) {
-    sections.push({ label: 'Support', items: supportItems })
+  if (supportKids.length > 0) {
+    products.push({ label: 'Support', icon: ChatBubbleLeftRightIcon, kids: supportKids })
   }
 
-  sections.push({
-    label: 'AI & Automation',
-    items: [
-      { label: 'Assistant', to: '/admin/settings/ai', icon: SparklesIcon },
-      { label: 'Sandbox', to: '/admin/settings/ai/sandbox', icon: BeakerIcon },
-    ],
-  })
+  if (flags?.helpCenter) {
+    products.push({
+      label: 'Help Center',
+      icon: BookOpenIcon,
+      kids: [{ label: 'Settings', to: '/admin/settings/help-center', icon: BookOpenIcon }],
+    })
+  }
 
-  sections.push({
-    label: 'Customers',
-    items: [{ label: 'People', to: '/admin/settings/people', icon: UserGroupIcon }],
-  })
-
-  return sections
+  return [
+    { label: 'Products', items: products },
+    {
+      label: 'AI & Automation',
+      items: [
+        { label: 'Assistant', to: '/admin/settings/ai', icon: SparklesIcon },
+        { label: 'Sandbox', to: '/admin/settings/ai/sandbox', icon: BeakerIcon },
+      ],
+    },
+    {
+      label: 'Workspace',
+      items: [
+        { label: 'General', to: '/admin/settings/general', icon: Cog6ToothIcon },
+        { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
+        { label: 'Portal', to: '/admin/settings/portal', icon: MegaphoneIcon },
+        { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
+        { label: 'Members & Teams', to: '/admin/settings/members', icon: UsersIcon },
+        {
+          label: 'Access & Security',
+          to: '/admin/settings/security/authentication',
+          icon: ShieldCheckIcon,
+        },
+        ...(flags?.supportInbox
+          ? [{ label: 'Emails', to: '/admin/settings/channels', icon: EnvelopeIcon }]
+          : []),
+        { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
+        { label: 'Integrations', to: '/admin/settings/integrations', icon: PuzzlePieceIcon },
+        { label: 'Labs', to: '/admin/settings/labs', icon: BeakerIcon },
+      ],
+    },
+    {
+      label: 'Data',
+      items: [{ label: 'People', to: '/admin/settings/people', icon: UserGroupIcon }],
+    },
+  ]
 }
 
 export function SettingsNav() {
@@ -138,33 +152,138 @@ export function SettingsNav() {
   const navSections = useMemo(() => buildNavSections(flags), [flags])
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {navSections.map((section) => (
-        <FilterSection key={section.label} title={section.label}>
-          <div className="space-y-1">
-            {section.items.map((item) => {
-              const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
-              const Icon = item.icon
-
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={cn(
-                    'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                    isActive
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  )}
-                >
-                  <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive && 'text-primary')} />
-                  <span className="truncate flex-1">{item.label}</span>
-                </Link>
-              )
-            })}
-          </div>
-        </FilterSection>
+        <NavCard key={section.label} section={section} pathname={pathname} />
       ))}
     </div>
+  )
+}
+
+/**
+ * A settings section rendered as a collapsible card. The gradient/border frames
+ * each group, and the body animates open/closed via a grid-rows 1fr↔0fr height
+ * transition (no JS measuring). Sections start open, matching the prior nav.
+ */
+function NavCard({ section, pathname }: { section: NavSection; pathname: string }) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border/50 bg-muted/20 bg-gradient-to-b from-foreground/[0.04] to-transparent">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.03]"
+      >
+        <span className="text-xs font-semibold tracking-tight text-foreground/90">
+          {section.label}
+        </span>
+        <ChevronDownIcon
+          className={cn(
+            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-300 ease-out',
+            !open && '-rotate-90'
+          )}
+        />
+      </button>
+      <div
+        className="grid transition-[grid-template-rows] duration-300 ease-out"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden">
+          <div className="space-y-0.5 px-1.5 pb-2">
+            {section.items.map((entry) =>
+              isNavGroup(entry) ? (
+                <NavGroupRows
+                  key={entry.label}
+                  group={entry}
+                  pathname={pathname}
+                  parentOpen={open}
+                />
+              ) : (
+                <NavLink key={entry.to} item={entry} pathname={pathname} tabbable={open} />
+              )
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** A product accordion: a toggle row plus its indented child links. */
+function NavGroupRows({
+  group,
+  pathname,
+  parentOpen,
+}: {
+  group: NavGroup
+  pathname: string
+  parentOpen: boolean
+}) {
+  const hasActiveKid = group.kids.some(
+    (kid) => pathname === kid.to || pathname.startsWith(kid.to + '/')
+  )
+  // Groups with the active page start open; others start collapsed to keep
+  // the Products section scannable.
+  const [open, setOpen] = useState(hasActiveKid)
+  const Icon = group.icon
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        tabIndex={parentOpen ? undefined : -1}
+        className={cn(
+          'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
+          hasActiveKid ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+        )}
+      >
+        <Icon className={cn('h-3.5 w-3.5 shrink-0', hasActiveKid && 'text-primary')} />
+        <span className="truncate flex-1 text-left">{group.label}</span>
+        <ChevronDownIcon
+          className={cn(
+            'h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out',
+            !open && '-rotate-90'
+          )}
+        />
+      </button>
+      {open && (
+        <div className="ml-4 border-l border-border/50 pl-1.5 space-y-0.5">
+          {group.kids.map((kid) => (
+            <NavLink key={kid.to} item={kid} pathname={pathname} tabbable={parentOpen} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NavLink({
+  item,
+  pathname,
+  tabbable,
+}: {
+  item: NavItem
+  pathname: string
+  tabbable: boolean
+}) {
+  const isActive = pathname === item.to || pathname.startsWith(item.to + '/')
+  const Icon = item.icon
+
+  return (
+    <Link
+      to={item.to}
+      tabIndex={tabbable ? undefined : -1}
+      className={cn(
+        'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+        isActive
+          ? 'bg-primary/10 text-foreground'
+          : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]'
+      )}
+    >
+      <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive && 'text-primary')} />
+      <span className="truncate flex-1">{item.label}</span>
+    </Link>
   )
 }

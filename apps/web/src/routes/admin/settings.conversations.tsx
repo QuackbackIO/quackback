@@ -130,7 +130,7 @@ function ConversationsSettingsPage() {
       </div>
       <PageHeader
         icon={ChatBubbleLeftRightIcon}
-        title="Conversations"
+        title="Messenger"
         description="How support conversations work: Messenger in the widget and how new conversations are routed to your team."
       />
 
