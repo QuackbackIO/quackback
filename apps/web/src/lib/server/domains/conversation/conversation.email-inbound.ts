@@ -376,7 +376,20 @@ function mimeOnly(contentType: string): string {
  * A leaf with no MIME headers at all is multipart preamble/epilogue, not a part,
  * and is skipped — so only the top-level bare-body message defaults to text/plain.
  */
-function walkMime(headers: RawHeader[], body: string, out: ExtractedMime, topLevel: boolean): void {
+// Bounds on the MIME walk — a hostile message can nest multipart containers or
+// fan out parts without limit; both are capped so a crafted email can't overflow
+// the stack (a poison pill the IMAP poller would retry forever) or exhaust memory.
+const MAX_MIME_DEPTH = 20
+const MAX_MIME_PARTS = 100
+
+function walkMime(
+  headers: RawHeader[],
+  body: string,
+  out: ExtractedMime,
+  topLevel: boolean,
+  depth = 0
+): void {
+  if (depth > MAX_MIME_DEPTH) return
   const ctHeader = readHeader(headers, 'content-type')
   const contentType = ctHeader ?? (topLevel ? 'text/plain' : '')
 
@@ -388,7 +401,7 @@ function walkMime(headers: RawHeader[], body: string, out: ExtractedMime, topLev
       const trimmed = segment.replace(/^\n+/, '')
       if (!trimmed || /^--/.test(trimmed)) continue
       const { headerBlock, body: partBody } = splitHeadersAndBody(trimmed)
-      walkMime(parseRawHeaders(headerBlock), partBody, out, false)
+      walkMime(parseRawHeaders(headerBlock), partBody, out, false, depth + 1)
     }
     return
   }
@@ -414,6 +427,9 @@ function walkMime(headers: RawHeader[], body: string, out: ExtractedMime, topLev
 
   const bytes = decodeBodyBytes(cte, body)
   if (bytes.length === 0) return
+  // Bound the collected part count; the rehoster caps uploads separately, but
+  // this keeps a fan-out message from filling memory before it gets there.
+  if (out.attachments.length >= MAX_MIME_PARTS) return
   const contentId = cidHeader ? stripAngleBrackets(cidHeader) || null : null
   out.attachments.push({
     bytes,

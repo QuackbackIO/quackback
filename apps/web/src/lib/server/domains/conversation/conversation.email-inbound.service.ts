@@ -67,6 +67,13 @@ const log = logger.child({ component: 'conversation-email-inbound' })
  *  routes: images share `chat-images`; non-image files get a sibling prefix). */
 const INBOUND_IMAGE_PREFIX = 'chat-images'
 const INBOUND_FILE_PREFIX = 'chat-files'
+// Hard ceiling on how many parts a single inbound email may rehost to storage,
+// covering inline images AND discrete attachments together. The discrete
+// attachment tray is separately capped at MAX_CONVERSATION_ATTACHMENTS; this
+// wider budget also bounds cid-referenced inline images (which don't consume an
+// attachment slot) so a message stuffed with thousands of tiny inline images
+// can't amplify into thousands of uploads.
+const MAX_INBOUND_UPLOADS = 25
 
 interface RehostedInboundMedia {
   /** The HTML body with `cid:` references rewritten to rehosted URLs, or the
@@ -122,9 +129,16 @@ async function rehostInboundMedia(parsed: ParsedInboundEmail): Promise<RehostedI
   let html = parsed.html
   const cidMap = new Map<string, string>()
   const attachments: ConversationAttachment[] = []
+  let uploads = 0
 
   for (const part of parts) {
     if (part.bytes.length === 0) continue
+    // Total-upload ceiling: gates inline images too, so a message referencing
+    // thousands of tiny cid: images can't amplify into thousands of S3 puts.
+    if (uploads >= MAX_INBOUND_UPLOADS) {
+      log.warn({ name: part.filename }, 'inbound email part dropped: over upload budget')
+      continue
+    }
     if (part.bytes.length > MAX_FILE_SIZE) {
       log.warn({ name: part.filename, size: part.bytes.length }, 'inbound email part dropped: over size cap')
       continue
@@ -155,6 +169,7 @@ async function rehostInboundMedia(parsed: ParsedInboundEmail): Promise<RehostedI
         log.warn({ err, name: part.filename }, 'inbound email image upload failed; skipped')
         continue
       }
+      uploads++
       if (referenced && part.contentId) {
         cidMap.set(part.contentId, url)
       } else {
@@ -179,6 +194,7 @@ async function rehostInboundMedia(parsed: ParsedInboundEmail): Promise<RehostedI
         log.warn({ err, name: part.filename }, 'inbound email attachment upload failed; skipped')
         continue
       }
+      uploads++
       attachments.push({
         url,
         name: part.filename || 'attachment',

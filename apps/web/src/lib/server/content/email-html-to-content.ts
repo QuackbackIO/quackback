@@ -73,8 +73,12 @@ const HISTORY_MARKERS: readonly RegExp[] = [
   /<div[^>]*\bid="?divRplyFwdMsg"?[^>]*>/i,
   // Outlook message header (older OWA / some connectors), id or class.
   /<[^>]*\b(?:id|class)="?[^">]*OutlookMessageHeader[^">]*"?[^>]*>/i,
-  // Outlook desktop divider div before the quoted From/Sent/To header table.
-  /<div[^>]*\bstyle="[^"]*border-top:[^"]*solid[^"]*"[^>]*>/i,
+  // Outlook desktop divider div, but ONLY when the quoted From:/Sent: header
+  // block follows it within a bounded window. A bare `border-top: solid` div is
+  // far too common (signatures, content dividers, pasted formatting) to treat as
+  // a history boundary on its own — requiring the adjacent Outlook header avoids
+  // silently deleting real reply content that merely contains a styled divider.
+  /<div[^>]*\bstyle="[^"]*border-top:[^"]*solid[^"]*"[^>]*>(?:[^<]|<[^>]*>){0,400}?\bFrom:(?:[^<]|<[^>]*>){0,200}?\bSent:/i,
   // Classic Outlook plaintext-in-HTML separator.
   /-{3,}\s*Original Message\s*-{3,}/i,
 ]

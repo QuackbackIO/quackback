@@ -259,6 +259,23 @@ describe('parseRawEmail', () => {
     const raw = ['Content-Type: text/plain', '', 'just text'].join('\r\n')
     expect(parseRawEmail(raw).attachments).toBeUndefined()
   })
+
+  it('does not overflow on a deeply nested multipart bomb (bounded recursion)', () => {
+    // Each level nests a fresh multipart with a distinct boundary so the walk
+    // truly recurses (a shared boundary would flatten via body.split). Without
+    // a depth bound this overflows the stack; the poller would then retry the
+    // message forever. 200 levels is well past the cap.
+    const DEPTH = 200
+    let raw = ['Content-Type: text/plain', '', 'deep body'].join('\r\n')
+    for (let i = DEPTH; i > 0; i--) {
+      const b = `B${i}`
+      raw = [`Content-Type: multipart/mixed; boundary="${b}"`, '', `--${b}`, raw, `--${b}--`].join(
+        '\r\n'
+      )
+    }
+    // The assertion is simply that this returns rather than throwing RangeError.
+    expect(() => parseRawEmail(raw)).not.toThrow()
+  })
 })
 
 describe('parseRawEmail — MIME attachment parts (P4.4)', () => {

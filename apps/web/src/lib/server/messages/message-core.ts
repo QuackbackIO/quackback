@@ -96,13 +96,24 @@ export function preview(content: string, attachments: ConversationAttachment[] =
  *  is what the unified RichTextEditor's `onImageUpload` authors instead (support-
  *  grade tickets/conversations, per TICKET-CONTENT-PARITY-SPEC §4) — both count,
  *  so an image-only send from either composer clears validateContent's
- *  empty-content guard the same way. */
+ *  empty-content guard the same way.
+ *
+ *  Recurses the whole tree (an image nested in a blockquote/list still counts)
+ *  and requires a surviving `src`: the visitor image-origin sanitize clears an
+ *  untrusted image's src to '', and a cleared image renders as nothing — so it
+ *  must NOT satisfy the empty-content guard, else a blank bubble would store
+ *  while the preview shows "📷 Image". */
 export function richMessageFallbackLabel(doc: TiptapContent | null | undefined): string {
   for (const node of doc?.content ?? []) {
-    if (node.type === 'chatImage' || node.type === 'resizableImage') return '📷 Image'
+    if (node.type === 'chatImage' || node.type === 'image' || node.type === 'resizableImage') {
+      if (typeof node.attrs?.src === 'string' && node.attrs.src.length > 0) return '📷 Image'
+      continue
+    }
     if (node.type === 'quackbackEmbed') {
       return node.attrs?.kind === 'changelog' ? '🔗 Shared an update' : '🔗 Shared a post'
     }
+    const nested = richMessageFallbackLabel(node)
+    if (nested) return nested
   }
   return ''
 }

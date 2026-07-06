@@ -101,6 +101,19 @@ describe('emailHtmlToContent', () => {
       expect(text).not.toContain('Quoted original text')
       expect(JSON.stringify(contentJson)).not.toContain('From:')
     })
+
+    it('does NOT treat a bare border-top divider (signature/content) as history', () => {
+      // A styled divider with no adjacent Outlook From:/Sent: header block is a
+      // signature or content separator, not a quote boundary — real content
+      // after it must survive.
+      const withDivider =
+        '<div>Here is the answer you asked for.</div>' +
+        '<div style="border-top:1px solid #ccc;padding-top:8px">' +
+        '<p>Extra detail the customer wrote below their divider.</p></div>'
+      const { text } = emailHtmlToContent(withDivider)
+      expect(text).toContain('Here is the answer you asked for.')
+      expect(text).toContain('Extra detail the customer wrote below their divider.')
+    })
   })
 
   describe('outlook divRplyFwdMsg reply header', () => {

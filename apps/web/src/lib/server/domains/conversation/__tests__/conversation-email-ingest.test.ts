@@ -584,6 +584,26 @@ describe('ingestInboundEmail', () => {
       expect(uploadImageBuffer).not.toHaveBeenCalled()
     })
 
+    it('caps total uploads so many cid-referenced inline images cannot amplify', async () => {
+      // 40 inline images, each referenced in the HTML (so none consume a discrete
+      // attachment slot) — without a total-upload budget every one would upload.
+      const cids = Array.from({ length: 40 }, (_, i) => `img${i}@x`)
+      const html = `<div>${cids.map((c) => `<img src="cid:${c}">`).join('')}</div>`
+      const parts = cids.map((c) =>
+        part({
+          contentType: 'image/png',
+          filename: `${c}.png`,
+          contentId: c,
+          disposition: 'inline',
+          bytes: PNG,
+        })
+      )
+      const result = await ingestParsedEmail(reply({ html, attachments: parts }))
+      expect(result.status).toBe('ingested')
+      // Bounded by MAX_INBOUND_UPLOADS (25), never all 40.
+      expect(uploadImageBuffer.mock.calls.length).toBeLessThanOrEqual(25)
+    })
+
     it('carries a cid image NOT referenced in the html as a discrete attachment', async () => {
       const result = await ingestParsedEmail(
         reply({

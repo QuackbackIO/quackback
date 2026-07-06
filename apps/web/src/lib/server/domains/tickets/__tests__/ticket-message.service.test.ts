@@ -19,6 +19,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+// config getters validate the full env (absent in tests); provide just what the
+// image-src trust check (isTrustedAttachmentUrl) reads so a same-origin
+// `/api/storage/...` src resolves as trusted.
+vi.mock('@/lib/server/config', () => ({
+  config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
+  getBaseUrl: () => 'http://localhost:3000',
+}))
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   tickets,
@@ -141,7 +149,7 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     const { ticketId, actor } = await seedTicketWithAgent()
     const contentJson = {
       type: 'doc' as const,
-      content: [{ type: 'chatImage', attrs: { src: null, alt: null } }],
+      content: [{ type: 'chatImage', attrs: { src: '/api/storage/chat-images/x.png', alt: null } }],
     }
 
     const { message } = await sendTicketMessage(actor, { ticketId, content: '', contentJson })
@@ -158,13 +166,49 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     const { ticketId, actor } = await seedTicketWithAgent()
     const contentJson = {
       type: 'doc' as const,
-      content: [{ type: 'resizableImage', attrs: { src: null, alt: null } }],
+      content: [
+        { type: 'resizableImage', attrs: { src: '/api/storage/chat-images/x.png', alt: null } },
+      ],
     }
 
     const { message } = await sendTicketMessage(actor, { ticketId, content: '', contentJson })
 
     expect(message.content).toBe('')
     expect(message.contentJson?.content?.[0]?.type).toBe('resizableImage')
+  })
+
+  it('rejects an image-only message whose image src was cleared (renders blank)', async () => {
+    const { ticketId, actor } = await seedTicketWithAgent()
+    // A src-less image node renders as nothing; it must NOT satisfy the
+    // empty-content guard (else a blank bubble stores while previews show an
+    // image). This mirrors what the visitor image-origin sanitize produces
+    // when it clears an untrusted src to ''.
+    const contentJson = {
+      type: 'doc' as const,
+      content: [{ type: 'resizableImage', attrs: { src: '', alt: null } }],
+    }
+
+    await expect(
+      sendTicketMessage(actor, { ticketId, content: '', contentJson })
+    ).rejects.toThrow(/empty/i)
+  })
+
+  it('allows an image-only message with the image nested in a blockquote', async () => {
+    const { ticketId, actor } = await seedTicketWithAgent()
+    const contentJson = {
+      type: 'doc' as const,
+      content: [
+        {
+          type: 'blockquote',
+          content: [
+            { type: 'resizableImage', attrs: { src: '/api/storage/chat-images/n.png', alt: null } },
+          ],
+        },
+      ],
+    }
+
+    const { message } = await sendTicketMessage(actor, { ticketId, content: '', contentJson })
+    expect(message.content).toBe('')
   })
 
   it('keeps an external inline-image src on an AGENT reply (agents may paste external images)', async () => {
