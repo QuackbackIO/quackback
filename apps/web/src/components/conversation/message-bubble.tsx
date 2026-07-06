@@ -250,17 +250,23 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         className="mt-0.5 size-7 shrink-0 text-[10px]"
       />
 
-      <div className={cn('flex min-w-0 flex-col', self ? 'items-end' : 'items-start')}>
+      {/* flex-1 gives the column a definite width; without it the column
+          shrink-wraps its content and the bubble's percentage max-width
+          resolves against an indefinite box, collapsing short plain-text
+          messages to min-content (one character per line). */}
+      <div className={cn('flex min-w-0 flex-1 flex-col', self ? 'items-end' : 'items-start')}>
         {message.isAssistant && message.citations.length > 0 && (
           <AssistantSourcesTrace citations={message.citations} />
         )}
 
         {/* The bubble and its hover toolbar share this positioning context so
-            the toolbar anchors to the bubble's corner, not the row. */}
-        <div className="relative">
+            the toolbar anchors to the bubble's corner, not the row. The width
+            cap lives HERE (a direct child of the definite-width column) and the
+            bubble fills it — see the flex-1 comment above. */}
+        <div className="relative w-fit max-w-[85%]">
           <div
             className={cn(
-              jumbo ? 'max-w-[85%]' : bubbleClasses(side, { note: isNote }),
+              jumbo ? 'max-w-full' : cn(bubbleClasses(side, { note: isNote }), 'max-w-full'),
               // Animated flash for motion users; a static brand ring as the
               // reduced-motion equivalent (no background fight with the fill).
               highlighted &&
