@@ -83,6 +83,7 @@ import {
   notifyTeamAssigned,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
+import { resolveMessageParent } from './message-parent'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   conversationToDTO,
@@ -1276,10 +1277,10 @@ export async function deleteConversationMessage(
     // ticket.view_all) may delete any of its messages. `canActAsAgent` is the
     // same broad "is this actor an agent" gate `message.actions.ts`'s
     // `requireAgent` uses for the equivalent ticket-message actions.
-    const ticketId = message.ticketId
-    if (!ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
-    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
-    await assertTicketVisible(ticketId, actor)
+    if (!message.ticketId) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+    // Resolves the parent + authorizes ticket visibility (§2.5) — shared with
+    // message.actions.ts's identical resolve-then-authorize step.
+    await resolveMessageParent(message, actor)
     const decision = canActAsAgent(actor)
     if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
 

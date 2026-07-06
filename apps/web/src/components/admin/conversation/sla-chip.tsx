@@ -11,7 +11,9 @@ import type { ConversationSlaDTO, ConversationStatus } from '@/lib/shared/conver
 import { slaChipState, SLA_TARGET_LABELS, type SlaChipTone } from '@/lib/shared/conversation/sla'
 import { cn } from '@/lib/shared/utils'
 
-const TONE_CLASSES: Record<SlaChipTone, string> = {
+/** Exported so other bare-countdown chips (e.g. `TicketDueChip` in
+ *  inbox-detail-panel.tsx) share this exact tone → color mapping. */
+export const TONE_CLASSES: Record<SlaChipTone, string> = {
   ok: 'bg-muted text-muted-foreground',
   due_soon: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
   due_now: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',

@@ -6,16 +6,7 @@
  * tracker's status onto its linked tickets rides setTicketStatus in
  * ticket.service and consumes listLinkedTicketIds here.
  */
-import {
-  db,
-  eq,
-  and,
-  isNull,
-  inArray,
-  conversationMessages,
-  ticketLinks,
-  tickets,
-} from '@/lib/server/db'
+import { db, eq, and, isNull, inArray, ticketLinks, tickets } from '@/lib/server/db'
 import type { TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
@@ -25,6 +16,7 @@ import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
 import { loadTicketOr404 } from './ticket.service'
+import { emitTicketSystemMessage } from './ticket-message.service'
 import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import type { TicketDTO } from './ticket.types'
 
@@ -83,19 +75,13 @@ export async function linkTicketToTracker(
       linkedByPrincipalId: actor.principalId ?? null,
     })
     // Team-only audit note on the linked ticket's thread (never customer-visible).
-    await tx.insert(conversationMessages).values({
-      ticketId: linkedTicketId,
-      principalId: null,
-      senderType: 'system',
-      isInternal: true,
-      content: `Linked to tracker ${formatTicketNumber(tracker.number)}`,
-      metadata: {
-        systemEvent: {
-          kind: 'ticket_linked',
-          trackerReference: formatTicketNumber(tracker.number),
-        },
-      },
-    })
+    await emitTicketSystemMessage(
+      linkedTicketId,
+      'ticket_linked',
+      `Linked to tracker ${formatTicketNumber(tracker.number)}`,
+      { trackerReference: formatTicketNumber(tracker.number) },
+      tx
+    )
   })
   log.info(
     { tracker_ticket_id: trackerTicketId, linked_ticket_id: linkedTicketId },

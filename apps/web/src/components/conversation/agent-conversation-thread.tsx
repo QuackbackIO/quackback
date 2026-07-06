@@ -1151,8 +1151,7 @@ export function AgentConversationThread({
     uploading
 
   // Render one virtualized row. AgentMessageBubble keeps all the agent-view
-  // behaviors (and its data-message-id root) — `readOnly` mirrors
-  // `capabilities.readOnlyBubbles`, false for every kind post-M4.
+  // behaviors (and its data-message-id root) for every kind.
   const renderRow = (row: AdminConversationRow) => {
     switch (row.type) {
       case 'load-older':
@@ -1175,7 +1174,6 @@ export function AgentConversationThread({
         return (
           <AgentMessageBubble
             message={m}
-            readOnly={capabilities.readOnlyBubbles}
             highlighted={m.id === highlightId}
             onOpenPost={onOpenPost}
             onDelete={() => deleteMutation.mutate(m.id)}
@@ -1390,7 +1388,7 @@ export function AgentConversationThread({
               End conversation
             </DropdownMenuItem>
           )}
-          {!isTicket && conversation && capabilities.convertToPost && (
+          {conversation && capabilities.convertToPost && (
             <DropdownMenuItem
               onSelect={() =>
                 setConvertSeed({ title: convertDefaultTitle, content: convertDefaultContent })

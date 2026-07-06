@@ -37,7 +37,7 @@ const hoisted = vi.hoisted(() => ({
   isFeatureEnabled: vi.fn(),
   isAssistantConfigured: vi.fn(),
   assertConversationViewable: vi.fn(),
-  assertTicketViewable: vi.fn(),
+  assertTicketVisible: vi.fn(),
   generateConversationSummaryText: vi.fn(),
   generateTicketSummaryText: vi.fn(),
 }))
@@ -55,8 +55,12 @@ vi.mock('@/lib/server/domains/assistant', () => ({
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   assertConversationViewable: hoisted.assertConversationViewable,
 }))
-vi.mock('@/lib/server/domains/assistant/copilot-gate', () => ({
-  assertTicketViewable: hoisted.assertTicketViewable,
+// `assertCopilotAvailable` (copilot-gate.ts) is exercised for real here, not
+// mocked as a whole module: it's the one piece of gate logic this suite
+// wants to assert against (flag -> configured, in order), composed from the
+// isFeatureEnabled/isAssistantConfigured mocks above.
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  assertTicketVisible: hoisted.assertTicketVisible,
 }))
 vi.mock('@/lib/server/domains/assistant/conversation-summary.service', () => ({
   generateConversationSummaryText: hoisted.generateConversationSummaryText,
@@ -75,7 +79,7 @@ beforeEach(() => {
   hoisted.isFeatureEnabled.mockResolvedValue(true)
   hoisted.isAssistantConfigured.mockReturnValue(true)
   hoisted.assertConversationViewable.mockResolvedValue({ id: CONVERSATION_ID })
-  hoisted.assertTicketViewable.mockResolvedValue({ id: TICKET_ID })
+  hoisted.assertTicketVisible.mockResolvedValue({ id: TICKET_ID })
   hoisted.generateConversationSummaryText.mockResolvedValue({
     question: 'Refund window',
     bullets: ['Customer asked about refunds.', 'Explained the 30-day window.'],
@@ -162,7 +166,7 @@ describe('summarizeTicketNowFn (unified inbox §2.9)', () => {
 
   it('checks the ticket is viewable by the caller before summarizing, never the conversation gate', async () => {
     await summarizeTicketNowFn({ data: { ticketId: TICKET_ID } })
-    expect(hoisted.assertTicketViewable).toHaveBeenCalledWith(TICKET_ID, expect.anything())
+    expect(hoisted.assertTicketVisible).toHaveBeenCalledWith(TICKET_ID, expect.anything())
     expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
   })
 
@@ -185,7 +189,7 @@ describe('summarizeTicketNowFn (unified inbox §2.9)', () => {
   })
 
   it('404s (rejects) when the ticket does not exist or is not viewable', async () => {
-    hoisted.assertTicketViewable.mockRejectedValue(new Error('Ticket not found'))
+    hoisted.assertTicketVisible.mockRejectedValue(new Error('Ticket not found'))
     await expect(summarizeTicketNowFn({ data: { ticketId: TICKET_ID } })).rejects.toThrow(
       'Ticket not found'
     )

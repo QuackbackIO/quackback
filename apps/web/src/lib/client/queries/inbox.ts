@@ -75,14 +75,6 @@ export const ticketQueries = {
       staleTime: 60_000,
     }),
 
-  /** A single ticket (properties only in 7A; the thread arrives with 7B). */
-  detail: (id: TicketId) =>
-    queryOptions({
-      queryKey: ticketKeys.detail(id),
-      queryFn: () => getTicketFn({ data: { ticketId: id } }),
-      staleTime: 60_000,
-    }),
-
   /** The status catalogue, ordered by category then position. */
   statuses: () =>
     queryOptions({
@@ -97,15 +89,6 @@ export const ticketQueries = {
       queryKey: ticketKeys.stageLabels(),
       queryFn: () => getTicketStageLabelsFn(),
       staleTime: 60_000,
-    }),
-
-  /** A ticket's message thread (oldest-first). No live SSE yet, so a short
-   *  staleTime + refetch-on-focus keeps it reasonably fresh for the agent. */
-  thread: (id: TicketId) =>
-    queryOptions({
-      queryKey: ticketKeys.thread(id),
-      queryFn: () => listTicketMessagesFn({ data: { ticketId: id } }),
-      staleTime: 10_000,
     }),
 
   /** A ticket's tracker links: for a tracker, the customer tickets it tracks;
@@ -184,9 +167,7 @@ export const inboxQueries = {
 
   /** A ticket's message thread (oldest-first), coerced through `asAgentMessage`
    *  so the cache always holds `AgentConversationMessageDTO` regardless of
-   *  whether the server response already carries reactions/flags — mirrors
-   *  `ticketQueries.thread` (same key, so a `ticketKeys.all()` invalidation
-   *  covers both). */
+   *  whether the server response already carries reactions/flags. */
   ticketThread: (id: TicketId) =>
     queryOptions({
       queryKey: ticketKeys.thread(id),
@@ -198,9 +179,7 @@ export const inboxQueries = {
     }),
 
   /** A single ticket's properties, for the unified thread's header controls
-   *  (status/assignee/priority/type/stage) and the unified `InboxDetailPanel`
-   *  — same key as `ticketQueries.detail` so both readers share one cache
-   *  entry. */
+   *  (status/assignee/priority/type/stage) and the unified `InboxDetailPanel`. */
   ticketDetail: (id: TicketId) =>
     queryOptions({
       queryKey: ticketKeys.detail(id),

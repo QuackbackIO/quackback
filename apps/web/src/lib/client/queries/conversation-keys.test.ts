@@ -38,6 +38,28 @@ describe('conversationKeys parity', () => {
     expect(conversationKeys.agentFlagged()).toEqual(['admin', 'inbox', 'flagged'])
   })
 
+  it('detail panel keys match the legacy inline inbox-detail-panel keys', () => {
+    const principalId = 'principal_z' as never
+    expect(conversationKeys.agentContactDetail(principalId)).toEqual([
+      'admin',
+      'inbox',
+      'visitor',
+      principalId,
+    ])
+    expect(conversationKeys.agentUserConversationsFor(principalId)).toEqual([
+      'admin',
+      'inbox',
+      'user-conversations',
+      principalId,
+    ])
+    expect(conversationKeys.agentAssistantActivity(convId)).toEqual([
+      'admin',
+      'inbox',
+      'assistant-activity',
+      convId,
+    ])
+  })
+
   it('widget list key matches the legacy inline widget key', () => {
     expect(conversationKeys.widgetConversationList(3)).toEqual(['widget', 'my-conversations', 3])
   })

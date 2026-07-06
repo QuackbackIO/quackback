@@ -21,6 +21,15 @@ export function ticketTypeLabel(type: TicketType): string {
   return TYPE_META[type].label
 }
 
+/** The type badge's tint, keyed by ticket type — shared with the inbox list
+ *  row's type-glyph avatar (conversation-list-column.tsx) so the two surfaces
+ *  can't drift apart. */
+export const TICKET_TYPE_CLASS: Record<TicketType, string> = {
+  customer: TYPE_META.customer.className,
+  back_office: TYPE_META.back_office.className,
+  tracker: TYPE_META.tracker.className,
+}
+
 /** A small pill naming a ticket's type (Customer / Back office / Tracker). */
 export function TicketTypeBadge({ type, className }: { type: TicketType; className?: string }) {
   const meta = TYPE_META[type]
@@ -40,7 +49,10 @@ export function TicketTypeBadge({ type, className }: { type: TicketType; classNa
 // The chip is tinted by category but never renders the category label (it shows
 // the status's own name), so this is a class map only — the label lives in the
 // shared TICKET_STATUS_CATEGORY_LABELS the settings list + list filter use.
-const CATEGORY_CHIP: Record<TicketStatusCategory, string> = {
+// Exported so the list row's linked-ticket summary chip (conversation-list-
+// column.tsx, which carries no full TicketStatusRef to reuse TicketStatusChip
+// itself) can tint by the same category without its own copy.
+export const CATEGORY_CHIP: Record<TicketStatusCategory, string> = {
   open: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
   pending: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
   closed: 'bg-muted text-muted-foreground',

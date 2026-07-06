@@ -15,7 +15,6 @@ import {
   or,
   isNull,
   inArray,
-  gt,
   lt,
   sql,
   asc,
@@ -47,6 +46,13 @@ import { getTeam } from '@/lib/server/domains/teams'
 import { NotFoundError, ValidationError, ForbiddenError, InternalError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
+import {
+  ascColumn,
+  buildKeysetCondition,
+  descColumn,
+  type KeysetColumn,
+} from '@/lib/server/db/keyset'
+import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { getStageLabels } from '../settings/settings.tickets'
 import { createNotification } from '../notifications/notification.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
@@ -117,10 +123,6 @@ export async function getTicket(id: TicketId): Promise<TicketDTO> {
 }
 
 const priorityRankExpr = priorityRankSql(tickets.priority)
-// JS-side twin of priorityRankExpr, for the keyset cursor's priority-rank
-// comparison (the two MUST agree or pages dupe/skip). Mirrors
-// conversation.query.ts's PRIORITY_RANK.
-const PRIORITY_RANK: Record<string, number> = { urgent: 5, high: 4, medium: 3, low: 2, none: 1 }
 
 /**
  * The ordering contract for each ticket sort, as pure data (column +
@@ -166,38 +168,41 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
 
 /**
  * Keyset cursor comparison for a sort: rows strictly after the cursor row in
- * the sort's order. The cursor is re-resolved from the DB (never a client
- * string) so ties are exact. Mirrors the (column, id) composite idiom in
- * conversation.query.ts's `cursorConditionForSort`.
+ * the sort's order, assembled by the shared `buildKeysetCondition` (a
+ * generic OR-of-ANDs "lexicographic successor" builder — see
+ * `lib/server/db/keyset.ts`) from this sort's per-column `equal`/`strict`
+ * pair, most-significant-first (the id tiebreak always last). The cursor is
+ * re-resolved from the DB (never a client string) so ties are exact. Mirrors
+ * conversation.query.ts's `cursorConditionForSort`, which uses the same
+ * builder.
  */
 function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
   const d = ticketSortDescriptorFor(sort)
+  const idTie = d.direction === 'asc' ? ascColumn(tickets.id, t.id) : descColumn(tickets.id, t.id)
   switch (d.primary) {
     case 'priorityRank': {
       const rank = PRIORITY_RANK[t.priority] ?? 1
-      return or(lt(priorityRankExpr, rank), and(eq(priorityRankExpr, rank), lt(tickets.id, t.id)))!
+      const rankCol: KeysetColumn = {
+        equal: eq(priorityRankExpr, rank),
+        strict: lt(priorityRankExpr, rank),
+      }
+      return buildKeysetCondition([rankCol, idTie])
     }
-    case 'createdAt':
-      return d.direction === 'asc'
-        ? or(
-            gt(tickets.createdAt, t.createdAt),
-            and(eq(tickets.createdAt, t.createdAt), gt(tickets.id, t.id))
-          )!
-        : or(
-            lt(tickets.createdAt, t.createdAt),
-            and(eq(tickets.createdAt, t.createdAt), lt(tickets.id, t.id))
-          )!
+    case 'createdAt': {
+      const col =
+        d.direction === 'asc'
+          ? ascColumn(tickets.createdAt, t.createdAt)
+          : descColumn(tickets.createdAt, t.createdAt)
+      return buildKeysetCondition([col, idTie])
+    }
     case 'updatedAt':
-    default:
-      return d.direction === 'asc'
-        ? or(
-            gt(tickets.updatedAt, t.updatedAt),
-            and(eq(tickets.updatedAt, t.updatedAt), gt(tickets.id, t.id))
-          )!
-        : or(
-            lt(tickets.updatedAt, t.updatedAt),
-            and(eq(tickets.updatedAt, t.updatedAt), lt(tickets.id, t.id))
-          )!
+    default: {
+      const col =
+        d.direction === 'asc'
+          ? ascColumn(tickets.updatedAt, t.updatedAt)
+          : descColumn(tickets.updatedAt, t.updatedAt)
+      return buildKeysetCondition([col, idTie])
+    }
   }
 }
 
@@ -316,6 +321,19 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
 // ---------------------------------------------------------------------------
 
 /**
+ * Rebuild a ticket's DTO and fan the unified-inbox realtime signal (unified
+ * inbox §3.2, M3) — the common tail of every mutator below (create, status,
+ * assign, priority, soft-delete): re-enrich the just-written row, then
+ * `publishTicketEvent('ticket_updated')` so every open inbox re-renders the
+ * row. Returns the DTO so callers can still return/reuse it.
+ */
+async function publishTicketUpdated(row: Ticket): Promise<TicketDTO> {
+  const dto = await ticketRowToDTO(row)
+  publishTicketEvent(row.id, { kind: 'ticket_updated', ticket: dto })
+  return dto
+}
+
+/**
  * Open a ticket WITHOUT a permission check — the caller authorizes (agent
  * TICKET_CREATE via createTicket, or requester self-creation via createMyTicket).
  * Resolves the default status; `number` auto-increments.
@@ -404,13 +422,11 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     category: defaultStatus.category,
     stage: resolveStage(defaultStatus),
   })
-  const dto = await ticketRowToDTO(created)
   // Realtime signal (unified inbox §3.2, M3): a fresh ticket is a new inbox
   // row, so the same 'ticket_updated' kind the update paths use below also
   // covers creation, mirroring how the conversation domain's 'conversation'
   // event has no separate created/updated split.
-  publishTicketEvent(created.id, { kind: 'ticket_updated', ticket: dto })
-  return dto
+  return publishTicketUpdated(created)
 }
 
 /** Open a ticket as an agent (any type, optional requester). */
@@ -464,8 +480,7 @@ export async function setTicketStatus(
   // Realtime signal (unified inbox §3.2, M3), unconditional like the webhook
   // below — mirrors conversation.service's publish-right-after-the-UPDATE
   // pattern. Computed once and reused for the function's return value.
-  const dto = await ticketRowToDTO(updated)
-  publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
+  const dto = await publishTicketUpdated(updated)
 
   // Agent/integration-facing signal: every internal status move fires a hook
   // (mirrors conversation.status_changed), reporting the category axis.
@@ -646,8 +661,7 @@ export async function assignTicket(
   // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the
   // webhook below — an inbox row re-render on a no-op re-assign is harmless,
   // while a missed signal on an actual reorder-relevant change is not.
-  const dto = await ticketRowToDTO(updated)
-  publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
+  const dto = await publishTicketUpdated(updated)
 
   // Only signal when an assignee actually moved (a no-op re-assign must not fire).
   if (
@@ -677,10 +691,8 @@ export async function setTicketPriority(
   const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
   if (stamp) patch.firstResponseAt = stamp
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
-  const dto = await ticketRowToDTO(updated)
   // Realtime signal (unified inbox §3.2, M3).
-  publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
-  return dto
+  return publishTicketUpdated(updated)
 }
 
 /**
@@ -699,7 +711,6 @@ export async function softDeleteTicket(id: TicketId, actor: Actor): Promise<void
     // Realtime signal (unified inbox §3.2, M3): the list re-query already
     // excludes a deleted ticket via ticketFilter, so the refetch this triggers
     // is what actually makes the row disappear for every other viewer.
-    const dto = await ticketRowToDTO(updated)
-    publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
+    await publishTicketUpdated(updated)
   }
 }

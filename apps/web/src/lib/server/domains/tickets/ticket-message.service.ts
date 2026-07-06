@@ -20,8 +20,10 @@ import {
   desc,
   isNull,
   type Ticket,
+  type ConversationSystemEventKind,
 } from '@/lib/server/db'
 import type { TicketId, ConversationMessageId, PrincipalId } from '@quackback/ids'
+import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { ConversationAttachment, TiptapContent } from '@/lib/shared/db-types'
 import type {
   ConversationMessageDTO,
@@ -54,6 +56,39 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
 
 const MESSAGE_PAGE_SIZE = 30
+
+/**
+ * Insert a team-only, author-less 'system' status event on a ticket thread —
+ * the ticket-side counterpart of the conversation domain's `emitSystemMessage`
+ * (conversation.service.ts): `senderType: 'system'`, no principal,
+ * `metadata.systemEvent` carrying `kind` plus whatever else the caller passes.
+ * Always internal — there is no ticket-side customer-facing announcement
+ * surface yet (a deliberate gap; see `linkTicketToTracker`'s doc comment in
+ * ticket-links.service.ts), so every ticket system event today is team-only.
+ *
+ * Takes an `Executor` (defaulting to `db`) so a caller already inside a
+ * `db.transaction` — `linkTicketToTracker`'s link + audit note — can enlist
+ * this insert in the same transaction instead of committing it separately.
+ * Unlike `emitSystemMessage` this does not publish or swallow errors: the
+ * caller decides whether a failure here should be fatal (as it is for the
+ * tracker-link transaction) or best-effort.
+ */
+export async function emitTicketSystemMessage(
+  ticketId: TicketId,
+  kind: ConversationSystemEventKind,
+  body: string,
+  metadata?: Record<string, unknown>,
+  exec: Executor = db
+): Promise<void> {
+  await exec.insert(conversationMessages).values({
+    ticketId,
+    principalId: null,
+    senderType: 'system',
+    isInternal: true,
+    content: body,
+    metadata: { systemEvent: { kind, ...metadata } },
+  })
+}
 
 export interface SendTicketMessageInput {
   ticketId: TicketId

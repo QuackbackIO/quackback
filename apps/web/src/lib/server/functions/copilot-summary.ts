@@ -6,10 +6,10 @@
  * internal note, never the customer-facing reply (Fin's pattern,
  * COPILOT-SIDEBAR-UX.md "20 Summarize").
  *
- * Both fns are gated on `copilot.use` + the `assistantCopilot` flag + the
- * assistant being configured, mirroring the copilot.ts SSE route's gate
- * order, then the item-scoped viewability check
- * (`assertConversationViewable` / `assertTicketViewable`). Each reuses its
+ * Both fns are gated on `copilot.use` + `assertCopilotAvailable` (the
+ * `assistantCopilot` flag + the assistant being configured), mirroring the
+ * copilot.ts SSE route's gate order, then the item-scoped viewability check
+ * (`assertConversationViewable` / `assertTicketVisible`). Each reuses its
  * matching generator in conversation-summary.service.ts
  * (`generateConversationSummaryText` / `generateTicketSummaryText`), which
  * shares its config-gated guard, transcript load, and truncation with the
@@ -23,10 +23,9 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { isAssistantConfigured } from '@/lib/server/domains/assistant'
+import { assertCopilotAvailable } from '@/lib/server/domains/assistant/copilot-gate'
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
-import { assertTicketViewable } from '@/lib/server/domains/assistant/copilot-gate'
+import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import {
   generateConversationSummaryText,
   generateTicketSummaryText,
@@ -46,13 +45,7 @@ export const summarizeConversationNowFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const auth = await requireAuth({ permission: PERMISSIONS.COPILOT_USE })
-
-      if (!(await isFeatureEnabled('assistantCopilot'))) {
-        throw new Error('Copilot is not available')
-      }
-      if (!isAssistantConfigured()) {
-        throw new Error('The assistant is not configured')
-      }
+      await assertCopilotAvailable()
 
       const conversationId = data.conversationId as ConversationId
       const actor = await policyActorFromAuth(auth)
@@ -79,17 +72,11 @@ export const summarizeTicketNowFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const auth = await requireAuth({ permission: PERMISSIONS.COPILOT_USE })
-
-      if (!(await isFeatureEnabled('assistantCopilot'))) {
-        throw new Error('Copilot is not available')
-      }
-      if (!isAssistantConfigured()) {
-        throw new Error('The assistant is not configured')
-      }
+      await assertCopilotAvailable()
 
       const ticketId = data.ticketId as TicketId
       const actor = await policyActorFromAuth(auth)
-      await assertTicketViewable(ticketId, actor)
+      await assertTicketVisible(ticketId, actor)
 
       const result = await generateTicketSummaryText(ticketId)
       if (!result) {

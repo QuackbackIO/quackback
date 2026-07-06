@@ -32,3 +32,14 @@ export const PRIORITY_OPTIONS: PriorityMeta[] = [
   META.low,
   META.none,
 ]
+
+/**
+ * Numeric orderable rank (text enum → int) for the priority sort, derived
+ * from `PRIORITY_OPTIONS`'s display order so the two can never drift apart:
+ * urgent(5) > high(4) > medium(3) > low(2) > none(1). Shared by the
+ * conversation inbox sort, the ticket list sort, and the unified inbox merge
+ * — all three previously redefined this map independently.
+ */
+export const PRIORITY_RANK: Record<ConversationPriority, number> = Object.fromEntries(
+  [...PRIORITY_OPTIONS].reverse().map((meta, index) => [meta.value, index + 1])
+) as Record<ConversationPriority, number>

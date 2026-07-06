@@ -272,15 +272,35 @@ export function prependOlderVisitorMessages(
   return prev ? prependOlder(prev, page) : prev
 }
 
-/** Patch one message in the agent thread cache (optimistic updates + server
- *  reconciliation for reactions and flags). */
+/** Patch one message in a thread cache (optimistic updates + server
+ *  reconciliation for reactions and flags) — generic over the cache shape,
+ *  following `prependOlder<T,C>`'s pattern. */
+function updateThreadMessage<C extends { messages: AgentConversationMessageDTO[] }>(
+  prev: C | undefined,
+  messageId: ConversationMessageId,
+  update: (m: AgentConversationMessageDTO) => AgentConversationMessageDTO
+): C | undefined {
+  if (!prev) return prev
+  return { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? update(m) : m)) }
+}
+
+/** Drop one message from a thread cache (after a delete) — generic, mirrors
+ *  `updateThreadMessage`. */
+function removeThreadMessage<C extends { messages: AgentConversationMessageDTO[] }>(
+  prev: C | undefined,
+  messageId: ConversationMessageId
+): C | undefined {
+  if (!prev) return prev
+  return { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) }
+}
+
+/** Patch one message in the agent thread cache. */
 export function updateAgentThreadMessage(
   prev: AgentThreadCache | undefined,
   messageId: ConversationMessageId,
   update: (m: AgentConversationMessageDTO) => AgentConversationMessageDTO
 ): AgentThreadCache | undefined {
-  if (!prev) return prev
-  return { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? update(m) : m)) }
+  return updateThreadMessage(prev, messageId, update)
 }
 
 /** Drop one message from the agent thread cache (after a delete). */
@@ -288,8 +308,7 @@ export function removeAgentThreadMessage(
   prev: AgentThreadCache | undefined,
   messageId: ConversationMessageId
 ): AgentThreadCache | undefined {
-  if (!prev) return prev
-  return { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) }
+  return removeThreadMessage(prev, messageId)
 }
 
 // ---------------------------------------------------------------------------
@@ -358,8 +377,7 @@ export function updateTicketThreadMessage(
   messageId: ConversationMessageId,
   update: (m: AgentConversationMessageDTO) => AgentConversationMessageDTO
 ): TicketThreadCache | undefined {
-  if (!prev) return prev
-  return { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? update(m) : m)) }
+  return updateThreadMessage(prev, messageId, update)
 }
 
 /** Drop one message from the ticket thread cache (after a delete). */
@@ -367,6 +385,5 @@ export function removeTicketThreadMessage(
   prev: TicketThreadCache | undefined,
   messageId: ConversationMessageId
 ): TicketThreadCache | undefined {
-  if (!prev) return prev
-  return { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) }
+  return removeThreadMessage(prev, messageId)
 }

@@ -8,9 +8,7 @@
  *  - a back_office/tracker ticket is note-only (no Reply/Note toggle, forced
  *    note mode) — `capabilities.reply` false;
  *  - a customer ticket keeps both Reply and Note tabs — `capabilities.reply`
- *    true;
- *  - a ticket message's bubble renders with the full inbox toolbar
- *    (`readOnly={false}`), not the old read-only ticket-thread rendering.
+ *    true.
  *
  * Heavy children (controls, dialogs, the rich editor, the virtualized
  * viewport) are stubbed — this test is about capability wiring, not those
@@ -63,16 +61,8 @@ vi.mock('../thread', () => ({
 }))
 
 vi.mock('../message-bubble', () => ({
-  AgentMessageBubble: ({
-    message,
-    readOnly,
-  }: {
-    message: AgentConversationMessageDTO
-    readOnly?: boolean
-  }) => (
-    <div data-testid={`bubble-${message.id}`} data-readonly={String(!!readOnly)}>
-      {message.content}
-    </div>
+  AgentMessageBubble: ({ message }: { message: AgentConversationMessageDTO }) => (
+    <div data-testid={`bubble-${message.id}`}>{message.content}</div>
   ),
   UnreadDivider: () => <div data-testid="unread-divider" />,
 }))
@@ -394,12 +384,6 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     )
     expect(await screen.findByText('Reply')).toBeInTheDocument()
     expect(screen.getByText('Note')).toBeInTheDocument()
-  })
-
-  it('a ticket message bubble is NOT read-only (reactions/flags/mark-unread/delete toolbar present)', async () => {
-    renderThread({ kind: 'ticket', id: 'ticket_1' })
-    const bubble = await screen.findByTestId('bubble-conversation_msg_1')
-    expect(bubble).toHaveAttribute('data-readonly', 'false')
   })
 
   it('renders the ticket header controls + type badge', async () => {

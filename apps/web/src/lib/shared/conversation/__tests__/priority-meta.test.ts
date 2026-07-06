@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { priorityMeta, PRIORITY_OPTIONS } from '../priority-meta'
+import { priorityMeta, PRIORITY_OPTIONS, PRIORITY_RANK } from '../priority-meta'
 import type { ConversationPriority } from '../types'
 
 describe('priorityMeta', () => {
@@ -25,5 +25,11 @@ describe('PRIORITY_OPTIONS', () => {
       'low',
       'none',
     ])
+  })
+})
+
+describe('PRIORITY_RANK', () => {
+  it("ranks urgent highest and none lowest, matching every keyset-sort site's prior local copy", () => {
+    expect(PRIORITY_RANK).toEqual({ urgent: 5, high: 4, medium: 3, low: 2, none: 1 })
   })
 })

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useRouteContext } from '@tanstack/react-router'
-import { formatDistanceToNow } from 'date-fns'
 import {
   ArrowTopRightOnSquareIcon,
   BuildingOffice2Icon,
@@ -20,7 +19,6 @@ import type { PrincipalId } from '@quackback/ids'
 import {
   HANDOFF_REASON_LABELS,
   CONVERSATION_END_REASON_LABELS,
-  type Channel,
   type ConversationDTO,
   type AssistantInvolvementOutcome,
 } from '@/lib/shared/conversation/types'
@@ -31,17 +29,19 @@ import {
   getConversationAssistantActivityFn,
 } from '@/lib/server/functions/conversation'
 import { getPortalUserFn } from '@/lib/server/functions/admin'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
 import { usePermission } from '@/lib/client/hooks/use-permission'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
-import { formatSlaCountdown } from '@/lib/shared/conversation/sla'
+import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
 import { PriorityControl } from '@/components/admin/conversation/priority-control'
 import { AssigneeControl } from '@/components/admin/conversation/assignee-control'
 import { ConversationTagsEditor } from '@/components/admin/conversation/conversation-tags-editor'
 import { ConversationAttributesEditor } from '@/components/admin/conversation/conversation-attributes-editor'
 import { StatusControl } from '@/components/admin/conversation/status-control'
-import { NoEmailBadge } from '@/components/admin/conversation/channel-badge'
+import { NoEmailBadge, CHANNEL_LABEL } from '@/components/admin/conversation/channel-badge'
+import { TONE_CLASSES } from '@/components/admin/conversation/sla-chip'
 import { CompanyCard } from '@/components/admin/conversation/company-card'
 import { CopilotPanel } from '@/components/admin/conversation/copilot-panel'
 import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
@@ -58,13 +58,8 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DetailRow as Row, formatDate } from '@/components/shared/detail-row'
+import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
-
-const CHANNEL_LABEL: Record<Channel, string> = {
-  messenger: 'Messenger',
-  email: 'Email',
-  web_form: 'Web form',
-}
 
 const RESOLVED_META = {
   label: 'Resolved',
@@ -115,21 +110,15 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
   if (!dueAt || resolvedAt || !now) return null
 
   const remainingMs = new Date(dueAt).getTime() - now.getTime()
-  const overdue = remainingMs < 0
+  const tone = dueCountdownTone(remainingMs)
+  const overdue = tone === 'overdue'
   const abs = Math.abs(remainingMs)
-  const tone = overdue
-    ? 'bg-red-500/15 text-red-700 dark:text-red-400'
-    : abs <= 5 * 60_000
-      ? 'bg-orange-500/15 text-orange-700 dark:text-orange-400'
-      : abs <= 15 * 60_000
-        ? 'bg-amber-400/15 text-amber-700 dark:text-amber-300'
-        : 'bg-muted text-muted-foreground'
 
   return (
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
-        tone
+        TONE_CLASSES[tone]
       )}
       title={`Due ${formatDate(dueAt)}`}
     >
@@ -218,20 +207,20 @@ export function InboxDetailPanel({
   const isVisible = useMediaQuery('(min-width: 1280px)')
 
   const { data: detail } = useQuery({
-    queryKey: ['admin', 'inbox', 'visitor', principalId],
+    queryKey: conversationKeys.agentContactDetail(principalId),
     queryFn: () => getPortalUserFn({ data: { principalId: principalId as PrincipalId } }),
     enabled: isVisible && !!principalId,
     staleTime: 60_000,
   })
   const { data: history } = useQuery({
-    queryKey: ['admin', 'inbox', 'user-conversations', principalId],
+    queryKey: conversationKeys.agentUserConversationsFor(principalId),
     queryFn: () =>
       listConversationsForUserFn({ data: { principalId: principalId as PrincipalId } }),
     enabled: isVisible && !!principalId,
     staleTime: 30_000,
   })
   const { data: aiActivity } = useQuery({
-    queryKey: ['admin', 'inbox', 'assistant-activity', conversation?.id],
+    queryKey: conversationKeys.agentAssistantActivity(conversation?.id),
     queryFn: () =>
       getConversationAssistantActivityFn({ data: { conversationId: conversation!.id } }),
     enabled: isVisible && !isTicketItem && !!conversation,
@@ -383,8 +372,7 @@ export function InboxDetailPanel({
                       {c.subject ?? c.lastMessagePreview ?? 'Conversation'}
                     </span>
                     <span className="block w-full min-w-0 truncate text-[10px] capitalize text-muted-foreground">
-                      {c.status} ·{' '}
-                      {formatDistanceToNow(new Date(c.lastMessageAt), { addSuffix: true })}
+                      {c.status} · <TimeAgo date={c.lastMessageAt} />
                     </span>
                   </button>
                 ))}

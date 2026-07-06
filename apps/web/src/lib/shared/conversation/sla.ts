@@ -68,6 +68,19 @@ export function slaChipState(
   return { tone, label: formatSlaCountdown(remaining), kind: next.kind }
 }
 
+/**
+ * The same urgency ladder as `slaChipState`, for a bare countdown that carries
+ * no policy/target metadata to build a full `ConversationSlaDTO` from — e.g. a
+ * ticket's `dueAt` (see `TicketDueChip` in inbox-detail-panel.tsx). `remainingMs`
+ * negative means overdue.
+ */
+export function dueCountdownTone(remainingMs: number): SlaChipTone {
+  if (remainingMs < 0) return 'overdue'
+  if (remainingMs <= DUE_NOW_MS) return 'due_now'
+  if (remainingMs <= DUE_SOON_MS) return 'due_soon'
+  return 'ok'
+}
+
 /** Compact remaining/elapsed time: "3d 4h", "4h 10m", "12m", "<1m". */
 export function formatSlaCountdown(ms: number): string {
   if (ms < MINUTE_MS) return '<1m'

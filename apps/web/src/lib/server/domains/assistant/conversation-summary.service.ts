@@ -50,6 +50,7 @@ import { withUsageLogging } from '@/lib/server/domains/ai/usage-log'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { loadConversationThread } from './assistant.thread'
+import { buildTicketTranscript } from './ticket-transcript'
 import { createId, type ConversationId, type TicketId } from '@quackback/ids'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { logger } from '@/lib/server/logger'
@@ -327,23 +328,6 @@ export async function generateConversationSummaryText(
   }
 
   return { question, bullets }
-}
-
-/**
- * Render a ticket thread as plain "Speaker: content" lines, oldest first —
- * same shape as `buildTranscript` above, but over a ticket's customer-visible
- * messages (`listTicketMessages` with `includeInternal: false`, mirroring
- * `loadConversationThread`'s own internal-note exclusion: even the
- * teammate-facing summarize chip never grounds on internal notes).
- */
-function buildTicketTranscript(messages: ConversationMessageDTO[]): string {
-  const lines: string[] = []
-  for (const m of messages) {
-    const content = m.content?.trim()
-    if (!content) continue
-    lines.push(`${m.senderType === 'visitor' ? 'Customer' : 'Agent'}: ${content}`)
-  }
-  return lines.join('\n')
 }
 
 /**

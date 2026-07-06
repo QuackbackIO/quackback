@@ -29,10 +29,7 @@ import { logger } from '@/lib/server/logger'
 import type { AssistantHandoffReason } from '@/lib/server/db'
 import type { PrincipalId, ConversationId, TicketId, AssistantInvolvementId } from '@quackback/ids'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
-import type {
-  AssistantActivityStatus,
-  ConversationMessageDTO,
-} from '@/lib/shared/conversation/types'
+import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 import { resolveContentAudience } from './audience'
 import { assembleAssistantToolset } from './assistant.tools'
 import { makeAssistantToolContext } from './assistant.toolspec'
@@ -57,6 +54,7 @@ import { wrapUntrustedText } from './injection-guard'
 // files are owned by a concurrent unified-inbox workstream.
 import { getTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { listTicketMessages } from '@/lib/server/domains/tickets/ticket-message.service'
+import { buildTicketTranscript } from './ticket-transcript'
 
 const log = logger.child({ component: 'assistant-runtime' })
 
@@ -542,23 +540,6 @@ export interface TicketGroundingFacts {
   /** Null when the ticket's status has no configured stage mapping. */
   stage: string | null
   requester: string
-}
-
-/**
- * Render a ticket thread (oldest-first, customer-visible turns only — internal
- * notes are excluded, mirroring `assistant.thread.ts`'s `loadConversationThread`
- * for conversations: even the teammate-facing copilot surface never grounds
- * Quinn on internal notes) as plain "Speaker: content" lines. Mirrors
- * `conversation-summary.service.ts`'s `buildTranscript` shape.
- */
-function buildTicketTranscript(messages: ConversationMessageDTO[]): string {
-  const lines: string[] = []
-  for (const m of messages) {
-    const content = m.content?.trim()
-    if (!content) continue
-    lines.push(`${m.senderType === 'visitor' ? 'Customer' : 'Agent'}: ${content}`)
-  }
-  return lines.join('\n')
 }
 
 /**

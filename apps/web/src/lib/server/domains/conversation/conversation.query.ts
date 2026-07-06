@@ -54,6 +54,13 @@ import { getAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
+import {
+  ascColumn,
+  buildKeysetCondition,
+  descColumn,
+  type KeysetColumn,
+} from '@/lib/server/db/keyset'
+import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
@@ -923,8 +930,6 @@ export function sortDescriptorFor(sort: ConversationSort = 'recent'): SortDescri
   }
 }
 
-/** Numeric priority rank (text enum → orderable int) for the priority sort. */
-const PRIORITY_RANK: Record<string, number> = { urgent: 5, high: 4, medium: 3, low: 2, none: 1 }
 const priorityRankExpr = priorityRankSql(conversations.priority)
 
 /**
@@ -978,38 +983,44 @@ function orderByForSort(sort: ConversationSort) {
 
 /**
  * Keyset cursor comparison for a sort: rows strictly after the cursor row in
- * the sort's order. The cursor is re-resolved from the DB (never a client
- * string) so ties + sub-ms precision are exact. Mirrors the (column, id)
- * composite idiom for every sort, including the waiting NULLS-LAST boundary and
- * the priority-rank CASE.
+ * the sort's order, assembled by the shared `buildKeysetCondition` (a
+ * generic OR-of-ANDs "lexicographic successor" builder — see
+ * `lib/server/db/keyset.ts`) from this sort's per-column `equal`/`strict`
+ * pair, most-significant-first. The cursor is re-resolved from the DB (never
+ * a client string) so ties + sub-ms precision are exact. Covers every sort,
+ * including the waiting/SLA NULLS-LAST boundary and the priority-rank CASE.
  */
 function cursorConditionForSort(sort: ConversationSort, c: Conversation) {
   const d = sortDescriptorFor(sort)
   switch (d.primary) {
     case 'priorityRank': {
       const rank = PRIORITY_RANK[c.priority] ?? 1
-      return or(
-        lt(priorityRankExpr, rank),
-        and(
-          eq(priorityRankExpr, rank),
-          or(
-            lt(conversations.lastMessageAt, c.lastMessageAt),
-            and(eq(conversations.lastMessageAt, c.lastMessageAt), lt(conversations.id, c.id))
-          )
-        )
-      )
+      const rankCol: KeysetColumn = {
+        equal: eq(priorityRankExpr, rank),
+        strict: lt(priorityRankExpr, rank),
+      }
+      return buildKeysetCondition([
+        rankCol,
+        descColumn(conversations.lastMessageAt, c.lastMessageAt),
+        descColumn(conversations.id, c.id),
+      ])
     }
     case 'waitingSince': {
       // waiting_since ASC NULLS LAST, id ASC. A cursor already in the NULL tail
-      // only precedes later NULL rows (by id); otherwise later non-NULL rows,
-      // same-instant id ties, then the whole NULL tail follow it.
-      if (!c.waitingSince)
-        return and(isNull(conversations.waitingSince), gt(conversations.id, c.id))
-      return or(
-        gt(conversations.waitingSince, c.waitingSince),
-        and(eq(conversations.waitingSince, c.waitingSince), gt(conversations.id, c.id)),
-        isNull(conversations.waitingSince)
-      )
+      // only precedes later NULL rows (by id) — nothing sorts "more null", so
+      // this column contributes no `strict` of its own. Otherwise later
+      // non-NULL rows OR the entire NULL tail (NULLS LAST sorts every null row
+      // after every non-null one), then the id tiebreak.
+      const waitingCol: KeysetColumn = c.waitingSince
+        ? {
+            equal: eq(conversations.waitingSince, c.waitingSince),
+            strict: or(
+              gt(conversations.waitingSince, c.waitingSince),
+              isNull(conversations.waitingSince)
+            )!,
+          }
+        : { equal: isNull(conversations.waitingSince), strict: undefined }
+      return buildKeysetCondition([waitingCol, ascColumn(conversations.id, c.id)])
     }
     case 'slaDueAt': {
       // slaDueExpr ASC NULLS LAST, id ASC — same NULLS-LAST boundary shape as
@@ -1017,35 +1028,40 @@ function cursorConditionForSort(sort: ConversationSort, c: Conversation) {
       // ISO string is bound (not a Date) and cast, matching the timestamptz
       // the expression yields.
       const due = slaDueAtFor(c)
-      if (!due) return and(sql`${slaDueExpr} IS NULL`, gt(conversations.id, c.id))
-      const iso = due.toISOString()
-      return or(
-        sql`${slaDueExpr} > ${iso}::timestamptz`,
-        and(sql`${slaDueExpr} = ${iso}::timestamptz`, gt(conversations.id, c.id)),
-        sql`${slaDueExpr} IS NULL`
-      )
+      const slaCol: KeysetColumn = due
+        ? {
+            equal: sql`${slaDueExpr} = ${due.toISOString()}::timestamptz`,
+            strict: or(
+              sql`${slaDueExpr} > ${due.toISOString()}::timestamptz`,
+              sql`${slaDueExpr} IS NULL`
+            )!,
+          }
+        : { equal: sql`${slaDueExpr} IS NULL`, strict: undefined }
+      return buildKeysetCondition([slaCol, ascColumn(conversations.id, c.id)])
     }
-    case 'createdAt':
-      return d.direction === 'asc'
-        ? or(
-            gt(conversations.createdAt, c.createdAt),
-            and(eq(conversations.createdAt, c.createdAt), gt(conversations.id, c.id))
-          )
-        : or(
-            lt(conversations.createdAt, c.createdAt),
-            and(eq(conversations.createdAt, c.createdAt), lt(conversations.id, c.id))
-          )
+    case 'createdAt': {
+      const col =
+        d.direction === 'asc'
+          ? ascColumn(conversations.createdAt, c.createdAt)
+          : descColumn(conversations.createdAt, c.createdAt)
+      const idTie =
+        d.direction === 'asc'
+          ? ascColumn(conversations.id, c.id)
+          : descColumn(conversations.id, c.id)
+      return buildKeysetCondition([col, idTie])
+    }
     case 'lastMessageAt':
-    default:
-      return d.direction === 'asc'
-        ? or(
-            gt(conversations.lastMessageAt, c.lastMessageAt),
-            and(eq(conversations.lastMessageAt, c.lastMessageAt), gt(conversations.id, c.id))
-          )
-        : or(
-            lt(conversations.lastMessageAt, c.lastMessageAt),
-            and(eq(conversations.lastMessageAt, c.lastMessageAt), lt(conversations.id, c.id))
-          )
+    default: {
+      const col =
+        d.direction === 'asc'
+          ? ascColumn(conversations.lastMessageAt, c.lastMessageAt)
+          : descColumn(conversations.lastMessageAt, c.lastMessageAt)
+      const idTie =
+        d.direction === 'asc'
+          ? ascColumn(conversations.id, c.id)
+          : descColumn(conversations.id, c.id)
+      return buildKeysetCondition([col, idTie])
+    }
   }
 }
 

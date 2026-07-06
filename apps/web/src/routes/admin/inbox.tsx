@@ -5,11 +5,16 @@ import { toast } from 'sonner'
 import { ChatBubbleLeftRightIcon, ChevronDownIcon, TicketIcon } from '@heroicons/react/24/solid'
 import { BuildingOffice2Icon } from '@heroicons/react/24/outline'
 import { isValidTypeId } from '@quackback/ids'
-import type { ConversationId, ConversationMessageId, CompanyId, TicketId } from '@quackback/ids'
+import type {
+  ConversationId,
+  ConversationMessageId,
+  CompanyId,
+  TicketId,
+  TicketStatusId,
+} from '@quackback/ids'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import {
   isConversationSort,
-  viewFiltersToListParams,
   type ConversationSort,
   type ConversationViewDTO,
 } from '@/lib/shared/conversation/views'
@@ -50,6 +55,11 @@ import {
   setTicketStatusFn,
 } from '@/lib/server/functions/tickets'
 import {
+  useAssignTicket,
+  useSetTicketPriority,
+  useSetTicketStatus,
+} from '@/lib/client/mutations/inbox'
+import {
   InboxNavSidebar,
   isInboxView,
   isTicketInboxView as isTicketNavView,
@@ -86,6 +96,7 @@ import { listCompaniesFn } from '@/lib/server/functions/companies'
 import { useConversationStream } from '@/lib/client/hooks/use-conversation-stream'
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
+import { useInboxListSource } from '@/lib/client/hooks/use-inbox-list-source'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
   DropdownMenu,
@@ -503,10 +514,6 @@ function InboxPage() {
   // as they are for the self-contained Mentions feed.
   const activeView: ConversationViewDTO | undefined =
     nav.kind === 'custom' ? navViews?.find((v) => v.id === nav.viewId) : undefined
-  const customParams = useMemo(
-    () => (activeView ? viewFiltersToListParams(activeView.filters) : undefined),
-    [activeView]
-  )
   const showRefinements = nav.kind !== 'custom' && !(nav.kind === 'view' && nav.view === 'mentions')
   // Ordering: URL sort wins; else a custom view's saved sort; else the default.
   const sort: ConversationSort = urlSort ?? activeView?.sort ?? 'recent'
@@ -555,40 +562,21 @@ function InboxPage() {
   // The unified endpoint (mine/unassigned/all, a team scope, a Tickets-section
   // scope, or a custom view carrying a ticket-only rule — §2.8) vs the legacy
   // conversation-only endpoint (mentions/quinn/saved, tag/segment, and a
-  // custom view with no ticket rules — see inbox-scope.ts's module note).
-  const useUnified = usesUnifiedInboxList(nav, activeView?.filters)
-  const { data: unifiedData, isLoading: unifiedLoading } = useQuery({
-    ...inboxQueries.itemList(
-      buildInboxListParams(
-        nav,
-        facet,
-        priorityFilter,
-        search,
-        urlCompany as CompanyId | undefined,
-        sort,
-        activeView?.filters
-      )
-    ),
-    refetchInterval: 30_000, // polling fallback until ticket SSE lands (M3)
-    enabled: useUnified && !isSaved,
+  // custom view with no ticket rules — see inbox-scope.ts's module note). The
+  // predicate + both param builders live in `useInboxListSource`; the loader
+  // (server context, no hooks) makes its own `usesUnifiedInboxList` call above
+  // against the same predicate for its SSR prefetch.
+  const { items, isLoading: listLoading } = useInboxListSource({
+    nav,
+    facet,
+    priorityFilter,
+    search,
+    companyId: urlCompany as CompanyId | undefined,
+    sort,
+    activeViewFilters: activeView?.filters,
+    aiBucket: nav.kind === 'view' && nav.view === 'quinn' ? urlAi : undefined,
+    isSaved,
   })
-  const { data: legacyData, isLoading: legacyLoading } = useQuery({
-    ...conversationInboxQueries.conversationList(
-      nav,
-      facetToStatusFilter(facet),
-      priorityFilter,
-      search,
-      urlCompany as CompanyId | undefined,
-      sort,
-      customParams,
-      nav.kind === 'view' && nav.view === 'quinn' ? urlAi : undefined
-    ),
-    refetchInterval: 30_000, // polling fallback if the stream drops
-    // Saved shows flagged messages (no list). A custom view can't run until its
-    // rule set has loaded from the views list, so hold the query until then.
-    enabled: !useUnified && !isSaved && (nav.kind !== 'custom' || !!activeView),
-  })
-  const listLoading = useUnified ? unifiedLoading : legacyLoading
 
   // Quinn-view sub-filter counts (only fetched while that view is open).
   const isQuinnView = nav.kind === 'view' && nav.view === 'quinn'
@@ -596,18 +584,6 @@ function InboxPage() {
     ...conversationInboxQueries.assistantCounts(),
     enabled: isQuinnView,
   })
-
-  // Unified inbox rows: either the merged conversation+ticket page (mine/
-  // unassigned/all/team/tickets_*), or the legacy conversation-only list
-  // wrapped into the same DTO shape (mentions/quinn/saved/tag/segment/custom).
-  const items: InboxItemDTO[] = useMemo(() => {
-    if (useUnified) return unifiedData?.items ?? []
-    return (legacyData?.conversations ?? []).map((conversation) => ({
-      kind: 'conversation' as const,
-      conversation,
-      linkedTicket: null,
-    }))
-  }, [useUnified, unifiedData, legacyData])
 
   // The ticket status catalogue, needed to resolve "close" → the default
   // closed-category status for a ticket target (§3.4). Gated on the same flag
@@ -714,10 +690,9 @@ function InboxPage() {
 
       // A ticket's live properties (status/assignee/priority/stage/type)
       // — patched directly onto the same cache key the unified thread's
-      // header and its `InboxDetailPanel` both read
-      // (`inboxQueries.ticketDetail`/`ticketQueries.detail` share
-      // `ticketKeys.detail`), so a change from another agent/tab shows up
-      // without a refetch.
+      // header and its `InboxDetailPanel` both read (`inboxQueries.ticketDetail`,
+      // keyed under `ticketKeys.detail`), so a change from another agent/tab
+      // shows up without a refetch.
       if (evt.kind === 'ticket_updated' && evt.ticket.id === activeTicketId) {
         queryClient.setQueryData(ticketKeys.detail(activeTicketId), evt.ticket)
       }
@@ -779,6 +754,13 @@ function InboxPage() {
   // The thread wrapper, so the reply action can focus the open composer.
   const threadContainerRef = useRef<HTMLDivElement>(null)
   const bulk = useBulkConversationUpdate()
+  // Solo (no-selection) ticket mutations route through these shared hooks
+  // rather than the raw server fns, so a change to the open ticket seeds
+  // `ticketKeys.detail` immediately — the same cache-seeding `ticket-controls.tsx`
+  // relies on — instead of waiting on `refreshInbox`'s broader invalidation.
+  const assignTicketMutation = useAssignTicket()
+  const priorityTicketMutation = useSetTicketPriority()
+  const statusTicketMutation = useSetTicketStatus()
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set())
@@ -857,15 +839,21 @@ function InboxPage() {
 
   /** Apply a bulk action to a mixed selection: conversation ids via the shared
    *  bulk mutation, ticket ids via an allSettled loop over the per-ticket fn
-   *  (no server-side bulk ticket endpoint exists yet), summarized together. */
+   *  (no server-side bulk ticket endpoint exists yet), summarized together.
+   *  Returns each kind's own result too — `applyClose` reuses this for its
+   *  required-attributes blocking prompt, which only ever reads conversation
+   *  failures. */
   const runMixedBulk = useCallback(
     async (
       verb: string,
       conversationAction: BulkConversationAction | null,
       ticketFn: ((id: TicketId) => Promise<unknown>) | null
-    ) => {
+    ): Promise<{
+      conversationResult: BulkConversationSummary
+      ticketResult: BulkConversationSummary
+    }> => {
       const { conversationIds, ticketIds } = splitByKind(selectedIds)
-      const [convRes, ticketRes] = await Promise.all([
+      const [conversationResult, ticketResult] = await Promise.all([
         conversationIds.length && conversationAction
           ? bulk.mutateAsync({ conversationIds, action: conversationAction })
           : Promise.resolve<BulkConversationSummary>({ succeeded: [], failed: [] }),
@@ -873,13 +861,13 @@ function InboxPage() {
           ? runTicketBulk(ticketIds, ticketFn)
           : Promise.resolve<BulkConversationSummary>({ succeeded: [], failed: [] }),
       ])
-      const succeeded = [...convRes.succeeded, ...ticketRes.succeeded]
-      const failed = [...convRes.failed, ...ticketRes.failed]
+      const succeeded = [...conversationResult.succeeded, ...ticketResult.succeeded]
+      const failed = [...conversationResult.failed, ...ticketResult.failed]
       summarize(verb, succeeded.length, failed.length)
       refreshInbox()
       if (failed.length === 0) clearSelection()
       else setBulkMenu(null)
-      return { succeeded, failed }
+      return { conversationResult, ticketResult }
     },
     [selectedIds, bulk, summarize, refreshInbox, clearSelection]
   )
@@ -901,77 +889,96 @@ function InboxPage() {
     [refreshInbox]
   )
 
-  // Each control targets the multi-selection when there is one (runMixedBulk),
-  // else the single open item via its own kind's server fn (runSolo). Snooze
-  // stays conversation-only (§2.5); close/reopen map per kind.
-  const applyAssign = useCallback(
-    async (assignTo: string | null) => {
+  /** One "assign / assignTeam / priority"-shaped verb: a selection routes
+   *  through the mixed-kind bulk mutation; a solo target dispatches straight
+   *  to its own kind — the ticket case through its shared mutation hook
+   *  (`mutateAsync`, see the comment by `assignTicketMutation` above), the
+   *  conversation case through its own server fn. A missing ticket verb is
+   *  just a missing table entry at the call site, not a new branch here.
+   *  Snooze/reopen don't fit this shape (no ticket verb at all) and keep their
+   *  own `runConversationOnlyBulk`-based implementations below. */
+  const applyVerb = useCallback(
+    async <TArgs,>(
+      args: TArgs,
+      opts: {
+        verb: string
+        bulkAction: (args: TArgs) => BulkConversationAction
+        ticketBulkFn: (id: TicketId, args: TArgs) => Promise<unknown>
+        soloTicket: (ticketId: TicketId, args: TArgs) => Promise<unknown>
+        soloConversation: (conversationId: ConversationId, args: TArgs) => Promise<unknown>
+        messages: {
+          ticket: { success: string; error: string }
+          conversation: { success: string; error: string }
+        }
+      }
+    ) => {
       if (hasSelection) {
-        await runMixedBulk('Assigned', { type: 'assign', assignTo }, (id) =>
-          assignTicketFn({ data: { ticketId: id, assigneePrincipalId: assignTo } })
-        )
+        await runMixedBulk(opts.verb, opts.bulkAction(args), (id) => opts.ticketBulkFn(id, args))
         return
       }
       if (!selectedRef) return
       if (selectedRef.kind === 'ticket') {
-        return runSolo(
-          () =>
-            assignTicketFn({ data: { ticketId: selectedRef.id, assigneePrincipalId: assignTo } }),
-          { success: 'Ticket assigned', error: 'Failed to assign ticket' }
-        )
+        return runSolo(() => opts.soloTicket(selectedRef.id, args), opts.messages.ticket)
       }
-      return runSolo(
-        () => assignConversationFn({ data: { conversationId: selectedRef.id, assignTo } }),
-        { success: 'Conversation assigned', error: 'Failed to assign conversation' }
-      )
+      return runSolo(() => opts.soloConversation(selectedRef.id, args), opts.messages.conversation)
     },
     [hasSelection, selectedRef, runMixedBulk, runSolo]
+  )
+
+  const applyAssign = useCallback(
+    (assignTo: string | null) =>
+      applyVerb(assignTo, {
+        verb: 'Assigned',
+        bulkAction: (a) => ({ type: 'assign', assignTo: a }),
+        ticketBulkFn: (id, a) => assignTicketFn({ data: { ticketId: id, assigneePrincipalId: a } }),
+        soloTicket: (id, a) =>
+          assignTicketMutation.mutateAsync({ ticketId: id, assigneePrincipalId: a }),
+        soloConversation: (id, a) =>
+          assignConversationFn({ data: { conversationId: id, assignTo: a } }),
+        messages: {
+          ticket: { success: 'Ticket assigned', error: 'Failed to assign ticket' },
+          conversation: {
+            success: 'Conversation assigned',
+            error: 'Failed to assign conversation',
+          },
+        },
+      }),
+    [applyVerb, assignTicketMutation]
   )
 
   const applyAssignTeam = useCallback(
-    async (teamId: string) => {
-      if (hasSelection) {
-        await runMixedBulk('Assigned', { type: 'assign_team', teamId }, (id) =>
-          assignTicketFn({ data: { ticketId: id, assigneeTeamId: teamId } })
-        )
-        return
-      }
-      if (!selectedRef) return
-      if (selectedRef.kind === 'ticket') {
-        return runSolo(
-          () => assignTicketFn({ data: { ticketId: selectedRef.id, assigneeTeamId: teamId } }),
-          { success: 'Assigned to team', error: 'Failed to assign team' }
-        )
-      }
-      return runSolo(
-        () => assignConversationTeamFn({ data: { conversationId: selectedRef.id, teamId } }),
-        { success: 'Assigned to team', error: 'Failed to assign team' }
-      )
-    },
-    [hasSelection, selectedRef, runMixedBulk, runSolo]
+    (teamId: string) =>
+      applyVerb(teamId, {
+        verb: 'Assigned',
+        bulkAction: (t) => ({ type: 'assign_team', teamId: t }),
+        ticketBulkFn: (id, t) => assignTicketFn({ data: { ticketId: id, assigneeTeamId: t } }),
+        soloTicket: (id, t) =>
+          assignTicketMutation.mutateAsync({ ticketId: id, assigneeTeamId: t }),
+        soloConversation: (id, t) =>
+          assignConversationTeamFn({ data: { conversationId: id, teamId: t } }),
+        messages: {
+          ticket: { success: 'Assigned to team', error: 'Failed to assign team' },
+          conversation: { success: 'Assigned to team', error: 'Failed to assign team' },
+        },
+      }),
+    [applyVerb, assignTicketMutation]
   )
 
   const applyPriority = useCallback(
-    async (priority: ConversationPriority) => {
-      if (hasSelection) {
-        await runMixedBulk('Updated', { type: 'priority', priority }, (id) =>
-          setTicketPriorityFn({ data: { ticketId: id, priority } })
-        )
-        return
-      }
-      if (!selectedRef) return
-      if (selectedRef.kind === 'ticket') {
-        return runSolo(
-          () => setTicketPriorityFn({ data: { ticketId: selectedRef.id, priority } }),
-          { success: 'Priority updated', error: 'Failed to set priority' }
-        )
-      }
-      return runSolo(
-        () => setConversationPriorityFn({ data: { conversationId: selectedRef.id, priority } }),
-        { success: 'Priority updated', error: 'Failed to set priority' }
-      )
-    },
-    [hasSelection, selectedRef, runMixedBulk, runSolo]
+    (priority: ConversationPriority) =>
+      applyVerb(priority, {
+        verb: 'Updated',
+        bulkAction: (p) => ({ type: 'priority', priority: p }),
+        ticketBulkFn: (id, p) => setTicketPriorityFn({ data: { ticketId: id, priority: p } }),
+        soloTicket: (id, p) => priorityTicketMutation.mutateAsync({ ticketId: id, priority: p }),
+        soloConversation: (id, p) =>
+          setConversationPriorityFn({ data: { conversationId: id, priority: p } }),
+        messages: {
+          ticket: { success: 'Priority updated', error: 'Failed to set priority' },
+          conversation: { success: 'Priority updated', error: 'Failed to set priority' },
+        },
+      }),
+    [applyVerb, priorityTicketMutation]
   )
 
   // Snooze has no ticket-row equivalent (§2.5: the status axis stands in for
@@ -994,32 +1001,37 @@ function InboxPage() {
   const applyClose = useCallback(async () => {
     const closedStatusId = resolveDefaultClosedStatusId(ticketStatusList)
     if (hasSelection) {
-      const { conversationIds, ticketIds } = splitByKind(selectedIds)
+      const { ticketIds } = splitByKind(selectedIds)
       if (ticketIds.length > 0 && !closedStatusId) {
         toast.error('No closed ticket status is configured')
       }
       try {
-        const [convRes, ticketRes] = await Promise.all([
-          conversationIds.length
-            ? bulk.mutateAsync({ conversationIds, action: { type: 'close' } })
-            : Promise.resolve<BulkConversationSummary>({ succeeded: [], failed: [] }),
-          ticketIds.length && closedStatusId
-            ? runTicketBulk(ticketIds, (id) =>
-                setTicketStatusFn({ data: { ticketId: id, statusId: closedStatusId } })
-              )
-            : Promise.resolve<BulkConversationSummary>({ succeeded: [], failed: [] }),
-        ])
+        // `runMixedBulk` already does the succeeded/failed merge, the summary
+        // toast, `refreshInbox`, and the clear-selection/keep-menu-open split;
+        // only the required-attributes blocking prompt below is close-specific,
+        // so it reads `conversationResult` straight off the shared helper's
+        // return value instead of re-running the whole dispatch by hand. No
+        // ticket verb at all (rather than the missing-status toast above)
+        // when there's no closed status configured — mirrors the pre-shared
+        // behavior of silently skipping ticket ids in that case.
+        const { conversationResult } = await runMixedBulk(
+          'Closed',
+          { type: 'close' },
+          closedStatusId
+            ? (id) => setTicketStatusFn({ data: { ticketId: id, statusId: closedStatusId } })
+            : null
+        )
         // Required-to-close refusals get the blocking prompt (one line per
         // distinct reason); other failures keep the generic summary toast.
         const blocked = [
           ...new Set(
-            convRes.failed
+            conversationResult.failed
               .map((f) => f.reason)
               .filter((reason) => isMissingRequiredAttributesMessage(reason))
           ),
         ]
         if (blocked.length > 0) {
-          const count = convRes.failed.filter((f) =>
+          const count = conversationResult.failed.filter((f) =>
             isMissingRequiredAttributesMessage(f.reason)
           ).length
           setCloseBlocked([
@@ -1027,12 +1039,6 @@ function InboxPage() {
             ...blocked,
           ])
         }
-        const succeeded = [...convRes.succeeded, ...ticketRes.succeeded]
-        const failed = [...convRes.failed, ...ticketRes.failed]
-        summarize('Closed', succeeded.length, failed.length)
-        refreshInbox()
-        if (failed.length === 0) clearSelection()
-        else setBulkMenu(null)
       } catch {
         toast.error('Bulk action failed')
       }
@@ -1044,15 +1050,14 @@ function InboxPage() {
         toast.error('No closed ticket status is configured')
         return
       }
-      setBulkMenu(null)
-      try {
-        await setTicketStatusFn({ data: { ticketId: selectedRef.id, statusId: closedStatusId } })
-        refreshInbox()
-        toast.success('Ticket resolved')
-      } catch {
-        toast.error('Failed to resolve ticket')
-      }
-      return
+      return runSolo(
+        () =>
+          statusTicketMutation.mutateAsync({
+            ticketId: selectedRef.id,
+            statusId: closedStatusId as TicketStatusId,
+          }),
+        { success: 'Ticket resolved', error: 'Failed to resolve ticket' }
+      )
     }
     setBulkMenu(null)
     try {
@@ -1069,9 +1074,9 @@ function InboxPage() {
     selectedIds,
     selectedRef,
     ticketStatusList,
-    bulk,
-    summarize,
-    clearSelection,
+    runMixedBulk,
+    statusTicketMutation,
+    runSolo,
     refreshInbox,
   ])
 

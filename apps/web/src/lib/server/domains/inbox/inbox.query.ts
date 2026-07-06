@@ -36,6 +36,7 @@ import {
 } from '@/lib/server/db'
 import type { ConversationId, TicketId, PrincipalId, TeamId, CompanyId } from '@quackback/ids'
 import type { ConversationPriority, TicketStage } from '@/lib/shared/db-types'
+import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { ticketFilter } from '@/lib/server/policy/tickets'
@@ -141,8 +142,6 @@ export interface MergeInboxBranchesResult {
   items: InboxItemDTO[]
   cursor: string | null
 }
-
-const PRIORITY_RANK: Record<string, number> = { urgent: 5, high: 4, medium: 3, low: 2, none: 1 }
 
 function itemId(item: InboxItemDTO): string {
   return item.kind === 'conversation' ? item.conversation.id : item.ticket.id
@@ -466,19 +465,27 @@ async function countConversationScope(
   return row?.c ?? 0
 }
 
-async function countTicketScope(
-  actor: Actor,
-  opts: { type: TicketType; excludeConversationLinked?: boolean }
-): Promise<number> {
+/**
+ * Open-ticket counts for all three types in one query, GROUP BY type. The
+ * one-row-rule exclusion (`excludeConversationLinkedCondition`) is applied
+ * unconditionally rather than only to the customer bucket: the predicate's
+ * own shape (`NOT (type = 'customer' AND EXISTS (...))`) is already a no-op
+ * for `back_office`/`tracker` rows (the `type = 'customer'` arm is false), so
+ * folding it into the shared WHERE reproduces the previous per-type
+ * behavior (customer: excluded-if-linked; the other two: unfiltered)
+ * without a CASE/FILTER per bucket.
+ */
+async function countTicketScopesByType(
+  actor: Actor
+): Promise<{ customer: number; back_office: number; tracker: number }> {
   const { excludeConversationLinkedCondition } =
     await import('@/lib/server/domains/tickets/ticket.service')
-  const [row] = await db
-    .select({ c: sql<number>`count(*)::int` })
+  const rows = await db
+    .select({ type: tickets.type, c: sql<number>`count(*)::int` })
     .from(tickets)
     .where(
       and(
         ticketFilter(actor),
-        eq(tickets.type, opts.type),
         inArray(
           tickets.statusId,
           db
@@ -486,10 +493,16 @@ async function countTicketScope(
             .from(ticketStatuses)
             .where(eq(ticketStatuses.category, 'open'))
         ),
-        opts.excludeConversationLinked ? excludeConversationLinkedCondition() : undefined
+        excludeConversationLinkedCondition()
       )
     )
-  return row?.c ?? 0
+    .groupBy(tickets.type)
+  const byType = new Map(rows.map((r) => [r.type, r.c]))
+  return {
+    customer: byType.get('customer') ?? 0,
+    back_office: byType.get('back_office') ?? 0,
+    tracker: byType.get('tracker') ?? 0,
+  }
 }
 
 /**
@@ -502,23 +515,17 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
   const canConversations = canViewConversations(actor)
   const canTickets = canViewTickets(actor)
 
-  const [mine, unassigned, customer, backOffice, tracker] = await Promise.all([
+  const [mine, unassigned, ticketsByType] = await Promise.all([
     canConversations && actor.principalId
       ? countConversationScope(actor, { assignedAgentPrincipalId: actor.principalId })
       : Promise.resolve(0),
     canConversations ? countConversationScope(actor, { unassignedOnly: true }) : Promise.resolve(0),
     canTickets
-      ? countTicketScope(actor, { type: 'customer', excludeConversationLinked: true })
-      : Promise.resolve(0),
-    canTickets ? countTicketScope(actor, { type: 'back_office' }) : Promise.resolve(0),
-    canTickets ? countTicketScope(actor, { type: 'tracker' }) : Promise.resolve(0),
+      ? countTicketScopesByType(actor)
+      : Promise.resolve({ customer: 0, back_office: 0, tracker: 0 }),
   ])
 
-  return {
-    mine,
-    unassigned,
-    ticketsByType: { customer, back_office: backOffice, tracker },
-  }
+  return { mine, unassigned, ticketsByType }
 }
 
 // ---------------------------------------------------------------------------

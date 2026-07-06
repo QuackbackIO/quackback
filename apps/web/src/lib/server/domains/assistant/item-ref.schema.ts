@@ -26,14 +26,6 @@ export const ticketIdSchema = z
   .string()
   .refine((v) => isValidTypeId(v, 'ticket'), { message: 'Invalid ticket ID format' })
 
-/** The bare item ref, no other fields — exactly one of `conversationId` / `ticketId`. */
-export const assistantItemRefSchema = z.union([
-  z.object({ conversationId: conversationIdSchema }).strict(),
-  z.object({ ticketId: ticketIdSchema }).strict(),
-])
-
-export type AssistantItemRef = z.infer<typeof assistantItemRefSchema>
-
 /**
  * Merge the item-ref union with a route's own request shape: each union
  * branch gets the same extra fields, so the result parses `{ conversationId,

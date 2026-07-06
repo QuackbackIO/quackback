@@ -17,9 +17,14 @@ import {
   TICKET_STATUS_CATEGORIES,
   TICKET_STAGES,
   type TicketType,
-  type TicketStatusCategory,
   type TicketStage,
 } from '@/lib/shared/db-types'
+import {
+  INBOX_TRIAGE_FACETS,
+  facetToConversationStatus,
+  facetToTicketStatusCategory,
+  type InboxTriageFacet,
+} from '@/lib/shared/inbox/items'
 
 // ── Sorts ──────────────────────────────────────────────────────────────────
 
@@ -222,17 +227,24 @@ export interface TicketViewRuleParams {
   teamId?: string
 }
 
-const CATEGORY_TO_FACET: Record<TicketStatusCategory, 'open' | 'waiting' | 'closed'> = {
-  open: 'open',
-  pending: 'waiting',
-  closed: 'closed',
+/** Build a facet's inverse map by running the forward mapper (items.ts) over
+ *  every non-'all' facet — so a new facet/category value only has to be taught
+ *  to the forward function, not kept in sync by hand in a second table here. */
+function invertFacetMap<V extends string>(
+  forward: (facet: InboxTriageFacet) => V | undefined
+): Record<V, 'open' | 'waiting' | 'closed'> {
+  const out = {} as Record<V, 'open' | 'waiting' | 'closed'>
+  for (const facet of INBOX_TRIAGE_FACETS) {
+    if (facet === 'all') continue
+    const value = forward(facet)
+    if (value !== undefined) out[value] = facet
+  }
+  return out
 }
 
-const CONVERSATION_STATUS_TO_FACET: Record<ConversationStatus, 'open' | 'waiting' | 'closed'> = {
-  open: 'open',
-  snoozed: 'waiting',
-  closed: 'closed',
-}
+const CATEGORY_TO_FACET = invertFacetMap(facetToTicketStatusCategory)
+
+const CONVERSATION_STATUS_TO_FACET = invertFacetMap(facetToConversationStatus)
 
 /**
  * Translate a view's rules into unified-endpoint params. Only called once

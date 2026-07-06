@@ -18,7 +18,11 @@ import {
   InboxScopeMenu,
   type InboxNavItem,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
-import { TicketStatusChip } from '@/components/admin/inbox/ticket-chips'
+import {
+  TicketStatusChip,
+  CATEGORY_CHIP,
+  TICKET_TYPE_CLASS,
+} from '@/components/admin/inbox/ticket-chips'
 import { TagChip } from '@/components/shared/tag-chip'
 import { Spinner } from '@/components/shared/spinner'
 import { Avatar } from '@/components/ui/avatar'
@@ -84,13 +88,8 @@ function emptyStateMessage(nav: InboxNavItem, facet: InboxTriageFacet, scopeLabe
 
 /** A minimal category-tinted chip for the linked-customer-ticket summary on a
  *  conversation row. `LinkedTicketSummary` carries no per-status color (unlike
- *  the full `TicketStatusRef`), so this doesn't reuse `TicketStatusChip`. */
-const LINKED_TICKET_CHIP_CLASS: Record<string, string> = {
-  open: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
-  pending: 'bg-amber-400/15 text-amber-700 dark:text-amber-300',
-  closed: 'bg-muted text-muted-foreground',
-}
-
+ *  the full `TicketStatusRef`), so this doesn't reuse `TicketStatusChip` — but
+ *  it shares `CATEGORY_CHIP`'s tint so the two surfaces can't drift apart. */
 function LinkedTicketChip({
   ticket,
 }: {
@@ -100,7 +99,7 @@ function LinkedTicketChip({
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium',
-        LINKED_TICKET_CHIP_CLASS[ticket.statusCategory] ?? LINKED_TICKET_CHIP_CLASS.closed
+        CATEGORY_CHIP[ticket.statusCategory] ?? CATEGORY_CHIP.closed
       )}
     >
       #{ticket.number} · {ticket.statusName}
@@ -108,20 +107,22 @@ function LinkedTicketChip({
   )
 }
 
-const TICKET_TYPE_GLYPH: Record<TicketType, { Icon: typeof TicketIcon; className: string }> = {
-  customer: { Icon: TicketIcon, className: 'bg-sky-500/12 text-sky-700 dark:text-sky-300' },
-  back_office: {
-    Icon: BuildingOffice2Icon,
-    className: 'bg-violet-500/12 text-violet-700 dark:text-violet-300',
-  },
-  tracker: { Icon: RectangleStackIcon, className: 'bg-muted text-muted-foreground' },
+const TICKET_TYPE_ICON: Record<TicketType, typeof TicketIcon> = {
+  customer: TicketIcon,
+  back_office: BuildingOffice2Icon,
+  tracker: RectangleStackIcon,
 }
 
 /** A square type-glyph avatar for a ticket row (customer/back-office/tracker). */
 function TicketTypeGlyph({ type }: { type: TicketType }) {
-  const { Icon, className } = TICKET_TYPE_GLYPH[type]
+  const Icon = TICKET_TYPE_ICON[type]
   return (
-    <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-md', className)}>
+    <span
+      className={cn(
+        'flex size-8 shrink-0 items-center justify-center rounded-md',
+        TICKET_TYPE_CLASS[type]
+      )}
+    >
       <Icon className="size-4" />
     </span>
   )

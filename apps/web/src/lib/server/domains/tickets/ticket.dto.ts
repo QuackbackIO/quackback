@@ -53,13 +53,51 @@ interface TicketActivity {
  * (one per concern) rather than one merged query, since the "latest of any
  * kind" and "latest non-internal" rows can differ; both are served by the
  * existing `(ticket_id, created_at, id)` index.
+ *
+ * A single-ticket page (every write path, via `ticketRowToDTO`) takes a
+ * cheaper path: two plain `eq(ticketId) ORDER BY created_at DESC LIMIT 1`
+ * lookups instead of a `DISTINCT ON` over a one-element `IN` list — same
+ * index, same two round trips, without the DISTINCT ON machinery a mutation
+ * enriching a single fresh row doesn't need.
  */
 async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketActivity>> {
   const map = new Map<TicketId, TicketActivity>()
   for (const r of rows) map.set(r.id, { lastMessageAt: null, lastMessagePreview: r.title })
-  const ids = rows.map((r) => r.id)
-  if (ids.length === 0) return map
+  if (rows.length === 0) return map
 
+  if (rows.length === 1) {
+    const id = rows[0].id
+    const [[latestAny], [latestVisible]] = await Promise.all([
+      db
+        .select({ createdAt: conversationMessages.createdAt })
+        .from(conversationMessages)
+        .where(and(eq(conversationMessages.ticketId, id), isNull(conversationMessages.deletedAt)))
+        .orderBy(desc(conversationMessages.createdAt))
+        .limit(1),
+      db
+        .select({
+          content: conversationMessages.content,
+          attachments: conversationMessages.attachments,
+        })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.ticketId, id),
+            isNull(conversationMessages.deletedAt),
+            eq(conversationMessages.isInternal, false)
+          )
+        )
+        .orderBy(desc(conversationMessages.createdAt))
+        .limit(1),
+    ])
+    const entry = map.get(id)!
+    if (latestAny) entry.lastMessageAt = latestAny.createdAt
+    if (latestVisible)
+      entry.lastMessagePreview = preview(latestVisible.content, latestVisible.attachments ?? [])
+    return map
+  }
+
+  const ids = rows.map((r) => r.id)
   const [latestAny, latestVisible] = await Promise.all([
     db
       .selectDistinctOn([conversationMessages.ticketId], {

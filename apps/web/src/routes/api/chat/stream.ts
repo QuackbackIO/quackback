@@ -9,7 +9,6 @@ import {
   conversations,
   conversationMessages,
   principal,
-  tickets,
 } from '@/lib/server/db'
 import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
@@ -26,7 +25,8 @@ import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
 import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { canViewConversation } from '@/lib/server/policy/conversation'
-import { ticketFilter } from '@/lib/server/policy/tickets'
+import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
+import { NotFoundError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import {
   loadAuthors,
@@ -174,18 +174,16 @@ export const Route = createFileRoute('/api/chat/stream')({
             return new Response('Forbidden', { status: 403 })
           }
           const ticketId = ticketIdParam as TicketId
-          // One query resolves existence + visibility (mirrors
-          // assistant/copilot-gate.ts's assertTicketViewable, duplicated here
-          // rather than imported so routes never depends on the assistant
-          // domain — see policy/dep-graph/README.md) — 404, never 403, so a
-          // team member without ticket.view on THIS ticket can't probe ids.
-          const [ticketRow] = await db
-            .select({ id: tickets.id })
-            .from(tickets)
-            .where(and(eq(tickets.id, ticketId), ticketFilter(actor)))
-            .limit(1)
-          if (!ticketRow) {
-            return new Response('Not found', { status: 404 })
+          // Existence + visibility in one call (the tickets domain's own
+          // chokepoint) — 404, never 403, so a team member without
+          // ticket.view on THIS ticket can't probe ids.
+          try {
+            await assertTicketVisible(ticketId, actor)
+          } catch (err) {
+            if (err instanceof NotFoundError) {
+              return new Response('Not found', { status: 404 })
+            }
+            throw err
           }
           // No backfill yet for a ticket's own stream (no ticket-thread analogue
           // of findBackfillCursor) — a reconnect just resumes live, same as the

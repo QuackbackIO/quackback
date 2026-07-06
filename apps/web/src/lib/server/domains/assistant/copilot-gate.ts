@@ -1,13 +1,14 @@
 /**
  * Shared gate sequence for the two teammate-facing Copilot SSE routes
  * (copilot.ts, transform.ts): `copilot.use` permission -> body parse against
- * the caller's own zod schema -> the `assistantCopilot` flag -> the assistant
- * being configured -> the AI token budget -> item-scoped viewability
- * (`assertConversationViewable` or `assertTicketViewable`, whichever the
- * parsed request carries — unified inbox §2.9), each already mapped onto the
- * route's error envelope (forbiddenResponse / errorResponse). Both routes ran
- * this exact sequence verbatim before this; only the request schema and the
- * invalid-request message differ between them, so this is generic over both.
+ * the caller's own zod schema -> `assertCopilotAvailable` (the
+ * `assistantCopilot` flag, then the assistant being configured) -> the AI
+ * token budget -> item-scoped viewability (`assertConversationViewable` or
+ * `assertTicketVisible`, whichever the parsed request carries — unified
+ * inbox §2.9), each already mapped onto the route's error envelope
+ * (forbiddenResponse / errorResponse). Both routes ran this exact sequence
+ * verbatim before this; only the request schema and the invalid-request
+ * message differ between them, so this is generic over both.
  *
  * sandbox.ts is deliberately NOT a caller: it has no conversation to assert
  * viewability against and gates on a different permission (`settings.manage`,
@@ -32,26 +33,42 @@ import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service
 import { isAssistantConfigured } from '@/lib/server/domains/assistant'
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
-import type { Ticket } from '@/lib/server/db'
-import type { Actor } from '@/lib/server/policy/types'
 import { NotFoundError } from '@/lib/shared/errors'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { errorResponse, forbiddenResponse } from '@/lib/server/domains/api/responses'
 
 /**
- * Ticket-scoped read chokepoint mirroring `assertConversationViewable`
- * exactly (one query resolves existence + visibility; NotFound, never
- * Forbidden, so a caller without `ticket.view` can't probe ticket ids
- * either). This used to inline the `ticketFilter` query itself — the doc
- * comment here previously explained that the tickets domain was owned by a
- * concurrent unified-inbox workstream this file must not touch. That
- * workstream has since landed the canonical version as
- * `tickets/ticket.service.ts`'s `assertTicketVisible`; this is now a thin
- * re-export under the name existing callers here already use.
+ * Thrown by `assertCopilotAvailable` when either check fails; carries enough
+ * to reproduce either call site's original error exactly (a mapped
+ * `errorResponse` here, a thrown `Error` in `copilot-summary.ts`).
  */
-export async function assertTicketViewable(ticketId: TicketId, actor: Actor): Promise<Ticket> {
-  return assertTicketVisible(ticketId, actor)
+export class CopilotUnavailableError extends Error {
+  constructor(
+    readonly code: 'NOT_FOUND' | 'AI_NOT_CONFIGURED',
+    message: string,
+    readonly statusCode: number
+  ) {
+    super(message)
+    this.name = 'CopilotUnavailableError'
+  }
+}
+
+/**
+ * The `assistantCopilot` flag -> assistant-configured half of the Copilot
+ * gate sequence, order load-bearing (the flag is checked first). Permission
+ * and item viewability are call-site specific and stay out of this helper;
+ * this covers only the two checks every Copilot entry point repeated
+ * verbatim: `gateCopilotRequest` below, and both on-demand summary fns in
+ * `copilot-summary.ts`.
+ */
+export async function assertCopilotAvailable(): Promise<void> {
+  if (!(await isFeatureEnabled('assistantCopilot'))) {
+    throw new CopilotUnavailableError('NOT_FOUND', 'Copilot is not available', 404)
+  }
+  if (!isAssistantConfigured()) {
+    throw new CopilotUnavailableError('AI_NOT_CONFIGURED', 'The assistant is not configured', 503)
+  }
 }
 
 export interface CopilotGateOk<T> {
@@ -102,15 +119,13 @@ export async function gateCopilotRequest<
     return { ok: false, response: errorResponse('INVALID_REQUEST', invalidRequestMessage, 400) }
   }
 
-  if (!(await isFeatureEnabled('assistantCopilot'))) {
-    return { ok: false, response: errorResponse('NOT_FOUND', 'Copilot is not available', 404) }
-  }
-
-  if (!isAssistantConfigured()) {
-    return {
-      ok: false,
-      response: errorResponse('AI_NOT_CONFIGURED', 'The assistant is not configured', 503),
+  try {
+    await assertCopilotAvailable()
+  } catch (err) {
+    if (err instanceof CopilotUnavailableError) {
+      return { ok: false, response: errorResponse(err.code, err.message, err.statusCode) }
     }
+    throw err
   }
 
   try {
@@ -131,7 +146,7 @@ export async function gateCopilotRequest<
       await assertConversationViewable(conversationId, actor)
     } else {
       ticketId = parsed.ticketId as TicketId
-      await assertTicketViewable(ticketId, actor)
+      await assertTicketVisible(ticketId, actor)
     }
   } catch (err) {
     if (err instanceof NotFoundError) {
