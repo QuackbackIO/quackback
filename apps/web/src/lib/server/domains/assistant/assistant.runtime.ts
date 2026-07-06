@@ -11,20 +11,14 @@
  * escalation, scope honesty) is encoded as pure, unit-tested functions that the
  * loop composes; the model only ever produces `{ text, citations, escalation }`.
  */
-import { chat, parsePartialJSON, maxIterations } from '@tanstack/ai'
-import { jsonrepair } from 'jsonrepair'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
+import { parsePartialJSON, maxIterations } from '@tanstack/ai'
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
 import { db, ASSISTANT_HANDOFF_REASONS } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
-import {
-  isAiClientConfigured,
-  structuredOutputProviderOptions,
-  stripCodeFences,
-} from '@/lib/server/domains/ai/config'
+import { isAiClientConfigured, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
-import { withUsageLogging, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
+import type { AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import {
   getAssistantConfig,
@@ -45,6 +39,7 @@ import {
   GUIDANCE_CHAR_BUDGET,
   type AssistantGuidanceRule,
 } from './guidance.service'
+import { runSynthesis, safeJsonRepair, type AttemptOutcome } from './synthesis-core'
 
 const log = logger.child({ component: 'assistant-runtime' })
 
@@ -137,9 +132,6 @@ export function isAssistantConfigured(): boolean {
  */
 export const ASSISTANT_MAX_ITERATIONS = 6
 
-/** Output budget: constrained decoding on small models needs headroom. */
-const MAX_OUTPUT_TOKENS = 1024
-
 /**
  * Shown to the customer when a turn can't produce a usable answer after retries
  * and salvage (e.g. empty or prose-only model output). A friendly retry prompt
@@ -207,15 +199,6 @@ function parseOrRepair(candidate: string): AssistantOutput | null {
     }
   }
   return null
-}
-
-/** jsonrepair throws on hopeless input; treat that as "no repair available". */
-function safeJsonRepair(text: string): string | null {
-  try {
-    return jsonrepair(text)
-  } catch {
-    return null
-  }
 }
 
 /**
@@ -462,133 +445,19 @@ function toModelMessages(messages: AssistantThreadMessage[]) {
   }))
 }
 
-interface AttemptResult {
-  final: unknown | null
-  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
-}
-
 /**
  * Classify an attempt for the usage log: escalated when the model set an
  * escalation reason, no_sources when retrieval never surfaced a citation
  * candidate this attempt, otherwise a normal answer.
  */
-function deriveAnswerKind(attempt: AttemptResult, toolContext: AssistantToolContext): AiAnswerKind {
+function deriveAnswerKind(
+  attempt: AttemptOutcome,
+  toolContext: AssistantToolContext
+): AiAnswerKind {
   const final = attempt.final as { escalation?: unknown } | null
   if (final?.escalation) return 'escalated'
   if (toolContext.sources.size === 0) return 'no_sources'
   return 'answered'
-}
-
-async function runAttempt(
-  model: string,
-  systemPrompts: string[],
-  tools: Awaited<ReturnType<typeof assembleAssistantTools>>,
-  toolNames: ReadonlySet<string>,
-  toolContext: AssistantToolContext,
-  input: AssistantTurnInput
-): Promise<AttemptResult> {
-  // Signal the start of this attempt so consumers reset any streamed-text buffer
-  // (a retry re-streams from scratch) and show the initial "thinking" state.
-  input.onActivity?.({ kind: 'thinking' })
-
-  const controller = new AbortController()
-  const forwardAbort = () => controller.abort()
-  if (input.signal) {
-    if (input.signal.aborted) controller.abort()
-    else input.signal.addEventListener('abort', forwardAbort, { once: true })
-  }
-
-  const adapter = openaiCompatibleText(model, {
-    baseURL: config.openaiBaseUrl!,
-    apiKey: config.openaiApiKey!,
-  })
-
-  const stream = chat({
-    adapter,
-    messages: toModelMessages(input.messages),
-    systemPrompts,
-    tools,
-    context: toolContext,
-    outputSchema: assistantOutputSchema,
-    agentLoopStrategy: maxIterations(ASSISTANT_MAX_ITERATIONS),
-    stream: true,
-    abortController: controller,
-    // NOTE: do not add sampling params (e.g. temperature) here. The provider
-    // options gate routing on providers advertising EVERY param in the request
-    // (require_parameters), so a param many providers don't advertise silently
-    // shrinks the pool to none and the turn dies with no output.
-    modelOptions: { max_tokens: MAX_OUTPUT_TOKENS, ...structuredOutputProviderOptions() },
-  })
-
-  let raw = ''
-  let emitted = ''
-  let final: unknown | null = null
-  let usage: AttemptResult['usage']
-  let runError: string | null = null
-
-  try {
-    for await (const chunk of stream) {
-      switch (chunk.type) {
-        case 'TEXT_MESSAGE_CONTENT': {
-          // Deltas are raw JSON; surface only the growth of the `text` field so
-          // consumers stream clean answer text, not the JSON envelope.
-          raw += chunk.delta
-          const partial = parsePartialJSON(raw) as { text?: unknown } | undefined
-          const text = typeof partial?.text === 'string' ? partial.text : ''
-          if (text.length > emitted.length && text.startsWith(emitted)) {
-            input.onTextDelta?.(text.slice(emitted.length))
-            emitted = text
-          }
-          break
-        }
-        case 'TOOL_CALL_START': {
-          // Surface the tool the agentic loop just invoked so the widget can show
-          // a live "searching the knowledge base" step. `toolCallName` is the
-          // @ag-ui/core field; `toolName` is TanStack's deprecated alias. Any
-          // name in this turn's assembled tool set is valid — the registry
-          // decides what tools exist, not a hardcoded list here.
-          const tool =
-            (chunk as { toolCallName?: string; toolName?: string }).toolCallName ??
-            (chunk as { toolName?: string }).toolName
-          if (tool && toolNames.has(tool)) {
-            input.onActivity?.({ kind: 'tool', tool })
-          }
-          break
-        }
-        case 'CUSTOM': {
-          if (chunk.name === 'structured-output.complete') {
-            final = (chunk.value as { object: unknown }).object
-          }
-          break
-        }
-        case 'RUN_FINISHED': {
-          usage = (chunk as { usage?: AttemptResult['usage'] }).usage
-          break
-        }
-        case 'RUN_ERROR': {
-          // Don't throw yet: the stream often carries the model's raw text
-          // alongside a parse failure. Record the error and try to salvage below.
-          runError = (chunk as { message?: string }).message ?? 'model run failed'
-          break
-        }
-      }
-    }
-  } finally {
-    input.signal?.removeEventListener('abort', forwardAbort)
-  }
-
-  // Strict decoding can fail on providers that accept the schema without
-  // enforcing it. When the model still emitted text, recover a schema-shaped
-  // answer from it rather than dropping the turn. Skip on abort (the caller
-  // wants the cancellation to propagate, not a salvaged partial).
-  if (final === null && !input.signal?.aborted && raw.trim().length > 0) {
-    final = salvageAssistantOutput(raw)
-  }
-  if (final === null && runError !== null) {
-    throw new Error(runError)
-  }
-
-  return { final, usage }
 }
 
 /**
@@ -662,74 +531,80 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const tools = await assembleAssistantTools(toolContext, undefined, toolControls)
   const toolNames = new Set(tools.map((t) => t.name))
 
-  const attemptOnce = async (attempt: number): Promise<AssistantOutput | null> => {
-    // Fresh ledger + search budget per attempt so a retry starts clean.
-    toolContext.sources.clear()
-    toolContext.searchCalls = 0
-    const result = await withUsageLogging(
-      {
-        pipelineStep: 'assistant',
-        callType: 'chat_completion',
-        model,
-        metadata: {
-          conversationId: input.conversationId ?? null,
-          attempt,
-          ...(guidanceRuleIds.length > 0 ? { guidanceRuleIds } : {}),
-        },
+  const fallback: AssistantTurnResult = {
+    status: 'answered',
+    text: ASSISTANT_FALLBACK_MESSAGE,
+    citations: [],
+  }
+
+  const outcome = await runSynthesis<AssistantTurnResult, AssistantToolContext>({
+    model,
+    systemPrompts,
+    messages: toModelMessages(input.messages),
+    outputSchema: assistantOutputSchema,
+    tools: {
+      specs: tools,
+      context: toolContext,
+      agentLoopStrategy: maxIterations(ASSISTANT_MAX_ITERATIONS),
+      names: toolNames,
+    },
+    deltaField: 'text',
+    salvageMode: 'forgiving',
+    salvage: (raw) => salvageAssistantOutput(raw),
+    onFailure: 'fallback',
+    fallbackValue: fallback,
+    signal: input.signal,
+    onTextDelta: input.onTextDelta,
+    onActivity: input.onActivity,
+    usageLogParams: {
+      pipelineStep: 'assistant',
+      callType: 'chat_completion',
+      model,
+      metadata: {
+        conversationId: input.conversationId ?? null,
+        ...(guidanceRuleIds.length > 0 ? { guidanceRuleIds } : {}),
       },
-      async () => {
-        const attemptResult = await runAttempt(
-          model,
-          systemPrompts,
-          tools,
-          toolNames,
-          toolContext,
-          input
-        )
-        return {
-          result: attemptResult,
-          retryCount: 0,
-          metadata: { answerKind: deriveAnswerKind(attemptResult, toolContext) },
-        }
-      },
-      (r) => ({
-        inputTokens: r.usage?.promptTokens ?? 0,
-        outputTokens: r.usage?.completionTokens ?? 0,
-        totalTokens: r.usage?.totalTokens ?? 0,
-      })
+    },
+    deriveAnswerKind: (attempt) => deriveAnswerKind(attempt, toolContext),
+    onAttemptStart: () => {
+      // Fresh ledger + search budget per attempt so a retry starts clean.
+      toolContext.sources.clear()
+      toolContext.searchCalls = 0
+    },
+    onRetry: (_attempt, error) => {
+      log.warn({ err: error }, 'assistant turn attempt failed, retrying once')
+    },
+  })
+
+  if (outcome.outcome === 'fallback') {
+    // Both attempts failed to yield a usable answer; never leave the customer
+    // in silence, and log the underlying error for diagnosis. (An abort
+    // propagates as a throw from runSynthesis before we ever get here.)
+    log.warn({ err: outcome.lastError }, 'assistant turn failed; returning fallback reply')
+    return outcome.value
+  }
+
+  const parsedResult = assistantOutputSchema.safeParse(outcome.final)
+  if (!parsedResult.success) {
+    // Defense in depth: a non-null but non-conformant final must fall back, never
+    // throw out of the turn (the pre-unification engine validated inside the
+    // retry/fallback zone). Keeps the "Quinn never throws on non-abort failure" invariant.
+    log.warn(
+      { err: parsedResult.error },
+      'assistant turn produced a non-conformant result; returning fallback reply'
     )
-    return result.final !== null ? assistantOutputSchema.parse(result.final) : null
+    return fallback
   }
-
-  let lastError: Error | null = null
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const parsed = await attemptOnce(attempt)
-      if (parsed) {
-        const citations = assembleCitations(parsed.citations, toolContext.sources)
-        const escalation = decideEscalation(
-          parsed.escalation?.reason,
-          input.escalationAlreadyOffered ?? false
-        )
-        return {
-          status: 'answered',
-          text: relinkCitations(parsed.text, parsed.citations, citations),
-          citations,
-          ...(escalation && { escalation }),
-        }
-      }
-      lastError = new Error('model returned no structured answer')
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      if (input.signal?.aborted) throw lastError
-    }
-    if (attempt === 0) log.warn({ err: lastError }, 'assistant turn attempt failed, retrying once')
+  const parsed = parsedResult.data
+  const citations = assembleCitations(parsed.citations, toolContext.sources)
+  const escalation = decideEscalation(
+    parsed.escalation?.reason,
+    input.escalationAlreadyOffered ?? false
+  )
+  return {
+    status: 'answered',
+    text: relinkCitations(parsed.text, parsed.citations, citations),
+    citations,
+    ...(escalation && { escalation }),
   }
-
-  // Both attempts failed to yield a usable answer. An abort is the caller's to
-  // handle, so propagate it; otherwise never leave the customer in silence —
-  // surface a friendly retry prompt and log the underlying error for diagnosis.
-  if (input.signal?.aborted) throw lastError ?? new Error('assistant turn aborted')
-  log.warn({ err: lastError }, 'assistant turn failed; returning fallback reply')
-  return { status: 'answered', text: ASSISTANT_FALLBACK_MESSAGE, citations: [] }
 }

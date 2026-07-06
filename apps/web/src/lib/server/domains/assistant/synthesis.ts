@@ -9,19 +9,12 @@
  * can be swapped without touching callers.
  */
 
-import { chat, parsePartialJSON } from '@tanstack/ai'
-import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
-import { jsonrepair } from 'jsonrepair'
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
-import {
-  isAiClientConfigured,
-  stripCodeFences,
-  structuredOutputProviderOptions,
-} from '@/lib/server/domains/ai/config'
+import { isAiClientConfigured, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
-import { withUsageLogging, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 import { logger } from '@/lib/server/logger'
+import { runSynthesis, safeJsonRepair } from './synthesis-core'
 import type { RetrievedKbArticle } from './retrieval'
 
 const log = logger.child({ component: 'assistant-synthesis' })
@@ -72,9 +65,6 @@ const answerSchema = z.object({
   answer: z.string(),
   sources: z.array(z.object({ articleId: z.string() })),
 })
-
-/** Generous output budget: constrained decoding on small models needs headroom. */
-const MAX_OUTPUT_TOKENS = 1024
 
 /**
  * Last-resort miss text when the model declares a miss but writes nothing, or
@@ -145,134 +135,45 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
   // The prompts are identical across attempts; build them once.
   const systemPrompts = buildAskAiSystemPrompts(params.articles)
 
-  // One usage-logged model run. Null means the stream produced no validated
-  // object (a known constrained-decoding failure mode) and is retryable.
-  const attemptOnce = async (attempt: number): Promise<AskAiAnswer | null> => {
-    const { validated } = await withUsageLogging(
-      {
-        pipelineStep: 'help_center_answers',
-        callType: 'chat_completion',
-        model,
-        metadata: { kbArticleIds: articleIds, attempt, query: params.query },
-      },
-      async () => {
-        const object = await runAttempt(model, systemPrompts, params)
-        // Prefer the validated structured object; if the stream never produced
-        // one, try to salvage a well-formed object from the raw text before
-        // giving up on the attempt.
-        const final = object.final ?? salvageAnswer(object.raw)
-        const validated = final !== null ? validateAnswer(final, retrievedIds) : null
-        const answerKind: AiAnswerKind =
-          validated === null ? 'invalid_output' : validated.kind === 'grounded' ? 'answered' : 'no_answer'
-        return { result: { object, validated }, retryCount: 0, metadata: { answerKind } }
-      },
-      ({ object }) => ({
-        inputTokens: object.usage?.promptTokens ?? 0,
-        outputTokens: object.usage?.completionTokens ?? 0,
-        totalTokens: object.usage?.totalTokens ?? 0,
-      })
-    )
-    return validated
-  }
-
-  let lastError: Error | null = null
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const answer = await attemptOnce(attempt)
-      if (answer) return answer
-      lastError = new Error('model returned no structured answer')
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      // Client went away: stop immediately, a retry would be wasted spend.
-      if (params.signal?.aborted) throw lastError
-    }
-    if (attempt === 0) log.warn({ err: lastError }, 'ask ai attempt failed, retrying once')
-  }
-  throw lastError ?? new Error('answer synthesis failed')
-}
-
-interface AttemptResult {
-  final: unknown | null
-  /** Raw model text accumulated over the stream, for jsonrepair salvage. */
-  raw: string
-  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
-}
-
-async function runAttempt(
-  model: string,
-  systemPrompts: string[],
-  params: SynthesizeAnswerParams
-): Promise<AttemptResult> {
-  const controller = new AbortController()
-  const forwardAbort = () => controller.abort()
-  if (params.signal) {
-    if (params.signal.aborted) controller.abort()
-    else params.signal.addEventListener('abort', forwardAbort, { once: true })
-  }
-
-  const adapter = openaiCompatibleText(model, {
-    baseURL: config.openaiBaseUrl!,
-    apiKey: config.openaiApiKey!,
-  })
-
-  const stream = chat({
-    adapter,
-    messages: [{ role: 'user', content: params.query }],
+  const outcome = await runSynthesis<never>({
+    model,
     systemPrompts,
+    messages: [{ role: 'user', content: params.query }],
     outputSchema: answerSchema,
-    stream: true,
-    abortController: controller,
-    modelOptions: { max_tokens: MAX_OUTPUT_TOKENS, ...structuredOutputProviderOptions() },
+    tools: null,
+    deltaField: 'answer',
+    salvageMode: 'strict',
+    salvage: (raw) => salvageAnswer(raw),
+    onFailure: 'throw',
+    signal: params.signal,
+    onTextDelta: params.onAnswerDelta,
+    usageLogParams: {
+      pipelineStep: 'help_center_answers',
+      callType: 'chat_completion',
+      model,
+      metadata: { kbArticleIds: articleIds, query: params.query },
+    },
+    // Prefer the validated structured object for classification; if the
+    // stream never produced one (final is null), this attempt is invalid.
+    deriveAnswerKind: (attempt) => {
+      const validated = attempt.final !== null ? validateAnswer(attempt.final, retrievedIds) : null
+      return validated === null
+        ? 'invalid_output'
+        : validated.kind === 'grounded'
+          ? 'answered'
+          : 'no_answer'
+    },
+    onRetry: (_attempt, error) => {
+      log.warn({ err: error }, 'ask ai attempt failed, retrying once')
+    },
   })
 
-  let raw = ''
-  let emitted = ''
-  let final: unknown | null = null
-  let usage: AttemptResult['usage']
-
-  try {
-    for await (const chunk of stream) {
-      switch (chunk.type) {
-        case 'TEXT_MESSAGE_CONTENT': {
-          // Deltas are raw JSON; surface only the growth of the `answer`
-          // field so consumers stream clean text.
-          raw += chunk.delta
-          const partial = parsePartialJSON(raw) as { answer?: unknown } | undefined
-          const answer = typeof partial?.answer === 'string' ? partial.answer : ''
-          if (answer.length > emitted.length && answer.startsWith(emitted)) {
-            params.onAnswerDelta?.(answer.slice(emitted.length))
-            emitted = answer
-          }
-          break
-        }
-        case 'CUSTOM': {
-          if (chunk.name === 'structured-output.complete') {
-            final = (chunk.value as { object: unknown }).object
-          }
-          break
-        }
-        case 'RUN_FINISHED': {
-          usage = (chunk as { usage?: AttemptResult['usage'] }).usage
-          break
-        }
-        case 'RUN_ERROR': {
-          throw new Error((chunk as { message?: string }).message ?? 'model run failed')
-        }
-      }
-    }
-  } finally {
-    params.signal?.removeEventListener('abort', forwardAbort)
+  if (outcome.outcome === 'fallback') {
+    // Unreachable: onFailure:'throw' always throws on total failure rather
+    // than resolving to a fallback value.
+    throw outcome.lastError ?? new Error('answer synthesis failed')
   }
-
-  return { final, raw, usage }
-}
-
-function safeJsonRepair(s: string): string | null {
-  try {
-    return jsonrepair(s)
-  } catch {
-    return null
-  }
+  return validateAnswer(outcome.final, retrievedIds)
 }
 
 /**

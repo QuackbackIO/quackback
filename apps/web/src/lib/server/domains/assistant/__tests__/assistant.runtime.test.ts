@@ -603,6 +603,25 @@ describe('runAssistantTurn', () => {
     ).rejects.toThrow()
   })
 
+  it('falls back instead of throwing when the final structured object fails schema validation', async () => {
+    // A non-null but non-conformant final (text is a number, not a string)
+    // reaches runAssistantTurn as a "success" outcome from runSynthesis (it
+    // only checks final !== null, never revalidates against the schema). The
+    // turn's own post-loop validation must catch this and fall back rather
+    // than let a thrown ZodError escape runAssistantTurn: Quinn's live widget
+    // path may only throw on an aborted signal, never otherwise.
+    const nonConformant = { text: 123, citations: [] }
+    mockChat.mockImplementation(() => chunkStream(completeRun(nonConformant)))
+
+    const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('q') })
+
+    expect(result).toEqual({
+      status: 'answered',
+      text: ASSISTANT_FALLBACK_MESSAGE,
+      citations: [],
+    })
+  })
+
   it('logs answerKind "answered" in the usage-log metadata for a normal grounded reply', async () => {
     mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
     mockChat.mockImplementation(
