@@ -16,6 +16,10 @@ import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 export function buildTicketTranscript(messages: ConversationMessageDTO[]): string {
   const lines: string[] = []
   for (const m of messages) {
+    // Mirrors conversation-summary.service.ts's buildTranscript: a system
+    // message (e.g. a status-change notice) is bookkeeping, not something
+    // either party said, so it never belongs in the grounding thread.
+    if (m.senderType === 'system') continue
     const content = m.content?.trim()
     if (!content) continue
     lines.push(`${m.senderType === 'visitor' ? 'Customer' : 'Agent'}: ${content}`)

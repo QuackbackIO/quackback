@@ -275,6 +275,49 @@ describe.skipIf(!fixture.available)('pending-actions.service (real DB, rolled ba
       expect(rows).toHaveLength(2)
     })
 
+    it('the conflict-fallback path resolves to the live proposed row, not a stale executed row sharing the same key', async () => {
+      const conversationId = await seedConversation()
+      const agentId = await seedPrincipal()
+      const key = 'conversation_1:msg_1:close_conversation:deadbeef'
+
+      // An OLD proposal, decided and executed — its idempotencyKey column
+      // stays set (the unique index only guards status = 'proposed').
+      const stale = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'An earlier turn, already done.',
+        idempotencyKey: key,
+      })
+      await decidePendingAction(stale.id, 'approved', agentId)
+      await markPendingActionExecuted(stale.id, { closed: true })
+
+      // A fresh proposal reuses the key (no conflict: the stale row is no
+      // longer `proposed`) and is still awaiting a decision.
+      const current = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'A later turn, still awaiting approval.',
+        idempotencyKey: key,
+      })
+
+      // A THIRD call with the same key now genuinely conflicts (`current` is
+      // still `proposed`), exercising proposePendingAction's onConflictDoNothing
+      // fallback with two rows sharing the key on the table. The dedupe must
+      // resolve to the live proposal, never resurrect the stale row's id.
+      const deduped = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'A later turn, still awaiting approval.',
+        idempotencyKey: key,
+      })
+      expect(deduped.id).toBe(current.id)
+      expect(deduped.id).not.toBe(stale.id)
+      expect(deduped.status).toBe('proposed')
+    })
+
     it('never conflicts across two proposals with no idempotencyKey (legacy no-key callers)', async () => {
       const conversationId = await seedConversation()
 
@@ -314,6 +357,40 @@ describe.skipIf(!fixture.available)('pending-actions.service (real DB, rolled ba
         'conversation_1:msg_1:close_conversation:abc'
       )
       expect(found?.id).toBe(proposed.id)
+    })
+
+    it('resolves to the still-proposed row, never a stale executed row sharing the same key', async () => {
+      const conversationId = await seedConversation()
+      const agentId = await seedPrincipal()
+      const key = 'conversation_1:msg_1:close_conversation:abc'
+
+      // An OLD proposal that already ran its course. Its idempotencyKey
+      // column is untouched by decide/execute — the unique index only covers
+      // status = 'proposed', so an executed row keeps its key forever.
+      const stale = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'An earlier turn, already done.',
+        idempotencyKey: key,
+      })
+      await decidePendingAction(stale.id, 'approved', agentId)
+      await markPendingActionExecuted(stale.id, { closed: true })
+
+      // A fresh proposal reusing the SAME key: the stale row is no longer
+      // `proposed`, so this is a genuinely new row, not a conflict.
+      const current = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'A later turn, still awaiting approval.',
+        idempotencyKey: key,
+      })
+      expect(current.id).not.toBe(stale.id)
+
+      const found = await getPendingActionByIdempotencyKey(key)
+      expect(found?.id).toBe(current.id)
+      expect(found?.status).toBe('proposed')
     })
   })
 

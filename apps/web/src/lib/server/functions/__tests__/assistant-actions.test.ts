@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fakePendingActionRow } from '@/lib/server/domains/assistant/__tests__/assistant-tool-fixtures'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { NotFoundError } from '@/lib/shared/errors'
 
 // createServerFn → directly-callable fns (mirrors conversation-bulk.test.ts).
 vi.mock('@tanstack/react-start', () => ({
@@ -38,6 +39,8 @@ const hoisted = vi.hoisted(() => ({
   resolveToolSpecs: vi.fn(),
   executeApprovedPendingAction: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
+  assertConversationViewable: vi.fn(),
+  assertTicketVisible: vi.fn(),
   log: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -113,6 +116,14 @@ vi.mock('@/lib/server/domains/assistant/assistant.principal', () => ({
   ensureAssistantPrincipal: hoisted.ensureAssistantPrincipal,
 }))
 
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  assertConversationViewable: hoisted.assertConversationViewable,
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  assertTicketVisible: hoisted.assertTicketVisible,
+}))
+
 import { approveAssistantActionFn, rejectAssistantActionFn } from '../assistant-actions'
 import type { AssistantPendingActionDTO } from '../assistant-actions'
 
@@ -171,6 +182,8 @@ beforeEach(() => {
   hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_SET_STATUS]))
   hoisted.resolveToolSpecs.mockReturnValue([CLOSE_SPEC])
   hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
+  hoisted.assertConversationViewable.mockResolvedValue(undefined)
+  hoisted.assertTicketVisible.mockResolvedValue(undefined)
 })
 
 describe('approveAssistantActionFn', () => {
@@ -291,6 +304,75 @@ describe('approveAssistantActionFn', () => {
     hoisted.getPendingActionById.mockResolvedValue(null)
 
     await expect(approve({ pendingActionId: 'nope' })).rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  describe('row-level parent authz (unified inbox §3.3)', () => {
+    it('authorizes against the conversation the pending action is scoped to, before deciding', async () => {
+      const pending = pendingRow({ conversationId: 'conversation_1', ticketId: null })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.decidePendingAction.mockResolvedValue({ ...pending, status: 'approved' })
+      hoisted.executeApprovedPendingAction.mockResolvedValue({
+        status: 'executed',
+        result: { closed: true },
+      })
+      hoisted.markPendingActionExecuted.mockResolvedValue({ ...pending, status: 'executed' })
+
+      await approve({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(
+        'conversation_1',
+        expect.objectContaining({ principalId: 'principal_agent1' })
+      )
+      expect(hoisted.assertTicketVisible).not.toHaveBeenCalled()
+    })
+
+    it('authorizes against the ticket the pending action is scoped to, before deciding', async () => {
+      const pending = pendingRow({ conversationId: null, ticketId: 'ticket_1' })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.decidePendingAction.mockResolvedValue({ ...pending, status: 'approved' })
+      hoisted.executeApprovedPendingAction.mockResolvedValue({
+        status: 'executed',
+        result: { created: true },
+      })
+      hoisted.markPendingActionExecuted.mockResolvedValue({ ...pending, status: 'executed' })
+
+      await approve({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.assertTicketVisible).toHaveBeenCalledWith(
+        'ticket_1',
+        expect.objectContaining({ principalId: 'principal_agent1' })
+      )
+      expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+    })
+
+    it('404s (never executing or deciding) when the approver holds conversation.view but cannot see this ticket-scoped row', async () => {
+      const pending = pendingRow({ conversationId: null, ticketId: 'ticket_1' })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.assertTicketVisible.mockRejectedValue(
+        new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+      )
+
+      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        statusCode: 404,
+      })
+
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
+    })
+
+    it('404s (never executing or deciding) when the approver cannot view the conversation this row is scoped to', async () => {
+      const pending = pendingRow({ conversationId: 'conversation_1', ticketId: null })
+      hoisted.getPendingActionById.mockResolvedValue(pending)
+      hoisted.assertConversationViewable.mockRejectedValue(
+        new NotFoundError('CONVERSATION_NOT_FOUND', 'Conversation not found')
+      )
+
+      await expect(reject({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
+        statusCode: 404,
+      })
+
+      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
+    })
   })
 })
 

@@ -157,6 +157,11 @@ describe('connectorToolSpec', () => {
     expect(connectorToolSpec(makeConnector({ method: 'POST' })).defaultMode).toBe('disabled')
   })
 
+  it('is conversation-only (unified inbox §2.9): resolveRuntimeContext only ever resolves a conversation visitor, so it must never be offered on a ticket-scoped turn', () => {
+    expect(connectorToolSpec(makeConnector({ method: 'GET' })).parents).toEqual(['conversation'])
+    expect(connectorToolSpec(makeConnector({ method: 'POST' })).parents).toEqual(['conversation'])
+  })
+
   it('summarizes with the connector display name', () => {
     const spec = connectorToolSpec(makeConnector({ name: 'Billing Lookup' }))
     expect(spec.summarize({})).toBe('Call Billing Lookup')

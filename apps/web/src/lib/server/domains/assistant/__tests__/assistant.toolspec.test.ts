@@ -65,6 +65,15 @@ describe('assistant.toolspec registry completeness', () => {
     }
   })
 
+  it('every spec declares a non-empty parents array of only conversation/ticket', () => {
+    for (const spec of specs) {
+      expect(spec.parents.length).toBeGreaterThan(0)
+      for (const parent of spec.parents) {
+        expect(['conversation', 'ticket']).toContain(parent)
+      }
+    }
+  })
+
   it('names are unique', () => {
     const names = specs.map((s) => s.name)
     expect(new Set(names).size).toBe(names.length)
@@ -121,6 +130,10 @@ describe('search_knowledge spec', () => {
 
   it('requires no conversation permission (audience scoping is the access control)', () => {
     expect(spec.permissions).toEqual([])
+  })
+
+  it('offers both conversation and ticket parents (unified inbox §2.9): it never keys its own logic off ctx.conversationId', () => {
+    expect(spec.parents).toEqual(['conversation', 'ticket'])
   })
 
   it('summarizes with the query', () => {

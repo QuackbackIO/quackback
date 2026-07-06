@@ -6,7 +6,7 @@
  * callers can never both "win" the same transition, and an UPDATE that
  * matches no row simply returns null instead of throwing.
  */
-import { db, eq, and, lt, gt, assistantPendingActions } from '@/lib/server/db'
+import { db, eq, and, lt, gt, desc, assistantPendingActions } from '@/lib/server/db'
 import type {
   AssistantPendingActionId,
   AssistantInvolvementId,
@@ -107,8 +107,18 @@ export async function proposePendingAction(
   return existing
 }
 
-/** Look up a pending action by its idempotency key — the dedup read
- *  `proposePendingAction` falls back to when its INSERT no-ops on conflict. */
+/**
+ * Look up a pending action by its idempotency key — the dedup read
+ * `proposePendingAction` falls back to when its INSERT no-ops on conflict.
+ * Scoped to `status = 'proposed'`, matching the partial unique index the
+ * conflict itself is against (`assistant_pending_actions_idempotency_key_idx`):
+ * the key alone is NOT unique across a row's full lifetime (an old
+ * executed/rejected/expired row keeps its key), so a bare key match could
+ * otherwise resolve to a stale row instead of the still-proposed one that
+ * actually won the conflicting insert. `orderBy` + `limit(1)` is defensive
+ * determinism, not a real disambiguator — the partial index guarantees at
+ * most one `proposed` row per key at any moment.
+ */
 export async function getPendingActionByIdempotencyKey(
   idempotencyKey: string,
   exec: Executor = db
@@ -116,7 +126,13 @@ export async function getPendingActionByIdempotencyKey(
   const [row] = await exec
     .select()
     .from(assistantPendingActions)
-    .where(eq(assistantPendingActions.idempotencyKey, idempotencyKey))
+    .where(
+      and(
+        eq(assistantPendingActions.idempotencyKey, idempotencyKey),
+        eq(assistantPendingActions.status, 'proposed')
+      )
+    )
+    .orderBy(desc(assistantPendingActions.proposedAt))
     .limit(1)
   return row ?? null
 }

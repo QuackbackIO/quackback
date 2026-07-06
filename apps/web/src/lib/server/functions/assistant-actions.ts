@@ -2,10 +2,14 @@
  * Approve/reject server fns for Quinn's pending write-tool proposals.
  *
  * Base gate is conversation.view (any inbox teammate may open the approval
- * queue); the actual authority check is per-proposal: the approver must hold
- * every permission the proposed tool declares, so approval can never grant
- * more than the approver already has themself. Approve executes immediately
- * via the same claim/execute/finalize pipeline autonomous mode uses.
+ * queue); the actual authority is per-proposal, in two parts: (1) the
+ * approver must be able to VIEW the proposal's actual parent — a real
+ * conversation or ticket visibility check (`assertConversationViewable` /
+ * `assertTicketVisible`), not just the base permission — and (2) the approver
+ * must hold every permission the proposed tool declares, so approval can
+ * never grant more than the approver already has themself. Approve executes
+ * immediately via the same claim/execute/finalize pipeline autonomous mode
+ * uses.
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
@@ -18,6 +22,8 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { NotFoundError, ForbiddenError, ConflictError, DomainException } from '@/lib/shared/errors'
 import type { JsonValue } from '@/lib/shared/json'
 import { logger } from '@/lib/server/logger'
+import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
+import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import {
   getPendingActionById,
   decidePendingAction,
@@ -130,6 +136,18 @@ async function decideAssistantAction(
 ): Promise<AssistantPendingAction> {
   const pending = await getPendingActionById(pendingActionId)
   if (!pending) throw new NotFoundError('PENDING_ACTION_NOT_FOUND', 'Pending action not found')
+
+  // Row-level authz (unified inbox §3.3): the route's base gate only confirms
+  // the approver holds conversation.view SOMEWHERE, not that they may see
+  // THIS proposal's actual item. Both helpers throw NotFoundError (never
+  // Forbidden) when the actor can't view the row's parent, so a proposal
+  // outside the approver's visibility reads exactly like one that doesn't
+  // exist, matching every other conversation/ticket read in the app.
+  if (pending.conversationId) {
+    await assertConversationViewable(pending.conversationId, actor)
+  } else if (pending.ticketId) {
+    await assertTicketVisible(pending.ticketId, actor)
+  }
 
   const spec = await getToolSpecByName(pending.toolName)
   if (!spec) throw new ToolSpecGoneError(pending.toolName)

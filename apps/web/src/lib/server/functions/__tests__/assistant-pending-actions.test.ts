@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fakePendingActionRow } from '@/lib/server/domains/assistant/__tests__/assistant-tool-fixtures'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { NotFoundError } from '@/lib/shared/errors'
 
 // createServerFn → directly-callable fns (mirrors assistant-actions.test.ts).
 vi.mock('@tanstack/react-start', () => ({
@@ -25,7 +26,10 @@ vi.mock('@tanstack/react-start', () => ({
 
 const hoisted = vi.hoisted(() => ({
   requireAuth: vi.fn(),
+  policyActorFromAuth: vi.fn(),
   getPendingActionById: vi.fn(),
+  assertConversationViewable: vi.fn(),
+  assertTicketVisible: vi.fn(),
   log: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -43,10 +47,19 @@ vi.mock('@/lib/server/logger', () => {
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: hoisted.requireAuth,
+  policyActorFromAuth: hoisted.policyActorFromAuth,
 }))
 
 vi.mock('@/lib/server/domains/assistant/pending-actions.service', () => ({
   getPendingActionById: hoisted.getPendingActionById,
+}))
+
+vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
+  assertConversationViewable: hoisted.assertConversationViewable,
+}))
+
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  assertTicketVisible: hoisted.assertTicketVisible,
 }))
 
 import { getAssistantPendingActionFn } from '../assistant-pending-actions'
@@ -75,12 +88,19 @@ function expectDTOFrom(row: Record<string, unknown>): Partial<AssistantPendingAc
   }
 }
 
+function actorWith(permissions: string[]) {
+  return { principalId: 'principal_agent1', role: 'member', permissions: new Set(permissions) }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const fetchPendingAction = (data: any) => getAssistantPendingActionFn({ data })
 
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.requireAuth.mockResolvedValue(AUTH)
+  hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_VIEW]))
+  hoisted.assertConversationViewable.mockResolvedValue(undefined)
+  hoisted.assertTicketVisible.mockResolvedValue(undefined)
 })
 
 describe('getAssistantPendingActionFn', () => {
@@ -122,6 +142,46 @@ describe('getAssistantPendingActionFn', () => {
 
     await expect(fetchPendingAction({ pendingActionId: 'nope' })).rejects.toMatchObject({
       statusCode: 404,
+    })
+  })
+
+  describe('row-level parent authz (unified inbox §3.3)', () => {
+    it('authorizes a conversation-scoped row against the conversation, not the ticket helper', async () => {
+      const row = fakePendingActionRow({ conversationId: 'conversation_1', ticketId: null })
+      hoisted.getPendingActionById.mockResolvedValue(row)
+
+      await fetchPendingAction({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.assertConversationViewable).toHaveBeenCalledWith(
+        'conversation_1',
+        expect.objectContaining({ principalId: 'principal_agent1' })
+      )
+      expect(hoisted.assertTicketVisible).not.toHaveBeenCalled()
+    })
+
+    it('authorizes a ticket-scoped row against the ticket, not the conversation helper', async () => {
+      const row = fakePendingActionRow({ conversationId: null, ticketId: 'ticket_1' })
+      hoisted.getPendingActionById.mockResolvedValue(row)
+
+      await fetchPendingAction({ pendingActionId: 'assistant_action_1' })
+
+      expect(hoisted.assertTicketVisible).toHaveBeenCalledWith(
+        'ticket_1',
+        expect.objectContaining({ principalId: 'principal_agent1' })
+      )
+      expect(hoisted.assertConversationViewable).not.toHaveBeenCalled()
+    })
+
+    it('404s when the caller holds conversation.view but cannot see this ticket-scoped row', async () => {
+      const row = fakePendingActionRow({ conversationId: null, ticketId: 'ticket_1' })
+      hoisted.getPendingActionById.mockResolvedValue(row)
+      hoisted.assertTicketVisible.mockRejectedValue(
+        new NotFoundError('TICKET_NOT_FOUND', 'Ticket not found')
+      )
+
+      await expect(
+        fetchPendingAction({ pendingActionId: 'assistant_action_1' })
+      ).rejects.toMatchObject({ statusCode: 404 })
     })
   })
 })

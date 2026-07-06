@@ -273,6 +273,20 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
   defaultMode: ToolControlMode
   /** Checked via can(quinnActor, p) before execute (wiring lands in a later task). */
   permissions: readonly PermissionKey[]
+  /**
+   * Which kind(s) of item this tool can act on (unified inbox §2.9/§3.3): a
+   * turn grounded on a ticket must never offer, propose, or execute a tool
+   * that only knows how to act on a conversation. `assembleAssistantToolset`
+   * (assistant.tools.ts) drops any spec whose `parents` doesn't include the
+   * turn's actual parent kind BEFORE it ever reaches mode resolution or the
+   * model — so a conversation-only tool simply never appears in a
+   * ticket-scoped turn's catalogue, rather than appearing and reporting a
+   * "no linked conversation" no-op. Every write tool defined in this file
+   * predates ticket-scoped turns and only ever keys off `ctx.conversationId`,
+   * so `['conversation']` is the correct default for all of them; a future
+   * ticket-aware write tool declares `['ticket']` or both explicitly.
+   */
+  parents: readonly ('conversation' | 'ticket')[]
   /** The TanStack tool definition: model-facing name, description, and zod schemas. */
   definition: ToolDefinition<any, any, string>
   execute(args: In, ctx: AssistantToolContext): Promise<Out>
@@ -432,7 +446,33 @@ export const captureFeedbackTool = toolDefinition({
   ),
 })
 
-const NO_CONVERSATION_NOTE = 'No linked conversation.'
+/**
+ * The sentinel note every conversation-only write tool returns when
+ * `ctx.conversationId` is null (no linked conversation to act on — the
+ * sandbox, or, absent the `parents` gate above, a ticket-scoped turn).
+ * Exported so `isNoParentResult` (below) and `assistant.tools.ts`'s
+ * approval-execution path can recognize this specific no-op by more than a
+ * duplicated string literal.
+ */
+export const NO_CONVERSATION_NOTE = 'No linked conversation.'
+
+/**
+ * Whether a tool's result reports the no-parent no-op (see
+ * `NO_CONVERSATION_NOTE`): a defense-in-depth check, independent of the
+ * `parents` catalogue gate above, for `executeApprovedPendingAction`
+ * (assistant.tools.ts) — a pending action approved for a tool that (for any
+ * reason, past or future) finds no parent to act on must settle as `failed`,
+ * never `executed`. Checked structurally against the shared sentinel rather
+ * than the caller re-matching the note text itself.
+ */
+export function isNoParentResult(result: unknown): boolean {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'note' in result &&
+    (result as { note?: unknown }).note === NO_CONVERSATION_NOTE
+  )
+}
 
 /**
  * One-row conversation snapshot for the write executors. One shared shape
@@ -603,12 +643,19 @@ function defineToolSpec<In, Out>(spec: {
   supportedModes: readonly ToolControlMode[]
   defaultMode: ToolControlMode
   permissions: readonly PermissionKey[]
+  /** Defaults to `['conversation']` — every write tool defined below predates
+   *  ticket-scoped turns; see the field's doc on `AssistantToolSpec`. */
+  parents?: readonly ('conversation' | 'ticket')[]
   definition: ToolDefinition<any, any, string>
   execute: (args: In, ctx: AssistantToolContext) => Promise<Out>
   summarize: (args: In) => string
   idempotencyKey?: (args: In, ctx: AssistantToolContext) => string
 }): AssistantToolSpec {
-  return { name: spec.definition.name, ...spec } as AssistantToolSpec
+  return {
+    name: spec.definition.name,
+    parents: spec.parents ?? ['conversation'],
+    ...spec,
+  } as AssistantToolSpec
 }
 
 const SPECS: readonly AssistantToolSpec[] = [
@@ -623,6 +670,12 @@ const SPECS: readonly AssistantToolSpec[] = [
     // Knowledge base reads are already scoped by viewer audience; there is no
     // separate conversation- or ticket-shaped permission to check here.
     permissions: [],
+    // Unlike the write tools below, this never keys off ctx.conversationId
+    // for its own logic (only the optional past-conversation-summaries
+    // source does, and that source already degrades to no results with no
+    // conversation — see AssistantToolContext's own doc), so it belongs on
+    // both a conversation-scoped and a ticket-scoped turn.
+    parents: ['conversation', 'ticket'],
     definition: searchKnowledgeTool,
     execute: executeSearchKnowledge,
     summarize: (args) => `Search knowledge for "${args.query}"`,

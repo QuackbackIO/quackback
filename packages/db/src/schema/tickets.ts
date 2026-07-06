@@ -156,8 +156,12 @@ export const tickets = pgTable(
     // conversations_last_message_at_id_idx. nullsFirst matches the migration's
     // plain DESC (postgres default).
     index('tickets_updated_at_id_idx').on(table.updatedAt.desc().nullsFirst(), table.id),
-    // Keyset support for the 'created' saved-view sort, ascending (oldest
-    // first) unlike conversations_created_at_id_idx's DESC ordering.
+    // Keyset support for the 'created' saved-view sort: createdAt DESC
+    // (newest first), the same convention as tickets_updated_at_id_idx above
+    // — 'created' is not an oldest-first exception. Declared ascending here
+    // (no .desc()) rather than matching conversations_created_at_id_idx's
+    // explicit .desc(): Postgres serves the DESC/DESC keyset scan via a
+    // backward scan of this ascending (createdAt, id) index just as well.
     index('tickets_created_at_id_idx').on(table.createdAt, table.id),
   ]
 )

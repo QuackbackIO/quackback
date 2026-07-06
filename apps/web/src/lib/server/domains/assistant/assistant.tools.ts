@@ -24,7 +24,12 @@ import { can } from '@/lib/server/policy/authorize'
 import { logger } from '@/lib/server/logger'
 import type { ConversationId, TicketId } from '@quackback/ids'
 import type { AssistantToolContext, AssistantToolSpec, ToolControlMode } from './assistant.toolspec'
-import { ASSISTANT_TOOL_SPECS, resolveToolSpecs } from './assistant.toolspec'
+import {
+  ASSISTANT_TOOL_SPECS,
+  resolveToolSpecs,
+  isNoParentResult,
+  NO_CONVERSATION_NOTE,
+} from './assistant.toolspec'
 import {
   claimToolCall,
   finalizeToolCall,
@@ -108,6 +113,20 @@ export function resolveEffectiveToolMode(
     if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
   }
   return mode
+}
+
+/**
+ * The turn's actual parent kind (unified inbox §2.9/§3.3), for filtering the
+ * catalogue against each spec's `parents`. `conversationId` wins when both
+ * happen to be set (never true today — a turn grounds on exactly one item),
+ * mirroring `runWithPipeline`'s own approval-parent choice below; the null-null
+ * sandbox falls back to 'conversation', matching every pre-ticket spec's
+ * existing (conversation-only) behavior there unchanged.
+ */
+function turnParentKind(ctx: AssistantToolContext): 'conversation' | 'ticket' {
+  if (ctx.conversationId != null) return 'conversation'
+  if (ctx.ticketId != null) return 'ticket'
+  return 'conversation'
 }
 
 /** JSON.stringify with object keys sorted, so equivalent args always hash the same. */
@@ -257,6 +276,21 @@ async function executeAndFinalize(
   const startedAt = Date.now()
   try {
     const result = await spec.execute(args, ctx)
+    // Defense in depth alongside the `parents` catalogue gate (assembleAssistantToolset):
+    // a tool that reports it found no parent to act on (see `NO_CONVERSATION_NOTE`)
+    // is never a successful execution, even if it somehow ran — most notably
+    // `executeApprovedPendingAction`, which runs a spec looked up straight off
+    // a stored pending-action row rather than this turn's filtered catalogue.
+    if (isNoParentResult(result)) {
+      if (claimed) {
+        await finalizeToolCall(claimed.id, {
+          status: 'failed',
+          error: NO_CONVERSATION_NOTE,
+          latencyMs: Date.now() - startedAt,
+        })
+      }
+      return { ok: false, error: NO_CONVERSATION_NOTE }
+    }
     if (claimed) {
       await finalizeToolCall(claimed.id, {
         status: 'succeeded',
@@ -355,13 +389,20 @@ export async function assembleAssistantToolset(
   specs?: readonly AssistantToolSpec[],
   controls?: AssistantToolControls
 ): Promise<{ tools: ReturnType<typeof toLegacyServerTool>[]; activeSpecs: AssistantToolSpec[] }> {
+  // Unified inbox §2.9/§3.3: never even consider a spec whose `parents`
+  // excludes this turn's actual parent kind — a conversation-only write tool
+  // (or a connector tool that only resolves conversation context) must not
+  // reach mode resolution, proposal, or the model at all on a ticket-scoped
+  // turn. See `parents`'s own doc on AssistantToolSpec.
+  const parentKind = turnParentKind(ctx)
+
   const actionsEnabled = await isFeatureEnabled('assistantActions')
   if (!actionsEnabled) {
     // Flag off exposes ONLY the read tools, unwrapped. Write specs must never
     // register without the pipeline, so a growing catalogue cannot widen the
     // legacy surface on its own.
     const legacySpecs = (specs ?? Object.values(ASSISTANT_TOOL_SPECS)).filter(
-      (spec) => spec.risk === 'read'
+      (spec) => spec.risk === 'read' && spec.parents.includes(parentKind)
     )
     return {
       tools: legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)),
@@ -369,7 +410,9 @@ export async function assembleAssistantToolset(
     }
   }
 
-  const resolvedSpecs = specs ?? (await resolveToolSpecs())
+  const resolvedSpecs = (specs ?? (await resolveToolSpecs())).filter((spec) =>
+    spec.parents.includes(parentKind)
+  )
   const resolvedControls = controls ?? (await getAssistantToolControls())
   const active = resolvedSpecs
     .map((spec) => ({

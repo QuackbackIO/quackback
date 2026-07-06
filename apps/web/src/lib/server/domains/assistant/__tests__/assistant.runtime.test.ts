@@ -1066,6 +1066,7 @@ describe('runAssistantTurn', () => {
     expect(lastLoggedMetadata).not.toHaveProperty('guidanceRuleIds')
     expect(lastLoggedMetadata).toEqual({
       conversationId: null,
+      ticketId: null,
       surface: 'widget',
       attempt: 0,
       answerKind: 'no_sources',
@@ -1454,6 +1455,21 @@ describe('runAssistantTurn: ticket-scoped grounding (unified inbox §2.9)', () =
 
     expect(mockGetTicket).not.toHaveBeenCalled()
     expect(mockListTicketMessages).not.toHaveBeenCalled()
+  })
+
+  it('records ticketId (not conversationId) in the usage-log metadata for a ticket-scoped turn', async () => {
+    mockGetTicket.mockResolvedValue(fakeTicket())
+    mockListTicketMessages.mockResolvedValue({ messages: [], hasMore: false })
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('question'),
+      ticketId: 'ticket_1' as never,
+      surface: 'copilot',
+    })
+
+    expect(lastLoggedMetadata?.ticketId).toBe('ticket_1')
+    expect(lastLoggedMetadata?.conversationId).toBeNull()
   })
 })
 

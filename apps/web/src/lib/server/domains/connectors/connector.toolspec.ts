@@ -152,6 +152,14 @@ export function connectorToolSpec(connector: DataConnector): AssistantToolSpec {
       risk === 'read' ? ['disabled', 'autonomous'] : ['disabled', 'approval', 'autonomous'],
     defaultMode: 'disabled',
     permissions: [],
+    // Deferred, not a bug: resolveRuntimeContext above only ever resolves
+    // `customer.*` builtins from a linked CONVERSATION's visitor. A
+    // ticket-scoped turn has a requester, not a visitor, and no wiring here
+    // to look one up — rather than silently execute with an empty runtime
+    // context, this tool is simply not offered on a ticket-scoped turn (see
+    // `parents` on AssistantToolSpec). Ticket/requester connector context is
+    // future work.
+    parents: ['conversation'],
     definition,
     execute: (args, ctx) => executeConnectorTool(connector, args as ConnectorToolArgs, ctx),
     summarize: () => `Call ${connector.name}`,

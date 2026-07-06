@@ -132,6 +132,7 @@ function makeFakeWriteSpec(overrides: Partial<AssistantToolSpec> = {}): Assistan
     supportedModes: ['disabled', 'approval', 'autonomous'],
     defaultMode: 'approval',
     permissions: [PERMISSIONS.CONVERSATION_SET_STATUS],
+    parents: ['conversation'],
     definition: fakeWriteDefinition,
     execute: mockWriteExecute,
     summarize: (args) => `Close conversation: ${(args as { reason: string }).reason}`,
@@ -160,6 +161,7 @@ function makeFakeReadSpec(overrides: Partial<AssistantToolSpec> = {}): Assistant
     supportedModes: ['disabled', 'autonomous'],
     defaultMode: 'autonomous',
     permissions: [],
+    parents: ['conversation', 'ticket'],
     definition: fakeReadDefinition,
     execute: vi.fn(),
     summarize: () => 'Lookup thing',
@@ -336,6 +338,61 @@ describe('assembleAssistantToolset: control-mode gating', () => {
   })
 })
 
+describe('assembleAssistantToolset: parent-kind gating (unified inbox §2.9/§3.3)', () => {
+  it('never offers a conversation-only write tool on a ticket-scoped turn', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'approval' })
+
+    const c = ctx({ conversationId: null, ticketId: 'ticket_1' as never })
+    const tools = await assembleTools(c, [makeFakeWriteSpec()])
+
+    expect(tools).toHaveLength(0)
+  })
+
+  it('still offers a conversation-only write tool on a conversation-scoped turn', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'approval' })
+
+    const c = ctx({ conversationId: 'conversation_1' as never })
+    const tools = await assembleTools(c, [makeFakeWriteSpec()])
+
+    expect(tools.map((t) => t.name)).toEqual(['close_conversation'])
+  })
+
+  it('offers a tool declaring both parents on a ticket-scoped turn too', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantToolControls.mockResolvedValue({})
+
+    const c = ctx({ conversationId: null, ticketId: 'ticket_1' as never })
+    const tools = await assembleTools(c, [
+      makeFakeReadSpec({ parents: ['conversation', 'ticket'] }),
+    ])
+
+    expect(tools.map((t) => t.name)).toEqual(['lookup_thing'])
+  })
+
+  it('filters the same way with the assistantActions flag off (legacy read-only branch)', async () => {
+    mockActionsFlag(false)
+
+    const c = ctx({ conversationId: null, ticketId: 'ticket_1' as never })
+    // A conversation-only read spec (hypothetical: today's only read tool,
+    // search_knowledge, declares both) must still be excluded here too.
+    const tools = await assembleTools(c, [makeFakeReadSpec({ parents: ['conversation'] })])
+
+    expect(tools).toHaveLength(0)
+  })
+
+  it('a null-null context (sandbox) falls back to conversation parent, matching pre-ticket behavior', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'autonomous' })
+
+    const c = ctx({ conversationId: null, simulate: true })
+    const tools = await assembleTools(c, [makeFakeWriteSpec({ defaultMode: 'autonomous' })])
+
+    expect(tools.map((t) => t.name)).toEqual(['close_conversation'])
+  })
+})
+
 describe('assembleAssistantToolset', () => {
   it('pairs each wired tool with the spec that produced it, index-aligned', async () => {
     mockActionsFlag(false)
@@ -455,7 +512,13 @@ describe('assembleAssistantToolset: write-tool pipeline (approval mode)', () => 
       ticketId: 'ticket_1' as never,
       involvementId: 'assistant_involvement_1' as never,
     })
-    const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec()])
+    // This test is about runWithPipeline's parent-choice logic once a write
+    // tool IS on a ticket-scoped turn's catalogue, a separate concern from
+    // the parents catalogue gate itself (covered in its own describe block
+    // below) — so the fake spec here opts into both parents explicitly.
+    const tool = await findTool(c, 'close_conversation', [
+      makeFakeWriteSpec({ parents: ['conversation', 'ticket'] }),
+    ])
     await tool.execute({ reason: 'resolved' }, toolCtx(c))
 
     expect(mockProposePendingAction).toHaveBeenCalledWith({
@@ -841,6 +904,24 @@ describe('executeApprovedPendingAction', () => {
     expect(mockWriteExecute).not.toHaveBeenCalled()
     expect(mockFinalizeToolCall).not.toHaveBeenCalled()
     expect(out).toEqual({ status: 'skipped_duplicate' })
+  })
+
+  it('never marks a no-parent no-op result as executed (defense in depth alongside the parents catalogue gate)', async () => {
+    // Forces the exact no-op shape a conversation-only write tool's execute
+    // body returns when it finds no parent to act on (assistant.toolspec.ts's
+    // NO_CONVERSATION_NOTE) — regardless of how the pending action reached
+    // this path, the settle must be 'failed', never 'executed'.
+    mockClaimToolCall.mockResolvedValue({ id: 'assistant_tool_call_1', status: 'started' })
+    mockWriteExecute.mockResolvedValue({ closed: false, note: 'No linked conversation.' })
+
+    const { executeApprovedPendingAction } = await import('../assistant.tools')
+    const out = await executeApprovedPendingAction(makeFakeWriteSpec(), fakePendingAction(), ctx())
+
+    expect(out).toEqual({ status: 'failed', error: 'No linked conversation.' })
+    expect(mockFinalizeToolCall).toHaveBeenCalledWith(
+      'assistant_tool_call_1',
+      expect.objectContaining({ status: 'failed', error: 'No linked conversation.' })
+    )
   })
 })
 

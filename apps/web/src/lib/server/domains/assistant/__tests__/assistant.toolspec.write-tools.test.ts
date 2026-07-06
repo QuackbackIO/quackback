@@ -74,6 +74,10 @@ describe('set_attribute', () => {
     expect(spec.permissions).toEqual([PERMISSIONS.CONVERSATION_SET_ATTRIBUTES])
   })
 
+  it('is conversation-only (unified inbox §2.9): never offered on a ticket-scoped turn', () => {
+    expect(spec.parents).toEqual(['conversation'])
+  })
+
   it('summarizes with the attribute key', () => {
     expect(spec.summarize({ key: 'plan_tier', value: 'pro' })).toBe('Set attribute "plan_tier"')
   })
@@ -111,7 +115,9 @@ describe('set_attribute', () => {
   })
 
   it('applies the write on the happy path', async () => {
-    mockSetConversationAttribute.mockResolvedValue({ plan_tier: { v: 'pro', src: 'ai', at: '2026-01-01' } })
+    mockSetConversationAttribute.mockResolvedValue({
+      plan_tier: { v: 'pro', src: 'ai', at: '2026-01-01' },
+    })
     const c = ctx({ conversationId: 'conversation_1' as never })
     const out = await spec.execute({ key: 'plan_tier', value: 'pro' }, c)
     expect(mockSetConversationAttribute).toHaveBeenCalledWith(
@@ -148,6 +154,10 @@ describe('end_conversation', () => {
     expect(spec.supportedModes).toEqual(['disabled', 'approval', 'autonomous'])
     expect(spec.defaultMode).toBe('approval')
     expect(spec.permissions).toEqual([PERMISSIONS.CONVERSATION_SET_STATUS])
+  })
+
+  it('is conversation-only (unified inbox §2.9): never offered on a ticket-scoped turn', () => {
+    expect(spec.parents).toEqual(['conversation'])
   })
 
   it('summarizes as a fixed string regardless of the reason', () => {
@@ -203,6 +213,10 @@ describe('create_ticket', () => {
     expect(spec.supportedModes).toEqual(['disabled', 'approval', 'autonomous'])
     expect(spec.defaultMode).toBe('approval')
     expect(spec.permissions).toEqual([PERMISSIONS.TICKET_CREATE])
+  })
+
+  it("is conversation-only (unified inbox §2.9): never offered on a ticket-scoped turn (it creates a NEW ticket from a conversation, unrelated to the turn's own ticket)", () => {
+    expect(spec.parents).toEqual(['conversation'])
   })
 
   it('summarizes with the ticket type and title', () => {
@@ -293,6 +307,10 @@ describe('capture_feedback', () => {
     expect(spec.permissions).toEqual([PERMISSIONS.POST_CREATE, PERMISSIONS.POST_VOTE_ON_BEHALF])
   })
 
+  it('is conversation-only (unified inbox §2.9): never offered on a ticket-scoped turn', () => {
+    expect(spec.parents).toEqual(['conversation'])
+  })
+
   it('never supports autonomous mode', () => {
     expect(spec.supportedModes).toEqual(['disabled', 'approval'])
     expect(spec.supportedModes).not.toContain('autonomous')
@@ -338,7 +356,10 @@ describe('capture_feedback', () => {
       created: true,
       boardSlug: 'feature-requests',
     })
-    const c = ctx({ conversationId: 'conversation_1' as never, assistantPrincipalId: 'principal_assistant' as never })
+    const c = ctx({
+      conversationId: 'conversation_1' as never,
+      assistantPrincipalId: 'principal_assistant' as never,
+    })
     const out = await spec.execute({ boardId: 'board_1', title: 'Add dark mode' }, c)
     expect(mockCreatePostFromConversation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -348,7 +369,10 @@ describe('capture_feedback', () => {
       }),
       expect.objectContaining({
         agentPrincipalId: 'principal_assistant',
-        agent: expect.objectContaining({ principalId: 'principal_assistant', displayName: 'Quinn' }),
+        agent: expect.objectContaining({
+          principalId: 'principal_assistant',
+          displayName: 'Quinn',
+        }),
       })
     )
     expect(out).toEqual({ created: true, postId: 'post_1' })

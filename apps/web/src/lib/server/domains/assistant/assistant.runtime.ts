@@ -822,6 +822,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       model,
       metadata: {
         conversationId: input.conversationId ?? null,
+        // Unified inbox §2.9: the ticket-scoped copilot turn's analog of
+        // conversationId above, same always-present-defaulting-null shape (a
+        // turn grounds on exactly one of the two, never both).
+        ticketId: input.ticketId ?? null,
         // The only signal that distinguishes a copilot turn from every other
         // surface in ai_usage_log — see analytics/copilot-usage.ts, which
         // counts questions and groups per-teammate activity off this field.
