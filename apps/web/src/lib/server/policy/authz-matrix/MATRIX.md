@@ -234,7 +234,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation-attributes.ts`::updateConversationAttributeFn | conversation.manage |
 | `lib/server/functions/conversation-attributes.ts`::archiveConversationAttributeFn | conversation.manage |
 | `lib/server/functions/conversation-attributes.ts`::restoreConversationAttributeFn | conversation.manage |
-| `lib/server/functions/conversation-attributes.ts`::setConversationAttributeValueFn | conversation.set_attributes |
+| `lib/server/functions/conversation-attributes.ts`::setConversationAttributeValueFn | DYNAMIC (conversation.set_attributes | ticket.set_status) |
 | `lib/server/functions/conversation-segments.ts`::fetchInboxSegmentsWithCountsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsWithCountsFn | conversation.view |

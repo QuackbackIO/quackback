@@ -1,6 +1,7 @@
 /**
  * The inbox detail panel's Attributes section: one typed inline editor per
- * live definition. Every edit goes through the single teammate write path
+ * live definition, for a conversation OR a ticket (unified inbox §3.5). Every
+ * edit goes through the single teammate write path
  * (setConversationAttributeValueFn), which stores a { v, src: 'teammate', at }
  * envelope. Renders nothing while no definitions exist so the panel stays
  * clean for workspaces that haven't adopted attributes.
@@ -9,13 +10,20 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDownIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, TicketId } from '@quackback/ids'
 import { setConversationAttributeValueFn } from '@/lib/server/functions/conversation-attributes'
 import {
   conversationAttributeQueries,
   type ConversationAttributeItem,
 } from '@/lib/client/queries/conversation-attributes'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
+import { ticketKeys } from '@/lib/client/queries/tickets'
 import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
+
+/** The dual target this editor writes to — mirrors SetAttributeTarget. */
+export type ConversationAttributesEditorTarget =
+  | { conversationId: ConversationId }
+  | { ticketId: TicketId }
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -168,12 +176,12 @@ function AttributeEditor({
 }
 
 export function ConversationAttributesEditor({
-  conversationId,
+  target,
   customAttributes,
   onChanged,
   enabled = true,
 }: {
-  conversationId: ConversationId
+  target: ConversationAttributesEditorTarget
   customAttributes: Record<string, unknown>
   onChanged: () => void
   /** Skip fetching while the panel is hidden (mirrors the sibling queries). */
@@ -187,10 +195,13 @@ export function ConversationAttributesEditor({
 
   const setValue = useMutation({
     mutationFn: (input: { key: string; value: unknown }) =>
-      setConversationAttributeValueFn({ data: { conversationId, ...input } }),
+      setConversationAttributeValueFn({ data: { ...target, ...input } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ['admin', 'inbox', 'thread', conversationId],
+        queryKey:
+          'conversationId' in target
+            ? conversationKeys.agentThread(target.conversationId)
+            : ticketKeys.detail(target.ticketId),
       })
       onChanged()
     },

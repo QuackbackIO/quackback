@@ -205,6 +205,17 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'bulk action — assign/assign_team require conversation.assign, the rest conversation.set_status'
   ),
 
+  // Attribute-value write: the permission depends on the target (conversation
+  // vs ticket), so the gate is bare and the per-target permission is asserted
+  // at runtime. There is no dedicated ticket-attribute permission in the
+  // catalogue, so a ticket target reuses ticket.set_status (same precedent as
+  // softDeleteTicket).
+  'lib/server/functions/conversation-attributes.ts::setConversationAttributeValueFn':
+    DYNAMIC_PERMISSION(
+      [PERMISSIONS.CONVERSATION_SET_ATTRIBUTES, PERMISSIONS.TICKET_SET_STATUS],
+      'target-dependent — a conversation target requires conversation.set_attributes, a ticket target requires ticket.set_status'
+    ),
+
   // Public-tier REST reads: a valid key is required, but the data is portal-public
   // so no permission is checked. Anonymous (no key) is still rejected.
   'routes/api/v1/apps/boards.ts::GET': PUBLIC_DATA('public board list'),

@@ -366,7 +366,7 @@ export function ConversationDetailPanel({
         {/* Attributes — typed inline editors for the admin-defined registry;
               renders nothing while no definitions exist. */}
         <ConversationAttributesEditor
-          conversationId={conversation.id}
+          target={{ conversationId: conversation.id }}
           customAttributes={conversation.customAttributes}
           onChanged={onChanged}
           enabled={isVisible}
