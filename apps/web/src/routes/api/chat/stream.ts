@@ -9,13 +9,15 @@ import {
   conversations,
   conversationMessages,
   principal,
+  tickets,
 } from '@/lib/server/db'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { auth } from '@/lib/server/auth'
 import { verifyStreamToken } from '@/lib/server/realtime/stream-token'
 import {
   conversationChannel,
   CONVERSATION_INBOX_CHANNEL,
+  ticketChannel,
   parseConversationFrame,
   isOwnTyping,
   type ParsedConversationFrame,
@@ -24,6 +26,7 @@ import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
 import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { canViewConversation } from '@/lib/server/policy/conversation'
+import { ticketFilter } from '@/lib/server/policy/tickets'
 import { isTeamMember } from '@/lib/shared/roles'
 import {
   loadAuthors,
@@ -95,18 +98,27 @@ export const Route = createFileRoute('/api/chat/stream')({
         const url = new URL(request.url)
         const scope = url.searchParams.get('scope') // 'inbox' for agents
         const conversationIdParam = url.searchParams.get('conversationId')
+        const ticketIdParam = url.searchParams.get('ticketId')
 
         const me = await resolveStreamPrincipal(request)
         if (!me) {
           return new Response('Unauthorized', { status: 401 })
         }
 
-        // Feature-flag gate: stop streams when every conversation surface is
-        // off (a token may have been minted before the flag flipped). Portal
-        // access for visitors was enforced when the stream token was minted.
-        const { isConversationsEnabled } =
+        // Feature-flag gate: stop streams when the relevant surface is off (a
+        // token may have been minted before the flag flipped). Portal access
+        // for visitors was enforced when the stream token was minted. A ticket
+        // stream is its own surface (support tickets), independent of the
+        // messenger/portal-support conversation surfaces `isConversationsEnabled`
+        // covers — so it passes when EITHER is on, not gated behind
+        // conversations being enabled too.
+        const { isConversationsEnabled, isSupportTicketsEnabled } =
           await import('@/lib/server/domains/settings/settings.support')
-        if (!(await isConversationsEnabled())) {
+        if (ticketIdParam) {
+          if (!((await isSupportTicketsEnabled()) || (await isConversationsEnabled()))) {
+            return new Response('Not found', { status: 404 })
+          }
+        } else if (!(await isConversationsEnabled())) {
           return new Response('Not found', { status: 404 })
         }
 
@@ -154,6 +166,32 @@ export const Route = createFileRoute('/api/chat/stream')({
           }
           channels.push(conversationChannel(conversationId))
           backfillConversationId = conversationId
+        } else if (ticketIdParam) {
+          // Team-member-only in this phase (unified inbox §3.2, M3) — there is
+          // no requester-facing ticket stream yet, so unlike conversationId
+          // above there's no visitor/portal branch to re-gate.
+          if (!isTeamMember(me.role)) {
+            return new Response('Forbidden', { status: 403 })
+          }
+          const ticketId = ticketIdParam as TicketId
+          // One query resolves existence + visibility (mirrors
+          // assistant/copilot-gate.ts's assertTicketViewable, duplicated here
+          // rather than imported so routes never depends on the assistant
+          // domain — see policy/dep-graph/README.md) — 404, never 403, so a
+          // team member without ticket.view on THIS ticket can't probe ids.
+          const [ticketRow] = await db
+            .select({ id: tickets.id })
+            .from(tickets)
+            .where(and(eq(tickets.id, ticketId), ticketFilter(actor)))
+            .limit(1)
+          if (!ticketRow) {
+            return new Response('Not found', { status: 404 })
+          }
+          // No backfill yet for a ticket's own stream (no ticket-thread analogue
+          // of findBackfillCursor) — a reconnect just resumes live, same as the
+          // inbox/presence scopes. Follow-up if ticket-detail reconnect
+          // resilience is needed later.
+          channels.push(ticketChannel(ticketId))
         } else {
           return new Response('Bad request', { status: 400 })
         }

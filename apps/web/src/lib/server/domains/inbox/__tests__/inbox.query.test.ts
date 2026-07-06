@@ -27,6 +27,10 @@ vi.mock('@/lib/server/config', () => ({
   config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
   getBaseUrl: () => 'http://localhost:3000',
 }))
+// Neutralize the ticket domain's realtime publish (unified inbox §3.2, M3):
+// createTicket/setTicketStatus now fire it too, and it would otherwise touch
+// the real (unconfigured-in-tests) Redis client mid-rollback.
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {

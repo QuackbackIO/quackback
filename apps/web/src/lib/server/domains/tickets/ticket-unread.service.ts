@@ -20,6 +20,7 @@ import {
   sql,
 } from '@/lib/server/db'
 import type { TicketId } from '@quackback/ids'
+import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 
 export type TicketUnreadSide = 'requester' | 'assignee'
 
@@ -97,18 +98,35 @@ export async function ticketUnreadMapForAgent(
   return map
 }
 
-/** Mark a ticket read for the assignee (agent) side. */
+/** Mark a ticket read for the assignee (agent) side. Publishes a 'ticket_read'
+ *  (unified inbox §3.2, M3) so another tab/teammate's open thread or inbox
+ *  list clears the badge live — `side: 'agent'` mirrors the conversation
+ *  domain's read event exactly (see conversation-channels.ts). */
 export async function markTicketReadForAgent(
   ticketId: TicketId,
   at: Date = new Date()
 ): Promise<void> {
   await db.update(tickets).set({ assigneeLastReadAt: at }).where(eq(tickets.id, ticketId))
+  publishTicketEvent(ticketId, {
+    kind: 'ticket_read',
+    ticketId,
+    side: 'agent',
+    at: at.toISOString(),
+  })
 }
 
-/** Mark a ticket read for the requester side. */
+/** Mark a ticket read for the requester side. Published as `side: 'visitor'`
+ *  for symmetry, though nothing in the agent inbox reacts to it today (see
+ *  `agentEventChangesInboxList`'s `ticket_read` branch). */
 export async function markTicketReadForRequester(
   ticketId: TicketId,
   at: Date = new Date()
 ): Promise<void> {
   await db.update(tickets).set({ requesterLastReadAt: at }).where(eq(tickets.id, ticketId))
+  publishTicketEvent(ticketId, {
+    kind: 'ticket_read',
+    ticketId,
+    side: 'visitor',
+    at: at.toISOString(),
+  })
 }

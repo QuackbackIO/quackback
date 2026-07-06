@@ -37,6 +37,11 @@ vi.mock('../ticket.webhooks', () => ({
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Neutralize the real Redis-backed realtime publish (unified inbox §3.2, M3):
+// createTicket/setTicketStatus now fire it too, and this suite isn't
+// exercising that behavior.
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
+
 import { createTicket, setTicketStatus } from '../ticket.service'
 import {
   linkTicketToTracker,

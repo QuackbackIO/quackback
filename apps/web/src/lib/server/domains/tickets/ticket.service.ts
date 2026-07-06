@@ -49,6 +49,7 @@ import { logger } from '@/lib/server/logger'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
 import { getStageLabels } from '../settings/settings.tickets'
 import { createNotification } from '../notifications/notification.service'
+import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { emitTicketCreated, emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
 import { ticketFtsMatch } from './ticket-search.service'
@@ -381,7 +382,13 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     category: defaultStatus.category,
     stage: resolveStage(defaultStatus),
   })
-  return ticketRowToDTO(created)
+  const dto = await ticketRowToDTO(created)
+  // Realtime signal (unified inbox §3.2, M3): a fresh ticket is a new inbox
+  // row, so the same 'ticket_updated' kind the update paths use below also
+  // covers creation, mirroring how the conversation domain's 'conversation'
+  // event has no separate created/updated split.
+  publishTicketEvent(created.id, { kind: 'ticket_updated', ticket: dto })
+  return dto
 }
 
 /** Open a ticket as an agent (any type, optional requester). */
@@ -432,6 +439,12 @@ export async function setTicketStatus(
 
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
 
+  // Realtime signal (unified inbox §3.2, M3), unconditional like the webhook
+  // below — mirrors conversation.service's publish-right-after-the-UPDATE
+  // pattern. Computed once and reused for the function's return value.
+  const dto = await ticketRowToDTO(updated)
+  publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
+
   // Agent/integration-facing signal: every internal status move fires a hook
   // (mirrors conversation.status_changed), reporting the category axis.
   void emitTicketStatusChanged(
@@ -477,7 +490,7 @@ export async function setTicketStatus(
     }
   }
 
-  return ticketRowToDTO(updated)
+  return dto
 }
 
 /**
@@ -608,6 +621,12 @@ export async function assignTicket(
 
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
 
+  // Realtime signal (unified inbox §3.2, M3): unconditional, unlike the
+  // webhook below — an inbox row re-render on a no-op re-assign is harmless,
+  // while a missed signal on an actual reorder-relevant change is not.
+  const dto = await ticketRowToDTO(updated)
+  publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
+
   // Only signal when an assignee actually moved (a no-op re-assign must not fire).
   if (
     existing.assigneePrincipalId !== updated.assigneePrincipalId ||
@@ -620,7 +639,7 @@ export async function assignTicket(
       existing.assigneeTeamId ?? null
     )
   }
-  return ticketRowToDTO(updated)
+  return dto
 }
 
 /** Set a ticket's triage priority (reuses the conversation priority scale). */
@@ -636,7 +655,10 @@ export async function setTicketPriority(
   const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
   if (stamp) patch.firstResponseAt = stamp
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
-  return ticketRowToDTO(updated)
+  const dto = await ticketRowToDTO(updated)
+  // Realtime signal (unified inbox §3.2, M3).
+  publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
+  return dto
 }
 
 /**
@@ -646,8 +668,16 @@ export async function setTicketPriority(
 export async function softDeleteTicket(id: TicketId, actor: Actor): Promise<void> {
   assertCan(actor, PERMISSIONS.TICKET_SET_STATUS, 'delete this ticket')
   await loadTicketOr404(id)
-  await db
+  const [updated] = await db
     .update(tickets)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(tickets.id, id), isNull(tickets.deletedAt)))
+    .returning()
+  if (updated) {
+    // Realtime signal (unified inbox §3.2, M3): the list re-query already
+    // excludes a deleted ticket via ticketFilter, so the refetch this triggers
+    // is what actually makes the row disappear for every other viewer.
+    const dto = await ticketRowToDTO(updated)
+    publishTicketEvent(updated.id, { kind: 'ticket_updated', ticket: dto })
+  }
 }

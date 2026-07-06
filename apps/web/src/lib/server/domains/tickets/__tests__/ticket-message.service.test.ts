@@ -41,6 +41,12 @@ import {
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { sendTicketMessage, addTicketNote, listTicketMessages } from '../ticket-message.service'
 
+// Realtime publish (unified inbox §3.2, M3): neutralize the real Redis-backed
+// publish so these DB-fixture tests stay deterministic, and assert the
+// shared insertTicketMessage write path wires it.
+const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
+vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
+
 const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: tickets.id }).from(tickets).limit(0)
@@ -86,6 +92,7 @@ async function ticketFirstResponseAt(ticketId: TicketId): Promise<Date | null> {
 
 describe.skipIf(!fixture.available)('ticket message service (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
+  beforeEach(() => realtime.publishTicketEvent.mockClear())
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
@@ -100,6 +107,26 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     expect(message.isInternal).toBe(false)
     expect(message.senderType).toBe('agent')
     expect(await ticketFirstResponseAt(ticketId)).not.toBeNull()
+  })
+
+  it('publishes a ticket_message realtime event (unified inbox §3.2, M3)', async () => {
+    const { ticketId, actor } = await seedTicketWithAgent()
+    const { message } = await sendTicketMessage(actor, { ticketId, content: 'On it.' })
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+      kind: 'ticket_message',
+      ticketId,
+      message,
+    })
+  })
+
+  it('publishes a ticket_message event for an internal note too (agent-only channels)', async () => {
+    const { ticketId, actor } = await seedTicketWithAgent()
+    const { message } = await addTicketNote(actor, { ticketId, content: 'internal only' })
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+      kind: 'ticket_message',
+      ticketId,
+      message,
+    })
   })
 
   it('first_response_at is stamped once, not on the second reply', async () => {
@@ -188,9 +215,9 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
       content: [{ type: 'resizableImage', attrs: { src: '', alt: null } }],
     }
 
-    await expect(
-      sendTicketMessage(actor, { ticketId, content: '', contentJson })
-    ).rejects.toThrow(/empty/i)
+    await expect(sendTicketMessage(actor, { ticketId, content: '', contentJson })).rejects.toThrow(
+      /empty/i
+    )
   })
 
   it('allows an image-only message with the image nested in a blockquote', async () => {

@@ -25,6 +25,12 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
+// Neutralize the real Redis-backed realtime publish (unified inbox §3.2, M3):
+// replyToMyTicket/createMyTicket now fire it too (via insertTicketMessage /
+// createTicketCore), and this suite isn't exercising that behavior.
+const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
+vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   tickets,
@@ -202,6 +208,20 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     expect(message.ticketId).toBe(w.mine)
   })
 
+  it('replyToMyTicket publishes a ticket_message realtime event (unified inbox §3.2, M3)', async () => {
+    const w = await seedWorld()
+    realtime.publishTicketEvent.mockClear()
+    const { message } = await replyToMyTicket(requesterActor(w.me), {
+      ticketId: w.mine,
+      content: 'thanks!',
+    })
+    expect(realtime.publishTicketEvent).toHaveBeenCalledWith(w.mine, {
+      kind: 'ticket_message',
+      ticketId: w.mine,
+      message,
+    })
+  })
+
   it("replyToMyTicket 404s another requester's ticket", async () => {
     const w = await seedWorld()
     await expect(
@@ -213,7 +233,9 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     const w = await seedWorld()
     const contentJson = {
       type: 'doc' as const,
-      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Still broken, see attached.' }] }],
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Still broken, see attached.' }] },
+      ],
     }
     const attachments = [
       {
@@ -265,9 +287,7 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
       content: 'look at this',
       contentJson,
     })
-    const images = (message.contentJson?.content ?? []).filter(
-      (n) => n.type === 'resizableImage'
-    )
+    const images = (message.contentJson?.content ?? []).filter((n) => n.type === 'resizableImage')
     // External host neutralized; own-storage src kept.
     expect(images[0]?.attrs?.src).toBe('')
     expect(images[1]?.attrs?.src).toBe('/api/storage/portal-images/mine.png')

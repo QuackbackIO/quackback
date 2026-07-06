@@ -23,6 +23,13 @@ import type {
 } from '@/lib/shared/db-types'
 import { CONVERSATION_END_REASONS } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
+// Type-only: the ticket domain's wire DTO, reused as-is on `ticket_updated` for
+// symmetry with `conversation` carrying ConversationDTO (see the design note on
+// ConversationStreamEvent below). Erased at build (no runtime import), and the
+// `lib/shared -> lib/server` bucket edge already exists (e.g.
+// lib/shared/types/posts.ts imports from '@/lib/server/domains/posts` the same
+// way) so this adds no new dependency-graph edge to adjudicate.
+import type { TicketDTO } from '@/lib/server/domains/tickets'
 export type { ConversationStatus, ConversationSystemEvent, ConversationEndReason }
 export { CONVERSATION_END_REASONS }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
@@ -341,6 +348,34 @@ export interface ConversationAssistantActivity {
   answeredAt: string | null
 }
 
+/**
+ * Ticket-thread realtime events (unified inbox §3.2, M3). Design choice:
+ * PARALLEL kinds (`ticket_message` / `ticket_updated` / `ticket_read`) rather
+ * than folding tickets into the existing `message` / `conversation` / `read`
+ * kinds under a shared itemRef. The existing conversation-side reducers
+ * (applyAgentThreadEvent, applyVisitorThreadEvent, agentEventChangesInboxList)
+ * all switch on `kind` and read `evt.conversationId` straight off the event —
+ * reshaping those kinds to carry an itemRef union would force every one of
+ * those switches to add a branch, touching code this task must not rewrite.
+ * Parallel kinds instead fall through those switches' existing `default` case
+ * untouched, and get their own small single-purpose reducers
+ * (applyTicketThreadEvent, events-reducer.ts). There is no `ticket_message_updated`
+ * (no reactions/flags on ticket messages) or `ticket_message_deleted` (no
+ * delete-ticket-message feature exists yet) — add them alongside their
+ * conversation counterparts if/when tickets grow those features.
+ *
+ * `ticket: TicketDTO` on `ticket_updated` mirrors `conversation: ConversationDTO`
+ * on `conversation`: one push refreshes both the list row and an open detail
+ * panel. `ticket_read`'s `side` reuses MessageSenderType exactly like `read`
+ * does — 'agent' == the assignee's watermark, 'visitor' == the requester's,
+ * mirroring how ticket-message senderType already overloads the same two
+ * values (see ticket-unread.service.ts).
+ */
+export type TicketStreamEvent =
+  | { kind: 'ticket_message'; ticketId: TicketId; message: ConversationMessageDTO }
+  | { kind: 'ticket_updated'; ticket: TicketDTO }
+  | { kind: 'ticket_read'; ticketId: TicketId; side: MessageSenderType; at: string }
+
 export type ConversationStreamEvent =
   | { kind: 'message'; conversationId: ConversationId; message: ConversationMessageDTO }
   | { kind: 'conversation'; conversation: ConversationDTO }
@@ -391,6 +426,7 @@ export type ConversationStreamEvent =
       text: string
       at: string
     }
+  | TicketStreamEvent
 
 /** Hard caps shared by client + server validation. */
 export const MAX_CONVERSATION_MESSAGE_LENGTH = 4000

@@ -4,7 +4,7 @@
  * never reaches the visitor's conversation channel.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationId } from '@quackback/ids'
+import type { ConversationId, TicketId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 
 const publish = vi.fn()
@@ -19,6 +19,8 @@ import {
   publishTyping,
   parseConversationFrame,
   isOwnTyping,
+  ticketChannel,
+  publishTicketEvent,
 } from '../conversation-channels'
 
 const conversationId = 'conversation_1' as ConversationId
@@ -143,6 +145,25 @@ describe('publishTyping', () => {
       side: 'visitor',
       typistPrincipalId: 'principal_owner',
     })
+  })
+})
+
+describe('ticketChannel', () => {
+  it('namespaces a ticket id', () => {
+    expect(ticketChannel('ticket_1' as TicketId)).toBe('ticket:ticket_1')
+  })
+})
+
+describe('publishTicketEvent', () => {
+  it('fans out the same event to the ticket channel AND the shared inbox channel', () => {
+    const ticketId = 'ticket_1' as TicketId
+    const event = { kind: 'ticket_updated', ticket: { id: ticketId } } as never
+    publishTicketEvent(ticketId, event)
+
+    expect(publish).toHaveBeenCalledTimes(2)
+    const calls = publish.mock.calls.map((c) => [c[0], c[1]])
+    expect(calls).toContainEqual([ticketChannel(ticketId), event])
+    expect(calls).toContainEqual([CONVERSATION_INBOX_CHANNEL, event])
   })
 })
 

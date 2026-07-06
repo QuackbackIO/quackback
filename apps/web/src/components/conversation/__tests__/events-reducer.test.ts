@@ -6,7 +6,7 @@
  * routing by side, and the inbox-list refresh predicate.
  */
 import { describe, it, expect } from 'vitest'
-import type { ConversationId, ConversationMessageId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId, TicketId } from '@quackback/ids'
 import type {
   AgentConversationMessageDTO,
   ConversationDTO,
@@ -16,8 +16,10 @@ import type {
 import {
   agentEventChangesInboxList,
   appendSentAgentMessage,
+  appendSentTicketMessage,
   appendSentVisitorMessage,
   applyAgentThreadEvent,
+  applyTicketThreadEvent,
   applyVisitorThreadEvent,
   asAgentMessage,
   mergeAgentMessage,
@@ -27,11 +29,14 @@ import {
   toggleReactionLocal,
   updateAgentThreadMessage,
   type AgentThreadCache,
+  type TicketThreadCache,
   type VisitorThreadCache,
 } from '../events-reducer'
 
 const CONV_ID = 'conversation_a' as ConversationId
 const OTHER_CONV_ID = 'conversation_b' as ConversationId
+const TICKET_ID = 'ticket_a' as TicketId
+const OTHER_TICKET_ID = 'ticket_b' as TicketId
 
 function baseMessage(id: string, overrides: Partial<ConversationMessageDTO> = {}) {
   return {
@@ -201,6 +206,7 @@ describe('toggleReactionLocal', () => {
 
 describe('agentEventChangesInboxList', () => {
   const msg = baseMessage('m9')
+  const ticketMsg = baseMessage('tm9', { conversationId: null, ticketId: TICKET_ID })
   it.each([
     [{ kind: 'message', conversationId: CONV_ID, message: msg }, true],
     [{ kind: 'conversation', conversation: conversation() }, true],
@@ -209,6 +215,10 @@ describe('agentEventChangesInboxList', () => {
     [{ kind: 'read', conversationId: CONV_ID, side: 'visitor', at: 'x' }, false],
     [{ kind: 'typing', conversationId: CONV_ID, side: 'visitor', at: 'x' }, false],
     [{ kind: 'message_updated', conversationId: CONV_ID, message: agentMessage('m9') }, false],
+    [{ kind: 'ticket_message', ticketId: TICKET_ID, message: ticketMsg }, true],
+    [{ kind: 'ticket_updated', ticket: { id: TICKET_ID } as never }, true],
+    [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'agent', at: 'x' }, true],
+    [{ kind: 'ticket_read', ticketId: TICKET_ID, side: 'visitor', at: 'x' }, false],
   ] as Array<[ConversationStreamEvent, boolean]>)('%j -> %s', (evt, expected) => {
     expect(agentEventChangesInboxList(evt)).toBe(expected)
   })
@@ -555,5 +565,79 @@ describe('agent thread message helpers', () => {
     const next = removeAgentThreadMessage(prev, 'm1' as ConversationMessageId)!
     expect(next.messages.map((m) => m.id)).toEqual(['m2'])
     expect(removeAgentThreadMessage(undefined, 'm1' as ConversationMessageId)).toBeUndefined()
+  })
+})
+
+function ticketMessage(id: string, overrides: Partial<ConversationMessageDTO> = {}) {
+  return baseMessage(id, { conversationId: null, ticketId: TICKET_ID, ...overrides })
+}
+
+function ticketCache(overrides: Partial<TicketThreadCache> = {}): TicketThreadCache {
+  return { messages: [ticketMessage('tm1')], hasMore: false, ...overrides }
+}
+
+describe('applyTicketThreadEvent', () => {
+  it('returns prev untouched when the cache is empty', () => {
+    const evt: ConversationStreamEvent = {
+      kind: 'ticket_message',
+      ticketId: TICKET_ID,
+      message: ticketMessage('tm2'),
+    }
+    expect(applyTicketThreadEvent(undefined, evt, TICKET_ID)).toBeUndefined()
+  })
+
+  it('appends a new ticket message, deduped by id', () => {
+    const prev = ticketCache()
+    const evt: ConversationStreamEvent = {
+      kind: 'ticket_message',
+      ticketId: TICKET_ID,
+      message: ticketMessage('tm2'),
+    }
+    const next = applyTicketThreadEvent(prev, evt, TICKET_ID)!
+    expect(next.messages.map((m) => m.id)).toEqual(['tm1', 'tm2'])
+    // Same event again: no duplicate, prev returned as-is.
+    expect(applyTicketThreadEvent(next, evt, TICKET_ID)).toBe(next)
+  })
+
+  it('ignores a message for another ticket', () => {
+    const prev = ticketCache()
+    const evt: ConversationStreamEvent = {
+      kind: 'ticket_message',
+      ticketId: OTHER_TICKET_ID,
+      message: ticketMessage('tm2'),
+    }
+    expect(applyTicketThreadEvent(prev, evt, TICKET_ID)).toBe(prev)
+  })
+
+  it('ignores ticket_updated and ticket_read (nothing in this cache to patch)', () => {
+    const prev = ticketCache()
+    expect(
+      applyTicketThreadEvent(
+        prev,
+        { kind: 'ticket_updated', ticket: { id: TICKET_ID } as never },
+        TICKET_ID
+      )
+    ).toBe(prev)
+    expect(
+      applyTicketThreadEvent(
+        prev,
+        { kind: 'ticket_read', ticketId: TICKET_ID, side: 'agent', at: 't' },
+        TICKET_ID
+      )
+    ).toBe(prev)
+  })
+})
+
+describe('appendSentTicketMessage', () => {
+  it('appends our sent ticket message', () => {
+    const prev = ticketCache()
+    const next = appendSentTicketMessage(prev, { message: ticketMessage('tm2') })!
+    expect(next.messages.map((m) => m.id)).toEqual(['tm1', 'tm2'])
+  })
+
+  it('is a no-op when the message already landed (SSE beat the response)', () => {
+    const prev = ticketCache()
+    expect(appendSentTicketMessage(prev, { message: ticketMessage('tm1') })).toBe(prev)
+    expect(appendSentTicketMessage(undefined, { message: ticketMessage('tm1') })).toBeUndefined()
   })
 })

@@ -7,8 +7,15 @@
  *
  * A new message is published to BOTH so the visitor's thread and every
  * agent's inbox update at once. Clients dedupe by message id.
+ *
+ * Tickets (unified inbox §3.2, M3) get their own per-ticket channel
+ * (`ticketChannel`) alongside the SAME shared inbox channel above — there is
+ * no ticket analogue of `publishConversationUpdate`'s visitor-stripped copy,
+ * because a ticket stream is team-member-only in this phase (see
+ * routes/api/chat/stream.ts's `ticketId` scope gate): both channels a ticket
+ * event reaches are agent audiences, so the full event is safe on both.
  */
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import type {
   ConversationStreamEvent,
   ConversationDTO,
@@ -118,4 +125,20 @@ export function publishConversationUpdate(
     kind: 'conversation',
     conversation: { ...agentDto, visitorEmail: null, tags: [], endNote: null, sla: null },
   })
+}
+
+/** `ticket:<id>` — the channel a ticket's own stream subscribes to (team members only). */
+export function ticketChannel(ticketId: TicketId): string {
+  return `ticket:${ticketId}`
+}
+
+/**
+ * Publish a ticket stream event to the ticket's own channel + the shared
+ * inbox channel, so an open ticket detail view and every team member's inbox
+ * update from the same push. Unlike `publishConversationEvent` there is no
+ * audience-stripped copy — see the file-header note on why that's safe here.
+ */
+export function publishTicketEvent(ticketId: TicketId, event: ConversationStreamEvent): void {
+  publish(ticketChannel(ticketId), event)
+  publish(CONVERSATION_INBOX_CHANNEL, event)
 }

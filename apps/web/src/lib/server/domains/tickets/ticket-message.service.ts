@@ -9,7 +9,18 @@
  * 7C.1 is the agent side (reply + internal note + list). Requester replies, the
  * public_stage-change notification path, and live SSE arrive with later slices.
  */
-import { db, conversationMessages, tickets, eq, and, lt, or, desc, isNull, type Ticket } from '@/lib/server/db'
+import {
+  db,
+  conversationMessages,
+  tickets,
+  eq,
+  and,
+  lt,
+  or,
+  desc,
+  isNull,
+  type Ticket,
+} from '@/lib/server/db'
 import type { TicketId, ConversationMessageId, PrincipalId } from '@quackback/ids'
 import type { ConversationAttachment, TiptapContent } from '@/lib/shared/db-types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -25,6 +36,7 @@ import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { firstResponseStamp } from './ticket.lifecycle'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
+import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -118,7 +130,16 @@ export async function insertTicketMessage(
   })
 
   const author = (await loadAuthors([principalId])).get(principalId) ?? fallbackAuthor(principalId)
-  return { message: toMessageDTO(messageRow, author), ticket: existing }
+  const message = toMessageDTO(messageRow, author)
+  // Realtime signal (unified inbox §3.2, M3): the one low-level write shared
+  // by the agent reply, the internal note, AND the requester reply (see
+  // sendTicketMessage / addTicketNote / requester.service's replyToMyTicket),
+  // so one publish call here covers all three. Safe to publish an internal
+  // note on both the ticket + inbox channels unstripped — both audiences are
+  // team-member-only in this phase (routes/api/chat/stream.ts's `ticketId`
+  // scope gate), unlike the conversation domain's visitor-facing channel.
+  publishTicketEvent(input.ticketId, { kind: 'ticket_message', ticketId: input.ticketId, message })
+  return { message, ticket: existing }
 }
 
 /** Agent reply on a customer ticket thread (customer-visible). */

@@ -11,8 +11,10 @@ const mockVerifyStreamToken = vi.fn()
 const mockGetSession = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
 const mockConversationFindFirst = vi.fn()
+const mockTicketSelect = vi.fn()
 const mockSubscribe = vi.fn()
 const mockCanView = vi.fn()
+const mockTicketFilter = vi.fn()
 const mockConversationsEnabled = vi.fn()
 const mockPortalAccess = vi.fn()
 const mockMarkPresent = vi.fn()
@@ -29,7 +31,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
       principal: { findFirst: (...a: unknown[]) => mockPrincipalFindFirst(...a) },
       conversations: { findFirst: (...a: unknown[]) => mockConversationFindFirst(...a) },
     },
-    select: vi.fn(),
+    // Chainable stub for the ticketId scope's existence+visibility query
+    // (db.select({...}).from(tickets).where(...).limit(1)) — the resolved rows
+    // are driven per-test via mockTicketSelect.
+    select: () => ({ from: () => ({ where: () => ({ limit: () => mockTicketSelect() }) }) }),
   },
   eq: vi.fn(),
   and: vi.fn(),
@@ -46,6 +51,7 @@ vi.mock('@/lib/server/realtime/stream-token', () => ({
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   conversationChannel: (id: string) => `conversation:${id}`,
   CONVERSATION_INBOX_CHANNEL: 'conversation:inbox',
+  ticketChannel: (id: string) => `ticket:${id}`,
   parseConversationFrame: (message: string) => {
     try {
       return JSON.parse(message)
@@ -54,6 +60,9 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
     }
   },
   isOwnTyping: () => false,
+}))
+vi.mock('@/lib/server/policy/tickets', () => ({
+  ticketFilter: (...a: unknown[]) => mockTicketFilter(...a),
 }))
 const mockReadActivitySnapshot = vi.fn()
 vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
@@ -79,8 +88,10 @@ vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
   normalizePrincipalType: (t: string) => t,
 }))
+const mockSupportTicketsEnabled = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isConversationsEnabled: (...a: unknown[]) => mockConversationsEnabled(...a),
+  isSupportTicketsEnabled: (...a: unknown[]) => mockSupportTicketsEnabled(...a),
 }))
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: (...a: unknown[]) => mockPortalAccess(...a),
@@ -132,10 +143,13 @@ async function drainUntil(res: Response, want: string, maxReads = 10): Promise<s
 beforeEach(() => {
   vi.clearAllMocks()
   mockConversationsEnabled.mockResolvedValue(true)
+  mockSupportTicketsEnabled.mockResolvedValue(true)
   mockVerifyStreamToken.mockReturnValue(null)
   mockGetSession.mockResolvedValue(null)
   mockPrincipalFindFirst.mockResolvedValue(undefined)
   mockConversationFindFirst.mockResolvedValue(undefined)
+  mockTicketSelect.mockResolvedValue([])
+  mockTicketFilter.mockReturnValue('MOCK_TICKET_FILTER_SQL')
   mockSubscribe.mockResolvedValue(async () => {})
   mockMarkPresent.mockResolvedValue(undefined)
   mockClearPresence.mockResolvedValue(false)
@@ -294,6 +308,63 @@ describe('GET /api/chat/stream - no scope', () => {
     tokenPrincipal('admin')
     const res = await GET({ request: req('?token=t') })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/chat/stream - ticketId scope (unified inbox §3.2, M3)', () => {
+  it('403s a non-team principal', async () => {
+    tokenPrincipal('user')
+    const res = await GET({ request: req('?ticketId=ticket_1&token=t') })
+    expect(res.status).toBe(403)
+    expect(mockSubscribe).not.toHaveBeenCalled()
+    // Rejected on role alone — never even queries the ticket.
+    expect(mockTicketSelect).not.toHaveBeenCalled()
+  })
+
+  it('opens an SSE stream on the ticket channel for a team member who can view it', async () => {
+    sessionPrincipal('member')
+    mockTicketSelect.mockResolvedValue([{ id: 'ticket_1' }])
+    const res = await GET({ request: req('?ticketId=ticket_1') })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('text/event-stream')
+    await settleAndClose(res)
+    expect(mockSubscribe).toHaveBeenCalledWith(['ticket:ticket_1'], expect.any(Function))
+  })
+
+  it('404s (not 403) when the ticket does not exist or ticketFilter denies it (no existence leak)', async () => {
+    sessionPrincipal('member')
+    mockTicketSelect.mockResolvedValue([])
+    const res = await GET({ request: req('?ticketId=ticket_missing') })
+    expect(res.status).toBe(404)
+    expect(mockSubscribe).not.toHaveBeenCalled()
+  })
+
+  it('404s when every ticket surface is disabled (both supportTickets and conversations off)', async () => {
+    sessionPrincipal('member')
+    mockSupportTicketsEnabled.mockResolvedValue(false)
+    mockConversationsEnabled.mockResolvedValue(false)
+    const res = await GET({ request: req('?ticketId=ticket_1') })
+    expect(res.status).toBe(404)
+  })
+
+  it('allows a ticket stream when supportTickets is on even though conversations is off', async () => {
+    sessionPrincipal('member')
+    mockSupportTicketsEnabled.mockResolvedValue(true)
+    mockConversationsEnabled.mockResolvedValue(false)
+    mockTicketSelect.mockResolvedValue([{ id: 'ticket_1' }])
+    const res = await GET({ request: req('?ticketId=ticket_1') })
+    expect(res.status).toBe(200)
+    await settleAndClose(res)
+  })
+
+  it('never touches the conversations gate check for a non-ticket, non-conversation request path', async () => {
+    // Sanity: the plain inbox scope is unaffected by the new ticket-gate branch.
+    tokenPrincipal('member')
+    const res = await GET({ request: req('?scope=inbox') })
+    expect(res.status).toBe(200)
+    await settleAndClose(res)
+    expect(mockConversationsEnabled).toHaveBeenCalled()
+    expect(mockSupportTicketsEnabled).not.toHaveBeenCalled()
   })
 })
 

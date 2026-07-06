@@ -6,7 +6,7 @@
  * widget. No React or query-client imports: everything is unit-testable
  * directly (events-reducer.test.ts).
  */
-import type { ConversationId, ConversationMessageId } from '@quackback/ids'
+import type { ConversationId, ConversationMessageId, TicketId } from '@quackback/ids'
 import type {
   AgentConversationMessageDTO,
   ConversationDTO,
@@ -107,8 +107,18 @@ export function toggleReactionLocal(
 /** Whether an inbox-stream event changes the conversation LIST's ordering /
  *  preview / unread badge: new + deleted messages, conversation updates, and an
  *  AGENT read move (mark-unread). typing, visitor-read ("Seen"), and
- *  message_updated (reaction/flag) only touch the open thread. */
+ *  message_updated (reaction/flag) only touch the open thread.
+ *
+ *  Also covers the ticket-side events (unified inbox §3.2, M3), which share
+ *  this one predicate rather than a parallel `eventChangesInboxItemList` since
+ *  the unified list is one query either way: `ticket_message` and
+ *  `ticket_updated` always refresh (new reply / any property change), and
+ *  `ticket_read` only for the assignee (`side: 'agent'`) watermark — a
+ *  requester marking their own copy read never moves the agent-facing unread
+ *  count (mirrors the conversation `read`/`side` rule above exactly). */
 export function agentEventChangesInboxList(evt: ConversationStreamEvent): boolean {
+  if (evt.kind === 'ticket_read') return evt.side === 'agent'
+  if (evt.kind === 'ticket_message' || evt.kind === 'ticket_updated') return true
   return (
     (evt.kind !== 'read' && evt.kind !== 'typing' && evt.kind !== 'message_updated') ||
     (evt.kind === 'read' && evt.side === 'agent')
@@ -287,4 +297,48 @@ export function removeAgentThreadMessage(
 ): AgentThreadCache | undefined {
   if (!prev) return prev
   return { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) }
+}
+
+// ---------------------------------------------------------------------------
+// Ticket thread (unified inbox §3.2, M3)
+// ---------------------------------------------------------------------------
+
+/** The interim ticket thread cache (components/admin/tickets/ticket-thread.tsx's
+ *  own local `TicketThreadCache`, mirrored here): plain base DTOs, no
+ *  `conversation`-shaped field to patch — a ticket carries no reactions/flags,
+ *  and its properties (status, assignee, priority...) live in the separate
+ *  `ticketQueries.detail`/`ticketQueries.list` caches, not this one. So
+ *  `applyTicketThreadEvent` only ever has a `ticket_message` to react to. */
+export interface TicketThreadCache {
+  messages: ConversationMessageDTO[]
+  hasMore: boolean
+}
+
+/** Apply one ticket-stream event to an open ticket thread's cache. Events for
+ *  other tickets (the inbox stream is multiplexed, and a ticket's own stream
+ *  only ever carries its own events anyway) and any non-`ticket_message` kind
+ *  return prev untouched — `ticket_updated`/`ticket_read` have nothing in this
+ *  cache to patch (see the type doc above). */
+export function applyTicketThreadEvent(
+  prev: TicketThreadCache | undefined,
+  evt: ConversationStreamEvent,
+  ticketId: TicketId
+): TicketThreadCache | undefined {
+  if (!prev) return prev
+  if (evt.kind !== 'ticket_message') return prev
+  if (evt.ticketId !== ticketId) return prev
+  if (prev.messages.some((m) => m.id === evt.message.id)) return prev
+  return { ...prev, messages: [...prev.messages, evt.message] }
+}
+
+/** Merge our own freshly-sent ticket message into the thread cache (dedupe by
+ *  id — the SSE echo may land first). Mirrors `appendSentAgentMessage` minus
+ *  the conversation-adoption step this cache has no field for. */
+export function appendSentTicketMessage(
+  prev: TicketThreadCache | undefined,
+  res: { message: ConversationMessageDTO }
+): TicketThreadCache | undefined {
+  return prev && !prev.messages.some((m) => m.id === res.message.id)
+    ? { ...prev, messages: [...prev.messages, res.message] }
+    : prev
 }

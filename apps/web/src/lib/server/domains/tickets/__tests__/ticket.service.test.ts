@@ -49,6 +49,13 @@ const webhooks = vi.hoisted(() => ({
 }))
 vi.mock('../ticket.webhooks', () => webhooks)
 
+// Realtime publish (unified inbox §3.2, M3): neutralize the real Redis-backed
+// publish so these DB-fixture tests stay deterministic, and assert the
+// service wires it — mirrors the webhooks mock above and conversation.service's
+// own test convention.
+const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
+vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
+
 // config getters validate the full env (absent in tests); provide just what the
 // attachment URL check (validateAttachments -> isTrustedAttachmentUrl) reads.
 vi.mock('@/lib/server/config', () => ({
@@ -60,6 +67,8 @@ import {
   createTicket,
   setTicketStatus,
   assignTicket,
+  setTicketPriority,
+  softDeleteTicket,
   listTickets,
   getTicket,
 } from '../ticket.service'
@@ -166,6 +175,7 @@ async function readTicket(id: TicketId) {
 describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
   beforeEach(() => Object.values(webhooks).forEach((m) => m.mockClear()))
+  beforeEach(() => realtime.publishTicketEvent.mockClear())
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
@@ -544,6 +554,78 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     // Re-assigning the identical teammate changes nothing → no second hook.
     await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
     expect(webhooks.emitTicketAssigned).toHaveBeenCalledTimes(1)
+  })
+
+  describe('realtime publish (unified inbox §3.2, M3)', () => {
+    it('createTicket publishes ticket_updated with the created DTO', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const created = await createTicket({ type: 'customer', title: 'Realtime me' }, adminActor())
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
+        kind: 'ticket_updated',
+        ticket: expect.objectContaining({ id: created.id }),
+      })
+    })
+
+    it('setTicketStatus publishes ticket_updated with the new status', async () => {
+      await seedSettings()
+      const { closed } = await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Move me' }, actor)
+      realtime.publishTicketEvent.mockClear()
+      await setTicketStatus(created.id, closed.id, actor)
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
+        kind: 'ticket_updated',
+        ticket: expect.objectContaining({
+          id: created.id,
+          status: expect.objectContaining({ id: closed.id }),
+        }),
+      })
+    })
+
+    it('assignTicket publishes ticket_updated even on a no-op re-assign', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const teammate = await seedTeammate()
+      const created = await createTicket({ type: 'back_office', title: 'Assign me' }, actor)
+      await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
+      realtime.publishTicketEvent.mockClear()
+
+      await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(
+        created.id,
+        expect.objectContaining({ kind: 'ticket_updated' })
+      )
+    })
+
+    it('setTicketPriority publishes ticket_updated with the new priority', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Prioritize me' }, actor)
+      realtime.publishTicketEvent.mockClear()
+
+      await setTicketPriority(created.id, 'urgent', actor)
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
+        kind: 'ticket_updated',
+        ticket: expect.objectContaining({ id: created.id, priority: 'urgent' }),
+      })
+    })
+
+    it('softDeleteTicket publishes ticket_updated so other viewers refetch the list', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Delete me' }, actor)
+      realtime.publishTicketEvent.mockClear()
+
+      await softDeleteTicket(created.id, actor)
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
+        kind: 'ticket_updated',
+        ticket: expect.objectContaining({ id: created.id }),
+      })
+    })
   })
 
   describe('listTickets: search', () => {

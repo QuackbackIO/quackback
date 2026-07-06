@@ -18,6 +18,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+// Neutralize the real Redis-backed realtime publish (unified inbox §3.2, M3):
+// seedWorld posts messages via sendTicketMessage/addTicketNote, which now
+// fire it too; this suite isn't exercising that behavior.
+vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   tickets,

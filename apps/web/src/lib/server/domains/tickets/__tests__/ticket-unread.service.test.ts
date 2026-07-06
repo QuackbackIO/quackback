@@ -29,6 +29,12 @@ import {
   markTicketReadForRequester,
 } from '../ticket-unread.service'
 
+// Realtime publish (unified inbox §3.2, M3): neutralize the real Redis-backed
+// publish so these DB-fixture tests stay deterministic, and assert the mark-
+// read writes wire it.
+const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
+vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
+
 const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: tickets.id }).from(tickets).limit(0)
@@ -92,6 +98,7 @@ async function ticketReadWatermarks(
 
 describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
+  beforeEach(() => realtime.publishTicketEvent.mockClear())
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
@@ -224,6 +231,27 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
 
       const after = await ticketReadWatermarks(ticketId)
       expect(after.assigneeLastReadAt?.toISOString()).toBe(at.toISOString())
+    })
+
+    it('publishes a ticket_read realtime event for each side (unified inbox §3.2, M3)', async () => {
+      const ticketId = await seedTicket()
+      const at = new Date('2026-01-01T00:00:00.000Z')
+
+      await markTicketReadForAgent(ticketId, at)
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+        kind: 'ticket_read',
+        ticketId,
+        side: 'agent',
+        at: at.toISOString(),
+      })
+
+      await markTicketReadForRequester(ticketId, at)
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
+        kind: 'ticket_read',
+        ticketId,
+        side: 'visitor',
+        at: at.toISOString(),
+      })
     })
 
     it('marking read clears the unread count for that side', async () => {
