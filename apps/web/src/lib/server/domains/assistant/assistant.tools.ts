@@ -42,11 +42,37 @@ const DUPLICATE_NOTE = 'This action was already performed for this message.'
 const FAILED_NOTE = 'This action could not be completed.'
 
 /**
- * Resolve a spec's effective mode for this turn: the saved control, else the
- * spec's default. A saved mode the spec no longer supports fails closed to
- * 'disabled' rather than silently running under some other permissiveness.
+ * The single resolution the pipeline runs on: `resolveEffectiveToolMode`'s
+ * result folds the saved control, the unsupported-mode fail-closed, and the
+ * simulate override into ONE value. 'disabled' is only ever consumed by
+ * `assembleAssistantToolset`'s filter, which drops the tool before it is
+ * registered; `runWithPipeline` itself only ever receives 'approval' |
+ * 'autonomous' | 'simulate'.
  */
-function resolveMode(spec: AssistantToolSpec, saved: ToolControlMode | undefined): ToolControlMode {
+export type EffectiveToolMode = ToolControlMode | 'simulate'
+
+/**
+ * Resolve a spec's effective mode for this turn: the saved control (or the
+ * spec's default), then two folds on top, applied in order.
+ *
+ * 1. Unsupported mode fails closed. A saved mode the spec no longer supports
+ *    (or, for a read tool, 'approval': reads never support it) disables the
+ *    tool rather than silently running under some other permissiveness.
+ * 2. 'disabled' always wins. A tool the workspace turned off never runs
+ *    under any circumstance, `ctx.simulate` included.
+ * 3. Write-risk simulate override. A write-risk tool with `ctx.simulate` true
+ *    resolves to 'simulate' unless `ctx.writeToolPolicy` is explicitly
+ *    'controls', in which case the configured mode (approval or autonomous)
+ *    is honored instead. `ctx.writeToolPolicy` unset behaves as 'simulate',
+ *    matching today's behavior for every existing caller (see its doc on
+ *    `AssistantToolContext`). Read-risk tools are never affected by
+ *    `ctx.simulate`: reads only observe, so there is nothing to preview.
+ */
+export function resolveEffectiveToolMode(
+  spec: AssistantToolSpec,
+  saved: ToolControlMode | undefined,
+  ctx: AssistantToolContext
+): EffectiveToolMode {
   const mode = saved ?? spec.defaultMode
   if (!spec.supportedModes.includes(mode)) {
     log.warn(
@@ -54,6 +80,10 @@ function resolveMode(spec: AssistantToolSpec, saved: ToolControlMode | undefined
       'assistant tool control mode not supported by this tool; disabling'
     )
     return 'disabled'
+  }
+  if (mode === 'disabled') return 'disabled'
+  if (spec.risk === 'write' && ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') {
+    return 'simulate'
   }
   return mode
 }
@@ -90,22 +120,30 @@ function resolveIdempotencyKey(
 }
 
 /**
- * Run one tool call through the control-mode pipeline. Approval short-circuits
- * to a pending action (no permission check — the approving human authorizes
- * it). Autonomous checks every declared permission, then (write-risk only)
- * claims an idempotency slot, executes, and finalizes the audit row. Never
- * throws: an execution failure settles the audit row and returns a graceful
- * note so a tool error can't crash the turn.
+ * Run one tool call through the control-mode pipeline. `mode` arrives already
+ * fully resolved (see `resolveEffectiveToolMode`); this function does no
+ * further gating of its own, it only carries out what the mode says.
+ * Simulate previews instead of running. Approval short-circuits to a pending
+ * action (no permission check: the approving human authorizes it).
+ * Autonomous checks every declared permission, then (write-risk only) claims
+ * an idempotency slot, executes, and finalizes the audit row. Never throws:
+ * an execution failure settles the audit row and returns a graceful note so
+ * a tool error can't crash the turn.
  */
 async function runWithPipeline(
   spec: AssistantToolSpec,
-  mode: ToolControlMode,
+  mode: Exclude<EffectiveToolMode, 'disabled'>,
   args: unknown,
   ctx: AssistantToolContext
 ): Promise<unknown> {
-  // Sandbox dry run: preview what a write tool would do. There is no real
-  // conversation to attach a claim, approval, or denial to.
-  if (ctx.simulate && spec.risk === 'write') {
+  if (mode === 'simulate') {
+    // A write tool's outcome resolved to a preview instead of a real run.
+    // Two distinct reasons land here (see `AssistantToolContext.writeToolPolicy`
+    // and `resolveEffectiveToolMode` for how the choice is made): the sandbox
+    // has no real conversation to attach a claim, approval, or denial to
+    // (nowhere to attach), while copilot has a real conversation but previews
+    // anyway because a teammate asking Quinn a question about the
+    // conversation must never let Quinn act in it (policy says preview).
     return { simulated: true, summary: spec.summarize(args) }
   }
 
@@ -120,6 +158,7 @@ async function runWithPipeline(
     return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
   }
 
+  // mode === 'autonomous' from here: simulate and approval both returned above.
   for (const permission of spec.permissions) {
     if (can(ctx.actor, permission)) continue
     await recordDeniedToolCall({
@@ -244,7 +283,8 @@ function toLegacyServerTool(spec: AssistantToolSpec, ctx: AssistantToolContext) 
  * dataConnectors is on: every connector's defaultMode is 'disabled' and the
  * legacy branch does not consult control modes at all, so a connector must
  * never reach it unwrapped. Actions on resolves the full catalogue (static +
- * connector, via `resolveToolSpecs`) and each spec's saved-or-default mode,
+ * connector, via `resolveToolSpecs`) and each spec's fully resolved mode (see
+ * `resolveEffectiveToolMode`, saved-or-default plus the simulate override),
  * drops disabled tools, and wraps the rest in the control-mode pipeline.
  *
  * `specs` defaults to the live catalogue; tests inject a fixed list to
@@ -279,8 +319,14 @@ export async function assembleAssistantToolset(
   const resolvedSpecs = specs ?? (await resolveToolSpecs())
   const resolvedControls = controls ?? (await getAssistantToolControls())
   const active = resolvedSpecs
-    .map((spec) => ({ spec, mode: resolveMode(spec, resolvedControls[spec.name]) }))
-    .filter((entry) => entry.mode !== 'disabled')
+    .map((spec) => ({
+      spec,
+      mode: resolveEffectiveToolMode(spec, resolvedControls[spec.name], ctx),
+    }))
+    .filter(
+      (entry): entry is { spec: AssistantToolSpec; mode: Exclude<EffectiveToolMode, 'disabled'> } =>
+        entry.mode !== 'disabled'
+    )
   return {
     tools: active.map(({ spec, mode }) =>
       spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))

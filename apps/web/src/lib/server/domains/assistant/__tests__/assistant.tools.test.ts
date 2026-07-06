@@ -78,7 +78,7 @@ vi.mock('@/lib/server/logger', () => ({
   },
 }))
 
-import { assembleAssistantToolset } from '../assistant.tools'
+import { assembleAssistantToolset, resolveEffectiveToolMode } from '../assistant.tools'
 import { makeToolTestContext, fakePendingActionRow } from './assistant-tool-fixtures'
 import type { AssistantToolContext, AssistantToolSpec } from '../assistant.toolspec'
 import type { AssistantToolControls } from '@/lib/server/domains/settings/settings.assistant'
@@ -135,6 +135,34 @@ function makeFakeWriteSpec(overrides: Partial<AssistantToolSpec> = {}): Assistan
     definition: fakeWriteDefinition,
     execute: mockWriteExecute,
     summarize: (args) => `Close conversation: ${(args as { reason: string }).reason}`,
+    ...overrides,
+  } as AssistantToolSpec
+}
+
+// A fake read-risk spec, for pinning that `ctx.simulate` never touches reads
+// (the fixed catalogue only has search_knowledge, and its behavior is
+// covered end to end above; the resolver test below wants a read spec with
+// a controllable supportedModes/defaultMode too).
+const fakeReadDefinition = toolDefinition({
+  name: 'lookup_thing',
+  description: 'Look something up.',
+  inputSchema: z.object({}),
+  outputSchema: z.object({ found: z.boolean() }),
+})
+
+function makeFakeReadSpec(overrides: Partial<AssistantToolSpec> = {}): AssistantToolSpec {
+  return {
+    name: 'lookup_thing',
+    label: 'Lookup thing',
+    description: 'Look something up.',
+    promptGuidance: 'Use to look something up.',
+    risk: 'read',
+    supportedModes: ['disabled', 'autonomous'],
+    defaultMode: 'autonomous',
+    permissions: [],
+    definition: fakeReadDefinition,
+    execute: vi.fn(),
+    summarize: () => 'Lookup thing',
     ...overrides,
   } as AssistantToolSpec
 }
@@ -475,6 +503,100 @@ describe('assembleAssistantToolset: sandbox simulate mode', () => {
 
     expect(mockRetrieve).toHaveBeenCalled()
     expect(out.articles).toHaveLength(1)
+  })
+})
+
+describe('resolveEffectiveToolMode', () => {
+  // The full matrix behind the pipeline's single mode decision: risk x
+  // configured mode x simulate x writeToolPolicy. Every "today" row pins an
+  // observable outcome one of the tests above already exercises end to end
+  // through assembleAssistantToolset/runWithPipeline; this suite is the unit
+  // form of the same precedence, plus the writeToolPolicy: 'controls' rows
+  // that the P2-C.4 copilot surface will exercise (unwired here; the pipeline
+  // itself never sets writeToolPolicy).
+
+  it('resolves a read tool to its configured mode regardless of simulate', () => {
+    const spec = makeFakeReadSpec()
+    expect(resolveEffectiveToolMode(spec, 'autonomous', ctx({ simulate: false }))).toBe(
+      'autonomous'
+    )
+    expect(resolveEffectiveToolMode(spec, 'autonomous', ctx({ simulate: true }))).toBe('autonomous')
+  })
+
+  it('disables a read tool whose saved mode is unsupported, regardless of simulate', () => {
+    const spec = makeFakeReadSpec({ supportedModes: ['disabled', 'autonomous'] })
+    expect(resolveEffectiveToolMode(spec, 'approval' as never, ctx({ simulate: true }))).toBe(
+      'disabled'
+    )
+    expect(mockLoggerWarn).toHaveBeenCalled()
+  })
+
+  it('disabled always wins for a read tool, simulate included', () => {
+    const spec = makeFakeReadSpec()
+    expect(resolveEffectiveToolMode(spec, 'disabled', ctx({ simulate: true }))).toBe('disabled')
+  })
+
+  it('resolves a write tool to its configured mode when simulate is false, any writeToolPolicy', () => {
+    const spec = makeFakeWriteSpec()
+    expect(resolveEffectiveToolMode(spec, 'approval', ctx({ simulate: false }))).toBe('approval')
+    expect(resolveEffectiveToolMode(spec, 'autonomous', ctx({ simulate: false }))).toBe(
+      'autonomous'
+    )
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        'approval',
+        ctx({ simulate: false, writeToolPolicy: 'controls' })
+      )
+    ).toBe('approval')
+  })
+
+  it("today's default: a write tool under simulate resolves to 'simulate' no matter its configured mode", () => {
+    const spec = makeFakeWriteSpec()
+    expect(resolveEffectiveToolMode(spec, 'approval', ctx({ simulate: true }))).toBe('simulate')
+    expect(resolveEffectiveToolMode(spec, 'autonomous', ctx({ simulate: true }))).toBe('simulate')
+  })
+
+  it("an explicit writeToolPolicy: 'simulate' behaves exactly like the unset default", () => {
+    const spec = makeFakeWriteSpec()
+    const c = ctx({ simulate: true, writeToolPolicy: 'simulate' })
+    expect(resolveEffectiveToolMode(spec, 'approval', c)).toBe('simulate')
+    expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('simulate')
+  })
+
+  it("the C.4 seam: writeToolPolicy: 'controls' defers to the configured mode even while simulate is true", () => {
+    const spec = makeFakeWriteSpec()
+    const c = ctx({ simulate: true, writeToolPolicy: 'controls' })
+    expect(resolveEffectiveToolMode(spec, 'approval', c)).toBe('approval')
+    expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('autonomous')
+  })
+
+  it("disabled still wins for a write tool under writeToolPolicy: 'controls'", () => {
+    const spec = makeFakeWriteSpec()
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        'disabled',
+        ctx({ simulate: true, writeToolPolicy: 'controls' })
+      )
+    ).toBe('disabled')
+  })
+
+  it('disables a write tool whose saved mode is unsupported, regardless of simulate or writeToolPolicy', () => {
+    const spec = makeFakeWriteSpec({ supportedModes: ['disabled', 'approval'] })
+    expect(
+      resolveEffectiveToolMode(
+        spec,
+        'autonomous',
+        ctx({ simulate: true, writeToolPolicy: 'controls' })
+      )
+    ).toBe('disabled')
+    expect(mockLoggerWarn).toHaveBeenCalled()
+  })
+
+  it('falls back to the spec default mode when no control is saved', () => {
+    const spec = makeFakeWriteSpec({ defaultMode: 'autonomous' })
+    expect(resolveEffectiveToolMode(spec, undefined, ctx({ simulate: false }))).toBe('autonomous')
   })
 })
 

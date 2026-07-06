@@ -86,6 +86,20 @@ export interface AssistantToolContext {
   searchCalls: number
   /** True in the admin sandbox: write tools report what they would do instead of running. */
   simulate: boolean
+  /**
+   * How a write-risk tool's outcome resolves when `simulate` is true (never
+   * consulted for a read-risk tool, or when `simulate` is false). 'simulate',
+   * the default when unset, always previews instead of running, matching
+   * every caller today: the sandbox (no conversation to attach a claim,
+   * approval, or denial to) and copilot (a real conversation, but writes
+   * must never actually fire there). 'controls' instead defers to the tool's
+   * configured mode, letting approval propose a pending action and
+   * autonomous execute as usual even while `simulate` is set. This is the
+   * seam a future surface uses to preview writes as approval cards rather
+   * than as a blanket simulated summary, without the pipeline itself
+   * changing. See `resolveEffectiveToolMode` in assistant.tools.ts.
+   */
+  writeToolPolicy?: 'simulate' | 'controls'
   /** The involvement this turn belongs to, for audit rows and pending actions. Null before the first involvement opens. */
   involvementId: AssistantInvolvementId | null
   /** The customer message this turn answers, keying the write-tool idempotency key. Null in the sandbox. */
@@ -114,6 +128,7 @@ export function makeAssistantToolContext(init: {
   involvementId?: AssistantInvolvementId | null
   latestCustomerMessageId?: string | null
   simulate?: boolean
+  writeToolPolicy?: 'simulate' | 'controls'
   actor?: Actor
 }): AssistantToolContext {
   return {
@@ -126,6 +141,7 @@ export function makeAssistantToolContext(init: {
     sources: new Map<string, AssistantCitation>(),
     searchCalls: 0,
     simulate: init.simulate ?? init.conversationId === null,
+    writeToolPolicy: init.writeToolPolicy,
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
