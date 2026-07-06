@@ -5,17 +5,32 @@
  * must never break the write (mirrors conversation.webhooks).
  *
  * These are the agent/integration-facing lifecycle signals. The customer-facing
- * signal (the requester's bell + the thread status event) rides the public_stage
- * crossing inside ticket.service and is deliberately not a webhook.
+ * status signal (the requester's bell + the thread status event) rides the
+ * public_stage crossing inside ticket.service and is deliberately not a webhook.
+ *
+ * A requester reply DOES fire ticket.replied (with senderType 'visitor'): a
+ * customer reply is activity the team's integrations want, distinct from the
+ * customer's own bell. Internal-note content ships in full (see the note on
+ * EventTicketMessageData): ticket events only ever reach admin-configured
+ * consumers, never a per-user or public subscription.
  */
 import type { Ticket } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
-import type { EventActor, EventTicketData, EventTicketRef } from '@/lib/server/events/types'
+import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type {
+  EventActor,
+  EventTicketData,
+  EventTicketMessageAttachment,
+  EventTicketRef,
+} from '@/lib/server/events/types'
 import {
   dispatchTicketCreated,
   dispatchTicketStatusChanged,
   dispatchTicketAssigned,
+  dispatchTicketReplied,
+  dispatchTicketNoteAdded,
 } from '@/lib/server/events/dispatch'
+import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'ticket-webhooks' })
@@ -65,6 +80,17 @@ async function safe(label: string, fn: () => Promise<void>): Promise<void> {
   }
 }
 
+/** Ticket-message attachments as the sanitized event shape, or null when none. */
+function messageAttachments(m: ConversationMessageDTO): EventTicketMessageAttachment[] | null {
+  if (!m.attachments || m.attachments.length === 0) return null
+  return m.attachments.map((a) => ({
+    name: a.name,
+    url: a.url,
+    contentType: a.contentType,
+    size: a.size,
+  }))
+}
+
 export async function emitTicketCreated(
   actor: Actor,
   ticket: Ticket,
@@ -107,6 +133,43 @@ export async function emitTicketAssigned(
       previousPrincipalId,
       ticket.assigneeTeamId ?? null,
       previousTeamId
+    )
+  )
+}
+
+/** A reply on a customer ticket thread — an agent reply or the requester's own
+ *  reply. senderType disambiguates the two for consumers. */
+export async function emitTicketReplied(
+  actor: Actor,
+  ticket: Ticket,
+  message: ConversationMessageDTO
+): Promise<void> {
+  await safe('ticket.replied', () =>
+    dispatchTicketReplied(
+      toEventActor(actor),
+      ticketRef(ticket),
+      message.id,
+      contentJsonToMarkdown(message.contentJson, message.content),
+      messageAttachments(message),
+      message.senderType === 'visitor' ? 'visitor' : 'agent'
+    )
+  )
+}
+
+/** An agent-only internal note added to a ticket thread (never customer-visible). */
+export async function emitTicketNoteAdded(
+  actor: Actor,
+  ticket: Ticket,
+  message: ConversationMessageDTO
+): Promise<void> {
+  await safe('ticket.note_added', () =>
+    dispatchTicketNoteAdded(
+      toEventActor(actor),
+      ticketRef(ticket),
+      message.id,
+      contentJsonToMarkdown(message.contentJson, message.content),
+      messageAttachments(message),
+      'agent'
     )
   )
 }

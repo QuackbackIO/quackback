@@ -142,6 +142,16 @@ export const WEBHOOK_EVENT_CONFIG = [
     label: 'Ticket Assigned',
     description: 'When a ticket is assigned to (or unassigned from) an agent or team',
   },
+  {
+    id: 'ticket.replied',
+    label: 'Ticket Reply',
+    description: 'When an agent or the requester replies on a ticket thread',
+  },
+  {
+    id: 'ticket.note_added',
+    label: 'Ticket Internal Note',
+    description: 'When an agent adds an internal note to a ticket (private content — opt-in)',
+  },
 ] as const satisfies ReadonlyArray<{ id: WebhookEventType; label: string; description: string }>
 
 // ============================================

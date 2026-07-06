@@ -23,6 +23,7 @@ import type {
   EventMessageData,
   EventPostRef,
   EventTicketData,
+  EventTicketMessageAttachment,
   EventTicketRef,
 } from './types.js'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -461,6 +462,36 @@ export async function dispatchTicketAssigned(
     ...eventEnvelope(actor),
     type: 'ticket.assigned',
     data: { ticket, assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId },
+  })
+}
+
+export async function dispatchTicketReplied(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  messageId: string,
+  content: string,
+  attachments: EventTicketMessageAttachment[] | null,
+  senderType: 'agent' | 'visitor'
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.replied',
+    data: { ticket, messageId, content, attachments, senderType },
+  })
+}
+
+export async function dispatchTicketNoteAdded(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  messageId: string,
+  content: string,
+  attachments: EventTicketMessageAttachment[] | null,
+  senderType: 'agent' | 'visitor'
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.note_added',
+    data: { ticket, messageId, content, attachments, senderType },
   })
 }
 

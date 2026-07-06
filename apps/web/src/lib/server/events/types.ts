@@ -32,6 +32,8 @@ export const EVENT_TYPES = [
   'ticket.created',
   'ticket.status_changed',
   'ticket.assigned',
+  'ticket.replied',
+  'ticket.note_added',
   'assistant.handed_off',
 ] as const
 
@@ -287,6 +289,33 @@ export interface TicketAssignedPayload {
   previousTeamId: string | null
 }
 
+/** A message attachment carried on a ticket reply/note event. */
+export interface EventTicketMessageAttachment {
+  name: string
+  url: string
+  contentType: string
+  size: number
+}
+
+/**
+ * Shared payload for the two ticket-thread message events (ticket.replied,
+ * ticket.note_added). Carries the ticket ref plus the new message's markdown
+ * content (images preserved from the stored contentJson), its attachments, and
+ * who sent it. Note content is included in full: ticket events reach only
+ * admin-configured consumers (webhooks gated by webhook.manage, integration
+ * mappings), never a per-user or public subscription — the same trust model
+ * under which message.note_created already ships full internal-note content.
+ */
+export interface EventTicketMessageData {
+  ticket: EventTicketRef
+  messageId: string
+  /** Markdown-rendered content — images preserved from the stored contentJson. */
+  content: string
+  attachments: EventTicketMessageAttachment[] | null
+  /** 'agent' for a teammate reply or internal note; 'visitor' for a requester reply. */
+  senderType: 'agent' | 'visitor'
+}
+
 /**
  * Payload for assistant.handed_off — fired when Quinn escalates a conversation
  * to the human team, once per hand-off decision.
@@ -391,6 +420,12 @@ export interface TicketStatusChangedEvent extends EventBase<'ticket.status_chang
 export interface TicketAssignedEvent extends EventBase<'ticket.assigned'> {
   data: TicketAssignedPayload
 }
+export interface TicketRepliedEvent extends EventBase<'ticket.replied'> {
+  data: EventTicketMessageData
+}
+export interface TicketNoteAddedEvent extends EventBase<'ticket.note_added'> {
+  data: EventTicketMessageData
+}
 
 export interface AssistantHandedOffEvent extends EventBase<'assistant.handed_off'> {
   data: AssistantHandedOffPayload
@@ -430,4 +465,6 @@ export type EventData =
   | TicketCreatedEvent
   | TicketStatusChangedEvent
   | TicketAssignedEvent
+  | TicketRepliedEvent
+  | TicketNoteAddedEvent
   | AssistantHandedOffEvent

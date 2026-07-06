@@ -9,7 +9,7 @@
  * 7C.1 is the agent side (reply + internal note + list). Requester replies, the
  * public_stage-change notification path, and live SSE arrive with later slices.
  */
-import { db, conversationMessages, tickets, eq, and, lt, or, desc, isNull } from '@/lib/server/db'
+import { db, conversationMessages, tickets, eq, and, lt, or, desc, isNull, type Ticket } from '@/lib/server/db'
 import type { TicketId, ConversationMessageId, PrincipalId } from '@quackback/ids'
 import type { ConversationAttachment, TiptapContent } from '@/lib/shared/db-types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -24,6 +24,7 @@ import {
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { firstResponseStamp } from './ticket.lifecycle'
 import { loadTicketOr404 } from './ticket.service'
+import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -61,12 +62,16 @@ interface InsertTicketMessageOpts {
  * Low-level ticket-message write, shared by the agent reply/note paths and the
  * requester reply path. The CALLER owns authorization (agent permission vs
  * requester ownership); this only validates, inserts, and lightly denormalizes.
+ *
+ * Returns the loaded ticket alongside the message so a caller can fire the
+ * matching webhook event without a second read; its ref fields (number, type,
+ * priority, assignment) are unchanged by the message write.
  */
 export async function insertTicketMessage(
   input: SendTicketMessageInput,
   principalId: PrincipalId,
   opts: InsertTicketMessageOpts
-): Promise<ConversationMessageDTO> {
+): Promise<{ message: ConversationMessageDTO; ticket: Ticket }> {
   const attachments = validateAttachments(input.attachments)
   const safeContentJson = input.contentJson
     ? sanitizeTiptapContent(input.contentJson, {
@@ -84,7 +89,7 @@ export async function insertTicketMessage(
   // idempotent (set once), so a read-before-update race is harmless.
   const existing = await loadTicketOr404(input.ticketId)
 
-  const message = await db.transaction(async (tx) => {
+  const messageRow = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(conversationMessages)
       .values({
@@ -113,7 +118,7 @@ export async function insertTicketMessage(
   })
 
   const author = (await loadAuthors([principalId])).get(principalId) ?? fallbackAuthor(principalId)
-  return toMessageDTO(message, author)
+  return { message: toMessageDTO(messageRow, author), ticket: existing }
 }
 
 /** Agent reply on a customer ticket thread (customer-visible). */
@@ -123,11 +128,13 @@ export async function sendTicketMessage(
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_REPLY, 'reply to this ticket')
   const principalId = requireAgentPrincipal(actor)
-  const message = await insertTicketMessage(input, principalId, {
+  const { message, ticket } = await insertTicketMessage(input, principalId, {
     senderType: 'agent',
     isInternal: false,
     stampFirstResponse: true,
   })
+  // Agent/integration-facing signal, fire-and-forget after the write commits.
+  void emitTicketReplied(actor, ticket, message)
   return { message }
 }
 
@@ -138,11 +145,12 @@ export async function addTicketNote(
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_NOTE, 'add a note to this ticket')
   const principalId = requireAgentPrincipal(actor)
-  const message = await insertTicketMessage(input, principalId, {
+  const { message, ticket } = await insertTicketMessage(input, principalId, {
     senderType: 'agent',
     isInternal: true,
     stampFirstResponse: false,
   })
+  void emitTicketNoteAdded(actor, ticket, message)
   return { message }
 }
 

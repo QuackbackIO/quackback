@@ -12,6 +12,7 @@ import type { TiptapContent, ConversationAttachment } from '@/lib/shared/db-type
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
+import { emitTicketReplied } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO } from './ticket.dto'
 import {
   insertTicketMessage,
@@ -114,7 +115,7 @@ export async function replyToMyTicket(
 ): Promise<{ message: ConversationMessageDTO }> {
   const principalId = requireRequester(actor)
   await loadOwnedTicketOr404(input.ticketId, principalId)
-  const message = await insertTicketMessage(input, principalId, {
+  const { message, ticket } = await insertTicketMessage(input, principalId, {
     senderType: 'visitor',
     isInternal: false,
     // A requester reply is not an agent "first response".
@@ -122,5 +123,8 @@ export async function replyToMyTicket(
   })
   // A reply from a waiting/closed requester reopens the ticket (§4.2).
   await autoReopenOnRequesterReply(input.ticketId)
+  // Agent/integration-facing signal (senderType 'visitor'): customer activity
+  // the team's integrations want, fire-and-forget after the write commits.
+  void emitTicketReplied(actor, ticket, message)
   return { message }
 }
