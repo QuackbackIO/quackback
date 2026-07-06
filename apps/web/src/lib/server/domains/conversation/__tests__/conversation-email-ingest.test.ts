@@ -258,6 +258,79 @@ describe('ingestInboundEmail', () => {
     expect(sendVisitorMessage).not.toHaveBeenCalled()
   })
 
+  describe('HTML → contentJson conversion', () => {
+    it('stores the converted body + contentJson for an HTML-only email (placeholder gone)', async () => {
+      const result = await ingestInboundEmail({
+        type: 'email.received',
+        data: {
+          to: [REPLY_TO],
+          from: 'jane@example.com',
+          subject: 'Re: ticket',
+          html: '<div dir="ltr">Hello from <b>html</b>.</div>',
+          headers: [{ name: 'Message-ID', value: '<html-1@x>' }],
+        },
+      })
+
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      const [input, , , contentJson] = sendVisitorMessage.mock.calls[0]
+      // Placeholder replaced by the real converted text.
+      expect((input as { content: string }).content).toBe('Hello from html.')
+      expect((input as { content: string }).content).not.toContain('no plain-text body')
+      // Rich doc passed as the 4th arg, formatting intact.
+      expect(contentJson).not.toBeNull()
+      const json = JSON.stringify(contentJson)
+      expect(json).toContain('"bold"')
+      expect(json).toContain('html')
+    })
+
+    it('keeps text/plain precedence for content but still derives contentJson from the HTML', async () => {
+      const result = await ingestInboundEmail({
+        type: 'email.received',
+        data: {
+          to: [REPLY_TO],
+          from: 'jane@example.com',
+          text: 'My typed reply.\n\nOn Mon wrote:\n> quoted',
+          html: '<div dir="ltr">My typed reply.</div>',
+          headers: [{ name: 'Message-ID', value: '<both-1@x>' }],
+        },
+      })
+
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      const [input, , , contentJson] = sendVisitorMessage.mock.calls[0]
+      // text/plain (quote-trimmed) wins the plaintext mirror.
+      expect((input as { content: string }).content).toBe('My typed reply.')
+      // …but the rich doc still comes from the HTML part.
+      expect(contentJson).not.toBeNull()
+      expect(JSON.stringify(contentJson)).toContain('My typed reply.')
+    })
+
+    it('passes a null contentJson for a plaintext-only email (unchanged behavior)', async () => {
+      const result = await ingestInboundEmail(baseEvent)
+
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      const [input, , , contentJson] = sendVisitorMessage.mock.calls[0]
+      expect((input as { content: string }).content).toBe('This is my reply.')
+      expect(contentJson ?? null).toBeNull()
+    })
+
+    it('falls back to the placeholder when an HTML-only body converts to empty', async () => {
+      const result = await ingestInboundEmail({
+        type: 'email.received',
+        data: {
+          to: [REPLY_TO],
+          from: 'jane@example.com',
+          html: '<script>alert(1)</script>',
+          headers: [{ name: 'Message-ID', value: '<empty-html@x>' }],
+        },
+      })
+
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      const [input, , , contentJson] = sendVisitorMessage.mock.calls[0]
+      expect((input as { content: string }).content).toBe('(no plain-text body)')
+      expect(contentJson ?? null).toBeNull()
+    })
+  })
+
   describe('loop / auto-mail suppression', () => {
     it('drops an Auto-Submitted (autoresponder) message before routing', async () => {
       const result = await ingestInboundEmail({

@@ -28,6 +28,7 @@ import {
   type ParsedInboundEmail,
 } from './conversation.email-inbound'
 import { conversationIdFromInboundAddress, ownEmailDomains } from './conversation.email-channel'
+import { emailHtmlToContent } from '@/lib/server/content/email-html-to-content'
 import {
   resolveConversationByMessageIds,
   resolvePrincipalIdByEmail,
@@ -99,12 +100,15 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   if (!conversation) return { status: 'no_conversation' }
 
   const plainText = extractReplyText(parsed.text ?? '')
-  // An HTML-only message (no plain-text part at all) is not empty — carry it
-  // through with a placeholder so it isn't dropped. NOTE for the P4.3
-  // HTML→contentJson task: replace this placeholder with the converted body
-  // instead of storing it verbatim.
+  // Convert the HTML body (when present) to a rich doc + its plaintext mirror.
+  // text/plain keeps precedence for the stored `content` (it's the sender's own
+  // quote-trimmed words); the HTML only supplies `contentJson` and, for an
+  // HTML-only message, the `content` fallback. An empty conversion of a body
+  // that WAS html-only still falls back to the placeholder so nothing is lost.
+  const converted = parsed.html ? emailHtmlToContent(parsed.html) : null
   if (!plainText && !parsed.html) return { status: 'empty' }
-  const content = plainText || '(no plain-text body)'
+  const content = plainText || converted?.text || '(no plain-text body)'
+  const contentJson = converted?.contentJson ?? null
 
   const visitorPrincipalId = conversation.visitorPrincipalId as PrincipalId
   const visitor = await db.query.principal.findFirst({
@@ -165,7 +169,8 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
       metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
     },
     { principalId: visitorPrincipalId, displayName: visitor.displayName },
-    actor
+    actor,
+    contentJson
   )
 
   return { status: 'ingested', conversationId }
@@ -194,10 +199,11 @@ async function ingestColdInbound(parsed: ParsedInboundEmail): Promise<IngestInbo
   }
 
   const plainText = extractReplyText(parsed.text ?? '')
-  // See the matching note in ingestParsedEmail: an HTML-only cold inbound is
-  // carried through with a placeholder rather than dropped.
+  // Same precedence as the reply path: text/plain owns `content`; the HTML body
+  // supplies `contentJson` and the HTML-only `content` fallback.
+  const converted = parsed.html ? emailHtmlToContent(parsed.html) : null
   if (!plainText && !parsed.html) return { status: 'empty' }
-  const content = plainText || '(no plain-text body)'
+  const content = plainText || converted?.text || '(no plain-text body)'
 
   const resolution = await resolveColdInboundSender(parsed.from, parsed.authenticationResults)
   if (resolution.action === 'drop') return { status: 'suppressed' }
@@ -208,6 +214,7 @@ async function ingestColdInbound(parsed: ParsedInboundEmail): Promise<IngestInbo
     principalId: resolution.principalId,
     unverified: resolution.unverified,
     content,
+    contentJson: converted?.contentJson ?? null,
   })
   return { status: 'ingested', conversationId }
 }

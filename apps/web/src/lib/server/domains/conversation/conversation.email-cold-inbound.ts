@@ -16,9 +16,11 @@
  * Resolution only touches identity; the caller owns creating the conversation.
  */
 import { db, sql, eq, user, conversations, conversationMessages } from '@/lib/server/db'
+import type { TiptapContent } from '@/lib/server/db'
 import type { PrincipalId, ChannelAccountId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import {
   createPrincipal,
   ensurePrincipalForUser,
@@ -90,8 +92,17 @@ export async function createEmailConversation(input: {
   principalId: PrincipalId
   unverified: boolean
   content: string
+  /** Rich body converted from the inbound HTML, or null for a plaintext mail. */
+  contentJson?: TiptapContent | null
 }): Promise<ConversationId> {
-  const { parsed, channelAccountId, principalId, unverified, content } = input
+  const { parsed, channelAccountId, principalId, unverified, content, contentJson } = input
+  // Direct insert bypasses sendVisitorMessage, so mirror its guard here: an
+  // untrusted sender's inline images may only reference our own storage (a
+  // cold-inbound cid: / external src is cleared until the attachment task
+  // rehosts it), same as every other visitor-ingress channel.
+  const safeContentJson = contentJson
+    ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
+    : null
   const now = new Date()
   const [conversation] = await db
     .insert(conversations)
@@ -116,6 +127,7 @@ export async function createEmailConversation(input: {
     principalId,
     senderType: 'visitor',
     content,
+    contentJson: safeContentJson,
     metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
   })
 

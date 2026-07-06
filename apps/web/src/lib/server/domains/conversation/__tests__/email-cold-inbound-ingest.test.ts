@@ -110,6 +110,27 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     expect(visitor.contactEmail).toBe('customer@acme.com')
   })
 
+  it('stores converted content + contentJson for an HTML-only cold inbound', async () => {
+    await seedInboundRoute('support@quackback.io')
+
+    const res = await ingestParsedEmail(
+      coldEmail({ text: '', html: '<div dir="ltr">Invoice looks <b>wrong</b>.</div>' })
+    )
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const [msg] = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, res.conversationId))
+    // Placeholder gone: the plaintext mirror is the converted body.
+    expect(msg.content).toBe('Invoice looks wrong.')
+    expect(msg.content).not.toContain('no plain-text body')
+    // The rich doc is persisted alongside it, formatting intact.
+    expect(msg.contentJson).not.toBeNull()
+    expect(JSON.stringify(msg.contentJson)).toContain('"bold"')
+  })
+
   it('leaves an email to no known route alone (no_conversation)', async () => {
     // No inbound route seeded for this address.
     const res = await ingestParsedEmail(coldEmail({ toAddresses: ['nobody@elsewhere.com'] }))
