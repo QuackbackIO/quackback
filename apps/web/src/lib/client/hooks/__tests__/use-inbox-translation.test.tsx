@@ -193,6 +193,28 @@ describe('useInboxTranslation — suggestion banner', () => {
     )
     expect(result.current.showSuggestionBanner).toBe(false)
   })
+
+  it('does not suggest when detection was inconclusive ("und")', async () => {
+    const { result } = renderHook(
+      () =>
+        useInboxTranslation({
+          enabledFlag: true,
+          conversationId,
+          translationState: {
+            enabled: false,
+            detectedCustomerLanguage: 'und',
+            suggestionDismissed: false,
+          },
+          messages: [],
+          onChanged: vi.fn(),
+        }),
+      { wrapper }
+    )
+    // Give the teammate-language query a chance to settle — the banner should
+    // still read false, not just "not yet true".
+    await waitFor(() => expect(result.current.detectedLanguageLabel).toBe(''))
+    expect(result.current.showSuggestionBanner).toBe(false)
+  })
 })
 
 describe('useInboxTranslation — activation actions', () => {

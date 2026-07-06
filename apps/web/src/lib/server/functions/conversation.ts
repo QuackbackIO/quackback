@@ -899,20 +899,27 @@ export const getConversationFn = createServerFn({ method: 'GET' })
         await import('@/lib/server/domains/conversation/conversation.service')
       const { conversationToDTO, listMessages, enrichMessagesForAgent } =
         await import('@/lib/server/domains/conversation/conversation.query')
-      let conversation = await assertConversationViewable(
+      const conversation = await assertConversationViewable(
         data.conversationId as ConversationId,
         actor
       )
       // P2-D.1 inbox translation: lazy, once-per-conversation customer-
       // language detection, so the auto-suggest banner has something to
-      // compare against. A no-op after the first successful detection (the
-      // column is then non-null) and a silent no-op whenever the flag is off
-      // or AI isn't configured — never blocks opening the thread.
+      // compare against. Fire-and-forget (like the summarize-on-close hook,
+      // events/process.ts) — this NEVER blocks opening the thread, even when
+      // the flag is on and AI is configured. The DTO below carries whatever
+      // is already stored; a detection that completes during (or after) this
+      // request simply lands on the NEXT read of this conversation.
       const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
       if (await isFeatureEnabled('inboxTranslation')) {
-        const { maybeDetectCustomerLanguage } =
-          await import('@/lib/server/domains/conversation/conversation-translation.service')
-        conversation = await maybeDetectCustomerLanguage(conversation)
+        void import('@/lib/server/domains/conversation/conversation-translation.service')
+          .then((m) => m.maybeDetectCustomerLanguage(conversation))
+          .catch((err) =>
+            log.error(
+              { err, conversation_id: conversation.id },
+              'customer language detection failed to load'
+            )
+          )
       }
       const [dto, page] = await Promise.all([
         conversationToDTO(conversation, 'agent'),
@@ -1531,15 +1538,24 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
           id: messagesTable.id,
           content: messagesTable.content,
           conversationId: messagesTable.conversationId,
+          isInternal: messagesTable.isInternal,
+          senderType: messagesTable.senderType,
+          contentJson: messagesTable.contentJson,
         })
         .from(messagesTable)
         .where(inArrayOp(messagesTable.id, data.messageIds as ConversationMessageId[]))
 
       const results: Record<string, { content: string; sourceLocale: string | null }> = {}
       for (const message of messages) {
-        // Defense in depth: only translate messages that actually belong to
-        // the conversation the caller was authorized for.
+        // Defense in depth: the client already only ever requests eligible
+        // ids (visitor-sent, non-internal, plain-text — see
+        // use-inbox-translation.ts's visitorMessageIds filter), but this is
+        // the trust boundary — never translate on a client's say-so alone.
+        // Skip (not error) anything ineligible so one bad id in a batch
+        // doesn't fail the whole request; a message outside the caller's
+        // authorized conversation is skipped the same way.
         if (message.conversationId !== conversation.id) continue
+        if (message.isInternal || message.senderType !== 'visitor' || message.contentJson) continue
         try {
           const { content } = await translateIncomingMessage(message, targetLocale)
           results[message.id] = { content, sourceLocale: context.customerLocale }

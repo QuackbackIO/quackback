@@ -332,6 +332,9 @@ export const conversationMessageTranslations = pgTable(
       table.conversationMessageId,
       table.locale
     ),
+    // Backs the 180-day retention sweep's DELETE ... WHERE created_at < cutoff
+    // (mirrors assistant_tool_calls_created_at_idx / tool-audit.ts's pattern).
+    index('conversation_message_translations_created_at_idx').on(table.createdAt),
   ]
 )
 

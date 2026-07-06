@@ -3,6 +3,7 @@ import type { ConversationMessageMetadata } from '@/lib/server/db'
 import type {
   ConversationAttachment,
   ConversationMessageDTO,
+  AgentConversationMessageDTO,
   ConversationDTO,
 } from '@/lib/shared/conversation/types'
 
@@ -35,5 +36,8 @@ export interface SendVisitorMessageResult {
 
 export interface SendAgentMessageResult {
   conversation: ConversationDTO
-  message: ConversationMessageDTO
+  // Agent-only DTO (mirrors enrichMessagesForAgent's shape) so the sending
+  // agent's own response — and the inbox-only message_updated broadcast to
+  // other agents — carries translatedFrom (P2-D.1). Never handed to a visitor.
+  message: AgentConversationMessageDTO
 }

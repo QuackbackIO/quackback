@@ -21,7 +21,10 @@ import type {
   AgentConversationMessageDTO,
   ConversationTranslationStateDTO,
 } from '@/lib/shared/conversation/types'
-import type { MessageTranslationDisplay } from '@/lib/shared/conversation/translation'
+import {
+  UNDETERMINED_LANGUAGE,
+  type MessageTranslationDisplay,
+} from '@/lib/shared/conversation/translation'
 
 /** Human language name from a BCP-47 tag, e.g. "fr" -> "French". Falls back
  *  to the raw tag when Intl can't resolve it (unrecognized/malformed tag). */
@@ -119,12 +122,17 @@ export function useInboxTranslation({
   })
 
   const detected = translationState?.detectedCustomerLanguage ?? null
+  // UNDETERMINED_LANGUAGE ('und') means detection ran but couldn't identify a
+  // language — that's not a real language to suggest translating from or to
+  // display a name for.
+  const hasRealDetectedLanguage = !!detected && detected !== UNDETERMINED_LANGUAGE
+  const detectedForDisplay = hasRealDetectedLanguage ? detected : null
   const showSuggestionBanner =
     enabledFlag &&
     !!translationState &&
     !translationState.enabled &&
     !translationState.suggestionDismissed &&
-    !!detected &&
+    hasRealDetectedLanguage &&
     // Wait for the teammate's own preference to actually load — showing the
     // banner while it's still `undefined` would flash on and then off again
     // for a teammate who turns out to share the customer's language.
@@ -151,7 +159,7 @@ export function useInboxTranslation({
         const fetched = translationsQuery.data?.[message.id]
         if (!fetched) return undefined
         return {
-          label: `Translated from ${languageDisplayName(fetched.sourceLocale ?? detected ?? '')}`,
+          label: `Translated from ${languageDisplayName(fetched.sourceLocale ?? detectedForDisplay ?? '')}`,
           translatedContent: fetched.content,
           originalContent: message.content,
           showingOriginal,
@@ -174,14 +182,14 @@ export function useInboxTranslation({
       translationState?.enabled,
       showOriginalIds,
       translationsQuery.data,
-      detected,
+      detectedForDisplay,
       toggleOriginal,
     ]
   )
 
   return {
     showSuggestionBanner,
-    detectedLanguageLabel: detected ? languageDisplayName(detected) : '',
+    detectedLanguageLabel: detectedForDisplay ? languageDisplayName(detectedForDisplay) : '',
     dismissSuggestion: () => dismissMutation.mutate(),
     activateFromSuggestion: () => toggleMutation.mutate(true),
     enabled: translationState?.enabled ?? false,

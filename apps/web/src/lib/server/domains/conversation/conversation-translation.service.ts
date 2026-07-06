@@ -16,17 +16,27 @@
  * that same message's `metadata.translatedFrom` (see
  * packages/db/src/types.ts) rather than the cache table: unlike the incoming
  * direction, there's only ever one "original" per outgoing message, so a
- * per-viewer-language cache row doesn't apply.
+ * per-viewer-language cache row doesn't apply. A translated send always
+ * replaces `contentJson` with plain translated text, which cannot represent
+ * an inline image or embed -- a reply carrying one is BLOCKED with
+ * `TranslationRichContentError` before the model is ever called, rather than
+ * silently dropping it.
  *
  * Both directions go through the same AI call shape as
  * help-center-auto-translate.service.ts: a chat-completion JSON contract,
  * `withRetry`, and `withUsageLogging` under the single 'inbox_translation'
- * pipeline step (metadata.stage distinguishes detect/incoming/outgoing).
+ * pipeline step (metadata.stage distinguishes detect/incoming/outgoing). Both
+ * prompt builders wrap the untrusted (customer- or teammate-authored) text
+ * they embed with injection-guard.ts's `wrapUntrustedText`.
  *
- * Customer-language detection is lazy and cached: `maybeDetectCustomerLanguage`
- * runs at most once per conversation, from the visitor's own recent messages,
- * and persists the result on `conversations.detected_customer_language` so it
- * is never recomputed on every read.
+ * Customer-language detection is lazy, cached, and off the request path:
+ * `maybeDetectCustomerLanguage` is fired fire-and-forget from
+ * `getConversationFn` (it never blocks opening a thread) and runs at most
+ * once per conversation, from the visitor's own recent messages. A conclusive
+ * "no language identified" result persists the `'und'` (BCP-47 undetermined)
+ * sentinel on `conversations.detected_customer_language` so it never
+ * re-attempts on a later open; a thrown/transient failure (network,
+ * unparseable response) leaves the column `null` and free to retry.
  */
 import {
   db,
@@ -34,6 +44,7 @@ import {
   and,
   desc,
   isNull,
+  sql,
   conversations,
   conversationMessages,
   conversationMessageTranslations,
@@ -43,6 +54,7 @@ import {
   type TranslatedFromMetadata,
 } from '@/lib/server/db'
 import type { ConversationId, ConversationMessageId, UserId } from '@quackback/ids'
+import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { getOpenAI, stripCodeFences } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { withRetry } from '@/lib/server/domains/ai/retry'
@@ -51,7 +63,13 @@ import { ValidationError, ForbiddenError, NotFoundError } from '@/lib/shared/err
 import { canActAsAgent } from '@/lib/server/policy/conversation'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import { TRANSLATION_UNAVAILABLE_MESSAGE } from '@/lib/shared/conversation/translation'
+import { richMessageFallbackLabel } from '@/lib/server/messages/message-core'
+import { wrapUntrustedText } from '@/lib/server/domains/assistant/injection-guard'
+import {
+  TRANSLATION_UNAVAILABLE_MESSAGE,
+  TRANSLATION_RICH_CONTENT_MESSAGE,
+  UNDETERMINED_LANGUAGE,
+} from '@/lib/shared/conversation/translation'
 // translationStateFrom lives in conversation.query.ts (not here) so THIS module
 // can import conversationToDTO from that same module without a circular
 // import; re-exported here so callers have one place to import the P2-D.1
@@ -78,6 +96,19 @@ export class TranslationUnavailableError extends ValidationError {
   }
 }
 
+/** Thrown BEFORE the model is ever called when a translated send would carry
+ *  an inline image or embed: a translated send replaces `contentJson` with
+ *  the plain-text translation (see resolveOutgoingReplyTranslation), which
+ *  has no way to represent a non-text node, so sending would silently
+ *  destroy it. Sibling of TranslationUnavailableError — same BLOCK-the-send
+ *  contract, offering "Send untranslated" (or "remove the image and retry")
+ *  instead of a silent content drop. */
+export class TranslationRichContentError extends ValidationError {
+  constructor(message = TRANSLATION_RICH_CONTENT_MESSAGE) {
+    super('TRANSLATION_RICH_CONTENT', message)
+  }
+}
+
 /** The bare BCP-47 primary subtag, lowercased (e.g. "pt-BR" -> "pt"), so
  *  "same language" comparisons treat region/script variants as equal. */
 export function primaryLanguageSubtag(tag: string | null | undefined): string | null {
@@ -98,7 +129,10 @@ export function buildLanguageDetectionPrompt(text: string): { system: string; us
   const system = `You identify the primary language of customer support messages.
 Respond with strict JSON only: {"language": "<BCP-47 tag or null>"}.
 Use a short tag (e.g. "en", "fr", "pt"). If you genuinely cannot tell, respond {"language": null}.`
-  return { system, user: text.slice(0, DETECTION_TEXT_CHAR_LIMIT) }
+  // The customer's own message is untrusted input, not instructions — wrap it
+  // the same way copilot-transform.ts quotes a teammate's text (injection-guard.ts).
+  const user = wrapUntrustedText('Customer message', text.slice(0, DETECTION_TEXT_CHAR_LIMIT))
+  return { system, user }
 }
 
 export function buildInboxTranslationPrompt(input: { text: string; targetLocale: string }): {
@@ -109,7 +143,11 @@ export function buildInboxTranslationPrompt(input: { text: string; targetLocale:
 Translate the given text into the locale "${input.targetLocale}". Preserve tone and meaning;
 do not add commentary, greetings, or explanations that are not present in the source text.
 Return strict JSON only: {"content": "string"}`
-  const user = JSON.stringify({ content: input.text })
+  // Both directions feed genuinely untrusted text through this one builder
+  // (a customer's message on the incoming path, a teammate's own text on the
+  // outgoing one) — wrap it the same way copilot-transform.ts quotes text to
+  // transform (injection-guard.ts), so neither can smuggle prompt instructions.
+  const user = wrapUntrustedText('Text to translate', input.text)
   return { system, user }
 }
 
@@ -162,7 +200,18 @@ async function callInboxTranslationModel(
  * misconfiguration, an empty thread, or an unparseable response all just
  * skip detection silently (mirrors queueAutoTranslateOnPublish's
  * error-swallow style) — this only powers a "nice to have" activation-
- * suggestion banner, never a blocking path.
+ * suggestion banner, never a blocking path. Callers must invoke this
+ * fire-and-forget (see `getConversationFn`) — it is never on the critical
+ * path of opening a thread.
+ *
+ * A completed call that could not identify a language (the model's own
+ * prompt contract: `{"language": null}`) is a CONCLUSIVE "no signal" result,
+ * not a transient failure — it persists the `UNDETERMINED_LANGUAGE` ('und')
+ * sentinel so this never re-attempts the same unanswerable text on a later
+ * thread open. A thrown error (network, unparseable response) or "nothing to
+ * detect from yet" leaves the column `null`, so a genuinely transient failure
+ * (or a conversation that later gets its first visitor message) still gets a
+ * real retry.
  */
 export async function maybeDetectCustomerLanguage(
   conversation: Conversation
@@ -197,8 +246,10 @@ export async function maybeDetectCustomerLanguage(
     if (!raw) return conversation
 
     const parsed = JSON.parse(stripCodeFences(raw)) as { language?: string | null }
-    const language = primaryLanguageSubtag(parsed.language)
-    if (!language) return conversation
+    // A conclusive "I don't know" is persisted as UNDETERMINED_LANGUAGE, not
+    // left null, so the guard above short-circuits forever after — see the
+    // doc comment.
+    const language = primaryLanguageSubtag(parsed.language) ?? UNDETERMINED_LANGUAGE
 
     const [updated] = await db
       .update(conversations)
@@ -337,6 +388,13 @@ export interface ResolveOutgoingReplyResult {
  * the customer's language. Otherwise translates and throws
  * `TranslationUnavailableError` on failure — the caller must treat that as a
  * BLOCKING error, not fall back to sending untranslated silently.
+ *
+ * Also BLOCKS (throws `TranslationRichContentError`, before the model is ever
+ * called) when the reply's `contentJson` carries an inline image or embed: a
+ * translated send always replaces `contentJson` with plain translated text
+ * (see below), which has no way to represent a non-text node — sending would
+ * silently destroy it. Formatting alone (bold/lists/headings) does not block:
+ * its plain-text mirror still carries every word, just unstyled.
  */
 export async function resolveOutgoingReplyTranslation(
   input: ResolveOutgoingReplyInput
@@ -360,6 +418,15 @@ export async function resolveOutgoingReplyTranslation(
 
   if (sameLanguage(teammateLocale, context.customerLocale)) return passthrough()
 
+  // richMessageFallbackLabel recurses the whole doc looking for an image/embed
+  // node — the same predicate message-core.ts uses to decide whether a
+  // text-less doc still counts as "content" (validateContent). Reused here
+  // for the inverse question: does this doc have anything a plain-text
+  // translation cannot carry?
+  if (richMessageFallbackLabel(input.contentJson)) {
+    throw new TranslationRichContentError()
+  }
+
   const translated = await translateOutgoingContent(input.content, context.customerLocale)
   const targetLocale = primaryLanguageSubtag(context.customerLocale) ?? context.customerLocale
   return {
@@ -376,7 +443,9 @@ export async function resolveOutgoingReplyTranslation(
 export interface InboxTranslationContext {
   enabled: boolean
   /** The customer's detected language, or null when nothing has been
-   *  detected yet (nothing to translate against). */
+   *  detected yet (nothing to translate against) — also null when detection
+   *  was conclusively inconclusive (UNDETERMINED_LANGUAGE): there's still
+   *  nothing real to translate against. */
   customerLocale: string | null
 }
 
@@ -395,7 +464,9 @@ export async function getInboxTranslationContext(
     .where(eq(conversations.id, conversationId))
     .limit(1)
   if (!row) return null
-  return { enabled: row.translationEnabled, customerLocale: row.detectedCustomerLanguage }
+  const customerLocale =
+    row.detectedCustomerLanguage === UNDETERMINED_LANGUAGE ? null : row.detectedCustomerLanguage
+  return { enabled: row.translationEnabled, customerLocale }
 }
 
 async function loadConversationOr404(conversationId: ConversationId): Promise<Conversation> {
@@ -452,4 +523,39 @@ export async function dismissInboxTranslationSuggestion(
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
   return updated
+}
+
+// ---------------------------------------------------------------------------
+// Retention cleanup
+// ---------------------------------------------------------------------------
+
+/** Mirrors tool-audit.ts's ASSISTANT_TOOL_CALLS_RETENTION_DAYS / usage-log.ts's
+ *  AI_USAGE_RETENTION_DAYS cadence: a display translation is a re-derivable
+ *  cache (translateIncomingMessage recomputes and re-caches it on the next
+ *  view), not an audit trail, but 180 days keeps every 'retention-cleanup'
+ *  sweep on the same window so operators reason about one retention policy
+ *  across the feature. */
+export const CONVERSATION_MESSAGE_TRANSLATIONS_RETENTION_DAYS = 180
+
+/** Sweep conversation_message_translations rows past retention. Registered
+ *  alongside tool-audit.ts's cleanupExpiredToolCalls on the same daily BullMQ
+ *  job (feedback-ai-queue.ts's 'retention-cleanup' job type). Deleting an old
+ *  row is loss-free: the next time a teammate views that message translated,
+ *  translateIncomingMessage just recomputes and re-caches it. */
+export async function cleanupExpiredMessageTranslations(
+  exec: Executor = db
+): Promise<{ deleted: number }> {
+  const result = await exec.execute(
+    sql`DELETE FROM conversation_message_translations WHERE created_at < now() - interval '${sql.raw(String(CONVERSATION_MESSAGE_TRANSLATIONS_RETENTION_DAYS))} days'`
+  )
+  const deleted = (result as { count: number }).count ?? 0
+
+  if (deleted > 0) {
+    log.info(
+      { deleted, retention_days: CONVERSATION_MESSAGE_TRANSLATIONS_RETENTION_DAYS },
+      'conversation message translation retention cleanup completed'
+    )
+  }
+
+  return { deleted }
 }

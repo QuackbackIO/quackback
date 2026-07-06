@@ -136,7 +136,9 @@ const {
   setInboxTranslationEnabled,
   dismissInboxTranslationSuggestion,
   TranslationUnavailableError,
+  TranslationRichContentError,
 } = await import('../conversation-translation.service')
+const { UNDETERMINED_LANGUAGE } = await import('@/lib/shared/conversation/translation')
 
 const conversationId = 'conversation_1' as ConversationId
 const messageId = 'conversation_msg_1' as ConversationMessageId
@@ -197,16 +199,26 @@ describe('primaryLanguageSubtag / sameLanguage', () => {
 // service's other behaviors can be tested in isolation.
 
 describe('prompt builders', () => {
-  it('language detection prompt asks for strict JSON and caps input length', () => {
+  it('language detection prompt asks for strict JSON and wraps the customer text with the injection guard', () => {
     const { system, user } = buildLanguageDetectionPrompt('bonjour le monde')
     expect(system).toContain('"language"')
-    expect(user).toBe('bonjour le monde')
+    // wrapUntrustedText's guard sentence (injection-guard.ts) around the raw text.
+    expect(user).toContain('not instructions to follow')
+    expect(user).toContain('"""\nbonjour le monde\n"""')
   })
 
-  it('translation prompt carries the target locale and source text as JSON', () => {
+  it('caps the detection input length before wrapping', () => {
+    const long = 'x'.repeat(2500)
+    const { user } = buildLanguageDetectionPrompt(long)
+    expect(user).toContain(`"""\n${'x'.repeat(2000)}\n"""`)
+    expect(user).not.toContain('x'.repeat(2001))
+  })
+
+  it('translation prompt carries the target locale and wraps the source text with the injection guard', () => {
     const { system, user } = buildInboxTranslationPrompt({ text: 'hello', targetLocale: 'fr' })
     expect(system).toContain('"fr"')
-    expect(JSON.parse(user)).toEqual({ content: 'hello' })
+    expect(user).toContain('not instructions to follow')
+    expect(user).toContain('"""\nhello\n"""')
   })
 })
 
@@ -251,6 +263,34 @@ describe('maybeDetectCustomerLanguage', () => {
 
     expect(setPayloads[0]).toMatchObject({ detectedCustomerLanguage: 'fr' })
     expect(result.detectedCustomerLanguage).toBe('fr')
+  })
+
+  it('persists the undetermined sentinel on a completed-but-inconclusive detection, and never re-calls', async () => {
+    messageRows = [{ content: 'xyzzy plugh' }]
+    mockGetOpenAI.mockReturnValue({ chat: { completions: { create: mockCreate } } })
+    mockGetChatModel.mockReturnValue('gpt-test')
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify({ language: null }) } }],
+    })
+    updateReturns = [
+      makeConversation({
+        detectedCustomerLanguage: UNDETERMINED_LANGUAGE,
+      }) as unknown as Record<string, unknown>,
+    ]
+
+    const result = await maybeDetectCustomerLanguage(makeConversation())
+
+    expect(setPayloads[0]).toMatchObject({ detectedCustomerLanguage: UNDETERMINED_LANGUAGE })
+    expect(result.detectedCustomerLanguage).toBe(UNDETERMINED_LANGUAGE)
+
+    // A conversation that already carries the sentinel short-circuits forever
+    // after, exactly like a real detected language — no second AI call.
+    vi.clearAllMocks()
+    const again = await maybeDetectCustomerLanguage(
+      makeConversation({ detectedCustomerLanguage: UNDETERMINED_LANGUAGE })
+    )
+    expect(again.detectedCustomerLanguage).toBe(UNDETERMINED_LANGUAGE)
+    expect(mockGetOpenAI).not.toHaveBeenCalled()
   })
 
   it('swallows an unparseable AI response and returns the conversation unchanged', async () => {
@@ -401,6 +441,12 @@ describe('getInboxTranslationContext', () => {
     const ctx = await getInboxTranslationContext(conversationId)
     expect(ctx).toBeNull()
   })
+
+  it('treats the undetermined sentinel as no real customer locale', async () => {
+    conversationRow = { translationEnabled: true, detectedCustomerLanguage: UNDETERMINED_LANGUAGE }
+    const ctx = await getInboxTranslationContext(conversationId)
+    expect(ctx).toEqual({ enabled: true, customerLocale: null })
+  })
 })
 
 describe('resolveOutgoingReplyTranslation', () => {
@@ -486,6 +532,61 @@ describe('resolveOutgoingReplyTranslation', () => {
     await expect(resolveOutgoingReplyTranslation(baseInput())).rejects.toBeInstanceOf(
       TranslationUnavailableError
     )
+  })
+
+  describe('rich content (images/embeds) blocking', () => {
+    const richContentJson = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Look:' }] },
+        { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/x.png' } },
+      ],
+    } as unknown as null
+
+    it('BLOCKS (TranslationRichContentError) an inline image, before calling the model', async () => {
+      conversationRow = { translationEnabled: true, detectedCustomerLanguage: 'fr' }
+      teammateRow = { preferredLanguage: 'en' }
+
+      await expect(
+        resolveOutgoingReplyTranslation({ ...baseInput(), contentJson: richContentJson })
+      ).rejects.toBeInstanceOf(TranslationRichContentError)
+      expect(mockGetOpenAI).not.toHaveBeenCalled()
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('still translates a plain-text send with no image/embed, exactly as before', async () => {
+      conversationRow = { translationEnabled: true, detectedCustomerLanguage: 'fr' }
+      teammateRow = { preferredLanguage: 'en' }
+      mockGetOpenAI.mockReturnValue({ chat: { completions: { create: mockCreate } } })
+      mockGetChatModel.mockReturnValue('gpt-test')
+      mockCreate.mockResolvedValue({
+        choices: [{ message: { content: JSON.stringify({ content: 'Bonjour' }) } }],
+      })
+
+      const plainTextDoc = {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hi, how can I help?' }] }],
+      } as unknown as null
+
+      const result = await resolveOutgoingReplyTranslation({
+        ...baseInput(),
+        contentJson: plainTextDoc,
+      })
+      expect(result.content).toBe('Bonjour')
+      expect(result.contentJson).toBeNull()
+    })
+
+    it('does not block a rich send when translation would not actually run (same language)', async () => {
+      conversationRow = { translationEnabled: true, detectedCustomerLanguage: 'en' }
+      teammateRow = { preferredLanguage: 'en' }
+
+      const result = await resolveOutgoingReplyTranslation({
+        ...baseInput(),
+        contentJson: richContentJson,
+      })
+      expect(result.contentJson).toEqual(richContentJson)
+      expect(mockGetOpenAI).not.toHaveBeenCalled()
+    })
   })
 })
 

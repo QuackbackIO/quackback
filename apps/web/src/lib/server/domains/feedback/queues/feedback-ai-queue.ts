@@ -68,7 +68,13 @@ async function initializeQueue() {
         case 'retention-cleanup': {
           const { cleanupExpiredLogs } = await import('../../ai/usage-log')
           const { cleanupExpiredToolCalls } = await import('../../assistant/tool-audit')
-          await Promise.all([cleanupExpiredLogs(), cleanupExpiredToolCalls()])
+          const { cleanupExpiredMessageTranslations } =
+            await import('../../conversation/conversation-translation.service')
+          await Promise.all([
+            cleanupExpiredLogs(),
+            cleanupExpiredToolCalls(),
+            cleanupExpiredMessageTranslations(),
+          ])
           break
         }
         default:

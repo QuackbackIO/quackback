@@ -31,7 +31,10 @@ import {
   markConversationUnreadFromMessageFn,
 } from '@/lib/server/functions/conversation'
 import { useInboxTranslation } from '@/lib/client/hooks/use-inbox-translation'
-import { isTranslationUnavailableMessage } from '@/lib/shared/conversation/translation'
+import {
+  isTranslationUnavailableMessage,
+  isTranslationRichContentMessage,
+} from '@/lib/shared/conversation/translation'
 import { removeConversationSlaFn } from '@/lib/server/functions/sla'
 import type {
   ConversationAttachment,
@@ -441,6 +444,21 @@ export function AgentConversationThread({
       appendToThread(res)
     },
     onError: (error, vars) => {
+      // The reply carried an inline image/embed that a translated send cannot
+      // preserve — BLOCKED before the model ever ran (see
+      // resolveOutgoingReplyTranslation), never silently dropped. Same choice
+      // UX as the unavailable-translation case below.
+      if (error instanceof Error && isTranslationRichContentMessage(error.message)) {
+        toast.error('Could not translate your reply.', {
+          description:
+            'Translation cannot carry images or embeds. Send untranslated to keep them, or remove them and try again.',
+          action: {
+            label: 'Send untranslated',
+            onClick: () => sendMutation.mutate({ ...vars, skipTranslation: true }),
+          },
+        })
+        return
+      }
       // Translation failed and the send was BLOCKED (never sent untranslated
       // silently) — offer the explicit fallback rather than a generic toast.
       if (error instanceof Error && isTranslationUnavailableMessage(error.message)) {

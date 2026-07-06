@@ -1233,6 +1233,13 @@
       "when": 1784767020000,
       "tag": "0175_conversation_translation",
       "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "7",
+      "when": 1784767080000,
+      "tag": "0176_conversation_message_translations_created_at_idx",
+      "breakpoints": true
     }
   ]
 }
