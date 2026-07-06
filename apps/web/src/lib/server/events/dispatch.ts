@@ -130,12 +130,14 @@ export async function dispatchPostStatusChanged(
   actor: EventActor,
   post: PostStatusChangedInput,
   previousStatus: string,
-  newStatus: string
+  newStatus: string,
+  previousStatusSlug: string,
+  newStatusSlug: string
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'post.status_changed',
-    data: { post, previousStatus, newStatus },
+    data: { post, previousStatus, newStatus, previousStatusSlug, newStatusSlug },
   })
 }
 

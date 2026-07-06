@@ -437,7 +437,9 @@ export async function updatePost(
         boardSlug: board.slug,
       },
       previousStatusName,
-      newStatus.name
+      newStatus.name,
+      previousStatus?.slug ?? 'open',
+      newStatus.slug
     )
 
     createActivity({
