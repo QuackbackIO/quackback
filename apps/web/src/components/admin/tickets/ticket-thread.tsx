@@ -1,11 +1,11 @@
 /**
  * The agent-facing ticket thread (support platform §4.2, 7C): a virtualized
  * message list + reply/internal-note composer for a customer ticket. Built on the
- * SAME shared thread core as the conversation inbox (thread.tsx + AgentMessageBubble
- * + the composers), but far leaner: a ticket carries no CSAT / typing / convert-to-
- * post / macros, and the message bubble renders read-only (no inbox reactions/flags/
- * delete toolbar). Live SSE arrives with the requester surfaces; for now a send
- * optimistically appends and the query refetches on focus.
+ * SAME shared thread core as the conversation inbox (thread.tsx + AgentMessageBubble)
+ * and the SAME unified RichTextEditor, but far leaner: a ticket carries no CSAT /
+ * typing / convert-to-post / macros, and the message bubble renders read-only (no
+ * inbox reactions/flags/delete toolbar). Live SSE arrives with the requester
+ * surfaces; for now a send optimistically appends and the query refetches on focus.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { PaperAirplaneIcon, PaperClipIcon, PencilSquareIcon } from '@heroicons/react/24/solid'
 import type { TicketId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/core'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import type {
   ConversationAttachment,
   ConversationMessageDTO,
@@ -25,25 +26,17 @@ import {
 import { ticketQueries, ticketKeys } from '@/lib/client/queries/tickets'
 import { AgentMessageBubble } from '@/components/conversation/message-bubble'
 import { asAgentMessage } from '@/components/conversation/events-reducer'
+import { ThreadViewport, useThreadVirtualizer } from '@/components/conversation/thread'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import {
-  ThreadViewport,
-  useThreadVirtualizer,
-  useComposerDoc,
-  docHasContentNode,
-} from '@/components/conversation/thread'
-import {
-  ConversationRichComposer,
-  type ConversationRichComposerHandle,
-} from '@/components/admin/conversation/conversation-rich-composer'
-import {
-  ConversationNoteEditor,
-  type ConversationNoteEditorHandle,
-} from '@/components/admin/conversation/conversation-note-editor'
+  CONVERSATION_EDITOR_FEATURES,
+  CONVERSATION_NOTE_FEATURES,
+} from '@/components/conversation/conversation-editor-features'
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
-import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { Spinner } from '@/components/shared/spinner'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { cn } from '@/lib/shared/utils'
 
 interface TicketThreadCache {
@@ -57,17 +50,28 @@ type Row = { key: string } & (
   | { type: 'empty' }
 )
 
+/** A composer's live draft: the rich doc (persisted as contentJson) plus the
+ *  derived markdown mirror (stored as `content` for FTS/preview/transcripts). */
+type ComposerDraft = { json: TiptapContent | null; markdown: string }
+const EMPTY_DRAFT: ComposerDraft = { json: null, markdown: '' }
+
 export function TicketThread({ ticketId }: { ticketId: TicketId }) {
   const queryClient = useQueryClient()
   const threadKey = ticketKeys.thread(ticketId)
 
-  const reply = useComposerDoc()
-  const note = useComposerDoc()
+  // Reply and Note keep independent drafts, so toggling modes preserves each
+  // mode's in-progress text/images (matches the previous two-editor setup). The
+  // reset key force-remounts the active editor to clear it after a send — the
+  // same pattern the comment composer uses (an empty controlled value leaves a
+  // stale `<p></p>` that traps the cursor; a remount is the clean reset).
   const [noteMode, setNoteMode] = useState(false)
+  const [replyDraft, setReplyDraft] = useState<ComposerDraft>(EMPTY_DRAFT)
+  const [noteDraft, setNoteDraft] = useState<ComposerDraft>(EMPTY_DRAFT)
+  const [replyKey, setReplyKey] = useState(0)
+  const [noteKey, setNoteKey] = useState(0)
+
   const [loadingOlder, setLoadingOlder] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const replyRef = useRef<ConversationRichComposerHandle>(null)
-  const noteRef = useRef<ConversationNoteEditorHandle>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data, isLoading } = useQuery(ticketQueries.thread(ticketId))
@@ -157,34 +161,53 @@ export function TicketThread({ ticketId }: { ticketId: TicketId }) {
     onError: () => toast.error('Failed to add note'),
   })
 
-  const onSend = useCallback(() => {
-    if (noteMode) {
-      const text = note.text.trim()
-      if (!text || noteMutation.isPending || uploading) return
-      noteMutation.mutate({
-        content: text,
-        contentJson: note.docRef.current,
-        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
-      })
-      note.clear()
-      return
-    }
-    const text = reply.text.trim()
-    const doc = reply.docRef.current
+  // A message is sendable when the doc carries text or an inline image/embed
+  // (isEmptyTiptapDoc counts any non-text node as content), OR a file is staged
+  // in the tray. `content` is stored as the doc's markdown; `contentJson` holds
+  // the doc (null when it's only an attachment). Text/doc clear optimistically on
+  // send; tray attachments clear in the mutation's onSuccess.
+  const onReplyChange = useCallback(
+    (json: JSONContent, _html: string, markdown: string) =>
+      setReplyDraft({ json: json as TiptapContent, markdown }),
+    []
+  )
+  const onNoteChange = useCallback(
+    (json: JSONContent, _html: string, markdown: string) =>
+      setNoteDraft({ json: json as TiptapContent, markdown }),
+    []
+  )
+
+  // Enter-to-send routes here, so it must be a STABLE callback — an inline arrow
+  // would churn the editor's extension identity on every keystroke. Read the
+  // latest state through a ref refreshed each render.
+  const sendRef = useRef<() => void>(() => {})
+  sendRef.current = () => {
+    const draft = noteMode ? noteDraft : replyDraft
+    const empty = isEmptyTiptapDoc(draft.json ?? undefined)
     const hasAttachments = pendingAttachments.length > 0
-    if (
-      (!text && !docHasContentNode(doc) && !hasAttachments) ||
-      sendMutation.isPending ||
-      uploading
-    )
-      return
-    sendMutation.mutate({
-      content: text,
-      contentJson: doc,
+    const mutation = noteMode ? noteMutation : sendMutation
+    if ((empty && !hasAttachments) || mutation.isPending || uploading) return
+    mutation.mutate({
+      content: draft.markdown.trim(),
+      contentJson: empty ? null : draft.json,
       attachments: hasAttachments ? pendingAttachments : undefined,
     })
-    reply.clear()
-  }, [reply, note, noteMode, noteMutation, sendMutation, pendingAttachments, uploading])
+    if (noteMode) {
+      setNoteDraft(EMPTY_DRAFT)
+      setNoteKey((k) => k + 1)
+    } else {
+      setReplyDraft(EMPTY_DRAFT)
+      setReplyKey((k) => k + 1)
+    }
+  }
+  const onSend = useCallback(() => sendRef.current(), [])
+
+  const activeDraft = noteMode ? noteDraft : replyDraft
+  const activePending = noteMode ? noteMutation.isPending : sendMutation.isPending
+  const sendDisabled =
+    (isEmptyTiptapDoc(activeDraft.json ?? undefined) && pendingAttachments.length === 0) ||
+    activePending ||
+    uploading
 
   const renderRow = (row: Row) => {
     switch (row.type) {
@@ -279,24 +302,40 @@ export function TicketThread({ ticketId }: { ticketId: TicketId }) {
               e.target.value = ''
             }}
           />
+          {/* Reply and Note share the unified RichTextEditor; the note preset only
+              differs by intent (a place to diverge later). Enter sends, Shift+Enter
+              breaks; formatting comes from the editor's own bubble/slash/`:` surfaces.
+              Pasted/dropped images inline via onImageUpload; the paperclip still
+              stages files in the tray below. */}
           {noteMode ? (
-            <ConversationNoteEditor
-              ref={noteRef}
-              resetSignal={note.resetSignal}
+            <RichTextEditor
+              key={`note-${noteKey}`}
+              value={noteDraft.json ?? ''}
+              features={CONVERSATION_NOTE_FEATURES}
+              borderless
+              minHeight="1.5rem"
+              autofocus={noteKey > 0 ? 'end' : false}
               disabled={noteMutation.isPending}
-              onChange={note.onChange}
+              placeholder="Add an internal note for your team…"
+              className="max-h-32 overflow-y-auto"
+              onChange={onNoteChange}
               onSubmit={onSend}
-              onImageFiles={(files) => void addFiles(files)}
+              onImageUpload={upload}
             />
           ) : (
-            <ConversationRichComposer
-              ref={replyRef}
-              resetSignal={reply.resetSignal}
+            <RichTextEditor
+              key={`reply-${replyKey}`}
+              value={replyDraft.json ?? ''}
+              features={CONVERSATION_EDITOR_FEATURES}
+              borderless
+              minHeight="1.5rem"
+              autofocus={replyKey > 0 ? 'end' : false}
               disabled={sendMutation.isPending}
               placeholder="Reply to the requester…"
-              onChange={reply.onChange}
+              className="max-h-32 overflow-y-auto"
+              onChange={onReplyChange}
               onSubmit={onSend}
-              onImageFiles={(files) => void addFiles(files)}
+              onImageUpload={upload}
             />
           )}
           <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
@@ -310,26 +349,11 @@ export function TicketThread({ ticketId }: { ticketId: TicketId }) {
             >
               <PaperClipIcon className="h-4 w-4" />
             </button>
-            <EmojiPicker
-              className="size-8"
-              onSelect={(emoji) => {
-                if (noteMode) noteRef.current?.insertText(emoji)
-                else replyRef.current?.insertText(emoji)
-              }}
-            />
             <div className="flex-1" />
             <button
               type="button"
               onClick={onSend}
-              disabled={
-                noteMode
-                  ? !note.text.trim() || noteMutation.isPending || uploading
-                  : (!reply.text.trim() &&
-                      !reply.hasContentNode &&
-                      pendingAttachments.length === 0) ||
-                    sendMutation.isPending ||
-                    uploading
-              }
+              disabled={sendDisabled}
               className={cn(
                 'flex size-8 shrink-0 items-center justify-center rounded-md text-primary-foreground disabled:opacity-40 transition-opacity',
                 noteMode ? 'bg-amber-500 text-white' : 'bg-primary'
