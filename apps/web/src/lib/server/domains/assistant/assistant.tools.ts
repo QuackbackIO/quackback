@@ -290,7 +290,10 @@ export async function executeApprovedPendingAction(
   ctx: AssistantToolContext
 ): Promise<ExecuteApprovedActionResult> {
   const claimed = await claimToolCall({
-    conversationId: pendingAction.conversationId,
+    // Ticket-scoped pending actions (unified inbox §3.3) have no
+    // conversationId; the tool-call audit trail doesn't thread a ticket
+    // parent yet, so this stays undefined for that case rather than wired.
+    conversationId: pendingAction.conversationId ?? undefined,
     involvementId: pendingAction.involvementId ?? undefined,
     pendingActionId: pendingAction.id,
     toolName: spec.name,

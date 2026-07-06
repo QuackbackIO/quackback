@@ -104,6 +104,10 @@ export const tickets = pgTable(
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     // How many times the ticket has been reopened after resolution.
     reopenedCount: integer('reopened_count').notNull().default(0),
+    // Read receipts power unread badges on each side independently, mirroring
+    // conversations.visitorLastReadAt/agentLastReadAt.
+    requesterLastReadAt: timestamp('requester_last_read_at', { withTimezone: true }),
+    assigneeLastReadAt: timestamp('assignee_last_read_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -148,6 +152,13 @@ export const tickets = pgTable(
     index('tickets_company_id_idx').on(table.companyId),
     // Type-scoped status boards (e.g. all open customer tickets).
     index('tickets_type_status_id_idx').on(table.type, table.statusId),
+    // Keyset support for the unified inbox's cross-status feed (§3.3), mirroring
+    // conversations_last_message_at_id_idx. nullsFirst matches the migration's
+    // plain DESC (postgres default).
+    index('tickets_updated_at_id_idx').on(table.updatedAt.desc().nullsFirst(), table.id),
+    // Keyset support for the 'created' saved-view sort, ascending (oldest
+    // first) unlike conversations_created_at_id_idx's DESC ordering.
+    index('tickets_created_at_id_idx').on(table.createdAt, table.id),
   ]
 )
 

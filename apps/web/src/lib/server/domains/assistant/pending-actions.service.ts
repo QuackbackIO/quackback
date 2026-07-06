@@ -113,6 +113,10 @@ export async function getPendingActionByIdempotencyKey(
  * source of truth an agent can act on from the approval queue.
  */
 async function surfacePendingActionNote(row: AssistantPendingAction): Promise<void> {
+  // Ticket-scoped pending actions (unified inbox §3.3) have no conversation
+  // thread to post into; that surface is unwired for tickets, so skip rather
+  // than announce nowhere.
+  if (!row.conversationId) return
   try {
     const assistant = await getAssistantPrincipal()
     if (!assistant) return
@@ -236,7 +240,17 @@ export async function sweepAndNotifyExpiredPendingActions(
   const { emitAssistantActionExpiredSystemMessage } =
     await import('@/lib/server/domains/conversation/conversation.service')
   await Promise.all(
-    expired.map((row) => emitAssistantActionExpiredSystemMessage(row.conversationId))
+    // Ticket-scoped pending actions (unified inbox §3.3) have no conversation
+    // thread to notify; that surface is unwired for tickets.
+    expired
+      .filter(
+        (
+          row
+        ): row is AssistantPendingAction & {
+          conversationId: NonNullable<AssistantPendingAction['conversationId']>
+        } => row.conversationId !== null
+      )
+      .map((row) => emitAssistantActionExpiredSystemMessage(row.conversationId))
   )
   return expired
 }

@@ -45,7 +45,11 @@ const PendingActionInput = z.object({ pendingActionId: z.string() })
 // safe reshape, not a lossy one.
 export interface AssistantPendingActionDTO {
   id: string
-  conversationId: string
+  // Polymorphic parent (unified inbox §3.3): null for a ticket-scoped pending
+  // action. The approval queue UI doesn't surface ticket-scoped actions yet,
+  // but the read shape must match the row so a nullable column here doesn't
+  // silently coerce to a bogus non-null string on the wire.
+  conversationId: string | null
   involvementId: string | null
   toolName: string
   args: JsonValue
