@@ -23,6 +23,21 @@ vi.mock('../posts-retrieval', () => ({
   },
 }))
 
+// Same idea for the snippets source, gated behind assistantSnippets.
+const mockSnippetsRetrieve = vi.fn()
+vi.mock('../snippets-retrieval', () => ({
+  snippetsKnowledgeSource: {
+    sourceType: 'snippet',
+    retrieve: (...args: unknown[]) => mockSnippetsRetrieve(...args),
+  },
+}))
+
+/** Flag-aware stand-in for isFeatureEnabled, so enabling one grounding flag
+ *  in a test doesn't accidentally also enable the other. */
+function onlyFlag(enabledFlag: string) {
+  return async (flag: string) => flag === enabledFlag
+}
+
 import {
   retrieveKnowledge,
   resolveKnowledgeSources,
@@ -76,17 +91,30 @@ describe('kbKnowledgeSource', () => {
 })
 
 describe('resolveKnowledgeSources', () => {
-  it('registers only the knowledge-base source when assistantPostGrounding is off', async () => {
+  it('registers only the knowledge-base source when both flags are off', async () => {
     mockIsFeatureEnabled.mockResolvedValue(false)
     const sources = await resolveKnowledgeSources()
     expect(sources).toEqual([kbKnowledgeSource])
     expect(mockIsFeatureEnabled).toHaveBeenCalledWith('assistantPostGrounding')
+    expect(mockIsFeatureEnabled).toHaveBeenCalledWith('assistantSnippets')
   })
 
   it('adds the feedback-posts source when assistantPostGrounding is on', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(true)
+    mockIsFeatureEnabled.mockImplementation(onlyFlag('assistantPostGrounding'))
     const sources = await resolveKnowledgeSources()
     expect(sources.map((s) => s.sourceType)).toEqual(['article', 'post'])
+  })
+
+  it('adds the snippets source when assistantSnippets is on', async () => {
+    mockIsFeatureEnabled.mockImplementation(onlyFlag('assistantSnippets'))
+    const sources = await resolveKnowledgeSources()
+    expect(sources.map((s) => s.sourceType)).toEqual(['article', 'snippet'])
+  })
+
+  it('adds both optional sources when both flags are on', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true)
+    const sources = await resolveKnowledgeSources()
+    expect(sources.map((s) => s.sourceType)).toEqual(['article', 'post', 'snippet'])
   })
 })
 
@@ -103,7 +131,7 @@ describe('retrieveKnowledge', () => {
   })
 
   it('merges sources in parallel, re-ranks by score desc, and trims to topK', async () => {
-    mockIsFeatureEnabled.mockResolvedValue(true)
+    mockIsFeatureEnabled.mockImplementation(onlyFlag('assistantPostGrounding'))
     mockRetrieveKbArticles.mockResolvedValue([
       makeKbArticle('kb_low', { score: 0.5 }),
       makeKbArticle('kb_high', { score: 0.9 }),

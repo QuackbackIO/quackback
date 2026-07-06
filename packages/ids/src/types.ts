@@ -163,6 +163,9 @@ export type AssistantPendingActionId = TypeId<'assistant_action'>
 /** Assistant tool-call audit ID - e.g., assistant_tool_call_01h455vb4pex5vsknk084sn02q */
 export type AssistantToolCallId = TypeId<'assistant_tool_call'>
 
+/** Assistant snippet ID - e.g., assistant_snippet_01h455vb4pex5vsknk084sn02q */
+export type AssistantSnippetId = TypeId<'assistant_snippet'>
+
 /** Data connector ID - e.g., data_connector_01h455vb4pex5vsknk084sn02q */
 export type DataConnectorId = TypeId<'data_connector'>
 
@@ -345,6 +348,7 @@ export interface EntityIdMap {
   assistant_guidance: AssistantGuidanceRuleId
   assistant_action: AssistantPendingActionId
   assistant_tool_call: AssistantToolCallId
+  assistant_snippet: AssistantSnippetId
   data_connector: DataConnectorId
   ticket: TicketId
   ticket_status: TicketStatusId

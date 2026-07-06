@@ -82,7 +82,6 @@ export {
   resolveToolSpecs,
   getToolSpecByName,
   searchKnowledgeTool,
-  getConversationContextTool,
   makeAssistantToolContext,
   assistantGateEnvelopeSchema,
   withGateEnvelope,
@@ -122,7 +121,7 @@ export {
 } from './tool-audit'
 
 // Quinn — tools + runtime
-export { assembleAssistantTools } from './assistant.tools'
+export { assembleAssistantToolset } from './assistant.tools'
 export {
   runAssistantTurn,
   isAssistantConfigured,

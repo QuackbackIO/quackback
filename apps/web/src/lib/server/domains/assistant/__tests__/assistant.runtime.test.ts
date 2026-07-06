@@ -54,7 +54,7 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 
 /**
  * `isFeatureEnabled` gates assistantActions (read here and inside the real
- * assembleAssistantTools this suite exercises) and, inside the real
+ * assembleAssistantToolset this suite exercises) and, inside the real
  * resolveToolSpecs, dataConnectors too. A flat `mockResolvedValue(true)`
  * would flip both and pull the real (DB-backed) connectors domain into these
  * prompt-assembly tests; discriminate by flag name so dataConnectors stays
@@ -77,7 +77,7 @@ vi.mock('@/lib/server/domains/connectors/connector.toolspec', () => ({
 // actions are on (asserted explicitly below); default to nothing saved.
 // getAssistantConfig is the runtime's one-read-per-turn entry point;
 // getAssistantToolControls stays stubbed too so a test can prove the real
-// assembleAssistantTools never falls back to fetching it on its own once the
+// assembleAssistantToolset never falls back to fetching it on its own once the
 // runtime already has controls in hand.
 const mockGetAssistantConfig = vi.fn()
 const mockGetAssistantToolControls = vi.fn()
@@ -95,20 +95,20 @@ vi.mock('../guidance.service', () => ({
 
 // Keep the real tool assembly by default (tool wiring is exercised for real
 // elsewhere in this file); the registry-derived activity filter tests below
-// swap in a fake tool set to prove the filter isn't hardcoded to the two
-// built-in tool names.
-const mockAssembleAssistantTools = vi.hoisted(() => vi.fn())
-const realAssembleAssistantToolsRef = vi.hoisted(() => ({
+// swap in a fake tool set to prove the filter isn't hardcoded to any
+// built-in tool name.
+const mockAssembleAssistantToolset = vi.hoisted(() => vi.fn())
+const realAssembleAssistantToolsetRef = vi.hoisted(() => ({
   current: undefined as unknown as (...args: unknown[]) => unknown,
 }))
 vi.mock('../assistant.tools', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../assistant.tools')>()
-  realAssembleAssistantToolsRef.current = actual.assembleAssistantTools as (
+  realAssembleAssistantToolsetRef.current = actual.assembleAssistantToolset as (
     ...args: unknown[]
   ) => unknown
   return {
     ...actual,
-    assembleAssistantTools: (...args: unknown[]) => mockAssembleAssistantTools(...args),
+    assembleAssistantToolset: (...args: unknown[]) => mockAssembleAssistantToolset(...args),
   }
 })
 
@@ -130,7 +130,16 @@ import {
   ASSISTANT_FALLBACK_MESSAGE,
   type AssistantThreadMessage,
 } from '../assistant.runtime'
+import { ASSISTANT_TOOL_SPECS } from '../assistant.toolspec'
 import type { AssistantCitation } from '../assistant.toolspec'
+
+/** The legacy (assistantActions off) widget tool set: the sole read tool
+ *  today. Mirrors what `assembleAssistantToolset` resolves in that mode. */
+const WIDGET_LEGACY_TOOLS = [ASSISTANT_TOOL_SPECS.search_knowledge]
+
+/** Every static spec, in registry order: what resolves when assistantActions
+ *  is on and nothing has been saved (every default mode is non-disabled). */
+const ALL_DEFAULT_ACTIVE_SPECS = Object.values(ASSISTANT_TOOL_SPECS)
 
 /** Async-iterable of scripted chunks. */
 function chunkStream(chunks: unknown[]) {
@@ -165,8 +174,8 @@ beforeEach(() => {
   mockGetAssistantConfig.mockResolvedValue({ toolControls: {}, surfaces: {}, basics: {} })
   mockGetAssistantToolControls.mockResolvedValue({})
   mockListGuidanceRules.mockResolvedValue([])
-  mockAssembleAssistantTools.mockImplementation((...args: unknown[]) =>
-    realAssembleAssistantToolsRef.current(...args)
+  mockAssembleAssistantToolset.mockImplementation((...args: unknown[]) =>
+    realAssembleAssistantToolsetRef.current(...args)
   )
   lastLoggedMetadata = undefined
   mockWithUsageLogging.mockImplementation(
@@ -275,6 +284,28 @@ describe('assembleCitations', () => {
     ])
   })
 
+  it('round-trips a snippet citation the same way as an article one (snippets grounding source)', () => {
+    const snippetLedger = new Map<string, AssistantCitation>([
+      ...ledger,
+      [
+        'assistant_snippet_1',
+        { type: 'snippet', id: 'assistant_snippet_1', title: 'Refund window', url: '' },
+      ],
+    ])
+    expect(
+      assembleCitations(
+        [
+          { type: 'article', id: 'kb_article_1' },
+          { type: 'snippet', id: 'assistant_snippet_1' },
+        ],
+        snippetLedger
+      )
+    ).toEqual([
+      { type: 'article', id: 'kb_article_1', title: 'T1', url: '/hc/articles/g/a1' },
+      { type: 'snippet', id: 'assistant_snippet_1', title: 'Refund window', url: '' },
+    ])
+  })
+
   it('drops everything when nothing cleared the confidence floor (empty ledger)', () => {
     expect(assembleCitations([{ type: 'article', id: 'kb_article_1' }], new Map())).toEqual([])
   })
@@ -318,9 +349,9 @@ describe('isSubstantiveAnswer', () => {
 })
 
 describe('buildAssistantSystemPrompt', () => {
-  it('carries the citation, scope-honesty, escalation, and injection guards', () => {
-    const joined = buildAssistantSystemPrompt('Quinn').join('\n').toLowerCase()
-    expect(joined).toContain('search_knowledge')
+  it('carries the grounding, citation, scope-honesty, escalation, and injection guards', () => {
+    const joined = buildAssistantSystemPrompt('Quinn', []).join('\n').toLowerCase()
+    expect(joined).toContain('ground every factual or product claim')
     expect(joined).toContain('never invent ids')
     expect(joined).toContain('do not know')
     expect(joined).toContain('escalation')
@@ -328,10 +359,49 @@ describe('buildAssistantSystemPrompt', () => {
     expect(joined).toContain('same language')
   })
 
+  it('carries the greeting/small-talk carve-out (skip tools for pure pleasantries)', () => {
+    const joined = buildAssistantSystemPrompt('Quinn', []).join('\n').toLowerCase()
+    expect(joined).toContain('greeting, thanks, or small talk')
+    expect(joined).toContain('skip your tools entirely')
+  })
+
   it('hardens the JSON-only instruction to curb weak-model prose leaks', () => {
-    const joined = buildAssistantSystemPrompt('Quinn').join('\n').toLowerCase()
+    const joined = buildAssistantSystemPrompt('Quinn', []).join('\n').toLowerCase()
     expect(joined).toContain('only a single json object')
     expect(joined).toContain('no markdown code fences')
+  })
+
+  it('reads as tools-agnostic with no tools assembled', () => {
+    const joined = buildAssistantSystemPrompt('Quinn', []).join('\n')
+    expect(joined).toContain('You have no tools this turn')
+  })
+
+  it('composes one bullet per assembled tool, from its own promptGuidance line', () => {
+    const joined = buildAssistantSystemPrompt('Quinn', [
+      { name: 'search_knowledge', promptGuidance: 'Call before answering anything factual.' },
+      { name: 'future_tool', promptGuidance: 'Use it for the future thing.' },
+    ]).join('\n')
+    expect(joined).toContain('- search_knowledge: Call before answering anything factual.')
+    expect(joined).toContain('- future_tool: Use it for the future thing.')
+  })
+
+  it('omits a tool not in the assembled set (per-tool guidance is registry-derived, not hardcoded)', () => {
+    const joined = buildAssistantSystemPrompt('Quinn', [
+      { name: 'search_knowledge', promptGuidance: 'Call before answering anything factual.' },
+    ]).join('\n')
+    expect(joined).not.toContain('future_tool')
+    expect(joined).not.toContain('get_conversation_context')
+  })
+
+  it('keeps the JSON output contract shape unchanged regardless of the tool set', () => {
+    const withTools = buildAssistantSystemPrompt('Quinn', [
+      { name: 'search_knowledge', promptGuidance: 'x' },
+    ]).join('\n')
+    const withoutTools = buildAssistantSystemPrompt('Quinn', []).join('\n')
+    const contract =
+      'Respond with ONLY a single JSON object and nothing else: no preamble, no commentary, no markdown code fences. The object must have this exact shape: {"text": string, "citations": [{"type": "article"|"post"|"snippet", "id": string}], "escalation": {"reason": string} | null}. Put the entire reply to the customer inside "text".'
+    expect(withTools).toContain(contract)
+    expect(withoutTools).toContain(contract)
   })
 })
 
@@ -832,12 +902,14 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
 
-    expect(systemPromptsFromLastCall()).toEqual(buildAssistantSystemPrompt('Quinn'))
+    expect(systemPromptsFromLastCall()).toEqual(
+      buildAssistantSystemPrompt('Quinn', WIDGET_LEGACY_TOOLS)
+    )
     expect(mockGetAssistantConfig).not.toHaveBeenCalled()
     expect(mockListGuidanceRules).not.toHaveBeenCalled()
   })
 
-  it('flag on but nothing saved: still byte-identical to the base prompt', async () => {
+  it('flag on but nothing saved: base prompt reflects the full default-active tool set', async () => {
     mockActionsFlag(true)
     mockGetAssistantConfig.mockResolvedValue({ toolControls: {}, surfaces: {}, basics: {} })
     mockListGuidanceRules.mockResolvedValue([])
@@ -845,7 +917,9 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
 
-    expect(systemPromptsFromLastCall()).toEqual(buildAssistantSystemPrompt('Quinn'))
+    expect(systemPromptsFromLastCall()).toEqual(
+      buildAssistantSystemPrompt('Quinn', ALL_DEFAULT_ACTIVE_SPECS)
+    )
   })
 
   it('assembles base -> basics -> surface instructions -> guidance, in that order', async () => {
@@ -864,7 +938,7 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
 
     const prompts = systemPromptsFromLastCall()
     expect(prompts).toHaveLength(4)
-    expect(prompts[0]).toEqual(buildAssistantSystemPrompt('Quinn')[0])
+    expect(prompts[0]).toEqual(buildAssistantSystemPrompt('Quinn', ALL_DEFAULT_ACTIVE_SPECS)[0])
     expect(prompts[1]).toBe('Write in a friendly tone. Keep answers concise.')
     expect(prompts[2]).toContain('Be extra warm.')
     expect(prompts[3]).toContain('Refunds')
@@ -915,7 +989,7 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
     expect(mockListGuidanceRules).toHaveBeenCalledTimes(1)
   })
 
-  it('shares the one getAssistantConfig read with tool assembly: assembleAssistantTools never re-fetches controls', async () => {
+  it('shares the one getAssistantConfig read with tool assembly: assembleAssistantToolset never re-fetches controls', async () => {
     mockActionsFlag(true)
     mockGetAssistantConfig.mockResolvedValue({
       toolControls: { search_knowledge: 'disabled' },
@@ -933,9 +1007,10 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
 
 describe('runAssistantTurn: registry-derived tool activity (E-6)', () => {
   it('surfaces a tool-call activity for any name present in the assembled tool set', async () => {
-    mockAssembleAssistantTools.mockResolvedValue([
-      { name: 'future_tool', description: 'x', execute: async () => ({}) },
-    ])
+    mockAssembleAssistantToolset.mockResolvedValue({
+      tools: [{ name: 'future_tool', description: 'x', execute: async () => ({}) }],
+      activeSpecs: [{ name: 'future_tool', promptGuidance: 'Use it for the future thing.' }],
+    })
     mockChat.mockImplementation(() =>
       chunkStream([
         { type: 'TOOL_CALL_START', toolCallName: 'future_tool' },
@@ -954,9 +1029,10 @@ describe('runAssistantTurn: registry-derived tool activity (E-6)', () => {
   })
 
   it('ignores a tool-call chunk for a name outside the assembled tool set', async () => {
-    mockAssembleAssistantTools.mockResolvedValue([
-      { name: 'search_knowledge', description: 'x', execute: async () => ({}) },
-    ])
+    mockAssembleAssistantToolset.mockResolvedValue({
+      tools: [{ name: 'search_knowledge', description: 'x', execute: async () => ({}) }],
+      activeSpecs: [{ name: 'search_knowledge', promptGuidance: 'x' }],
+    })
     mockChat.mockImplementation(() =>
       chunkStream([
         { type: 'TOOL_CALL_START', toolCallName: 'not_assembled' },
@@ -972,6 +1048,17 @@ describe('runAssistantTurn: registry-derived tool activity (E-6)', () => {
     })
 
     expect(activities.some((a) => a.kind === 'tool')).toBe(false)
+  })
+})
+
+describe('runAssistantTurn: widget tool set (get_conversation_context removal)', () => {
+  it('never assembles get_conversation_context for the widget surface (the full thread is already in messages)', async () => {
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'widget' })
+
+    const opts = mockChat.mock.calls.at(-1)?.[0] as { systemPrompts: string[] }
+    expect(opts.systemPrompts.join('\n')).not.toContain('get_conversation_context')
   })
 })
 

@@ -943,6 +943,8 @@ export interface FeatureFlags {
   dataConnectors: boolean
   /** Ground AI assistant answers in published feedback posts, alongside the knowledge base */
   assistantPostGrounding: boolean
+  /** Ground AI assistant answers in admin-curated private snippets, alongside the knowledge base */
+  assistantSnippets: boolean
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -957,6 +959,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   assistantActions: false,
   dataConnectors: false,
   assistantPostGrounding: false,
+  assistantSnippets: false,
 }
 
 /**
@@ -1018,6 +1021,11 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       'Let the AI assistant search published feedback posts, alongside the knowledge base, when answering questions.',
   },
+  assistantSnippets: {
+    label: 'Assistant snippets',
+    description:
+      'Let the AI assistant ground answers in short private facts your team curates, alongside the knowledge base.',
+  },
 }
 
 /**
@@ -1050,6 +1058,6 @@ export const LAB_SECTIONS: Array<{
     title: 'AI',
     description:
       'Enable your AI assistant to automate workflows and integrate with external data sources.',
-    flags: ['assistantActions', 'dataConnectors', 'assistantPostGrounding'],
+    flags: ['assistantActions', 'dataConnectors', 'assistantPostGrounding', 'assistantSnippets'],
   },
 ]

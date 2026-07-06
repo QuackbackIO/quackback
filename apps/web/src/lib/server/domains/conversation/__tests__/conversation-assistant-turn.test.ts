@@ -44,6 +44,13 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishAgentConversationEvent: vi.fn(),
   publishConversationUpdate: vi.fn(),
   publishTyping: vi.fn(),
+  publishConversationOnlyEvent: vi.fn(),
+}))
+const mockWriteActivitySnapshot = vi.hoisted(() => vi.fn(async () => {}))
+const mockClearActivitySnapshot = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
+  writeActivitySnapshot: mockWriteActivitySnapshot,
+  clearActivitySnapshot: mockClearActivitySnapshot,
 }))
 vi.mock('../conversation.webhooks', () => ({
   emitConversationCreated: vi.fn(),
@@ -318,5 +325,53 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
     expect(assistantMock.runAssistantTurn).toHaveBeenCalledWith(
       expect.objectContaining({ surface: 'widget' })
     )
+  })
+})
+
+describe('runAssistantTurnForConversation activity snapshot (Redis mirror)', () => {
+  it('mirrors every onActivity publish into Redis, keyed by conversation', async () => {
+    assistantMock.runAssistantTurn.mockImplementation(
+      async (input: { onActivity: (a: unknown) => void }) => {
+        input.onActivity({ kind: 'thinking' })
+        return answered({})
+      }
+    )
+    await runAssistantTurnForConversation(CONV)
+
+    expect(mockWriteActivitySnapshot).toHaveBeenCalledWith(
+      CONV,
+      expect.objectContaining({ kind: 'assistant_activity', status: 'thinking' })
+    )
+  })
+
+  it('clears the snapshot once the reply lands (answer/offer path)', async () => {
+    assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
+    await runAssistantTurnForConversation(CONV)
+    expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
+  })
+
+  it('clears the snapshot on the hand-off path', async () => {
+    assistantMock.getActiveInvolvement.mockResolvedValue({
+      id: 'assistant_involvement_1',
+      escalationOfferedAt: new Date(),
+    })
+    assistantMock.runAssistantTurn.mockResolvedValue(
+      answered({ escalation: { reason: 'low_confidence', mode: 'handoff' } })
+    )
+    await runAssistantTurnForConversation(CONV)
+    expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
+  })
+
+  it('clears the snapshot when the engine suppresses on the silence rule', async () => {
+    assistantMock.runAssistantTurn.mockResolvedValue({ status: 'suppressed', reason: 'silence' })
+    await runAssistantTurnForConversation(CONV)
+    expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
+  })
+
+  it('never writes or clears when the turn never starts (respond off)', async () => {
+    getMessengerConfig.mockResolvedValue({ assistant: { respond: false } })
+    await runAssistantTurnForConversation(CONV)
+    expect(mockWriteActivitySnapshot).not.toHaveBeenCalled()
+    expect(mockClearActivitySnapshot).not.toHaveBeenCalled()
   })
 })

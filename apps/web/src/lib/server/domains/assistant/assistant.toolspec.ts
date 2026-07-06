@@ -16,7 +16,6 @@ import type { Executor } from '@/lib/server/domains/principals/principal.factory
 import type { PrincipalId, ConversationId, AssistantInvolvementId, BoardId } from '@quackback/ids'
 import { type ContentAudience } from './audience'
 import { retrieveKnowledge } from './retrieval-sources'
-import { listMessages } from '@/lib/server/domains/conversation/conversation.query'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import {
   TICKET_TYPES,
@@ -35,7 +34,7 @@ import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service
 
 /** A structured citation — the only citation contract; never free-form markdown. */
 export interface AssistantCitation {
-  type: 'article' | 'post'
+  type: 'article' | 'post' | 'snippet'
   id: string
   title: string
   url: string
@@ -115,9 +114,6 @@ export function makeAssistantToolContext(init: {
  */
 export const SEARCH_BUDGET_PER_TURN = 3
 
-/** Recent messages get_conversation_context returns. */
-const CONTEXT_MESSAGE_LIMIT = 20
-
 /** Read tools only observe; write tools change state and can require approval. */
 export type ToolRiskClass = 'read' | 'write'
 
@@ -167,6 +163,15 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
   label: string
   /** Admin UI copy explaining what the tool does — not the model-facing description. */
   description: string
+  /**
+   * One short, model-facing line of usage guidance for THIS tool: when to
+   * call it, how often, what not to use it for. Composed into the system
+   * prompt's "Your tools" section (buildAssistantSystemPrompt), keyed off the
+   * actual assembled tool set for the turn — so adding a tool here is the
+   * only change needed for the model to learn how to use it; the prompt
+   * builder never lists tools by name itself.
+   */
+  promptGuidance: string
   risk: ToolRiskClass
   supportedModes: readonly ToolControlMode[]
   defaultMode: ToolControlMode
@@ -197,22 +202,6 @@ export const searchKnowledgeTool = toolDefinition({
         })
       ),
       note: z.string().optional(),
-    })
-  ),
-})
-
-export const getConversationContextTool = toolDefinition({
-  name: 'get_conversation_context',
-  description:
-    'Fetch metadata and recent messages for the current conversation: its status, priority, whether a human teammate is assigned, and the latest messages. Use it to ground your reply in what has already been said.',
-  inputSchema: z.object({}),
-  outputSchema: withGateEnvelope(
-    z.object({
-      linked: z.boolean(),
-      status: z.string().nullable(),
-      priority: z.string().nullable(),
-      assignedToHuman: z.boolean(),
-      messages: z.array(z.object({ sender: z.string(), text: z.string() })),
     })
   ),
 })
@@ -254,48 +243,6 @@ async function executeSearchKnowledge(
       title: item.title,
       snippet: item.excerpt,
     })),
-  }
-}
-
-interface ConversationContextOutput {
-  linked: boolean
-  status: string | null
-  priority: string | null
-  assignedToHuman: boolean
-  messages: Array<{ sender: string; text: string }>
-}
-
-async function executeGetConversationContext(
-  _args: Record<string, never>,
-  ctx: AssistantToolContext
-): Promise<ConversationContextOutput> {
-  // No linked conversation (e.g. the admin sandbox): the transcript in the
-  // prompt is all the context there is.
-  if (!ctx.conversationId) {
-    return { linked: false, status: null, priority: null, assignedToHuman: false, messages: [] }
-  }
-  // The row lookup and message page are independent; fetch them together.
-  const [[row], page] = await Promise.all([
-    ctx.db
-      .select({
-        status: conversations.status,
-        priority: conversations.priority,
-        assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
-      })
-      .from(conversations)
-      .where(eq(conversations.id, ctx.conversationId))
-      .limit(1),
-    listMessages(ctx.conversationId, {
-      includeInternal: false,
-      limit: CONTEXT_MESSAGE_LIMIT,
-    }),
-  ])
-  return {
-    linked: true,
-    status: row?.status ?? null,
-    priority: row?.priority ?? null,
-    assignedToHuman: Boolean(row?.assignedAgentPrincipalId),
-    messages: page.messages.map((m) => ({ sender: m.senderType, text: m.content })),
   }
 }
 
@@ -549,6 +496,7 @@ async function executeCaptureFeedback(
 function defineToolSpec<In, Out>(spec: {
   label: string
   description: string
+  promptGuidance: string
   risk: ToolRiskClass
   supportedModes: readonly ToolControlMode[]
   defaultMode: ToolControlMode
@@ -565,6 +513,8 @@ const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
     label: 'Search knowledge',
     description: 'Search the published help center for articles the current viewer can see.',
+    promptGuidance:
+      'Call before answering anything factual or product-related; refine the query once more if the first search misses, then answer with what you have. Cite only the article ids it returns.',
     risk: 'read',
     supportedModes: ['disabled', 'autonomous'],
     defaultMode: 'autonomous',
@@ -576,22 +526,11 @@ const SPECS: readonly AssistantToolSpec[] = [
     summarize: (args) => `Search knowledge for "${args.query}"`,
   }),
   defineToolSpec({
-    label: 'Read conversation context',
-    description: 'Read the linked conversation status, priority, assignment, and recent messages.',
-    risk: 'read',
-    supportedModes: ['disabled', 'autonomous'],
-    defaultMode: 'autonomous',
-    // Reads a single conversation already scoped to the caller; view_all is
-    // for listing across the workspace, which this tool never does.
-    permissions: [PERMISSIONS.CONVERSATION_VIEW],
-    definition: getConversationContextTool,
-    execute: executeGetConversationContext,
-    summarize: () => 'Read conversation context',
-  }),
-  defineToolSpec({
     label: 'Set attribute',
     description:
       'Record a structured fact on the conversation (category, plan tier, etc.) learned from what the customer said.',
+    promptGuidance:
+      'Use to record a fact you learned for reporting only; never to reply to the customer or to change conversation status.',
     risk: 'write',
     supportedModes: ['disabled', 'approval', 'autonomous'],
     defaultMode: 'autonomous',
@@ -607,6 +546,8 @@ const SPECS: readonly AssistantToolSpec[] = [
   defineToolSpec({
     label: 'End conversation',
     description: 'Close the conversation once the customer has confirmed their issue is resolved.',
+    promptGuidance:
+      'Only call once the customer has clearly confirmed the issue is resolved or said they need nothing else; never close on your own judgement that the answer seems to solve it.',
     risk: 'write',
     supportedModes: ['disabled', 'approval', 'autonomous'],
     defaultMode: 'approval',
@@ -619,6 +560,8 @@ const SPECS: readonly AssistantToolSpec[] = [
     label: 'Create ticket',
     description:
       'Open a support ticket to track work that needs a teammate beyond this conversation.',
+    promptGuidance:
+      'Use for a bug or an account problem that needs a teammate to investigate beyond this conversation, not for a feature request.',
     risk: 'write',
     supportedModes: ['disabled', 'approval', 'autonomous'],
     defaultMode: 'approval',
@@ -631,6 +574,8 @@ const SPECS: readonly AssistantToolSpec[] = [
     label: 'Capture feedback',
     description:
       'Create a public feedback post from the conversation, attributed to the customer, for the team roadmap.',
+    promptGuidance:
+      'Use for a feature request or suggestion the customer raises, not for a problem that needs a fix.',
     risk: 'write',
     // Approval-only v0: a live post attributed to the visitor is public in a
     // way the other write tools are not, so there is no autonomous mode yet.

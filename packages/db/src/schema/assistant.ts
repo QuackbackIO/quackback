@@ -1,7 +1,18 @@
-import { pgTable, text, timestamp, jsonb, integer, index } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  timestamp,
+  jsonb,
+  integer,
+  boolean,
+  index,
+  check,
+  customType,
+} from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
-import { typeIdWithDefault, typeIdColumn } from '@quackback/ids/drizzle'
+import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { conversations } from './conversation'
+import { principal } from './auth'
 
 /**
  * Assistant involvement record — the audit/KPI unit for the in-product AI
@@ -41,9 +52,9 @@ export type AssistantInvolvementTrigger = (typeof ASSISTANT_INVOLVEMENT_TRIGGERS
 export type AssistantInvolvementStatus = (typeof ASSISTANT_INVOLVEMENT_STATUSES)[number]
 export type AssistantHandoffReason = (typeof ASSISTANT_HANDOFF_REASONS)[number]
 
-/** One cited source captured on an involvement (a help-center article or a feedback post). */
+/** One cited source captured on an involvement (a help-center article, a feedback post, or an admin-curated snippet). */
 export interface AssistantInvolvementSource {
-  type: 'article' | 'post'
+  type: 'article' | 'post' | 'snippet'
   id: string
   title?: string
   url?: string
@@ -87,5 +98,67 @@ export const assistantInvolvementsRelations = relations(assistantInvolvements, (
   conversation: one(conversations, {
     fields: [assistantInvolvements.conversationId],
     references: [conversations.id],
+  }),
+}))
+
+/** pgvector column, 1536 dims (OpenAI text-embedding-3-small). Local to this
+ *  file, mirroring the per-schema-file `vector` customType convention (see
+ *  posts.ts / kb.ts) rather than a shared export. */
+const vector = customType<{ data: number[] }>({
+  dataType() {
+    return 'vector(1536)'
+  },
+})
+
+/** Mirrors `ContentAudience` (apps/web assistant/audience.ts) — kept as its
+ *  own literal array here rather than importing that app-layer type, so this
+ *  package stays independent of the web app. */
+export const ASSISTANT_SNIPPET_AUDIENCES = ['public', 'team', 'internal'] as const
+export type AssistantSnippetAudience = (typeof ASSISTANT_SNIPPET_AUDIENCES)[number]
+
+/**
+ * Snippets — short, private facts an admin curates for Quinn to ground
+ * answers on, alongside the knowledge base and (when enabled) feedback
+ * posts. Unlike a guidance rule (which steers HOW Quinn answers), a snippet
+ * IS an answerable fact: it is embedded on write and retrieved the same way
+ * a KB article is (`assistant/snippets-retrieval.ts`), scoped by its own
+ * `audience` ceiling rather than a surface allowlist. No vector index
+ * (matches house style: exact scan until corpus size demands one).
+ */
+export const assistantSnippets = pgTable(
+  'assistant_snippets',
+  {
+    id: typeIdWithDefault('assistant_snippet')('id').primaryKey(),
+    title: text('title').notNull(),
+    content: text('content').notNull(),
+    audience: text('audience', { enum: ASSISTANT_SNIPPET_AUDIENCES }).notNull().default('team'),
+    enabled: boolean('enabled').notNull().default(true),
+    embedding: vector('embedding'),
+    embeddingModel: text('embedding_model'),
+    embeddingUpdatedAt: timestamp('embedding_updated_at', { withTimezone: true }),
+    // Nulled on the author's deletion — the snippet outlives them.
+    createdById: typeIdColumnNullable('principal')('created_by_id').references(() => principal.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('assistant_snippets_enabled_audience_idx').on(table.enabled, table.audience),
+    check('assistant_snippets_title_length_check', sql`char_length(${table.title}) <= 120`),
+    check('assistant_snippets_content_length_check', sql`char_length(${table.content}) <= 2000`),
+    check(
+      'assistant_snippets_audience_check',
+      sql`${table.audience} IN ('public','team','internal')`
+    ),
+  ]
+)
+
+export type AssistantSnippet = typeof assistantSnippets.$inferSelect
+
+export const assistantSnippetsRelations = relations(assistantSnippets, ({ one }) => ({
+  createdBy: one(principal, {
+    fields: [assistantSnippets.createdById],
+    references: [principal.id],
   }),
 }))

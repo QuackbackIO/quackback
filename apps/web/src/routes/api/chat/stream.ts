@@ -22,6 +22,7 @@ import {
 } from '@/lib/server/realtime/conversation-channels'
 import { subscribe } from '@/lib/server/realtime/pubsub'
 import { markPresent, refreshPresence, clearPresence } from '@/lib/server/realtime/presence'
+import { readActivitySnapshot } from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { canViewConversation } from '@/lib/server/policy/conversation'
 import { isTeamMember } from '@/lib/shared/roles'
 import {
@@ -257,6 +258,20 @@ export const Route = createFileRoute('/api/chat/stream')({
             }
             unsubscribe = unsub
 
+            // Replay Quinn's in-flight activity trace, if any: a subscriber
+            // connecting mid-turn (most visibly a brand-new conversation,
+            // where the stream opens after the turn already started) would
+            // otherwise miss every "thinking" / "searching" frame published
+            // before it subscribed. Kicked off AFTER subscribing (no gap) but
+            // awaited past the backfill below so the Redis read overlaps the
+            // DB round trips; sent before the live-buffer flush so an activity
+            // frame that arrived during backfill is flushed after it and wins.
+            // Only for a conversation-scoped stream — the trace is never
+            // inbox-wide.
+            const activitySnapshot = backfillConversationId
+              ? readActivitySnapshot(backfillConversationId)
+              : null
+
             // Backfill messages the client missed while disconnected. Mirror
             // the canonical read path: skip soft-deleted rows and use the
             // composite (created_at, id) keyset so same-microsecond siblings
@@ -311,6 +326,13 @@ export const Route = createFileRoute('/api/chat/stream')({
               } catch (err) {
                 log.warn({ err }, 'chat stream backfill failed')
               }
+            }
+
+            const snapshot = activitySnapshot ? await activitySnapshot : null
+            if (snapshot) {
+              const json = JSON.stringify(snapshot)
+              const { frame } = formatFrame(json, parseConversationFrame(json))
+              sse.sendRaw(frame)
             }
 
             // Flush live events buffered during backfill, skipping any message

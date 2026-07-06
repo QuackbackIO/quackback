@@ -1191,6 +1191,13 @@
       "when": 1784766660000,
       "tag": "0169_teammate_language_pref",
       "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1784766720000,
+      "tag": "0170_assistant_snippets",
+      "breakpoints": true
     }
   ]
 }

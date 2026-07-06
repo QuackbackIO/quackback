@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
-import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   ASSISTANT_TOOL_SPECS,
   resolveToolSpecs,
@@ -29,11 +28,12 @@ describe('assistant.toolspec registry completeness', () => {
     expect(specs.length).toBeGreaterThan(0)
   })
 
-  it('every spec has non-empty name, label, and description', () => {
+  it('every spec has non-empty name, label, description, and promptGuidance', () => {
     for (const spec of specs) {
       expect(spec.name.length).toBeGreaterThan(0)
       expect(spec.label.length).toBeGreaterThan(0)
       expect(spec.description.length).toBeGreaterThan(0)
+      expect(spec.promptGuidance.length).toBeGreaterThan(0)
     }
   })
 
@@ -128,35 +128,13 @@ describe('search_knowledge spec', () => {
   })
 })
 
-describe('get_conversation_context spec', () => {
-  const spec = ASSISTANT_TOOL_SPECS.get_conversation_context
-
-  it('exists with the expected shape', () => {
-    expect(spec).toBeDefined()
-    expect(spec.risk).toBe('read')
-    expect(spec.defaultMode).toBe('autonomous')
-    expect(spec.supportedModes).toEqual(['disabled', 'autonomous'])
-  })
-
-  it('requires conversation.view (it reads the linked conversation)', () => {
-    expect(spec.permissions).toEqual([PERMISSIONS.CONVERSATION_VIEW])
-  })
-
-  it('summarizes without needing args', () => {
-    expect(spec.summarize({})).toBe('Read conversation context')
-  })
-})
-
 describe('resolveToolSpecs', () => {
   it('returns exactly the read and write specs that exist today', async () => {
-    const names = (await resolveToolSpecs())
-      .map((s) => s.name)
-      .sort()
+    const names = (await resolveToolSpecs()).map((s) => s.name).sort()
     expect(names).toEqual([
       'capture_feedback',
       'create_ticket',
       'end_conversation',
-      'get_conversation_context',
       'search_knowledge',
       'set_attribute',
     ])

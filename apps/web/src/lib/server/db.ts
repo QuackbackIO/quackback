@@ -348,6 +348,9 @@ export {
   ASSISTANT_HANDOFF_REASONS,
   // Schema tables - assistant guidance rules
   assistantGuidanceRules,
+  // Schema tables - assistant snippets
+  assistantSnippets,
+  assistantSnippetsRelations,
   // Schema tables - assistant pending actions
   assistantPendingActions,
   ASSISTANT_PENDING_ACTION_STATUSES,
@@ -391,6 +394,7 @@ export type {
   AssistantHandoffReason,
   AssistantPendingActionStatus,
   AssistantToolCallStatus,
+  AssistantSnippet,
   MacroScope,
   MacroPriority,
   MacroSnoozePreset,

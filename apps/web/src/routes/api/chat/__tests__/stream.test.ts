@@ -46,8 +46,18 @@ vi.mock('@/lib/server/realtime/stream-token', () => ({
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   conversationChannel: (id: string) => `conversation:${id}`,
   CONVERSATION_INBOX_CHANNEL: 'conversation:inbox',
-  parseConversationFrame: () => null,
+  parseConversationFrame: (message: string) => {
+    try {
+      return JSON.parse(message)
+    } catch {
+      return null
+    }
+  },
   isOwnTyping: () => false,
+}))
+const mockReadActivitySnapshot = vi.fn()
+vi.mock('@/lib/server/domains/assistant/assistant-activity-snapshot', () => ({
+  readActivitySnapshot: (...a: unknown[]) => mockReadActivitySnapshot(...a),
 }))
 vi.mock('@/lib/server/realtime/pubsub', () => ({
   subscribe: (...a: unknown[]) => mockSubscribe(...a),
@@ -103,6 +113,22 @@ async function settleAndClose(res: Response) {
   await res.body?.cancel()
 }
 
+/** Read frames off the SSE body until `want` shows up (or reads run out),
+ *  then release the stream. Reads one chunk at a time rather than assuming a
+ *  fixed count, since the underlying stream may coalesce or split enqueues. */
+async function drainUntil(res: Response, want: string, maxReads = 10): Promise<string> {
+  const reader = res.body!.getReader()
+  let all = ''
+  for (let i = 0; i < maxReads; i++) {
+    const { value, done } = await reader.read()
+    if (done) break
+    all += new TextDecoder().decode(value)
+    if (all.includes(want)) break
+  }
+  await reader.cancel()
+  return all
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockConversationsEnabled.mockResolvedValue(true)
@@ -116,6 +142,7 @@ beforeEach(() => {
   mockCanView.mockReturnValue({ allowed: true })
   mockPortalAccess.mockResolvedValue({ granted: true })
   mockAcquireSlot.mockReturnValue({ ok: true, release: vi.fn() })
+  mockReadActivitySnapshot.mockResolvedValue(null)
 })
 
 function tokenPrincipal(role: string, type = 'user') {
@@ -302,5 +329,72 @@ describe('GET /api/chat/stream - connection cap (Phase 6 R1)', () => {
     const res = await GET({ request: req('?scope=inbox') })
     await settleAndClose(res)
     await vi.waitFor(() => expect(release).toHaveBeenCalled())
+  })
+})
+
+describe('GET /api/chat/stream - assistant activity snapshot replay', () => {
+  it('replays a pending Quinn activity snapshot as an SSE frame for a fresh conversation subscriber', async () => {
+    tokenPrincipal('user', 'anonymous')
+    mockConversationFindFirst.mockResolvedValue({
+      id: 'conversation_1',
+      visitorPrincipalId: 'principal_tok',
+    })
+    mockReadActivitySnapshot.mockResolvedValue({
+      kind: 'assistant_activity',
+      conversationId: 'conversation_1',
+      status: 'thinking',
+      at: '2026-01-01T00:00:00.000Z',
+    })
+
+    const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
+    expect(res.status).toBe(200)
+    const body = await drainUntil(res, 'assistant_activity')
+
+    expect(mockReadActivitySnapshot).toHaveBeenCalledWith('conversation_1')
+    expect(body).toContain('event: assistant_activity')
+    expect(body).toContain('"status":"thinking"')
+  })
+
+  it('reads the snapshot only after subscribing (no gap between subscribe and replay)', async () => {
+    tokenPrincipal('user', 'anonymous')
+    mockConversationFindFirst.mockResolvedValue({
+      id: 'conversation_1',
+      visitorPrincipalId: 'principal_tok',
+    })
+    const order: string[] = []
+    mockSubscribe.mockImplementation(async () => {
+      order.push('subscribe')
+      return async () => {}
+    })
+    mockReadActivitySnapshot.mockImplementation(async () => {
+      order.push('read-snapshot')
+      return null
+    })
+
+    const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
+    await settleAndClose(res)
+    await vi.waitFor(() => expect(mockReadActivitySnapshot).toHaveBeenCalled())
+
+    expect(order).toEqual(['subscribe', 'read-snapshot'])
+  })
+
+  it('emits no frame and never reads the snapshot for the inbox/presence scopes', async () => {
+    tokenPrincipal('member')
+    const res = await GET({ request: req('?scope=inbox') })
+    await settleAndClose(res)
+    expect(mockReadActivitySnapshot).not.toHaveBeenCalled()
+  })
+
+  it('emits nothing extra when no turn is in flight (snapshot miss)', async () => {
+    tokenPrincipal('user', 'anonymous')
+    mockConversationFindFirst.mockResolvedValue({
+      id: 'conversation_1',
+      visitorPrincipalId: 'principal_tok',
+    })
+    mockReadActivitySnapshot.mockResolvedValue(null)
+
+    const res = await GET({ request: req('?conversationId=conversation_1&token=t') })
+    await settleAndClose(res)
+    expect(mockReadActivitySnapshot).toHaveBeenCalledWith('conversation_1')
   })
 })

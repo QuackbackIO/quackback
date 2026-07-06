@@ -19,6 +19,10 @@ import {
   executeAssistantHandoff,
 } from '@/lib/server/domains/conversation/conversation.service'
 import { publishConversationOnlyEvent } from '@/lib/server/realtime/conversation-channels'
+import {
+  writeActivitySnapshot,
+  clearActivitySnapshot,
+} from '@/lib/server/domains/assistant/assistant-activity-snapshot'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import {
@@ -122,87 +126,105 @@ export async function runAssistantTurnForConversation(
   // a smooth cadence — a dropped tail is harmless since the persisted reply is the
   // ground truth that replaces the buffer moments later.
   let lastDeltaAt = 0
-  const publishActivity = (status: 'thinking' | 'searching_kb' | 'reviewing_conversation') =>
-    publishConversationOnlyEvent(conversationId, {
-      kind: 'assistant_activity',
+  // Mirrored into Redis on every publish (and cleared when the turn ends, in
+  // the finally below) so a subscriber that connects mid-turn can replay the
+  // current state instead of missing it — see assistant-activity-snapshot.ts.
+  const publishActivity = (status: 'thinking' | 'searching_kb' | 'reviewing_conversation') => {
+    const event = {
+      kind: 'assistant_activity' as const,
       conversationId,
       status,
       at: new Date().toISOString(),
-    })
+    }
+    publishConversationOnlyEvent(conversationId, event)
+    void writeActivitySnapshot(conversationId, event)
+  }
 
-  const result = await runAssistantTurn({
-    messages,
-    assistantPrincipalId,
-    conversationId,
-    surface: 'widget',
-    involvementId: active?.id ?? null,
-    latestCustomerMessageId,
-    escalationAlreadyOffered: active?.escalationOfferedAt != null,
-    onActivity: (activity) => {
-      if (activity.kind === 'thinking') {
-        streamed = ''
-        publishActivity('thinking')
-      } else {
-        publishActivity(
-          activity.tool === 'search_knowledge' ? 'searching_kb' : 'reviewing_conversation'
-        )
-      }
-    },
-    onTextDelta: (delta) => {
-      streamed += delta
-      const now = Date.now()
-      if (now - lastDeltaAt < 90) return
-      lastDeltaAt = now
-      publishConversationOnlyEvent(conversationId, {
-        kind: 'assistant_delta',
-        conversationId,
-        text: streamed,
-        at: new Date(now).toISOString(),
+  // The finally is the single place the snapshot is cleared: every exit —
+  // suppressed, hand-off, answered, or a throw from any of the persistence
+  // writes — must leave no stale trace for a later subscriber to replay.
+  try {
+    const result = await runAssistantTurn({
+      messages,
+      assistantPrincipalId,
+      conversationId,
+      surface: 'widget',
+      involvementId: active?.id ?? null,
+      latestCustomerMessageId,
+      escalationAlreadyOffered: active?.escalationOfferedAt != null,
+      onActivity: (activity) => {
+        if (activity.kind === 'thinking') {
+          streamed = ''
+          publishActivity('thinking')
+        } else {
+          publishActivity(
+            activity.tool === 'search_knowledge' ? 'searching_kb' : 'reviewing_conversation'
+          )
+        }
+      },
+      onTextDelta: (delta) => {
+        streamed += delta
+        const now = Date.now()
+        if (now - lastDeltaAt < 90) return
+        lastDeltaAt = now
+        publishConversationOnlyEvent(conversationId, {
+          kind: 'assistant_delta',
+          conversationId,
+          text: streamed,
+          at: new Date(now).toISOString(),
+        })
+      },
+    })
+    // Suppressed by the engine's own silence check — nothing to persist.
+    if (result.status !== 'answered') return
+
+    // Open on first touch; reuse the active involvement otherwise.
+    const involvement =
+      active ?? (await openInvolvement({ conversationId, triggeredBy: 'first_touch' }))
+
+    const author: ConversationAuthorInput = {
+      principalId: assistantPrincipalId,
+      displayName: messenger.assistant?.name ?? 'Quinn',
+      avatarUrl: messenger.assistant?.avatarUrl ?? null,
+    }
+
+    if (result.escalation?.mode === 'handoff') {
+      const { getOfficeHoursSchedule } =
+        await import('@/lib/server/domains/settings/settings.office-hours')
+      const schedule = await getOfficeHoursSchedule()
+      await appendAssistantReply(conversationId, buildAssistantHandoverMessage(schedule), author, {
+        waiting: true,
       })
-    },
-  })
-  // Suppressed by the engine's own silence check — nothing to persist.
-  if (result.status !== 'answered') return
+      // Reply posted; record the hand-off, drop an agent-only note explaining why
+      // (so the teammate has context), and route it to a human — in parallel
+      // (distinct rows — the involvement vs the note vs the conversation).
+      await Promise.all([
+        recordHandoff(involvement.id, result.escalation.reason),
+        appendAssistantHandoffNote(conversationId, result.escalation.reason, author),
+        executeAssistantHandoff(conversationId, result.escalation.reason, author),
+      ])
+      return
+    }
 
-  // Open on first touch; reuse the active involvement otherwise.
-  const involvement =
-    active ?? (await openInvolvement({ conversationId, triggeredBy: 'first_touch' }))
-
-  const author: ConversationAuthorInput = {
-    principalId: assistantPrincipalId,
-    displayName: messenger.assistant?.name ?? 'Quinn',
-    avatarUrl: messenger.assistant?.avatarUrl ?? null,
-  }
-
-  if (result.escalation?.mode === 'handoff') {
-    const { getOfficeHoursSchedule } =
-      await import('@/lib/server/domains/settings/settings.office-hours')
-    const schedule = await getOfficeHoursSchedule()
-    await appendAssistantReply(conversationId, buildAssistantHandoverMessage(schedule), author, {
-      waiting: true,
+    // Answer or offer: persist Quinn's reply (its text carries any offer), then
+    // record the cited sources + stamp the inactivity clock (+ the single
+    // escalation offer) in one involvement update.
+    await appendAssistantReply(conversationId, result.text, author, {
+      waiting: false,
+      citations: result.citations,
     })
-    // Reply posted; record the hand-off, drop an agent-only note explaining why
-    // (so the teammate has context), and route it to a human — in parallel
-    // (distinct rows — the involvement vs the note vs the conversation).
-    await Promise.all([
-      recordHandoff(involvement.id, result.escalation.reason),
-      appendAssistantHandoffNote(conversationId, result.escalation.reason, author),
-      executeAssistantHandoff(conversationId, result.escalation.reason, author),
-    ])
-    return
+    await recordAssistantAnswer(involvement.id, {
+      sources: result.citations.map((c) => ({
+        type: c.type,
+        id: c.id,
+        title: c.title,
+        url: c.url,
+      })),
+      offeredEscalation: result.escalation?.mode === 'offer',
+    })
+  } finally {
+    await clearActivitySnapshot(conversationId)
   }
-
-  // Answer or offer: persist Quinn's reply (its text carries any offer), then
-  // record the cited sources + stamp the inactivity clock (+ the single
-  // escalation offer) in one involvement update.
-  await appendAssistantReply(conversationId, result.text, author, {
-    waiting: false,
-    citations: result.citations,
-  })
-  await recordAssistantAnswer(involvement.id, {
-    sources: result.citations.map((c) => ({ type: c.type, id: c.id, title: c.title, url: c.url })),
-    offeredEscalation: result.escalation?.mode === 'offer',
-  })
 }
 
 /**

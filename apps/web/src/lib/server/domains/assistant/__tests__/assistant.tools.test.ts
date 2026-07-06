@@ -11,11 +11,6 @@ vi.mock('../retrieval', () => ({
   retrieveKbArticles: (...args: unknown[]) => mockRetrieve(...args),
 }))
 
-const mockListMessages = vi.fn()
-vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
-  listMessages: (...args: unknown[]) => mockListMessages(...args),
-}))
-
 const mockIsFeatureEnabled = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...args),
@@ -30,7 +25,9 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
  * dataConnectors stays off unless a test opts in.
  */
 function mockActionsFlag(enabled: boolean) {
-  mockIsFeatureEnabled.mockImplementation(async (flag: string) => flag === 'assistantActions' && enabled)
+  mockIsFeatureEnabled.mockImplementation(
+    async (flag: string) => flag === 'assistantActions' && enabled
+  )
 }
 
 const mockGetAssistantToolControls = vi.fn()
@@ -71,9 +68,20 @@ vi.mock('@/lib/server/logger', () => ({
   },
 }))
 
-import { assembleAssistantTools } from '../assistant.tools'
+import { assembleAssistantToolset } from '../assistant.tools'
 import { makeToolTestContext, fakePendingActionRow } from './assistant-tool-fixtures'
 import type { AssistantToolContext, AssistantToolSpec } from '../assistant.toolspec'
+import type { AssistantToolControls } from '@/lib/server/domains/settings/settings.assistant'
+
+/** Tools-only view of the assembly, for the many cases here that don't need
+ *  the paired specs. */
+async function assembleTools(
+  c: AssistantToolContext,
+  specs?: readonly AssistantToolSpec[],
+  controls?: AssistantToolControls
+) {
+  return (await assembleAssistantToolset(c, specs, controls)).tools
+}
 
 const ctx = makeToolTestContext
 
@@ -86,7 +94,7 @@ async function findTool(
   name: string,
   specs?: readonly AssistantToolSpec[]
 ): Promise<{ execute: (args: unknown, o: unknown) => Promise<unknown> }> {
-  const tools = specs ? await assembleAssistantTools(c, specs) : await assembleAssistantTools(c)
+  const tools = specs ? await assembleTools(c, specs) : await assembleTools(c)
   const tool = tools.find((t) => t.name === name)
   if (!tool?.execute) throw new Error(`tool ${name} not found`)
   return tool as { execute: (args: unknown, o: unknown) => Promise<unknown> }
@@ -109,6 +117,7 @@ function makeFakeWriteSpec(overrides: Partial<AssistantToolSpec> = {}): Assistan
     name: 'close_conversation',
     label: 'Close conversation',
     description: 'Close the conversation with the given reason.',
+    promptGuidance: 'Only call once the customer has confirmed the issue is resolved.',
     risk: 'write',
     supportedModes: ['disabled', 'approval', 'autonomous'],
     defaultMode: 'approval',
@@ -178,67 +187,11 @@ describe('search_knowledge', () => {
   })
 })
 
-describe('get_conversation_context', () => {
-  it('returns not-linked without a conversation (sandbox)', async () => {
-    const c = ctx()
-    const tool = await findTool(c, 'get_conversation_context')
-    const out = await tool.execute({}, toolCtx(c))
-    expect(out).toEqual({
-      linked: false,
-      status: null,
-      priority: null,
-      assignedToHuman: false,
-      messages: [],
-    })
-    expect(mockListMessages).not.toHaveBeenCalled()
-  })
-
-  it('reads the conversation and allowlists status/priority/assignment + recent messages', async () => {
-    const fakeDb = {
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            limit: () =>
-              Promise.resolve([
-                { status: 'open', priority: 'high', assignedAgentPrincipalId: 'principal_agent' },
-              ]),
-          }),
-        }),
-      }),
-    }
-    mockListMessages.mockResolvedValue({
-      messages: [
-        { senderType: 'visitor', content: 'help', foo: 'secret' },
-        { senderType: 'agent', content: 'hi', bar: 'secret' },
-      ],
-      hasMore: false,
-      nextCursor: null,
-    })
-
-    const c = ctx({ conversationId: 'conversation_1' as never, db: fakeDb as never })
-    const tool = await findTool(c, 'get_conversation_context')
-    const out = (await tool.execute({}, toolCtx(c))) as {
-      linked: boolean
-      status: string
-      assignedToHuman: boolean
-      messages: unknown[]
-    }
-
-    expect(out.linked).toBe(true)
-    expect(out.status).toBe('open')
-    expect(out.assignedToHuman).toBe(true)
-    expect(out.messages).toEqual([
-      { sender: 'visitor', text: 'help' },
-      { sender: 'agent', text: 'hi' },
-    ])
-  })
-})
-
-describe('assembleAssistantTools: assistant actions flag', () => {
-  it('returns exactly the two read tools with no pipeline wrapping when the flag is off', async () => {
+describe('assembleAssistantToolset: assistant actions flag', () => {
+  it('returns exactly the one read tool with no pipeline wrapping when the flag is off', async () => {
     mockIsFeatureEnabled.mockResolvedValue(false)
-    const tools = await assembleAssistantTools(ctx())
-    expect(tools.map((t) => t.name).sort()).toEqual(['get_conversation_context', 'search_knowledge'])
+    const tools = await assembleTools(ctx())
+    expect(tools.map((t) => t.name).sort()).toEqual(['search_knowledge'])
     // Byte-identical legacy behavior: no settings read beyond the flag itself.
     expect(mockGetAssistantToolControls).not.toHaveBeenCalled()
   })
@@ -246,7 +199,7 @@ describe('assembleAssistantTools: assistant actions flag', () => {
   it('reads the flag and controls exactly once per assembly when the flag is on', async () => {
     mockActionsFlag(true)
     mockGetAssistantToolControls.mockResolvedValue({})
-    await assembleAssistantTools(ctx())
+    await assembleTools(ctx())
     // Twice, not once: assistantActions here plus dataConnectors inside the
     // real resolveToolSpecs this call falls through to (no explicit specs) —
     // each flag is still read exactly once, not re-read redundantly.
@@ -258,17 +211,17 @@ describe('assembleAssistantTools: assistant actions flag', () => {
 
   it('accepts pre-fetched controls, skipping its own settings read', async () => {
     mockActionsFlag(true)
-    const tools = await assembleAssistantTools(ctx(), undefined, { search_knowledge: 'disabled' })
+    const tools = await assembleTools(ctx(), undefined, { search_knowledge: 'disabled' })
     expect(tools.map((t) => t.name)).not.toContain('search_knowledge')
     expect(mockGetAssistantToolControls).not.toHaveBeenCalled()
   })
 })
 
-describe('assembleAssistantTools: control-mode gating', () => {
+describe('assembleAssistantToolset: control-mode gating', () => {
   it('does not register a disabled tool', async () => {
     mockActionsFlag(true)
     mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'disabled' })
-    const tools = await assembleAssistantTools(ctx(), [makeFakeWriteSpec()])
+    const tools = await assembleTools(ctx(), [makeFakeWriteSpec()])
     expect(tools).toHaveLength(0)
   })
 
@@ -276,7 +229,7 @@ describe('assembleAssistantTools: control-mode gating', () => {
     mockActionsFlag(true)
     mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'autonomous' })
     const spec = makeFakeWriteSpec({ supportedModes: ['disabled', 'approval'] })
-    const tools = await assembleAssistantTools(ctx(), [spec])
+    const tools = await assembleTools(ctx(), [spec])
     expect(tools).toHaveLength(0)
     expect(mockLoggerWarn).toHaveBeenCalled()
   })
@@ -284,19 +237,34 @@ describe('assembleAssistantTools: control-mode gating', () => {
   it('read tools still respect disabled mode when actions are on', async () => {
     mockActionsFlag(true)
     mockGetAssistantToolControls.mockResolvedValue({ search_knowledge: 'disabled' })
-    const tools = await assembleAssistantTools(ctx())
+    const tools = await assembleTools(ctx())
     expect(tools.map((t) => t.name)).not.toContain('search_knowledge')
-    expect(tools.map((t) => t.name)).toContain('get_conversation_context')
+    // Another default-active tool (autonomous by default) survives untouched.
+    expect(tools.map((t) => t.name)).toContain('set_attribute')
   })
 })
 
-describe('assembleAssistantTools: write-tool pipeline (approval mode)', () => {
+describe('assembleAssistantToolset', () => {
+  it('pairs each wired tool with the spec that produced it, index-aligned', async () => {
+    mockActionsFlag(false)
+    const { tools, activeSpecs } = await assembleAssistantToolset(ctx())
+    expect(tools.map((t) => t.name)).toEqual(activeSpecs.map((s) => s.name))
+    expect(
+      activeSpecs.every((s) => typeof s.promptGuidance === 'string' && s.promptGuidance.length > 0)
+    ).toBe(true)
+  })
+})
+
+describe('assembleAssistantToolset: write-tool pipeline (approval mode)', () => {
   it('proposes a pending action, returns a pending_approval note, and never executes', async () => {
     mockActionsFlag(true)
     mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'approval' })
     mockProposePendingAction.mockResolvedValue({ id: 'assistant_action_1' })
 
-    const c = ctx({ conversationId: 'conversation_1' as never, involvementId: 'assistant_involvement_1' as never })
+    const c = ctx({
+      conversationId: 'conversation_1' as never,
+      involvementId: 'assistant_involvement_1' as never,
+    })
     const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec()])
     const out = (await tool.execute({ reason: 'resolved' }, toolCtx(c))) as {
       status: string
@@ -317,7 +285,7 @@ describe('assembleAssistantTools: write-tool pipeline (approval mode)', () => {
   })
 })
 
-describe('assembleAssistantTools: write-tool pipeline (autonomous mode)', () => {
+describe('assembleAssistantToolset: write-tool pipeline (autonomous mode)', () => {
   function autonomousCtx(overrides: Partial<AssistantToolContext> = {}) {
     return ctx({ conversationId: 'conversation_1' as never, ...overrides })
   }
@@ -415,13 +383,15 @@ describe('assembleAssistantTools: write-tool pipeline (autonomous mode)', () => 
   })
 })
 
-describe('assembleAssistantTools: sandbox simulate mode', () => {
+describe('assembleAssistantToolset: sandbox simulate mode', () => {
   it('skips claim, execute, and audit for a write tool and returns a simulated summary', async () => {
     mockActionsFlag(true)
     mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'autonomous' })
 
     const c = ctx({ conversationId: null, simulate: true })
-    const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec({ defaultMode: 'autonomous' })])
+    const tool = await findTool(c, 'close_conversation', [
+      makeFakeWriteSpec({ defaultMode: 'autonomous' }),
+    ])
     const out = await tool.execute({ reason: 'resolved' }, toolCtx(c))
 
     expect(out).toEqual({ simulated: true, summary: 'Close conversation: resolved' })

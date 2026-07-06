@@ -3,9 +3,10 @@
  *
  * `search_knowledge` used to call the knowledge base directly (the only
  * grounding source that existed). This module generalizes that into a
- * `KnowledgeSource` per grounding source — the knowledge base today, feedback
- * posts next, more later (past-conversation summaries, custom snippets) —
- * composed by `retrieveKnowledge` into one ranked, budgeted result.
+ * `KnowledgeSource` per grounding source — the knowledge base always,
+ * feedback posts and admin-curated snippets each behind their own flag, more
+ * later (past-conversation summaries) — composed by `retrieveKnowledge` into
+ * one ranked, budgeted result.
  *
  * Mirrors the static-plus-flagged-dynamic shape of `resolveToolSpecs()`
  * (assistant.toolspec.ts): the knowledge-base source is always registered; a
@@ -36,7 +37,7 @@ export const KNOWLEDGE_TOP_K = 5
  */
 export interface RetrievedItem {
   id: string
-  sourceType: 'article' | 'post'
+  sourceType: 'article' | 'post' | 'snippet'
   title: string
   excerpt: string
   score: number
@@ -101,19 +102,29 @@ export const kbKnowledgeSource: KnowledgeSource = {
 const STATIC_SOURCES: readonly KnowledgeSource[] = [kbKnowledgeSource]
 
 /**
- * Resolve the active source list: the knowledge-base source plus, when the
- * `assistantPostGrounding` flag is on, the feedback-posts source. The posts
- * domain is imported dynamically so this module (and everything that
- * statically imports it, including assistant.toolspec.ts) never pulls in the
- * posts/boards schema at load time when the flag is off — mirrors
- * `resolveToolSpecs()`'s lazy import of the connectors domain behind
- * `dataConnectors`.
+ * Resolve the active source list: the knowledge-base source plus, per-flag,
+ * the feedback-posts source (`assistantPostGrounding`) and the admin-curated
+ * snippets source (`assistantSnippets`). Each optional source's domain is
+ * imported dynamically so this module (and everything that statically
+ * imports it, including assistant.toolspec.ts) never pulls in that source's
+ * schema at load time when its flag is off — mirrors `resolveToolSpecs()`'s
+ * lazy import of the connectors domain behind `dataConnectors`.
  */
 export async function resolveKnowledgeSources(): Promise<KnowledgeSource[]> {
-  const postGroundingEnabled = await isFeatureEnabled('assistantPostGrounding')
-  if (!postGroundingEnabled) return [...STATIC_SOURCES]
-  const { postsKnowledgeSource } = await import('./posts-retrieval')
-  return [...STATIC_SOURCES, postsKnowledgeSource]
+  const [postGroundingEnabled, snippetsEnabled] = await Promise.all([
+    isFeatureEnabled('assistantPostGrounding'),
+    isFeatureEnabled('assistantSnippets'),
+  ])
+  const sources: KnowledgeSource[] = [...STATIC_SOURCES]
+  if (postGroundingEnabled) {
+    const { postsKnowledgeSource } = await import('./posts-retrieval')
+    sources.push(postsKnowledgeSource)
+  }
+  if (snippetsEnabled) {
+    const { snippetsKnowledgeSource } = await import('./snippets-retrieval')
+    sources.push(snippetsKnowledgeSource)
+  }
+  return sources
 }
 
 /**

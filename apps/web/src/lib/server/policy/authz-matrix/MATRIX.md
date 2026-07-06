@@ -98,7 +98,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 488 surfaces
+### Server functions (`requireAuth`) — 493 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -161,6 +161,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-settings.ts`::updateAssistantToolControlsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantSurfacesFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantBasicsFn | assistant.manage |
+| `lib/server/functions/assistant-snippets.ts`::listSnippetsFn | assistant.manage |
+| `lib/server/functions/assistant-snippets.ts`::createSnippetFn | assistant.manage |
+| `lib/server/functions/assistant-snippets.ts`::updateSnippetFn | assistant.manage |
+| `lib/server/functions/assistant-snippets.ts`::deleteSnippetFn | assistant.manage |
 | `lib/server/functions/assistant-tools-analytics.ts`::getQuinnToolMetricsFn | analytics.view |
 | `lib/server/functions/assistant-tools-analytics.ts`::getConnectorHealthFn | analytics.view |
 | `lib/server/functions/audit-log.ts`::listAuditEventsFn | audit.view |
@@ -538,6 +542,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/webhooks.ts`::updateWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::deleteWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::rotateWebhookSecretFn | webhook.manage |
+| `lib/server/functions/workflow-reporting.ts`::workflowEffectivenessFn | routing.manage |
 | `lib/server/functions/workflows.ts`::listWorkflowsFn | routing.manage |
 | `lib/server/functions/workflows.ts`::getWorkflowFn | routing.manage |
 | `lib/server/functions/workflows.ts`::createWorkflowFn | workflow.manage |
@@ -758,7 +763,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-158 of 732 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+158 of 737 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

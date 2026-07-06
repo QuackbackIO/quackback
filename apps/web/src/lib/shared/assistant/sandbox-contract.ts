@@ -14,7 +14,7 @@ export const SANDBOX_EVENTS = {
 
 /** A structured citation on a sandbox answer (mirrors AssistantCitation). */
 export interface SandboxCitation {
-  type: 'article' | 'post'
+  type: 'article' | 'post' | 'snippet'
   id: string
   title: string
   url: string

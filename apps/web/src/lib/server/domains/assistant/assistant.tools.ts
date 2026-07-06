@@ -25,7 +25,12 @@ import { logger } from '@/lib/server/logger'
 import type { ConversationId } from '@quackback/ids'
 import type { AssistantToolContext, AssistantToolSpec, ToolControlMode } from './assistant.toolspec'
 import { ASSISTANT_TOOL_SPECS, resolveToolSpecs } from './assistant.toolspec'
-import { claimToolCall, finalizeToolCall, recordDeniedToolCall, type AssistantToolCall } from './tool-audit'
+import {
+  claimToolCall,
+  finalizeToolCall,
+  recordDeniedToolCall,
+  type AssistantToolCall,
+} from './tool-audit'
 import { proposePendingAction, type AssistantPendingAction } from './pending-actions.service'
 
 const log = logger.child({ component: 'assistant-tools' })
@@ -231,44 +236,55 @@ function toLegacyServerTool(spec: AssistantToolSpec, ctx: AssistantToolContext) 
 }
 
 /**
- * Build this turn's tool set. Assistant actions off means every catalogue
- * tool runs exactly as before the pipeline existed, with no settings read
- * beyond the flag — that legacy branch uses the static registry directly and
- * never resolves connector tools, even if dataConnectors is on: every
- * connector's defaultMode is 'disabled' and the legacy branch does not
- * consult control modes at all, so a connector must never reach it unwrapped.
- * Actions on resolves the full catalogue (static + connector, via
- * `resolveToolSpecs`) and each spec's saved-or-default mode, drops disabled
- * tools, and wraps the rest in the control-mode pipeline.
+ * Build this turn's tool set, paired with the specs that produced it
+ * (`activeSpecs[i]` is the spec behind `tools[i]`). Assistant actions off
+ * means every catalogue tool runs exactly as before the pipeline existed,
+ * with no settings read beyond the flag — that legacy branch uses the static
+ * registry directly and never resolves connector tools, even if
+ * dataConnectors is on: every connector's defaultMode is 'disabled' and the
+ * legacy branch does not consult control modes at all, so a connector must
+ * never reach it unwrapped. Actions on resolves the full catalogue (static +
+ * connector, via `resolveToolSpecs`) and each spec's saved-or-default mode,
+ * drops disabled tools, and wraps the rest in the control-mode pipeline.
  *
  * `specs` defaults to the live catalogue; tests inject a fixed list to
  * exercise write-risk behavior the current catalogue doesn't ship yet.
  * `controls` defaults to fetching the saved tool-controls map; the runtime
  * passes the one it already read this turn (via `getAssistantConfig`) so
  * assembly never re-reads the settings row on its own.
+ *
+ * The system prompt builder needs `activeSpecs` (each carries its own
+ * promptGuidance line, composed into the "Your tools" section); the agentic
+ * loop needs `tools`. Kept as one function so the two can never drift apart.
  */
-export async function assembleAssistantTools(
+export async function assembleAssistantToolset(
   ctx: AssistantToolContext,
   specs?: readonly AssistantToolSpec[],
   controls?: AssistantToolControls
-) {
+): Promise<{ tools: ReturnType<typeof toLegacyServerTool>[]; activeSpecs: AssistantToolSpec[] }> {
   const actionsEnabled = await isFeatureEnabled('assistantActions')
   if (!actionsEnabled) {
-    const legacySpecs = specs ?? Object.values(ASSISTANT_TOOL_SPECS)
     // Flag off exposes ONLY the read tools, unwrapped. Write specs must never
     // register without the pipeline, so a growing catalogue cannot widen the
     // legacy surface on its own.
-    return legacySpecs
-      .filter((spec) => spec.risk === 'read')
-      .map((spec) => toLegacyServerTool(spec, ctx))
+    const legacySpecs = (specs ?? Object.values(ASSISTANT_TOOL_SPECS)).filter(
+      (spec) => spec.risk === 'read'
+    )
+    return {
+      tools: legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)),
+      activeSpecs: legacySpecs,
+    }
   }
 
   const resolvedSpecs = specs ?? (await resolveToolSpecs())
   const resolvedControls = controls ?? (await getAssistantToolControls())
-  return resolvedSpecs
+  const active = resolvedSpecs
     .map((spec) => ({ spec, mode: resolveMode(spec, resolvedControls[spec.name]) }))
     .filter((entry) => entry.mode !== 'disabled')
-    .map(({ spec, mode }) =>
+  return {
+    tools: active.map(({ spec, mode }) =>
       spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
-    )
+    ),
+    activeSpecs: active.map((entry) => entry.spec),
+  }
 }
