@@ -117,9 +117,14 @@ const lowlight = createLowlight(common)
  */
 export function buildExtensions(
   features: EditorFeatures,
-  options: { placeholder: string; onImageUpload?: (file: File) => Promise<string> }
+  options: {
+    placeholder: string
+    onImageUpload?: (file: File) => Promise<string>
+    /** When set, Enter submits (chat-send) instead of splitting the block. */
+    onSubmit?: () => void
+  }
 ) {
-  const { placeholder, onImageUpload } = options
+  const { placeholder, onImageUpload, onSubmit } = options
   return [
     StarterKit.configure({
       heading: features.headings ? { levels: [1, 2, 3] } : false,
@@ -208,8 +213,18 @@ export function buildExtensions(
       : []),
     ...(features.slashMenu !== false ? [createSlashCommands(features, onImageUpload)] : []),
     ...(features.emojiPicker !== false ? [createEmojiExtension()] : []),
+    // Enter-key bindings, highest precedence first. createSubmitOnEnter registers
+    // at a higher priority than createEnterAsHardBreak (see the factory below), so
+    // a consumer that passes onSubmit gets Enter-to-send even when the preset also
+    // sets enterAsHardBreak — Enter submits, Shift+Enter breaks. Both yield to an
+    // open slash/mention/emoji popover via hasActiveSuggestion.
+    ...(onSubmit ? [createSubmitOnEnter(onSubmit)] : []),
     ...(features.enterAsHardBreak ? [createEnterAsHardBreak()] : []),
-    MentionExtension,
+    // Registered unless mentions are explicitly disabled (undefined = enabled), so
+    // every existing consumer keeps the `@` menu while visitor-facing composers can
+    // drop it. Read-only surfaces render mention nodes via generateContentHTML,
+    // which doesn't go through buildExtensions.
+    ...(features.mentions !== false ? [MentionExtension] : []),
     Markdown,
   ]
 }
@@ -236,6 +251,30 @@ function createEnterAsHardBreak() {
             () => commands.setHardBreak(),
           ])
         },
+      }
+    },
+  })
+}
+
+// Enter submits (chat-send); Shift+Enter inserts a line break. Registered at a
+// priority above createEnterAsHardBreak and StarterKit (default 100) so, when a
+// preset sets enterAsHardBreak while a consumer also passes onSubmit, Enter still
+// submits rather than inserting a break. TipTap tries same-key bindings in
+// descending priority order and stops at the first that returns true. ProseMirror
+// runs keymap handlers before a suggestion popover's handleKeyDown, so an open
+// slash/mention/emoji menu keeps Enter — we yield by returning false.
+function createSubmitOnEnter(onSubmit: () => void) {
+  return Extension.create({
+    name: 'submitOnEnter',
+    priority: 1000,
+    addKeyboardShortcuts() {
+      return {
+        Enter: () => {
+          if (hasActiveSuggestion(this.editor)) return false
+          onSubmit()
+          return true
+        },
+        'Shift-Enter': () => this.editor.commands.setHardBreak(),
       }
     },
   })
@@ -308,6 +347,11 @@ export interface EditorFeatures {
    * for document-shaped ones (posts, changelog) where paragraph-per-Enter
    * is the expected affordance. */
   enterAsHardBreak?: boolean
+  /** Enable the `@` mention menu (default: true). Registered unless explicitly
+   * false, so existing consumers keep mentions and saved mention nodes still
+   * round-trip; disable for visitor-facing composers where there's nobody to
+   * mention. */
+  mentions?: boolean
 }
 
 // ============================================================================
@@ -1071,6 +1115,10 @@ interface RichTextEditorProps {
   features?: EditorFeatures
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
   onImageUpload?: (file: File) => Promise<string>
+  /** When set, Enter submits (chat-send) instead of splitting the block and
+   * Shift+Enter inserts a line break. Yields to an open slash/mention/emoji
+   * popover. Pass a stable (memoized) callback so extensions aren't rebuilt. */
+  onSubmit?: () => void
 }
 
 // ============================================================================
@@ -1089,6 +1137,7 @@ function RichTextEditorBase({
   autofocus = false,
   features = {},
   onImageUpload,
+  onSubmit,
 }: RichTextEditorProps) {
   // Memoize extensions keyed on individual feature flags.
   // TipTap v3's useEditor calls editor.setOptions() whenever the extensions
@@ -1096,7 +1145,7 @@ function RichTextEditorBase({
   // Rebuilding the array on every render causes setOptions→transaction→onUpdate
   // on every keystroke, resulting in 300–400 ms input violations.
   const extensions = useMemo(
-    () => buildExtensions(features, { placeholder, onImageUpload }),
+    () => buildExtensions(features, { placeholder, onImageUpload, onSubmit }),
 
     [
       features.headings,
@@ -1111,7 +1160,9 @@ function RichTextEditorBase({
       features.slashMenu,
       features.emojiPicker,
       features.enterAsHardBreak,
+      features.mentions,
       onImageUpload,
+      onSubmit,
       placeholder,
     ]
   )
@@ -1423,6 +1474,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.value !== next.value ||
     prev.onChange !== next.onChange ||
     prev.onImageUpload !== next.onImageUpload ||
+    prev.onSubmit !== next.onSubmit ||
     prev.disabled !== next.disabled ||
     prev.placeholder !== next.placeholder ||
     prev.minHeight !== next.minHeight ||
@@ -1446,6 +1498,7 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     pf.slashMenu === nf.slashMenu &&
     pf.emojiPicker === nf.emojiPicker &&
     pf.enterAsHardBreak === nf.enterAsHardBreak &&
+    pf.mentions === nf.mentions &&
     pf.bubbleMenu === nf.bubbleMenu
   )
 })

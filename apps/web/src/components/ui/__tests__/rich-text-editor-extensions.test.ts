@@ -118,6 +118,29 @@ describe('buildExtensions', () => {
     const names = exts.map((e) => (e as { name: string }).name)
     expect(names).toContain('enterAsHardBreak')
   })
+
+  // P2.1 — mentions feature flag (default TRUE; undefined must mean enabled so
+  // every existing consumer keeps the `@` menu).
+  it('includes the mention extension by default (undefined = enabled)', () => {
+    const names = buildExtensions({}, { placeholder: '' }).map((e) => (e as { name: string }).name)
+    expect(names).toContain('mention')
+  })
+
+  it('omits the mention extension when mentions is false', () => {
+    const names = buildExtensions({ mentions: false }, { placeholder: '' }).map(
+      (e) => (e as { name: string }).name
+    )
+    expect(names).not.toContain('mention')
+  })
+
+  it('keeps mentions on for an existing preset that never sets the flag (widget set)', () => {
+    // Spot-check: WIDGET_FEATURES (and every current preset) leaves `mentions`
+    // unset, so the mention menu must survive the flag addition.
+    const names = buildExtensions(WIDGET_FEATURES, { placeholder: '' }).map(
+      (e) => (e as { name: string }).name
+    )
+    expect(names).toContain('mention')
+  })
 })
 
 describe('hasActiveSuggestion', () => {
@@ -149,6 +172,92 @@ describe('hasActiveSuggestion', () => {
   it('tolerates plugins whose getState returns undefined or non-object', () => {
     const editor = makeEditor([undefined, 'not-a-state', 42])
     expect(hasActiveSuggestion(editor)).toBe(false)
+  })
+})
+
+// P2.2 — onSubmit (Enter sends). The submitOnEnter extension is only registered
+// when RichTextEditor is given an onSubmit callback. We invoke its keyboard
+// shortcut handlers directly (mirroring the mock-editor pattern above) so the
+// Enter/Shift+Enter/suggestion/precedence behaviour is asserted deterministically
+// without standing up a full ProseMirror view.
+describe('submitOnEnter (onSubmit)', () => {
+  type KeyHandlers = Record<string, () => boolean>
+  type KeymapExtension = {
+    name: string
+    config: { priority?: number; addKeyboardShortcuts: () => KeyHandlers }
+  }
+
+  // Minimal editor stub covering the two things the handlers touch:
+  // hasActiveSuggestion (state.plugins) and commands.setHardBreak.
+  function makeMockEditor({ suggestion = false }: { suggestion?: boolean } = {}) {
+    const setHardBreak = vi.fn(() => true)
+    const plugins = [{ getState: () => ({ active: suggestion }) }]
+    const editor = { state: { plugins }, commands: { setHardBreak } }
+    return { editor, setHardBreak }
+  }
+
+  function submitExtension(features: EditorFeatures, onSubmit: () => void): KeymapExtension {
+    const ext = buildExtensions(features, { placeholder: '', onSubmit }).find(
+      (e) => (e as { name: string }).name === 'submitOnEnter'
+    )
+    if (!ext) throw new Error('submitOnEnter extension was not registered')
+    return ext as unknown as KeymapExtension
+  }
+
+  function handlersFor(mockEditor: unknown, onSubmit: () => void): KeyHandlers {
+    return submitExtension({}, onSubmit).config.addKeyboardShortcuts.call({ editor: mockEditor })
+  }
+
+  it('is absent when no onSubmit is provided (zero behavior change)', () => {
+    const names = buildExtensions({}, { placeholder: '' }).map((e) => (e as { name: string }).name)
+    expect(names).not.toContain('submitOnEnter')
+  })
+
+  it('is registered when onSubmit is provided', () => {
+    const names = buildExtensions({}, { placeholder: '', onSubmit: () => {} }).map(
+      (e) => (e as { name: string }).name
+    )
+    expect(names).toContain('submitOnEnter')
+  })
+
+  it('Enter fires onSubmit and consumes the key (no paragraph split)', () => {
+    const onSubmit = vi.fn()
+    const { editor, setHardBreak } = makeMockEditor()
+    const consumed = handlersFor(editor, onSubmit).Enter()
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(consumed).toBe(true) // returning true stops ProseMirror's default Enter
+    expect(setHardBreak).not.toHaveBeenCalled()
+  })
+
+  it('Shift+Enter inserts a hardBreak and does not submit', () => {
+    const onSubmit = vi.fn()
+    const { editor, setHardBreak } = makeMockEditor()
+    const result = handlersFor(editor, onSubmit)['Shift-Enter']()
+    expect(setHardBreak).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(result).toBe(true)
+  })
+
+  it('yields Enter to an active suggestion popover instead of submitting', () => {
+    const onSubmit = vi.fn()
+    const { editor } = makeMockEditor({ suggestion: true })
+    const consumed = handlersFor(editor, onSubmit).Enter()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(consumed).toBe(false) // let the popover's own onKeyDown pick the item
+  })
+
+  it('wins over enterAsHardBreak via a higher extension priority', () => {
+    // TipTap tries same-key bindings in descending priority order and stops at
+    // the first returning true, so submitOnEnter must outrank enterAsHardBreak.
+    const exts = buildExtensions({ enterAsHardBreak: true }, { placeholder: '', onSubmit: () => {} })
+    const byName = new Map(
+      exts.map((e) => [(e as { name: string }).name, e as unknown as KeymapExtension])
+    )
+    expect(byName.has('submitOnEnter')).toBe(true)
+    expect(byName.has('enterAsHardBreak')).toBe(true)
+    const submitPriority = byName.get('submitOnEnter')!.config.priority ?? 100
+    const hardBreakPriority = byName.get('enterAsHardBreak')!.config.priority ?? 100
+    expect(submitPriority).toBeGreaterThan(hardBreakPriority)
   })
 })
 
