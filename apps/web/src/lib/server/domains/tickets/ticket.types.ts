@@ -61,7 +61,14 @@ export interface TicketListFilter {
   teamId?: TeamId
   requesterPrincipalId?: PrincipalId
   companyId?: CompanyId
+  /** Free-text match over the ticket title + its messages' `search_vector`
+   *  (same FTS primitive as `searchTickets`). A bare/`#`-prefixed integer
+   *  (e.g. "42", "#42") also matches by ticket number, OR'd with the FTS match. */
+  search?: string
   sort?: TicketSort
+  /** Keyset cursor: the previous page's last ticket id, re-resolved server-side
+   *  against the active sort (mirrors the conversation inbox). */
+  cursor?: TicketId
   limit?: number
 }
 
@@ -126,4 +133,18 @@ export interface TicketDTO {
   createdAt: string
   updatedAt: string
   reopenedCount: number
+  /** The latest customer-visible message's preview text (same truncation as the
+   *  conversation inbox's `lastMessagePreview`), falling back to the ticket
+   *  title when only internal notes exist or the thread is empty. */
+  lastMessagePreview: string | null
+  /** The newest non-deleted message's timestamp, of ANY kind — an internal note
+   *  still counts as activity, unlike `lastMessagePreview`. Null when the
+   *  thread is empty (e.g. a ticket opened with no description). */
+  lastMessageAt: string | null
+}
+
+/** A page of `listTickets`: the rows plus whether an older page follows. */
+export interface TicketListPage {
+  tickets: TicketDTO[]
+  hasMore: boolean
 }

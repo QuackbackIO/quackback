@@ -43,6 +43,28 @@ export interface SearchTicketsOptions {
   limit?: number
 }
 
+/**
+ * The `websearch_to_tsquery` + title/message match predicate shared by every
+ * ticket FTS entry point: this primitive's `searchTickets`, and the ticket
+ * list's `search` filter (`ticket.service.ts` `listTickets`). Audience scoping
+ * beyond the internal-note strip (e.g. restricting to the requester's own
+ * tickets) is the caller's concern — see `audienceScope` below.
+ */
+export function ticketFtsMatch(
+  query: string,
+  opts: { stripInternal: boolean } = { stripInternal: false }
+): { tsq: SQL; condition: SQL } {
+  const tsq = sql`websearch_to_tsquery('english', ${query})`
+  // A message match must respect the internal-note strip for a requester.
+  const msgMatch = sql`EXISTS (
+    SELECT 1 FROM conversation_messages cm
+    WHERE cm.ticket_id = ${tickets.id} AND cm.deleted_at IS NULL
+      AND cm.search_vector @@ ${tsq} ${opts.stripInternal ? sql`AND cm.is_internal = false` : sql``}
+  )`
+  const titleMatch = sql`to_tsvector('english', ${tickets.title}) @@ ${tsq}`
+  return { tsq, condition: sql`(${titleMatch} OR ${msgMatch})` }
+}
+
 export async function searchTickets(
   actor: Actor,
   opts: SearchTicketsOptions
@@ -52,14 +74,7 @@ export async function searchTickets(
   const limit = Math.min(opts.limit ?? DEFAULT_LIMIT, MAX_LIMIT)
   const requester = opts.audience === 'requester'
 
-  const tsq = sql`websearch_to_tsquery('english', ${q})`
-  // A message match must respect the internal-note strip for a requester.
-  const msgMatch = sql`EXISTS (
-    SELECT 1 FROM conversation_messages cm
-    WHERE cm.ticket_id = ${tickets.id} AND cm.deleted_at IS NULL
-      AND cm.search_vector @@ ${tsq} ${requester ? sql`AND cm.is_internal = false` : sql``}
-  )`
-  const titleMatch = sql`to_tsvector('english', ${tickets.title}) @@ ${tsq}`
+  const { tsq, condition: match } = ticketFtsMatch(q, { stripInternal: requester })
   const titleRank = sql<number>`ts_rank(to_tsvector('english', ${tickets.title}), ${tsq})`
   const bestMsgRank = sql<number>`coalesce((
     SELECT max(ts_rank(cm.search_vector, ${tsq}))
@@ -81,7 +96,7 @@ export async function searchTickets(
   const rows = await db
     .select({ row: tickets })
     .from(tickets)
-    .where(and(audienceScope, sql`(${titleMatch} OR ${msgMatch})`))
+    .where(and(audienceScope, match))
     .orderBy(sql`${rank} DESC`, tickets.id)
     .limit(limit)
   if (rows.length === 0) return []

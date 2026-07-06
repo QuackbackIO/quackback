@@ -24,6 +24,8 @@ const { mockTicket, setTicketStatusFn } = vi.hoisted(() => {
     createdAt: '2026-07-03T00:00:00.000Z',
     updatedAt: '2026-07-03T00:00:00.000Z',
     reopenedCount: 0,
+    lastMessagePreview: 'Test',
+    lastMessageAt: null,
   } as TicketDTO
   return { mockTicket, setTicketStatusFn: vi.fn(async () => mockTicket) }
 })

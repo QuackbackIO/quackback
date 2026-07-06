@@ -12,8 +12,11 @@ import {
   db,
   eq,
   and,
+  or,
   isNull,
   inArray,
+  gt,
+  lt,
   sql,
   asc,
   desc,
@@ -47,6 +50,7 @@ import { getStageLabels } from '../settings/settings.tickets'
 import { createNotification } from '../notifications/notification.service'
 import { emitTicketCreated, emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
+import { ticketFtsMatch } from './ticket-search.service'
 import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
 import type {
   CreateTicketInput,
@@ -54,6 +58,7 @@ import type {
   TicketListFilter,
   TicketSort,
   TicketDTO,
+  TicketListPage,
 } from './ticket.types'
 
 export { resolveStage }
@@ -88,18 +93,87 @@ export async function getTicket(id: TicketId): Promise<TicketDTO> {
 }
 
 const priorityRankExpr = priorityRankSql(tickets.priority)
+// JS-side twin of priorityRankExpr, for the keyset cursor's priority-rank
+// comparison (the two MUST agree or pages dupe/skip). Mirrors
+// conversation.query.ts's PRIORITY_RANK.
+const PRIORITY_RANK: Record<string, number> = { urgent: 5, high: 4, medium: 3, low: 2, none: 1 }
 
-function orderByForTicketSort(sort: TicketSort): SQL[] {
+/**
+ * The ordering contract for each ticket sort, as pure data (column +
+ * direction). `orderByForTicketSort` and `cursorConditionForTicketSort` both
+ * derive from this, so the two can never diverge — and it's directly
+ * unit-testable without a database. `priority` ties on `id` alone (no
+ * secondary activity tiebreak) — a deliberate simplification vs. the richer
+ * conversation sort, so the keyset cursor only ever needs two columns.
+ */
+export interface TicketSortDescriptor {
+  primary: 'updatedAt' | 'createdAt' | 'priorityRank'
+  direction: 'asc' | 'desc'
+}
+
+export function ticketSortDescriptorFor(sort: TicketSort = 'recent'): TicketSortDescriptor {
   switch (sort) {
     case 'oldest':
-      return [asc(tickets.updatedAt), asc(tickets.id)]
+      return { primary: 'updatedAt', direction: 'asc' }
     case 'created':
-      return [desc(tickets.createdAt), desc(tickets.id)]
+      return { primary: 'createdAt', direction: 'desc' }
     case 'priority':
-      return [desc(priorityRankExpr), desc(tickets.updatedAt), desc(tickets.id)]
+      return { primary: 'priorityRank', direction: 'desc' }
     case 'recent':
     default:
-      return [desc(tickets.updatedAt), desc(tickets.id)]
+      return { primary: 'updatedAt', direction: 'desc' }
+  }
+}
+
+/** ORDER BY clause list for a sort. `id` breaks ties so keyset never dupes/skips. */
+function orderByForTicketSort(sort: TicketSort): SQL[] {
+  const d = ticketSortDescriptorFor(sort)
+  const idTie = d.direction === 'asc' ? asc(tickets.id) : desc(tickets.id)
+  switch (d.primary) {
+    case 'priorityRank':
+      return [desc(priorityRankExpr), idTie]
+    case 'createdAt':
+      return [d.direction === 'asc' ? asc(tickets.createdAt) : desc(tickets.createdAt), idTie]
+    case 'updatedAt':
+    default:
+      return [d.direction === 'asc' ? asc(tickets.updatedAt) : desc(tickets.updatedAt), idTie]
+  }
+}
+
+/**
+ * Keyset cursor comparison for a sort: rows strictly after the cursor row in
+ * the sort's order. The cursor is re-resolved from the DB (never a client
+ * string) so ties are exact. Mirrors the (column, id) composite idiom in
+ * conversation.query.ts's `cursorConditionForSort`.
+ */
+function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
+  const d = ticketSortDescriptorFor(sort)
+  switch (d.primary) {
+    case 'priorityRank': {
+      const rank = PRIORITY_RANK[t.priority] ?? 1
+      return or(lt(priorityRankExpr, rank), and(eq(priorityRankExpr, rank), lt(tickets.id, t.id)))!
+    }
+    case 'createdAt':
+      return d.direction === 'asc'
+        ? or(
+            gt(tickets.createdAt, t.createdAt),
+            and(eq(tickets.createdAt, t.createdAt), gt(tickets.id, t.id))
+          )!
+        : or(
+            lt(tickets.createdAt, t.createdAt),
+            and(eq(tickets.createdAt, t.createdAt), lt(tickets.id, t.id))
+          )!
+    case 'updatedAt':
+    default:
+      return d.direction === 'asc'
+        ? or(
+            gt(tickets.updatedAt, t.updatedAt),
+            and(eq(tickets.updatedAt, t.updatedAt), gt(tickets.id, t.id))
+          )!
+        : or(
+            lt(tickets.updatedAt, t.updatedAt),
+            and(eq(tickets.updatedAt, t.updatedAt), lt(tickets.id, t.id))
+          )!
   }
 }
 
@@ -107,9 +181,22 @@ function orderByForTicketSort(sort: TicketSort): SQL[] {
  * List tickets for an agent, filtered + sorted, scoped by `ticketFilter(actor)`.
  * Soft-deleted tickets are excluded. Status-category and stage filters resolve
  * through subqueries on ticket_statuses so the outer select stays tickets-only.
+ * `filter.search` reuses the FTS predicate from `ticket-search.service.ts`
+ * (title + message `search_vector`, agent audience so internal notes count),
+ * with a `#N`/`N` ticket-number fast path OR'd in. Keyset-paginated:
+ * `filter.cursor` is the previous page's last ticket id, re-resolved
+ * server-side against the active sort (mirrors `listConversationsForAgent`) so
+ * a page boundary can't be spoofed and ties are handled deterministically.
  */
-export async function listTickets(filter: TicketListFilter, actor: Actor): Promise<TicketDTO[]> {
+export async function listTickets(filter: TicketListFilter, actor: Actor): Promise<TicketListPage> {
   const limit = Math.min(Math.max(filter.limit ?? DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT)
+  const sort = filter.sort ?? 'recent'
+
+  let cursor: Ticket | null = null
+  if (filter.cursor) {
+    const [row] = await db.select().from(tickets).where(eq(tickets.id, filter.cursor)).limit(1)
+    if (row) cursor = row
+  }
 
   const assigneeCondition =
     filter.assignee === 'me'
@@ -121,6 +208,17 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
         : filter.assignee
           ? eq(tickets.assigneePrincipalId, filter.assignee)
           : undefined
+
+  const search = filter.search?.trim()
+  // A bare or `#`-prefixed integer is also a ticket-number fast path, OR'd
+  // onto the FTS match — "42" finds ticket #42 as well as any FTS hit on "42".
+  const searchCondition = search
+    ? (() => {
+        const { condition } = ticketFtsMatch(search)
+        const numMatch = /^#?(\d+)$/.exec(search)
+        return numMatch ? or(condition, eq(tickets.number, Number(numMatch[1])))! : condition
+      })()
+    : undefined
 
   const rows = await db
     .select()
@@ -153,14 +251,21 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
         filter.requesterPrincipalId
           ? eq(tickets.requesterPrincipalId, filter.requesterPrincipalId)
           : undefined,
-        filter.companyId ? eq(tickets.companyId, filter.companyId) : undefined
+        filter.companyId ? eq(tickets.companyId, filter.companyId) : undefined,
+        searchCondition,
+        // Keyset comparison for the active sort (re-resolved cursor row). id is
+        // always the final tiebreak so a page boundary never dupes or skips.
+        cursor ? cursorConditionForTicketSort(sort, cursor) : undefined
       )
     )
-    .orderBy(...orderByForTicketSort(filter.sort ?? 'recent'))
-    .limit(limit)
+    .orderBy(...orderByForTicketSort(sort))
+    .limit(limit + 1)
 
-  const ctx = await buildTicketContext(rows)
-  return rows.map((r) => ticketToDTO(r, ctx))
+  const hasMore = rows.length > limit
+  const page = hasMore ? rows.slice(0, limit) : rows
+
+  const ctx = await buildTicketContext(page)
+  return { tickets: page.map((r) => ticketToDTO(r, ctx)), hasMore }
 }
 
 // ---------------------------------------------------------------------------

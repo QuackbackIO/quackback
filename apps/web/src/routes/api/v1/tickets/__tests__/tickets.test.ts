@@ -58,7 +58,7 @@ beforeEach(() => {
 
 describe('GET /api/v1/tickets', () => {
   it('lists serialized tickets scoped to a service actor', async () => {
-    mockListTickets.mockResolvedValue([ticketDTO])
+    mockListTickets.mockResolvedValue({ tickets: [ticketDTO], hasMore: false })
     const res = await getHandler(ListRoute)({
       request: new Request('https://x.test/api/v1/tickets?type=customer&limit=5'),
       params: {},

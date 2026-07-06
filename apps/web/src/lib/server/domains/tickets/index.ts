@@ -18,4 +18,5 @@ export type {
   TicketAssigneeRef,
   TicketCompanyRef,
   TicketDTO,
+  TicketListPage,
 } from './ticket.types'

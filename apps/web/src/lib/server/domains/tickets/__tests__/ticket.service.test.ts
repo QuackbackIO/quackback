@@ -17,7 +17,10 @@ import {
   user,
   settings,
   inAppNotifications,
+  conversationMessages,
   eq,
+  and,
+  desc,
 } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -31,6 +34,9 @@ const webhooks = vi.hoisted(() => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  // Posting a message (activity-enrichment tests) also fires these two.
+  emitTicketReplied: vi.fn().mockResolvedValue(undefined),
+  emitTicketNoteAdded: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('../ticket.webhooks', () => webhooks)
 
@@ -41,8 +47,14 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-import { createTicket, setTicketStatus, assignTicket } from '../ticket.service'
-import { listTicketMessages } from '../ticket-message.service'
+import {
+  createTicket,
+  setTicketStatus,
+  assignTicket,
+  listTickets,
+  getTicket,
+} from '../ticket.service'
+import { listTicketMessages, sendTicketMessage, addTicketNote } from '../ticket-message.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 
@@ -59,6 +71,20 @@ const suffix = () => `${Date.now().toString(36)}_${Math.random().toString(36).sl
 function adminActor(): Actor {
   return {
     principalId: createId('principal') as PrincipalId,
+    role: 'admin',
+    principalType: 'user',
+    segmentIds: new Set(),
+    permissions: resolveActorPermissions('admin'),
+  }
+}
+
+/** An admin actor backed by a real principal row — required for any write that
+ *  posts a ticket-thread message (its FK on `principal_id` won't accept the
+ *  bare, unbacked id `adminActor()` returns). */
+async function messageAuthorActor(): Promise<Actor> {
+  const principalId = await seedTeammate()
+  return {
+    principalId,
     role: 'admin',
     principalType: 'user',
     segmentIds: new Set(),
@@ -509,5 +535,219 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     // Re-assigning the identical teammate changes nothing → no second hook.
     await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
     expect(webhooks.emitTicketAssigned).toHaveBeenCalledTimes(1)
+  })
+
+  describe('listTickets: search', () => {
+    it('matches by ticket title', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const target = await createTicket(
+        { type: 'customer', title: 'Cannot reset my password' },
+        actor
+      )
+      await createTicket({ type: 'customer', title: 'Billing question' }, actor)
+
+      const { tickets: results } = await listTickets({ search: 'password' }, actor)
+      expect(results.map((t) => t.id)).toEqual([target.id])
+    })
+
+    it('matches a message (agent audience, so internal notes count)', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      const target = await createTicket({ type: 'customer', title: 'General question' }, actor)
+      await addTicketNote(actor, {
+        ticketId: target.id,
+        content: 'escalate this to the payments squad',
+      })
+      await createTicket({ type: 'customer', title: 'Unrelated' }, actor)
+
+      const { tickets: results } = await listTickets({ search: 'payments squad' }, actor)
+      expect(results.map((t) => t.id)).toContain(target.id)
+    })
+
+    it('a bare or #-prefixed integer is a ticket-number fast path', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const target = await createTicket(
+        { type: 'customer', title: 'Totally unrelated title' },
+        actor
+      )
+      await createTicket({ type: 'customer', title: 'Another one' }, actor)
+
+      const byBareNumber = await listTickets({ search: String(target.number) }, actor)
+      expect(byBareNumber.tickets.map((t) => t.id)).toContain(target.id)
+
+      const byHashNumber = await listTickets({ search: `#${target.number}` }, actor)
+      expect(byHashNumber.tickets.map((t) => t.id)).toContain(target.id)
+    })
+
+    it('an empty/whitespace search does not filter the list', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      await createTicket({ type: 'customer', title: 'Ticket one' }, actor)
+      await createTicket({ type: 'customer', title: 'Ticket two' }, actor)
+
+      const { tickets: results } = await listTickets({ search: '   ' }, actor)
+      expect(results.length).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  describe('listTickets: keyset cursor', () => {
+    it('pages through the recent sort without dupes or gaps', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const a = await createTicket({ type: 'customer', title: 'Ticket A' }, actor)
+      const b = await createTicket({ type: 'customer', title: 'Ticket B' }, actor)
+      const c = await createTicket({ type: 'customer', title: 'Ticket C' }, actor)
+
+      // Pin updatedAt explicitly (deterministic ordering, no timing flakiness):
+      // C is most recent, then B, then A.
+      await testDb
+        .update(tickets)
+        .set({ updatedAt: new Date('2026-01-01T00:00:00.000Z') })
+        .where(eq(tickets.id, a.id))
+      await testDb
+        .update(tickets)
+        .set({ updatedAt: new Date('2026-01-02T00:00:00.000Z') })
+        .where(eq(tickets.id, b.id))
+      await testDb
+        .update(tickets)
+        .set({ updatedAt: new Date('2026-01-03T00:00:00.000Z') })
+        .where(eq(tickets.id, c.id))
+
+      const page1 = await listTickets({ limit: 2 }, actor)
+      expect(page1.tickets.map((t) => t.id)).toEqual([c.id, b.id])
+      expect(page1.hasMore).toBe(true)
+
+      const page2 = await listTickets(
+        { limit: 2, cursor: page1.tickets[page1.tickets.length - 1].id },
+        actor
+      )
+      expect(page2.tickets.map((t) => t.id)).toEqual([a.id])
+      expect(page2.hasMore).toBe(false)
+    })
+
+    it('the priority sort ranks by priority, keyset intact across pages', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const low = await createTicket(
+        { type: 'customer', title: 'Low priority', priority: 'low' },
+        actor
+      )
+      const urgent = await createTicket(
+        { type: 'customer', title: 'Urgent priority', priority: 'urgent' },
+        actor
+      )
+      const high = await createTicket(
+        { type: 'customer', title: 'High priority', priority: 'high' },
+        actor
+      )
+
+      const page1 = await listTickets({ sort: 'priority', limit: 1 }, actor)
+      expect(page1.tickets.map((t) => t.id)).toEqual([urgent.id])
+      expect(page1.hasMore).toBe(true)
+
+      const page2 = await listTickets(
+        { sort: 'priority', limit: 1, cursor: page1.tickets[0].id },
+        actor
+      )
+      expect(page2.tickets.map((t) => t.id)).toEqual([high.id])
+      expect(page2.hasMore).toBe(true)
+
+      const page3 = await listTickets(
+        { sort: 'priority', limit: 1, cursor: page2.tickets[0].id },
+        actor
+      )
+      expect(page3.tickets.map((t) => t.id)).toEqual([low.id])
+      expect(page3.hasMore).toBe(false)
+    })
+
+    it('an unknown cursor is ignored (first page, not a 500)', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Solo' }, actor)
+
+      const page = await listTickets({ cursor: createId('ticket') as TicketId }, actor)
+      expect(page.tickets.map((t) => t.id)).toContain(created.id)
+    })
+  })
+
+  describe('listTickets + getTicket: activity enrichment', () => {
+    it('carries the latest non-internal message as the preview + its timestamp as lastMessageAt', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      const created = await createTicket({ type: 'customer', title: 'Quiet ticket' }, actor)
+      await sendTicketMessage(actor, {
+        ticketId: created.id,
+        content: 'the checkout page kept spinning',
+      })
+
+      const { tickets: results } = await listTickets({}, actor)
+      const dto = results.find((t) => t.id === created.id)
+      expect(dto?.lastMessagePreview).toBe('the checkout page kept spinning')
+      expect(dto?.lastMessageAt).not.toBeNull()
+
+      // getTicket (single-row path) populates the same fields.
+      const single = await getTicket(created.id)
+      expect(single.lastMessagePreview).toBe('the checkout page kept spinning')
+      expect(single.lastMessageAt).not.toBeNull()
+    })
+
+    it('an internal note bumps lastMessageAt but the preview falls back to the title', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      const created = await createTicket({ type: 'customer', title: 'Note-only ticket' }, actor)
+      await addTicketNote(actor, { ticketId: created.id, content: 'internal-only note' })
+
+      const dto = await getTicket(created.id)
+      expect(dto.lastMessagePreview).toBe('Note-only ticket')
+      expect(dto.lastMessageAt).not.toBeNull()
+    })
+
+    it('a thread-less ticket has a null lastMessageAt and the title as its preview', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Untouched ticket' }, actor)
+
+      const dto = await getTicket(created.id)
+      expect(dto.lastMessagePreview).toBe('Untouched ticket')
+      expect(dto.lastMessageAt).toBeNull()
+    })
+
+    it('a later internal note does not override a non-internal preview', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      const created = await createTicket({ type: 'customer', title: 'Mixed thread' }, actor)
+      await sendTicketMessage(actor, { ticketId: created.id, content: 'customer-visible reply' })
+      await addTicketNote(actor, { ticketId: created.id, content: 'a later internal note' })
+
+      const dto = await getTicket(created.id)
+      // lastMessageAt reflects the later (internal) activity...
+      const [latestNote] = await testDb
+        .select()
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.ticketId, created.id),
+            eq(conversationMessages.isInternal, true)
+          )
+        )
+        .orderBy(desc(conversationMessages.createdAt))
+        .limit(1)
+      expect(new Date(dto.lastMessageAt as string).getTime()).toBe(latestNote.createdAt.getTime())
+      // ...but the preview still prefers the non-internal message.
+      expect(dto.lastMessagePreview).toBe('customer-visible reply')
+    })
   })
 })

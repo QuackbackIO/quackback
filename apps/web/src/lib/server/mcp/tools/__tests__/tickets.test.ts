@@ -93,7 +93,7 @@ describe('ticket MCP tools', () => {
   })
 
   it('list_tickets maps filters, passes an actor, and returns a compact shape', async () => {
-    mockListTickets.mockResolvedValue([ticketDTO])
+    mockListTickets.mockResolvedValue({ tickets: [ticketDTO], hasMore: false })
     const out = await collect(teamAuth).get('list_tickets')!({
       type: 'customer',
       statusCategory: 'open',

@@ -94,7 +94,9 @@ Examples:
     teamOnly: true,
     handler: async (args) => {
       const { listTickets } = await import('@/lib/server/domains/tickets/ticket.service')
-      const tickets = await listTickets(
+      // The wire contract stays a bare list (no cursor param exposed here yet);
+      // `hasMore` is dropped, mirroring the admin ticket list fn.
+      const { tickets } = await listTickets(
         {
           type: args.type,
           statusCategory: args.statusCategory,

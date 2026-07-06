@@ -7,15 +7,21 @@
  */
 import {
   db,
+  eq,
+  and,
+  isNull,
   inArray,
+  desc,
   ticketStatuses,
   teams,
   companies,
+  conversationMessages,
   type Ticket,
   type TicketStatusEntity,
 } from '@/lib/server/db'
-import type { TicketStatusId, PrincipalId, TeamId, CompanyId } from '@quackback/ids'
+import type { TicketId, TicketStatusId, PrincipalId, TeamId, CompanyId } from '@quackback/ids'
 import { formatTicketNumber, type TicketStageLabels } from '@/lib/shared/tickets'
+import { preview } from '@/lib/server/messages/message-core'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { getStageLabels } from '../settings/settings.tickets'
 import { resolveStage } from './ticket.lifecycle'
@@ -27,6 +33,71 @@ interface TicketDTOContext {
   teams: Map<TeamId, string>
   companies: Map<CompanyId, string>
   stageLabels: TicketStageLabels
+  activity: Map<TicketId, TicketActivity>
+}
+
+/** A ticket's activity snapshot for the list/DTO (see `loadTicketActivity`). */
+interface TicketActivity {
+  lastMessageAt: Date | null
+  lastMessagePreview: string | null
+}
+
+/**
+ * Batch-load each ticket's activity snapshot in one page: `lastMessageAt` is the
+ * newest non-deleted message of ANY kind (an internal note still counts as
+ * activity), while `lastMessagePreview` prefers the latest customer-visible
+ * message — truncated the same way the conversation inbox derives its preview
+ * (`preview()`, message-core) — and falls back to the ticket's own title when
+ * only internal notes exist or the thread is empty. Two DISTINCT ON queries
+ * (one per concern) rather than one merged query, since the "latest of any
+ * kind" and "latest non-internal" rows can differ; both are served by the
+ * existing `(ticket_id, created_at, id)` index.
+ */
+async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketActivity>> {
+  const map = new Map<TicketId, TicketActivity>()
+  for (const r of rows) map.set(r.id, { lastMessageAt: null, lastMessagePreview: r.title })
+  const ids = rows.map((r) => r.id)
+  if (ids.length === 0) return map
+
+  const [latestAny, latestVisible] = await Promise.all([
+    db
+      .selectDistinctOn([conversationMessages.ticketId], {
+        ticketId: conversationMessages.ticketId,
+        createdAt: conversationMessages.createdAt,
+      })
+      .from(conversationMessages)
+      .where(
+        and(inArray(conversationMessages.ticketId, ids), isNull(conversationMessages.deletedAt))
+      )
+      .orderBy(conversationMessages.ticketId, desc(conversationMessages.createdAt)),
+    db
+      .selectDistinctOn([conversationMessages.ticketId], {
+        ticketId: conversationMessages.ticketId,
+        content: conversationMessages.content,
+        attachments: conversationMessages.attachments,
+      })
+      .from(conversationMessages)
+      .where(
+        and(
+          inArray(conversationMessages.ticketId, ids),
+          isNull(conversationMessages.deletedAt),
+          eq(conversationMessages.isInternal, false)
+        )
+      )
+      .orderBy(conversationMessages.ticketId, desc(conversationMessages.createdAt)),
+  ])
+
+  // The inner join-free selects guarantee a non-null ticketId (the column is
+  // NOT NULL for every ticket-thread message).
+  for (const row of latestAny) {
+    const entry = map.get(row.ticketId as TicketId)
+    if (entry) entry.lastMessageAt = row.createdAt
+  }
+  for (const row of latestVisible) {
+    const entry = map.get(row.ticketId as TicketId)
+    if (entry) entry.lastMessagePreview = preview(row.content, row.attachments ?? [])
+  }
+  return map
 }
 
 function uniqueIds<T extends string>(ids: ReadonlyArray<T | null | undefined>): T[] {
@@ -39,7 +110,7 @@ export async function buildTicketContext(rows: Ticket[]): Promise<TicketDTOConte
   const teamIds = uniqueIds(rows.map((r) => r.assigneeTeamId))
   const companyIds = uniqueIds(rows.map((r) => r.companyId))
 
-  const [statusRows, principals, teamRows, companyRows, stageLabels] = await Promise.all([
+  const [statusRows, principals, teamRows, companyRows, stageLabels, activity] = await Promise.all([
     statusIds.length
       ? db.select().from(ticketStatuses).where(inArray(ticketStatuses.id, statusIds))
       : Promise.resolve([] as TicketStatusEntity[]),
@@ -59,6 +130,7 @@ export async function buildTicketContext(rows: Ticket[]): Promise<TicketDTOConte
           .where(inArray(companies.id, companyIds))
       : Promise.resolve([] as Array<{ id: CompanyId; name: string }>),
     getStageLabels(),
+    loadTicketActivity(rows),
   ])
 
   return {
@@ -67,6 +139,7 @@ export async function buildTicketContext(rows: Ticket[]): Promise<TicketDTOConte
     teams: new Map(teamRows.map((t) => [t.id, t.name])),
     companies: new Map(companyRows.map((c) => [c.id, c.name])),
     stageLabels,
+    activity,
   }
 }
 
@@ -114,6 +187,8 @@ export function ticketToDTO(row: Ticket, ctx: TicketDTOContext): TicketDTO {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     reopenedCount: row.reopenedCount,
+    lastMessagePreview: ctx.activity.get(row.id)?.lastMessagePreview ?? row.title,
+    lastMessageAt: ctx.activity.get(row.id)?.lastMessageAt?.toISOString() ?? null,
   }
 }
 

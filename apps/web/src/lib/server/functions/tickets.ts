@@ -57,7 +57,9 @@ const listTicketsSchema = z.object({
   teamId: z.string().optional(),
   requesterPrincipalId: z.string().optional(),
   companyId: z.string().optional(),
+  search: z.string().optional(),
   sort: z.enum(['recent', 'oldest', 'created', 'priority']).optional(),
+  cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
 })
 
@@ -92,10 +94,19 @@ export const listTicketsFn = createServerFn({ method: 'GET' })
         data.companyId && isValidTypeId(data.companyId, 'company')
           ? (data.companyId as CompanyId)
           : undefined,
+      search: data.search,
       sort: data.sort,
+      cursor:
+        data.cursor && isValidTypeId(data.cursor, 'ticket') ? (data.cursor as TicketId) : undefined,
       limit: data.limit,
     }
-    return listTickets(filter, actor)
+    // Wire contract unchanged (bare array): `listTickets` now returns
+    // `{ tickets, hasMore }`, but every current caller of this fn (the admin
+    // ticket list, ticket-links picker, company activity) still expects the
+    // old array shape. `hasMore` isn't surfaced here yet — pagination for this
+    // surface lands with the unified inbox (§3.1), which reads `listTickets`
+    // directly rather than through this fn.
+    return (await listTickets(filter, actor)).tickets
   })
 
 export const getTicketFn = createServerFn({ method: 'GET' })
