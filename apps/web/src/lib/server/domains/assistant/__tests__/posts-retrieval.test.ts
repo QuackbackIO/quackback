@@ -67,6 +67,7 @@ function row(id: string, overrides: Partial<Record<string, unknown>> = {}) {
     content: 'post body',
     boardSlug: 'general',
     score: 0.82,
+    isPublic: true,
     ...overrides,
   }
 }
@@ -126,6 +127,7 @@ describe('retrievePosts', () => {
         content: 'post body',
         boardSlug: 'general',
         score: 0.82,
+        isPublic: true,
       },
     ])
   })
@@ -191,5 +193,21 @@ describe('postsKnowledgeSource', () => {
       },
     })
     expect(items[0].excerpt.length).toBeLessThanOrEqual(1200)
+  })
+
+  it('flags a post on a non-anonymous-viewable board as internal', async () => {
+    mockGenerateEmbedding.mockResolvedValue(null)
+    mockLimit.mockResolvedValue([row('post_4', { isPublic: false })])
+
+    const items = await postsKnowledgeSource.retrieve('policy', 'team', { topK: 5 })
+    expect(items[0].citation.internal).toBe(true)
+  })
+
+  it('leaves a post on an anonymous-viewable board unflagged (no internal key)', async () => {
+    mockGenerateEmbedding.mockResolvedValue(null)
+    mockLimit.mockResolvedValue([row('post_5', { isPublic: true })])
+
+    const items = await postsKnowledgeSource.retrieve('policy', 'public', { topK: 5 })
+    expect(items[0].citation).not.toHaveProperty('internal')
   })
 })

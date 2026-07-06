@@ -197,6 +197,19 @@ describe('search_knowledge', () => {
     expect(c.sources.has('kb_article_1')).toBe(true)
   })
 
+  it("forwards the context's sourceTypes into retrieveKnowledge, narrowing away the knowledge base", async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    // sourceTypes excludes 'article': the only registered source (flags off)
+    // gets filtered out entirely, so retrieveKbArticles is never called.
+    const c = ctx({ sourceTypes: ['post'] })
+    const search = await findTool(c, 'search_knowledge')
+
+    const out = (await search.execute({ query: 'billing' }, toolCtx(c))) as { articles: unknown[] }
+
+    expect(mockRetrieve).not.toHaveBeenCalled()
+    expect(out.articles).toEqual([])
+  })
+
   it("threads the context's customerPrincipalId and conversationId into the past-conversation-summaries source", async () => {
     mockIsFeatureEnabled.mockImplementation(
       async (flag: string) => flag === 'assistantConversationGrounding'

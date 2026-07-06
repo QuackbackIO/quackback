@@ -98,6 +98,22 @@ describe('kbKnowledgeSource', () => {
     await kbKnowledgeSource.retrieve('q', 'internal', { topK: 5 })
     expect(mockRetrieveKbArticles).toHaveBeenCalledWith('q', { audience: 'team' })
   })
+
+  it('flags a team-only article as internal (isPublic: false)', async () => {
+    mockRetrieveKbArticles.mockResolvedValue([
+      makeKbArticle('kb_article_private', { isPublic: false }),
+    ])
+    const items = await kbKnowledgeSource.retrieve('policy', 'team', { topK: 5 })
+    expect(items[0].citation.internal).toBe(true)
+  })
+
+  it('leaves a public article unflagged (no internal key)', async () => {
+    mockRetrieveKbArticles.mockResolvedValue([
+      makeKbArticle('kb_article_public', { isPublic: true }),
+    ])
+    const items = await kbKnowledgeSource.retrieve('policy', 'public', { topK: 5 })
+    expect(items[0].citation).not.toHaveProperty('internal')
+  })
 })
 
 describe('resolveKnowledgeSources', () => {
@@ -191,6 +207,56 @@ describe('retrieveKnowledge', () => {
     expect(mockPostsRetrieve).toHaveBeenCalledOnce()
     expect(items.map((i) => i.id)).toEqual(['post_top', 'kb_high', 'post_mid'])
     expect(items).toHaveLength(3)
+  })
+
+  it('sourceTypes undefined consults every registered source (default, unchanged)', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true)
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockPostsRetrieve.mockResolvedValue([])
+    mockSnippetsRetrieve.mockResolvedValue([])
+    mockConversationSummariesRetrieve.mockResolvedValue([])
+
+    await retrieveKnowledge('q', 'public')
+
+    expect(mockRetrieveKbArticles).toHaveBeenCalled()
+    expect(mockPostsRetrieve).toHaveBeenCalled()
+    expect(mockSnippetsRetrieve).toHaveBeenCalled()
+    expect(mockConversationSummariesRetrieve).toHaveBeenCalled()
+  })
+
+  it('sourceTypes narrows to the given subset, skipping every other registered source', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(true)
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+    mockSnippetsRetrieve.mockResolvedValue([
+      {
+        id: 'assistant_snippet_1',
+        sourceType: 'snippet',
+        title: 'Snippet',
+        excerpt: 'x',
+        score: 0.9,
+        citation: { type: 'snippet', id: 'assistant_snippet_1', title: 'Snippet', url: '' },
+      },
+    ])
+
+    const items = await retrieveKnowledge('q', 'public', { sourceTypes: ['snippet'] })
+
+    expect(mockRetrieveKbArticles).not.toHaveBeenCalled()
+    expect(mockPostsRetrieve).not.toHaveBeenCalled()
+    expect(mockConversationSummariesRetrieve).not.toHaveBeenCalled()
+    expect(mockSnippetsRetrieve).toHaveBeenCalled()
+    expect(items.map((i) => i.id)).toEqual(['assistant_snippet_1'])
+  })
+
+  it('cannot re-enable a flag-off source: sourceTypes only narrows what resolveKnowledgeSources already registered', async () => {
+    // Every optional flag off: only the knowledge base is registered, even
+    // though the request asks for posts too.
+    mockIsFeatureEnabled.mockResolvedValue(false)
+    mockRetrieveKbArticles.mockResolvedValue([makeKbArticle('kb_article_1', { score: 0.5 })])
+
+    const items = await retrieveKnowledge('q', 'public', { sourceTypes: ['article', 'post'] })
+
+    expect(mockPostsRetrieve).not.toHaveBeenCalled()
+    expect(items.map((i) => i.id)).toEqual(['kb_article_1'])
   })
 
   it('forwards customerPrincipalId and conversationId to every source (only the summaries source reads them)', async () => {

@@ -48,6 +48,11 @@ export interface RetrievedPost {
   content: string
   boardSlug: string
   score: number
+  /** Whether the post's board is anonymous-viewable: the same predicate the
+   *  'public' branch of {@link postsVisibilityConditions} enforces at query
+   *  time, exposed per row so a wider ('team'/'internal') query can tell a
+   *  publicly-viewable post apart from one on a private board. */
+  isPublic: boolean
 }
 
 export interface RetrievePostsOptions {
@@ -97,12 +102,17 @@ export function postsVisibilityConditions(ceiling: ContentAudience) {
 /** Select the post content pre-trimmed to the context budget. */
 const trimmedContent = () => sql<string>`left(${posts.content}, ${POSTS_ASK_CONTEXT_CHARS})`
 
+/** The same anonymous-viewable check the 'public' branch of
+ *  {@link postsVisibilityConditions} filters on, computed per row. */
+const isPublicBoard = () => sql<boolean>`(${boards.access}->>'view' = 'anonymous')`
+
 interface PostRetrievalRow {
   id: string
   title: string
   content: string
   boardSlug: string
   score: number
+  isPublic: boolean
 }
 
 /**
@@ -131,6 +141,7 @@ async function hybridQuery(
       content: trimmedContent(),
       boardSlug: boards.slug,
       score: combined.as('score'),
+      isPublic: isPublicBoard().as('is_public_board'),
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -170,6 +181,7 @@ async function keywordQuery(
       content: trimmedContent(),
       boardSlug: boards.slug,
       score: rank.as('score'),
+      isPublic: isPublicBoard().as('is_public_board'),
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -214,6 +226,7 @@ export async function retrievePosts(
     content: r.content ?? '',
     boardSlug: r.boardSlug,
     score: Number(r.score),
+    isPublic: r.isPublic,
   }))
 }
 
@@ -238,6 +251,10 @@ export const postsKnowledgeSource: KnowledgeSource = {
           id: p.id,
           title: p.title,
           url: postUrl(p.boardSlug, p.id),
+          // Public at the 'public' ceiling is guaranteed by
+          // postsVisibilityConditions; on 'team'/'internal' this flags a post
+          // on a non-anonymous-viewable board for the copilot leak gate.
+          ...(p.isPublic ? {} : { internal: true }),
         },
       })
     )

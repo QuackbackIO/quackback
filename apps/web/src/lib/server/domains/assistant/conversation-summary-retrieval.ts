@@ -220,6 +220,11 @@ export const conversationSummariesKnowledgeSource: KnowledgeSource = {
           // citation renders (e.g. the widget), so this stays title-referential
           // only, like a snippet's.
           url: '',
+          // Always internal: another conversation's content is never
+          // customer-facing material, regardless of the turn's audience
+          // ceiling (this source is customer-scoped, not audience-scoped;
+          // see the module doc).
+          internal: true,
         },
       })
     )

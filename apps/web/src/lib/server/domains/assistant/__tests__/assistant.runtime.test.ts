@@ -154,6 +154,7 @@ import {
   buildSurfaceInstructionsPrompt,
   buildBasicsPrompt,
   buildGuidancePrompt,
+  buildCopilotFramingPrompt,
   isAssistantConfigured,
   AssistantNotConfiguredError,
   salvageAssistantOutput,
@@ -280,6 +281,20 @@ describe('assembleCitations', () => {
   it('keeps only surfaced ids, enriched from the ledger', () => {
     expect(assembleCitations([{ type: 'article', id: 'kb_article_1' }], ledger)).toEqual([
       { type: 'article', id: 'kb_article_1', title: 'T1', url: '/hc/articles/g/a1' },
+    ])
+  })
+
+  it('preserves the internal flag a source adapter set on the ledger entry', () => {
+    const internalLedger = new Map<string, AssistantCitation>([
+      [
+        'assistant_snippet_1',
+        { type: 'snippet', id: 'assistant_snippet_1', title: 'S1', url: '', internal: true },
+      ],
+    ])
+    expect(
+      assembleCitations([{ type: 'snippet', id: 'assistant_snippet_1' }], internalLedger)
+    ).toEqual([
+      { type: 'snippet', id: 'assistant_snippet_1', title: 'S1', url: '', internal: true },
     ])
   })
 
@@ -646,6 +661,7 @@ describe('runAssistantTurn', () => {
           url: '/hc/articles/general/slug-kb_article_1',
         },
       ],
+      internalSourced: false,
     })
     expect(deltas.join('')).toBe('Use the reset link.')
     // Retrieval was called through the tool, audience-scoped.
@@ -684,6 +700,66 @@ describe('runAssistantTurn', () => {
     // a caller-suppliable value, since AssistantTurnInput has no audience
     // field at all.
     expect(mockRetrieve).toHaveBeenCalledWith('internal escalation policy', { audience: 'team' })
+  })
+
+  it('derives internalSourced true when a surviving citation is internal', async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1', { isPublic: false })])
+    mockChat.mockImplementation(
+      (opts: {
+        tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
+        context: unknown
+      }) =>
+        (async function* () {
+          const search = opts.tools.find((t) => t.name === 'search_knowledge')!
+          await search.execute(
+            { query: 'internal policy' },
+            { context: opts.context, emitCustomEvent: () => {} }
+          )
+          yield* completeRun({
+            text: 'Here is the policy.',
+            citations: [{ type: 'article', id: 'kb_article_1' }],
+          })
+        })()
+    )
+
+    const result = await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('what is the policy?'),
+      surface: 'copilot',
+    })
+
+    expect(result.status).toBe('answered')
+    if (result.status === 'answered') expect(result.internalSourced).toBe(true)
+  })
+
+  it('internalSourced stays false when every surviving citation is public', async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1', { isPublic: true })])
+    mockChat.mockImplementation(
+      (opts: {
+        tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
+        context: unknown
+      }) =>
+        (async function* () {
+          const search = opts.tools.find((t) => t.name === 'search_knowledge')!
+          await search.execute(
+            { query: 'public policy' },
+            { context: opts.context, emitCustomEvent: () => {} }
+          )
+          yield* completeRun({
+            text: 'Here is the policy.',
+            citations: [{ type: 'article', id: 'kb_article_1' }],
+          })
+        })()
+    )
+
+    const result = await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('what is the policy?'),
+      surface: 'copilot',
+    })
+
+    expect(result.status).toBe('answered')
+    if (result.status === 'answered') expect(result.internalSourced).toBe(false)
   })
 
   it('drops citations below the confidence floor (nothing retrieved)', async () => {
@@ -768,6 +844,7 @@ describe('runAssistantTurn', () => {
       status: 'answered',
       text: ASSISTANT_FALLBACK_MESSAGE,
       citations: [],
+      internalSourced: false,
     })
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
@@ -801,6 +878,7 @@ describe('runAssistantTurn', () => {
       status: 'answered',
       text: ASSISTANT_FALLBACK_MESSAGE,
       citations: [],
+      internalSourced: false,
     })
   })
 
@@ -940,6 +1018,7 @@ describe('runAssistantTurn', () => {
       status: 'answered',
       text: 'Click the reset link in your email.',
       citations: [],
+      internalSourced: false,
     })
     // Salvaged on the first attempt; no retry needed.
     expect(mockChat).toHaveBeenCalledTimes(1)
@@ -1024,6 +1103,67 @@ describe('runAssistantTurn: customer-scoped retrieval context (P2-A.4)', () => {
 
     expect(capturedCtx?.customerPrincipalId).toBeUndefined()
   })
+
+  it('threads sourceTypes onto the tool context for search_knowledge to forward', async () => {
+    mockRetrieve.mockResolvedValue([])
+    let capturedCtx: { sourceTypes?: unknown } | undefined
+    driveSearch((ctx) => {
+      capturedCtx = ctx as typeof capturedCtx
+    })
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('question'),
+      sourceTypes: ['snippet', 'summary'],
+    })
+
+    expect(capturedCtx?.sourceTypes).toEqual(['snippet', 'summary'])
+  })
+
+  it('defaults sourceTypes to undefined when the caller omits it', async () => {
+    mockRetrieve.mockResolvedValue([])
+    let capturedCtx: { sourceTypes?: unknown } | undefined
+    driveSearch((ctx) => {
+      capturedCtx = ctx as typeof capturedCtx
+    })
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('question') })
+
+    expect(capturedCtx?.sourceTypes).toBeUndefined()
+  })
+
+  it('forces the tool context to simulate when the caller passes simulate: true, even with a real conversationId (copilot never runs a write tool for real)', async () => {
+    mockRetrieve.mockResolvedValue([])
+    let capturedCtx: { simulate?: unknown } | undefined
+    driveSearch((ctx) => {
+      capturedCtx = ctx as typeof capturedCtx
+    })
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('question'),
+      conversationId: 'conversation_42' as never,
+      simulate: true,
+    })
+
+    expect(capturedCtx?.simulate).toBe(true)
+  })
+
+  it('defaults simulate to false for a real conversationId when the caller omits it (unchanged orchestrator behavior)', async () => {
+    mockRetrieve.mockResolvedValue([])
+    let capturedCtx: { simulate?: unknown } | undefined
+    driveSearch((ctx) => {
+      capturedCtx = ctx as typeof capturedCtx
+    })
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('question'),
+      conversationId: 'conversation_42' as never,
+    })
+
+    expect(capturedCtx?.simulate).toBe(false)
+  })
 })
 
 describe('runAssistantTurn: prompt assembly (basics + surface instructions + guidance)', () => {
@@ -1043,6 +1183,29 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
     )
     expect(mockGetAssistantConfig).not.toHaveBeenCalled()
     expect(mockListGuidanceRules).not.toHaveBeenCalled()
+  })
+
+  it('copilot surface: adds the copilot framing block right after the base prompt', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(false)
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'copilot' })
+
+    const prompts = systemPromptsFromLastCall()
+    expect(prompts).toHaveLength(2)
+    expect(prompts[0]).toEqual(buildAssistantSystemPrompt('Quinn', WIDGET_LEGACY_TOOLS)[0])
+    expect(prompts[1]).toBe(buildCopilotFramingPrompt())
+  })
+
+  it('widget surface: never adds the copilot framing block', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(false)
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'widget' })
+
+    expect(systemPromptsFromLastCall()).toEqual(
+      buildAssistantSystemPrompt('Quinn', WIDGET_LEGACY_TOOLS)
+    )
   })
 
   it('flag on but nothing saved: base prompt reflects the full default-active tool set', async () => {

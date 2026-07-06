@@ -58,6 +58,7 @@ function row(id: string, overrides: Partial<Record<string, unknown>> = {}) {
     title: `Snippet ${id}`,
     content: 'snippet body',
     score: 0.8,
+    audience: 'public',
     ...overrides,
   }
 }
@@ -103,6 +104,7 @@ describe('retrieveSnippets', () => {
         title: 'Snippet assistant_snippet_1',
         content: 'snippet body',
         score: 0.8,
+        audience: 'public',
       },
     ])
   })
@@ -153,5 +155,21 @@ describe('snippetsKnowledgeSource', () => {
       },
     })
     expect(items[0].excerpt.length).toBeLessThanOrEqual(1200)
+  })
+
+  it('flags a team/internal-audience snippet as internal', async () => {
+    mockGenerateEmbedding.mockResolvedValue(null)
+    mockLimit.mockResolvedValue([row('assistant_snippet_4', { audience: 'team' })])
+
+    const items = await snippetsKnowledgeSource.retrieve('policy', 'team', { topK: 5 })
+    expect(items[0].citation.internal).toBe(true)
+  })
+
+  it('leaves a public-audience snippet unflagged (no internal key)', async () => {
+    mockGenerateEmbedding.mockResolvedValue(null)
+    mockLimit.mockResolvedValue([row('assistant_snippet_5', { audience: 'public' })])
+
+    const items = await snippetsKnowledgeSource.retrieve('policy', 'public', { topK: 5 })
+    expect(items[0].citation).not.toHaveProperty('internal')
   })
 })

@@ -177,6 +177,7 @@ describe('conversationSummariesKnowledgeSource', () => {
           id: 'conversation_past_1',
           title: 'Past conversation',
           url: '',
+          internal: true,
         },
       },
     ])

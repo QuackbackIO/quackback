@@ -15,6 +15,7 @@ export function makeKbArticle(
     categorySlug: 'general',
     categoryName: 'General',
     score: 0.9,
+    isPublic: true,
     ...overrides,
   }
 }

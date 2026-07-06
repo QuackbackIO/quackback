@@ -947,6 +947,8 @@ export interface FeatureFlags {
   assistantSnippets: boolean
   /** Ground AI assistant answers in the SAME customer's own past-conversation summaries */
   assistantConversationGrounding: boolean
+  /** Quinn Copilot: a private, teammate-facing Q&A sidebar in the inbox conversation panel */
+  assistantCopilot: boolean
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -963,6 +965,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   assistantPostGrounding: false,
   assistantSnippets: false,
   assistantConversationGrounding: false,
+  assistantCopilot: false,
 }
 
 /**
@@ -1034,6 +1037,11 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       "Let the AI assistant ground answers in the same customer's own past conversation summaries, so it remembers earlier context.",
   },
+  assistantCopilot: {
+    label: 'Quinn Copilot',
+    description:
+      'Add a private Copilot tab to the inbox conversation panel where a teammate can ask Quinn questions about the conversation. Answers are visible only to the asking teammate.',
+  },
 }
 
 /**
@@ -1072,6 +1080,7 @@ export const LAB_SECTIONS: Array<{
       'assistantPostGrounding',
       'assistantSnippets',
       'assistantConversationGrounding',
+      'assistantCopilot',
     ],
   },
 ]

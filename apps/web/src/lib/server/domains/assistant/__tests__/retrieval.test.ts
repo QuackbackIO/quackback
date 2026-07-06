@@ -155,4 +155,20 @@ describe('retrieveKbArticles', () => {
     await retrieveKbArticles('anything', { audience: 'team' })
     expect(vi.mocked(eq)).not.toHaveBeenCalledWith('is_public', true)
   })
+
+  it('maps the computed isPublic flag through for a team-only row (the copilot leak gate reads this)', async () => {
+    mockGenerateKbEmbedding.mockResolvedValue([0.5])
+    mockLimit.mockResolvedValue([{ ...row('kb_article_private'), isPublic: false }])
+
+    const result = await retrieveKbArticles('anything', { audience: 'team' })
+    expect(result[0].isPublic).toBe(false)
+  })
+
+  it('maps the computed isPublic flag through for a public row', async () => {
+    mockGenerateKbEmbedding.mockResolvedValue([0.5])
+    mockLimit.mockResolvedValue([{ ...row('kb_article_public'), isPublic: true }])
+
+    const result = await retrieveKbArticles('anything', { audience: 'public' })
+    expect(result[0].isPublic).toBe(true)
+  })
 })

@@ -31,6 +31,9 @@ export interface RetrievedSnippet {
   title: string
   content: string
   score: number
+  /** The snippet's own audience tier, for the copilot leak gate: anything but
+   *  'public' is flagged internal by the source adapter below. */
+  audience: ContentAudience
 }
 
 export interface RetrieveSnippetsOptions {
@@ -70,6 +73,7 @@ interface SnippetRow {
   title: string
   content: string
   score: number
+  audience: ContentAudience
 }
 
 /** Semantic path: cosine similarity over the stored embedding. */
@@ -88,6 +92,7 @@ async function hybridQuery(
       title: assistantSnippets.title,
       content: assistantSnippets.content,
       score: score.as('score'),
+      audience: assistantSnippets.audience,
     })
     .from(assistantSnippets)
     .where(
@@ -118,6 +123,7 @@ async function keywordQuery(
       title: assistantSnippets.title,
       content: assistantSnippets.content,
       score: score.as('score'),
+      audience: assistantSnippets.audience,
     })
     .from(assistantSnippets)
     .where(
@@ -157,6 +163,7 @@ export async function retrieveSnippets(
     title: r.title,
     content: r.content ?? '',
     score: Number(r.score),
+    audience: r.audience,
   }))
 }
 
@@ -183,6 +190,10 @@ export const snippetsKnowledgeSource: KnowledgeSource = {
           id: s.id,
           title: s.title,
           url: '',
+          // A snippet is only ever surfaced to a viewer whose ceiling covers
+          // its audience, but 'team'/'internal' snippets are still not
+          // customer-safe: flag them for the copilot leak gate.
+          ...(s.audience === 'public' ? {} : { internal: true }),
         },
       })
     )

@@ -37,6 +37,7 @@ import type {
   AssistantToolContext,
   AssistantToolSpec,
 } from './assistant.toolspec'
+import type { RetrievedItem } from './retrieval-sources'
 import {
   listGuidanceRules,
   GUIDANCE_MAX_ENABLED_PER_SURFACE,
@@ -72,6 +73,10 @@ export type AssistantTurnResult =
       status: 'answered'
       text: string
       citations: AssistantCitation[]
+      /** Whether any surviving citation is internal (`citations.some(c => c.internal)`), the
+       *  server-derived flag the copilot leak gate reads; a customer-facing turn's citations
+       *  are never internal in practice (their retrieval ceiling excludes those sources). */
+      internalSourced: boolean
       escalation?: EscalationOutcome
     }
   | { status: 'suppressed'; reason: 'silence' }
@@ -105,6 +110,21 @@ export interface AssistantTurnInput {
    * internal content. Defaults to 'widget'.
    */
   surface?: AssistantSurface
+  /**
+   * Per-request NARROWING filter over search_knowledge's grounding sources
+   * (the copilot Answer-sources picker); undefined consults every source the
+   * workspace's flags already registered. See `retrieveKnowledge`.
+   */
+  sourceTypes?: RetrievedItem['sourceType'][]
+  /**
+   * Force write tools to report what they would do instead of running, even
+   * with a real `conversationId` (which otherwise implies a live run; see
+   * `makeAssistantToolContext`). The copilot surface sets this: it is a
+   * private Q&A about the conversation, never participation in it, so a
+   * write tool must never actually execute there. Undefined preserves the
+   * existing conversationId-derived default for every other caller.
+   */
+  simulate?: boolean
   /** Tenant db handle for the tools; defaults to the app db. */
   db?: Executor
   /** Aborts the in-flight provider call. */
@@ -429,6 +449,22 @@ export function buildSurfaceInstructionsPrompt(
   ].join('\n')
 }
 
+/**
+ * Frame the copilot surface: unlike every other surface, this turn is
+ * answering a support TEAMMATE working the conversation, not the customer in
+ * it. Structural (not admin-authored free text), so it carries no
+ * injection-guard framing of its own; it composes right after the base
+ * prompt, before basics/surface instructions/guidance, and only for
+ * `surface: 'copilot'` (see `runAssistantTurn`).
+ */
+export function buildCopilotFramingPrompt(): string {
+  return [
+    'You are answering a TEAMMATE who is working this conversation, not the customer in it.',
+    'Reply to the teammate directly, in the second person, as their assistant.',
+    'Team and internal sources are allowed here in addition to public ones; a source flagged internal must never be pasted into a customer-facing reply as-is.',
+  ].join('\n')
+}
+
 /** `buildGuidancePrompt`'s result: the composed block plus which rules made it in. */
 export interface GuidancePromptResult {
   /** The composed guidance block, or null when no rule survived the budget. */
@@ -543,8 +579,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     audience,
     conversationId,
     customerPrincipalId,
+    sourceTypes: input.sourceTypes,
     involvementId: input.involvementId,
     latestCustomerMessageId: input.latestCustomerMessageId,
+    simulate: input.simulate,
   })
   // Config read: basics, surfaces, and tool controls all live in the same
   // settings row, so a single `getAssistantConfig()` read (in parallel with
@@ -581,6 +619,12 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // -> surface instructions -> guidance, each an additional systemPrompts
   // element past the base (element 0 always carries the JSON contract).
   const systemPrompts = buildAssistantSystemPrompt('Quinn', activeSpecs)
+  // Copilot framing: unconditional on the surface alone (never gated on the
+  // assistantActions flag, unlike basics/surface instructions/guidance below);
+  // it is structural, not admin-configured content.
+  if (surface === 'copilot') {
+    systemPrompts.push(buildCopilotFramingPrompt())
+  }
   // Ids of the guidance rules actually folded into this turn's prompt (after
   // the budget cap), logged onto every attempt below for the per-rule
   // used/resolved stats. Empty when actions are off or nothing survived, so
@@ -602,6 +646,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     status: 'answered',
     text: ASSISTANT_FALLBACK_MESSAGE,
     citations: [],
+    internalSourced: false,
   }
 
   const outcome = await runSynthesis<AssistantTurnResult, AssistantToolContext>({
@@ -672,6 +717,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     status: 'answered',
     text: relinkCitations(parsed.text, parsed.citations, citations),
     citations,
+    internalSourced: citations.some((c) => c.internal === true),
     ...(escalation && { escalation }),
   }
 }

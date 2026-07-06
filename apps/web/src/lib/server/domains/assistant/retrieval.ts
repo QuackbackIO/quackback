@@ -41,6 +41,15 @@ export interface RetrievedKbArticle {
   categorySlug: string
   categoryName: string
   score: number
+  /**
+   * Whether this article would also clear the 'public' audience filter (a
+   * public category, published, and not scheduled for the future). The
+   * source-adapter boundary (retrieval-sources.ts) uses this to flag a
+   * team-only row as internal for the copilot leak gate. Always true when
+   * `audience: 'public'` was requested (the filter already guarantees it);
+   * meaningful only on the wider 'team' query.
+   */
+  isPublic: boolean
 }
 
 export interface RetrieveKbArticlesOptions {
@@ -105,6 +114,7 @@ export async function retrieveKbArticles(
     categorySlug: r.categorySlug,
     categoryName: r.categoryName,
     score: Number(r.score),
+    isPublic: r.isPublic,
   }))
 }
 
@@ -117,7 +127,13 @@ interface RetrievalRow {
   categorySlug: string
   categoryName: string
   score: number
+  isPublic: boolean
 }
+
+/** The same three predicates the 'public' branch of {@link helpCenterVisibilityConditions}
+ *  requires, computed per row so a 'team' query (which admits both) can tell them apart. */
+const isPublicRow = () =>
+  sql<boolean>`(${helpCenterCategories.isPublic} AND ${helpCenterArticles.publishedAt} IS NOT NULL AND ${helpCenterArticles.publishedAt} <= now())`
 
 /**
  * Hybrid retrieval: an article matches on a keyword hit OR a semantic hit above
@@ -153,6 +169,7 @@ async function hybridQuery(
       categorySlug: helpCenterCategories.slug,
       categoryName: helpCenterCategories.name,
       score: combined.as('score'),
+      isPublic: isPublicRow().as('is_public_row'),
     })
     .from(helpCenterArticles)
     .innerJoin(
@@ -200,6 +217,7 @@ async function keywordQuery(
       categorySlug: helpCenterCategories.slug,
       categoryName: helpCenterCategories.name,
       score: rank.as('score'),
+      isPublic: isPublicRow().as('is_public_row'),
     })
     .from(helpCenterArticles)
     .innerJoin(

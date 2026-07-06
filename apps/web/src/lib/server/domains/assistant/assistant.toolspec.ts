@@ -15,7 +15,7 @@ import { conversations, eq } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { PrincipalId, ConversationId, AssistantInvolvementId, BoardId } from '@quackback/ids'
 import { type ContentAudience } from './audience'
-import { retrieveKnowledge } from './retrieval-sources'
+import { retrieveKnowledge, type RetrievedItem } from './retrieval-sources'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import {
   TICKET_TYPES,
@@ -38,6 +38,13 @@ export interface AssistantCitation {
   id: string
   title: string
   url: string
+  /**
+   * Set (never `false`) when the source adapter that produced this citation
+   * determined it is not customer-visible: the server half of the copilot
+   * leak gate. Ledger-only: never persist this onto a DB-stored citation (see
+   * the orchestrator, which strips it before writing a conversation message).
+   */
+  internal?: boolean
 }
 
 /**
@@ -65,6 +72,14 @@ export interface AssistantToolContext {
    * fall back to unscoped.
    */
   customerPrincipalId?: PrincipalId
+  /**
+   * Per-request NARROWING filter over the grounding sources search_knowledge
+   * consults (the copilot Answer-sources picker); undefined means every
+   * source the workspace's flags already registered. Can only drop a
+   * registered source, never re-enable one a flag left off; see
+   * `retrieveKnowledge` in `./retrieval-sources`.
+   */
+  sourceTypes?: RetrievedItem['sourceType'][]
   /** Sources surfaced by search_knowledge this run, keyed by id, for citation assembly. */
   sources: Map<string, AssistantCitation>
   /** search_knowledge calls made this attempt, for the server-side search budget. */
@@ -95,6 +110,7 @@ export function makeAssistantToolContext(init: {
   audience: ContentAudience
   conversationId: ConversationId | null
   customerPrincipalId?: PrincipalId | null
+  sourceTypes?: RetrievedItem['sourceType'][]
   involvementId?: AssistantInvolvementId | null
   latestCustomerMessageId?: string | null
   simulate?: boolean
@@ -106,6 +122,7 @@ export function makeAssistantToolContext(init: {
     audience: init.audience,
     conversationId: init.conversationId,
     customerPrincipalId: init.customerPrincipalId ?? undefined,
+    sourceTypes: init.sourceTypes,
     sources: new Map<string, AssistantCitation>(),
     searchCalls: 0,
     simulate: init.simulate ?? init.conversationId === null,
@@ -249,6 +266,7 @@ async function executeSearchKnowledge(
   const items = await retrieveKnowledge(args.query, ctx.audience, {
     customerPrincipalId: ctx.customerPrincipalId,
     conversationId: ctx.conversationId,
+    sourceTypes: ctx.sourceTypes,
   })
   for (const item of items) {
     ctx.sources.set(item.id, item.citation)

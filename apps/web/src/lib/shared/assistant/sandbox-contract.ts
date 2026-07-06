@@ -18,6 +18,9 @@ export interface SandboxCitation {
   id: string
   title: string
   url: string
+  /** Set when the source is not customer-visible (see AssistantCitation.internal).
+   *  Sandbox-only signal for admins previewing the copilot surface; never persisted. */
+  internal?: boolean
 }
 
 /** An escalation decision on a sandbox answer (mirrors EscalationOutcome). */

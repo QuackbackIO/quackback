@@ -256,6 +256,34 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
     expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
   })
 
+  it('strips the ledger-only internal flag before persisting citations onto the conversation message', async () => {
+    assistantMock.runAssistantTurn.mockResolvedValue(
+      answered({
+        text: 'Here is the internal-sourced answer.',
+        citations: [
+          { type: 'article', id: 'a1', title: 'T', url: 'u' },
+          {
+            type: 'summary',
+            id: 'conversation_past_1',
+            title: 'Past conversation',
+            url: '',
+            internal: true,
+          },
+        ],
+        internalSourced: true,
+      })
+    )
+    await runAssistantTurnForConversation(CONV)
+
+    expect(insertedMessages).toHaveLength(1)
+    // The stored shape is byte-identical to the pre-copilot shape: no
+    // `internal` key survives onto the persisted row, on any citation.
+    expect(insertedMessages[0].citations).toEqual([
+      { type: 'article', id: 'a1', title: 'T', url: 'u' },
+      { type: 'summary', id: 'conversation_past_1', title: 'Past conversation', url: '' },
+    ])
+  })
+
   it('on a hand-off, records the reason, writes the custom attribute, and posts the handover', async () => {
     assistantMock.getActiveInvolvement.mockResolvedValue({
       id: 'assistant_involvement_1',

@@ -109,6 +109,10 @@ export const kbKnowledgeSource: KnowledgeSource = {
         id: a.id,
         title: a.title,
         url: helpArticleUrl(a.categorySlug, a.slug),
+        // Public at the 'public' ceiling is guaranteed by the audience filter
+        // (isPublic is always true there); on 'team' it distinguishes a
+        // team-only article, flagged for the copilot leak gate.
+        ...(a.isPublic ? {} : { internal: true }),
       },
     }))
   },
@@ -154,6 +158,13 @@ export async function resolveKnowledgeSources(): Promise<KnowledgeSource[]> {
  * re-rank by score desc, and trim to `topK`. This is the one thing
  * `search_knowledge` calls — it no longer knows the knowledge base is even a
  * source, let alone the only one.
+ *
+ * `sourceTypes`, when given, is a per-request NARROWING filter applied after
+ * `resolveKnowledgeSources()`: it can only drop sources the flags already
+ * registered, never add one back that a flag left unregistered (the copilot
+ * Answer-sources picker is the caller; it lets a teammate turn a source off
+ * for one question, not turn on a source the workspace hasn't enabled).
+ * `undefined` (the default) consults every registered source, unchanged.
  */
 export async function retrieveKnowledge(
   query: string,
@@ -163,10 +174,14 @@ export async function retrieveKnowledge(
     signal?: AbortSignal
     customerPrincipalId?: PrincipalId
     conversationId?: ConversationId | null
+    sourceTypes?: RetrievedItem['sourceType'][]
   } = {}
 ): Promise<RetrievedItem[]> {
   const topK = opts.topK ?? KNOWLEDGE_TOP_K
-  const sources = await resolveKnowledgeSources()
+  const resolved = await resolveKnowledgeSources()
+  const sources = opts.sourceTypes
+    ? resolved.filter((source) => opts.sourceTypes!.includes(source.sourceType))
+    : resolved
   const perSource = await Promise.all(
     sources.map((source) =>
       source.retrieve(query, ceiling, {

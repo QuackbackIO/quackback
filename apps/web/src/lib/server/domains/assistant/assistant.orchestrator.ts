@@ -208,10 +208,17 @@ export async function runAssistantTurnForConversation(
 
     // Answer or offer: persist Quinn's reply (its text carries any offer), then
     // record the cited sources + stamp the inactivity clock (+ the single
-    // escalation offer) in one involvement update.
+    // escalation offer) in one involvement update. `internal` is a ledger-only
+    // flag for the copilot leak gate (see AssistantCitation): strip it before
+    // persisting so the stored citation shape never changes; a widget turn can
+    // legitimately carry it when the past-conversation-summaries source is on
+    // (that source is always internal, regardless of surface).
+    const persistedCitations = result.citations.map(
+      ({ internal: _internal, ...citation }) => citation
+    )
     await appendAssistantReply(conversationId, result.text, author, {
       waiting: false,
-      citations: result.citations,
+      citations: persistedCitations,
     })
     await recordAssistantAnswer(involvement.id, {
       sources: result.citations.map((c) => ({

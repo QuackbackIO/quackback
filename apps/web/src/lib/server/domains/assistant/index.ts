@@ -136,6 +136,7 @@ export {
   type AssistantTurnResult,
   type AssistantThreadMessage,
   type AssistantThreadSender,
+  type AssistantActivity,
   type EscalationOutcome,
   type EscalationReason,
 } from './assistant.runtime'
