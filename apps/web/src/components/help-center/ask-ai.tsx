@@ -19,7 +19,14 @@ import {
 } from '@/lib/shared/help-center/kb-ask-contract'
 import { AssistantAnswer } from '@/components/shared/conversation/assistant-turn'
 import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
+import { parseAskAiSseBlock, readSseBlocks } from '@/lib/client/utils/sse-blocks'
 import { splitByTerms } from './ask-ai-text'
+
+// Re-exported for existing importers (the kb-ask/sandbox/copilot route tests,
+// and any future non-component client code should import the lib/ module
+// directly — see sse-blocks.ts's doc comment for why the implementation lives
+// there instead of here).
+export { parseAskAiSseBlock, readSseBlocks }
 
 // ============================================================================
 // Stream contract (kb-ask.v1.*)
@@ -35,45 +42,6 @@ interface AskAiStreamHandlers {
   onDelta?: (text: string) => void
   onFinal?: (final: KbAskFinalPayload) => void
   onError?: (code: string) => void
-}
-
-/** Parse one SSE block ("event: ...\ndata: ...") into an event, or null. */
-export function parseAskAiSseBlock(block: string): { event: string; data: unknown } | null {
-  const eventMatch = /^event: (.+)$/m.exec(block)
-  const dataMatch = /^data: (.+)$/m.exec(block)
-  if (!eventMatch || !dataMatch) return null
-  try {
-    return { event: eventMatch[1].trim(), data: JSON.parse(dataMatch[1]) }
-  } catch {
-    return null
-  }
-}
-
-/**
- * Read an SSE body to completion, invoking `onBlock` for each "\n\n"-delimited
- * block (including a final unterminated one). Framing only — callers parse and
- * dispatch. Shared by the kb-ask reader and the assistant sandbox so the
- * chunk-splitting lives in one place.
- */
-export async function readSseBlocks(
-  body: ReadableStream<Uint8Array>,
-  onBlock: (block: string) => void
-): Promise<void> {
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    let sep = buffer.indexOf('\n\n')
-    while (sep !== -1) {
-      onBlock(buffer.slice(0, sep))
-      buffer = buffer.slice(sep + 2)
-      sep = buffer.indexOf('\n\n')
-    }
-  }
-  if (buffer.trim()) onBlock(buffer)
 }
 
 /**

@@ -144,6 +144,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/notifications.ts::archiveNotificationFn': END_USER(
     'archive own notification'
   ),
+  'lib/server/functions/notifications.ts::archiveAllReadNotificationsFn': END_USER(
+    'archive all own read notifications'
+  ),
   'lib/server/functions/portal.ts::fetchSubscriptionStatus': END_USER(
     'own subscription status (portal)'
   ),
@@ -236,6 +239,11 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
     why: 'SSE stream: the inbox and presence scopes are team-only; the conversation scope is gated by canViewConversation',
+  },
+  'lib/server/functions/portal-permissions.ts::getMyPortalPermissionsFn::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'permission echo for portal UI affordances: non-team callers fail open to an empty permission list rather than an error',
   },
   'lib/server/functions/onboarding.ts::setupWorkspaceFn::isAdmin': {
     intent: 'SECONDARY_GATE',

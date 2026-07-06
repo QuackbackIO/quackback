@@ -130,6 +130,7 @@ export {
   decideEscalation,
   isSubstantiveAnswer,
   buildAssistantSystemPrompt,
+  activityToStatus,
   AssistantNotConfiguredError,
   ASSISTANT_MAX_ITERATIONS,
   type AssistantTurnInput,

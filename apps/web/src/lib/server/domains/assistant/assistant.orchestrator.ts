@@ -41,6 +41,7 @@ import {
   respondEligible,
   runAssistantTurn,
   buildAssistantHandoverMessage,
+  activityToStatus,
 } from '.'
 import { logger } from '@/lib/server/logger'
 
@@ -153,14 +154,8 @@ export async function runAssistantTurnForConversation(
       latestCustomerMessageId,
       escalationAlreadyOffered: active?.escalationOfferedAt != null,
       onActivity: (activity) => {
-        if (activity.kind === 'thinking') {
-          streamed = ''
-          publishActivity('thinking')
-        } else {
-          publishActivity(
-            activity.tool === 'search_knowledge' ? 'searching_kb' : 'reviewing_conversation'
-          )
-        }
+        if (activity.kind === 'thinking') streamed = ''
+        publishActivity(activityToStatus(activity))
       },
       onTextDelta: (delta) => {
         streamed += delta

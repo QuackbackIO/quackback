@@ -27,7 +27,7 @@ import {
   isAssistantConfigured,
   runAssistantTurn,
   ensureAssistantPrincipal,
-  type AssistantActivity,
+  activityToStatus,
   type AssistantThreadMessage,
 } from '@/lib/server/domains/assistant'
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
@@ -35,6 +35,7 @@ import { NotFoundError } from '@/lib/shared/errors'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { createSseStream, SSE_RESPONSE_HEADERS } from '@/lib/server/utils/sse'
+import { errorResponse, forbiddenResponse } from '@/lib/server/domains/api/responses'
 import { logger } from '@/lib/server/logger'
 import {
   COPILOT_EVENTS,
@@ -42,6 +43,7 @@ import {
   type CopilotActivityPayload,
   type CopilotFinalPayload,
   type CopilotErrorPayload,
+  type CopilotHistoryEntry,
 } from '@/lib/shared/assistant/copilot-contract'
 
 const log = logger.child({ component: 'assistant-copilot' })
@@ -49,33 +51,29 @@ const log = logger.child({ component: 'assistant-copilot' })
 const MAX_QUESTION_CHARS = 4000
 const MAX_HISTORY_TURNS = 20
 
+// The zod literals are the runtime validation; the type annotation just pins
+// the parsed shape to the shared CopilotHistoryEntry so the route and the
+// sidebar's history building can never drift silently.
+const historyEntrySchema: z.ZodType<CopilotHistoryEntry> = z.object({
+  role: z.enum(['teammate', 'copilot']),
+  content: z.string().min(1).max(MAX_QUESTION_CHARS),
+})
+
 const requestSchema = z.object({
   conversationId: z
     .string()
     .refine((v) => isValidTypeId(v, 'conversation'), { message: 'Invalid conversation ID format' }),
   question: z.string().min(1).max(MAX_QUESTION_CHARS),
-  history: z
-    .array(
-      z.object({
-        role: z.enum(['teammate', 'copilot']),
-        content: z.string().min(1).max(MAX_QUESTION_CHARS),
-      })
-    )
-    .max(MAX_HISTORY_TURNS)
-    .default([]),
+  history: z.array(historyEntrySchema).max(MAX_HISTORY_TURNS).default([]),
   sourceTypes: z.array(z.enum(['article', 'post', 'snippet', 'summary'])).optional(),
 })
-
-function jsonError(status: number, code: string, message: string): Response {
-  return Response.json({ error: { code, message } }, { status })
-}
 
 /** Map the teammate's prior turns + new question onto the runtime's message
  *  vocabulary: a teammate turn reads as 'customer' (the one asking Quinn),
  *  Copilot's own prior answers read as 'assistant', and the question is
  *  always last. */
 function toTurnMessages(
-  history: Array<{ role: 'teammate' | 'copilot'; content: string }>,
+  history: CopilotHistoryEntry[],
   question: string
 ): AssistantThreadMessage[] {
   return [
@@ -87,41 +85,34 @@ function toTurnMessages(
   ]
 }
 
-/** Mirrors assistant.orchestrator.ts's publishActivity status mapping: the
- *  widget's activity vocabulary, reused verbatim for the sidebar's status line. */
-function activityStatus(activity: AssistantActivity): CopilotActivityPayload['status'] {
-  if (activity.kind === 'thinking') return 'thinking'
-  return activity.tool === 'search_knowledge' ? 'searching_kb' : 'reviewing_conversation'
-}
-
 export async function handleCopilot({ request }: { request: Request }): Promise<Response> {
   let auth: Awaited<ReturnType<typeof requireAuth>>
   try {
     auth = await requireAuth({ permission: PERMISSIONS.COPILOT_USE })
   } catch {
-    return jsonError(403, 'FORBIDDEN', 'Copilot access required')
+    return forbiddenResponse('Copilot access required')
   }
 
   let parsed: z.infer<typeof requestSchema>
   try {
     parsed = requestSchema.parse(await request.json())
   } catch {
-    return jsonError(400, 'INVALID_REQUEST', 'A valid conversationId and question are required')
+    return errorResponse('INVALID_REQUEST', 'A valid conversationId and question are required', 400)
   }
 
   if (!(await isFeatureEnabled('assistantCopilot'))) {
-    return jsonError(404, 'NOT_FOUND', 'Copilot is not available')
+    return errorResponse('NOT_FOUND', 'Copilot is not available', 404)
   }
 
   if (!isAssistantConfigured()) {
-    return jsonError(503, 'AI_NOT_CONFIGURED', 'The assistant is not configured')
+    return errorResponse('AI_NOT_CONFIGURED', 'The assistant is not configured', 503)
   }
 
   try {
     await enforceAiTokenBudget()
   } catch (err) {
     if (err instanceof TierLimitError) {
-      return jsonError(err.statusCode, err.code, err.message)
+      return errorResponse(err.code, err.message, err.statusCode)
     }
     throw err
   }
@@ -132,7 +123,7 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
     await assertConversationViewable(conversationId, actor)
   } catch (err) {
     if (err instanceof NotFoundError) {
-      return jsonError(404, err.code, err.message)
+      return errorResponse(err.code, err.message, 404)
     }
     throw err
   }
@@ -162,7 +153,7 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
           sse.send(COPILOT_EVENTS.delta, { text } satisfies CopilotDeltaPayload),
         onActivity: (activity) =>
           sse.send(COPILOT_EVENTS.activity, {
-            status: activityStatus(activity),
+            status: activityToStatus(activity),
           } satisfies CopilotActivityPayload),
       })
 

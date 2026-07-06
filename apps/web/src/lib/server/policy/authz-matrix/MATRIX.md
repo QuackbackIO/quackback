@@ -98,7 +98,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 493 surfaces
+### Server functions (`requireAuth`) — 497 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -369,6 +369,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::markNotificationAsReadFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::markAllNotificationsAsReadFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveNotificationFn | END_USER (any authenticated) |
+| `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
 | `lib/server/functions/onboarding.ts`::setupWorkspaceFn | ADMIN-ONLY |
 | `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
@@ -380,11 +381,14 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/portal-invites.ts`::resendPortalInviteFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::fetchPortalInvitesFn | settings.manage |
 | `lib/server/functions/portal-invites.ts`::getPortalInviteLinkFn | settings.manage |
+| `lib/server/functions/portal-permissions.ts`::getMyPortalPermissionsFn | TEAM-ONLY |
 | `lib/server/functions/portal.ts`::fetchSubscriptionStatus | END_USER (any authenticated) |
 | `lib/server/functions/post-merge.ts`::mergePostFn | post.merge |
 | `lib/server/functions/post-merge.ts`::unmergePostFn | post.merge |
 | `lib/server/functions/post-merge.ts`::getMergedPostsFn | post.view_private |
 | `lib/server/functions/post-merge.ts`::fetchMergePreviewFn | post.view_private |
+| `lib/server/functions/post-owner-context.ts`::listOwnerCandidatesFn | post.set_owner |
+| `lib/server/functions/post-owner-context.ts`::getPostOwnerFn | post.set_owner |
 | `lib/server/functions/post-tags.ts`::fetchTags | tag.view |
 | `lib/server/functions/post-tags.ts`::fetchTag | tag.view |
 | `lib/server/functions/post-tags.ts`::createPostTagFn | tag.manage |
@@ -764,7 +768,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-158 of 738 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+159 of 742 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -809,6 +813,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/portal-access.ts`::evaluateMyPortalAccessFn | server-fn |
 | `lib/server/functions/portal-access.ts`::recordPortalAccessDeniedFn | server-fn |
 | `lib/server/functions/portal-invites.ts`::acceptPortalInviteFn | server-fn |
+| `lib/server/functions/portal-permissions.ts`::getMyPortalPermissionsFn | server-fn |
 | `lib/server/functions/portal.ts`::fetchAvatars | server-fn |
 | `lib/server/functions/portal.ts`::fetchBoardCapabilitiesFn | server-fn |
 | `lib/server/functions/portal.ts`::fetchPortalData | server-fn |

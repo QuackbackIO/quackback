@@ -85,6 +85,7 @@ import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typin
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
+import { useCopilotInsert } from '@/lib/client/hooks/use-copilot-insert'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { Avatar } from '@/components/ui/avatar'
@@ -517,6 +518,17 @@ export function AgentConversationThread({
     replyComposerRef.current?.insertText(body)
   }, [])
 
+  // The Copilot sidebar's "Add to composer" / "Add as note" seam
+  // (COPILOT-SIDEBAR-UX.md B.4): unlike insertMacroBody (always the reply
+  // composer), Copilot can target either editor and may need to flip
+  // `noteMode` first — see use-copilot-insert.ts for the mount-timing fix.
+  const insertFromCopilot = useCopilotInsert({
+    noteMode,
+    setNoteMode,
+    replyComposerRef,
+    noteEditorRef,
+  })
+
   const onSend = useCallback(() => {
     if (noteMode) {
       // Notes are rich (mention chips in the doc) and can carry attachments. The
@@ -940,6 +952,7 @@ export function AgentConversationThread({
           onTrackAsFeedback={() =>
             setConvertSeed({ title: trackConvoTitle, content: trackConvoContent })
           }
+          onInsertFromCopilot={insertFromCopilot}
         />
       )}
     </div>

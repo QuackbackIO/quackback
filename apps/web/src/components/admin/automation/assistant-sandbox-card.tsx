@@ -1,10 +1,10 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { parseAskAiSseBlock, readSseBlocks } from '@/components/help-center/ask-ai'
+import { useSseTurn } from '@/lib/client/hooks/use-sse-turn'
 import {
   SANDBOX_EVENTS,
   type SandboxCitation,
@@ -29,7 +29,7 @@ export function AssistantSandboxCard() {
   const [input, setInput] = useState('')
   const [status, setStatus] = useState<'idle' | 'streaming' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
+  const { start, stop } = useSseTurn()
 
   const busy = status === 'streaming'
 
@@ -44,9 +44,6 @@ export function AssistantSandboxCard() {
     setMessages([...thread, { sender: 'assistant', content: '' }])
     setStatus('streaming')
 
-    const controller = new AbortController()
-    abortRef.current = controller
-
     const patchAssistant = (patch: Partial<TurnMessage>) => {
       setMessages((prev) => {
         const next = [...prev]
@@ -56,17 +53,29 @@ export function AssistantSandboxCard() {
       })
     }
 
-    try {
-      const res = await fetch('/api/admin/assistant/sandbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: thread.map((m) => ({ sender: m.sender, content: m.content })),
-        }),
-        signal: controller.signal,
-      })
+    let answer = ''
 
-      if (!res.ok || !res.body) {
+    await start({
+      url: '/api/admin/assistant/sandbox',
+      body: { messages: thread.map((m) => ({ sender: m.sender, content: m.content })) },
+      handlers: {
+        [SANDBOX_EVENTS.delta]: (data) => {
+          answer += (data as { text: string }).text
+          patchAssistant({ content: answer })
+        },
+        [SANDBOX_EVENTS.final]: (data) => {
+          const final = data as SandboxFinalPayload
+          patchAssistant({
+            content: final.text || answer,
+            citations: final.citations ?? [],
+            escalation: final.escalation ?? null,
+          })
+        },
+        [SANDBOX_EVENTS.error]: (data) => {
+          setError((data as { message: string }).message)
+        },
+      },
+      onHttpError: (res) => {
         const code =
           res.status === 503
             ? 'The assistant is not configured (set an AI model).'
@@ -74,41 +83,17 @@ export function AssistantSandboxCard() {
         setError(code)
         setStatus('error')
         patchAssistant({ content: '' })
-        return
-      }
-
-      let answer = ''
-
-      await readSseBlocks(res.body, (block) => {
-        const parsed = parseAskAiSseBlock(block)
-        if (!parsed) return
-        if (parsed.event === SANDBOX_EVENTS.delta) {
-          answer += (parsed.data as { text: string }).text
-          patchAssistant({ content: answer })
-        } else if (parsed.event === SANDBOX_EVENTS.final) {
-          const data = parsed.data as SandboxFinalPayload
-          patchAssistant({
-            content: data.text || answer,
-            citations: data.citations ?? [],
-            escalation: data.escalation ?? null,
-          })
-        } else if (parsed.event === SANDBOX_EVENTS.error) {
-          setError((parsed.data as { message: string }).message)
-        }
-      })
-      setStatus('idle')
-    } catch {
-      if (!controller.signal.aborted) {
+      },
+      onStreamEnd: () => setStatus('idle'),
+      onError: () => {
         setError('Request failed.')
         setStatus('error')
-      }
-    } finally {
-      abortRef.current = null
-    }
+      },
+    })
   }
 
   function reset() {
-    abortRef.current?.abort()
+    stop()
     setMessages([])
     setInput('')
     setStatus('idle')

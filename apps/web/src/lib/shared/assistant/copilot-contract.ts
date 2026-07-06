@@ -17,6 +17,15 @@ export const COPILOT_EVENTS = {
   error: 'copilot.v1.error',
 } as const
 
+/** One prior turn in a copilot thread, as sent on the request body: a teammate
+ *  question or one of Copilot's own past answers. Shared by the route's request
+ *  schema (validated at runtime by the zod literals) and the sidebar's history
+ *  building, so the two never drift. */
+export interface CopilotHistoryEntry {
+  role: 'teammate' | 'copilot'
+  content: string
+}
+
 /**
  * A structured citation on a copilot answer (mirrors AssistantCitation).
  * `internal` is the visual half of the leak gate: the sidebar renders a

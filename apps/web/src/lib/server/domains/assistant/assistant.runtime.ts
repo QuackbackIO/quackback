@@ -29,6 +29,7 @@ import { logger } from '@/lib/server/logger'
 import type { AssistantHandoffReason } from '@/lib/server/db'
 import type { PrincipalId, ConversationId, AssistantInvolvementId } from '@quackback/ids'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
+import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 import { resolveContentAudience } from './audience'
 import { assembleAssistantToolset } from './assistant.tools'
 import { makeAssistantToolContext } from './assistant.toolspec'
@@ -88,6 +89,16 @@ export type AssistantTurnResult =
  * (the registry, not a hardcoded list, decides what's valid).
  */
 export type AssistantActivity = { kind: 'thinking' } | { kind: 'tool'; tool: string }
+
+/** Map a turn's activity step to the widget's status vocabulary: 'thinking' is
+ *  the default working state; any tool call reads as a knowledge search or (for
+ *  every other tool) reviewing the conversation. Shared by the widget's
+ *  publishActivity (assistant.orchestrator.ts) and the copilot route's status
+ *  line — both render the exact same three states from the same steps. */
+export function activityToStatus(activity: AssistantActivity): AssistantActivityStatus {
+  if (activity.kind === 'thinking') return 'thinking'
+  return activity.tool === 'search_knowledge' ? 'searching_kb' : 'reviewing_conversation'
+}
 
 export interface AssistantTurnInput {
   /** Prior turns oldest-first, including the message being responded to. */
