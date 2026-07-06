@@ -72,3 +72,51 @@ export interface CopilotErrorPayload {
   code: string
   message: string
 }
+
+/**
+ * transform.v1 SSE contract (P2-C.1): rewrites over already-composed text, run
+ * from two entry points (COPILOT-SIDEBAR-UX.md "What P2-C adds"): the answer
+ * card's "Add to composer & modify" menu (source = the streamed answer) and
+ * the reply composer's Format chip (source = the teammate's own draft). Same
+ * delta/final/error vocabulary as copilot.v1, scoped down to a single field
+ * (`text`) since a transform has no citations or sources of its own.
+ */
+export const TRANSFORM_EVENTS = {
+  delta: 'transform.v1.delta',
+  final: 'transform.v1.final',
+  error: 'transform.v1.error',
+} as const
+
+/**
+ * `my_tone` mines the teammate's own past replies for style excerpts.
+ * `more_friendly`/`more_formal`/`more_concise` are shared by both entry
+ * points; `expand`/`rephrase`/`fix_grammar` are Format-chip only (there is no
+ * "expand the answer" row on the answer card).
+ */
+export const TRANSFORM_KINDS = [
+  'my_tone',
+  'more_friendly',
+  'more_formal',
+  'more_concise',
+  'expand',
+  'rephrase',
+  'fix_grammar',
+] as const
+
+export type TransformKind = (typeof TRANSFORM_KINDS)[number]
+
+/** transform.v1.delta: one fragment of the rewritten text. */
+export interface TransformDeltaPayload {
+  text: string
+}
+
+/** transform.v1.final: the completed rewrite. */
+export interface TransformFinalPayload {
+  text: string
+}
+
+/** transform.v1.error: a terminal failure after the stream opened. */
+export interface TransformErrorPayload {
+  code: string
+  message: string
+}

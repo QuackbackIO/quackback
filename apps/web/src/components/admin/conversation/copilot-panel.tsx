@@ -40,6 +40,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -68,12 +69,17 @@ import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   COPILOT_EVENTS,
+  TRANSFORM_EVENTS,
   type CopilotActivityPayload,
   type CopilotCitation,
   type CopilotDeltaPayload,
   type CopilotErrorPayload,
   type CopilotFinalPayload,
   type CopilotHistoryEntry,
+  type TransformKind,
+  type TransformDeltaPayload,
+  type TransformFinalPayload,
+  type TransformErrorPayload,
 } from '@/lib/shared/assistant/copilot-contract'
 import {
   stripCitationMarkers,
@@ -89,6 +95,38 @@ const GENERIC_ERROR = 'Something went wrong. Try again.'
 
 type SourceType = CopilotCitation['type']
 type InsertMode = 'reply' | 'note'
+
+/** The answer card's "Add to composer & modify" menu rows (P2-C.1): the tone
+ *  transforms Fin ships in its equivalent menu. */
+const MODIFY_ROWS: { transform: TransformKind; label: string }[] = [
+  { transform: 'my_tone', label: 'My tone of voice' },
+  { transform: 'more_friendly', label: 'More friendly' },
+  { transform: 'more_formal', label: 'More formal' },
+  { transform: 'more_concise', label: 'More concise' },
+]
+
+/** The reply composer's Format chip menu rows (P2-C.1): acts on the
+ *  composer's own draft rather than an answer. */
+const FORMAT_ROWS: { transform: TransformKind; label: string }[] = [
+  { transform: 'expand', label: 'Expand' },
+  { transform: 'rephrase', label: 'Rephrase' },
+  { transform: 'more_friendly', label: 'More friendly' },
+  { transform: 'more_formal', label: 'More formal' },
+  { transform: 'more_concise', label: 'More concise' },
+  { transform: 'fix_grammar', label: 'Fix grammar and spelling' },
+]
+
+/** Which control currently owns the in-flight transform stream: used to show
+ *  its own inline progress state and disable every OTHER transform entry
+ *  point until it settles (only one transform runs at a time). */
+type TransformState = { scope: 'answer'; turnId: string } | { scope: 'composer' }
+
+/** An answer (or a transform of one) awaiting the internal-source leak-gate
+ *  confirm: carries the text to actually insert, since a modify transform's
+ *  result differs from the turn's original `answer`. */
+interface PendingInsert {
+  text: string
+}
 
 interface CopilotTurn {
   id: string
@@ -231,10 +269,17 @@ export function CopilotPanel({
   conversationId,
   flags,
   onInsert,
+  getComposerText,
+  onReplaceComposerText,
 }: {
   conversationId: ConversationId
   flags: FeatureFlags | undefined
   onInsert: (text: string, mode: InsertMode) => void
+  /** Current plain text of the reply composer: the Format chip's
+   *  empty-check and its transform source (P2-C.1). */
+  getComposerText: () => string
+  /** Replace the reply composer's content with a Format transform's result. */
+  onReplaceComposerText: (text: string) => void
 }) {
   const { principal } = useRouteContext({ from: '/admin' }) as { principal?: { id: string } | null }
   const { data: widgetConfig } = useQuery(settingsQueries.widgetConfig())
@@ -249,17 +294,113 @@ export function CopilotPanel({
 
   const [turns, setTurns] = useState<CopilotTurn[]>([])
   const [input, setInput] = useState('')
-  const [leakGateTurnId, setLeakGateTurnId] = useState<string | null>(null)
+  const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null)
   const [saveMacroTurnId, setSaveMacroTurnId] = useState<string | null>(null)
   const [summarizing, setSummarizing] = useState(false)
   const { start, stop } = useSseTurn()
+  // A transform (modify-answer or Format) runs on its own SSE turn, separate
+  // from the ask/answer stream above, so asking a follow-up and transforming
+  // a prior answer never abort each other.
+  const { start: startTransform, stop: stopTransform } = useSseTurn()
+  const [transformState, setTransformState] = useState<TransformState | null>(null)
+  const transforming = transformState !== null
   const nextIdRef = useRef(0)
 
   const busy = turns.some((t) => t.status === 'streaming')
-  const leakGateTurn = turns.find((t) => t.id === leakGateTurnId) ?? null
   const saveMacroTurn = turns.find((t) => t.id === saveMacroTurnId) ?? null
+  // Pull-based read (mirrors insertMacroBody): re-read on every render rather
+  // than threading composer text through props on every keystroke, which
+  // would re-render this whole panel (and the virtualized thread above it)
+  // on every character typed.
+  const composerEmpty = getComposerText().trim().length === 0
 
   useEffect(() => stop, [stop])
+  useEffect(() => stopTransform, [stopTransform])
+
+  // Route an answer (or a transform of one) to the insert callback, gating on
+  // the leak-gate confirm when the SOURCE answer was internal-sourced:
+  // transforming text never launders it, so a modify result inherits the
+  // originating turn's `internalSourced` flag rather than re-deriving one.
+  const requestInsert = useCallback(
+    (text: string, internalSourced: boolean) => {
+      if (internalSourced) setPendingInsert({ text })
+      else onInsert(text, 'reply')
+    },
+    [onInsert]
+  )
+
+  const runTransform = useCallback(
+    async (transform: TransformKind, text: string): Promise<string | null> => {
+      let result = ''
+      let ok = true
+      await startTransform({
+        url: '/api/admin/assistant/transform',
+        body: { conversationId, text, transform },
+        handlers: {
+          [TRANSFORM_EVENTS.delta]: (data) => {
+            result += (data as TransformDeltaPayload).text
+          },
+          [TRANSFORM_EVENTS.final]: (data) => {
+            const final = data as TransformFinalPayload
+            if (final.text) result = final.text
+          },
+          [TRANSFORM_EVENTS.error]: (data) => {
+            ok = false
+            toast.error((data as TransformErrorPayload).message || GENERIC_ERROR)
+          },
+        },
+        onHttpError: async (res) => {
+          ok = false
+          let message = GENERIC_ERROR
+          try {
+            const body = await res.json()
+            if (body?.error?.message) message = body.error.message
+          } catch {
+            // Non-JSON error body: keep the generic message.
+          }
+          toast.error(message)
+        },
+        onAbort: () => {
+          ok = false
+        },
+        onError: () => {
+          ok = false
+          toast.error(GENERIC_ERROR)
+        },
+      })
+      return ok && result ? result : null
+    },
+    [conversationId, startTransform]
+  )
+
+  const modifyAnswer = useCallback(
+    async (turn: CopilotTurn, transform: TransformKind) => {
+      if (transforming || !turn.answer) return
+      setTransformState({ scope: 'answer', turnId: turn.id })
+      try {
+        const result = await runTransform(transform, turn.answer)
+        if (result) requestInsert(result, turn.internalSourced)
+      } finally {
+        setTransformState(null)
+      }
+    },
+    [transforming, runTransform, requestInsert]
+  )
+
+  const formatComposer = useCallback(
+    async (transform: TransformKind) => {
+      const text = getComposerText()
+      if (transforming || !text.trim()) return
+      setTransformState({ scope: 'composer' })
+      try {
+        const result = await runTransform(transform, text)
+        if (result) onReplaceComposerText(result)
+      } finally {
+        setTransformState(null)
+      }
+    },
+    [transforming, runTransform, getComposerText, onReplaceComposerText]
+  )
 
   const runTurn = useCallback(
     async (id: string, question: string, history: CopilotHistoryEntry[]) => {
@@ -384,14 +525,8 @@ export function CopilotPanel({
   }, [busy])
 
   const handleAddToComposer = useCallback(
-    (turn: CopilotTurn) => {
-      if (turn.internalSourced) {
-        setLeakGateTurnId(turn.id)
-      } else {
-        onInsert(turn.answer, 'reply')
-      }
-    },
-    [onInsert]
+    (turn: CopilotTurn) => requestInsert(turn.answer, turn.internalSourced),
+    [requestInsert]
   )
 
   const summarizeNow = useCallback(async () => {
@@ -439,6 +574,11 @@ export function CopilotPanel({
                 onAddAsNote={() => onInsert(turn.answer, 'note')}
                 onSaveAsMacro={() => setSaveMacroTurnId(turn.id)}
                 onRetry={() => retry(turn.id)}
+                onModify={(transform) => void modifyAnswer(turn, transform)}
+                transformBusy={transforming}
+                isTransforming={
+                  transformState?.scope === 'answer' && transformState.turnId === turn.id
+                }
               />
             ))}
           </div>
@@ -457,6 +597,10 @@ export function CopilotPanel({
         onToggleSource={toggle}
         onSummarize={() => void summarizeNow()}
         summarizing={summarizing}
+        onFormat={(transform) => void formatComposer(transform)}
+        formatDisabled={busy || transforming || composerEmpty}
+        formatBusy={transformState?.scope === 'composer'}
+        composerEmpty={composerEmpty}
       />
 
       <SaveAsMacroDialog
@@ -464,7 +608,7 @@ export function CopilotPanel({
         onOpenChange={(open) => !open && setSaveMacroTurnId(null)}
       />
 
-      <AlertDialog open={!!leakGateTurn} onOpenChange={(open) => !open && setLeakGateTurnId(null)}>
+      <AlertDialog open={!!pendingInsert} onOpenChange={(open) => !open && setPendingInsert(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>This answer uses internal sources</AlertDialogTitle>
@@ -474,15 +618,15 @@ export function CopilotPanel({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button type="button" variant="outline" onClick={() => setLeakGateTurnId(null)}>
+            <Button type="button" variant="outline" onClick={() => setPendingInsert(null)}>
               Cancel
             </Button>
             <Button
               type="button"
               variant="secondary"
               onClick={() => {
-                if (leakGateTurn) onInsert(leakGateTurn.answer, 'note')
-                setLeakGateTurnId(null)
+                if (pendingInsert) onInsert(pendingInsert.text, 'note')
+                setPendingInsert(null)
               }}
             >
               Add as note
@@ -491,8 +635,8 @@ export function CopilotPanel({
               type="button"
               className={buttonVariants({ variant: 'destructive' })}
               onClick={() => {
-                if (leakGateTurn) onInsert(leakGateTurn.answer, 'reply')
-                setLeakGateTurnId(null)
+                if (pendingInsert) onInsert(pendingInsert.text, 'reply')
+                setPendingInsert(null)
               }}
             >
               Add to composer anyway
@@ -538,14 +682,25 @@ function CopilotTurnView({
   onAddAsNote,
   onSaveAsMacro,
   onRetry,
+  onModify,
+  transformBusy,
+  isTransforming,
 }: {
   turn: CopilotTurn
   onAddToComposer: () => void
   onAddAsNote: () => void
   onSaveAsMacro: () => void
   onRetry: () => void
+  /** Run a modify transform on this turn's answer (P2-C.1). */
+  onModify: (transform: TransformKind) => void
+  /** Any transform (this turn's or another's) is in flight: disables this
+   *  card's own entry points too, so only one transform runs at a time. */
+  transformBusy: boolean
+  /** This specific turn's answer is the one being transformed right now. */
+  isTransforming: boolean
 }) {
   const streaming = turn.status === 'streaming'
+  const actionsDisabled = streaming || transformBusy
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
@@ -571,7 +726,12 @@ function CopilotTurnView({
             <AssistantAnswer text={turn.answer} citations={turn.citations} caret={streaming} />
             {!streaming && turn.answer && (
               <div className="mt-2 flex items-center gap-1.5">
-                <Button type="button" size="sm" onClick={onAddToComposer} disabled={streaming}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onAddToComposer}
+                  disabled={actionsDisabled}
+                >
                   Add to composer
                 </Button>
                 <DropdownMenu>
@@ -579,18 +739,32 @@ function CopilotTurnView({
                     <button
                       type="button"
                       aria-label="More answer actions"
-                      disabled={streaming}
+                      disabled={actionsDisabled}
                       className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
                     >
                       <EllipsisHorizontalIcon className="h-4 w-4" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Add to composer & modify</DropdownMenuLabel>
+                    {MODIFY_ROWS.map((row) => (
+                      <DropdownMenuItem key={row.transform} onClick={() => onModify(row.transform)}>
+                        <SparklesIcon className="h-3.5 w-3.5" />
+                        {row.label}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onAddAsNote}>Add as note</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onSaveAsMacro}>Save as macro</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {isTransforming && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                    Rewriting…
+                  </span>
+                )}
               </div>
             )}
           </>
@@ -686,6 +860,10 @@ function CopilotAskInput({
   onToggleSource,
   onSummarize,
   summarizing,
+  onFormat,
+  formatDisabled,
+  formatBusy,
+  composerEmpty,
 }: {
   value: string
   onChange: (value: string) => void
@@ -696,15 +874,48 @@ function CopilotAskInput({
   sourceOptions: SourceOption[]
   checked: Set<SourceType>
   onToggleSource: (type: SourceType) => void
-  /** Chips row above the input (COPILOT-SIDEBAR-UX.md P2-C): [Summarize] for
-   *  now; [AI Format] joins it in C.1. */
+  /** Chips row above the input (COPILOT-SIDEBAR-UX.md P2-C): [Format] acts on
+   *  the reply composer's own draft; [Summarize] writes a note. */
   onSummarize: () => void
   summarizing: boolean
+  /** Run a Format transform on the reply composer's current draft. */
+  onFormat: (transform: TransformKind) => void
+  /** Disabled while busy/transforming, or while the composer has no draft. */
+  formatDisabled: boolean
+  /** This chip's own transform is the one in flight right now. */
+  formatBusy: boolean
+  /** Whether the disabled state above is specifically "no draft yet": drives
+   *  the "Write a draft first" tooltip rather than a generic disabled state. */
+  composerEmpty: boolean
 }) {
   const placeholder = hasAskedBefore ? 'Ask a follow-up question...' : 'Ask a question...'
   return (
     <div className="border-t border-border/50 p-3">
       <div className="mb-2 flex items-center gap-1.5">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={formatDisabled}
+              title={composerEmpty ? 'Write a draft first' : undefined}
+              className="flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+            >
+              {formatBusy ? (
+                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <SparklesIcon className="h-3.5 w-3.5" />
+              )}
+              {formatBusy ? 'Formatting…' : 'Format'}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {FORMAT_ROWS.map((row) => (
+              <DropdownMenuItem key={row.transform} onClick={() => onFormat(row.transform)}>
+                {row.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <button
           type="button"
           onClick={onSummarize}

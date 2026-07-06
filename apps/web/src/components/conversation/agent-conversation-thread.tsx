@@ -529,6 +529,24 @@ export function AgentConversationThread({
     noteEditorRef,
   })
 
+  // The Copilot Format chip's read/replace seam onto the REPLY composer only
+  // (P2-C.1): unlike insertFromCopilot, Format never targets the note editor,
+  // so it needs no mode-flip plumbing: it reads and rewrites whatever draft is
+  // already live in the reply composer. `getComposerText` is a plain pull (no
+  // re-render on every keystroke, mirroring insertMacroBody's ref-based
+  // approach); `replaceComposerText` swaps in the transformed text as one
+  // undoable edit and offers an Undo action so a bad rewrite costs one keystroke.
+  const getComposerText = useCallback(() => replyComposerRef.current?.getText() ?? '', [])
+  const replaceComposerText = useCallback((text: string) => {
+    replyComposerRef.current?.replaceText(text)
+    toast.success('Draft updated. Undo with Ctrl+Z', {
+      action: {
+        label: 'Undo',
+        onClick: () => replyComposerRef.current?.undo(),
+      },
+    })
+  }, [])
+
   const onSend = useCallback(() => {
     if (noteMode) {
       // Notes are rich (mention chips in the doc) and can carry attachments. The
@@ -953,6 +971,8 @@ export function AgentConversationThread({
             setConvertSeed({ title: trackConvoTitle, content: trackConvoContent })
           }
           onInsertFromCopilot={insertFromCopilot}
+          getComposerText={getComposerText}
+          onReplaceComposerText={replaceComposerText}
         />
       )}
     </div>

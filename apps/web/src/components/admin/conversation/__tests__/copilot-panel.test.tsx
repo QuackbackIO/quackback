@@ -92,20 +92,46 @@ function renderPanel(
   props: Partial<{
     flags: FeatureFlags | undefined
     onInsert: (t: string, m: 'reply' | 'note') => void
+    getComposerText: () => string
+    onReplaceComposerText: (t: string) => void
   }> = {}
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const onInsert = props.onInsert ?? vi.fn()
+  const onReplaceComposerText = props.onReplaceComposerText ?? vi.fn()
   render(
     <QueryClientProvider client={client}>
       <CopilotPanel
         conversationId={CONVERSATION_ID}
         flags={props.flags ?? ALL_FLAGS_ON}
         onInsert={onInsert}
+        getComposerText={props.getComposerText ?? (() => '')}
+        onReplaceComposerText={onReplaceComposerText}
       />
     </QueryClientProvider>
   )
-  return { onInsert }
+  return { onInsert, onReplaceComposerText }
+}
+
+function transformSseFrames(text: string): string {
+  return sseFrame('transform.v1.delta', { text }) + sseFrame('transform.v1.final', { text })
+}
+
+/** Route fetch by URL: the ask/copilot endpoint and the transform endpoint
+ *  stream independently in the real app (separate useSseTurn instances), so
+ *  tests that exercise both in one flow need a fetch mock that branches. */
+function stubFetchByUrl(responses: { copilot?: string; transform?: string }) {
+  const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+    if (url.includes('/transform') && responses.transform !== undefined) {
+      return Promise.resolve(mockStreamingResponse(responses.transform))
+    }
+    if (responses.copilot !== undefined) {
+      return Promise.resolve(mockStreamingResponse(responses.copilot))
+    }
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
 }
 
 async function ask(question: string) {
@@ -307,6 +333,122 @@ describe('<CopilotPanel> leak gate', () => {
 
     expect(onInsert).toHaveBeenCalledWith('Here is the internal-flavored answer.', 'note')
     expect(screen.queryByText('This answer uses internal sources')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> "Add to composer & modify" menu', () => {
+  async function askAndOpenModifyMenu(internalSourced: boolean) {
+    const copilotFrames = sseFrame(COPILOT_EVENTS.final, {
+      text: 'Here is the original answer.',
+      citations: internalSourced
+        ? [{ type: 'snippet', id: 'snippet_1', title: 'Internal note', url: '', internal: true }]
+        : [],
+      internalSourced,
+    })
+    const fetchMock = stubFetchByUrl({
+      copilot: copilotFrames,
+      transform: transformSseFrames('Here is the FRIENDLIER answer.'),
+    })
+    const onInsert = vi.fn()
+    renderPanel({ onInsert })
+    await ask('What should I do?')
+    await screen.findByText(/Here is the original answer/)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
+      button: 0,
+    })
+    expect(await screen.findByText('Add to composer & modify')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'More friendly' }))
+
+    return { onInsert, fetchMock }
+  }
+
+  it('lists the tone rows under the "Add to composer & modify" header, above Add as note / Save as macro', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    const frames = sseFrame(COPILOT_EVENTS.final, {
+      text: 'Answer.',
+      citations: [],
+      internalSourced: false,
+    })
+    stubFetchByUrl({ copilot: frames })
+    renderPanel()
+    await ask('Question?')
+    await screen.findByText('Answer.')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
+      button: 0,
+    })
+
+    expect(await screen.findByText('Add to composer & modify')).toBeInTheDocument()
+    for (const label of ['My tone of voice', 'More friendly', 'More formal', 'More concise']) {
+      expect(screen.getByRole('menuitem', { name: label })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('menuitem', { name: 'Add as note' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Save as macro' })).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('streams the transform then inserts directly when the source answer is not internal', async () => {
+    const { onInsert, fetchMock } = await askAndOpenModifyMenu(false)
+
+    await waitFor(() => {
+      expect(onInsert).toHaveBeenCalledWith('Here is the FRIENDLIER answer.', 'reply')
+    })
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/transform'))).toBe(true)
+    vi.unstubAllGlobals()
+  })
+
+  it('routes the TRANSFORMED text through the leak gate when the source answer is internal', async () => {
+    const { onInsert } = await askAndOpenModifyMenu(true)
+
+    expect(await screen.findByText('This answer uses internal sources')).toBeInTheDocument()
+    expect(onInsert).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer anyway/i }))
+    expect(onInsert).toHaveBeenCalledWith('Here is the FRIENDLIER answer.', 'reply')
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> Format chip', () => {
+  it('is disabled with a "Write a draft first" tooltip when the composer is empty', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    renderPanel({ getComposerText: () => '' })
+
+    const chip = screen.getByRole('button', { name: /^format$/i })
+    expect(chip).toBeDisabled()
+    expect(chip).toHaveAttribute('title', 'Write a draft first')
+  })
+
+  it('is enabled when the composer has a draft', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    renderPanel({ getComposerText: () => 'A draft reply.' })
+
+    expect(screen.getByRole('button', { name: /^format$/i })).not.toBeDisabled()
+  })
+
+  it('streams the transform and replaces the composer content with the final text', async () => {
+    const fetchMock = stubFetchByUrl({
+      transform: transformSseFrames('Expanded and improved draft.'),
+    })
+    const { onReplaceComposerText } = renderPanel({ getComposerText: () => 'Short draft.' })
+
+    // Radix DropdownMenuTrigger opens on pointerDown, not click.
+    fireEvent.pointerDown(screen.getByRole('button', { name: /^format$/i }), { button: 0 })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Expand' }))
+
+    await waitFor(() => {
+      expect(onReplaceComposerText).toHaveBeenCalledWith('Expanded and improved draft.')
+    })
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/transform'))
+    expect(call).toBeDefined()
+    const body = JSON.parse((call as [string, RequestInit])[1].body as string)
+    expect(body).toEqual({
+      conversationId: CONVERSATION_ID,
+      text: 'Short draft.',
+      transform: 'expand',
+    })
     vi.unstubAllGlobals()
   })
 })

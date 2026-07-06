@@ -43,6 +43,20 @@ export interface ConversationRichComposerHandle {
    *  explicit "attach image" button so it matches paste/drop behavior. */
   insertImage: (src: string) => void
   focus: () => void
+  /** Plain text of the current content: a read seam for callers that need to
+   *  act on the live draft (e.g. the Copilot Format chip's empty-check and
+   *  its transform-replace flow) without duplicating editor state of their
+   *  own. Returns '' once the editor is destroyed or never mounted. */
+  getText: () => string
+  /** Replace the entire document with `text` in a single chain (select-all +
+   *  insert), which TipTap collapses into one transaction, so Ctrl+Z undoes
+   *  the whole replace in one step and restores the prior draft, instead of
+   *  undoing a select then an insert separately. */
+  replaceText: (text: string) => void
+  /** Undo the last transaction: exposed so a toast action button can revert
+   *  a `replaceText` (e.g. after a Format transform) without the teammate
+   *  reaching for the keyboard. */
+  undo: () => void
 }
 
 /**
@@ -98,6 +112,13 @@ export const ConversationRichComposer = forwardRef<
           e.chain().focus().insertContent({ type: 'chatImage', attrs: { src } }).run()
         ),
       focus: () => withLiveEditor(editorRef.current, (e) => e.chain().focus().run()),
+      getText: () =>
+        editorRef.current && !editorRef.current.isDestroyed ? editorRef.current.getText() : '',
+      replaceText: (text: string) =>
+        withLiveEditor(editorRef.current, (e) =>
+          e.chain().focus().selectAll().insertContent(text).run()
+        ),
+      undo: () => withLiveEditor(editorRef.current, (e) => e.chain().focus().undo().run()),
     }),
     []
   )

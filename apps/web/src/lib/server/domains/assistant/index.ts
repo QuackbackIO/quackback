@@ -120,6 +120,16 @@ export {
   type AssistantToolCall,
 } from './tool-audit'
 
+// Quinn Copilot transforms (P2-C.1): tone/format rewrites over
+// already-composed text, run directly through the synthesis core.
+export {
+  fetchTeammateStyleExcerpts,
+  buildTransformSystemPrompts,
+  runCopilotTransform,
+  type RunCopilotTransformParams,
+  type CopilotTransformResult,
+} from './copilot-transform'
+
 // Quinn — tools + runtime
 export { assembleAssistantToolset } from './assistant.tools'
 export {

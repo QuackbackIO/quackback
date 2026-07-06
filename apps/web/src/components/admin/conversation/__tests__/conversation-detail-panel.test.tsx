@@ -104,6 +104,8 @@ function renderPanel(conversation: ConversationDTO = makeConversation()) {
         onEndConversation={vi.fn()}
         onTrackAsFeedback={vi.fn()}
         onInsertFromCopilot={vi.fn()}
+        getComposerText={() => ''}
+        onReplaceComposerText={vi.fn()}
       />
     </QueryClientProvider>
   )

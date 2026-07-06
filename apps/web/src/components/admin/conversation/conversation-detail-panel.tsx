@@ -102,6 +102,8 @@ export function ConversationDetailPanel({
   onEndConversation,
   onTrackAsFeedback,
   onInsertFromCopilot,
+  getComposerText,
+  onReplaceComposerText,
 }: {
   conversation: ConversationDTO
   onChanged: () => void
@@ -114,6 +116,11 @@ export function ConversationDetailPanel({
    *  (agent-conversation-thread.tsx's insertFromCopilot). Only read when the
    *  Copilot tab actually renders. */
   onInsertFromCopilot: (text: string, mode: 'reply' | 'note') => void
+  /** Current plain text of the reply composer (P2-C.1's Format chip
+   *  empty-check + transform source). Only read when the Copilot tab renders. */
+  getComposerText: () => string
+  /** Replace the reply composer's content with a Format transform's result. */
+  onReplaceComposerText: (text: string) => void
 }) {
   const { settings } = useRouteContext({ from: '/admin' }) as {
     settings?: { featureFlags?: FeatureFlags } | null
@@ -475,6 +482,8 @@ export function ConversationDetailPanel({
             conversationId={conversation.id}
             flags={flags}
             onInsert={onInsertFromCopilot}
+            getComposerText={getComposerText}
+            onReplaceComposerText={onReplaceComposerText}
           />
         </TabsContent>
       </Tabs>
