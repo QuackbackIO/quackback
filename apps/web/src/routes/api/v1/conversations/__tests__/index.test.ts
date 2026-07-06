@@ -62,8 +62,11 @@ describe('GET /api/v1/conversations', () => {
       visitorPrincipalId: 'principal_v',
     })
     expect(body.meta.pagination).toEqual({ cursor: 'conversation_1', hasMore: true })
-    // status + limit forwarded to the query
-    expect(mockList).toHaveBeenCalledWith(expect.objectContaining({ status: 'open', limit: 10 }))
+    // status + limit forwarded to the query, scoped by the API key's actor
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'open', limit: 10 }),
+      expect.objectContaining({ principalType: 'service' })
+    )
   })
 
   it('rejects a non-team key (403 from withApiKeyAuth)', async () => {

@@ -86,16 +86,26 @@ export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
 export interface InboxActionContext {
   hasActiveConversation: boolean
   hasSelection: boolean
+  /**
+   * True when the current target (the multi-selection, or the single active
+   * item when there's no selection) includes at least one ticket
+   * (UNIFIED-INBOX-SPEC.md §2.5: snooze has no ticket-row equivalent — the
+   * status axis stands in for it). Optional so every pre-unified-inbox call
+   * site (conversation-only) is unaffected.
+   */
+  hasTicketTarget?: boolean
 }
 
 /**
  * Whether an action can run in the current context, from its `scope` alone.
+ * Snooze is additionally disabled whenever the target includes a ticket.
  * Pure; shared by the palette and unit-tested directly.
  */
 export function isInboxActionEnabled(
   descriptor: InboxActionDescriptor,
   ctx: InboxActionContext
 ): boolean {
+  if (descriptor.id === 'snooze' && ctx.hasTicketTarget) return false
   switch (descriptor.scope) {
     case 'active':
       return ctx.hasActiveConversation

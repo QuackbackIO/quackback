@@ -28,6 +28,9 @@ export interface InboxCommandBarProps {
   onAction: (id: InboxActionId) => void
   hasSelection: boolean
   hasActiveConversation: boolean
+  /** True when the target (selection, or the solo active item) includes a
+   *  ticket — disables the Snooze row (UNIFIED-INBOX-SPEC.md §2.5). */
+  hasTicketTarget?: boolean
 }
 
 export function InboxCommandBar({
@@ -36,6 +39,7 @@ export function InboxCommandBar({
   onAction,
   hasSelection,
   hasActiveConversation,
+  hasTicketTarget,
 }: InboxCommandBarProps) {
   function run(id: InboxActionId) {
     onAction(id)
@@ -63,6 +67,7 @@ export function InboxCommandBar({
                     const disabled = !isInboxActionEnabled(action, {
                       hasActiveConversation,
                       hasSelection,
+                      hasTicketTarget,
                     })
                     return (
                       <CommandItem

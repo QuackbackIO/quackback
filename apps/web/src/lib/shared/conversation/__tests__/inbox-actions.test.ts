@@ -95,4 +95,35 @@ describe('isInboxActionEnabled', () => {
       false
     )
   })
+
+  it('snooze is disabled when the target includes a ticket (UNIFIED-INBOX-SPEC.md §2.5)', () => {
+    const snooze = byId('snooze')
+    expect(isInboxActionEnabled(snooze, { hasActiveConversation: true, hasSelection: false })).toBe(
+      true
+    )
+    expect(
+      isInboxActionEnabled(snooze, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        hasTicketTarget: true,
+      })
+    ).toBe(false)
+    expect(
+      isInboxActionEnabled(snooze, {
+        hasActiveConversation: false,
+        hasSelection: true,
+        hasTicketTarget: true,
+      })
+    ).toBe(false)
+  })
+
+  it('hasTicketTarget never disables a non-snooze action', () => {
+    expect(
+      isInboxActionEnabled(both, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        hasTicketTarget: true,
+      })
+    ).toBe(true)
+  })
 })

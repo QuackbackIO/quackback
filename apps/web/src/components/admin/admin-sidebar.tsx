@@ -4,7 +4,6 @@ import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/reac
 import {
   ChatBubbleLeftIcon,
   ChatBubbleLeftRightIcon,
-  TicketIcon,
   MapIcon,
   UsersIcon,
   Cog6ToothIcon,
@@ -65,8 +64,10 @@ interface AdminSidebarProps {
 
 const navItems = [
   { label: 'Feedback', href: '/admin/feedback', icon: ChatBubbleLeftIcon },
-  { label: 'Conversations', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon },
-  { label: 'Tickets', href: '/admin/tickets', icon: TicketIcon },
+  // UNIFIED-INBOX-SPEC.md §2.3/§4: one Support entry replaces the old
+  // Conversations + Tickets pair — the unified /admin/inbox shell now covers
+  // both (gated below on either flag being on).
+  { label: 'Support', href: '/admin/inbox', icon: ChatBubbleLeftRightIcon },
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon },
@@ -133,8 +134,11 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
   const filteredNavItems = navItems.filter((item) => {
     if (item.href === '/admin/help-center') return flags?.helpCenter ?? false
-    if (item.href === '/admin/inbox') return flags?.supportInbox ?? false
-    if (item.href === '/admin/tickets') return flags?.supportTickets ?? false
+    // Support covers both conversations and tickets now — shown when either is
+    // enabled (a tickets-only workspace still needs the shell, minus the
+    // conversation affordances the unified route hides on its own).
+    if (item.href === '/admin/inbox')
+      return (flags?.supportInbox ?? false) || (flags?.supportTickets ?? false)
     // AI & Automation is admin-only, same gate as the settings cog below.
     if (item.href === '/admin/automation/assistant') return isAdmin
     return true

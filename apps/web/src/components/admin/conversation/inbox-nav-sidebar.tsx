@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import {
   ChatBubbleLeftRightIcon,
   InboxIcon,
@@ -13,6 +14,9 @@ import {
   EllipsisHorizontalIcon,
   StarIcon,
   SparklesIcon,
+  TicketIcon,
+  BuildingOffice2Icon,
+  RectangleStackIcon,
 } from '@heroicons/react/24/solid'
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'
 import type { ConversationTagId, SegmentId, TeamId, ConversationViewId } from '@quackback/ids'
@@ -26,7 +30,9 @@ import {
   deleteConversationViewFn,
 } from '@/lib/server/functions/conversation-views'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
+import { inboxQueries } from '@/lib/client/queries/inbox'
 import type { ConversationViewDTO } from '@/lib/shared/conversation/views'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,35 +51,66 @@ import { cn } from '@/lib/shared/utils'
 // nav consumers are unaffected.
 export {
   inboxNavKey,
+  isTicketInboxView,
   type InboxView,
   type InboxNavItem,
 } from '@/lib/client/conversation/inbox-scope'
 import {
   inboxNavKey,
+  ticketTypeForView,
   type InboxView,
   type InboxNavItem,
 } from '@/lib/client/conversation/inbox-scope'
 
 // Primary views are assignee-based queues — Mine / Unassigned / All — then the
 // @-mentions feed and the personal "Saved for later" feed of flagged messages.
-// Status is no longer a view; it's a list filter.
+// Status is no longer a view; it's a list filter. Quinn AI and the Tickets
+// section (below) render as their own nav groups, in that order (§2.3).
 export const CONVERSATION_VIEWS = [
   { view: 'mine', label: 'Mine', Icon: UserIcon },
   { view: 'unassigned', label: 'Unassigned', Icon: InboxArrowDownIcon },
   { view: 'all', label: 'All', Icon: InboxIcon },
   { view: 'mentions', label: 'Mentions', Icon: AtSymbolIcon },
-  { view: 'quinn', label: 'Quinn AI', Icon: SparklesIcon },
   { view: 'saved', label: 'Saved for later', Icon: BookmarkIcon },
 ] as const
 
+const QUINN_VIEW = { view: 'quinn', label: 'Quinn AI', Icon: SparklesIcon } as const
+
+/** The Tickets nav section (UNIFIED-INBOX-SPEC.md §2.3), visible only when
+ *  `supportTickets` is enabled — see `useSupportTicketsEnabled`. */
+export const TICKET_INBOX_VIEWS = [
+  { view: 'tickets_customer', label: 'Customer', Icon: TicketIcon },
+  { view: 'tickets_back_office', label: 'Back office', Icon: BuildingOffice2Icon },
+  { view: 'tickets_tracker', label: 'Trackers', Icon: RectangleStackIcon },
+] as const
+
 /**
- * URL-safe guard: is `v` one of the canonical conversation views? Derived from
- * CONVERSATION_VIEWS so the route's `?view=` allowlist tracks the nav definition
- * and can't drift — a new view is accepted in the URL the moment it's listed
- * above, instead of needing a second hand-maintained list in validateSearch.
+ * URL-safe guard: is `v` one of the canonical inbox views (conversation scopes,
+ * Quinn AI, or a Tickets-section scope)? Derived from the view lists so the
+ * route's `?view=` allowlist tracks the nav definition and can't drift — a new
+ * view is accepted in the URL the moment it's listed above, instead of needing
+ * a second hand-maintained list in validateSearch.
  */
 export function isInboxView(v: unknown): v is InboxView {
-  return typeof v === 'string' && CONVERSATION_VIEWS.some((c) => c.view === v)
+  return (
+    typeof v === 'string' &&
+    (CONVERSATION_VIEWS.some((c) => c.view === v) ||
+      TICKET_INBOX_VIEWS.some((c) => c.view === v) ||
+      v === QUINN_VIEW.view)
+  )
+}
+
+/** Shared (deduped) source of `supportTickets` — gates the Tickets nav section. */
+export function useSupportTicketsEnabled(): boolean {
+  const { settings } = useRouteContext({ from: '__root__' })
+  const flags = settings?.featureFlags as FeatureFlags | undefined
+  return flags?.supportTickets ?? false
+}
+
+/** Shared (deduped) source of the inbox nav-badge counts (mine/unassigned/
+ *  tickets-by-type). */
+export function useInboxCounts() {
+  return useQuery(inboxQueries.counts())
 }
 
 export type ConversationTagWithCount = {
@@ -151,17 +188,26 @@ export function scopeLabelFor(
     return segments?.find((s) => s.id === nav.segmentId)?.name ?? 'Segment'
   if (nav.kind === 'team') return teams?.find((t) => t.id === nav.teamId)?.name ?? 'Team'
   if (nav.kind === 'custom') return views?.find((v) => v.id === nav.viewId)?.name ?? 'View'
-  return nav.view === 'mentions'
-    ? 'Mentions'
-    : nav.view === 'quinn'
-      ? 'Quinn AI'
-      : nav.view === 'saved'
-        ? 'Saved for later'
-        : nav.view === 'mine'
-          ? 'Mine'
-          : nav.view === 'unassigned'
-            ? 'Unassigned'
-            : 'All conversations'
+  switch (nav.view) {
+    case 'mentions':
+      return 'Mentions'
+    case 'quinn':
+      return 'Quinn AI'
+    case 'saved':
+      return 'Saved for later'
+    case 'mine':
+      return 'Mine'
+    case 'unassigned':
+      return 'Unassigned'
+    case 'tickets_customer':
+      return 'Customer tickets'
+    case 'tickets_back_office':
+      return 'Back office tickets'
+    case 'tickets_tracker':
+      return 'Trackers'
+    default:
+      return 'All conversations'
+  }
 }
 
 // Mirrors the settings secondary-nav item aesthetic (settings-nav.tsx) so the
@@ -415,12 +461,31 @@ function ViewsFilterSection({
   )
 }
 
+/** Count badge for a nav row (mine/unassigned/ticket-type badges); renders
+ *  nothing for a zero/undefined count so an empty scope shows no stray "0". */
+function NavRowCount({ count }: { count?: number }) {
+  if (!count) return null
+  return <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{count}</span>
+}
+
+/** Nav-badge count for one conversation scope view, from `useInboxCounts`. */
+function countForConversationView(
+  view: InboxView,
+  counts?: { mine: number; unassigned: number }
+): number | undefined {
+  if (!counts) return undefined
+  if (view === 'mine') return counts.mine
+  if (view === 'unassigned') return counts.unassigned
+  return undefined
+}
+
 /**
  * Grouped inbox navigation: a Conversations group (Mine / Unassigned / All /
- * Mentions / Saved), per-team inboxes (when teams exist), a Views group of
- * custom saved views, and Tags + Segments groups with counts. All scopes are
- * mutually exclusive. Desktop-only (lg+); the mobile equivalent is
- * InboxScopeMenu in the list header.
+ * Mentions / Saved), a Tickets group (Customer / Back office / Trackers, when
+ * `supportTickets` is on), Quinn AI, per-team inboxes (when teams exist), a
+ * Views group of custom saved views, and Tags + Segments groups with counts.
+ * All scopes are mutually exclusive. Desktop-only (lg+); the mobile equivalent
+ * is InboxScopeMenu in the list header.
  */
 export function InboxNavSidebar({
   nav,
@@ -441,8 +506,12 @@ export function InboxNavSidebar({
   const { data: segments } = useInboxSegmentsWithCounts()
   const { data: teams } = useInboxTeams()
   const { data: views } = useConversationViews()
+  const { data: counts } = useInboxCounts()
+  const showTickets = useSupportTicketsEnabled()
   const activeKey = inboxNavKey(nav)
   const teamRows = teamNavRows(teams)
+  const quinnItem: InboxNavItem = { kind: 'view', view: QUINN_VIEW.view }
+  const quinnActive = activeKey === inboxNavKey(quinnItem)
 
   return (
     <nav className="hidden w-64 shrink-0 flex-col border-r border-border/50 bg-card/30 lg:flex xl:w-72">
@@ -477,11 +546,49 @@ export function InboxNavSidebar({
                   className={itemClass(active)}
                 >
                   <Icon className={cn('h-3.5 w-3.5 shrink-0', active && 'text-primary')} />
-                  {label}
+                  <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                  <NavRowCount count={countForConversationView(view, counts)} />
                 </button>
               )
             })}
           </div>
+        </FilterSection>
+
+        {showTickets && (
+          <FilterSection title="Tickets">
+            <div className="space-y-1">
+              {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
+                const item: InboxNavItem = { kind: 'view', view }
+                const active = activeKey === inboxNavKey(item)
+                const count = counts?.ticketsByType[ticketTypeForView(view)]
+                return (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => onSelect(item)}
+                    className={itemClass(active)}
+                  >
+                    <Icon className={cn('h-3.5 w-3.5 shrink-0', active && 'text-primary')} />
+                    <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                    <NavRowCount count={count} />
+                  </button>
+                )
+              })}
+            </div>
+          </FilterSection>
+        )}
+
+        <FilterSection title="Quinn AI" collapsible={false}>
+          <button
+            type="button"
+            onClick={() => onSelect(quinnItem)}
+            className={itemClass(quinnActive)}
+          >
+            <QUINN_VIEW.Icon
+              className={cn('h-3.5 w-3.5 shrink-0', quinnActive && 'text-primary')}
+            />
+            {QUINN_VIEW.label}
+          </button>
         </FilterSection>
 
         <ScopeFilterSection
@@ -533,8 +640,11 @@ export function InboxScopeMenu({
   const { data: segments } = useInboxSegmentsWithCounts()
   const { data: teams } = useInboxTeams()
   const { data: views } = useConversationViews()
+  const { data: counts } = useInboxCounts()
+  const showTickets = useSupportTicketsEnabled()
   const activeKey = inboxNavKey(nav)
   const teamRows = teamNavRows(teams)
+  const quinnItem: InboxNavItem = { kind: 'view', view: QUINN_VIEW.view }
 
   return (
     <DropdownMenu>
@@ -553,6 +663,7 @@ export function InboxScopeMenu({
         </DropdownMenuLabel>
         {CONVERSATION_VIEWS.map(({ view, label, Icon }) => {
           const item: InboxNavItem = { kind: 'view', view }
+          const count = countForConversationView(view, counts)
           return (
             <DropdownMenuItem
               key={view}
@@ -560,10 +671,42 @@ export function InboxScopeMenu({
               className={cn('gap-2', activeKey === inboxNavKey(item) && 'text-primary')}
             >
               <Icon className="h-4 w-4" />
-              {label}
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+              <NavRowCount count={count} />
             </DropdownMenuItem>
           )
         })}
+        {showTickets && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Tickets
+            </DropdownMenuLabel>
+            {TICKET_INBOX_VIEWS.map(({ view, label, Icon }) => {
+              const item: InboxNavItem = { kind: 'view', view }
+              const count = counts?.ticketsByType[ticketTypeForView(view)]
+              return (
+                <DropdownMenuItem
+                  key={view}
+                  onClick={() => onSelect(item)}
+                  className={cn('gap-2', activeKey === inboxNavKey(item) && 'text-primary')}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <NavRowCount count={count} />
+                </DropdownMenuItem>
+              )
+            })}
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => onSelect(quinnItem)}
+          className={cn('gap-2', activeKey === inboxNavKey(quinnItem) && 'text-primary')}
+        >
+          <QUINN_VIEW.Icon className="h-4 w-4" />
+          {QUINN_VIEW.label}
+        </DropdownMenuItem>
         <ScopeMenuSection
           title="Teams"
           rows={teamRows}

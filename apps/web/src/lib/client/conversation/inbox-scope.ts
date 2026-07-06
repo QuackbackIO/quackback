@@ -14,8 +14,54 @@ import type {
 } from '@quackback/ids'
 import type { ConversationStatus, ConversationPriority } from '@/lib/shared/conversation/types'
 import type { ConversationSort, ConversationViewListParams } from '@/lib/shared/conversation/views'
+import type { TicketType } from '@/lib/shared/db-types'
+import {
+  facetToConversationStatus,
+  isInboxTriageFacet,
+  INBOX_TRIAGE_FACETS,
+  type InboxTriageFacet,
+} from '@/lib/shared/inbox/items'
 
-export type InboxView = 'mine' | 'unassigned' | 'all' | 'mentions' | 'saved' | 'quinn'
+// Re-exported so route/component code can pull the facet type from the one
+// scope module instead of reaching into lib/shared/inbox/items directly.
+export { INBOX_TRIAGE_FACETS, isInboxTriageFacet, type InboxTriageFacet }
+
+export type InboxView =
+  | 'mine'
+  | 'unassigned'
+  | 'all'
+  | 'mentions'
+  | 'saved'
+  | 'quinn'
+  // UNIFIED-INBOX-SPEC.md §2.3: the Tickets nav section. A separate group in
+  // the sidebar (see inbox-nav-sidebar.tsx), but the same InboxView/InboxNavItem
+  // machinery carries them through the URL + query layer.
+  | 'tickets_customer'
+  | 'tickets_back_office'
+  | 'tickets_tracker'
+
+const TICKET_VIEW_TYPE: Record<
+  'tickets_customer' | 'tickets_back_office' | 'tickets_tracker',
+  TicketType
+> = {
+  tickets_customer: 'customer',
+  tickets_back_office: 'back_office',
+  tickets_tracker: 'tracker',
+}
+
+/** Whether a view is one of the three Tickets-section scopes. */
+export function isTicketInboxView(
+  view: InboxView
+): view is 'tickets_customer' | 'tickets_back_office' | 'tickets_tracker' {
+  return view === 'tickets_customer' || view === 'tickets_back_office' || view === 'tickets_tracker'
+}
+
+/** The ticket `type` a Tickets-section view scopes the unified list to. */
+export function ticketTypeForView(
+  view: 'tickets_customer' | 'tickets_back_office' | 'tickets_tracker'
+): TicketType {
+  return TICKET_VIEW_TYPE[view]
+}
 
 /** Quinn-inbox sub-filter by involvement outcome (Fin's Resolved/Escalated/Pending). */
 export type AiBucket = 'resolved' | 'escalated' | 'pending'
@@ -46,10 +92,16 @@ export type StatusFilter = ConversationStatus | 'all'
 
 export const PRIORITY_VALUES = ['all', 'none', 'low', 'medium', 'high', 'urgent'] as const
 
-/** Inbox URL search params — the source of truth for the open conversation + filters. */
+/** Inbox URL search params — the source of truth for the open item + filters. */
 export interface InboxSearch {
+  /** The unified selection param (UNIFIED-INBOX-SPEC.md §2.2): a conversation OR
+   *  ticket TypeID, discriminated by prefix via `inboxItemRefFromId`. */
+  i?: string
+  /** Legacy alias for `i`, accepted forever (existing deep links in notification
+   *  emails, conversation.convert.ts, conversation.notify.ts). `validateSearch`
+   *  normalizes `c=X` to `i=X`. */
   c?: string
-  /** Deep-link target message within `c` — scrolled to + flashed on open. */
+  /** Deep-link target message within the open item — scrolled to + flashed on open. */
   m?: string
   view?: InboxView
   /** Quinn-view sub-filter by involvement outcome; omitted = any Quinn-engaged. */
@@ -60,7 +112,10 @@ export interface InboxSearch {
   team?: string
   /** Custom saved view scope (a conversation-view id). */
   viewId?: string
-  status?: StatusFilter
+  /** The triage facet (open/waiting/closed/all) — replaces the old per-status
+   *  filter. Legacy `snoozed` values normalize to `waiting` (see
+   *  `normalizeTriageFacet`). */
+  status?: InboxTriageFacet
   priority?: ConversationPriority | 'all'
   /** Inbox ordering; omitted = the default 'recent'. */
   sort?: ConversationSort
@@ -160,4 +215,151 @@ export function buildListParams(
         ? ('unassigned' as const)
         : ('all' as const)
   return { status: statusParam, priority, assignee, search: q, companyId: company, sort: sortParam }
+}
+
+// ---------------------------------------------------------------------------
+// Triage facet (UNIFIED-INBOX-SPEC.md §2.2/§2.4) — the URL-level `status` param.
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse the `?status=` param into a facet, accepting the legacy `snoozed`
+ * value (pre-unified-inbox bookmarks/links) as `waiting`. Anything else
+ * unrecognized falls back to `undefined` (the caller defaults to 'open').
+ */
+export function normalizeTriageFacet(v: unknown): InboxTriageFacet | undefined {
+  if (v === 'snoozed') return 'waiting'
+  if (isInboxTriageFacet(v)) return v
+  return undefined
+}
+
+/**
+ * Adapt a triage facet to the legacy `StatusFilter` shape `buildListParams`
+ * (and the conversation-inbox query factory) expect — the scopes that still
+ * run the pre-unified-inbox conversation-only list (mentions/quinn/saved,
+ * tag/segment/custom views) keep calling `buildListParams` unchanged, so its
+ * `ConversationStatus | 'all'` contract can't drift. `waiting` maps back to
+ * `snoozed`; `all` has no conversation-status equivalent.
+ */
+export function facetToStatusFilter(facet: InboxTriageFacet): StatusFilter {
+  return facetToConversationStatus(facet) ?? 'all'
+}
+
+// ---------------------------------------------------------------------------
+// Unified list params (UNIFIED-INBOX-SPEC.md §3.1) — the subset of
+// InboxNavItem scopes the unified `listInboxItemsFn` endpoint actually
+// supports today: assignee queues (mine/unassigned/all), a per-team inbox,
+// and the three Tickets-section scopes. Tag/segment/custom/mentions/quinn/
+// saved stay on the legacy `buildListParams` + conversation-only endpoint
+// (see the inbox route report — the unified endpoint's filter has no
+// tagIds/segmentIds/mentionedPrincipalId/assistantStatuses support yet).
+// ---------------------------------------------------------------------------
+
+/** The subset of `ConversationSort` the unified endpoint's `inboxSortSchema`
+ *  accepts. `waiting`/`sla` are conversation-only sorts with no ticket-row
+ *  equivalent (§3.1 documents they'd rank ticket rows by activity) — the
+ *  endpoint's zod schema simply rejects them today, so the client must clamp
+ *  rather than forward and 400. */
+const INBOX_UNIFIED_SORTS = new Set(['recent', 'oldest', 'created', 'priority'])
+
+export interface InboxListParams {
+  facet: InboxTriageFacet
+  kinds?: Array<'conversation' | 'ticket'>
+  ticketType?: TicketType
+  priority?: ConversationPriority
+  search?: string
+  assignee?: string
+  teamId?: string
+  companyId?: string
+  sort?: 'recent' | 'oldest' | 'created' | 'priority'
+}
+
+/**
+ * Whether `nav` is one of the scopes the unified `listInboxItemsFn` endpoint
+ * supports (mine/unassigned/all, a per-team inbox, or a Tickets-section
+ * scope). Everything else (tag/segment/custom/mentions/quinn/saved) stays on
+ * the legacy conversation-only endpoint via `buildListParams`.
+ */
+export function usesUnifiedInboxList(nav: InboxNavItem): boolean {
+  if (nav.kind === 'team') return true
+  if (nav.kind === 'view') {
+    return (
+      nav.view === 'mine' ||
+      nav.view === 'unassigned' ||
+      nav.view === 'all' ||
+      isTicketInboxView(nav.view)
+    )
+  }
+  return false
+}
+
+/**
+ * Map the active nav scope + triage facet + filter chips to the unified
+ * endpoint's list filter. Only called for the scopes the endpoint supports
+ * (see the module note above); the route picks `buildListParams` instead for
+ * everything else.
+ */
+export function buildInboxListParams(
+  nav: InboxNavItem,
+  facet: InboxTriageFacet,
+  priorityFilter: ConversationPriority | 'all',
+  search: string,
+  companyId?: CompanyId,
+  sort?: ConversationSort
+): InboxListParams {
+  const priority = priorityFilter === 'all' ? undefined : priorityFilter
+  const searchParam = search || undefined
+  const company = companyId || undefined
+  const sortParam: InboxListParams['sort'] =
+    sort && sort !== 'recent' && INBOX_UNIFIED_SORTS.has(sort)
+      ? (sort as InboxListParams['sort'])
+      : undefined
+
+  if (nav.kind === 'team') {
+    return {
+      facet,
+      kinds: ['conversation'],
+      teamId: nav.teamId,
+      priority,
+      search: searchParam,
+      companyId: company,
+      sort: sortParam,
+    }
+  }
+  if (nav.kind === 'view' && isTicketInboxView(nav.view)) {
+    return {
+      facet,
+      kinds: ['ticket'],
+      ticketType: ticketTypeForView(nav.view),
+      priority,
+      search: searchParam,
+      companyId: company,
+      sort: sortParam,
+    }
+  }
+  if (nav.kind === 'view' && nav.view === 'all') {
+    return {
+      facet,
+      kinds: ['conversation', 'ticket'],
+      priority,
+      search: searchParam,
+      companyId: company,
+      sort: sortParam,
+    }
+  }
+  // 'mine' | 'unassigned' — the only other scopes this function is called for.
+  const assignee =
+    nav.kind === 'view' && nav.view === 'mine'
+      ? 'me'
+      : nav.kind === 'view' && nav.view === 'unassigned'
+        ? 'unassigned'
+        : undefined
+  return {
+    facet,
+    kinds: ['conversation'],
+    assignee,
+    priority,
+    search: searchParam,
+    companyId: company,
+    sort: sortParam,
+  }
 }

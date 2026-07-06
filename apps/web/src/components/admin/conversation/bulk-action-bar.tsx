@@ -44,6 +44,10 @@ export interface BulkActionBarProps {
   onPriority: (priority: ConversationPriority) => void
   onSnooze: (until: string | null) => void
   onClose: () => void
+  /** True when the target includes at least one ticket — snooze has no
+   *  ticket-row equivalent (UNIFIED-INBOX-SPEC.md §2.5), so its trigger is
+   *  disabled rather than silently no-op'd. */
+  disableSnooze?: boolean
 }
 
 const triggerClass =
@@ -61,6 +65,7 @@ export function BulkActionBar({
   onPriority,
   onSnooze,
   onClose,
+  disableSnooze,
 }: BulkActionBarProps) {
   const { data: members } = useTeamMembers()
   const { data: teams } = useInboxTeams()
@@ -148,10 +153,17 @@ export function BulkActionBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Snooze (presets mirror the single-conversation status control) */}
+        {/* Snooze (presets mirror the single-conversation status control). No
+            ticket-row equivalent, so it's disabled rather than silently
+            no-op'd whenever the target includes a ticket. */}
         <DropdownMenu {...menuOpen('snooze')}>
           <DropdownMenuTrigger asChild>
-            <button type="button" disabled={pending} className={triggerClass}>
+            <button
+              type="button"
+              disabled={pending || disableSnooze}
+              title={disableSnooze ? 'Not available for tickets' : undefined}
+              className={triggerClass}
+            >
               Snooze
               <ChevronUpIcon className="size-3" />
             </button>
