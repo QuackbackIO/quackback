@@ -216,8 +216,11 @@ export async function sendVisitorMessage(
   }
   const attachments = validateAttachments(input.attachments)
   // Rich-composer doc (inline embeds/images): sanitized on write, like the agent
-  // path — but no mention extraction (a visitor carries no team @-mentions).
-  const safeContentJson = contentJson ? sanitizeTiptapContent(contentJson) : null
+  // path — but no mention extraction (a visitor carries no team @-mentions), and
+  // visitor-authored inline images may only reference our own storage.
+  const safeContentJson = contentJson
+    ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
+    : null
   // A text-less rich message is valid only when it carries an inline image or a
   // shared post; this label also backs the list preview + notification body. A
   // doc with neither (an empty doc) yields '' → treated as no content below.

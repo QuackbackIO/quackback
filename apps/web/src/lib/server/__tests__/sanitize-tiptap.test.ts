@@ -721,6 +721,90 @@ describe('sanitizeTiptapContent', () => {
     expect(node!.attrs!.src).toBe('')
   })
 
+  // ============================================
+  // restrictImagesToTrustedOrigins — the chatImage guard, opted into for
+  // image/resizableImage on visitor-authored content
+  // ============================================
+
+  it('keeps an external resizableImage src by default (agent-authored content)', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/shot.png', alt: 'x' } },
+      ],
+    }
+    const result = sanitizeTiptapContent(input)
+    const node = result.content!.find((n) => n.type === 'resizableImage')
+    expect(node!.attrs!.src).toBe('https://cdn.example.com/shot.png')
+  })
+
+  it('strips an external resizableImage src under restrictImagesToTrustedOrigins', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        { type: 'resizableImage', attrs: { src: 'https://evil.example.com/track.gif', alt: 'x' } },
+        { type: 'image', attrs: { src: 'https://evil.example.com/pixel.png', alt: 'y' } },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, { restrictImagesToTrustedOrigins: true })
+    const resizable = result.content!.find((n) => n.type === 'resizableImage')
+    const image = result.content!.find((n) => n.type === 'image')
+    expect(resizable!.attrs!.src).toBe('')
+    expect(image!.attrs!.src).toBe('')
+  })
+
+  it('keeps a same-origin upload resizableImage src under restrictImagesToTrustedOrigins', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'resizableImage',
+          attrs: {
+            src: '/api/storage/chat-images/photo.png',
+            alt: 'ok',
+            width: 320,
+            'data-keep-ratio': true,
+          },
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, { restrictImagesToTrustedOrigins: true })
+    const node = result.content!.find((n) => n.type === 'resizableImage')
+    expect(node!.attrs!.src).toBe('/api/storage/chat-images/photo.png')
+    expect(node!.attrs!.width).toBe(320)
+    expect(node!.attrs!['data-keep-ratio']).toBe(true)
+  })
+
+  it('restricts images inside nested structures too (list item)', () => {
+    const input = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'text', text: 'see:' }],
+                },
+                {
+                  type: 'resizableImage',
+                  attrs: { src: 'https://evil.example.com/deep.gif', alt: 'x' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const result = sanitizeTiptapContent(input, { restrictImagesToTrustedOrigins: true })
+    const list = result.content!.find((n) => n.type === 'bulletList')
+    const img = list!.content![0].content!.find((n) => n.type === 'resizableImage')
+    expect(img!.attrs!.src).toBe('')
+  })
+
   it('strips a data:image/svg+xml src on a chatImage', () => {
     const input = {
       type: 'doc',

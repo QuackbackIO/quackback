@@ -93,13 +93,26 @@ function sanitizeMark(mark: TiptapMark): TiptapMark | null {
   return { type: mark.type }
 }
 
+export interface SanitizeTiptapOptions {
+  /**
+   * Restrict inline image srcs (`image`/`resizableImage`) to this workspace's
+   * own upload origins, the same guard `chatImage` always gets. Set on
+   * visitor/requester-authored content: an arbitrary external src would let
+   * the author aim a tracking pixel at whichever agent opens the thread.
+   * Agent-authored content stays permissive (external images are legitimate
+   * paste targets there, as in posts).
+   */
+  restrictImagesToTrustedOrigins?: boolean
+}
+
 /**
  * Sanitize attributes for a specific node type.
  * Returns a clean attrs object with only safe, validated values.
  */
 function sanitizeAttrs(
   type: string,
-  attrs: Record<string, unknown> | undefined
+  attrs: Record<string, unknown> | undefined,
+  opts?: SanitizeTiptapOptions
 ): Record<string, unknown> | undefined {
   if (!attrs) return undefined
 
@@ -127,7 +140,14 @@ function sanitizeAttrs(
 
     case 'image':
     case 'resizableImage': {
-      const src = sanitizeImageUrl(String(attrs.src ?? ''))
+      const rawSrc = String(attrs.src ?? '')
+      // Untrusted senders may only reference our own upload pipeline — mirror
+      // the chatImage guard below. Clearing (not dropping) keeps the node
+      // shape intact so the serializer renders nothing.
+      if (opts?.restrictImagesToTrustedOrigins && !isTrustedAttachmentUrl(rawSrc)) {
+        return { src: '', alt: '' }
+      }
+      const src = sanitizeImageUrl(rawSrc)
       if (!src) return { src: '', alt: '' }
       const result: Record<string, unknown> = { src, alt: String(attrs.alt ?? '').slice(0, 500) }
       if (attrs.width !== undefined) result.width = safePositiveInt(attrs.width, 0)
@@ -241,7 +261,8 @@ function sanitizeNode(
   depth = 0,
   // Shared mutable counter (created once at the top call, threaded through the
   // recursion) bounding total node count across the whole tree.
-  budget: { count: number } = { count: 0 }
+  budget: { count: number } = { count: 0 },
+  opts?: SanitizeTiptapOptions
 ): TiptapNode | null {
   // Prevent deeply nested content (potential DoS or stack overflow)
   if (depth > 20) return null
@@ -262,7 +283,7 @@ function sanitizeNode(
   }
 
   // Sanitize attributes
-  const attrs = sanitizeAttrs(node.type, node.attrs)
+  const attrs = sanitizeAttrs(node.type, node.attrs, opts)
   if (attrs !== undefined) {
     sanitized.attrs = attrs
   }
@@ -278,7 +299,7 @@ function sanitizeNode(
   // Recursively sanitize child content
   if (node.content && Array.isArray(node.content)) {
     const sanitizedContent = node.content
-      .map((child) => sanitizeNode(child, depth + 1, budget))
+      .map((child) => sanitizeNode(child, depth + 1, budget, opts))
       .filter((child): child is TiptapNode => child !== null)
     if (sanitizedContent.length > 0) {
       sanitized.content = sanitizedContent
@@ -297,11 +318,14 @@ function sanitizeNode(
  * @param content - Raw TipTap JSON from client
  * @returns Sanitized TipTap JSON safe for storage and rendering
  */
-export function sanitizeTiptapContent(content: {
-  type: string
-  content?: unknown[]
-}): TiptapContent {
-  const sanitized = sanitizeNode(content as TiptapNode)
+export function sanitizeTiptapContent(
+  content: {
+    type: string
+    content?: unknown[]
+  },
+  opts?: SanitizeTiptapOptions
+): TiptapContent {
+  const sanitized = sanitizeNode(content as TiptapNode, 0, { count: 0 }, opts)
   if (!sanitized || sanitized.type !== 'doc') {
     return { type: 'doc' } as TiptapContent
   }

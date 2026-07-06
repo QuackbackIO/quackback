@@ -239,6 +239,37 @@ describe('sendVisitorMessage content derivation from contentJson', () => {
     expect(result.created).toBe(true)
     expect(insertedMessages[0]).toMatchObject({ content: 'Hello from the doc.' })
   })
+
+  it('clears an external inline-image src (visitor images are trusted-origin only)', async () => {
+    const contentJson = {
+      type: 'doc' as const,
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'see:' }] },
+        {
+          type: 'resizableImage',
+          attrs: { src: 'https://evil.example.com/track.gif', alt: 'x' },
+        },
+        {
+          type: 'chatImage',
+          attrs: { src: '/api/storage/widget-images/mine.png', alt: 'ok' },
+        },
+      ],
+    }
+    const result = await sendVisitorMessage(
+      { content: 'see:' },
+      { principalId: visitor },
+      visitorActor,
+      contentJson
+    )
+    expect(result.created).toBe(true)
+    const doc = insertedMessages[0].contentJson as {
+      content?: { type: string; attrs?: Record<string, unknown> }[]
+    }
+    const resizable = doc.content?.find((n) => n.type === 'resizableImage')
+    const chat = doc.content?.find((n) => n.type === 'chatImage')
+    expect(resizable?.attrs?.src).toBe('')
+    expect(chat?.attrs?.src).toBe('/api/storage/widget-images/mine.png')
+  })
 })
 
 describe('sendVisitorMessage attachments', () => {

@@ -167,6 +167,29 @@ describe.skipIf(!fixture.available)('ticket message service (real DB, rolled bac
     expect(message.contentJson?.content?.[0]?.type).toBe('resizableImage')
   })
 
+  it('keeps an external inline-image src on an AGENT reply (agents may paste external images)', async () => {
+    const { ticketId, actor } = await seedTicketWithAgent()
+    const contentJson = {
+      type: 'doc' as const,
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'from the docs site:' }] },
+        {
+          type: 'resizableImage',
+          attrs: { src: 'https://docs.example.com/diagram.png', alt: 'diagram' },
+        },
+      ],
+    }
+
+    const { message } = await sendTicketMessage(actor, {
+      ticketId,
+      content: 'from the docs site:',
+      contentJson,
+    })
+
+    const img = (message.contentJson?.content ?? []).find((n) => n.type === 'resizableImage')
+    expect(img?.attrs?.src).toBe('https://docs.example.com/diagram.png')
+  })
+
   it('prefers explicit non-blank content over deriving from contentJson', async () => {
     const { ticketId, actor } = await seedTicketWithAgent()
     const contentJson = {

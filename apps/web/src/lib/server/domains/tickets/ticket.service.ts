@@ -201,8 +201,14 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   // (image/embed) satisfy the empty-content guard via its fallback label. Run
   // ahead of the transaction — it's pure validation, no I/O.
   const openingAttachments = validateAttachments(input.attachments)
+  // The description is the requester's own ask when they file the ticket
+  // themselves — their inline images may only reference our own storage.
+  const filedByRequester =
+    !!actor.principalId && actor.principalId === (input.requesterPrincipalId ?? null)
   const safeDescriptionJson = input.descriptionJson
-    ? sanitizeTiptapContent(input.descriptionJson)
+    ? sanitizeTiptapContent(input.descriptionJson, {
+        restrictImagesToTrustedOrigins: filedByRequester,
+      })
     : null
   const fallbackLabel = richMessageFallbackLabel(safeDescriptionJson)
   const resolvedDescription = resolveMessageContent(input.description ?? '', safeDescriptionJson)

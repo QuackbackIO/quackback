@@ -244,6 +244,35 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     expect(stored?.attachments).toHaveLength(1)
   })
 
+  it('replyToMyTicket clears an external inline-image src (visitor images are trusted-origin only)', async () => {
+    const w = await seedWorld()
+    const contentJson = {
+      type: 'doc' as const,
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'look at this' }] },
+        {
+          type: 'resizableImage',
+          attrs: { src: 'https://evil.example.com/track.gif', alt: 'x' },
+        },
+        {
+          type: 'resizableImage',
+          attrs: { src: '/api/storage/portal-images/mine.png', alt: 'ok' },
+        },
+      ],
+    }
+    const { message } = await replyToMyTicket(requesterActor(w.me), {
+      ticketId: w.mine,
+      content: 'look at this',
+      contentJson,
+    })
+    const images = (message.contentJson?.content ?? []).filter(
+      (n) => n.type === 'resizableImage'
+    )
+    // External host neutralized; own-storage src kept.
+    expect(images[0]?.attrs?.src).toBe('')
+    expect(images[1]?.attrs?.src).toBe('/api/storage/portal-images/mine.png')
+  })
+
   it('createMyTicket opens a customer ticket owned by me with a visitor opening message', async () => {
     await testDb
       .insert(settings)

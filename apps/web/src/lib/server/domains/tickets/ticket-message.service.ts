@@ -68,7 +68,12 @@ export async function insertTicketMessage(
   opts: InsertTicketMessageOpts
 ): Promise<ConversationMessageDTO> {
   const attachments = validateAttachments(input.attachments)
-  const safeContentJson = input.contentJson ? sanitizeTiptapContent(input.contentJson) : null
+  const safeContentJson = input.contentJson
+    ? sanitizeTiptapContent(input.contentJson, {
+        // Requester-authored inline images may only reference our own storage.
+        restrictImagesToTrustedOrigins: opts.senderType === 'visitor',
+      })
+    : null
   const fallbackLabel = richMessageFallbackLabel(safeContentJson)
   const content = validateContent(
     resolveMessageContent(input.content, safeContentJson),
