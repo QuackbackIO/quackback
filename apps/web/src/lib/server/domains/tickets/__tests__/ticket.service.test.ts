@@ -232,7 +232,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     ).toBeUndefined()
   })
 
-  it('a public_stage crossing notifies the requester bell', async () => {
+  it('a public_stage crossing notifies the requester bell with a from/to body', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()
     const actor = adminActor()
@@ -249,6 +249,53 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     const ticketNotif = notifs.find((n) => n.type === 'ticket_status_changed')
     expect(ticketNotif).toBeDefined()
     expect((ticketNotif?.metadata as { ticketId?: string } | null)?.ticketId).toBe(created.id)
+    expect(ticketNotif?.body).toBe('Moved from Received to Resolved')
+  })
+
+  it('a public_stage crossing with no prior stage falls back to a generic body', async () => {
+    await seedSettings()
+    // Neutralize any committed default so our seeded default is the only one.
+    await testDb
+      .update(ticketStatuses)
+      .set({ isDefault: false })
+      .where(eq(ticketStatuses.isDefault, true))
+    const [internal] = await testDb
+      .insert(ticketStatuses)
+      .values({
+        name: 'T-Internal',
+        slug: `t_internal_${suffix()}`,
+        category: 'open',
+        position: 102,
+        isDefault: true,
+        publicStage: null,
+      })
+      .returning()
+    const [resolved] = await testDb
+      .insert(ticketStatuses)
+      .values({
+        name: 'T-Resolved',
+        slug: `t_resolved_${suffix()}`,
+        category: 'closed',
+        position: 103,
+        isDefault: false,
+        publicStage: 'resolved',
+      })
+      .returning()
+    const actor = adminActor()
+    const requester = await seedTeammate()
+    const created = await createTicket(
+      { type: 'customer', title: 'No prior stage', requesterPrincipalId: requester },
+      actor
+    )
+    expect(created.status.id).toBe(internal.id) // starts on the publicStage-less default
+    await setTicketStatus(created.id, resolved.id, actor) // null -> resolved
+    const notifs = await testDb
+      .select()
+      .from(inAppNotifications)
+      .where(eq(inAppNotifications.principalId, requester))
+    const ticketNotif = notifs.find((n) => n.type === 'ticket_status_changed')
+    expect(ticketNotif).toBeDefined()
+    expect(ticketNotif?.body).toBe('Open the ticket to see the latest update.')
   })
 
   it('closing stamps resolvedAt + firstResponseAt; reopening clears resolvedAt and counts the reopen', async () => {

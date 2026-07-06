@@ -296,15 +296,20 @@ export async function setTicketStatus(
   const newStage = resolveStage(target)
   const oldStage = current ? resolveStage(current) : null
   if (newStage && newStage !== oldStage) {
-    const stageLabel = (await getStageLabels())[newStage]
+    const stageLabels = await getStageLabels()
+    const stageLabel = stageLabels[newStage]
     await postTicketStatusEvent(id, stageLabel)
     // Notify the requester's bell that their ticket progressed. The system-1
     // email (§4.8) and the conversation echo ride this same crossing later.
     if (existing.requesterPrincipalId) {
+      const body = oldStage
+        ? `Moved from ${stageLabels[oldStage]} to ${stageLabel}`
+        : 'Open the ticket to see the latest update.'
       await createNotification({
         principalId: existing.requesterPrincipalId,
         type: 'ticket_status_changed',
         title: `${updated.title} is now ${stageLabel}`,
+        body,
         metadata: { ticketId: id },
       })
     }
