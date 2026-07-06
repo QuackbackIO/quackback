@@ -16,6 +16,11 @@ export interface ParsedInboundEmail {
   from: string | null
   subject: string | null
   text: string | null
+  /** HTML body: the provider's `html` field (webhook) or the first `text/html`
+   *  MIME part (IMAP). Set alongside `text` when a message carries both; set
+   *  alone for an HTML-only message, which `text` (`''`) no longer represents
+   *  as "no body" — callers must check both fields for emptiness. */
+  html?: string
   /** Provider Message-ID (header preferred, email id as fallback) for dedupe. */
   messageId: string | null
   /** Threading parent from the `In-Reply-To` header (bare id, no `<>`), or null. */
@@ -162,6 +167,7 @@ export function parseInboundEmail(data: unknown): ParsedInboundEmail {
     from: asString(d.from),
     subject: asString(d.subject),
     text: asString(d.text),
+    html: asString(d.html) ?? undefined,
     messageId: readHeader(d.headers, 'message-id') ?? asString(d.email_id) ?? asString(d.id),
     ...readThreadingHeaders(d.headers),
   }
@@ -239,13 +245,25 @@ function decodeBody(cte: string | null, body: string): string {
   return body
 }
 
-/** Pick the plain-text body: the first text/plain part of a multipart message,
- *  else the whole (decoded) body when it isn't explicitly some other type. */
-function extractTextBody(headers: RawHeader[], body: string): string {
+/** Extracted plain-text and HTML bodies. Either may be `''` when the message
+ *  doesn't carry that part. */
+interface ExtractedBody {
+  text: string
+  html: string
+}
+
+/** Pick the plain-text and HTML bodies: the first text/plain and first
+ *  text/html parts of a multipart message (both captured when both are
+ *  present), else the whole (decoded) body under whichever of the two types
+ *  it declares directly. Neither part is a general MIME parser concern
+ *  (attachments, nested multipart) — that's out of scope here. */
+function extractBody(headers: RawHeader[], body: string): ExtractedBody {
   const contentType = readHeader(headers, 'content-type') ?? 'text/plain'
 
   if (/^multipart\//i.test(contentType)) {
     const boundary = boundaryOf(contentType)
+    let text = ''
+    let html = ''
     if (boundary) {
       const parts = body.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
       for (const part of parts) {
@@ -253,16 +271,21 @@ function extractTextBody(headers: RawHeader[], body: string): string {
         const { headerBlock, body: partBody } = splitHeadersAndBody(trimmed)
         const partHeaders = parseRawHeaders(headerBlock)
         const partType = readHeader(partHeaders, 'content-type')
-        if (partType && /^text\/plain/i.test(partType)) {
-          return decodeBody(readHeader(partHeaders, 'content-transfer-encoding'), partBody)
+        if (!text && partType && /^text\/plain/i.test(partType)) {
+          text = decodeBody(readHeader(partHeaders, 'content-transfer-encoding'), partBody)
+        } else if (!html && partType && /^text\/html/i.test(partType)) {
+          html = decodeBody(readHeader(partHeaders, 'content-transfer-encoding'), partBody)
         }
       }
     }
-    return ''
+    return { text, html }
   }
 
-  if (!/^text\//i.test(contentType)) return ''
-  return decodeBody(readHeader(headers, 'content-transfer-encoding'), body)
+  if (/^text\/html/i.test(contentType)) {
+    return { text: '', html: decodeBody(readHeader(headers, 'content-transfer-encoding'), body) }
+  }
+  if (!/^text\//i.test(contentType)) return { text: '', html: '' }
+  return { text: decodeBody(readHeader(headers, 'content-transfer-encoding'), body), html: '' }
 }
 
 /** Parse a raw RFC822 message into the same shape the webhook path produces. */
@@ -277,12 +300,14 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
       .split(',')
       .map((a) => a.trim())
       .filter(Boolean)
+  const { text, html } = extractBody(headers, body)
   return {
     toAddresses: headerAddresses('to'),
     ccAddresses: headerAddresses('cc'),
     from: readHeader(headers, 'from'),
     subject: readHeader(headers, 'subject'),
-    text: extractTextBody(headers, body),
+    text,
+    html: html || undefined,
     messageId: readHeader(headers, 'message-id'),
     ...readThreadingHeaders(headers),
   }

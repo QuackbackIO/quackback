@@ -134,6 +134,30 @@ describe('pollOnce', () => {
     })
     expect(received?.from).toBe('jane@example.com')
     expect(received?.text).toBe('hello there')
+    expect(received?.html).toBeUndefined()
+  })
+
+  it('passes an HTML-only message through with html set (not dropped as empty)', async () => {
+    const raw = [
+      'From: jane@example.com',
+      'To: reply+x@d',
+      'Message-ID: <m@x>',
+      'Content-Type: text/html',
+      '',
+      '<p>only html here</p>',
+    ].join('\r\n')
+    const client = fakeClient([{ uid: 7, raw }])
+    let received: ParsedInboundEmail | undefined
+    const ingest = vi.fn(async (parsed: ParsedInboundEmail): Promise<IngestInboundResult> => {
+      received = parsed
+      return { status: 'ingested', conversationId: 'conversation_x' as never }
+    })
+
+    const result = await pollOnce(client, ingest)
+
+    expect(result).toEqual({ fetched: 1, ingested: 1, failed: 0 })
+    expect(received?.text).toBe('')
+    expect(received?.html).toBe('<p>only html here</p>')
   })
 })
 

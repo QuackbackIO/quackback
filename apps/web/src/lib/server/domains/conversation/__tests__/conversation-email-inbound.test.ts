@@ -60,6 +60,31 @@ describe('parseInboundEmail', () => {
     expect(parsed.messageId).toBeNull()
     expect(parsed.inReplyTo).toBeNull()
     expect(parsed.references).toEqual([])
+    expect(parsed.html).toBeUndefined()
+  })
+
+  it('reads the html body field alongside text when a payload carries both', () => {
+    const parsed = parseInboundEmail({
+      to: ['x@y.com'],
+      text: 'plain body',
+      html: '<p>rich body</p>',
+    })
+    expect(parsed.text).toBe('plain body')
+    expect(parsed.html).toBe('<p>rich body</p>')
+  })
+
+  it('reads the html body field when the payload has no plain-text field', () => {
+    const parsed = parseInboundEmail({
+      to: ['x@y.com'],
+      html: '<p>only html</p>',
+    })
+    expect(parsed.text).toBeNull()
+    expect(parsed.html).toBe('<p>only html</p>')
+  })
+
+  it('leaves html undefined when the payload has no html field', () => {
+    const parsed = parseInboundEmail({ to: ['x@y.com'], text: 'plain only' })
+    expect(parsed.html).toBeUndefined()
   })
 
   it('reads the threading + auto-mail headers', () => {
@@ -115,6 +140,7 @@ describe('parseRawEmail', () => {
       'c.abc.n1@tenaevexeo.resend.app',
     ])
     expect(parsed.text).toBe('This is my reply.')
+    expect(parsed.html).toBeUndefined()
   })
 
   it('unfolds a folded header (continuation line)', () => {
@@ -139,10 +165,12 @@ describe('parseRawEmail', () => {
       '',
       'Caf=C3=A9 time =\n now',
     ].join('\r\n')
-    expect(parseRawEmail(raw).text).toBe('Café time  now')
+    const parsed = parseRawEmail(raw)
+    expect(parsed.text).toBe('Café time  now')
+    expect(parsed.html).toBeUndefined()
   })
 
-  it('extracts the text/plain part of a multipart/alternative message', () => {
+  it('extracts both text/plain and text/html parts of a multipart/alternative message, one quoted-printable', () => {
     const raw = [
       'Content-Type: multipart/alternative; boundary="B"',
       '',
@@ -152,11 +180,40 @@ describe('parseRawEmail', () => {
       'plain body here',
       '--B',
       'Content-Type: text/html',
+      'Content-Transfer-Encoding: quoted-printable',
       '',
-      '<p>html body</p>',
+      '<p>Caf=C3=A9 html body</p>',
       '--B--',
     ].join('\r\n')
-    expect(parseRawEmail(raw).text?.trim()).toBe('plain body here')
+    const parsed = parseRawEmail(raw)
+    expect(parsed.text?.trim()).toBe('plain body here')
+    expect(parsed.html?.trim()).toBe('<p>Café html body</p>')
+  })
+
+  it('extracts the html part of an HTML-only (non-multipart) message', () => {
+    const raw = [
+      'Content-Type: text/html; charset=utf-8',
+      '',
+      '<p>Only an HTML body here.</p>',
+    ].join('\r\n')
+    const parsed = parseRawEmail(raw)
+    expect(parsed.text).toBe('')
+    expect(parsed.html).toBe('<p>Only an HTML body here.</p>')
+  })
+
+  it('extracts the html part of a multipart message with no text/plain part', () => {
+    const raw = [
+      'Content-Type: multipart/alternative; boundary="B"',
+      '',
+      '--B',
+      'Content-Type: text/html',
+      '',
+      '<p>html-only alternative</p>',
+      '--B--',
+    ].join('\r\n')
+    const parsed = parseRawEmail(raw)
+    expect(parsed.text).toBe('')
+    expect(parsed.html?.trim()).toBe('<p>html-only alternative</p>')
   })
 })
 

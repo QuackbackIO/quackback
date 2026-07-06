@@ -98,8 +98,13 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   })
   if (!conversation) return { status: 'no_conversation' }
 
-  const content = extractReplyText(parsed.text ?? '')
-  if (!content) return { status: 'empty' }
+  const plainText = extractReplyText(parsed.text ?? '')
+  // An HTML-only message (no plain-text part at all) is not empty — carry it
+  // through with a placeholder so it isn't dropped. NOTE for the P4.3
+  // HTML→contentJson task: replace this placeholder with the converted body
+  // instead of storing it verbatim.
+  if (!plainText && !parsed.html) return { status: 'empty' }
+  const content = plainText || '(no plain-text body)'
 
   const visitorPrincipalId = conversation.visitorPrincipalId as PrincipalId
   const visitor = await db.query.principal.findFirst({
@@ -188,8 +193,11 @@ async function ingestColdInbound(parsed: ParsedInboundEmail): Promise<IngestInbo
     if (dupe) return { status: 'duplicate' }
   }
 
-  const content = extractReplyText(parsed.text ?? '')
-  if (!content) return { status: 'empty' }
+  const plainText = extractReplyText(parsed.text ?? '')
+  // See the matching note in ingestParsedEmail: an HTML-only cold inbound is
+  // carried through with a placeholder rather than dropped.
+  if (!plainText && !parsed.html) return { status: 'empty' }
+  const content = plainText || '(no plain-text body)'
 
   const resolution = await resolveColdInboundSender(parsed.from, parsed.authenticationResults)
   if (resolution.action === 'drop') return { status: 'suppressed' }
