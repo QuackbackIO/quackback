@@ -1,22 +1,35 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useIntl, FormattedMessage } from 'react-intl'
-import { BellIcon, InboxIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { BellIcon, InboxIcon, CheckIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useInfiniteNotifications } from '@/lib/client/hooks/use-notifications-queries'
 import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
 import { NotificationItem } from '@/components/notifications/notification-item'
 import { groupNotificationsByDate } from '@/components/notifications/group-by-date'
 
+interface NotificationsSearch {
+  filter?: 'unread'
+}
+
 export const Route = createFileRoute('/_portal/notifications')({
+  // Only the literal 'unread' is accepted — anything else falls back to the
+  // default All tab rather than surfacing a broken filter state.
+  validateSearch: (search: Record<string, unknown>): NotificationsSearch => ({
+    filter: search.filter === 'unread' ? 'unread' : undefined,
+  }),
   component: NotificationsPage,
 })
 
 function NotificationsPage() {
   const intl = useIntl()
+  const navigate = Route.useNavigate()
+  const { filter } = Route.useSearch()
+  const unreadOnly = filter === 'unread'
   const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
-    useInfiniteNotifications()
+    useInfiniteNotifications({ unreadOnly })
   const markAsRead = useMarkNotificationAsRead()
   const markAllAsRead = useMarkAllNotificationsAsRead()
 
@@ -62,26 +75,54 @@ function NotificationsPage() {
               </p>
             </div>
           </div>
-          {unreadCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => markAllAsRead.mutate()}
-              disabled={markAllAsRead.isPending}
-              className="shrink-0 gap-1.5"
+          <div className="flex shrink-0 items-center gap-3">
+            <Tabs
+              value={unreadOnly ? 'unread' : 'all'}
+              onValueChange={(value) => {
+                void navigate({
+                  search: (prev) => ({
+                    ...prev,
+                    filter: value === 'unread' ? 'unread' : undefined,
+                  }),
+                  replace: true,
+                })
+              }}
             >
-              <CheckIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                <FormattedMessage
-                  id="portal.notifications.markAllRead"
-                  defaultMessage="Mark all read"
-                />
-              </span>
-              <span className="sm:hidden">
-                <FormattedMessage id="portal.notifications.readAll" defaultMessage="Read all" />
-              </span>
-            </Button>
-          )}
+              <TabsList>
+                <TabsTrigger value="all">
+                  <FormattedMessage id="portal.notifications.tabAll" defaultMessage="All" />
+                </TabsTrigger>
+                <TabsTrigger value="unread">
+                  <FormattedMessage id="portal.notifications.tabUnread" defaultMessage="Unread" />
+                  {unreadCount > 0 && (
+                    <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+                      {unreadCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {unreadCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => markAllAsRead.mutate()}
+                disabled={markAllAsRead.isPending}
+                className="gap-1.5"
+              >
+                <CheckIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  <FormattedMessage
+                    id="portal.notifications.markAllRead"
+                    defaultMessage="Mark all read"
+                  />
+                </span>
+                <span className="sm:hidden">
+                  <FormattedMessage id="portal.notifications.readAll" defaultMessage="Read all" />
+                </span>
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -133,6 +174,24 @@ function NotificationsPage() {
               </Button>
             </div>
           )}
+        </div>
+      ) : unreadOnly ? (
+        <div
+          className="rounded-xl border border-border/50 bg-card shadow-sm animate-in fade-in duration-200 fill-mode-backwards"
+          style={{ animationDelay: '75ms' }}
+        >
+          <EmptyState
+            icon={CheckCircleIcon}
+            title={intl.formatMessage({
+              id: 'portal.notifications.unreadEmpty.title',
+              defaultMessage: 'All caught up',
+            })}
+            description={intl.formatMessage({
+              id: 'portal.notifications.unreadEmpty.description',
+              defaultMessage: 'No unread notifications.',
+            })}
+            className="py-20 px-6"
+          />
         </div>
       ) : (
         <div

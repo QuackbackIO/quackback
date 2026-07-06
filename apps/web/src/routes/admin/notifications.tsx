@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { InboxIcon } from '@heroicons/react/24/outline'
+import { InboxIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { NotificationItem } from '@/components/notifications/notification-item'
 import { useInfiniteNotifications } from '@/lib/client/hooks/use-notifications-queries'
 import { useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/lib/client/mutations'
@@ -19,13 +20,25 @@ const GROUP_LABELS: Record<NotificationDateGroupKey, string> = {
   earlier: 'Earlier',
 }
 
+interface NotificationsSearch {
+  filter?: 'unread'
+}
+
 export const Route = createFileRoute('/admin/notifications')({
+  // Only the literal 'unread' is accepted — anything else falls back to the
+  // default All tab rather than surfacing a broken filter state.
+  validateSearch: (search: Record<string, unknown>): NotificationsSearch => ({
+    filter: search.filter === 'unread' ? 'unread' : undefined,
+  }),
   component: NotificationsPage,
 })
 
 function NotificationsPage() {
+  const navigate = Route.useNavigate()
+  const { filter } = Route.useSearch()
+  const unreadOnly = filter === 'unread'
   const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
-    useInfiniteNotifications()
+    useInfiniteNotifications({ unreadOnly })
   const markAsRead = useMarkNotificationAsRead()
   const markAllAsRead = useMarkAllNotificationsAsRead()
 
@@ -53,16 +66,39 @@ function NotificationsPage() {
             </p>
           </div>
         </div>
-        {unreadCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => markAllAsRead.mutate()}
-            disabled={markAllAsRead.isPending}
+        <div className="flex items-center gap-3">
+          <Tabs
+            value={filter === 'unread' ? 'unread' : 'all'}
+            onValueChange={(value) => {
+              void navigate({
+                search: (prev) => ({ ...prev, filter: value === 'unread' ? 'unread' : undefined }),
+                replace: true,
+              })
+            }}
           >
-            Mark all as read
-          </Button>
-        )}
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="unread">
+                Unread
+                {unreadCount > 0 && (
+                  <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+                    {unreadCount}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {unreadCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => markAllAsRead.mutate()}
+              disabled={markAllAsRead.isPending}
+            >
+              Mark all as read
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -105,6 +141,13 @@ function NotificationsPage() {
             )}
           </div>
         </ScrollArea>
+      ) : unreadOnly ? (
+        <EmptyState
+          icon={CheckCircleIcon}
+          title="All caught up"
+          description="No unread notifications."
+          className="py-24"
+        />
       ) : (
         <EmptyState
           icon={InboxIcon}
