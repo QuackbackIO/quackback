@@ -8,6 +8,15 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import type { TeamId } from '@quackback/ids'
 
+// config is read lazily (getters), so seeding the required env before any config
+// access makes config.baseUrl resolve — the insert-time trusted-url gate
+// (restrictImagesToTrustedOrigins) needs it to accept the rehosted image src.
+// The harness leaves BASE_URL as a bare "/" (not a valid absolute URL), so set an
+// absolute one unconditionally for this file's config load.
+process.env.BASE_URL = 'https://quackback.test'
+process.env.SECRET_KEY ||= 'x'.repeat(32)
+process.env.REDIS_URL ||= 'redis://localhost:6379'
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   teams,
@@ -28,6 +37,20 @@ vi.mock('../conversation.webhooks', async (orig) => ({
   ...(await orig<typeof import('../conversation.webhooks')>()),
   emitConversationCreated: vi.fn().mockResolvedValue(undefined),
 }))
+// Storage is mocked so media rehosting never touches real S3; the mock returns
+// own-storage URLs (config.baseUrl + /api/storage/...) so they pass the trusted-
+// url gate the direct cold-inbound insert re-applies.
+vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
+  const { config } = await import('@/lib/server/config')
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
+    isS3Configured: () => true,
+    uploadImageBuffer: async (bytes: Buffer, mime: string) => ({
+      url: `${config.baseUrl}/api/storage/chat-images/img-${bytes.length}.${mime.split('/')[1]}`,
+    }),
+    uploadObject: async (key: string) => `${config.baseUrl}/api/storage/${key}`,
+  }
+})
 
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
 
@@ -129,6 +152,57 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     // The rich doc is persisted alongside it, formatting intact.
     expect(msg.contentJson).not.toBeNull()
     expect(JSON.stringify(msg.contentJson)).toContain('"bold"')
+  })
+
+  it('rehosts an inline cid image + stores a discrete attachment for cold inbound', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const png = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+      0x52,
+    ])
+    const pdf = Buffer.from('%PDF-1.4 cold invoice payload')
+
+    const res = await ingestParsedEmail(
+      coldEmail({
+        text: '',
+        html: '<div dir="ltr">See logo <img src="cid:logo@c"> and the invoice.</div>',
+        attachments: [
+          {
+            bytes: png,
+            contentType: 'image/png',
+            filename: 'logo.png',
+            contentId: 'logo@c',
+            disposition: 'inline',
+          },
+          {
+            bytes: pdf,
+            contentType: 'application/pdf',
+            filename: 'invoice.pdf',
+            contentId: null,
+            disposition: 'attachment',
+          },
+        ],
+      })
+    )
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const [msg] = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, res.conversationId))
+    // Inline image rehosted into the body: a trusted own-storage src survives the
+    // insert-time restrictImagesToTrustedOrigins sanitize; the cid ref is gone.
+    const json = JSON.stringify(msg.contentJson)
+    expect(json).toContain('/api/storage/chat-images')
+    expect(json).not.toContain('cid:')
+    // The PDF lands as a discrete attachment with its name/type/size.
+    expect(msg.attachments).toHaveLength(1)
+    expect(msg.attachments![0]).toMatchObject({
+      name: 'invoice.pdf',
+      contentType: 'application/pdf',
+      size: pdf.length,
+    })
   })
 
   it('leaves an email to no known route alone (no_conversation)', async () => {

@@ -7,6 +7,26 @@
  * the visitor actually wrote.
  */
 
+/**
+ * One decoded MIME attachment part (inline image or a discrete file). Produced
+ * by both front doors — the IMAP MIME walk and the webhook payload mapping — and
+ * consumed by the ingest layer, which rehosts each part to workspace storage
+ * (inline `cid:` images rewritten into the HTML; other files → `attachments[]`).
+ */
+export interface ParsedEmailAttachment {
+  /** Decoded raw bytes (base64 / quoted-printable resolved). */
+  bytes: Buffer
+  /** Declared MIME type, lowercased and param-stripped (e.g. `image/png`); `''` when absent. */
+  contentType: string
+  /** Filename from Content-Disposition `filename` or Content-Type `name`, or null.
+   *  Kept verbatim — RFC 2047 encoded-words are NOT decoded (no helper exists). */
+  filename: string | null
+  /** Bare `Content-ID` (angle brackets stripped) for `cid:` matching, or null. */
+  contentId: string | null
+  /** Content-Disposition kind; inferred as `inline` for a part carrying a Content-ID. */
+  disposition: 'inline' | 'attachment'
+}
+
 export interface ParsedInboundEmail {
   /** Recipient addresses (one is our plus-addressed `reply+<id>@domain`). */
   toAddresses: string[]
@@ -38,6 +58,9 @@ export interface ParsedInboundEmail {
   /** `Authentication-Results` header the receiving MTA stamped (SPF/DKIM/DMARC),
    *  or null — the cold-inbound trust gate (§4.8) reads it. */
   authenticationResults: string | null
+  /** MIME attachment parts (inline images + files), or undefined when the message
+   *  carries none. The ingest layer rehosts each to storage. */
+  attachments?: ParsedEmailAttachment[]
 }
 
 function asString(v: unknown): string | null {
@@ -159,8 +182,52 @@ function addressArray(raw: unknown): string[] {
   return typeof raw === 'string' ? [raw] : []
 }
 
+/**
+ * Map a provider webhook's `attachments` array to decoded parts. Resend's
+ * `email.received` event embeds each attachment's payload as a base64 `content`
+ * string (the webhook handler sizes its body limit for exactly this); we tolerate
+ * both snake_case and camelCase field spellings and a Node-Buffer JSON shape.
+ * Parts with no decodable content are skipped.
+ */
+function parseWebhookAttachments(raw: unknown): ParsedEmailAttachment[] {
+  if (!Array.isArray(raw)) return []
+  const out: ParsedEmailAttachment[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const rec = item as Record<string, unknown>
+    const content = rec.content
+    let bytes: Buffer | null = null
+    if (typeof content === 'string') {
+      try {
+        bytes = Buffer.from(content, 'base64')
+      } catch {
+        bytes = null
+      }
+    } else if (
+      content &&
+      typeof content === 'object' &&
+      Array.isArray((content as { data?: unknown }).data)
+    ) {
+      bytes = Buffer.from((content as { data: number[] }).data)
+    }
+    if (!bytes || bytes.length === 0) continue
+    const contentType = asString(rec.content_type ?? rec.contentType) ?? ''
+    const cid = asString(rec.content_id ?? rec.contentId)
+    const disp = asString(rec.content_disposition ?? rec.disposition)
+    out.push({
+      bytes,
+      contentType: contentType.split(';')[0]!.trim().toLowerCase(),
+      filename: asString(rec.filename ?? rec.name),
+      contentId: cid ? stripAngleBrackets(cid) || null : null,
+      disposition: disp && /inline/i.test(disp) ? 'inline' : cid ? 'inline' : 'attachment',
+    })
+  }
+  return out
+}
+
 export function parseInboundEmail(data: unknown): ParsedInboundEmail {
   const d = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+  const attachments = parseWebhookAttachments(d.attachments)
   return {
     toAddresses: addressArray(d.to),
     ccAddresses: addressArray(d.cc),
@@ -170,6 +237,7 @@ export function parseInboundEmail(data: unknown): ParsedInboundEmail {
     html: asString(d.html) ?? undefined,
     messageId: readHeader(d.headers, 'message-id') ?? asString(d.email_id) ?? asString(d.id),
     ...readThreadingHeaders(d.headers),
+    ...(attachments.length > 0 ? { attachments } : {}),
   }
 }
 
@@ -208,9 +276,9 @@ function parseRawHeaders(headerBlock: string): RawHeader[] {
   return headers
 }
 
-/** Decode a quoted-printable body (soft line breaks + `=XX` octets) to UTF-8.
- *  `=XX` yields a raw byte, so multi-byte sequences are collected then decoded. */
-function decodeQuotedPrintable(input: string): string {
+/** Decode a quoted-printable body (soft line breaks + `=XX` octets) to raw bytes.
+ *  `=XX` yields a raw byte, so multi-byte sequences are collected as-is. */
+function decodeQuotedPrintableBytes(input: string): Buffer {
   const withoutSoftBreaks = input.replace(/=\r?\n/g, '')
   const bytes: number[] = []
   for (let i = 0; i < withoutSoftBreaks.length; i++) {
@@ -222,7 +290,30 @@ function decodeQuotedPrintable(input: string): string {
       bytes.push(ch.charCodeAt(0))
     }
   }
-  return Buffer.from(bytes).toString('utf8')
+  return Buffer.from(bytes)
+}
+
+/** Decode a quoted-printable body to UTF-8 text. */
+function decodeQuotedPrintable(input: string): string {
+  return decodeQuotedPrintableBytes(input).toString('utf8')
+}
+
+/** Decode a body segment to raw bytes given its own transfer encoding. Used for
+ *  binary attachment parts, where a UTF-8 round-trip would corrupt the bytes. */
+function decodeBodyBytes(cte: string | null, body: string): Buffer {
+  const enc = (cte ?? '').trim().toLowerCase()
+  if (enc === 'base64') {
+    try {
+      return Buffer.from(body.replace(/\s+/g, ''), 'base64')
+    } catch {
+      return Buffer.from(body, 'utf8')
+    }
+  }
+  if (enc === 'quoted-printable') return decodeQuotedPrintableBytes(body)
+  // 7bit / 8bit / binary / none: best effort. The minimal IMAP client reads the
+  // raw message as UTF-8 text, so a non-base64 binary part can already be lossy
+  // at the socket — real-world attachments are base64, which is ASCII-safe.
+  return Buffer.from(body, 'utf8')
 }
 
 /** Read the boundary token from a multipart Content-Type value. */
@@ -245,47 +336,99 @@ function decodeBody(cte: string | null, body: string): string {
   return body
 }
 
-/** Extracted plain-text and HTML bodies. Either may be `''` when the message
- *  doesn't carry that part. */
-interface ExtractedBody {
+/** Extracted bodies + attachment parts from a walked MIME tree. `text`/`html`
+ *  may be `''` when the message doesn't carry that part. */
+interface ExtractedMime {
   text: string
   html: string
+  attachments: ParsedEmailAttachment[]
 }
 
-/** Pick the plain-text and HTML bodies: the first text/plain and first
- *  text/html parts of a multipart message (both captured when both are
- *  present), else the whole (decoded) body under whichever of the two types
- *  it declares directly. Neither part is a general MIME parser concern
- *  (attachments, nested multipart) — that's out of scope here. */
-function extractBody(headers: RawHeader[], body: string): ExtractedBody {
-  const contentType = readHeader(headers, 'content-type') ?? 'text/plain'
+/** Read a `param="value"` / `param=value` token from a header value, or null. */
+function readParam(header: string | null, name: string): string | null {
+  if (!header) return null
+  const m = new RegExp(`(?:^|;)\\s*${name}\\s*=\\s*("[^"]*"|[^;]+)`, 'i').exec(header)
+  if (!m) return null
+  const value = m[1]!.replace(/^"|"$/g, '').trim()
+  return value || null
+}
+
+/** The Content-Disposition kind, or null when the header is absent/unknown. */
+function readDisposition(cd: string | null): 'inline' | 'attachment' | null {
+  if (!cd) return null
+  if (/^\s*inline/i.test(cd)) return 'inline'
+  if (/^\s*attachment/i.test(cd)) return 'attachment'
+  return null
+}
+
+/** The bare MIME type (no params), lowercased. */
+function mimeOnly(contentType: string): string {
+  return contentType.split(';')[0]!.trim().toLowerCase()
+}
+
+/**
+ * Recursively walk a MIME tree, capturing the first text/plain and text/html
+ * bodies and collecting every attachment part (inline images + files) — deeper
+ * than the old flat one-level scan, so `multipart/mixed(multipart/alternative,
+ * <image>, <file>)` reaches its attachments. A text/plain or text/html part is a
+ * BODY (not an attachment) only when it has no filename and isn't marked
+ * `Content-Disposition: attachment`; everything else at a leaf is an attachment.
+ * A leaf with no MIME headers at all is multipart preamble/epilogue, not a part,
+ * and is skipped — so only the top-level bare-body message defaults to text/plain.
+ */
+function walkMime(headers: RawHeader[], body: string, out: ExtractedMime, topLevel: boolean): void {
+  const ctHeader = readHeader(headers, 'content-type')
+  const contentType = ctHeader ?? (topLevel ? 'text/plain' : '')
 
   if (/^multipart\//i.test(contentType)) {
     const boundary = boundaryOf(contentType)
-    let text = ''
-    let html = ''
-    if (boundary) {
-      const parts = body.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
-      for (const part of parts) {
-        const trimmed = part.replace(/^\n+/, '')
-        const { headerBlock, body: partBody } = splitHeadersAndBody(trimmed)
-        const partHeaders = parseRawHeaders(headerBlock)
-        const partType = readHeader(partHeaders, 'content-type')
-        if (!text && partType && /^text\/plain/i.test(partType)) {
-          text = decodeBody(readHeader(partHeaders, 'content-transfer-encoding'), partBody)
-        } else if (!html && partType && /^text\/html/i.test(partType)) {
-          html = decodeBody(readHeader(partHeaders, 'content-transfer-encoding'), partBody)
-        }
-      }
+    if (!boundary) return
+    const escaped = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    for (const segment of body.split(new RegExp(`--${escaped}`))) {
+      const trimmed = segment.replace(/^\n+/, '')
+      if (!trimmed || /^--/.test(trimmed)) continue
+      const { headerBlock, body: partBody } = splitHeadersAndBody(trimmed)
+      walkMime(parseRawHeaders(headerBlock), partBody, out, false)
     }
-    return { text, html }
+    return
   }
 
-  if (/^text\/html/i.test(contentType)) {
-    return { text: '', html: decodeBody(readHeader(headers, 'content-transfer-encoding'), body) }
+  const cte = readHeader(headers, 'content-transfer-encoding')
+  const cd = readHeader(headers, 'content-disposition')
+  const cidHeader = readHeader(headers, 'content-id')
+  // A segment carrying no MIME headers at all is preamble/epilogue text between
+  // boundaries, not a real part — ignore it (only the top-level bare body counts).
+  if (!ctHeader && !cd && !cidHeader && !cte && !topLevel) return
+
+  const disposition = readDisposition(cd)
+  const filename = readParam(cd, 'filename') ?? readParam(contentType, 'name')
+  const isTextPlain = /^text\/plain/i.test(contentType)
+  const isTextHtml = /^text\/html/i.test(contentType)
+  const isBodyPart = (isTextPlain || isTextHtml) && disposition !== 'attachment' && !filename
+
+  if (isBodyPart) {
+    if (isTextPlain && !out.text) out.text = decodeBody(cte, body)
+    else if (isTextHtml && !out.html) out.html = decodeBody(cte, body)
+    return
   }
-  if (!/^text\//i.test(contentType)) return { text: '', html: '' }
-  return { text: decodeBody(readHeader(headers, 'content-transfer-encoding'), body), html: '' }
+
+  const bytes = decodeBodyBytes(cte, body)
+  if (bytes.length === 0) return
+  const contentId = cidHeader ? stripAngleBrackets(cidHeader) || null : null
+  out.attachments.push({
+    bytes,
+    contentType: mimeOnly(contentType),
+    filename,
+    contentId,
+    disposition: disposition ?? (contentId ? 'inline' : 'attachment'),
+  })
+}
+
+/** Walk a message's MIME tree from its top-level headers + body. */
+function extractMime(headers: RawHeader[], body: string): ExtractedMime {
+  const out: ExtractedMime = { text: '', html: '', attachments: [] }
+  walkMime(headers, body, out, true)
+  return out
 }
 
 /** Parse a raw RFC822 message into the same shape the webhook path produces. */
@@ -300,7 +443,7 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
       .split(',')
       .map((a) => a.trim())
       .filter(Boolean)
-  const { text, html } = extractBody(headers, body)
+  const { text, html, attachments } = extractMime(headers, body)
   return {
     toAddresses: headerAddresses('to'),
     ccAddresses: headerAddresses('cc'),
@@ -310,6 +453,7 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
     html: html || undefined,
     messageId: readHeader(headers, 'message-id'),
     ...readThreadingHeaders(headers),
+    ...(attachments.length > 0 ? { attachments } : {}),
   }
 }
 

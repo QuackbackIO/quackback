@@ -16,11 +16,12 @@
  * Resolution only touches identity; the caller owns creating the conversation.
  */
 import { db, sql, eq, user, conversations, conversationMessages } from '@/lib/server/db'
-import type { TiptapContent } from '@/lib/server/db'
+import type { TiptapContent, ConversationAttachment } from '@/lib/server/db'
 import type { PrincipalId, ChannelAccountId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { validateAttachments } from '@/lib/server/messages/message-core'
 import {
   createPrincipal,
   ensurePrincipalForUser,
@@ -94,15 +95,19 @@ export async function createEmailConversation(input: {
   content: string
   /** Rich body converted from the inbound HTML, or null for a plaintext mail. */
   contentJson?: TiptapContent | null
+  /** Discrete files rehosted from the inbound MIME parts, or none. */
+  attachments?: ConversationAttachment[]
 }): Promise<ConversationId> {
   const { parsed, channelAccountId, principalId, unverified, content, contentJson } = input
-  // Direct insert bypasses sendVisitorMessage, so mirror its guard here: an
+  // Direct insert bypasses sendVisitorMessage, so mirror its guards here: an
   // untrusted sender's inline images may only reference our own storage (a
   // cold-inbound cid: / external src is cleared until the attachment task
-  // rehosts it), same as every other visitor-ingress channel.
+  // rehosts it), and attachments are re-validated (own-storage url, count, size)
+  // — same as every other visitor-ingress channel.
   const safeContentJson = contentJson
     ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
     : null
+  const attachments = validateAttachments(input.attachments)
   const now = new Date()
   const [conversation] = await db
     .insert(conversations)
@@ -113,7 +118,10 @@ export async function createEmailConversation(input: {
       channelAccountId,
       status: 'open',
       subject: parsed.subject?.slice(0, 200) ?? null,
-      lastMessagePreview: content.slice(0, 200),
+      lastMessagePreview: (content || (attachments[0] ? `📎 ${attachments[0].name}` : '')).slice(
+        0,
+        200
+      ),
       lastMessageAt: now,
       // The customer is waiting on the first reply from the moment it lands.
       waitingSince: now,
@@ -128,6 +136,7 @@ export async function createEmailConversation(input: {
     senderType: 'visitor',
     content,
     contentJson: safeContentJson,
+    attachments: attachments.length > 0 ? attachments : null,
     metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
   })
 

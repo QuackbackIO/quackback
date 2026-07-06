@@ -15,11 +15,13 @@
  * on an unroutable one — it returns a status the caller maps to an ack + log.
  */
 import { db, eq, sql, conversationMessages, conversations, principal, user } from '@/lib/server/db'
+import type { ConversationAttachment } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { logger } from '@/lib/server/logger'
 import {
   parseInboundEmail,
   extractReplyText,
@@ -29,6 +31,15 @@ import {
 } from './conversation.email-inbound'
 import { conversationIdFromInboundAddress, ownEmailDomains } from './conversation.email-channel'
 import { emailHtmlToContent } from '@/lib/server/content/email-html-to-content'
+import {
+  isS3Configured,
+  uploadImageBuffer,
+  uploadObject,
+  generateStorageKey,
+  MAX_FILE_SIZE,
+} from '@/lib/server/storage/s3'
+import { sniffImageMime, canonicalizeImageMime } from '@/lib/server/content/magic-bytes'
+import { MAX_CONVERSATION_ATTACHMENTS } from '@/lib/shared/conversation/types'
 import {
   resolveConversationByMessageIds,
   resolvePrincipalIdByEmail,
@@ -49,6 +60,137 @@ export type IngestInboundResult =
   | { status: 'from_mismatch' }
   | { status: 'rate_limited' }
   | { status: 'suppressed' }
+
+const log = logger.child({ component: 'conversation-email-inbound' })
+
+/** Own-storage prefixes for rehosted inbound media (mirror the composer upload
+ *  routes: images share `chat-images`; non-image files get a sibling prefix). */
+const INBOUND_IMAGE_PREFIX = 'chat-images'
+const INBOUND_FILE_PREFIX = 'chat-files'
+
+interface RehostedInboundMedia {
+  /** The HTML body with `cid:` references rewritten to rehosted URLs, or the
+   *  original html when nothing was rewritten. */
+  html: string | undefined
+  /** Discrete (non-inline) attachments to carry on the stored message. */
+  attachments: ConversationAttachment[]
+}
+
+/** Does the HTML reference this Content-ID via a `cid:<id>` URL? */
+function htmlReferencesCid(html: string, cid: string): boolean {
+  return html.toLowerCase().includes(`cid:${cid.toLowerCase()}`)
+}
+
+/**
+ * Rewrite every `cid:<id>` reference in the raw HTML to its rehosted https URL.
+ * MUST run before `emailHtmlToContent` — its tiptap sanitize clears non-http(s)
+ * `cid:` srcs, so an un-rewritten inline image would lose its source. Longest cid
+ * first so a cid that's a prefix of another (`logo` vs `logo2`) can't corrupt it.
+ */
+function rewriteCidReferences(html: string, cidMap: Map<string, string>): string {
+  let out = html
+  for (const [cid, url] of [...cidMap].sort((a, b) => b[0].length - a[0].length)) {
+    const escaped = cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out.replace(new RegExp(`cid:${escaped}`, 'gi'), url)
+  }
+  return out
+}
+
+/**
+ * Rehost inbound MIME attachment parts to workspace storage. Inline images whose
+ * `cid:` is referenced in the HTML are rewritten into the body (they render as
+ * inline images once `emailHtmlToContent` runs on the rewritten HTML); every
+ * other part becomes a discrete `attachments[]` entry.
+ *
+ * Fail-soft by design: a part over the size cap, a declared image whose bytes
+ * don't match (magic-byte check), an over-count attachment, or a failed upload is
+ * dropped with a log line — a single bad part never fails the whole ingest.
+ * Images upload via `uploadImageBuffer` (allow-list + `chat-images` prefix, the
+ * same primitive the content rehoster uses); other files upload via the raw
+ * `uploadObject` under `chat-files`, capped at `MAX_FILE_SIZE` (5 MB) — the same
+ * limit the composer's image upload endpoint enforces (no discrete non-image
+ * upload endpoint exists to mirror, so the shared 5 MB file cap applies).
+ */
+async function rehostInboundMedia(parsed: ParsedInboundEmail): Promise<RehostedInboundMedia> {
+  const parts = parsed.attachments ?? []
+  if (parts.length === 0) return { html: parsed.html, attachments: [] }
+  if (!isS3Configured()) {
+    log.warn({ count: parts.length }, 'inbound email media dropped: storage not configured')
+    return { html: parsed.html, attachments: [] }
+  }
+
+  let html = parsed.html
+  const cidMap = new Map<string, string>()
+  const attachments: ConversationAttachment[] = []
+
+  for (const part of parts) {
+    if (part.bytes.length === 0) continue
+    if (part.bytes.length > MAX_FILE_SIZE) {
+      log.warn({ name: part.filename, size: part.bytes.length }, 'inbound email part dropped: over size cap')
+      continue
+    }
+    const declared = canonicalizeImageMime((part.contentType || '').toLowerCase())
+    const isImage = declared.startsWith('image/')
+    const referenced = !!part.contentId && !!html && htmlReferencesCid(html, part.contentId)
+
+    if (isImage) {
+      const sniffed = sniffImageMime(part.bytes)
+      if (!sniffed || sniffed !== declared) {
+        log.warn(
+          { name: part.filename, declared, sniffed },
+          'inbound email image dropped: bytes do not match declared type'
+        )
+        continue
+      }
+      // A discrete image consumes an attachment slot; a cid-referenced inline one
+      // does not (it lands in the body), so only gate discrete images on the cap.
+      if (!referenced && attachments.length >= MAX_CONVERSATION_ATTACHMENTS) {
+        log.warn({ name: part.filename }, 'inbound email attachment dropped: over count cap')
+        continue
+      }
+      let url: string
+      try {
+        ;({ url } = await uploadImageBuffer(part.bytes, sniffed, INBOUND_IMAGE_PREFIX))
+      } catch (err) {
+        log.warn({ err, name: part.filename }, 'inbound email image upload failed; skipped')
+        continue
+      }
+      if (referenced && part.contentId) {
+        cidMap.set(part.contentId, url)
+      } else {
+        attachments.push({
+          url,
+          name: part.filename || `image.${sniffed.split('/')[1] ?? 'img'}`,
+          contentType: sniffed,
+          size: part.bytes.length,
+        })
+      }
+    } else {
+      if (attachments.length >= MAX_CONVERSATION_ATTACHMENTS) {
+        log.warn({ name: part.filename }, 'inbound email attachment dropped: over count cap')
+        continue
+      }
+      const contentType = declared || 'application/octet-stream'
+      let url: string
+      try {
+        const key = generateStorageKey(INBOUND_FILE_PREFIX, part.filename || 'attachment')
+        url = await uploadObject(key, part.bytes, contentType)
+      } catch (err) {
+        log.warn({ err, name: part.filename }, 'inbound email attachment upload failed; skipped')
+        continue
+      }
+      attachments.push({
+        url,
+        name: part.filename || 'attachment',
+        contentType,
+        size: part.bytes.length,
+      })
+    }
+  }
+
+  if (cidMap.size > 0 && html) html = rewriteCidReferences(html, cidMap)
+  return { html, attachments }
+}
 
 /** Find the conversation id carried by any recipient plus-address. */
 function conversationIdFromRecipients(toAddresses: string[]): string | null {
@@ -100,15 +242,8 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
   if (!conversation) return { status: 'no_conversation' }
 
   const plainText = extractReplyText(parsed.text ?? '')
-  // Convert the HTML body (when present) to a rich doc + its plaintext mirror.
-  // text/plain keeps precedence for the stored `content` (it's the sender's own
-  // quote-trimmed words); the HTML only supplies `contentJson` and, for an
-  // HTML-only message, the `content` fallback. An empty conversion of a body
-  // that WAS html-only still falls back to the placeholder so nothing is lost.
-  const converted = parsed.html ? emailHtmlToContent(parsed.html) : null
-  if (!plainText && !parsed.html) return { status: 'empty' }
-  const content = plainText || converted?.text || '(no plain-text body)'
-  const contentJson = converted?.contentJson ?? null
+  const hasAttachmentParts = (parsed.attachments?.length ?? 0) > 0
+  if (!plainText && !parsed.html && !hasAttachmentParts) return { status: 'empty' }
 
   const visitorPrincipalId = conversation.visitorPrincipalId as PrincipalId
   const visitor = await db.query.principal.findFirst({
@@ -162,11 +297,25 @@ export async function ingestParsedEmail(parsed: ParsedInboundEmail): Promise<Ing
     segmentIds: new Set(),
   }
 
+  // Rehost inbound media only now — after the sender is verified and the message
+  // cleared the rate gate — so a forged / throttled mail never spends an upload.
+  // Inline `cid:` images are rewritten into the HTML before conversion; other
+  // files become discrete attachments. Convert the HTML body (rewritten) to a
+  // rich doc + its plaintext mirror: text/plain keeps precedence for `content`
+  // (the sender's own quote-trimmed words); the HTML supplies `contentJson` and,
+  // for an HTML-only message, the `content` fallback.
+  const media = await rehostInboundMedia(parsed)
+  const converted = media.html ? emailHtmlToContent(media.html) : null
+  const content =
+    plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')
+  const contentJson = converted?.contentJson ?? null
+
   await sendVisitorMessage(
     {
       conversationId,
       content,
       metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
+      ...(media.attachments.length > 0 ? { attachments: media.attachments } : {}),
     },
     { principalId: visitorPrincipalId, displayName: visitor.displayName },
     actor,
@@ -199,14 +348,19 @@ async function ingestColdInbound(parsed: ParsedInboundEmail): Promise<IngestInbo
   }
 
   const plainText = extractReplyText(parsed.text ?? '')
-  // Same precedence as the reply path: text/plain owns `content`; the HTML body
-  // supplies `contentJson` and the HTML-only `content` fallback.
-  const converted = parsed.html ? emailHtmlToContent(parsed.html) : null
-  if (!plainText && !parsed.html) return { status: 'empty' }
-  const content = plainText || converted?.text || '(no plain-text body)'
+  const hasAttachmentParts = (parsed.attachments?.length ?? 0) > 0
+  if (!plainText && !parsed.html && !hasAttachmentParts) return { status: 'empty' }
 
   const resolution = await resolveColdInboundSender(parsed.from, parsed.authenticationResults)
   if (resolution.action === 'drop') return { status: 'suppressed' }
+
+  // Rehost media after the drop gate (never upload for a rejected sender). Same
+  // precedence as the reply path: text/plain owns `content`; the rewritten HTML
+  // supplies `contentJson` and the HTML-only `content` fallback.
+  const media = await rehostInboundMedia(parsed)
+  const converted = media.html ? emailHtmlToContent(media.html) : null
+  const content =
+    plainText || converted?.text || (media.attachments.length > 0 ? '' : '(no plain-text body)')
 
   const conversationId = await createEmailConversation({
     parsed,
@@ -215,6 +369,7 @@ async function ingestColdInbound(parsed: ParsedInboundEmail): Promise<IngestInbo
     unverified: resolution.unverified,
     content,
     contentJson: converted?.contentJson ?? null,
+    attachments: media.attachments,
   })
   return { status: 'ingested', conversationId }
 }

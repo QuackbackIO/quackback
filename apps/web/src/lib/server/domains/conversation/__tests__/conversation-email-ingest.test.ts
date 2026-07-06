@@ -17,6 +17,8 @@ const sendVisitorMessage = vi.fn()
 const assertConversationSendRate = vi.fn()
 const resolveConversationByMessageIds = vi.fn<(...a: unknown[]) => Promise<string | null>>()
 const resolvePrincipalIdByEmail = vi.fn<(...a: unknown[]) => Promise<string | null>>()
+const uploadImageBuffer = vi.fn()
+const uploadObject = vi.fn()
 let conversationRow: Record<string, unknown> | undefined
 let principalRow: Record<string, unknown> | undefined
 let userRow: Record<string, unknown> | undefined
@@ -63,7 +65,19 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-import { ingestInboundEmail } from '../conversation.email-inbound.service'
+// Storage is mocked so rehosting inbound media never touches real S3; the mock
+// returns own-storage URLs (BASE_URL/api/storage/...) so they read as trusted.
+// generateStorageKey + MAX_FILE_SIZE stay real via the spread.
+vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/storage/s3')>()),
+  isS3Configured: () => true,
+  uploadImageBuffer: (...a: unknown[]) => uploadImageBuffer(...a),
+  uploadObject: (...a: unknown[]) => uploadObject(...a),
+}))
+
+import { ingestInboundEmail, ingestParsedEmail } from '../conversation.email-inbound.service'
+import { parseRawEmail } from '../conversation.email-inbound'
+import type { ParsedInboundEmail, ParsedEmailAttachment } from '../conversation.email-inbound'
 
 const baseEvent = {
   type: 'email.received',
@@ -94,6 +108,10 @@ beforeEach(() => {
   assertConversationSendRate.mockResolvedValue(undefined)
   resolveConversationByMessageIds.mockResolvedValue(null)
   resolvePrincipalIdByEmail.mockResolvedValue(null)
+  uploadImageBuffer.mockImplementation(async (bytes: Buffer, mime: string) => ({
+    url: `https://quackback.ngrok.app/api/storage/chat-images/img-${bytes.length}.${mime.split('/')[1]}`,
+  }))
+  uploadObject.mockImplementation(async (key: string) => `https://quackback.ngrok.app/api/storage/${key}`)
 })
 
 describe('ingestInboundEmail', () => {
@@ -432,5 +450,162 @@ describe('ingestInboundEmail', () => {
 
     expect(result).toEqual({ status: 'from_mismatch' })
     expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  describe('MIME attachment rehosting (P4.4)', () => {
+    // Valid PNG magic bytes so the real magic-byte sniff accepts the image parts.
+    const PNG = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    ])
+
+    const part = (over: Partial<ParsedEmailAttachment>): ParsedEmailAttachment => ({
+      bytes: Buffer.from('file-bytes'),
+      contentType: 'application/pdf',
+      filename: 'file.pdf',
+      contentId: null,
+      disposition: 'attachment',
+      ...over,
+    })
+
+    let seq = 0
+    const reply = (over: Partial<ParsedInboundEmail>): ParsedInboundEmail => ({
+      toAddresses: [REPLY_TO],
+      ccAddresses: [],
+      from: 'jane@example.com',
+      subject: 'Re: ticket',
+      text: 'reply body',
+      html: undefined,
+      messageId: `<att-${seq++}@example.com>`,
+      inReplyTo: null,
+      references: [],
+      autoSubmitted: null,
+      autoResponseSuppress: null,
+      precedence: null,
+      hasListHeaders: false,
+      authenticationResults: null,
+      ...over,
+    })
+
+    const lastSend = () =>
+      sendVisitorMessage.mock.calls[sendVisitorMessage.mock.calls.length - 1] as [
+        { attachments?: unknown[] },
+        unknown,
+        unknown,
+        unknown,
+      ]
+
+    it('rehosts an inline cid image into the body and lands a PDF in attachments[] (raw IMAP fixture)', async () => {
+      const pdf = Buffer.from('%PDF-1.4\ninvoice payload\n%%EOF')
+      const raw = [
+        `To: ${REPLY_TO}`,
+        'From: jane@example.com',
+        'Subject: Re: ticket',
+        'Message-ID: <mime-att-1@example.com>',
+        'Content-Type: multipart/mixed; boundary="OUT"',
+        '',
+        '--OUT',
+        'Content-Type: multipart/alternative; boundary="ALT"',
+        '',
+        '--ALT',
+        'Content-Type: text/plain',
+        '',
+        'Here is the logo and invoice.',
+        '--ALT',
+        'Content-Type: text/html',
+        '',
+        '<div dir="ltr">Here is the logo <img src="cid:logo@x"> and invoice.</div>',
+        '--ALT--',
+        '--OUT',
+        'Content-Type: image/png',
+        'Content-Transfer-Encoding: base64',
+        'Content-ID: <logo@x>',
+        'Content-Disposition: inline; filename="logo.png"',
+        '',
+        PNG.toString('base64'),
+        '--OUT',
+        'Content-Type: application/pdf',
+        'Content-Transfer-Encoding: base64',
+        'Content-Disposition: attachment; filename="invoice.pdf"',
+        '',
+        pdf.toString('base64'),
+        '--OUT--',
+      ].join('\r\n')
+
+      const result = await ingestParsedEmail(parseRawEmail(raw))
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+
+      const [input, , , contentJson] = lastSend()
+      // The inline image was rewritten to a rehosted https src (cid gone).
+      const json = JSON.stringify(contentJson)
+      expect(json).toContain('/api/storage/chat-images')
+      expect(json).not.toContain('cid:')
+      // The PDF is a discrete attachment carrying name/type/size + a trusted url.
+      expect(input.attachments).toHaveLength(1)
+      expect(input.attachments![0]).toMatchObject({
+        name: 'invoice.pdf',
+        contentType: 'application/pdf',
+        size: pdf.length,
+      })
+      expect((input.attachments![0] as { url: string }).url).toContain('/api/storage/chat-files')
+    })
+
+    it('drops an oversized part but still ingests the message', async () => {
+      const result = await ingestParsedEmail(
+        reply({ attachments: [part({ filename: 'big.pdf', bytes: Buffer.alloc(5 * 1024 * 1024 + 1) })] })
+      )
+      expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+      expect(lastSend()[0].attachments).toBeUndefined()
+      expect(uploadObject).not.toHaveBeenCalled()
+    })
+
+    it('keeps only the first 10 of 11+ attachments', async () => {
+      const parts = Array.from({ length: 12 }, (_, i) =>
+        part({ filename: `f${i}.pdf`, bytes: Buffer.from(`file-${i}`) })
+      )
+      const result = await ingestParsedEmail(reply({ attachments: parts }))
+      expect(result.status).toBe('ingested')
+      expect(lastSend()[0].attachments).toHaveLength(10)
+    })
+
+    it('rejects an image part whose bytes do not match its declared type', async () => {
+      const result = await ingestParsedEmail(
+        reply({
+          attachments: [
+            part({
+              contentType: 'image/png',
+              filename: 'fake.png',
+              bytes: Buffer.from('this is definitely not a png image payload'),
+            }),
+          ],
+        })
+      )
+      expect(result.status).toBe('ingested')
+      expect(lastSend()[0].attachments).toBeUndefined()
+      expect(uploadImageBuffer).not.toHaveBeenCalled()
+    })
+
+    it('carries a cid image NOT referenced in the html as a discrete attachment', async () => {
+      const result = await ingestParsedEmail(
+        reply({
+          html: '<p>no inline image here</p>',
+          attachments: [
+            part({
+              contentType: 'image/png',
+              filename: 'orphan.png',
+              contentId: 'orphan@x',
+              disposition: 'inline',
+              bytes: PNG,
+            }),
+          ],
+        })
+      )
+      expect(result.status).toBe('ingested')
+      const [input, , , contentJson] = lastSend()
+      expect(input.attachments).toHaveLength(1)
+      expect(input.attachments![0]).toMatchObject({ name: 'orphan.png', contentType: 'image/png' })
+      // It did NOT get inlined into the body.
+      expect(JSON.stringify(contentJson)).not.toContain('/api/storage/chat-images')
+      expect(uploadImageBuffer).toHaveBeenCalledTimes(1)
+    })
   })
 })

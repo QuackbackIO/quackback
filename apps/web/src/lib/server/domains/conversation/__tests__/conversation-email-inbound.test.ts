@@ -115,6 +115,45 @@ describe('parseInboundEmail', () => {
     ])
     expect(parseInboundEmail({ to: 'x@y.com' }).ccAddresses).toEqual([])
   })
+
+  it('leaves attachments undefined when the payload carries none', () => {
+    expect(parseInboundEmail({ to: ['x@y.com'], text: 'hi' }).attachments).toBeUndefined()
+    expect(parseInboundEmail({ to: ['x@y.com'], attachments: [] }).attachments).toBeUndefined()
+  })
+
+  it('maps provider attachment fields (base64 content, snake_case + camelCase)', () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const pdf = Buffer.from('%PDF-1.4 mock')
+    const parsed = parseInboundEmail({
+      to: ['x@y.com'],
+      text: 'see attached',
+      attachments: [
+        {
+          filename: 'logo.png',
+          content_type: 'image/png',
+          content: png.toString('base64'),
+          content_id: '<cid1@host>',
+          content_disposition: 'inline',
+        },
+        { name: 'invoice.pdf', contentType: 'application/pdf', content: pdf.toString('base64') },
+        { filename: 'empty.txt', content_type: 'text/plain', content: '' }, // dropped: no bytes
+      ],
+    })
+    expect(parsed.attachments).toHaveLength(2)
+    expect(parsed.attachments![0]).toMatchObject({
+      filename: 'logo.png',
+      contentType: 'image/png',
+      contentId: 'cid1@host',
+      disposition: 'inline',
+    })
+    expect(parsed.attachments![0].bytes.equals(png)).toBe(true)
+    expect(parsed.attachments![1]).toMatchObject({
+      filename: 'invoice.pdf',
+      contentType: 'application/pdf',
+      contentId: null,
+      disposition: 'attachment',
+    })
+  })
 })
 
 describe('parseRawEmail', () => {
@@ -214,6 +253,96 @@ describe('parseRawEmail', () => {
     const parsed = parseRawEmail(raw)
     expect(parsed.text).toBe('')
     expect(parsed.html?.trim()).toBe('<p>html-only alternative</p>')
+  })
+
+  it('leaves attachments undefined for a message that carries no MIME parts', () => {
+    const raw = ['Content-Type: text/plain', '', 'just text'].join('\r\n')
+    expect(parseRawEmail(raw).attachments).toBeUndefined()
+  })
+})
+
+describe('parseRawEmail — MIME attachment parts (P4.4)', () => {
+  const pngBytes = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  ])
+  const pdfBytes = Buffer.from('%PDF-1.4\nmock invoice payload\n%%EOF')
+
+  it('walks multipart/mixed(alternative(text,html-cid) + inline image + pdf) and collects both parts', () => {
+    const raw = [
+      'Content-Type: multipart/mixed; boundary="OUT"',
+      '',
+      'This is a multipart message in MIME format.',
+      '--OUT',
+      'Content-Type: multipart/alternative; boundary="ALT"',
+      '',
+      '--ALT',
+      'Content-Type: text/plain',
+      '',
+      'Here is the logo.',
+      '--ALT',
+      'Content-Type: text/html',
+      '',
+      '<div dir="ltr">Here is the logo <img src="cid:logo123@host"></div>',
+      '--ALT--',
+      '--OUT',
+      'Content-Type: image/png',
+      'Content-Transfer-Encoding: base64',
+      'Content-ID: <logo123@host>',
+      'Content-Disposition: inline; filename="logo.png"',
+      '',
+      pngBytes.toString('base64'),
+      '--OUT',
+      'Content-Type: application/pdf; name="invoice.pdf"',
+      'Content-Transfer-Encoding: base64',
+      'Content-Disposition: attachment; filename="invoice.pdf"',
+      '',
+      pdfBytes.toString('base64'),
+      '--OUT--',
+    ].join('\r\n')
+
+    const parsed = parseRawEmail(raw)
+    expect(parsed.text?.trim()).toBe('Here is the logo.')
+    expect(parsed.html).toContain('cid:logo123@host')
+    expect(parsed.attachments).toHaveLength(2)
+
+    const [img, pdf] = parsed.attachments!
+    expect(img).toMatchObject({
+      contentType: 'image/png',
+      contentId: 'logo123@host',
+      disposition: 'inline',
+      filename: 'logo.png',
+    })
+    expect(img.bytes.equals(pngBytes)).toBe(true)
+
+    expect(pdf).toMatchObject({
+      contentType: 'application/pdf',
+      contentId: null,
+      disposition: 'attachment',
+      filename: 'invoice.pdf',
+    })
+    expect(pdf.bytes.toString('utf8')).toContain('%PDF-1.4')
+  })
+
+  it('decodes a quoted-printable attachment part', () => {
+    const raw = [
+      'Content-Type: multipart/mixed; boundary="M"',
+      '',
+      '--M',
+      'Content-Type: text/plain',
+      '',
+      'body',
+      '--M',
+      'Content-Type: text/calendar; name="event.ics"',
+      'Content-Transfer-Encoding: quoted-printable',
+      'Content-Disposition: attachment; filename="event.ics"',
+      '',
+      'SUMMARY:Caf=C3=A9',
+      '--M--',
+    ].join('\r\n')
+    const parsed = parseRawEmail(raw)
+    expect(parsed.attachments).toHaveLength(1)
+    expect(parsed.attachments![0].contentType).toBe('text/calendar')
+    expect(parsed.attachments![0].bytes.toString('utf8').trim()).toBe('SUMMARY:Café')
   })
 })
 
