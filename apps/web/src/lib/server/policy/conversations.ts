@@ -3,9 +3,11 @@
  *
  * The agent-side visibility predicate over `conversations`, mirroring
  * policy/tickets.ts `ticketFilter` (same service / view_all / team / self
- * resolution). This is the SEAM only — ADDITIVE. conversation.query.ts is NOT
- * rewired to use it here; that migration is a later follow-up. The single-row
- * read path (the owning visitor, or a conversation.view holder) stays in
+ * resolution). Wired into `conversation.query.ts`'s `listConversationsForAgent`
+ * (UNIFIED-INBOX-SPEC.md §3.1/§6): a deliberate behavior change — a bare
+ * `conversation.view` holder now sees assigned-to-me-or-my-team only, not
+ * every conversation (previously an unwired seam). The single-row read path
+ * (the owning visitor, or a conversation.view holder) stays in
  * policy/conversation.ts `canViewConversation`; this predicate is purely the
  * team-inbox row selection and does not encode the visitor-owner branch.
  *

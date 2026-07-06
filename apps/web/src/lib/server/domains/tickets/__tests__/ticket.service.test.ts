@@ -6,7 +6,14 @@
  * the db-test-fixture rollback transaction (see server/__tests__/README.md).
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
-import { createId, type PrincipalId, type TeamId, type UserId, type TicketId } from '@quackback/ids'
+import {
+  createId,
+  type PrincipalId,
+  type TeamId,
+  type UserId,
+  type TicketId,
+  type ConversationId,
+} from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
@@ -18,6 +25,8 @@ import {
   settings,
   inAppNotifications,
   conversationMessages,
+  conversations,
+  ticketConversations,
   eq,
   and,
   desc,
@@ -593,6 +602,75 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
 
       const { tickets: results } = await listTickets({ search: '   ' }, actor)
       expect(results.length).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  describe('listTickets: priority filter', () => {
+    it('restricts to tickets with the given priority', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const urgent = await createTicket(
+        { type: 'customer', title: 'Urgent', priority: 'urgent' },
+        actor
+      )
+      await createTicket({ type: 'customer', title: 'Low', priority: 'low' }, actor)
+
+      const { tickets: results } = await listTickets({ priority: 'urgent' }, actor)
+      expect(results.map((t) => t.id)).toEqual([urgent.id])
+    })
+  })
+
+  describe('listTickets: excludeConversationLinked (unified inbox one-row rule)', () => {
+    async function linkTicketToConversation(
+      ticketId: TicketId,
+      ticketType: 'customer' | 'back_office'
+    ) {
+      const visitor = await seedTeammate()
+      const conversationId = createId('conversation') as ConversationId
+      await testDb
+        .insert(conversations)
+        .values({ id: conversationId, visitorPrincipalId: visitor, channel: 'messenger' })
+      await testDb.insert(ticketConversations).values({ ticketId, conversationId, ticketType })
+      return conversationId
+    }
+
+    it('excludes a linked customer ticket but keeps an unlinked one', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const linked = await createTicket({ type: 'customer', title: 'Linked' }, actor)
+      const unlinked = await createTicket({ type: 'customer', title: 'Unlinked' }, actor)
+      await linkTicketToConversation(linked.id, 'customer')
+
+      const { tickets: results } = await listTickets({ excludeConversationLinked: true }, actor)
+      const ids = results.map((t) => t.id)
+      expect(ids).toContain(unlinked.id)
+      expect(ids).not.toContain(linked.id)
+    })
+
+    it('never excludes a linked back_office ticket (the flag is customer-only)', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const backOffice = await createTicket({ type: 'back_office', title: 'Internal task' }, actor)
+      // A link row can exist for a non-customer ticket type (e.g. a tracker
+      // cascade) without tripping the customer-only partial unique index.
+      await linkTicketToConversation(backOffice.id, 'back_office')
+
+      const { tickets: results } = await listTickets({ excludeConversationLinked: true }, actor)
+      expect(results.map((t) => t.id)).toContain(backOffice.id)
+    })
+
+    it('does not constrain the list when the flag is omitted', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const linked = await createTicket({ type: 'customer', title: 'Linked' }, actor)
+      await linkTicketToConversation(linked.id, 'customer')
+
+      const { tickets: results } = await listTickets({}, actor)
+      expect(results.map((t) => t.id)).toContain(linked.id)
     })
   })
 

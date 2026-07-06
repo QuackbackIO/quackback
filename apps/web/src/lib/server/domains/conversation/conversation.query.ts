@@ -51,6 +51,8 @@ import type { ConversationSort } from '@/lib/shared/conversation/views'
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { getAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
+import { conversationFilter } from '@/lib/server/policy/conversations'
+import type { Actor } from '@/lib/server/policy/types'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
@@ -1006,9 +1008,16 @@ export interface ConversationListPage {
   nextCursor: string | null
 }
 
-/** Inbox feed for agents: conversations newest-activity-first with unread counts. */
+/**
+ * Inbox feed for agents: conversations newest-activity-first with unread
+ * counts, scoped by `conversationFilter(actor)` (UNIFIED-INBOX-SPEC.md §6 —
+ * wiring this is a deliberate behavior change: a bare `conversation.view`
+ * holder now sees assigned-to-me-or-my-team only, matching tickets, rather
+ * than every conversation).
+ */
 export async function listConversationsForAgent(
-  filter: ConversationListFilter = {}
+  filter: ConversationListFilter = {},
+  actor: Actor
 ): Promise<ConversationListPage> {
   const limit = Math.min(filter.limit ?? INBOX_PAGE_SIZE, 100)
   const sort = filter.sort ?? 'recent'
@@ -1051,6 +1060,7 @@ export async function listConversationsForAgent(
     .from(conversations)
     .where(
       and(
+        conversationFilter(actor),
         filter.status ? eq(conversations.status, filter.status) : undefined,
         filter.source ? eq(conversations.source, filter.source) : undefined,
         filter.visitorPrincipalId

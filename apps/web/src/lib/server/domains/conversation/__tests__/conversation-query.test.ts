@@ -107,6 +107,18 @@ import {
   translationStateFrom,
 } from '../conversation.query'
 import { isNull, isNotNull, eq } from '@/lib/server/db'
+import type { Actor } from '@/lib/server/policy/types'
+
+// The RBAC wiring (UNIFIED-INBOX-SPEC.md §6) ANDs conversationFilter(actor)
+// into every call; a service actor short-circuits to `sql\`true\`` with no
+// extra eq/isNull/inArray calls, so every pre-existing assertion in this file
+// (which count those mocks) stays valid unchanged.
+const serviceActor: Actor = {
+  principalId: null,
+  role: null,
+  principalType: 'service',
+  segmentIds: new Set(),
+}
 
 const visitorId = 'principal_visitor' as PrincipalId
 const agentId = 'principal_agent' as PrincipalId
@@ -402,12 +414,12 @@ describe('listConversationsForAgent assignee filter', () => {
   // empty result short-circuits before any author load, so a call to isNull
   // unambiguously means the unassigned condition was applied.
   it('adds an "assigned agent IS NULL" condition for the unassigned queue', async () => {
-    await listConversationsForAgent({ unassignedOnly: true })
+    await listConversationsForAgent({ unassignedOnly: true }, serviceActor)
     expect(isNull).toHaveBeenCalledTimes(1)
   })
 
   it('does not constrain the assignee by default', async () => {
-    await listConversationsForAgent({})
+    await listConversationsForAgent({}, serviceActor)
     expect(isNull).not.toHaveBeenCalled()
   })
 })
@@ -416,19 +428,19 @@ describe('listConversationsForAgent segment filter', () => {
   const segmentId = 'segment_eng' as SegmentId
 
   it('restricts to conversations whose visitor is in the requested segments', async () => {
-    await listConversationsForAgent({ segmentIds: [segmentId] })
+    await listConversationsForAgent({ segmentIds: [segmentId] }, serviceActor)
     // The membership subquery pins conversations to visitors in these segments;
     // the inner inArray carries the requested segment ids.
     expect(inArrayCalls.some((c) => Array.isArray(c) && c.includes(segmentId))).toBe(true)
   })
 
   it('does not add the segment condition by default', async () => {
-    await listConversationsForAgent({})
+    await listConversationsForAgent({}, serviceActor)
     expect(inArrayCalls).toHaveLength(0)
   })
 
   it('ignores an empty segmentIds array', async () => {
-    await listConversationsForAgent({ segmentIds: [] })
+    await listConversationsForAgent({ segmentIds: [] }, serviceActor)
     expect(inArrayCalls).toHaveLength(0)
   })
 })
@@ -439,14 +451,14 @@ describe('listConversationsForAgent mentions view', () => {
   const eqCalledWithPrincipal = () => vi.mocked(eq).mock.calls.some((c) => c[1] === agentId)
 
   it('restricts to conversations whose notes mention the given principal', async () => {
-    const page = await listConversationsForAgent({ mentionedPrincipalId: agentId })
+    const page = await listConversationsForAgent({ mentionedPrincipalId: agentId }, serviceActor)
     expect(page).toEqual({ conversations: [], hasMore: false, nextCursor: null })
     // The mentions subquery pins the mention recipient to this principal.
     expect(eqCalledWithPrincipal()).toBe(true)
   })
 
   it('does not add the mentions condition by default', async () => {
-    await listConversationsForAgent({})
+    await listConversationsForAgent({}, serviceActor)
     expect(eqCalledWithPrincipal()).toBe(false)
   })
 
@@ -454,19 +466,19 @@ describe('listConversationsForAgent mentions view', () => {
     // Mention rows survive a note's soft-delete (the FK only cascades on hard
     // delete), so the subquery must guard on deleted_at IS NULL or a deleted
     // note keeps the conversation in Mentions forever.
-    await listConversationsForAgent({ mentionedPrincipalId: agentId })
+    await listConversationsForAgent({ mentionedPrincipalId: agentId }, serviceActor)
     expect(isNull).toHaveBeenCalled()
   })
 })
 
 describe('listConversationsForAgent visitor filter', () => {
   it('restricts to the given visitor', async () => {
-    await listConversationsForAgent({ visitorPrincipalId: visitorId })
+    await listConversationsForAgent({ visitorPrincipalId: visitorId }, serviceActor)
     expect(vi.mocked(eq).mock.calls.some((c) => c[1] === visitorId)).toBe(true)
   })
 
   it('does not constrain by visitor by default', async () => {
-    await listConversationsForAgent({})
+    await listConversationsForAgent({}, serviceActor)
     expect(vi.mocked(eq).mock.calls.some((c) => c[1] === visitorId)).toBe(false)
   })
 })
@@ -475,18 +487,18 @@ describe('listConversationsForAgent company filter', () => {
   const companyId = 'company_acme' as CompanyId
 
   it('restricts to conversations whose visitor belongs to the company', async () => {
-    await listConversationsForAgent({ companyId })
+    await listConversationsForAgent({ companyId }, serviceActor)
     // A subquery over principal pins the visitor to this company_id.
     expect(vi.mocked(eq).mock.calls.some((c) => c[1] === companyId)).toBe(true)
   })
 
   it('does not constrain by company by default', async () => {
-    await listConversationsForAgent({})
+    await listConversationsForAgent({}, serviceActor)
     expect(vi.mocked(eq).mock.calls.some((c) => c[1] === companyId)).toBe(false)
   })
 
   it('combines the company filter with a status filter', async () => {
-    await listConversationsForAgent({ companyId, status: 'open' })
+    await listConversationsForAgent({ companyId, status: 'open' }, serviceActor)
     const calls = vi.mocked(eq).mock.calls
     expect(calls.some((c) => c[1] === companyId)).toBe(true)
     expect(calls.some((c) => c[1] === 'open')).toBe(true)
@@ -591,12 +603,12 @@ describe('slaDueAtFor / slaDtoFor', () => {
 
 describe('listConversationsForAgent waiting filter', () => {
   it('adds a "waiting_since IS NOT NULL" condition for the waiting scope', async () => {
-    await listConversationsForAgent({ waitingOnly: true })
+    await listConversationsForAgent({ waitingOnly: true }, serviceActor)
     expect(isNotNull).toHaveBeenCalledTimes(1)
   })
 
   it('does not constrain by waiting by default', async () => {
-    await listConversationsForAgent({})
+    await listConversationsForAgent({}, serviceActor)
     expect(isNotNull).not.toHaveBeenCalled()
   })
 })

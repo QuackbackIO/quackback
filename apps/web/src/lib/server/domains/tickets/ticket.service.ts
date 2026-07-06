@@ -23,6 +23,7 @@ import {
   tickets,
   ticketStatuses,
   conversationMessages,
+  ticketConversations,
   principal,
   type Ticket,
   type ConversationPriority,
@@ -178,6 +179,23 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
 }
 
 /**
+ * The unified inbox's one-row-rule predicate (UNIFIED-INBOX-SPEC.md §2.1):
+ * exclude a `type: 'customer'` ticket that has an active `ticket_conversations`
+ * link (it renders as its linked conversation's row in the union endpoint
+ * instead). Back-office and tracker tickets are never excluded — the type
+ * guard is part of the condition, not just a filter alongside it, since a
+ * back-office/tracker ticket can still carry a link row (tracker cascade
+ * links, notably) without losing its own row. Exported so
+ * `inbox.query.ts`'s count endpoint can reuse the identical predicate rather
+ * than re-deriving it.
+ */
+export function excludeConversationLinkedCondition(): SQL {
+  return sql`NOT (${tickets.type} = 'customer' AND EXISTS (
+    SELECT 1 FROM ${ticketConversations} tc WHERE tc.ticket_id = ${tickets.id}
+  ))`
+}
+
+/**
  * List tickets for an agent, filtered + sorted, scoped by `ticketFilter(actor)`.
  * Soft-deleted tickets are excluded. Status-category and stage filters resolve
  * through subqueries on ticket_statuses so the outer select stays tickets-only.
@@ -228,6 +246,8 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
         // ticketFilter(actor) already excludes soft-deleted rows in every branch.
         ticketFilter(actor),
         filter.type ? eq(tickets.type, filter.type) : undefined,
+        filter.priority ? eq(tickets.priority, filter.priority) : undefined,
+        filter.excludeConversationLinked ? excludeConversationLinkedCondition() : undefined,
         filter.statusCategory
           ? inArray(
               tickets.statusId,

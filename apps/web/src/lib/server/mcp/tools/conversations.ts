@@ -56,13 +56,16 @@ Examples:
     handler: async (args) => {
       const { listConversationsForAgent } =
         await import('@/lib/server/domains/conversation/conversation.query')
-      const result = await listConversationsForAgent({
-        status: args.status,
-        priority: args.priority,
-        assignedAgentPrincipalId: args.assignedAgentPrincipalId as PrincipalId | undefined,
-        before: args.cursor,
-        limit: args.limit ?? 20,
-      })
+      const result = await listConversationsForAgent(
+        {
+          status: args.status,
+          priority: args.priority,
+          assignedAgentPrincipalId: args.assignedAgentPrincipalId as PrincipalId | undefined,
+          before: args.cursor,
+          limit: args.limit ?? 20,
+        },
+        mcpAgentActor(auth)
+      )
       return compactJsonResult({
         conversations: result.conversations.map((c) => ({
           id: c.id,

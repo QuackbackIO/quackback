@@ -57,6 +57,7 @@ export interface TicketListFilter {
   type?: TicketType
   statusCategory?: TicketStatusCategory
   stage?: TicketStage
+  priority?: ConversationPriority
   assignee?: TicketAssigneeFilter
   teamId?: TeamId
   requesterPrincipalId?: PrincipalId
@@ -70,6 +71,14 @@ export interface TicketListFilter {
    *  against the active sort (mirrors the conversation inbox). */
   cursor?: TicketId
   limit?: number
+  /**
+   * Unified inbox one-row rule (UNIFIED-INBOX-SPEC.md §2.1): exclude a
+   * `type: 'customer'` ticket that has an active `ticket_conversations` link —
+   * it renders as its linked conversation's row instead. Back-office and
+   * tracker tickets are never excluded by this flag (they have no
+   * conversation-row analogue), even if a link row exists for them.
+   */
+  excludeConversationLinked?: boolean
 }
 
 // ---------------------------------------------------------------------------

@@ -783,6 +783,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+      const actor = await policyActorFromAuth(ctx)
       const { listConversationsForAgent } =
         await import('@/lib/server/domains/conversation/conversation.query')
       // assignee is 'all' | 'mine' | 'unassigned' | a teammate principal id. A
@@ -798,32 +799,35 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
               isValidTypeId(assignee, 'principal')
             ? (assignee as PrincipalId)
             : undefined
-      return await listConversationsForAgent({
-        status: data.status,
-        priority: data.priority,
-        assignedAgentPrincipalId,
-        unassignedOnly: assignee === 'unassigned',
-        teamId:
-          data.teamId && isValidTypeId(data.teamId, 'team') ? (data.teamId as TeamId) : undefined,
-        source: data.source,
-        waitingOnly: data.waitingOnly,
-        sort: data.sort,
-        search: data.search,
-        tagIds: data.tagIds as ConversationTagId[] | undefined,
-        segmentIds: data.segmentIds as SegmentId[] | undefined,
-        companyId: data.companyId as CompanyId | undefined,
-        // Always the requesting agent — never trust a client-supplied id here.
-        mentionedPrincipalId: data.view === 'mentions' ? ctx.principal.id : undefined,
-        // Quinn view: a chosen bucket narrows to its statuses; none = any Quinn
-        // involvement (every bucket).
-        assistantStatuses:
-          data.view === 'quinn'
-            ? data.ai
-              ? AI_INBOX_BUCKETS[data.ai]
-              : Object.values(AI_INBOX_BUCKETS).flat()
-            : undefined,
-        before: data.before,
-      })
+      return await listConversationsForAgent(
+        {
+          status: data.status,
+          priority: data.priority,
+          assignedAgentPrincipalId,
+          unassignedOnly: assignee === 'unassigned',
+          teamId:
+            data.teamId && isValidTypeId(data.teamId, 'team') ? (data.teamId as TeamId) : undefined,
+          source: data.source,
+          waitingOnly: data.waitingOnly,
+          sort: data.sort,
+          search: data.search,
+          tagIds: data.tagIds as ConversationTagId[] | undefined,
+          segmentIds: data.segmentIds as SegmentId[] | undefined,
+          companyId: data.companyId as CompanyId | undefined,
+          // Always the requesting agent — never trust a client-supplied id here.
+          mentionedPrincipalId: data.view === 'mentions' ? ctx.principal.id : undefined,
+          // Quinn view: a chosen bucket narrows to its statuses; none = any Quinn
+          // involvement (every bucket).
+          assistantStatuses:
+            data.view === 'quinn'
+              ? data.ai
+                ? AI_INBOX_BUCKETS[data.ai]
+                : Object.values(AI_INBOX_BUCKETS).flat()
+              : undefined,
+          before: data.before,
+        },
+        actor
+      )
     } catch (error) {
       log.error({ err: error }, 'list conversations failed')
       throw error
@@ -874,14 +878,18 @@ export const listConversationsForUserFn = createServerFn({ method: 'GET' })
   .validator(userConversationsSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+      const actor = await policyActorFromAuth(ctx)
       const { listConversationsForAgent } =
         await import('@/lib/server/domains/conversation/conversation.query')
-      return await listConversationsForAgent({
-        visitorPrincipalId: data.principalId as PrincipalId,
-        status: data.status,
-        before: data.before,
-      })
+      return await listConversationsForAgent(
+        {
+          visitorPrincipalId: data.principalId as PrincipalId,
+          status: data.status,
+          before: data.before,
+        },
+        actor
+      )
     } catch (error) {
       log.error({ err: error }, 'list conversations for user failed')
       throw error

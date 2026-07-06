@@ -4,7 +4,7 @@ import { successResponse, handleDomainError } from '@/lib/server/domains/api/res
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { serializeConversation } from './-serialize'
 import type { ConversationStatus, ConversationPriority } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import type { PrincipalId, SegmentId } from '@quackback/ids'
 
 export const Route = createFileRoute('/api/v1/conversations/')({
   server: {
@@ -12,7 +12,7 @@ export const Route = createFileRoute('/api/v1/conversations/')({
       /** GET /api/v1/conversations — list conversations (team API key). */
       GET: async ({ request }) => {
         try {
-          await withApiKeyAuth(request, { permission: PERMISSIONS.CONVERSATION_VIEW })
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.CONVERSATION_VIEW })
 
           const url = new URL(request.url)
           const cursor = url.searchParams.get('cursor') ?? undefined
@@ -26,15 +26,28 @@ export const Route = createFileRoute('/api/v1/conversations/')({
           const assignedAgentPrincipalId =
             (url.searchParams.get('assignedAgentPrincipalId') as PrincipalId | null) ?? undefined
 
+          // A service (API key) actor sees every conversation via
+          // conversationFilter's service-principal branch, mirroring the
+          // ticket REST route's inline actor.
+          const actor = {
+            principalId: auth.principalId,
+            role: auth.role,
+            principalType: 'service' as const,
+            segmentIds: new Set<SegmentId>(),
+          }
+
           const { listConversationsForAgent } =
             await import('@/lib/server/domains/conversation/conversation.query')
-          const result = await listConversationsForAgent({
-            status,
-            priority,
-            assignedAgentPrincipalId,
-            before: cursor,
-            limit,
-          })
+          const result = await listConversationsForAgent(
+            {
+              status,
+              priority,
+              assignedAgentPrincipalId,
+              before: cursor,
+              limit,
+            },
+            actor
+          )
 
           return successResponse(result.conversations.map(serializeConversation), {
             pagination: { cursor: result.nextCursor, hasMore: result.hasMore },
