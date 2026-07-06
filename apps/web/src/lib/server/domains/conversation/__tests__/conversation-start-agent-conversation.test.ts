@@ -309,6 +309,28 @@ describe('startAgentConversation happy path', () => {
     // Outbound conversations never notify the team of a "visitor message".
     expect(notify.notifyVisitorMessage).not.toHaveBeenCalled()
   })
+
+  it('passes the FULL content and contentJson to the notify layer (not a truncated preview)', async () => {
+    const longContent = 'A'.repeat(300)
+    const contentJson = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: longContent }] }],
+    }
+    await startAgentConversation(
+      { targetPrincipalId, content: longContent, contentJson },
+      agent,
+      agentActor
+    )
+
+    expect(notify.notifyConversationStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // The email body renders the whole message; notify derives its own
+        // subject/preheader excerpt, so no pre-truncation here.
+        content: longContent,
+        contentJson: expect.objectContaining({ type: 'doc' }),
+      })
+    )
+  })
 })
 
 describe('startAgentConversation rich content', () => {

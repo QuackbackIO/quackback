@@ -353,7 +353,10 @@ export async function sendVisitorMessage(
 
   void notifyVisitorMessage({
     conversation: txResult.conversation,
-    content: preview(content || fallbackLabel, attachments),
+    // Full text, not the truncated preview — notify derives its own
+    // subject/preheader excerpt and renders the whole body inline.
+    content: content || preview(fallbackLabel, attachments),
+    contentJson: safeContentJson,
     authorName: author.displayName ?? 'A visitor',
     isFirstMessage: created,
   })
@@ -507,7 +510,9 @@ export async function startAgentConversation(
   void notifyConversationStarted({
     conversationId: txResult.conversation.id,
     visitorPrincipalId: txResult.conversation.visitorPrincipalId,
-    content: preview(content || fallbackLabel, []),
+    // Full text, not the truncated preview — notify derives its own excerpt.
+    content: content || fallbackLabel,
+    contentJson: safeContentJson,
     agentName: agent.displayName ?? 'Support',
   })
 
@@ -611,7 +616,9 @@ export async function sendAgentMessage(
   void notifyAgentReply({
     conversationId: txResult.conversation.id,
     visitorPrincipalId: txResult.conversation.visitorPrincipalId,
-    content: preview(content || fallbackLabel, attachments),
+    // Full text, not the truncated preview — notify derives its own excerpt.
+    content: content || preview(fallbackLabel, attachments),
+    contentJson: safeContentJson,
     agentName: agent.displayName ?? 'Support',
     capturedEmail: txResult.conversation.visitorEmail,
   })

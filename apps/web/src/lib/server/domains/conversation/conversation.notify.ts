@@ -13,6 +13,7 @@ import { resolveSendingAddress } from '@/lib/server/domains/channel-accounts/cha
 import type { Conversation } from '@/lib/server/db'
 import type { PrincipalId, ConversationId, TeamId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/core'
+import { config } from '@/lib/server/config'
 import { generateContentHTML } from '@/lib/shared/content-html'
 import { isAnyAgentOnline, isPrincipalOnline } from '@/lib/server/realtime/presence'
 import { createNotificationsBatch } from '@/lib/server/domains/notifications/notification.service'
@@ -55,6 +56,34 @@ function plaintextBodyHtml(content: string): string {
   return paragraphs.map((p) => `<p>${escapeHtmlText(p).replace(/\r?\n/g, '<br>')}</p>`).join('')
 }
 
+const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage', 'chatImage'])
+
+/**
+ * Rewrite self-origin `/api/storage/` image srcs to carry the route's `?email=1`
+ * force-proxy hint. Without it the route answers with a 302 to a presigned S3
+ * URL, which many mail clients refuse to follow; with it the asset is proxied
+ * inline. `S3_PUBLIC_URL` srcs are already directly fetchable and are left
+ * untouched, as is every foreign origin. Structural walk over a copy of the
+ * doc — never a string replace over serialized content.
+ */
+function withEmailProxyHint(node: JSONContent): JSONContent {
+  let next = node
+  if (IMAGE_NODE_TYPES.has(node.type ?? '') && typeof node.attrs?.src === 'string') {
+    try {
+      const src = new URL(node.attrs.src, config.baseUrl)
+      const sameOrigin = src.origin === new URL(config.baseUrl).origin
+      if (sameOrigin && src.pathname.startsWith('/api/storage/') && !src.searchParams.has('email')) {
+        src.searchParams.set('email', '1')
+        next = { ...node, attrs: { ...node.attrs, src: src.toString() } }
+      }
+    } catch {
+      // Unparseable src: leave the node alone; the serializer drops unsafe URLs.
+    }
+  }
+  if (!node.content) return next
+  return { ...next, content: node.content.map(withEmailProxyHint) }
+}
+
 /**
  * The full message body as sanitized HTML for the conversation email: the rich
  * `contentJson` rendered through the shared JSON→HTML serializer when present
@@ -63,7 +92,7 @@ function plaintextBodyHtml(content: string): string {
  * case the template falls back to its truncated preview quote.
  */
 function messageBodyHtml(content: string, contentJson?: JSONContent | null): string {
-  if (contentJson) return generateContentHTML(contentJson)
+  if (contentJson) return generateContentHTML(withEmailProxyHint(contentJson))
   return plaintextBodyHtml(content)
 }
 

@@ -23,6 +23,11 @@ const buildHookContext =
   >()
 const sendConversationMessageEmail = vi.fn<(opts: Record<string, unknown>) => Promise<unknown>>()
 
+vi.mock('@/lib/server/config', () => ({
+  config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
+  getBaseUrl: () => 'http://localhost:3000',
+}))
+
 vi.mock('@/lib/server/realtime/presence', () => ({
   isAnyAgentOnline: (...a: []) => isAnyAgentOnline(...a),
   isPrincipalOnline: (...a: [PrincipalId]) => isPrincipalOnline(...a),
@@ -379,6 +384,35 @@ describe('conversation email body (P4.5)', () => {
     expect(call.bodyHtml).toContain('<strong>bold</strong>')
     // The preview excerpt is still provided for the subject/preheader.
     expect(call.messagePreview).toBe('Here is bold')
+  })
+
+  it('appends the ?email=1 proxy hint to self-origin storage image srcs only', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    const contentJson = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'see:' }] },
+        // Self-origin storage ref: mail clients won't follow the route's 302,
+        // so the email body must carry the force-proxy hint.
+        { type: 'chatImage', attrs: { src: '/api/storage/chat-images/a.png' } },
+        // Foreign origin: left byte-identical.
+        { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/b.png' } },
+      ],
+    }
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'see:',
+      contentJson,
+      agentName: 'Agent',
+    })
+
+    const call = sendConversationMessageEmail.mock.calls[0][0]
+    expect(call.bodyHtml).toContain('/api/storage/chat-images/a.png?email=1')
+    expect(call.bodyHtml).toContain('https://cdn.example.com/b.png')
+    expect(call.bodyHtml).not.toContain('b.png?email=1')
   })
 
   it('falls back to the FULL plain-text content wrapped in escaped <p> paragraphs (no contentJson)', async () => {
