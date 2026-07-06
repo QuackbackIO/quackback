@@ -8,8 +8,14 @@ import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
+import type { JSONContent } from '@tiptap/react'
+import type { TiptapContent } from '@/lib/shared/db-types'
 import { createMyTicketFn } from '@/lib/server/functions/tickets'
 import { portalTicketKeys } from '@/lib/client/queries/portal-tickets'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import {
   Dialog,
   DialogContent,
@@ -19,8 +25,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+
+// Native `<textarea maxLength>` used to silently cap this field; a rich doc
+// can't be truncated mid-node without corrupting it, so the cap is now
+// enforced pre-submit with the same toast the dialog already uses for
+// mutation errors.
+const DESCRIPTION_MAX_LENGTH = 4000
 
 export function NewPortalTicketDialog({
   open,
@@ -33,17 +44,25 @@ export function NewPortalTicketDialog({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [descriptionJson, setDescriptionJson] = useState<JSONContent | undefined>(undefined)
+  const [descriptionMarkdown, setDescriptionMarkdown] = useState('')
 
   useEffect(() => {
     if (open) {
       setTitle('')
-      setDescription('')
+      setDescriptionJson(undefined)
+      setDescriptionMarkdown('')
     }
   }, [open])
 
+  const { upload: uploadImage } = usePortalImageUpload()
+
   const create = useMutation({
-    mutationFn: (vars: { title: string; description?: string }) => createMyTicketFn({ data: vars }),
+    mutationFn: (vars: {
+      title: string
+      description?: string
+      descriptionJson?: TiptapContent | null
+    }) => createMyTicketFn({ data: vars }),
     onSuccess: (ticket) => {
       void queryClient.invalidateQueries({ queryKey: portalTicketKeys.list() })
       onOpenChange(false)
@@ -54,6 +73,24 @@ export function NewPortalTicketDialog({
   })
 
   const canSubmit = title.trim().length > 0 && !create.isPending
+
+  const submit = () => {
+    if (!canSubmit) return
+    const description = descriptionMarkdown.trim()
+    if (description.length > DESCRIPTION_MAX_LENGTH) {
+      // Matches the plain-English toast.error below (mutation errors also
+      // aren't localized in this dialog).
+      toast.error(`Details are too long (max ${DESCRIPTION_MAX_LENGTH} characters).`)
+      return
+    }
+    create.mutate({
+      title: title.trim(),
+      description: description || undefined,
+      descriptionJson: isEmptyTiptapDoc(descriptionJson as TiptapContent | undefined)
+        ? null
+        : (descriptionJson as TiptapContent),
+    })
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,11 +127,15 @@ export function NewPortalTicketDialog({
             <label className="text-xs font-medium text-muted-foreground">
               <FormattedMessage id="portal.tickets.new.details" defaultMessage="Details" />
             </label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={4000}
-              rows={5}
+            <RichTextEditor
+              value={descriptionJson ?? ''}
+              onChange={(json, _html, markdown) => {
+                setDescriptionJson(json)
+                setDescriptionMarkdown(markdown)
+              }}
+              features={VISITOR_CONVERSATION_FEATURES}
+              onImageUpload={uploadImage}
+              minHeight="120px"
               placeholder={intl.formatMessage({
                 id: 'portal.tickets.new.detailsPlaceholder',
                 defaultMessage: 'Add anything that helps us understand the issue.',
@@ -107,12 +148,7 @@ export function NewPortalTicketDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={create.isPending}>
             <FormattedMessage id="common.cancel" defaultMessage="Cancel" />
           </Button>
-          <Button
-            onClick={() =>
-              create.mutate({ title: title.trim(), description: description.trim() || undefined })
-            }
-            disabled={!canSubmit}
-          >
+          <Button onClick={submit} disabled={!canSubmit}>
             <FormattedMessage id="portal.tickets.new.submit" defaultMessage="Create ticket" />
           </Button>
         </DialogFooter>

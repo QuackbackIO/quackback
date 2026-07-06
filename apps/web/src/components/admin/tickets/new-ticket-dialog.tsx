@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { XMarkIcon } from '@heroicons/react/24/solid'
+import type { JSONContent } from '@tiptap/react'
 import type { PrincipalId, TicketId } from '@quackback/ids'
-import type { TicketType } from '@/lib/shared/db-types'
+import type { TicketType, TiptapContent } from '@/lib/shared/db-types'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
-import { useCreateTicket } from '@/lib/client/mutations/tickets'
+import { createTicketFn } from '@/lib/server/functions/tickets'
+import { ticketKeys } from '@/lib/client/queries/tickets'
 import { ticketTypeLabel } from '@/components/admin/tickets/ticket-chips'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { PortalUserPicker } from '@/components/shared/portal-user-picker'
+import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
+import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import {
   Dialog,
   DialogContent,
@@ -18,7 +25,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Avatar } from '@/components/ui/avatar'
 import {
   Select,
@@ -27,6 +33,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+
+// Native `<textarea maxLength>` used to silently cap this field; a rich doc
+// can't be truncated mid-node without corrupting it, so the cap is now
+// enforced pre-submit with the same toast the dialog already uses for
+// mutation errors.
+const DESCRIPTION_MAX_LENGTH = 4000
 
 interface Requester {
   principalId: string
@@ -50,7 +62,8 @@ export function NewTicketDialog({
 }) {
   const [type, setType] = useState<TicketType>('customer')
   const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [descriptionJson, setDescriptionJson] = useState<JSONContent | undefined>(undefined)
+  const [descriptionMarkdown, setDescriptionMarkdown] = useState('')
   const [requester, setRequester] = useState<Requester | null>(null)
 
   // A fresh open starts clean.
@@ -58,22 +71,45 @@ export function NewTicketDialog({
     if (open) {
       setType('customer')
       setTitle('')
-      setDescription('')
+      setDescriptionJson(undefined)
+      setDescriptionMarkdown('')
       setRequester(null)
     }
   }, [open])
 
-  const create = useCreateTicket()
+  const queryClient = useQueryClient()
+  const create = useMutation({
+    mutationFn: (vars: {
+      type: TicketType
+      title: string
+      description?: string
+      descriptionJson?: TiptapContent | null
+      requesterPrincipalId?: PrincipalId
+    }) => createTicketFn({ data: vars }),
+    onSuccess: (ticket) => {
+      queryClient.setQueryData(ticketKeys.detail(ticket.id), ticket)
+      void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+    },
+  })
+  const { upload: uploadImage } = useImageUpload({ prefix: 'chat-images' })
   const canCreate = title.trim().length > 0 && !create.isPending
 
   const submit = () => {
     if (!canCreate) return
+    const description = descriptionMarkdown.trim()
+    if (description.length > DESCRIPTION_MAX_LENGTH) {
+      toast.error(`Description is too long (max ${DESCRIPTION_MAX_LENGTH} characters).`)
+      return
+    }
     create.mutate(
       {
         type,
         title: title.trim(),
-        description: description.trim() || undefined,
-        requesterPrincipalId: (requester?.principalId as PrincipalId | undefined) ?? null,
+        description: description || undefined,
+        descriptionJson: isEmptyTiptapDoc(descriptionJson as TiptapContent | undefined)
+          ? null
+          : (descriptionJson as TiptapContent),
+        requesterPrincipalId: requester?.principalId as PrincipalId | undefined,
       },
       {
         onSuccess: (ticket) => {
@@ -125,11 +161,15 @@ export function NewTicketDialog({
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Description</label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={4000}
-              rows={4}
+            <RichTextEditor
+              value={descriptionJson ?? ''}
+              onChange={(json, _html, markdown) => {
+                setDescriptionJson(json)
+                setDescriptionMarkdown(markdown)
+              }}
+              features={CONVERSATION_EDITOR_FEATURES}
+              onImageUpload={uploadImage}
+              minHeight="120px"
               placeholder="Add details (optional). This opens the ticket thread."
             />
           </div>

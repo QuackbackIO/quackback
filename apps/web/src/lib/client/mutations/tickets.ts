@@ -60,6 +60,9 @@ export function useCreateTicket() {
         data: {
           type: input.type,
           title: input.title,
+          description: input.description,
+          descriptionJson: input.descriptionJson,
+          attachments: input.attachments,
           requesterPrincipalId: input.requesterPrincipalId ?? undefined,
           priority: input.priority,
           companyId: input.companyId ?? undefined,
