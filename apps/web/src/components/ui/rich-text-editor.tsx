@@ -27,7 +27,25 @@ import { Markdown } from '@tiptap/markdown'
 import { Extension } from '@tiptap/core'
 import type { Range } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
-import { common, createLowlight } from 'lowlight'
+import { createLowlight } from 'lowlight'
+import langBash from 'highlight.js/lib/languages/bash'
+import langC from 'highlight.js/lib/languages/c'
+import langCss from 'highlight.js/lib/languages/css'
+import langDiff from 'highlight.js/lib/languages/diff'
+import langGo from 'highlight.js/lib/languages/go'
+import langJava from 'highlight.js/lib/languages/java'
+import langJavascript from 'highlight.js/lib/languages/javascript'
+import langJson from 'highlight.js/lib/languages/json'
+import langPhp from 'highlight.js/lib/languages/php'
+import langPlaintext from 'highlight.js/lib/languages/plaintext'
+import langPython from 'highlight.js/lib/languages/python'
+import langRuby from 'highlight.js/lib/languages/ruby'
+import langRust from 'highlight.js/lib/languages/rust'
+import langShell from 'highlight.js/lib/languages/shell'
+import langSql from 'highlight.js/lib/languages/sql'
+import langTypescript from 'highlight.js/lib/languages/typescript'
+import langXml from 'highlight.js/lib/languages/xml'
+import langYaml from 'highlight.js/lib/languages/yaml'
 import {
   useEffect,
   useCallback,
@@ -101,8 +119,42 @@ import {
 } from './context-menu'
 import { ScrollArea } from './scroll-area'
 
-// Create lowlight instance with common languages
-const lowlight = createLowlight(common)
+// Curated grammar set instead of lowlight's `common` (~37 languages): the
+// bundle cost of every registered grammar is paid by all editor surfaces,
+// including the lazy-loaded visitor composer, so registration is limited to
+// languages that actually appear in support and product content. An
+// unregistered language renders as plain text inside the code block.
+const lowlight = createLowlight({
+  bash: langBash,
+  c: langC,
+  css: langCss,
+  diff: langDiff,
+  go: langGo,
+  java: langJava,
+  javascript: langJavascript,
+  json: langJson,
+  php: langPhp,
+  plaintext: langPlaintext,
+  python: langPython,
+  ruby: langRuby,
+  rust: langRust,
+  shell: langShell,
+  sql: langSql,
+  typescript: langTypescript,
+  xml: langXml,
+  yaml: langYaml,
+})
+// Fence aliases people actually type (```js, ```html, ```sh …) — without
+// these an aliased block silently falls back to plain text.
+lowlight.registerAlias({
+  bash: ['sh', 'zsh'],
+  javascript: ['js', 'jsx', 'node'],
+  python: ['py'],
+  ruby: ['rb'],
+  typescript: ['ts', 'tsx'],
+  xml: ['html', 'svg'],
+  yaml: ['yml'],
+})
 
 // ============================================================================
 // Extension builder (exported for testing)
@@ -1107,7 +1159,14 @@ interface RichTextEditorProps {
   disabled?: boolean
   minHeight?: string
   borderless?: boolean
-  toolbarPosition?: 'top' | 'none'
+  /** Where the formatting toolbar sits relative to the content area.
+   * - 'top': classic bordered strip above the editor (filled, muted bg)
+   * - 'bottom': quiet ghost icon row on a transparent background, sitting
+   *   directly on the editor card below the content (no bordered strip)
+   * - 'none': no fixed toolbar (bubble + slash menus only)
+   * Defaults to 'bottom' for bordered editors and 'none' for borderless ones.
+   * Both 'top' and 'bottom' render the SAME feature-gated button set. */
+  toolbarPosition?: 'top' | 'none' | 'bottom'
   /** Where to place the cursor when the editor mounts ('end' is the common
    * choice for edit forms; default is no autofocus). */
   autofocus?: boolean | 'start' | 'end' | number
@@ -1133,7 +1192,7 @@ function RichTextEditorBase({
   disabled = false,
   minHeight = '120px',
   borderless = false,
-  toolbarPosition = borderless ? 'none' : 'top',
+  toolbarPosition = borderless ? 'none' : 'bottom',
   autofocus = false,
   features = {},
   onImageUpload,
@@ -1354,8 +1413,6 @@ function RichTextEditorBase({
     )
   }
 
-  const showToolbar = toolbarPosition !== 'none'
-
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild disabled={!features.images}>
@@ -1368,16 +1425,28 @@ function RichTextEditorBase({
           )}
           onContextMenu={handleContextMenu}
         >
-          {showToolbar && (
+          {toolbarPosition === 'top' && (
             <MenuBar
               editor={editor}
               disabled={disabled}
               features={features}
               onImageUpload={onImageUpload}
+              variant="top"
             />
           )}
 
           <EditorContent editor={editor} />
+
+          {toolbarPosition === 'bottom' && (
+            <MenuBar
+              editor={editor}
+              disabled={disabled}
+              features={features}
+              onImageUpload={onImageUpload}
+              variant="bottom"
+              borderless={borderless}
+            />
+          )}
         </div>
       </ContextMenuTrigger>
 
@@ -1607,6 +1676,9 @@ interface ToolbarButtonProps {
   isActive?: boolean
   title?: string
   'aria-label'?: string
+  /** 'quiet' renders a muted ghost icon on a transparent background (for the
+   * bottom toolbar); 'default' keeps the filled active-state look. */
+  variant?: 'default' | 'quiet'
 }
 
 function ToolbarButton({
@@ -1616,13 +1688,22 @@ function ToolbarButton({
   isActive,
   title,
   'aria-label': ariaLabel,
+  variant = 'default',
 }: ToolbarButtonProps) {
   return (
     <Button
       type="button"
       variant="ghost"
       size="sm"
-      className={cn('h-7 w-7 p-0', isActive && 'bg-muted')}
+      className={cn(
+        'h-7 w-7 p-0',
+        variant === 'quiet'
+          ? cn(
+              'text-muted-foreground/60 hover:text-foreground',
+              isActive && 'bg-muted/60 text-foreground'
+            )
+          : isActive && 'bg-muted'
+      )}
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -2051,9 +2132,27 @@ interface MenuBarProps {
   disabled: boolean
   features?: EditorFeatures
   onImageUpload?: (file: File) => Promise<string>
+  /** 'top' is the classic bordered strip; 'bottom' is a quiet transparent row
+   * of ghost icon buttons rendered below the content. Both render the same
+   * feature-gated button set. */
+  variant?: 'top' | 'bottom'
+  /** Only meaningful for the bottom variant: when the surrounding editor is
+   * borderless the consumer supplies its own horizontal padding, so the row
+   * drops its own px to stay flush with the content's left edge. */
+  borderless?: boolean
 }
 
-function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProps) {
+function MenuBar({
+  editor,
+  disabled,
+  features = {},
+  onImageUpload,
+  variant = 'top',
+  borderless = false,
+}: MenuBarProps) {
+  const isBottom = variant === 'bottom'
+  // Muted ghost buttons on the transparent bottom row; filled active-state on top.
+  const btn = isBottom ? ('quiet' as const) : ('default' as const)
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href
     let url = window.prompt('URL', previousUrl)
@@ -2097,11 +2196,22 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
   const canRedo = editor.can().chain().focus().redo().run()
 
   return (
-    <div className="flex items-center gap-1 flex-wrap px-2 py-1.5 border-b border-input bg-muted/30">
+    <div
+      className={cn(
+        'flex items-center flex-wrap',
+        isBottom
+          ? // Quiet transparent row sitting on the editor background. Drops its
+            // own horizontal padding when borderless so the consumer's padding
+            // keeps the icons flush with the content's left edge.
+            cn('gap-0.5 pt-1', borderless ? 'px-0 pb-0' : 'px-3 pb-2')
+          : 'gap-1 px-2 py-1.5 border-b border-input bg-muted/30'
+      )}
+    >
       {/* Heading buttons */}
       {features.headings && (
         <>
           <ToolbarButton
+            variant={btn}
             icon={<Heading1 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             disabled={disabled}
@@ -2109,6 +2219,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
             title="Heading 1"
           />
           <ToolbarButton
+            variant={btn}
             icon={<Heading2 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             disabled={disabled}
@@ -2116,6 +2227,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
             title="Heading 2"
           />
           <ToolbarButton
+            variant={btn}
             icon={<Heading3 className="size-4" />}
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
             disabled={disabled}
@@ -2128,6 +2240,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
 
       {/* Basic formatting */}
       <ToolbarButton
+        variant={btn}
         icon={<Bold className="size-4" />}
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={disabled || !editor.can().chain().focus().toggleBold().run()}
@@ -2135,6 +2248,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
         title="Bold"
       />
       <ToolbarButton
+        variant={btn}
         icon={<Italic className="size-4" />}
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={disabled || !editor.can().chain().focus().toggleItalic().run()}
@@ -2145,6 +2259,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
 
       {/* Lists */}
       <ToolbarButton
+        variant={btn}
         icon={<ListBulletIcon className="size-4" />}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         disabled={disabled}
@@ -2152,6 +2267,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
         title="Bullet List"
       />
       <ToolbarButton
+        variant={btn}
         icon={<ListOrdered className="size-4" />}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         disabled={disabled}
@@ -2162,6 +2278,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
 
       {/* Link */}
       <ToolbarButton
+        variant={btn}
         icon={<LinkIcon className="size-4" />}
         onClick={setLink}
         disabled={disabled}
@@ -2172,6 +2289,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
       {/* Code block button */}
       {features.codeBlocks && (
         <ToolbarButton
+          variant={btn}
           icon={<Code2 className="size-4" />}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           disabled={disabled}
@@ -2183,6 +2301,7 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
       {/* Image button */}
       {features.images && onImageUpload && (
         <ToolbarButton
+          variant={btn}
           icon={<ImagePlus className="size-4" />}
           onClick={insertImage}
           disabled={disabled}
@@ -2190,16 +2309,20 @@ function MenuBar({ editor, disabled, features = {}, onImageUpload }: MenuBarProp
         />
       )}
 
-      <div className="flex-1" />
+      {/* Push undo/redo to the trailing edge on the filled top strip; the quiet
+          bottom row flows left-to-right (and wraps) with no spacer. */}
+      {!isBottom && <div className="flex-1" />}
 
       {/* Undo/Redo */}
       <ToolbarButton
+        variant={btn}
         icon={<ArrowUturnLeftIcon className="size-4" />}
         onClick={() => editor.chain().focus().undo().run()}
         disabled={disabled || !canUndo}
         title="Undo"
       />
       <ToolbarButton
+        variant={btn}
         icon={<ArrowUturnRightIcon className="size-4" />}
         onClick={() => editor.chain().focus().redo().run()}
         disabled={disabled || !canRedo}
