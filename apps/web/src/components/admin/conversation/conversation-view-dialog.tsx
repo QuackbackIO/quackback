@@ -21,7 +21,7 @@ import {
 } from '@/lib/shared/conversation/views'
 import { TICKET_TYPES, TICKET_STATUS_CATEGORIES, TICKET_STAGES } from '@/lib/shared/db-types'
 import { TICKET_STATUS_CATEGORY_LABELS, DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
-import { ticketTypeLabel } from '@/components/admin/tickets/ticket-chips'
+import { ticketTypeLabel } from '@/components/admin/inbox/ticket-chips'
 import {
   useConversationTagsWithCounts,
   useInboxTeams,

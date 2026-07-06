@@ -18,7 +18,7 @@ import {
   InboxScopeMenu,
   type InboxNavItem,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
-import { TicketStatusChip } from '@/components/admin/tickets/ticket-chips'
+import { TicketStatusChip } from '@/components/admin/inbox/ticket-chips'
 import { TagChip } from '@/components/shared/tag-chip'
 import { Spinner } from '@/components/shared/spinner'
 import { Avatar } from '@/components/ui/avatar'

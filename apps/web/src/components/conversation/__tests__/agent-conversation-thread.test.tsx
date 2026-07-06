@@ -116,13 +116,13 @@ vi.mock('@/components/admin/conversation/export-transcript-button', () => ({
   downloadTranscriptFile: vi.fn(),
 }))
 vi.mock('@/components/ui/datetime-picker', () => ({ DateTimePicker: () => null }))
-vi.mock('@/components/admin/tickets/ticket-chips', () => ({
+vi.mock('@/components/admin/inbox/ticket-chips', () => ({
   TicketTypeBadge: ({ type }: { type: string }) => (
     <span data-testid="ticket-type-badge">{type}</span>
   ),
   TicketStageChip: () => null,
 }))
-vi.mock('@/components/admin/tickets/ticket-controls', () => ({
+vi.mock('@/components/admin/inbox/ticket-controls', () => ({
   TicketStatusControl: () => <div data-testid="ticket-status-control" />,
   TicketAssigneeControl: () => <div data-testid="ticket-assignee-control" />,
   TicketPriorityControl: () => <div data-testid="ticket-priority-control" />,
@@ -252,7 +252,8 @@ vi.mock('@/lib/server/functions/tickets', () => ({
   setTicketStatusFn: vi.fn(),
   exportTicketTranscriptFn: vi.fn(),
 }))
-vi.mock('@/lib/client/queries/inbox', () => ({
+vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/client/queries/inbox')>()),
   inboxQueries: {
     ticketThread: (id: string) => ({
       queryKey: ['ticket-thread', id],
@@ -267,9 +268,6 @@ vi.mock('@/lib/client/queries/inbox', () => ({
       queryFn: () => Promise.resolve(null),
     }),
   },
-}))
-vi.mock('@/lib/client/queries/tickets', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/client/queries/tickets')>()),
   ticketQueries: {
     statuses: () => ({
       queryKey: ['ticket-statuses'],

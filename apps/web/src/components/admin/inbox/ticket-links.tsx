@@ -5,7 +5,7 @@ import { LinkIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import type { TicketId } from '@quackback/ids'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
-import { ticketQueries, ticketKeys } from '@/lib/client/queries/tickets'
+import { ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
 import { linkTicketToTrackerFn, unlinkTicketFromTrackerFn } from '@/lib/server/functions/tickets'
 import { DetailRow as Row } from '@/components/shared/detail-row'
 import {

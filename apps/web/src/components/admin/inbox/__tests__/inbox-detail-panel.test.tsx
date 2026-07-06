@@ -33,16 +33,16 @@ vi.mock('@/components/admin/conversation/conversation-attributes-editor', () => 
 }))
 vi.mock('@/components/admin/conversation/status-control', () => ({ StatusControl: () => null }))
 vi.mock('@/components/admin/conversation/company-card', () => ({ CompanyCard: () => null }))
-vi.mock('@/components/admin/tickets/ticket-chips', () => ({
+vi.mock('@/components/admin/inbox/ticket-chips', () => ({
   TicketTypeBadge: () => null,
   TicketStageChip: () => null,
 }))
-vi.mock('@/components/admin/tickets/ticket-controls', () => ({
+vi.mock('@/components/admin/inbox/ticket-controls', () => ({
   TicketStatusControl: () => null,
   TicketAssigneeControl: () => null,
   TicketPriorityControl: () => null,
 }))
-vi.mock('@/components/admin/tickets/ticket-links', () => ({ TicketLinks: () => null }))
+vi.mock('@/components/admin/inbox/ticket-links', () => ({ TicketLinks: () => null }))
 vi.mock('@/components/admin/users/block-person-control', () => ({
   usePersonBlockStatus: () => ({ blocked: false, isLoading: false }),
 }))

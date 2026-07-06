@@ -41,10 +41,15 @@ export function getNotificationTarget(
     (notification.type === 'chat_mention' || notification.type === 'chat_message') &&
     notification.conversationId
   ) {
-    return { to: '/admin/inbox', search: { c: notification.conversationId } }
+    return { to: '/admin/inbox', search: { i: notification.conversationId } }
   }
 
   // A ticket-stage change notifies the requester (portal); deep-link to the thread.
+  // Deliberately NOT `/admin/inbox?i=` (UNIFIED-INBOX-SPEC.md §4 suggests this):
+  // `existing.requesterPrincipalId` (ticket.service.ts) is only ever set from
+  // `PortalUserPicker`, so every recipient of this notification is a portal
+  // customer without admin access — routing them into `/admin/inbox` would
+  // strand them outside the workspace they can reach.
   if (notification.type === 'ticket_status_changed' && notification.ticketId) {
     return { to: '/support/ticket/$ticketId', params: { ticketId: notification.ticketId } }
   }

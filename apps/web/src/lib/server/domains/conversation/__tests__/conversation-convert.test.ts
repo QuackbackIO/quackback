@@ -206,7 +206,7 @@ describe('createPostFromConversation create-new path', () => {
       postId: 'post_new',
       integrationType: 'live_chat',
       externalId: conversationId,
-      externalUrl: `http://localhost:3000/admin/inbox?c=${conversationId}`,
+      externalUrl: `http://localhost:3000/admin/inbox?i=${conversationId}`,
       externalDisplayId: 'Need dark mode', // conversation.subject
     })
     expect(onConflictHit).toBe(true)
@@ -243,7 +243,7 @@ describe('createPostFromConversation upvote-existing path', () => {
     expect(principalArg).toBe(visitorPrincipalId)
     expect(sourceArg).toMatchObject({
       type: 'live_chat',
-      externalUrl: `http://localhost:3000/admin/inbox?c=${conversationId}`,
+      externalUrl: `http://localhost:3000/admin/inbox?i=${conversationId}`,
     })
     expect(fourthArg).toBeNull()
     expect(agentArg).toBe(agentPrincipalId)

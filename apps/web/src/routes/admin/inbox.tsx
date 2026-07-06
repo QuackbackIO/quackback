@@ -76,8 +76,7 @@ import {
   type InboxSearch,
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
-import { inboxQueries, inboxKeys } from '@/lib/client/queries/inbox'
-import { ticketQueries, ticketKeys } from '@/lib/client/queries/tickets'
+import { inboxQueries, inboxKeys, ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
 import {
   inboxItemRefFromId,
   type InboxItemDTO,

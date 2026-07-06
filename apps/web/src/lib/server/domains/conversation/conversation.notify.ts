@@ -72,7 +72,11 @@ function withEmailProxyHint(node: JSONContent): JSONContent {
     try {
       const src = new URL(node.attrs.src, config.baseUrl)
       const sameOrigin = src.origin === new URL(config.baseUrl).origin
-      if (sameOrigin && src.pathname.startsWith('/api/storage/') && !src.searchParams.has('email')) {
+      if (
+        sameOrigin &&
+        src.pathname.startsWith('/api/storage/') &&
+        !src.searchParams.has('email')
+      ) {
         src.searchParams.set('email', '1')
         next = { ...node, attrs: { ...node.attrs, src: src.toString() } }
       }
@@ -183,7 +187,7 @@ export async function notifyVisitorMessage(opts: {
     if (!agentsOnline) {
       const ctx = await buildHookContext()
       if (!ctx) return
-      const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?c=${opts.conversation.id}`
+      const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
       const { sendConversationMessageEmail } = await import('@quackback/email')
       await Promise.allSettled(
         team

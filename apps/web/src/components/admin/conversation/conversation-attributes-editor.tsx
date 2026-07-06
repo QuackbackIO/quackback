@@ -17,7 +17,7 @@ import {
   type ConversationAttributeItem,
 } from '@/lib/client/queries/conversation-attributes'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
-import { ticketKeys } from '@/lib/client/queries/tickets'
+import { ticketKeys } from '@/lib/client/queries/inbox'
 import { readAttributeValue } from '@/lib/shared/conversation/attribute-values'
 
 /** The dual target this editor writes to — mirrors SetAttributeTarget. */

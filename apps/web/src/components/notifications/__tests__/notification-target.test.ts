@@ -90,7 +90,7 @@ describe('getNotificationTarget', () => {
     })
     expect(getNotificationTarget(notification)).toEqual({
       to: '/admin/inbox',
-      search: { c: 'conversation_1' },
+      search: { i: 'conversation_1' },
     })
   })
 
@@ -101,7 +101,7 @@ describe('getNotificationTarget', () => {
     })
     expect(getNotificationTarget(notification)).toEqual({
       to: '/admin/inbox',
-      search: { c: 'conversation_2' },
+      search: { i: 'conversation_2' },
     })
   })
 

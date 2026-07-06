@@ -41,7 +41,7 @@ export async function createPostFromConversation(
 
   const conversation = await assertConversationViewable(input.conversationId, ctx.agentActor)
   const visitorPrincipalId = conversation.visitorPrincipalId
-  const externalUrl = `${config.baseUrl.replace(/\/$/, '')}/admin/inbox?c=${input.conversationId}`
+  const externalUrl = `${config.baseUrl.replace(/\/$/, '')}/admin/inbox?i=${input.conversationId}`
 
   let postId: PostId
   let created: boolean

@@ -351,8 +351,8 @@ function ActivitySection({ companyId }: { companyId: CompanyId }) {
             {(recentTickets ?? []).map((t) => (
               <Link
                 key={t.id}
-                to="/admin/tickets"
-                search={{ t: t.id }}
+                to="/admin/inbox"
+                search={{ i: t.id }}
                 className="flex items-center gap-2 px-3 py-2 hover:bg-muted/40 transition-colors"
               >
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
@@ -478,7 +478,10 @@ function CompanyAttributesPanel({
       <div className="rounded-lg border border-border/50 bg-card px-3 py-1">
         {defs.map((def) =>
           draft ? (
-            <div key={def.key} className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
+            <div
+              key={def.key}
+              className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0"
+            >
               <span className="w-36 shrink-0 text-xs text-muted-foreground">{def.label}</span>
               {def.type === 'boolean' ? (
                 <Select

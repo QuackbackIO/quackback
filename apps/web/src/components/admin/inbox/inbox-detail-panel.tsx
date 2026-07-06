@@ -45,13 +45,13 @@ import { NoEmailBadge } from '@/components/admin/conversation/channel-badge'
 import { CompanyCard } from '@/components/admin/conversation/company-card'
 import { CopilotPanel } from '@/components/admin/conversation/copilot-panel'
 import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
-import { TicketTypeBadge, TicketStageChip } from '@/components/admin/tickets/ticket-chips'
+import { TicketTypeBadge, TicketStageChip } from '@/components/admin/inbox/ticket-chips'
 import {
   TicketStatusControl,
   TicketAssigneeControl,
   TicketPriorityControl,
-} from '@/components/admin/tickets/ticket-controls'
-import { TicketLinks } from '@/components/admin/tickets/ticket-links'
+} from '@/components/admin/inbox/ticket-controls'
+import { TicketLinks } from '@/components/admin/inbox/ticket-links'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'

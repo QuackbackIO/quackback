@@ -18,7 +18,7 @@ vi.mock('@/lib/server/functions/tickets', () => ({
 }))
 
 import { TicketLinks } from '../ticket-links'
-import { ticketKeys } from '@/lib/client/queries/tickets'
+import { ticketKeys } from '@/lib/client/queries/inbox'
 
 function ticket(overrides: Partial<TicketDTO> = {}): TicketDTO {
   return {

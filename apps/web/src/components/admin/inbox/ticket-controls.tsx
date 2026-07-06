@@ -15,13 +15,13 @@ import { PriorityDot, PriorityMenuItems } from '@/components/admin/conversation/
 import { AssigneeMenuItems } from '@/components/admin/conversation/assignee-control'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
-import { ticketQueries } from '@/lib/client/queries/tickets'
+import { ticketQueries } from '@/lib/client/queries/inbox'
 import {
   useSetTicketStatus,
   useAssignTicket,
   useSetTicketPriority,
-} from '@/lib/client/mutations/tickets'
-import { TicketStatusChip } from '@/components/admin/tickets/ticket-chips'
+} from '@/lib/client/mutations/inbox'
+import { TicketStatusChip } from '@/components/admin/inbox/ticket-chips'
 import { Avatar } from '@/components/ui/avatar'
 import {
   DropdownMenu,

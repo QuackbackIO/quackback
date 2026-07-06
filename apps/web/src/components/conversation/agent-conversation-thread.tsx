@@ -120,12 +120,12 @@ import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
 import { SlaChip } from '@/components/admin/conversation/sla-chip'
 import { ConversationTagsEditor } from '@/components/admin/conversation/conversation-tags-editor'
 import { StatusControl } from '@/components/admin/conversation/status-control'
-import { TicketTypeBadge, TicketStageChip } from '@/components/admin/tickets/ticket-chips'
+import { TicketTypeBadge, TicketStageChip } from '@/components/admin/inbox/ticket-chips'
 import {
   TicketStatusControl,
   TicketAssigneeControl,
   TicketPriorityControl,
-} from '@/components/admin/tickets/ticket-controls'
+} from '@/components/admin/inbox/ticket-controls'
 import { InboxDetailPanel } from '@/components/admin/inbox/inbox-detail-panel'
 import { CreateTicketDialog } from '@/components/admin/inbox/create-ticket-dialog'
 import { ConvertToPostDialog } from '@/components/admin/conversation/convert-to-post-dialog'
@@ -143,8 +143,7 @@ import {
 import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-tray'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
-import { inboxQueries } from '@/lib/client/queries/inbox'
-import { ticketKeys, ticketQueries } from '@/lib/client/queries/tickets'
+import { inboxQueries, ticketKeys, ticketQueries } from '@/lib/client/queries/inbox'
 import {
   buildAdminConversationRows,
   type AdminConversationRow,
@@ -788,7 +787,7 @@ export function AgentConversationThread({
   // control. Conversation-only — the ticket header's controls call `onChanged`
   // (the route's own refresh) directly, mirroring the pre-fold TicketDetail:
   // their mutations already seed `ticketKeys.detail`/`ticketKeys.list` caches
-  // themselves (lib/client/mutations/tickets.ts), so there's nothing extra to
+  // themselves (lib/client/mutations/inbox.ts), so there's nothing extra to
   // invalidate here for a ticket.
   const refreshThread = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: threadKey })

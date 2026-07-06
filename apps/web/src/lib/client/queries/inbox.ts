@@ -5,6 +5,11 @@
  * (inbox-scope.ts) recognizes call `itemList` — everything else keeps reading
  * `conversationInboxQueries.conversationList` from conversation-inbox.ts, which
  * this module does not touch.
+ *
+ * Also carries the standalone ticket-workspace query keys/options
+ * (`ticketKeys`/`ticketQueries`, formerly `lib/client/queries/tickets.ts`,
+ * folded in at UNIFIED-INBOX-SPEC.md M6): cache keys are unchanged so existing
+ * invalidations keep matching.
  */
 import { queryOptions } from '@tanstack/react-query'
 import type { ConversationId, TicketId } from '@quackback/ids'
@@ -13,10 +18,105 @@ import {
   fetchInboxCountsFn,
   getConversationTicketLinkFn,
 } from '@/lib/server/functions/inbox'
-import { listTicketMessagesFn, getTicketFn } from '@/lib/server/functions/tickets'
-import { ticketKeys } from '@/lib/client/queries/tickets'
+import {
+  listTicketsFn,
+  getTicketFn,
+  listTicketStatusesFn,
+  getTicketStageLabelsFn,
+  listTicketMessagesFn,
+  getTicketLinksFn,
+} from '@/lib/server/functions/tickets'
+import type { TicketListFilter } from '@/lib/server/domains/tickets'
 import { asAgentMessage } from '@/lib/shared/conversation/types'
 import type { InboxListParams } from '@/lib/client/conversation/inbox-scope'
+
+/** A deterministic string key for a ticket-list filter (so the query cache
+ *  dedupes). Mirrors `inboxListParamsKey` for the unified list. */
+export function ticketListKey(filter: TicketListFilter): string {
+  return [
+    filter.type ?? 'all',
+    filter.statusCategory ?? 'all',
+    filter.stage ?? 'all',
+    filter.assignee ?? 'all',
+    filter.teamId ?? '',
+    filter.requesterPrincipalId ?? '',
+    filter.companyId ?? '',
+    filter.sort ?? 'recent',
+    filter.limit ?? '',
+  ].join('|')
+}
+
+export const ticketKeys = {
+  /** Prefix of every ticket query (broad invalidation target). */
+  all: () => ['admin', 'tickets'] as const,
+  /** Prefix of every ticket-list query (all scopes/filters). */
+  lists: () => [...ticketKeys.all(), 'list'] as const,
+  /** One ticket list for a specific filter. */
+  list: (filterKey: string) => [...ticketKeys.lists(), filterKey] as const,
+  /** A single ticket's detail. */
+  detail: (id: TicketId) => [...ticketKeys.all(), 'detail', id] as const,
+  /** The workspace's status catalogue (drives the status picker). */
+  statuses: () => [...ticketKeys.all(), 'statuses'] as const,
+  /** The workspace's customer-facing stage labels. */
+  stageLabels: () => [...ticketKeys.all(), 'stage-labels'] as const,
+  /** A single ticket's message thread. */
+  thread: (id: TicketId) => [...ticketKeys.all(), 'thread', id] as const,
+  /** A single ticket's tracker links (the tracker it belongs to, or its linked tickets). */
+  links: (id: TicketId) => [...ticketKeys.all(), 'links', id] as const,
+}
+
+export const ticketQueries = {
+  /** The ticket list for a scope + type/status/sort refinement. `staleTime` keeps
+   *  the loader-warmed data from refetching the instant a row mounts. */
+  list: (filter: TicketListFilter) =>
+    queryOptions({
+      queryKey: ticketKeys.list(ticketListKey(filter)),
+      queryFn: () => listTicketsFn({ data: filter }),
+      staleTime: 60_000,
+    }),
+
+  /** A single ticket (properties only in 7A; the thread arrives with 7B). */
+  detail: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.detail(id),
+      queryFn: () => getTicketFn({ data: { ticketId: id } }),
+      staleTime: 60_000,
+    }),
+
+  /** The status catalogue, ordered by category then position. */
+  statuses: () =>
+    queryOptions({
+      queryKey: ticketKeys.statuses(),
+      queryFn: () => listTicketStatusesFn(),
+      staleTime: 60_000,
+    }),
+
+  /** The customer-facing stage labels (drives the status picker's stage hints). */
+  stageLabels: () =>
+    queryOptions({
+      queryKey: ticketKeys.stageLabels(),
+      queryFn: () => getTicketStageLabelsFn(),
+      staleTime: 60_000,
+    }),
+
+  /** A ticket's message thread (oldest-first). No live SSE yet, so a short
+   *  staleTime + refetch-on-focus keeps it reasonably fresh for the agent. */
+  thread: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.thread(id),
+      queryFn: () => listTicketMessagesFn({ data: { ticketId: id } }),
+      staleTime: 10_000,
+    }),
+
+  /** A ticket's tracker links: for a tracker, the customer tickets it tracks;
+   *  for a customer ticket, the tracker it belongs to (or null). */
+  links: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.links(id),
+      queryFn: () => getTicketLinksFn({ data: { ticketId: id } }),
+      staleTime: 30_000,
+    }),
+}
 
 export const inboxKeys = {
   /** Prefix of every unified-inbox query (broad invalidation target). */
@@ -76,12 +176,10 @@ export const inboxQueries = {
 
   // -------------------------------------------------------------------------
   // Ticket thread/detail (§2.5, M4): the unified thread's ticket-kind data.
-  // Deliberately keyed under `ticketKeys` (not a new `inboxKeys` namespace) —
-  // `lib/client/queries/tickets.ts` is only deleted in M6, and the inbox
-  // route's `refreshInbox` already invalidates `ticketKeys.all()` to refresh
-  // the (to-be-deleted) ticket-only surfaces; reusing the same keys means
-  // that one invalidation keeps covering the unified thread too, with no
-  // second cache entry to keep in sync.
+  // Deliberately keyed under `ticketKeys` (defined above, not a separate
+  // `inboxKeys` namespace) — the inbox route's `refreshInbox` already
+  // invalidates `ticketKeys.all()`, so one invalidation keeps covering the
+  // unified thread with no second cache entry to keep in sync.
   // -------------------------------------------------------------------------
 
   /** A ticket's message thread (oldest-first), coerced through `asAgentMessage`

@@ -175,7 +175,7 @@ describe('notifyVisitorMessage', () => {
       to: 'a@x.com',
       direction: 'visitor_message',
       senderName: 'Jane',
-      ctaUrl: `https://acme.example.com/admin/inbox?c=${conversationId}`,
+      ctaUrl: `https://acme.example.com/admin/inbox?i=${conversationId}`,
       workspaceName: 'Acme',
     })
   })
@@ -431,9 +431,7 @@ describe('conversation email body (P4.5)', () => {
     const call = sendConversationMessageEmail.mock.calls[0][0]
     // The whole body (not the 140-char preview), split on the blank line and
     // with text escaped so stored content can't inject HTML into the inbox.
-    expect(call.bodyHtml).toBe(
-      `<p>${'A'.repeat(200)}</p><p>second &lt;script&gt; line</p>`
-    )
+    expect(call.bodyHtml).toBe(`<p>${'A'.repeat(200)}</p><p>second &lt;script&gt; line</p>`)
     // messagePreview stays the truncated excerpt.
     expect((call.messagePreview as string).length).toBeLessThan(body.length)
   })
