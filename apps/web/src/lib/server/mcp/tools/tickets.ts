@@ -9,9 +9,16 @@
 import { z } from 'zod'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { TicketId, PrincipalId, CompanyId } from '@quackback/ids'
-import type { TicketType, TicketStatusCategory, TicketStage } from '@/lib/server/db'
+import type {
+  TicketType,
+  TicketStatusCategory,
+  TicketStage,
+  ConversationAttachment,
+} from '@/lib/server/db'
 import type { TicketSort } from '@/lib/server/domains/tickets/ticket.types'
 import type { McpAuthContext } from '../types'
+import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import {
   registerTool,
   mcpAgentActor,
@@ -26,6 +33,30 @@ const TICKET_CATEGORIES = ['open', 'pending', 'closed'] as const
 const TICKET_STAGES = ['received', 'in_progress', 'awaiting_requester', 'resolved'] as const
 const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority'] as const
 const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
+
+/** Markdown format note appended to the write tools' content/description fields.
+ *  Unlike posts/changelog/articles, ticket messages do not auto-rehost external
+ *  images — omit that claim here. */
+const TICKET_MARKDOWN_DESCRIBE =
+  'Markdown (GFM): headings, bold/italic, links, ordered/bulleted lists, code blocks, images via ![alt](url).'
+
+/**
+ * Parse MCP-supplied markdown into a sanitized TipTap doc. The ticket domain
+ * (unlike posts/changelog/articles) does not derive `contentJson` from
+ * markdown itself — see `createTicketCore` / `insertTicketMessage`, which only
+ * sanitize a doc the caller already supplied — so the MCP write tools convert
+ * here before calling the service, same as a rich-editor client would.
+ */
+function markdownToSanitizedJson(markdown: string) {
+  return sanitizeTiptapContent(markdownToTiptapJson(markdown))
+}
+
+/** Append a compact attachments summary to a message's rendered body, when present. */
+function withAttachmentsSummary(content: string, attachments: ConversationAttachment[]): string {
+  if (!attachments.length) return content
+  const lines = attachments.map((a) => `- ${a.name}: ${a.url}`)
+  return `${content}\n\nAttachments:\n${lines.join('\n')}`
+}
 
 export function registerTicketTools(server: McpServer, auth: McpAuthContext) {
   registerTool<{
@@ -158,7 +189,10 @@ Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
           senderType: m.senderType,
           isInternal: m.isInternal,
           authorName: m.author?.displayName ?? null,
-          content: m.content,
+          content: withAttachmentsSummary(
+            contentJsonToMarkdown(m.contentJson, m.content),
+            m.attachments ?? []
+          ),
           createdAt: m.createdAt,
         })),
         hasMore: page.hasMore,
@@ -182,7 +216,11 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
     schema: {
       type: z.enum(TICKET_TYPES).describe('Ticket object type'),
       title: z.string().min(1).max(300).describe('Short summary'),
-      description: z.string().max(10000).optional().describe('Opening message body (optional)'),
+      description: z
+        .string()
+        .max(10000)
+        .optional()
+        .describe(`Opening message body (optional). ${TICKET_MARKDOWN_DESCRIBE}`),
       priority: z.enum(TICKET_PRIORITIES).optional().describe('Triage priority (default none)'),
       requesterPrincipalId: z
         .string()
@@ -195,11 +233,18 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
     teamOnly: true,
     handler: async (args) => {
       const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      // Always populate descriptionJson from the markdown when a description is
+      // given (mirrors createPost's unconditional contentJson derivation) — a
+      // plain single-line description still yields a minimal valid doc.
+      const descriptionJson = args.description
+        ? markdownToSanitizedJson(args.description)
+        : undefined
       const dto = await createTicket(
         {
           type: args.type,
           title: args.title,
           description: args.description,
+          descriptionJson,
           priority: args.priority,
           requesterPrincipalId: args.requesterPrincipalId as PrincipalId | undefined,
           companyId: args.companyId as CompanyId | undefined,
@@ -226,7 +271,11 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
 Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued your refund; it should arrive in 3-5 days." })`,
     schema: {
       ticketId: z.string().describe('Ticket TypeID'),
-      content: z.string().min(1).max(10000).describe('Reply text, visible to the requester'),
+      content: z
+        .string()
+        .min(1)
+        .max(10000)
+        .describe(`Reply text, visible to the requester. ${TICKET_MARKDOWN_DESCRIBE}`),
     },
     annotations: WRITE,
     scope: 'write:chat',
@@ -237,6 +286,7 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
       const { message } = await sendTicketMessage(mcpAgentActor(auth), {
         ticketId: args.ticketId as TicketId,
         content: args.content,
+        contentJson: markdownToSanitizedJson(args.content),
       })
       return jsonResult({
         id: message.id,
@@ -253,7 +303,11 @@ Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued y
 Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the refund with billing; awaiting bank processing." })`,
     schema: {
       ticketId: z.string().describe('Ticket TypeID'),
-      content: z.string().min(1).max(10000).describe('Internal note text (team-only)'),
+      content: z
+        .string()
+        .min(1)
+        .max(10000)
+        .describe(`Internal note text (team-only). ${TICKET_MARKDOWN_DESCRIBE}`),
     },
     annotations: WRITE,
     scope: 'write:chat',
@@ -263,6 +317,7 @@ Example: add_ticket_note({ ticketId: "ticket_01abc...", content: "Confirmed the 
       const { message } = await addTicketNote(mcpAgentActor(auth), {
         ticketId: args.ticketId as TicketId,
         content: args.content,
+        contentJson: markdownToSanitizedJson(args.content),
       })
       return jsonResult({
         id: message.id,

@@ -130,6 +130,8 @@ describe('ticket MCP tools', () => {
           isInternal: false,
           author: null,
           content: 'first',
+          contentJson: null,
+          attachments: [],
           createdAt: '2026-07-04T00:00:00.000Z',
         },
         {
@@ -138,6 +140,8 @@ describe('ticket MCP tools', () => {
           isInternal: false,
           author: { displayName: 'Grace' },
           content: 'reply',
+          contentJson: null,
+          attachments: [],
           createdAt: '2026-07-04T00:01:00.000Z',
         },
       ],
@@ -152,8 +156,77 @@ describe('ticket MCP tools', () => {
     const body = parse(out)
     expect(body.ticket).toMatchObject({ id: 'ticket_1', reference: '#42', stage: 'in_progress' })
     expect(body.messages.map((m: { id: string }) => m.id)).toEqual(['m_old', 'm_new'])
+    expect(body.messages.map((m: { content: string }) => m.content)).toEqual(['first', 'reply'])
     expect(body.hasMore).toBe(true)
     expect(body.nextCursor).toBe('m_old')
+  })
+
+  it('get_ticket renders an image-bearing message as markdown, never empty', async () => {
+    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockListMessages.mockResolvedValue({
+      messages: [
+        {
+          id: 'm_img',
+          senderType: 'visitor',
+          isInternal: false,
+          author: null,
+          // The rich composer stored contentJson but no plaintext mirror.
+          content: '',
+          contentJson: {
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'image',
+                    attrs: { src: 'https://cdn.example.com/pic.png', alt: null, title: null },
+                  },
+                ],
+              },
+            ],
+          },
+          attachments: [],
+          createdAt: '2026-07-04T00:00:00.000Z',
+        },
+      ],
+      hasMore: false,
+    })
+    const out = await collect(teamAuth).get('get_ticket')!({ ticketId: 'ticket_1' })
+    const body = parse(out)
+    expect(body.messages[0].content).toBe('![](https://cdn.example.com/pic.png)')
+    expect(body.messages[0].content).not.toBe('')
+  })
+
+  it('get_ticket appends an attachments summary when a message carries attachments', async () => {
+    mockGetTicket.mockResolvedValue(ticketDTO)
+    mockListMessages.mockResolvedValue({
+      messages: [
+        {
+          id: 'm_att',
+          senderType: 'agent',
+          isInternal: false,
+          author: { displayName: 'Grace' },
+          content: 'See attached invoice.',
+          contentJson: null,
+          attachments: [
+            {
+              name: 'invoice.pdf',
+              url: 'https://cdn.example.com/invoice.pdf',
+              contentType: 'application/pdf',
+              size: 1024,
+            },
+          ],
+          createdAt: '2026-07-04T00:01:00.000Z',
+        },
+      ],
+      hasMore: false,
+    })
+    const out = await collect(teamAuth).get('get_ticket')!({ ticketId: 'ticket_1' })
+    const body = parse(out)
+    expect(body.messages[0].content).toBe(
+      'See attached invoice.\n\nAttachments:\n- invoice.pdf: https://cdn.example.com/invoice.pdf'
+    )
   })
 
   it('create_ticket maps the input and returns the created ticket', async () => {
@@ -169,11 +242,28 @@ describe('ticket MCP tools', () => {
       title: 'Refund not received',
       description: 'Missing refund',
     })
+    // A plain single-line description still produces a minimal valid doc
+    // (consistent with createPost's unconditional contentJson derivation).
+    expect(input.descriptionJson).toEqual({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Missing refund' }] }],
+    })
     expect(actor.principalId).toBe('principal_key')
     expect(parse(out)).toMatchObject({ id: 'ticket_1', reference: '#42' })
   })
 
-  it('reply_to_ticket sends a visitor-visible message', async () => {
+  it('create_ticket omits descriptionJson when no description is given', async () => {
+    mockCreateTicket.mockResolvedValue(ticketDTO)
+    await collect(teamAuth).get('create_ticket')!({
+      type: 'customer',
+      title: 'Refund not received',
+    })
+    const [input] = mockCreateTicket.mock.calls[0]
+    expect(input.description).toBeUndefined()
+    expect(input.descriptionJson).toBeUndefined()
+  })
+
+  it('reply_to_ticket sends a visitor-visible message with a minimal contentJson doc for plain text', async () => {
     mockSendMessage.mockResolvedValue({
       message: { id: 'm_1', ticketId: 'ticket_1', createdAt: '2026-07-04T00:02:00.000Z' },
     })
@@ -183,7 +273,14 @@ describe('ticket MCP tools', () => {
     })
     const [actor, input] = mockSendMessage.mock.calls[0]
     expect(actor.principalId).toBe('principal_key')
-    expect(input).toEqual({ ticketId: 'ticket_1', content: 'On it.' })
+    expect(input).toEqual({
+      ticketId: 'ticket_1',
+      content: 'On it.',
+      contentJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'On it.' }] }],
+      },
+    })
     expect(parse(out)).toEqual({
       id: 'm_1',
       ticketId: 'ticket_1',
@@ -191,13 +288,64 @@ describe('ticket MCP tools', () => {
     })
   })
 
-  it('add_ticket_note routes to the note path, not the reply path', async () => {
+  it('reply_to_ticket converts markdown structure (bold + list) into contentJson', async () => {
+    mockSendMessage.mockResolvedValue({
+      message: { id: 'm_1', ticketId: 'ticket_1', createdAt: '2026-07-04T00:02:00.000Z' },
+    })
+    await collect(teamAuth).get('reply_to_ticket')!({
+      ticketId: 'ticket_1',
+      content: '**bold** plus a list\n\n- one\n- two',
+    })
+    const [, input] = mockSendMessage.mock.calls[0]
+    expect(input.content).toBe('**bold** plus a list\n\n- one\n- two')
+    const nodeTypes = JSON.stringify(input.contentJson)
+    expect(nodeTypes).toContain('"bold"')
+    expect(nodeTypes).toContain('"bulletList"')
+    expect(input.contentJson.content[0].content[0]).toEqual({
+      type: 'text',
+      text: 'bold',
+      marks: [{ type: 'bold' }],
+    })
+  })
+
+  it('reply_to_ticket neutralizes hostile markdown (raw script text, javascript: link)', async () => {
+    mockSendMessage.mockResolvedValue({
+      message: { id: 'm_1', ticketId: 'ticket_1', createdAt: '2026-07-04T00:02:00.000Z' },
+    })
+    await collect(teamAuth).get('reply_to_ticket')!({
+      ticketId: 'ticket_1',
+      content: '<script>alert(1)</script>\n\n[click me](javascript:alert(1))',
+    })
+    const [, input] = mockSendMessage.mock.calls[0]
+    const serialized = JSON.stringify(input.contentJson)
+    // sanitizeTiptapContent strips the javascript: link mark entirely.
+    expect(serialized).not.toContain('javascript:')
+    expect(serialized).not.toContain('"link"')
+    // The raw <script> tag was never parsed as an executable node — it only
+    // ever exists as inert text content.
+    for (const node of input.contentJson.content) {
+      for (const child of node.content ?? []) {
+        expect(child.type === 'text' || child.type === 'hardBreak').toBe(true)
+      }
+    }
+  })
+
+  it('add_ticket_note routes to the note path, not the reply path, with contentJson', async () => {
     mockAddNote.mockResolvedValue({
       message: { id: 'm_2', ticketId: 'ticket_1', createdAt: '2026-07-04T00:03:00.000Z' },
     })
     await collect(teamAuth).get('add_ticket_note')!({ ticketId: 'ticket_1', content: 'internal' })
     expect(mockAddNote).toHaveBeenCalledTimes(1)
     expect(mockSendMessage).not.toHaveBeenCalled()
+    const [, input] = mockAddNote.mock.calls[0]
+    expect(input).toEqual({
+      ticketId: 'ticket_1',
+      content: 'internal',
+      contentJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'internal' }] }],
+      },
+    })
   })
 
   it('link_ticket links a customer ticket to a tracker and returns the linked ids', async () => {
