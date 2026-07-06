@@ -771,6 +771,125 @@ describe('sanitizeTiptapContent', () => {
     expect(node!.attrs!.class).toBeUndefined()
   })
 
+  // ============================================
+  // Support-grade preset round-trip (P0.2)
+  // ============================================
+  // The upgraded ticket/conversation composers emit this full node set. Each
+  // case is a true round-trip (sanitize(doc) deep-equals doc) so a future
+  // gap in the allowlist regresses loudly instead of silently dropping content.
+
+  it('round-trips a codeBlock with its language attr and text content', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'codeBlock',
+          attrs: { language: 'bash' },
+          content: [{ type: 'text', text: 'curl https://example.com' }],
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
+  })
+
+  it('round-trips a resizableImage with src/width/height/data-keep-ratio', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'resizableImage',
+          attrs: {
+            src: 'https://example.com/photo.png',
+            alt: 'A photo',
+            width: 400,
+            height: 300,
+            'data-keep-ratio': true,
+          },
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
+  })
+
+  it('round-trips a mention with its id/label attrs', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Hey ' },
+            {
+              type: 'mention',
+              attrs: { id: 'user_01ktjwt5tyf6br9mw521h13n6n', label: 'Jane Doe' },
+            },
+          ],
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
+  })
+
+  it('round-trips the full support-grade node set unchanged', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Hey ' },
+            {
+              type: 'mention',
+              attrs: { id: 'user_01ktjwt5tyf6br9mw521h13n6n', label: 'Jane Doe' },
+            },
+            { type: 'text', text: ', see ' },
+            {
+              type: 'text',
+              text: 'this',
+              marks: [
+                {
+                  type: 'link',
+                  attrs: {
+                    href: 'https://example.com/path',
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                  },
+                },
+              ],
+            },
+            { type: 'text', text: ' ' },
+            { type: 'emoji', attrs: { name: 'smile', emoji: '😄' } },
+          ],
+        },
+        {
+          type: 'codeBlock',
+          attrs: { language: 'bash' },
+          content: [{ type: 'text', text: 'curl https://example.com' }],
+        },
+        {
+          type: 'resizableImage',
+          attrs: {
+            src: 'https://example.com/photo.png',
+            alt: 'A photo',
+            width: 400,
+            height: 300,
+            'data-keep-ratio': true,
+          },
+        },
+        {
+          type: 'chatImage',
+          attrs: { src: '/api/storage/chat-images/photo.png', alt: 'A screenshot' },
+        },
+        { type: 'quackbackEmbed', attrs: { kind: 'post', id: EMBED_POST_ID } },
+        {
+          type: 'blockquote',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A quote' }] }],
+        },
+      ],
+    }
+    expect(sanitizeTiptapContent(doc)).toEqual(doc)
+  })
+
   it('caps total node count (doc-bomb protection)', () => {
     const input = {
       type: 'doc',

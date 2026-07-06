@@ -135,6 +135,11 @@ function sanitizeAttrs(
       // Remove zero-value dimensions
       if (result.width === 0) delete result.width
       if (result.height === 0) delete result.height
+      // `data-keep-ratio` (tiptap-extension-resizable-image) locks the aspect
+      // ratio while a resize handle is dragged — a plain boolean, safe to coerce.
+      if (attrs['data-keep-ratio'] !== undefined) {
+        result['data-keep-ratio'] = Boolean(attrs['data-keep-ratio'])
+      }
       return result
     }
 
