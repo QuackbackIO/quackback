@@ -726,6 +726,7 @@ describe('<CopilotPanel> proposed actions (P2-C.4)', () => {
           id: 'assistant_action_1',
           toolName: 'end_conversation',
           summary: 'Close the conversation',
+          label: 'End conversation',
         },
       ],
     })
@@ -853,6 +854,31 @@ describe('<CopilotPanel> proposed actions (P2-C.4)', () => {
     expect(
       await screen.findByText('This request was already decided or has expired')
     ).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('refetches and settles to the terminal state on a 409-style "already decided" error (C1)', async () => {
+    await askAndGetProposal()
+    // The proposal was actually decided (e.g. by another teammate, or swept
+    // expired) by the time this approve call lands; the mock's next
+    // resolved value simulates the now-current server truth a refetch sees.
+    hoisted.approveAssistantActionFn.mockRejectedValue(
+      new Error('This request was already decided or has expired')
+    )
+    hoisted.getAssistantPendingActionFn.mockResolvedValue(proposedActionRow({ status: 'expired' }))
+
+    await userEvent.click(screen.getByRole('button', { name: /approve/i }))
+
+    expect(
+      await screen.findByText('This request was already decided or has expired')
+    ).toBeInTheDocument()
+    // usePendingActionDecision's on-error invalidateQueries refetches, so the
+    // stale "proposed" buttons are replaced by the real terminal state
+    // instead of staying clickable — the fix this hook exists for.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
+    )
+    expect(await screen.findByText('Expired')).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 })

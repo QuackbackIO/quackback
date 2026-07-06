@@ -16,21 +16,20 @@
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import { isValidTypeId, type ConversationId } from '@quackback/ids'
+import type { ConversationId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 import { isAssistantConfigured } from '@/lib/server/domains/assistant'
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
 import { generateConversationSummaryText } from '@/lib/server/domains/assistant/conversation-summary.service'
+import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'copilot-summary-fn' })
 
 const summarizeConversationNowSchema = z.object({
-  conversationId: z
-    .string()
-    .refine((v) => isValidTypeId(v, 'conversation'), { message: 'Invalid conversation ID format' }),
+  conversationId: conversationIdSchema,
 })
 
 export const summarizeConversationNowFn = createServerFn({ method: 'POST' })

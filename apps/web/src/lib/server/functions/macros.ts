@@ -49,17 +49,28 @@ const listMacrosSchema = z
   .object({ surface: z.enum(['support', 'feedback']).optional() })
   .optional()
 
+// Manager-authored limits: a teammate hand-types both fields from the macro
+// manager form, so these stay tight. Copilot's save-as-macro flow (below)
+// prefills name from the full question and body from Quinn's full answer —
+// neither is manually trimmed the way a teammate composing from scratch
+// would be, so its limits are deliberately roomier rather than truncating
+// either into a rejected save. Keep both pairs as their own named constants
+// rather than unifying: they encode two different authoring shapes, not an
+// oversight.
+const MACRO_NAME_MAX = 80
+const MACRO_BODY_MAX = 4000
+
 const createMacroSchema = z.object({
-  name: z.string().min(1).max(80),
-  body: z.string().min(1).max(4000),
+  name: z.string().min(1).max(MACRO_NAME_MAX),
+  body: z.string().min(1).max(MACRO_BODY_MAX),
   scope: macroScopeSchema.default('support'),
   actions: z.array(macroActionSchema).max(20).default([]),
 })
 
 const updateMacroSchema = z.object({
   id: z.string(),
-  name: z.string().min(1).max(80).optional(),
-  body: z.string().min(1).max(4000).optional(),
+  name: z.string().min(1).max(MACRO_NAME_MAX).optional(),
+  body: z.string().min(1).max(MACRO_BODY_MAX).optional(),
   scope: macroScopeSchema.optional(),
   actions: z.array(macroActionSchema).max(20).optional(),
 })
@@ -89,9 +100,13 @@ export const createMacroFn = createServerFn({ method: 'POST' })
     })
   })
 
+// Roomier than MACRO_NAME_MAX/MACRO_BODY_MAX — see the comment there.
+const COPILOT_MACRO_NAME_MAX = 120
+const COPILOT_MACRO_BODY_MAX = 8000
+
 const saveCopilotAnswerAsMacroSchema = z.object({
-  name: z.string().min(1).max(120),
-  body: z.string().min(1).max(8000),
+  name: z.string().min(1).max(COPILOT_MACRO_NAME_MAX),
+  body: z.string().min(1).max(COPILOT_MACRO_BODY_MAX),
 })
 
 /**

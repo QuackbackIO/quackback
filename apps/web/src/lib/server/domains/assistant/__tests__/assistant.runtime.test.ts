@@ -851,6 +851,49 @@ describe('runAssistantTurn', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
 
+  it('reports a proposal a write tool created during the failing final attempt, even though the answer itself falls back (S6)', async () => {
+    // Unlike citations (only ever derived from a validated final, so stay
+    // empty on a fallback), a completed propose call is a real DB side
+    // effect that already happened — the fallback path must still report it
+    // rather than losing it because the surrounding turn never validated.
+    mockRetrieve.mockResolvedValue([])
+    let callCount = 0
+    mockChat.mockImplementation((opts: { context: { proposedActions: unknown[] } }) => {
+      callCount += 1
+      if (callCount === 1) {
+        // First attempt: a plain hard failure, nothing proposed.
+        return chunkStream([{ type: 'RUN_ERROR', message: 'provider exploded' }])
+      }
+      // Second (final) attempt: a write tool proposes before this run also
+      // fails to produce a usable answer.
+      return (async function* () {
+        opts.context.proposedActions.push({
+          id: 'assistant_action_1',
+          toolName: 'end_conversation',
+          summary: 'Close the conversation',
+          label: 'End conversation',
+        })
+        yield { type: 'RUN_ERROR', message: 'provider exploded again' }
+      })()
+    })
+
+    const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('q') })
+
+    expect(result).toMatchObject({
+      status: 'answered',
+      text: ASSISTANT_FALLBACK_MESSAGE,
+      proposedActions: [
+        {
+          id: 'assistant_action_1',
+          toolName: 'end_conversation',
+          summary: 'Close the conversation',
+          label: 'End conversation',
+        },
+      ],
+    })
+    expect(mockChat).toHaveBeenCalledTimes(2)
+  })
+
   it('propagates an abort instead of masking it with the fallback', async () => {
     const controller = new AbortController()
     mockChat.mockImplementation(() =>

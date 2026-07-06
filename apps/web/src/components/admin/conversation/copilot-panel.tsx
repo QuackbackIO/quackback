@@ -9,37 +9,24 @@
  * composer (B.4's leak gate) — "Add as note" never confirms, from anywhere.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ArrowPathIcon,
   BoltIcon,
-  BookOpenIcon,
-  ChatBubbleLeftRightIcon,
   ClipboardDocumentListIcon,
-  DocumentTextIcon,
   EllipsisHorizontalIcon,
   FunnelIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
-  MapIcon,
   ShieldCheckIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline'
-import {
-  CheckCircleIcon,
-  CheckIcon,
-  PaperAirplaneIcon,
-  StopIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/solid'
-import type { AssistantPendingActionId, ConversationId } from '@quackback/ids'
+import { PaperAirplaneIcon, StopIcon } from '@heroicons/react/24/solid'
+import type { ConversationId } from '@quackback/ids'
 import { Avatar } from '@/components/ui/avatar'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -60,23 +47,19 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   AssistantAnswer,
   AssistantWorkingTrace,
 } from '@/components/shared/conversation/assistant-turn'
+import { CopilotProposedActionCard } from './copilot-proposed-action-card'
+import { SaveAsMacroDialog } from './copilot-save-as-macro-dialog'
+import {
+  CopilotSourcesList,
+  visibleSourceOptions,
+  type SourceOption,
+  type SourceType,
+} from './copilot-sources'
 import { useSseTurn } from '@/lib/client/hooks/use-sse-turn'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { assistantPendingActionQueries } from '@/lib/client/queries/assistant-pending-actions'
-import {
-  useApproveAssistantAction,
-  useRejectAssistantAction,
-} from '@/lib/client/mutations/assistant-pending-actions'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
@@ -94,19 +77,28 @@ import {
   type TransformFinalPayload,
   type TransformErrorPayload,
 } from '@/lib/shared/assistant/copilot-contract'
-import {
-  stripCitationMarkers,
-  formatConversationSummaryNote,
-} from '@/lib/shared/assistant/copilot-format'
+import { formatConversationSummaryNote } from '@/lib/shared/assistant/copilot-format'
 import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
-import { saveCopilotAnswerAsMacroFn } from '@/lib/server/functions/macros'
 import { summarizeConversationNowFn } from '@/lib/server/functions/copilot-summary'
 
 const MAX_QUESTION_CHARS = 4000
 const MAX_HISTORY_ENTRIES = 20
 const GENERIC_ERROR = 'Something went wrong. Try again.'
 
-type SourceType = CopilotCitation['type']
+/** Pull the server's `{error:{message}}` body off a failed SSE turn's HTTP
+ *  response, falling back to GENERIC_ERROR for a non-JSON (or empty) body.
+ *  Shared by both `onHttpError` handlers below (the ask/answer turn and the
+ *  transform turn) so the same fallback logic doesn't drift between them. */
+async function extractHttpErrorMessage(res: Response): Promise<string> {
+  try {
+    const body = await res.json()
+    if (body?.error?.message) return body.error.message as string
+  } catch {
+    // Non-JSON error body: keep the generic message.
+  }
+  return GENERIC_ERROR
+}
+
 type InsertMode = 'reply' | 'note'
 
 /** The answer card's "Add to composer & modify" menu rows (P2-C.1): the tone
@@ -141,7 +133,7 @@ interface PendingInsert {
   text: string
 }
 
-interface CopilotTurn {
+export interface CopilotTurn {
   id: string
   question: string
   answer: string
@@ -155,60 +147,6 @@ interface CopilotTurn {
   status: 'streaming' | 'done' | 'error'
   activity: AssistantActivityStatus | null
   errorMessage?: string
-}
-
-interface SourceOption {
-  type: SourceType
-  /** Plural — the Answer-sources popover's filter row. */
-  label: string
-  /** Singular — the per-citation source row's hovercard meta line. */
-  rowLabel: string
-  subtitle?: string
-  icon: typeof BookOpenIcon
-  flagKey?: keyof FeatureFlags
-}
-
-// Single source of truth for each source type's icon + labels: the popover
-// filter list and the citation-row hovercard both read off this one table
-// instead of keeping their own icon/label maps in sync by hand.
-const SOURCE_OPTIONS: SourceOption[] = [
-  {
-    type: 'article',
-    label: 'Help center articles',
-    rowLabel: 'Help center article',
-    icon: BookOpenIcon,
-  },
-  {
-    type: 'snippet',
-    label: 'Snippets',
-    rowLabel: 'Snippet',
-    icon: DocumentTextIcon,
-    flagKey: 'assistantSnippets',
-  },
-  {
-    type: 'post',
-    label: 'Roadmap posts',
-    rowLabel: 'Roadmap post',
-    icon: MapIcon,
-    flagKey: 'assistantPostGrounding',
-  },
-  {
-    type: 'summary',
-    label: 'Past conversations',
-    rowLabel: 'Past conversation',
-    subtitle: "This customer's closed conversations",
-    icon: ChatBubbleLeftRightIcon,
-    flagKey: 'assistantConversationGrounding',
-  },
-]
-
-const SOURCE_TYPE_META: Record<SourceType, { icon: typeof BookOpenIcon; label: string }> =
-  Object.fromEntries(
-    SOURCE_OPTIONS.map((opt) => [opt.type, { icon: opt.icon, label: opt.rowLabel }])
-  ) as Record<SourceType, { icon: typeof BookOpenIcon; label: string }>
-
-function visibleSourceOptions(flags: FeatureFlags | undefined): SourceOption[] {
-  return SOURCE_OPTIONS.filter((opt) => !opt.flagKey || flags?.[opt.flagKey])
 }
 
 function copilotSourcesStorageKey(principalId: string): string {
@@ -368,14 +306,7 @@ export function CopilotPanel({
         },
         onHttpError: async (res) => {
           ok = false
-          let message = GENERIC_ERROR
-          try {
-            const body = await res.json()
-            if (body?.error?.message) message = body.error.message
-          } catch {
-            // Non-JSON error body: keep the generic message.
-          }
-          toast.error(message)
+          toast.error(await extractHttpErrorMessage(res))
         },
         onAbort: () => {
           ok = false
@@ -463,14 +394,7 @@ export function CopilotPanel({
           },
         },
         onHttpError: async (res) => {
-          let message = GENERIC_ERROR
-          try {
-            const body = await res.json()
-            if (body?.error?.message) message = body.error.message
-          } catch {
-            // Non-JSON error body — keep the generic message.
-          }
-          patch({ status: 'error', errorMessage: message })
+          patch({ status: 'error', errorMessage: await extractHttpErrorMessage(res) })
         },
         onStreamEnd: () => {
           if (!finished) patch({ status: 'done', activity: null })
@@ -803,225 +727,6 @@ function CopilotTurnView({
   )
 }
 
-/** Terminal-status copy for a decided proposal that ISN'T executed/failed
- *  (those two get their own richer treatment below). Mirrors
- *  pending-action-card.tsx's TERMINAL_LABEL for the states it shares. */
-const PROPOSED_ACTION_TERMINAL_LABEL: Record<string, string> = {
-  approved: 'Approved',
-  rejected: 'Rejected',
-  expired: 'Expired',
-}
-
-/** "close_conversation" -> "Close conversation": a short, human tool label
- *  for the card's kicker line. Derived from the internal tool name rather
- *  than fetched from the server catalogue, since this is a purely cosmetic
- *  label and the copilot client has no other reason to know tool metadata. */
-function humanizeToolName(toolName: string): string {
-  const words = toolName.split('_').filter(Boolean)
-  if (words.length === 0) return toolName
-  return [`${words[0][0]?.toUpperCase() ?? ''}${words[0].slice(1)}`, ...words.slice(1)].join(' ')
-}
-
-/** Pull a short, human line out of a tool's JSON result, if it offered one
- *  (create_ticket's reference/title, or any tool's own `note`). Returns null
- *  when nothing recognizable is there; the card falls back to a generic
- *  "Approved and executed" in that case. */
-function formatProposedActionResult(result: unknown): string | null {
-  if (!result || typeof result !== 'object' || Array.isArray(result)) return null
-  const r = result as Record<string, unknown>
-  if (typeof r.note === 'string' && r.note) return r.note
-  if (typeof r.reference === 'string' && r.reference) return `Ticket ${r.reference}`
-  if (typeof r.title === 'string' && r.title) return r.title
-  return null
-}
-
-/** The `{error}` a failed execution settled with (markPendingActionFailed's result shape). */
-function formatProposedActionFailure(result: unknown): string | null {
-  if (!result || typeof result !== 'object' || Array.isArray(result)) return null
-  const error = (result as Record<string, unknown>).error
-  return typeof error === 'string' && error ? error : null
-}
-
-/** True for a 403 from the approve/reject gate: duck-typed off the DomainException
- *  shape (`statusCode`/`code`) rather than `instanceof`, since a thrown server-fn
- *  error's prototype chain isn't guaranteed to survive the RPC boundary, but its
- *  own enumerable properties are. */
-function isPermissionDeniedError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  const withMeta = error as Error & { statusCode?: number; code?: string }
-  return withMeta.statusCode === 403 || withMeta.code === 'ASSISTANT_ACTION_PERMISSION_DENIED'
-}
-
-function proposedActionErrorMessage(error: unknown): string {
-  if (isPermissionDeniedError(error)) return 'You do not have permission to approve this action.'
-  return error instanceof Error && error.message ? error.message : GENERIC_ERROR
-}
-
-/**
- * One write-tool call this Copilot turn proposed (P2-C.4, "act-on-approval"):
- * tool label + summary + Approve/Reject, wired to the SAME gated server fns
- * the inbox approval queue uses (functions/assistant-actions.ts via
- * use-assistant-pending-actions' mutations), polling the same live row
- * (assistantPendingActionQueries) so this card can never show a stale status
- * relative to the inbox note card announcing the same proposal. A distinct
- * visual from pending-action-card.tsx (that one's amber note-card chrome is
- * built for the conversation thread, not a Copilot answer bubble), same data
- * plumbing underneath, per the "reuse the same fns" rule.
- */
-function CopilotProposedActionCard({ action }: { action: CopilotProposedAction }) {
-  const id = action.id as AssistantPendingActionId
-  const { data, isLoading, isError } = useQuery(assistantPendingActionQueries.detail(id))
-  const approve = useApproveAssistantAction()
-  const reject = useRejectAssistantAction()
-  const [inlineError, setInlineError] = useState<string | null>(null)
-
-  const busy = approve.isPending || reject.isPending
-
-  const decide = (mutate: typeof approve.mutate) => {
-    setInlineError(null)
-    mutate(
-      { pendingActionId: id },
-      { onError: (error) => setInlineError(proposedActionErrorMessage(error)) }
-    )
-  }
-
-  return (
-    <div className="mt-2 flex flex-col gap-1.5 rounded-lg border border-border bg-background p-2.5 text-xs">
-      <div className="flex items-center gap-1.5 font-medium text-foreground">
-        <ShieldCheckIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
-        {humanizeToolName(action.toolName)}
-      </div>
-      <p className="text-muted-foreground">{action.summary}</p>
-
-      {isLoading ? (
-        <span className="text-muted-foreground">Checking status…</span>
-      ) : isError ? (
-        <span className="text-muted-foreground">Couldn&apos;t load the current status</span>
-      ) : data?.status === 'proposed' ? (
-        <div className="flex items-center gap-2 pt-0.5">
-          <Button type="button" size="sm" disabled={busy} onClick={() => decide(approve.mutate)}>
-            {approve.isPending ? (
-              <>
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Approving…
-              </>
-            ) : (
-              <>
-                <CheckIcon className="h-3.5 w-3.5" /> Approve
-              </>
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => decide(reject.mutate)}
-          >
-            {reject.isPending ? (
-              <>
-                <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" /> Rejecting…
-              </>
-            ) : (
-              <>
-                <XMarkIcon className="h-3.5 w-3.5" /> Reject
-              </>
-            )}
-          </Button>
-        </div>
-      ) : data?.status === 'executed' ? (
-        <div className="flex items-center gap-1.5 pt-0.5 text-emerald-700 dark:text-emerald-400">
-          <CheckCircleIcon className="h-4 w-4 shrink-0" />
-          <span>{formatProposedActionResult(data.result) ?? 'Approved and executed'}</span>
-        </div>
-      ) : data?.status === 'failed' ? (
-        <span className="pt-0.5 text-destructive">
-          {formatProposedActionFailure(data.result) ?? 'This action could not be completed.'}
-        </span>
-      ) : (
-        <span className="pt-0.5 font-medium text-muted-foreground">
-          {data
-            ? (PROPOSED_ACTION_TERMINAL_LABEL[data.status] ?? data.status)
-            : 'Unable to load status'}
-        </span>
-      )}
-      {inlineError && <span className="text-destructive">{inlineError}</span>}
-    </div>
-  )
-}
-
-function CopilotSourcesList({ citations }: { citations: CopilotCitation[] }) {
-  return (
-    <div className="ps-1">
-      <p className="mb-1 text-[11px] text-muted-foreground/70">
-        {citations.length} relevant {citations.length === 1 ? 'source' : 'sources'}
-      </p>
-      <div className="flex flex-col gap-0.5">
-        {citations.map((c) => (
-          <CopilotSourceRow key={c.id} citation={c} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
-  const meta = SOURCE_TYPE_META[citation.type]
-  const Icon = meta.icon
-  const isInternal = citation.internal === true
-  const hasUrl = !!citation.url
-  const [copied, setCopied] = useState(false)
-
-  const copyLink = (e: ReactMouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!citation.url) return
-    void navigator.clipboard?.writeText(citation.url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
-  const row = (
-    <span className="group relative flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
-      <Icon className={cn('h-3.5 w-3.5 shrink-0', isInternal && 'text-amber-600')} />
-      <span className="truncate">{citation.title}</span>
-      {isInternal && <LockClosedIcon className="h-3 w-3 shrink-0 text-amber-600" />}
-      <span className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-30 w-60 -translate-y-1 rounded-xl border border-border bg-popover p-3 text-left opacity-0 shadow-xl transition-all group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-        <span className="mb-1 block text-[13px] font-semibold leading-snug text-foreground">
-          {citation.title}
-        </span>
-        <span className="mb-1 block text-[11px] text-muted-foreground">
-          {meta.label}
-          {isInternal ? ' · Internal' : ''}
-        </span>
-        {hasUrl ? (
-          <span className="flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] text-muted-foreground">{citation.url}</span>
-            <button
-              type="button"
-              onClick={copyLink}
-              className="pointer-events-auto shrink-0 text-[11px] text-primary hover:underline"
-            >
-              {copied ? 'Copied' : 'Copy link'}
-            </button>
-          </span>
-        ) : (
-          <span className="text-[11px] text-amber-700 dark:text-amber-300">
-            Internal · not linkable
-          </span>
-        )}
-      </span>
-    </span>
-  )
-
-  return hasUrl ? (
-    <a href={citation.url} target="_blank" rel="noreferrer" className="no-underline">
-      {row}
-    </a>
-  ) : (
-    row
-  )
-}
-
 function CopilotAskInput({
   value,
   onChange,
@@ -1176,93 +881,5 @@ function CopilotAskInput({
         </div>
       </div>
     </div>
-  )
-}
-
-/** First few words of a question, used to prefill the macro name field. */
-function firstWords(text: string, count: number): string {
-  return text.trim().split(/\s+/).filter(Boolean).slice(0, count).join(' ')
-}
-
-/** The answer card "..." menu's "Save as macro" dialog (P2-C.2). Keyed on the
- *  turn's id so switching to a different turn's dialog remounts the form with
- *  a fresh name/body instead of carrying over stale edits. */
-function SaveAsMacroDialog({
-  turn,
-  onOpenChange,
-}: {
-  turn: CopilotTurn | null
-  onOpenChange: (open: boolean) => void
-}) {
-  return (
-    <Dialog open={!!turn} onOpenChange={onOpenChange}>
-      <DialogContent>
-        {turn && <SaveAsMacroForm key={turn.id} turn={turn} onClose={() => onOpenChange(false)} />}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function SaveAsMacroForm({ turn, onClose }: { turn: CopilotTurn; onClose: () => void }) {
-  const [name, setName] = useState(() => firstWords(turn.question, 6))
-  const [saving, setSaving] = useState(false)
-  const body = useMemo(() => stripCitationMarkers(turn.answer), [turn.answer])
-
-  const save = useCallback(async () => {
-    const trimmedName = name.trim()
-    if (!trimmedName || saving) return
-    setSaving(true)
-    try {
-      await saveCopilotAnswerAsMacroFn({ data: { name: trimmedName, body } })
-      toast.success('Macro saved')
-      onClose()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save macro')
-    } finally {
-      setSaving(false)
-    }
-  }, [name, body, saving, onClose])
-
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Save as macro</DialogTitle>
-      </DialogHeader>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="copilot-macro-name">Name</Label>
-          <Input
-            id="copilot-macro-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={120}
-            autoFocus
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="copilot-macro-body">Body</Label>
-          <Textarea
-            id="copilot-macro-body"
-            value={body}
-            readOnly
-            rows={6}
-            className="max-h-40 resize-none overflow-y-auto"
-          />
-        </div>
-        {turn.internalSourced && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            This answer used internal sources. Review before saving it as a reusable reply.
-          </p>
-        )}
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-          Cancel
-        </Button>
-        <Button type="button" onClick={() => void save()} disabled={saving || !name.trim()}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-      </DialogFooter>
-    </>
   )
 }

@@ -21,6 +21,7 @@ import {
   markPendingActionExecuted,
   markPendingActionFailed,
   expireStalePendingActions,
+  getPendingActionByIdempotencyKey,
 } from '../pending-actions.service'
 
 const fixture = await createDbTestFixture({
@@ -185,5 +186,112 @@ describe.skipIf(!fixture.available)('pending-actions.service (real DB, rolled ba
       .from(assistantPendingActions)
       .where(eq(assistantPendingActions.id, decidedButPastExpiry.id))
     expect(untouchedDecided?.status).toBe('approved')
+  })
+
+  describe('proposePendingAction: idempotency key (S1, propose-retry safety)', () => {
+    it('dedupes a repeated idempotencyKey onto the same still-proposed row instead of inserting a duplicate', async () => {
+      const conversationId = await seedConversation()
+      const key = 'conversation_1:conversation_message_1:close_conversation:deadbeef'
+
+      const first = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: { reason: 'resolved' },
+        summary: 'Close this conversation as resolved.',
+        idempotencyKey: key,
+      })
+      const second = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: { reason: 'resolved' },
+        summary: 'Close this conversation as resolved.',
+        idempotencyKey: key,
+      })
+
+      // Both calls report the SAME proposal id — a retry never orphans the
+      // first attempt's row or creates a second one the caller loses track of.
+      expect(second.id).toBe(first.id)
+
+      const rows = await testDb
+        .select({ id: assistantPendingActions.id })
+        .from(assistantPendingActions)
+        .where(eq(assistantPendingActions.idempotencyKey, key))
+      expect(rows).toHaveLength(1)
+    })
+
+    it('allows a fresh proposal to reuse a key once the earlier row is no longer proposed', async () => {
+      const conversationId = await seedConversation()
+      const agentId = await seedPrincipal()
+      const key = 'conversation_1:conversation_message_1:close_conversation:deadbeef'
+
+      const first = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'Close it.',
+        idempotencyKey: key,
+      })
+      await decidePendingAction(first.id, 'rejected', agentId)
+
+      // Same key, but the earlier row is no longer `proposed`: this must be a
+      // genuinely new proposal, not a resurrection of the rejected decision.
+      const second = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'Close it, asked again.',
+        idempotencyKey: key,
+      })
+
+      expect(second.id).not.toBe(first.id)
+      expect(second.status).toBe('proposed')
+
+      const rows = await testDb
+        .select({ id: assistantPendingActions.id, status: assistantPendingActions.status })
+        .from(assistantPendingActions)
+        .where(eq(assistantPendingActions.idempotencyKey, key))
+      expect(rows).toHaveLength(2)
+    })
+
+    it('never conflicts across two proposals with no idempotencyKey (legacy no-key callers)', async () => {
+      const conversationId = await seedConversation()
+
+      const first = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'Close it.',
+      })
+      const second = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'Close it.',
+      })
+
+      expect(second.id).not.toBe(first.id)
+    })
+  })
+
+  describe('getPendingActionByIdempotencyKey', () => {
+    it('returns null when nothing carries the key', async () => {
+      expect(await getPendingActionByIdempotencyKey('no_such_key')).toBeNull()
+    })
+
+    it('finds the row that claimed the key', async () => {
+      const conversationId = await seedConversation()
+      const proposed = await proposePendingAction({
+        conversationId,
+        toolName: 'close_conversation',
+        args: {},
+        summary: 'Close it.',
+        idempotencyKey: 'conversation_1:msg_1:close_conversation:abc',
+      })
+
+      const found = await getPendingActionByIdempotencyKey(
+        'conversation_1:msg_1:close_conversation:abc'
+      )
+      expect(found?.id).toBe(proposed.id)
+    })
   })
 })

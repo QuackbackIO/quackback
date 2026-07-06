@@ -65,7 +65,11 @@ export type EffectiveToolMode = ToolControlMode | 'simulate'
  *    even one configured 'autonomous': the proposal card a teammate sees IS
  *    the confirmation UX for a Copilot chat, so nothing fires without one,
  *    regardless of `ctx.simulate`. This check runs before the simulate fold
- *    below, so 'propose' wins over 'simulate' too if both were ever set.
+ *    below, so 'propose' wins over 'simulate' too if both were ever set. Same
+ *    fail-closed rule as fold 1: a spec whose `supportedModes` never lists
+ *    'approval' at all cannot honor this override (there is no proposal UX
+ *    for it to fall back to), so it disables rather than forcing a mode the
+ *    tool never declared it could run under.
  * 4. Write-risk simulate override. A write-risk tool with `ctx.simulate` true
  *    resolves to 'simulate' unless `ctx.writeToolPolicy` is explicitly
  *    'controls' (or 'propose', already handled above), in which case the
@@ -91,7 +95,16 @@ export function resolveEffectiveToolMode(
   }
   if (mode === 'disabled') return 'disabled'
   if (spec.risk === 'write') {
-    if (ctx.writeToolPolicy === 'propose') return 'approval'
+    if (ctx.writeToolPolicy === 'propose') {
+      if (!spec.supportedModes.includes('approval')) {
+        log.warn(
+          { tool: spec.name, mode: 'approval' },
+          'assistant tool control mode not supported by this tool; disabling'
+        )
+        return 'disabled'
+      }
+      return 'approval'
+    }
     if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
   }
   return mode
@@ -164,12 +177,22 @@ async function runWithPipeline(
       toolName: spec.name,
       args: args as Record<string, unknown>,
       summary,
+      // Same-shaped key as the autonomous branch's claim below: a synthesis
+      // retry that re-runs this exact write-tool call for the same turn
+      // dedupes onto the first proposal row instead of inserting a duplicate
+      // and re-announcing the note (see proposePendingAction). Always
+      // defined here — approval mode is only ever reached for a write-risk
+      // spec (reads never support it), and resolveIdempotencyKey always
+      // returns a key for a write-risk spec.
+      idempotencyKey: resolveIdempotencyKey(spec, args, ctx),
     })
     // Mirrors how search_knowledge records onto ctx.sources: the caller (the
     // copilot route, today) reads this ledger off the tool context after the
     // turn to surface what got proposed, alongside the customer-facing note
-    // proposePendingAction already dropped in the thread.
-    ctx.proposedActions.push({ id: pending.id, toolName: spec.name, summary })
+    // proposePendingAction already dropped in the thread. `pending` is the
+    // EXISTING row on a deduped retry, so this still references the one real
+    // proposal rather than a phantom second one.
+    ctx.proposedActions.push({ id: pending.id, toolName: spec.name, summary, label: spec.label })
     return { status: 'pending_approval', note: PENDING_APPROVAL_NOTE }
   }
 

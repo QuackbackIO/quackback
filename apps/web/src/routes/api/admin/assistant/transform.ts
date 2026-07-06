@@ -14,21 +14,14 @@
  *
  * Same gate order as copilot.ts: `copilot.use` -> the `assistantCopilot` flag
  * -> AI configured -> the AI token budget -> the conversation-viewable check.
+ * That shared sequence lives in copilot-gate.ts, alongside copilot.ts.
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { isValidTypeId } from '@quackback/ids'
-import type { ConversationId } from '@quackback/ids'
-import { requireAuth, policyActorFromAuth } from '@/lib/server/functions/auth-helpers'
-import { PERMISSIONS } from '@/lib/shared/permissions'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
-import { isAssistantConfigured, runCopilotTransform } from '@/lib/server/domains/assistant'
-import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
-import { NotFoundError } from '@/lib/shared/errors'
-import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
-import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
+import { runCopilotTransform } from '@/lib/server/domains/assistant'
+import { gateCopilotRequest } from '@/lib/server/domains/assistant/copilot-gate'
+import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
 import { createSseStream, SSE_RESPONSE_HEADERS } from '@/lib/server/utils/sse'
-import { errorResponse, forbiddenResponse } from '@/lib/server/domains/api/responses'
 import { logger } from '@/lib/server/logger'
 import {
   TRANSFORM_EVENTS,
@@ -43,59 +36,19 @@ const log = logger.child({ component: 'assistant-transform' })
 const MAX_TEXT_CHARS = 8000
 
 const requestSchema = z.object({
-  conversationId: z
-    .string()
-    .refine((v) => isValidTypeId(v, 'conversation'), { message: 'Invalid conversation ID format' }),
+  conversationId: conversationIdSchema,
   text: z.string().min(1).max(MAX_TEXT_CHARS),
   transform: z.enum(TRANSFORM_KINDS),
 })
 
 export async function handleTransform({ request }: { request: Request }): Promise<Response> {
-  let auth: Awaited<ReturnType<typeof requireAuth>>
-  try {
-    auth = await requireAuth({ permission: PERMISSIONS.COPILOT_USE })
-  } catch {
-    return forbiddenResponse('Copilot access required')
-  }
-
-  let parsed: z.infer<typeof requestSchema>
-  try {
-    parsed = requestSchema.parse(await request.json())
-  } catch {
-    return errorResponse(
-      'INVALID_REQUEST',
-      'A valid conversationId, text, and transform are required',
-      400
-    )
-  }
-
-  if (!(await isFeatureEnabled('assistantCopilot'))) {
-    return errorResponse('NOT_FOUND', 'Copilot is not available', 404)
-  }
-
-  if (!isAssistantConfigured()) {
-    return errorResponse('AI_NOT_CONFIGURED', 'The assistant is not configured', 503)
-  }
-
-  try {
-    await enforceAiTokenBudget()
-  } catch (err) {
-    if (err instanceof TierLimitError) {
-      return errorResponse(err.code, err.message, err.statusCode)
-    }
-    throw err
-  }
-
-  const conversationId = parsed.conversationId as ConversationId
-  try {
-    const actor = await policyActorFromAuth(auth)
-    await assertConversationViewable(conversationId, actor)
-  } catch (err) {
-    if (err instanceof NotFoundError) {
-      return errorResponse(err.code, err.message, 404)
-    }
-    throw err
-  }
+  const gate = await gateCopilotRequest(
+    request,
+    requestSchema,
+    'A valid conversationId, text, and transform are required'
+  )
+  if (!gate.ok) return gate.response
+  const { auth, parsed } = gate
 
   const sse = createSseStream()
 

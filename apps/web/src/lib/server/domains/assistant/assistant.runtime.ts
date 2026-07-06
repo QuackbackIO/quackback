@@ -92,6 +92,14 @@ export type AssistantTurnResult =
   | { status: 'suppressed'; reason: 'silence' }
 
 /**
+ * The `answered` branch alone — a fallback (never `suppressed`) is always
+ * this shape. Narrows `runSynthesis`'s fallback typing so the two fallback
+ * return sites can spread it plus a fresh `proposedActions` snapshot without
+ * TypeScript having to reason about the union's other, incompatible branch.
+ */
+type AssistantAnsweredResult = Extract<AssistantTurnResult, { status: 'answered' }>
+
+/**
  * A step surfaced while Quinn works, for a live "thinking / searching" trace in
  * the widget. `thinking` is the default working state; `tool` names the tool the
  * agentic loop just invoked, any name present in this turn's assembled tool set
@@ -673,19 +681,19 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     guidanceRuleIds = guidance.ruleIds
   }
 
-  const fallback: AssistantTurnResult = {
+  const fallback: AssistantAnsweredResult = {
     status: 'answered',
     text: ASSISTANT_FALLBACK_MESSAGE,
     citations: [],
     internalSourced: false,
-    // A reference, not a snapshot: toolContext.proposedActions is cleared
-    // in-place per attempt (never reassigned; see onAttemptStart below), so
-    // this always reflects whichever attempt actually ran by the time the
-    // fallback is returned, including one a real proposal happened in.
-    proposedActions: toolContext.proposedActions,
+    // Placeholder only: both return sites below always snapshot
+    // toolContext.proposedActions fresh at the moment they return, rather
+    // than reading this field, so a stale reference captured here (before
+    // the attempt loop even runs) can never leak out.
+    proposedActions: [],
   }
 
-  const outcome = await runSynthesis<AssistantTurnResult, AssistantToolContext>({
+  const outcome = await runSynthesis<AssistantAnsweredResult, AssistantToolContext>({
     model,
     systemPrompts,
     messages: toModelMessages(input.messages),
@@ -716,12 +724,12 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     deriveAnswerKind: (attempt) => deriveAnswerKind(attempt, toolContext),
     onAttemptStart: () => {
       // Fresh ledgers + search budget per attempt so a retry starts clean.
-      // proposedActions is truncated in place, never reassigned, so a
-      // reference taken earlier (the `fallback` value above) always reflects
-      // the latest attempt's state rather than an attempt-1 snapshot.
+      // A plain reassignment (not a truncate-in-place): nothing holds a live
+      // reference to the old array across attempts anymore (both return
+      // sites below snapshot via spread at return time instead).
       toolContext.sources.clear()
       toolContext.searchCalls = 0
-      toolContext.proposedActions.length = 0
+      toolContext.proposedActions = []
     },
     onRetry: (_attempt, error) => {
       log.warn({ err: error }, 'assistant turn attempt failed, retrying once')
@@ -733,7 +741,12 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     // in silence, and log the underlying error for diagnosis. (An abort
     // propagates as a throw from runSynthesis before we ever get here.)
     log.warn({ err: outcome.lastError }, 'assistant turn failed; returning fallback reply')
-    return outcome.value
+    // proposedActions survives the fallback (unlike citations, which stay
+    // empty here) because a write-tool call may already have created a real
+    // pending-action row before this attempt's answer failed to validate —
+    // that row is a real side effect and must still be reported, even though
+    // there is no validated final to derive citations from.
+    return { ...outcome.value, proposedActions: [...toolContext.proposedActions] }
   }
 
   const parsedResult = assistantOutputSchema.safeParse(outcome.final)
@@ -745,7 +758,9 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       { err: parsedResult.error },
       'assistant turn produced a non-conformant result; returning fallback reply'
     )
-    return fallback
+    // Same reasoning as the fallback branch above: snapshot fresh rather than
+    // trusting the placeholder `fallback` was built with.
+    return { ...fallback, proposedActions: [...toolContext.proposedActions] }
   }
   const parsed = parsedResult.data
   const citations = assembleCitations(parsed.citations, toolContext.sources)

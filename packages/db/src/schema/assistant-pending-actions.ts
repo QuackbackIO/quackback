@@ -6,8 +6,35 @@
  * unattended ones to `expired`. `executed`/`failed` land once an approved
  * action actually runs. `assistant_tool_calls.pending_action_id` links the
  * execution audit row back to the proposal that authorized it.
+ *
+ * `idempotencyKey` mirrors `assistant_tool_calls.idempotency_key` (same
+ * `conversationId:latestCustomerMessageId:toolName:hash(args)` shape, see
+ * assistant.tools.ts's `resolveIdempotencyKey`): a synthesis retry that
+ * re-runs a write-tool call whose first attempt already proposed dedupes
+ * onto that row via `proposePendingAction`'s INSERT ... ON CONFLICT DO
+ * NOTHING instead of inserting a duplicate. The uniqueness only holds `WHERE
+ * status = 'proposed'`, deliberately narrower than `assistant_tool_calls`'
+ * key-alone index: this key does NOT uniquely identify a turn the way the
+ * tool-call key does, because a copilot turn (surface: 'copilot') has no
+ * customer message to key off and always threads `latestCustomerMessageId:
+ * null`, so two unrelated copilot turns proposing the same tool with the
+ * same args mint the identical key. Scoping to `status = 'proposed'` means
+ * that collision only dedupes while the earlier proposal is still live (the
+ * actual retry case this exists for, and an arguably-desirable merge of two
+ * concurrent identical asks); once it is approved, rejected, expired, or
+ * executed, the key is free again and a new, unrelated proposal is never
+ * blocked from resurrecting a stale decision.
  */
-import { pgTable, text, timestamp, jsonb, index, check, foreignKey } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  text,
+  timestamp,
+  jsonb,
+  index,
+  uniqueIndex,
+  check,
+  foreignKey,
+} from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { conversations } from './conversation'
@@ -50,6 +77,7 @@ export const assistantPendingActions = pgTable(
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     executedAt: timestamp('executed_at', { withTimezone: true }),
     result: jsonb('result').$type<Record<string, unknown> | null>(),
+    idempotencyKey: text('idempotency_key'),
   },
   (table) => [
     foreignKey({
@@ -64,6 +92,11 @@ export const assistantPendingActions = pgTable(
     index('assistant_pending_actions_conversation_proposed_idx')
       .on(table.conversationId)
       .where(sql`${table.status} = 'proposed'`),
+    // See the column comment above for why this is scoped to `status =
+    // 'proposed'` rather than the key alone.
+    uniqueIndex('assistant_pending_actions_idempotency_key_idx')
+      .on(table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL AND ${table.status} = 'proposed'`),
     check(
       'assistant_pending_actions_status_check',
       sql`${table.status} IN ('proposed','approved','rejected','expired','executed','failed')`

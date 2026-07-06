@@ -98,10 +98,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 501 surfaces
+### Server functions (`requireAuth`) — 502 surfaces
 
 | Surface | Enforces |
 | --- | --- |
+| `lib/server/domains/assistant/copilot-gate.ts`::gateCopilotRequest | copilot.use |
 | `lib/server/functions/activity.ts`::fetchActivityForPost | post.view_private |
 | `lib/server/functions/admin-reset-two-factor.ts`::adminResetTwoFactorFn | auth.manage |
 | `lib/server/functions/admin.ts`::fetchInboxPosts | post.view_private |
@@ -604,13 +605,11 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/integrations/zendesk/functions.ts`::getZendeskConnectUrl | integration.manage |
 | `lib/server/integrations/zendesk/functions.ts`::searchZendeskUserFn | integration.view |
 
-### Public REST API (`withApiKeyAuth`) — 93 surfaces
+### Public REST API (`withApiKeyAuth`) — 91 surfaces
 
 | Surface | Enforces |
 | --- | --- |
-| `routes/api/admin/assistant/copilot.ts`::handleCopilot | copilot.use |
 | `routes/api/admin/assistant/sandbox.ts`::handleSandbox | settings.manage |
-| `routes/api/admin/assistant/transform.ts`::handleTransform | copilot.use |
 | `routes/api/export.companies.ts`::GET | company.view |
 | `routes/api/export.users.ts`::handleExportUsers | people.view |
 | `routes/api/v1/apps/boards.ts`::GET | PUBLIC (any valid key) |
@@ -773,7 +772,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-160 of 748 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+162 of 748 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -873,6 +872,8 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/[.]well-known.oauth-authorization-server.ts`::GET | route |
 | `routes/[.]well-known.oauth-protected-resource.ts`::GET | route |
 | `routes/[.]well-known.openid-configuration.ts`::GET | route |
+| `routes/api/admin/assistant/copilot.ts`::POST | route |
+| `routes/api/admin/assistant/transform.ts`::POST | route |
 | `routes/api/auth/$.ts`::GET | route |
 | `routes/api/auth/$.ts`::POST | route |
 | `routes/api/auth/invitation.$invitationId.ts`::GET | route |

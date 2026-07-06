@@ -66,6 +66,8 @@ export interface CopilotProposedAction {
   toolName: string
   /** Human-readable one-liner, same text the inbox approval note card shows. */
   summary: string
+  /** The admin-facing tool name (e.g. "End conversation"), for the card's title. */
+  label: string
 }
 
 /**

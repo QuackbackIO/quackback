@@ -31,9 +31,30 @@ export interface ProposePendingActionInput {
   args: Record<string, unknown>
   summary: string
   ttlHours?: number
+  /**
+   * A stable per-turn key, same shape as `assistant_tool_calls.idempotency_key`
+   * (assistant.tools.ts's `resolveIdempotencyKey`:
+   * `conversationId:latestCustomerMessageId:toolName:hash(args)`). A synthesis
+   * retry that re-runs the same write-tool call for the same turn mints the
+   * identical key, so the INSERT below no-ops against the partial-unique
+   * index instead of creating a duplicate row and re-announcing the note; see
+   * this function's doc comment and the column comment in the Drizzle schema
+   * for why the uniqueness is scoped to `status = 'proposed'`. Undefined
+   * never conflicts (a NULL key never collides with another NULL), matching
+   * every caller that predates this field.
+   */
+  idempotencyKey?: string
 }
 
-/** Open a proposal awaiting agent approval. */
+/**
+ * Open a proposal awaiting agent approval. When `idempotencyKey` is set and a
+ * still-`proposed` row already claimed it (a retried synthesis attempt
+ * re-running the same write-tool call within one turn), the INSERT no-ops on
+ * the partial-unique index and this returns that EXISTING row instead of
+ * inserting a duplicate — the propose-time note (`surfacePendingActionNote`)
+ * only ever fires for the row that actually won the insert, never for a
+ * deduped retry.
+ */
 export async function proposePendingAction(
   input: ProposePendingActionInput,
   exec: Executor = db
@@ -49,10 +70,40 @@ export async function proposePendingAction(
       args: input.args,
       summary: input.summary,
       expiresAt,
+      idempotencyKey: input.idempotencyKey ?? null,
     })
+    .onConflictDoNothing()
     .returning()
-  await surfacePendingActionNote(row)
-  return row
+  if (row) {
+    await surfacePendingActionNote(row)
+    return row
+  }
+  // Conflict: a NULL key never conflicts (the partial index only covers
+  // non-NULL keys), so reaching here with no row guarantees idempotencyKey
+  // was set and another still-proposed row already claimed it.
+  const existing = await getPendingActionByIdempotencyKey(input.idempotencyKey!, exec)
+  if (!existing) {
+    // Vanishingly unlikely (the winning row would have to be deleted between
+    // the INSERT and this SELECT) but never return a void proposal.
+    throw new Error(
+      `proposePendingAction: idempotency conflict on "${input.idempotencyKey}" but no existing row was found`
+    )
+  }
+  return existing
+}
+
+/** Look up a pending action by its idempotency key — the dedup read
+ *  `proposePendingAction` falls back to when its INSERT no-ops on conflict. */
+export async function getPendingActionByIdempotencyKey(
+  idempotencyKey: string,
+  exec: Executor = db
+): Promise<AssistantPendingAction | null> {
+  const [row] = await exec
+    .select()
+    .from(assistantPendingActions)
+    .where(eq(assistantPendingActions.idempotencyKey, idempotencyKey))
+    .limit(1)
+  return row ?? null
 }
 
 /**
@@ -65,9 +116,8 @@ async function surfacePendingActionNote(row: AssistantPendingAction): Promise<vo
   try {
     const assistant = await getAssistantPrincipal()
     if (!assistant) return
-    const { appendAssistantPendingActionNote } = await import(
-      '@/lib/server/domains/conversation/conversation.service'
-    )
+    const { appendAssistantPendingActionNote } =
+      await import('@/lib/server/domains/conversation/conversation.service')
     await appendAssistantPendingActionNote(
       row.conversationId,
       { pendingActionId: row.id, toolName: row.toolName, summary: row.summary },
@@ -183,9 +233,10 @@ export async function sweepAndNotifyExpiredPendingActions(
 ): Promise<AssistantPendingAction[]> {
   const expired = await expireStalePendingActions(exec)
   if (expired.length === 0) return expired
-  const { emitAssistantActionExpiredSystemMessage } = await import(
-    '@/lib/server/domains/conversation/conversation.service'
+  const { emitAssistantActionExpiredSystemMessage } =
+    await import('@/lib/server/domains/conversation/conversation.service')
+  await Promise.all(
+    expired.map((row) => emitAssistantActionExpiredSystemMessage(row.conversationId))
   )
-  await Promise.all(expired.map((row) => emitAssistantActionExpiredSystemMessage(row.conversationId)))
   return expired
 }

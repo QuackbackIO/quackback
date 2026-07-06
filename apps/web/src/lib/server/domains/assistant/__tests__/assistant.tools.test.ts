@@ -369,6 +369,12 @@ describe('assembleAssistantToolset: write-tool pipeline (approval mode)', () => 
       toolName: 'close_conversation',
       args: { reason: 'resolved' },
       summary: 'Close conversation: resolved',
+      // Same-shaped key as the autonomous branch's claim (S1); this context
+      // has no latestCustomerMessageId override, so it threads through as
+      // the literal "null" segment.
+      idempotencyKey: expect.stringMatching(
+        /^conversation_1:null:close_conversation:[0-9a-f]{64}$/
+      ),
     })
     expect(out.status).toBe('pending_approval')
     expect(typeof out.note).toBe('string')
@@ -381,8 +387,62 @@ describe('assembleAssistantToolset: write-tool pipeline (approval mode)', () => 
         id: 'assistant_action_1',
         toolName: 'close_conversation',
         summary: 'Close conversation: resolved',
+        label: 'Close conversation',
       },
     ])
+  })
+
+  it('computes the same-shaped idempotency key the autonomous branch claims with, so a retry can dedupe (S1)', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'approval' })
+    mockProposePendingAction.mockResolvedValue({ id: 'assistant_action_1' })
+
+    const c = ctx({
+      conversationId: 'conversation_1' as never,
+      latestCustomerMessageId: 'conversation_message_1',
+    })
+    const tool = await findTool(c, 'close_conversation', [makeFakeWriteSpec()])
+    await tool.execute({ reason: 'resolved' }, toolCtx(c))
+
+    // {conversationId}:{latestCustomerMessageId}:{toolName}:{sha256(args)} —
+    // identical shape (and, for identical args, identical value) to the
+    // autonomous claim's key asserted above.
+    expect(mockProposePendingAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(
+          /^conversation_1:conversation_message_1:close_conversation:[0-9a-f]{64}$/
+        ),
+      })
+    )
+  })
+
+  it('reports the SAME proposal id on two invocations for an identical turn+args (S1: propose-retry idempotency)', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantToolControls.mockResolvedValue({ close_conversation: 'approval' })
+    // Stands in for proposePendingAction's real dedup behavior (covered end
+    // to end against a real DB in pending-actions.service.test.ts /
+    // pending-actions-note.test.ts): a second call with the same
+    // idempotencyKey resolves to the SAME existing row rather than a new one.
+    mockProposePendingAction.mockImplementation(async (input: { idempotencyKey?: string }) => ({
+      id: `assistant_action_for_${input.idempotencyKey}`,
+    }))
+
+    const c1 = ctx({
+      conversationId: 'conversation_1' as never,
+      latestCustomerMessageId: 'conversation_message_1',
+    })
+    const tool1 = await findTool(c1, 'close_conversation', [makeFakeWriteSpec()])
+    await tool1.execute({ reason: 'resolved' }, toolCtx(c1))
+
+    const c2 = ctx({
+      conversationId: 'conversation_1' as never,
+      latestCustomerMessageId: 'conversation_message_1',
+    })
+    const tool2 = await findTool(c2, 'close_conversation', [makeFakeWriteSpec()])
+    await tool2.execute({ reason: 'resolved' }, toolCtx(c2))
+
+    expect(c1.proposedActions[0].id).toBe(c2.proposedActions[0].id)
+    expect(mockProposePendingAction).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -411,6 +471,7 @@ describe('assembleAssistantToolset: write-tool pipeline (writeToolPolicy: propos
         id: 'assistant_action_1',
         toolName: 'close_conversation',
         summary: 'Close conversation: resolved',
+        label: 'Close conversation',
       },
     ])
   })
@@ -656,6 +717,17 @@ describe('resolveEffectiveToolMode', () => {
     expect(resolveEffectiveToolMode(spec, 'disabled', ctx({ writeToolPolicy: 'propose' }))).toBe(
       'disabled'
     )
+  })
+
+  it("S3: fails closed to disabled (with a warning) when propose fires for a write tool that never supports 'approval' at all", () => {
+    // Saved mode 'autonomous' IS supported (so fold 1 does not trip), but
+    // 'approval' itself is absent from supportedModes — the propose override
+    // must not force a mode this spec never declared it could run under.
+    const spec = makeFakeWriteSpec({ supportedModes: ['disabled', 'autonomous'] })
+    expect(resolveEffectiveToolMode(spec, 'autonomous', ctx({ writeToolPolicy: 'propose' }))).toBe(
+      'disabled'
+    )
+    expect(mockLoggerWarn).toHaveBeenCalled()
   })
 
   it("a read tool is unaffected by writeToolPolicy: 'propose'", () => {

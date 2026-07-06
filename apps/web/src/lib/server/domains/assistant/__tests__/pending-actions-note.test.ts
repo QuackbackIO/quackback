@@ -124,6 +124,32 @@ describe.skipIf(!fixture.available)('proposePendingAction: propose-time note', (
 
     expect(mockAppendNote).not.toHaveBeenCalled()
   })
+
+  it('does not re-announce the note when a retry dedupes onto an already-proposed row (S1)', async () => {
+    mockGetAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn', displayName: 'Quinn' })
+    const conversationId = await seedConversation()
+    const key = 'conversation_1:conversation_message_1:close_conversation:deadbeef'
+
+    const first = await proposePendingAction({
+      conversationId,
+      toolName: 'close_conversation',
+      args: { reason: 'resolved' },
+      summary: 'Close this conversation as resolved.',
+      idempotencyKey: key,
+    })
+    const second = await proposePendingAction({
+      conversationId,
+      toolName: 'close_conversation',
+      args: { reason: 'resolved' },
+      summary: 'Close this conversation as resolved.',
+      idempotencyKey: key,
+    })
+
+    expect(second.id).toBe(first.id)
+    // Only the winning insert announces — a deduped retry must never surface
+    // a second note for the same proposal.
+    expect(mockAppendNote).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe.skipIf(!fixture.available)('sweepAndNotifyExpiredPendingActions', () => {

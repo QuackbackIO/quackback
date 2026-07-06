@@ -259,6 +259,17 @@ export const conversationMessages = pgTable(
     // Ticket-thread keyset pagination, mirroring the conversation index.
     index('conversation_messages_ticket_created_idx').on(table.ticketId, table.createdAt, table.id),
     index('conversation_messages_principal_idx').on(table.principalId),
+    // The `my_tone` transform's style-mining query (copilot-transform.ts's
+    // fetchTeammateStyleExcerpts): principal_id + sender_type='agent' +
+    // is_internal=false + deleted_at IS NULL, ordered by created_at DESC
+    // LIMIT 10. The plain principal_id index above doesn't serve the
+    // ordering or the other three predicates; this partial index matches
+    // the query exactly.
+    index('conversation_messages_style_mining_idx')
+      .on(table.principalId, table.createdAt.desc().nullsFirst())
+      .where(
+        sql`${table.senderType} = 'agent' AND ${table.isInternal} = false AND ${table.deletedAt} IS NULL`
+      ),
     index('conversation_messages_created_at_idx').on(table.createdAt),
     index('conversation_messages_search_vector_idx').using('gin', table.searchVector),
     // Inbound-email dedupe: one message per provider Message-ID.

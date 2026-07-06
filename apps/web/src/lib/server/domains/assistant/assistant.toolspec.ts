@@ -61,6 +61,9 @@ export interface AssistantProposedAction {
   toolName: string
   /** `spec.summarize(args)` at proposal time, same text the inbox note card shows. */
   summary: string
+  /** `spec.label` at proposal time — the admin-facing tool name (e.g. "End conversation"),
+   *  for the proposed-action card's title. */
+  label: string
 }
 
 /**
