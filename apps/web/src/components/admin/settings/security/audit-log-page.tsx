@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { ASSISTANT_CONFIG_EVENT_LABELS } from '@/lib/shared/assistant/config-audit-events'
 import type { AuditEventRow } from '@/lib/server/functions/audit-log'
 
 /**
@@ -94,6 +95,15 @@ const FILTER_EVENT_TYPES: FilterEventOption[] = [
     label: 'Handshake invalid',
     value: 'portal.widget_handshake.invalid',
   },
+  // AI config changelog: guidance rule CRUD, tool controls, per-surface
+  // instructions, the Basics preset, and data connector CRUD. Same events
+  // the assistant admin page's "Recent changes" card reads, sourced from the
+  // shared label map so the two can never list a different set.
+  ...Object.entries(ASSISTANT_CONFIG_EVENT_LABELS).map(([value, label]) => ({
+    group: 'AI config',
+    label,
+    value,
+  })),
 ]
 
 const TIME_RANGES = [

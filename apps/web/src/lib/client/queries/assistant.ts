@@ -5,6 +5,7 @@ import {
   listAssistantToolsFn,
 } from '@/lib/server/functions/assistant-guidance'
 import { getGuidanceRuleStatsFn } from '@/lib/server/functions/assistant-guidance-stats'
+import { getAssistantConfigChangelogFn } from '@/lib/server/functions/assistant-config-changelog'
 
 const STALE_TIME = 30 * 1000
 // The tool catalogue only changes when a connector is enabled/disabled, so it
@@ -16,6 +17,7 @@ export const assistantKeys = {
   guidanceRules: () => ['assistant', 'guidanceRules'] as const,
   guidanceRuleStats: () => ['assistant', 'guidanceRuleStats'] as const,
   tools: () => ['assistant', 'tools'] as const,
+  configChangelog: () => ['assistant', 'configChangelog'] as const,
 }
 
 /** Assistant customization settings queries: tool controls, surface instructions, the Basics preset, guidance rules, and the tool catalogue. */
@@ -47,5 +49,13 @@ export const assistantQueries = {
       queryKey: assistantKeys.tools(),
       queryFn: listAssistantToolsFn,
       staleTime: TOOLS_STALE_TIME,
+    }),
+
+  /** Recent assistant-config mutations (guidance, tool controls, surfaces, basics, connectors). */
+  configChangelog: () =>
+    queryOptions({
+      queryKey: assistantKeys.configChangelog(),
+      queryFn: getAssistantConfigChangelogFn,
+      staleTime: STALE_TIME,
     }),
 }

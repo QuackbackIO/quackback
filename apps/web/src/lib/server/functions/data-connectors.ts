@@ -9,9 +9,11 @@
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
+import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 import type { DataConnectorId } from '@quackback/ids'
 
 const log = logger.child({ component: 'data-connectors-fn' })
@@ -116,9 +118,17 @@ export const createDataConnectorFn = createServerFn({ method: 'POST' })
     try {
       const auth = await requireAuth({ permission: PERMISSIONS.CONNECTOR_MANAGE })
       await assertDataConnectorsEnabled()
-      const { createConnector } = await import('@/lib/server/domains/connectors/connector.service')
+      const { createConnector, toAuditSafeConnector } =
+        await import('@/lib/server/domains/connectors/connector.service')
       const connector = await createConnector(data, auth.principal.id)
       log.info({ connector_id: connector.id }, 'data connector created')
+      await recordAuditEvent({
+        event: 'assistant.connector.created',
+        actor: actorFromAuth(auth),
+        headers: getRequestHeaders(),
+        target: { type: 'data_connector', id: connector.id },
+        after: toAuditSafeConnector(connector),
+      })
       return connector
     } catch (error) {
       log.error({ err: error }, 'create data connector failed')
@@ -130,12 +140,20 @@ export const updateDataConnectorFn = createServerFn({ method: 'POST' })
   .validator(updateConnectorSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ permission: PERMISSIONS.CONNECTOR_MANAGE })
+      const auth = await requireAuth({ permission: PERMISSIONS.CONNECTOR_MANAGE })
       await assertDataConnectorsEnabled()
-      const { updateConnector } = await import('@/lib/server/domains/connectors/connector.service')
+      const { updateConnector, toAuditSafeConnector } =
+        await import('@/lib/server/domains/connectors/connector.service')
       const { id, ...input } = data
       const connector = await updateConnector(id as DataConnectorId, input)
       log.info({ connector_id: connector.id }, 'data connector updated')
+      await recordAuditEvent({
+        event: 'assistant.connector.updated',
+        actor: actorFromAuth(auth),
+        headers: getRequestHeaders(),
+        target: { type: 'data_connector', id: connector.id },
+        after: toAuditSafeConnector(connector),
+      })
       return connector
     } catch (error) {
       log.error({ err: error }, 'update data connector failed')
@@ -147,11 +165,17 @@ export const deleteDataConnectorFn = createServerFn({ method: 'POST' })
   .validator(connectorIdSchema)
   .handler(async ({ data }) => {
     try {
-      await requireAuth({ permission: PERMISSIONS.CONNECTOR_MANAGE })
+      const auth = await requireAuth({ permission: PERMISSIONS.CONNECTOR_MANAGE })
       await assertDataConnectorsEnabled()
       const { deleteConnector } = await import('@/lib/server/domains/connectors/connector.service')
       await deleteConnector(data.id as DataConnectorId)
       log.info({ connector_id: data.id }, 'data connector deleted')
+      await recordAuditEvent({
+        event: 'assistant.connector.deleted',
+        actor: actorFromAuth(auth),
+        headers: getRequestHeaders(),
+        target: { type: 'data_connector', id: data.id },
+      })
       return { id: data.id as DataConnectorId }
     } catch (error) {
       log.error({ err: error }, 'delete data connector failed')

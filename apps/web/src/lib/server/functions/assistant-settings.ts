@@ -5,6 +5,7 @@
  * area gates on.
  */
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import {
   assistantToolControlsSchema,
   assistantSurfacesSchema,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/server/domains/settings/settings.assistant'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
+import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
 
 const log = logger.child({ component: 'assistant-settings' })
@@ -34,10 +36,17 @@ export const updateAssistantToolControlsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('update assistant tool controls')
     try {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+      const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { updateAssistantToolControls } =
         await import('@/lib/server/domains/settings/settings.assistant')
-      return await updateAssistantToolControls(data)
+      const result = await updateAssistantToolControls(data)
+      await recordAuditEvent({
+        event: 'assistant.tool_controls.changed',
+        actor: actorFromAuth(ctx),
+        headers: getRequestHeaders(),
+        after: data,
+      })
+      return result
     } catch (error) {
       log.error({ err: error }, 'update assistant tool controls failed')
       throw error
@@ -49,10 +58,17 @@ export const updateAssistantSurfacesFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('update assistant surfaces')
     try {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+      const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { updateAssistantSurfaces } =
         await import('@/lib/server/domains/settings/settings.assistant')
-      return await updateAssistantSurfaces(data)
+      const result = await updateAssistantSurfaces(data)
+      await recordAuditEvent({
+        event: 'assistant.surfaces.changed',
+        actor: actorFromAuth(ctx),
+        headers: getRequestHeaders(),
+        after: data,
+      })
+      return result
     } catch (error) {
       log.error({ err: error }, 'update assistant surfaces failed')
       throw error
@@ -64,10 +80,17 @@ export const updateAssistantBasicsFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('update assistant basics')
     try {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+      const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { updateAssistantBasics } =
         await import('@/lib/server/domains/settings/settings.assistant')
-      return await updateAssistantBasics(data)
+      const result = await updateAssistantBasics(data)
+      await recordAuditEvent({
+        event: 'assistant.basics.changed',
+        actor: actorFromAuth(ctx),
+        headers: getRequestHeaders(),
+        after: data,
+      })
+      return result
     } catch (error) {
       log.error({ err: error }, 'update assistant basics failed')
       throw error

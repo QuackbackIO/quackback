@@ -36,6 +36,15 @@ const hoisted = vi.hoisted(() => ({
   updateConnector: vi.fn(),
   deleteConnector: vi.fn(),
   testConnector: vi.fn(),
+  recordAuditEvent: vi.fn(),
+  actorFromAuth: vi.fn(() => ({ email: 'admin@example.com' })),
+  // Real implementation (not a bare mock) so the audit-site tests below still
+  // exercise the actual name/method/enabled-only projection.
+  toAuditSafeConnector: vi.fn((c: { name: string; method: string; enabled: boolean }) => ({
+    name: c.name,
+    method: c.method,
+    enabled: c.enabled,
+  })),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
@@ -48,9 +57,17 @@ vi.mock('@/lib/server/domains/connectors/connector.service', () => ({
   createConnector: hoisted.createConnector,
   updateConnector: hoisted.updateConnector,
   deleteConnector: hoisted.deleteConnector,
+  toAuditSafeConnector: hoisted.toAuditSafeConnector,
 }))
 vi.mock('@/lib/server/domains/connectors/connector.execute', () => ({
   testConnector: hoisted.testConnector,
+}))
+vi.mock('@/lib/server/audit/log', () => ({
+  recordAuditEvent: hoisted.recordAuditEvent,
+  actorFromAuth: hoisted.actorFromAuth,
+}))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers(),
 }))
 
 import {
@@ -79,11 +96,15 @@ describe('access gate', () => {
   it('every fn requires connector.manage', async () => {
     hoisted.listConnectors.mockResolvedValue([])
     await fetchDataConnectorsFn()
-    expect(hoisted.requireAuth).toHaveBeenLastCalledWith({ permission: PERMISSIONS.CONNECTOR_MANAGE })
+    expect(hoisted.requireAuth).toHaveBeenLastCalledWith({
+      permission: PERMISSIONS.CONNECTOR_MANAGE,
+    })
 
     hoisted.createConnector.mockResolvedValue({ id: 'data_connector_1' })
     await createDataConnectorFn({ data: VALID_CREATE })
-    expect(hoisted.requireAuth).toHaveBeenLastCalledWith({ permission: PERMISSIONS.CONNECTOR_MANAGE })
+    expect(hoisted.requireAuth).toHaveBeenLastCalledWith({
+      permission: PERMISSIONS.CONNECTOR_MANAGE,
+    })
   })
 
   it('rejects when the dataConnectors flag is off, without calling the domain layer', async () => {
@@ -173,5 +194,60 @@ describe('testDataConnectorFn', () => {
     hoisted.testConnector.mockResolvedValue({ ok: true, status: 200, data: {} })
     await testDataConnectorFn({ data: { id: 'data_connector_1', sampleValues: { id: '42' } } })
     expect(hoisted.testConnector).toHaveBeenCalledWith('data_connector_1', { id: '42' })
+  })
+})
+
+describe('audit logging', () => {
+  it('createDataConnectorFn records assistant.connector.created without secrets', async () => {
+    hoisted.createConnector.mockResolvedValue({
+      id: 'data_connector_1',
+      name: 'Get User',
+      method: 'GET',
+      enabled: false,
+      headers: [{ name: 'X-Api-Key', value: 'super-secret' }],
+      hasSecret: true,
+    })
+    await createDataConnectorFn({ data: VALID_CREATE })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.connector.created',
+        target: { type: 'data_connector', id: 'data_connector_1' },
+        after: { name: 'Get User', method: 'GET', enabled: false },
+      })
+    )
+    const call = hoisted.recordAuditEvent.mock.calls[0][0]
+    expect(JSON.stringify(call.after)).not.toContain('super-secret')
+  })
+
+  it('updateDataConnectorFn records assistant.connector.updated without secrets', async () => {
+    hoisted.updateConnector.mockResolvedValue({
+      id: 'data_connector_1',
+      name: 'New Name',
+      method: 'POST',
+      enabled: true,
+      headers: [{ name: 'Authorization', value: 'Bearer super-secret' }],
+      hasSecret: true,
+    })
+    await updateDataConnectorFn({ data: { id: 'data_connector_1', name: 'New Name' } })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.connector.updated',
+        target: { type: 'data_connector', id: 'data_connector_1' },
+        after: { name: 'New Name', method: 'POST', enabled: true },
+      })
+    )
+    const call = hoisted.recordAuditEvent.mock.calls[0][0]
+    expect(JSON.stringify(call.after)).not.toContain('super-secret')
+  })
+
+  it('deleteDataConnectorFn records assistant.connector.deleted with the target id', async () => {
+    hoisted.deleteConnector.mockResolvedValue(undefined)
+    await deleteDataConnectorFn({ data: { id: 'data_connector_1' } })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.connector.deleted',
+        target: { type: 'data_connector', id: 'data_connector_1' },
+      })
+    )
   })
 })

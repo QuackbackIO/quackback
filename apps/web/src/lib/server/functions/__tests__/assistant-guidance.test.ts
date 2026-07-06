@@ -35,6 +35,8 @@ const hoisted = vi.hoisted(() => ({
   reorderGuidanceRules: vi.fn(),
   deleteGuidanceRule: vi.fn(),
   resolveToolSpecs: vi.fn(),
+  recordAuditEvent: vi.fn(),
+  actorFromAuth: vi.fn(() => ({ email: 'admin@example.com' })),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
@@ -48,6 +50,13 @@ vi.mock('@/lib/server/domains/assistant/guidance.service', () => ({
 }))
 vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
   resolveToolSpecs: hoisted.resolveToolSpecs,
+}))
+vi.mock('@/lib/server/audit/log', () => ({
+  recordAuditEvent: hoisted.recordAuditEvent,
+  actorFromAuth: hoisted.actorFromAuth,
+}))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers(),
 }))
 
 import {
@@ -280,5 +289,81 @@ describe('listAssistantToolsFn', () => {
         defaultMode: 'approval',
       },
     ])
+  })
+})
+
+describe('audit logging', () => {
+  it('createGuidanceRuleFn records assistant.guidance.created with the new rule', async () => {
+    hoisted.createGuidanceRule.mockResolvedValue({
+      id: 'assistant_guidance_1',
+      title: 'Refund policy',
+      enabled: true,
+      surfaces: ['widget'],
+      category: 'other',
+    })
+    await createGuidanceRuleFn({
+      data: { title: 'Refund policy', body: 'Always mention it.', surfaces: ['widget'] },
+    })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.guidance.created',
+        target: { type: 'assistant_guidance', id: 'assistant_guidance_1' },
+        after: {
+          title: 'Refund policy',
+          enabled: true,
+          surfaces: ['widget'],
+          category: 'other',
+        },
+      })
+    )
+  })
+
+  it('updateGuidanceRuleFn records assistant.guidance.updated with after and no before', async () => {
+    hoisted.updateGuidanceRule.mockResolvedValue({
+      id: 'assistant_guidance_1',
+      title: 'Refund policy',
+      enabled: false,
+      surfaces: null,
+      category: 'other',
+    })
+    await updateGuidanceRuleFn({ data: { id: 'assistant_guidance_1', enabled: false } })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.guidance.updated',
+        target: { type: 'assistant_guidance', id: 'assistant_guidance_1' },
+        after: {
+          title: 'Refund policy',
+          enabled: false,
+          surfaces: null,
+          category: 'other',
+        },
+      })
+    )
+    const call = hoisted.recordAuditEvent.mock.calls[0][0]
+    expect(call.before).toBeUndefined()
+  })
+
+  it('reorderGuidanceRulesFn records assistant.guidance.reordered with the moved count', async () => {
+    hoisted.reorderGuidanceRules.mockResolvedValue(undefined)
+    await reorderGuidanceRulesFn({
+      data: { ids: ['assistant_guidance_2', 'assistant_guidance_1'] },
+    })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.guidance.reordered',
+        metadata: { count: 2 },
+      })
+    )
+  })
+
+  it('deleteGuidanceRuleFn records assistant.guidance.deleted with the target id', async () => {
+    hoisted.deleteGuidanceRule.mockResolvedValue(undefined)
+    await deleteGuidanceRuleFn({ data: { id: 'assistant_guidance_1' } })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.guidance.deleted',
+        target: { type: 'assistant_guidance', id: 'assistant_guidance_1' },
+      })
+    )
   })
 })

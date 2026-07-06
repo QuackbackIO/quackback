@@ -6,11 +6,13 @@
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { AssistantGuidanceRuleId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ASSISTANT_SURFACES } from '@/lib/shared/assistant/surfaces'
 import { ASSISTANT_GUIDANCE_CATEGORIES } from '@/lib/shared/assistant/guidance-categories'
 import { logger } from '@/lib/server/logger'
+import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
 
 const log = logger.child({ component: 'assistant-guidance' })
@@ -46,9 +48,8 @@ export const listGuidanceRulesFn = createServerFn({ method: 'GET' }).handler(asy
   log.debug('list guidance rules')
   try {
     await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-    const { listGuidanceRules, GUIDANCE_CHAR_BUDGET } = await import(
-      '@/lib/server/domains/assistant/guidance.service'
-    )
+    const { listGuidanceRules, GUIDANCE_CHAR_BUDGET } =
+      await import('@/lib/server/domains/assistant/guidance.service')
     const rules = await listGuidanceRules({ enabledOnly: false })
     return { rules, charBudget: GUIDANCE_CHAR_BUDGET }
   } catch (error) {
@@ -64,7 +65,7 @@ export const createGuidanceRuleFn = createServerFn({ method: 'POST' })
     try {
       const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { createGuidanceRule } = await import('@/lib/server/domains/assistant/guidance.service')
-      return await createGuidanceRule({
+      const rule = await createGuidanceRule({
         title: data.title,
         body: data.body,
         enabled: data.enabled,
@@ -72,6 +73,19 @@ export const createGuidanceRuleFn = createServerFn({ method: 'POST' })
         category: data.category,
         createdById: ctx.principal.id,
       })
+      await recordAuditEvent({
+        event: 'assistant.guidance.created',
+        actor: actorFromAuth(ctx),
+        headers: getRequestHeaders(),
+        target: { type: 'assistant_guidance', id: rule.id },
+        after: {
+          title: rule.title,
+          enabled: rule.enabled,
+          surfaces: rule.surfaces,
+          category: rule.category,
+        },
+      })
+      return rule
     } catch (error) {
       log.error({ err: error }, 'create guidance rule failed')
       throw error
@@ -83,15 +97,34 @@ export const updateGuidanceRuleFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('update guidance rule')
     try {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+      const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { updateGuidanceRule } = await import('@/lib/server/domains/assistant/guidance.service')
-      return await updateGuidanceRule(data.id as AssistantGuidanceRuleId, {
+      const rule = await updateGuidanceRule(data.id as AssistantGuidanceRuleId, {
         title: data.title,
         body: data.body,
         enabled: data.enabled,
         surfaces: data.surfaces,
         category: data.category,
       })
+      await recordAuditEvent({
+        event: 'assistant.guidance.updated',
+        actor: actorFromAuth(ctx),
+        headers: getRequestHeaders(),
+        target: { type: 'assistant_guidance', id: data.id },
+        // updateGuidanceRule doesn't return the prior row, so there's no
+        // meaningful before snapshot here — the target id already identifies
+        // which rule changed. The after snapshot (the full updated row) is
+        // what matters for reconstructing what changed.
+        after: rule
+          ? {
+              title: rule.title,
+              enabled: rule.enabled,
+              surfaces: rule.surfaces,
+              category: rule.category,
+            }
+          : null,
+      })
+      return rule
     } catch (error) {
       log.error({ err: error }, 'update guidance rule failed')
       throw error
@@ -103,11 +136,16 @@ export const reorderGuidanceRulesFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('reorder guidance rules')
     try {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-      const { reorderGuidanceRules } = await import(
-        '@/lib/server/domains/assistant/guidance.service'
-      )
+      const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+      const { reorderGuidanceRules } =
+        await import('@/lib/server/domains/assistant/guidance.service')
       await reorderGuidanceRules(data.ids as AssistantGuidanceRuleId[])
+      await recordAuditEvent({
+        event: 'assistant.guidance.reordered',
+        actor: actorFromAuth(ctx),
+        headers: getRequestHeaders(),
+        metadata: { count: data.ids.length },
+      })
       return { ids: data.ids }
     } catch (error) {
       log.error({ err: error }, 'reorder guidance rules failed')
@@ -120,9 +158,15 @@ export const deleteGuidanceRuleFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info('delete guidance rule')
     try {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+      const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { deleteGuidanceRule } = await import('@/lib/server/domains/assistant/guidance.service')
       await deleteGuidanceRule(data.id as AssistantGuidanceRuleId)
+      await recordAuditEvent({
+        event: 'assistant.guidance.deleted',
+        actor: actorFromAuth(ctx),
+        headers: getRequestHeaders(),
+        target: { type: 'assistant_guidance', id: data.id },
+      })
       return { id: data.id }
     } catch (error) {
       log.error({ err: error }, 'delete guidance rule failed')

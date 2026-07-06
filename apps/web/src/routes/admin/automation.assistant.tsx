@@ -13,6 +13,7 @@ import { AssistantBasicsCard } from '@/components/admin/automation/assistant-bas
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
 import { ToolControlsCard } from '@/components/admin/automation/tool-controls-card'
 import { SurfaceInstructionsCard } from '@/components/admin/automation/surface-instructions-card'
+import { AssistantConfigChangelogCard } from '@/components/admin/automation/assistant-config-changelog-card'
 
 export const Route = createFileRoute('/admin/automation/assistant')({
   loader: async ({ context }) => {
@@ -64,6 +65,7 @@ function AssistantPage() {
           <GuidanceRulesCard />
           <ToolControlsCard />
           <SurfaceInstructionsCard />
+          <AssistantConfigChangelogCard />
         </>
       ) : (
         <p className="text-sm text-muted-foreground">

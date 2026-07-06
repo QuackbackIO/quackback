@@ -65,6 +65,20 @@ function mapConnector(row: ConnectorRow): DataConnector {
   }
 }
 
+/**
+ * Audit-safe projection of a connector: name, method, and enabled only.
+ * `headers` and `auth` can carry a live secret value (e.g. a custom auth
+ * header or bearer token), so they — and everything else on the row — are
+ * deliberately excluded. The one place this exclusion is decided; every
+ * audit-log call site for connector CRUD should go through this rather than
+ * hand-picking fields.
+ */
+export function toAuditSafeConnector(
+  connector: DataConnector
+): Pick<DataConnector, 'name' | 'method' | 'enabled'> {
+  return { name: connector.name, method: connector.method, enabled: connector.enabled }
+}
+
 function validateUrlTemplate(template: string): void {
   if (!/^https:\/\//i.test(template)) {
     throw new ValidationError('VALIDATION_ERROR', 'Connector URL must use HTTPS')
@@ -118,7 +132,10 @@ function validateAuthConfig(auth: ConnectorAuthConfig, secretAvailable: boolean)
 
 function validateTimeout(timeoutMs: number): void {
   if (timeoutMs > MAX_TIMEOUT_MS || timeoutMs <= 0) {
-    throw new ValidationError('VALIDATION_ERROR', `timeoutMs must be between 1 and ${MAX_TIMEOUT_MS}`)
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      `timeoutMs must be between 1 and ${MAX_TIMEOUT_MS}`
+    )
   }
 }
 
@@ -130,7 +147,10 @@ async function assertNoStaticToolCollision(slug: string): Promise<void> {
   const { ASSISTANT_TOOL_SPECS } = await import('@/lib/server/domains/assistant/assistant.toolspec')
   const toolId = `connector_${slug}`
   if (toolId in ASSISTANT_TOOL_SPECS) {
-    throw new ValidationError('VALIDATION_ERROR', `"${slug}" collides with a built-in assistant tool`)
+    throw new ValidationError(
+      'VALIDATION_ERROR',
+      `"${slug}" collides with a built-in assistant tool`
+    )
   }
 }
 
@@ -277,7 +297,9 @@ export async function getConnector(id: DataConnectorId): Promise<DataConnector> 
 }
 
 export async function listConnectors(): Promise<DataConnector[]> {
-  const rows = await db.query.dataConnectors.findMany({ orderBy: (t, { desc }) => [desc(t.createdAt)] })
+  const rows = await db.query.dataConnectors.findMany({
+    orderBy: (t, { desc }) => [desc(t.createdAt)],
+  })
   return rows.map(mapConnector)
 }
 

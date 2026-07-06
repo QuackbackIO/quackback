@@ -62,6 +62,7 @@ vi.mock('@/lib/server/db', () => {
     gte: vi.fn((col, val) => ({ op: 'gte', col, val })),
     lte: vi.fn((col, val) => ({ op: 'lte', col, val })),
     ilike: vi.fn((col, val) => ({ op: 'ilike', col, val })),
+    inArray: vi.fn((col, vals) => ({ op: 'inArray', col, vals })),
     notInArray: vi.fn((col, vals) => ({ op: 'notInArray', col, vals })),
     desc: vi.fn((col) => ({ op: 'desc', col })),
     __helpers: { where, orderBy, limit, from },

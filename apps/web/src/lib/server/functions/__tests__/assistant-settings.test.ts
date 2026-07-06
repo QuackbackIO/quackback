@@ -32,6 +32,8 @@ const hoisted = vi.hoisted(() => ({
   updateAssistantToolControls: vi.fn(),
   updateAssistantSurfaces: vi.fn(),
   updateAssistantBasics: vi.fn(),
+  recordAuditEvent: vi.fn(),
+  actorFromAuth: vi.fn(() => ({ email: 'admin@example.com' })),
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({ requireAuth: hoisted.requireAuth }))
@@ -43,6 +45,13 @@ vi.mock('@/lib/server/domains/settings/settings.assistant', async (importOrigina
   updateAssistantToolControls: hoisted.updateAssistantToolControls,
   updateAssistantSurfaces: hoisted.updateAssistantSurfaces,
   updateAssistantBasics: hoisted.updateAssistantBasics,
+}))
+vi.mock('@/lib/server/audit/log', () => ({
+  recordAuditEvent: hoisted.recordAuditEvent,
+  actorFromAuth: hoisted.actorFromAuth,
+}))
+vi.mock('@tanstack/react-start/server', () => ({
+  getRequestHeaders: () => new Headers(),
 }))
 
 import {
@@ -164,5 +173,40 @@ describe('updateAssistantBasicsFn', () => {
       tone: 'friendly',
       length: 'concise',
     })
+  })
+})
+
+describe('audit logging', () => {
+  it('updateAssistantToolControlsFn records assistant.tool_controls.changed with the submitted map', async () => {
+    hoisted.updateAssistantToolControls.mockResolvedValue({ end_conversation: 'approval' })
+    await updateAssistantToolControlsFn({ data: { end_conversation: 'approval' } })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.tool_controls.changed',
+        after: { end_conversation: 'approval' },
+      })
+    )
+  })
+
+  it('updateAssistantSurfacesFn records assistant.surfaces.changed with the submitted map', async () => {
+    hoisted.updateAssistantSurfaces.mockResolvedValue({ widget: { instructions: 'Be concise.' } })
+    await updateAssistantSurfacesFn({ data: { widget: { instructions: 'Be concise.' } } })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.surfaces.changed',
+        after: { widget: { instructions: 'Be concise.' } },
+      })
+    )
+  })
+
+  it('updateAssistantBasicsFn records assistant.basics.changed with the submitted preset', async () => {
+    hoisted.updateAssistantBasics.mockResolvedValue({ tone: 'friendly', length: 'concise' })
+    await updateAssistantBasicsFn({ data: { tone: 'friendly', length: 'concise' } })
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'assistant.basics.changed',
+        after: { tone: 'friendly', length: 'concise' },
+      })
+    )
   })
 })

@@ -61,7 +61,7 @@ vi.mock('@tanstack/react-router', () => ({
 // category picker can be exercised with a plain change event.
 vi.mock('@/components/ui/select', async () => import('@/test/radix-select'))
 
-import { GuidanceRulesCard } from '../guidance-rules-card'
+import { GuidanceRulesCard, guidanceRuleMatchesQuery } from '../guidance-rules-card'
 
 afterEach(cleanup)
 
@@ -69,6 +69,31 @@ function renderWithClient(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 }
+
+describe('guidanceRuleMatchesQuery', () => {
+  const rule = { title: 'Refund policy', body: 'Always mention our 30-day refund policy.' }
+
+  it('matches on title', () => {
+    expect(guidanceRuleMatchesQuery(rule, 'Refund')).toBe(true)
+  })
+
+  it('matches on body', () => {
+    expect(guidanceRuleMatchesQuery(rule, '30-day')).toBe(true)
+  })
+
+  it('is case-insensitive', () => {
+    expect(guidanceRuleMatchesQuery(rule, 'REFUND POLICY')).toBe(true)
+  })
+
+  it('matches everything for an empty or whitespace-only query', () => {
+    expect(guidanceRuleMatchesQuery(rule, '')).toBe(true)
+    expect(guidanceRuleMatchesQuery(rule, '   ')).toBe(true)
+  })
+
+  it('returns false when neither title nor body match', () => {
+    expect(guidanceRuleMatchesQuery(rule, 'nonexistent')).toBe(false)
+  })
+})
 
 describe('GuidanceRulesCard', () => {
   it('renders a row per rule from listGuidanceRulesFn', async () => {
@@ -161,5 +186,61 @@ describe('category grouping', () => {
     )
 
     expect(await screen.findByLabelText('Category')).toHaveValue('spam')
+  })
+})
+
+describe('search filtering', () => {
+  it('filters the list to rules matching the query and hides the rest', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+
+    fireEvent.change(screen.getByPlaceholderText('Search rules'), {
+      target: { value: 'widget' },
+    })
+
+    expect(await screen.findByText('Widget tone')).toBeInTheDocument()
+    expect(screen.queryByText('Refund policy')).not.toBeInTheDocument()
+  })
+
+  it('shows a muted empty state when the query matches no rules', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+
+    fireEvent.change(screen.getByPlaceholderText('Search rules'), {
+      target: { value: 'zzz-no-match' },
+    })
+
+    expect(await screen.findByText('No rules match "zzz-no-match".')).toBeInTheDocument()
+    expect(screen.queryByText('Refund policy')).not.toBeInTheDocument()
+    expect(screen.queryByText('Widget tone')).not.toBeInTheDocument()
+  })
+
+  it('leaves the char budget meter unchanged while a filter is active', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+    const before = await screen.findByText(/\/ 4000 characters used across enabled rules/)
+    const beforeText = before.textContent
+
+    fireEvent.change(screen.getByPlaceholderText('Search rules'), {
+      target: { value: 'widget' },
+    })
+
+    const after = await screen.findByText(/\/ 4000 characters used across enabled rules/)
+    expect(after.textContent).toBe(beforeText)
+  })
+
+  it('disables reorder controls for rules still visible while a search query is active', async () => {
+    renderWithClient(<GuidanceRulesCard />)
+    await screen.findByText('Refund policy')
+
+    // Refund policy is index 0 of 2, so "move down" is enabled by default —
+    // it should flip to disabled purely because of the active filter.
+    expect(screen.getByRole('button', { name: 'Move Refund policy down' })).toBeEnabled()
+
+    fireEvent.change(screen.getByPlaceholderText('Search rules'), {
+      target: { value: 'refund' },
+    })
+
+    expect(await screen.findByRole('button', { name: 'Move Refund policy down' })).toBeDisabled()
   })
 })

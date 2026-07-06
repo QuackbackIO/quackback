@@ -22,6 +22,7 @@ import {
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/shared/search-input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
@@ -90,6 +91,21 @@ function toKnownCategory(category: AssistantGuidanceRule['category']): Assistant
   return KNOWN_CATEGORIES.includes(category) ? (category as AssistantGuidanceCategory) : 'other'
 }
 
+// Pure so the search box's filtering behavior (title-or-body, case-insensitive
+// substring, empty query matches everything) is unit-testable without mounting
+// the card.
+export function guidanceRuleMatchesQuery(
+  rule: Pick<AssistantGuidanceRule, 'title' | 'body'>,
+  query: string
+): boolean {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
+  return (
+    rule.title.trim().toLowerCase().includes(normalizedQuery) ||
+    rule.body.trim().toLowerCase().includes(normalizedQuery)
+  )
+}
+
 export function GuidanceRulesCard() {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -103,6 +119,7 @@ export function GuidanceRulesCard() {
   const [newRuleCategory, setNewRuleCategory] = useState<AssistantGuidanceCategory>('other')
   const [deletingRule, setDeletingRule] = useState<AssistantGuidanceRule | null>(null)
   const [reordering, setReordering] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Re-sync from the query's latest fetch (initial load and after every
   // mutation's invalidate) while local handlers below apply optimistic edits
@@ -111,23 +128,36 @@ export function GuidanceRulesCard() {
     if (rulesQuery.data) setRules(rulesQuery.data.rules)
   }, [rulesQuery.data])
 
+  // The budget meter is a global count across ALL enabled rules regardless of
+  // the search box below — it must not shrink just because a filter hides
+  // some rows from view.
   const charBudget = rulesQuery.data?.charBudget ?? FALLBACK_CHAR_BUDGET
   const enabledChars = rules.filter((r) => r.enabled).reduce((sum, r) => sum + r.body.length, 0)
 
+  const trimmedQuery = searchQuery.trim()
+  const isFiltering = trimmedQuery.length > 0
+
   // Grouped for display only — each rule keeps its index in the flat, position-
   // ordered `rules` array so reorder (which is not category-aware) still moves
-  // the underlying list correctly.
+  // the underlying list correctly. While a search query is active, rules that
+  // don't match are dropped from their group, and groups left with none are
+  // hidden entirely rather than showing the "no rules yet" placeholder.
   const rulesByCategory = ASSISTANT_GUIDANCE_CATEGORIES.map((category) => ({
     category,
     rules: rules
       .map((rule, index) => ({ rule, index }))
-      .filter(({ rule }) => toKnownCategory(rule.category) === category),
-  }))
+      .filter(({ rule }) => toKnownCategory(rule.category) === category)
+      .filter(({ rule }) => guidanceRuleMatchesQuery(rule, searchQuery)),
+  })).filter((group) => !isFiltering || group.rules.length > 0)
 
   function openAddDialog(category: AssistantGuidanceCategory) {
     setEditingRule(null)
     setNewRuleCategory(category)
     setDialogOpen(true)
+  }
+
+  function handleSearchChange(value: string) {
+    setSearchQuery(value)
   }
 
   const createRule = useCreateGuidanceRule()
@@ -205,114 +235,133 @@ export function GuidanceRulesCard() {
         contentClassName="p-4"
       >
         <div className="space-y-1">
-          {rulesByCategory.map(({ category, rules: groupRules }) => (
-            <div key={category} data-testid={`guidance-category-${category}`}>
-              <CollapsibleSection
-                title={ASSISTANT_GUIDANCE_CATEGORY_LABELS[category].label}
-                description={ASSISTANT_GUIDANCE_CATEGORY_LABELS[category].description}
-                defaultOpen
-                headerClassName="px-2 py-2"
-                contentClassName="px-0 pb-2 pt-0"
-                headerAction={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 text-muted-foreground"
-                    onClick={() => openAddDialog(category)}
-                  >
-                    <PlusIcon className="h-3 w-3" />
-                    New
-                  </Button>
-                }
-              >
-                {groupRules.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-3">
-                    No rules in this category yet.
-                  </p>
-                ) : (
-                  groupRules.map(({ rule, index }) => (
-                    <div
-                      key={rule.id}
-                      className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
+          <div className="px-2 pb-3">
+            <SearchInput
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Search rules"
+            />
+          </div>
+
+          {isFiltering && rulesByCategory.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              No rules match &quot;{trimmedQuery}&quot;.
+            </p>
+          ) : (
+            rulesByCategory.map(({ category, rules: groupRules }) => (
+              <div key={category} data-testid={`guidance-category-${category}`}>
+                <CollapsibleSection
+                  title={ASSISTANT_GUIDANCE_CATEGORY_LABELS[category].label}
+                  description={ASSISTANT_GUIDANCE_CATEGORY_LABELS[category].description}
+                  defaultOpen
+                  headerClassName="px-2 py-2"
+                  contentClassName="px-0 pb-2 pt-0"
+                  headerAction={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 text-muted-foreground"
+                      onClick={() => openAddDialog(category)}
                     >
-                      <div className="flex flex-col -my-1">
-                        <button
-                          type="button"
-                          className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
-                          onClick={() => move(index, -1)}
-                          disabled={index === 0 || reordering}
-                          aria-label={`Move ${rule.title} up`}
-                        >
-                          <ChevronUpIcon className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
-                          onClick={() => move(index, 1)}
-                          disabled={index === rules.length - 1 || reordering}
-                          aria-label={`Move ${rule.title} down`}
-                        >
-                          <ChevronDownIcon className="h-3 w-3" />
-                        </button>
-                      </div>
-
-                      <Switch
-                        checked={rule.enabled}
-                        onCheckedChange={() => handleToggleEnabled(rule)}
-                        className="scale-90"
-                        aria-label={`Enable ${rule.title}`}
-                      />
-
-                      <span className="text-sm font-medium truncate">{rule.title}</span>
-
-                      <Badge variant="outline" className="shrink-0">
-                        {surfaceLabel(rule.surfaces)}
-                      </Badge>
-
-                      <span className="flex-1" />
-
-                      <div className="hidden shrink-0 items-center gap-3 text-xs text-muted-foreground tabular-nums sm:flex">
-                        <span title="Turns this rule was folded into the assistant's prompt">
-                          {statsQuery.data?.[rule.id] ? statsQuery.data[rule.id].used : '—'} used
-                        </span>
-                        <span title="Share of those conversations that resolved">
-                          {pct(asRate(statsQuery.data?.[rule.id]?.resolvedPct))} resolved
-                        </span>
-                      </div>
-
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
-                        onClick={() => {
-                          setEditingRule(rule)
-                          setDialogOpen(true)
-                        }}
-                        title="Edit guidance rule"
+                      <PlusIcon className="h-3 w-3" />
+                      New
+                    </Button>
+                  }
+                >
+                  {groupRules.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-3">
+                      No rules in this category yet.
+                    </p>
+                  ) : (
+                    groupRules.map(({ rule, index }) => (
+                      <div
+                        key={rule.id}
+                        className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 group"
                       >
-                        <PencilSquareIcon className="h-3.5 w-3.5" />
-                      </Button>
+                        <div className="flex flex-col -my-1">
+                          <button
+                            type="button"
+                            className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
+                            onClick={() => move(index, -1)}
+                            disabled={index === 0 || reordering || isFiltering}
+                            aria-label={`Move ${rule.title} up`}
+                          >
+                            <ChevronUpIcon className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            className="text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30"
+                            onClick={() => move(index, 1)}
+                            disabled={index === rules.length - 1 || reordering || isFiltering}
+                            aria-label={`Move ${rule.title} down`}
+                          >
+                            <ChevronDownIcon className="h-3 w-3" />
+                          </button>
+                        </div>
 
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
-                        onClick={() => setDeletingRule(rule)}
-                        title="Delete guidance rule"
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </CollapsibleSection>
-            </div>
-          ))}
+                        <Switch
+                          checked={rule.enabled}
+                          onCheckedChange={() => handleToggleEnabled(rule)}
+                          className="scale-90"
+                          aria-label={`Enable ${rule.title}`}
+                        />
+
+                        <span className="text-sm font-medium truncate">{rule.title}</span>
+
+                        <Badge variant="outline" className="shrink-0">
+                          {surfaceLabel(rule.surfaces)}
+                        </Badge>
+
+                        <span className="flex-1" />
+
+                        <div className="hidden shrink-0 items-center gap-3 text-xs text-muted-foreground tabular-nums sm:flex">
+                          <span title="Turns this rule was folded into the assistant's prompt">
+                            {statsQuery.data?.[rule.id] ? statsQuery.data[rule.id].used : '—'} used
+                          </span>
+                          <span title="Share of those conversations that resolved">
+                            {pct(asRate(statsQuery.data?.[rule.id]?.resolvedPct))} resolved
+                          </span>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                          onClick={() => {
+                            setEditingRule(rule)
+                            setDialogOpen(true)
+                          }}
+                          title="Edit guidance rule"
+                        >
+                          <PencilSquareIcon className="h-3.5 w-3.5" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                          onClick={() => setDeletingRule(rule)}
+                          title="Delete guidance rule"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </CollapsibleSection>
+              </div>
+            ))
+          )}
 
           <p className="text-xs text-muted-foreground pt-2 flex items-center gap-1">
             {enabledChars} / {charBudget} characters used across enabled rules
             {reordering && <ArrowPathIcon className="h-3 w-3 animate-spin ms-1" />}
           </p>
+          {isFiltering && (
+            <p className="text-xs text-muted-foreground/70 px-2 pt-1">
+              Reordering is disabled while search is active.
+            </p>
+          )}
         </div>
       </SettingsCard>
 

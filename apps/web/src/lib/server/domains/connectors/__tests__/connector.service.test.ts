@@ -38,10 +38,14 @@ import {
   getConnector,
   listConnectors,
   listEnabledConnectors,
+  toAuditSafeConnector,
 } from '../connector.service'
+import type { DataConnector } from '../connector.types'
+import type { DataConnectorId } from '@quackback/ids'
 
 const fixture = await createDbTestFixture({
-  probe: async (db) => void (await db.select({ id: dataConnectors.id }).from(dataConnectors).limit(0)),
+  probe: async (db) =>
+    void (await db.select({ id: dataConnectors.id }).from(dataConnectors).limit(0)),
 })
 
 describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', () => {
@@ -120,12 +124,22 @@ describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', 
 
     it('rejects a duplicate connector name', async () => {
       await createConnector(
-        { name: 'Duplicate', description: 'x', method: 'GET', urlTemplate: 'https://api.example.com/a' },
+        {
+          name: 'Duplicate',
+          description: 'x',
+          method: 'GET',
+          urlTemplate: 'https://api.example.com/a',
+        },
         null
       )
       await expect(
         createConnector(
-          { name: 'Duplicate', description: 'y', method: 'GET', urlTemplate: 'https://api.example.com/b' },
+          {
+            name: 'Duplicate',
+            description: 'y',
+            method: 'GET',
+            urlTemplate: 'https://api.example.com/b',
+          },
           null
         )
       ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
@@ -133,12 +147,22 @@ describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', 
 
     it('rejects two different names that derive the same slug', async () => {
       await createConnector(
-        { name: 'Get  User!!', description: 'x', method: 'GET', urlTemplate: 'https://api.example.com/a' },
+        {
+          name: 'Get  User!!',
+          description: 'x',
+          method: 'GET',
+          urlTemplate: 'https://api.example.com/a',
+        },
         null
       )
       await expect(
         createConnector(
-          { name: 'get user', description: 'y', method: 'GET', urlTemplate: 'https://api.example.com/b' },
+          {
+            name: 'get user',
+            description: 'y',
+            method: 'GET',
+            urlTemplate: 'https://api.example.com/b',
+          },
           null
         )
       ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
@@ -241,7 +265,12 @@ describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', 
   describe('updateConnector', () => {
     it('re-derives the slug when the name changes', async () => {
       const created = await createConnector(
-        { name: 'Old Name', description: 'x', method: 'GET', urlTemplate: 'https://api.example.com/a' },
+        {
+          name: 'Old Name',
+          description: 'x',
+          method: 'GET',
+          urlTemplate: 'https://api.example.com/a',
+        },
         null
       )
       const updated = await updateConnector(created.id, { name: 'New Name' })
@@ -250,7 +279,12 @@ describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', 
 
     it('accepts a new secret and reports hasSecret without exposing it', async () => {
       const created = await createConnector(
-        { name: 'Secretless', description: 'x', method: 'GET', urlTemplate: 'https://api.example.com/a' },
+        {
+          name: 'Secretless',
+          description: 'x',
+          method: 'GET',
+          urlTemplate: 'https://api.example.com/a',
+        },
         null
       )
       expect(created.hasSecret).toBe(false)
@@ -274,17 +308,27 @@ describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', 
         },
         null
       )
-      const cleared = await updateConnector(created.id, { clearSecret: true, auth: { type: 'none' } })
+      const cleared = await updateConnector(created.id, {
+        clearSecret: true,
+        auth: { type: 'none' },
+      })
       expect(cleared.hasSecret).toBe(false)
 
-      await expect(updateConnector(created.id, { auth: { type: 'bearer' } })).rejects.toMatchObject({
-        code: 'VALIDATION_ERROR',
-      })
+      await expect(updateConnector(created.id, { auth: { type: 'bearer' } })).rejects.toMatchObject(
+        {
+          code: 'VALIDATION_ERROR',
+        }
+      )
     })
 
     it('re-enabling from disabled resets the circuit breaker', async () => {
       const created = await createConnector(
-        { name: 'Breaker', description: 'x', method: 'GET', urlTemplate: 'https://api.example.com/a' },
+        {
+          name: 'Breaker',
+          description: 'x',
+          method: 'GET',
+          urlTemplate: 'https://api.example.com/a',
+        },
         null
       )
       // Simulate a tripped breaker directly (executeConnector's own increment
@@ -305,7 +349,12 @@ describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', 
   describe('deleteConnector', () => {
     it('removes the row; a later read 404s', async () => {
       const created = await createConnector(
-        { name: 'Doomed', description: 'x', method: 'GET', urlTemplate: 'https://api.example.com/a' },
+        {
+          name: 'Doomed',
+          description: 'x',
+          method: 'GET',
+          urlTemplate: 'https://api.example.com/a',
+        },
         null
       )
       await deleteConnector(created.id)
@@ -350,5 +399,42 @@ describe.skipIf(!fixture.available)('connector.service (real DB, rolled back)', 
       const enabledList = await listEnabledConnectors()
       expect(enabledList.map((c) => c.id)).toEqual([enabled.id])
     })
+  })
+})
+
+// Pure function — no DB needed, so this runs regardless of fixture availability.
+describe('toAuditSafeConnector', () => {
+  it('keeps only name, method, and enabled — never headers, auth, or the secret flag', () => {
+    const connector: DataConnector = {
+      id: 'data_connector_1' as DataConnectorId,
+      name: 'Billing Lookup',
+      slug: 'billing_lookup',
+      description: 'Look up a billing account.',
+      method: 'GET',
+      urlTemplate: 'https://api.example.com/billing/{id}',
+      headers: [{ name: 'X-Api-Key', value: 'super-secret' }],
+      auth: { type: 'bearer' },
+      hasSecret: true,
+      inputs: [],
+      bodyTemplate: null,
+      exampleResponse: null,
+      responsePaths: null,
+      timeoutMs: 10000,
+      enabled: true,
+      status: 'active',
+      failureCount: 0,
+      lastError: null,
+      lastTestedAt: null,
+      createdById: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    const safe = toAuditSafeConnector(connector)
+
+    expect(safe).toEqual({ name: 'Billing Lookup', method: 'GET', enabled: true })
+    expect(safe).not.toHaveProperty('headers')
+    expect(safe).not.toHaveProperty('auth')
+    expect(safe).not.toHaveProperty('hasSecret')
   })
 })
