@@ -69,6 +69,7 @@ export function AuthSettings({
           replace: true,
         })
       }}
+      variant="line"
       className="space-y-6"
     >
       <TabsList>

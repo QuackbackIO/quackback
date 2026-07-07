@@ -105,8 +105,9 @@ function NotificationsPage() {
                 replace: true,
               })
             }}
+            variant="line"
           >
-            <TabsList>
+            <TabsList className="w-fit">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="unread">
                 Unread

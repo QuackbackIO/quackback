@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { UsersIcon } from '@heroicons/react/24/solid'
 import type { UserId, PrincipalId } from '@quackback/ids'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { BackLink } from '@/components/ui/back-link'
+import { PageHeader } from '@/components/shared/page-header'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { MembersTab } from '@/components/admin/settings/team/members-tab'
 import { TeamsTab } from '@/components/admin/settings/teams/teams-tab'
@@ -48,8 +50,13 @@ function MembersPage() {
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>
+      <PageHeader
+        icon={UsersIcon}
+        title="Members & Teams"
+        description="Manage who has access to your workspace, organize them into teams, and control what they can do."
+      />
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={setTab} variant="line">
         <TabsList>
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="teams">Teams</TabsTrigger>

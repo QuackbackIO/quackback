@@ -131,6 +131,7 @@ function HelpCenterSettingsPage() {
             replace: true,
           })
         }}
+        variant="line"
         className="space-y-6"
       >
         <TabsList>

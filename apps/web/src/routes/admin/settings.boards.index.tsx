@@ -1,18 +1,25 @@
-import type { ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { z } from 'zod'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { Squares2X2Icon, ChatBubbleLeftIcon } from '@heroicons/react/24/solid'
+import {
+  Squares2X2Icon,
+  ChatBubbleLeftIcon,
+  Cog6ToothIcon,
+  LockClosedIcon,
+  ShieldCheckIcon,
+  ArrowUpTrayIcon,
+  ArrowDownTrayIcon,
+} from '@heroicons/react/24/solid'
 import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BackLink } from '@/components/ui/back-link'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { CreateBoardDialog } from '@/components/admin/settings/boards/create-board-dialog'
 import { BoardSettingsHeader } from '@/components/admin/settings/boards/board-settings-header'
-import { BoardSettingsNav } from '@/components/admin/settings/boards/board-settings-nav'
 import { BoardGeneralForm } from '@/components/admin/settings/boards/board-general-form'
 import { BoardAccessForm } from '@/components/admin/settings/boards/board-access-form'
 import { BoardModerationForm } from '@/components/admin/settings/boards/board-moderation-form'
@@ -23,16 +30,6 @@ import {
   useBoardSelection,
   type BoardTab,
 } from '@/components/admin/settings/boards/use-board-selection'
-import type { BoardId } from '@quackback/ids'
-
-/** Board data as returned from server functions (dates serialized as strings) */
-interface BoardForSettings {
-  id: BoardId
-  name: string
-  slug: string
-  description: string | null
-  access: import('@/lib/shared/db-types').BoardAccess
-}
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -58,7 +55,7 @@ export const Route = createFileRoute('/admin/settings/boards/')({
 
 function BoardsSettingsPage() {
   const { data: boards } = useSuspenseQuery(adminQueries.boardsForSettings())
-  const { selectedBoardSlug, selectedTab, setSelectedBoard } = useBoardSelection()
+  const { selectedBoardSlug, selectedTab, setSelectedBoard, setSelectedTab } = useBoardSelection()
 
   // Auto-select first board if none selected
   useEffect(() => {
@@ -86,68 +83,71 @@ function BoardsSettingsPage() {
       </div>
       <BoardSettingsHeader currentBoard={currentBoard} allBoards={boards} />
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        <BoardSettingsNav />
+      <Tabs
+        value={selectedTab}
+        onValueChange={(next) => setSelectedTab(next as BoardTab)}
+        variant="line"
+        className="space-y-6"
+      >
+        <TabsList>
+          <TabsTrigger value="general">
+            <Cog6ToothIcon />
+            General
+          </TabsTrigger>
+          <TabsTrigger value="access">
+            <LockClosedIcon />
+            Access
+          </TabsTrigger>
+          <TabsTrigger value="moderation">
+            <ShieldCheckIcon />
+            Moderation
+          </TabsTrigger>
+          <TabsTrigger value="import">
+            <ArrowUpTrayIcon />
+            Import Data
+          </TabsTrigger>
+          <TabsTrigger value="export">
+            <ArrowDownTrayIcon />
+            Export Data
+          </TabsTrigger>
+        </TabsList>
 
-        <div className="flex-1 min-w-0 space-y-6">
-          <BoardTabContent board={currentBoard} tab={selectedTab} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-interface BoardTabContentProps {
-  board: BoardForSettings
-  tab: BoardTab
-}
-
-function BoardTabContent({ board, tab }: BoardTabContentProps): ReactNode {
-  switch (tab) {
-    case 'general':
-      return (
-        <div className="space-y-6">
-          <SettingsCard title="Board Details">
-            <BoardGeneralForm key={board.id} board={board} />
+        <TabsContent value="general" className="space-y-6">
+          <SettingsCard>
+            <BoardGeneralForm key={currentBoard.id} board={currentBoard} />
           </SettingsCard>
 
           <SettingsCard title="Danger Zone" variant="danger">
-            <DeleteBoardForm key={board.id} board={board} />
+            <DeleteBoardForm key={currentBoard.id} board={currentBoard} />
           </SettingsCard>
-        </div>
-      )
+        </TabsContent>
 
-    case 'access':
-      return (
-        <SettingsCard title="Access Control">
-          <BoardAccessForm key={board.id} board={board} />
-        </SettingsCard>
-      )
+        <TabsContent value="access">
+          <SettingsCard>
+            <BoardAccessForm key={currentBoard.id} board={currentBoard} />
+          </SettingsCard>
+        </TabsContent>
 
-    case 'moderation':
-      return (
-        <SettingsCard title="Moderation">
-          <BoardModerationForm key={board.id} board={board} />
-        </SettingsCard>
-      )
+        <TabsContent value="moderation">
+          <SettingsCard>
+            <BoardModerationForm key={currentBoard.id} board={currentBoard} />
+          </SettingsCard>
+        </TabsContent>
 
-    case 'import':
-      return (
-        <SettingsCard
-          title="Import Data"
-          description="Import posts from a CSV file into this board"
-        >
-          <BoardImportSection boardId={board.id} />
-        </SettingsCard>
-      )
+        <TabsContent value="import">
+          <SettingsCard description="Import posts from a CSV file into this board">
+            <BoardImportSection boardId={currentBoard.id} />
+          </SettingsCard>
+        </TabsContent>
 
-    case 'export':
-      return (
-        <SettingsCard title="Export Data" description="Download all posts from this board as CSV">
-          <BoardExportSection boardId={board.id} />
-        </SettingsCard>
-      )
-  }
+        <TabsContent value="export">
+          <SettingsCard description="Download all posts from this board as CSV">
+            <BoardExportSection boardId={currentBoard.id} />
+          </SettingsCard>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
 }
 
 function EmptyBoardsState() {

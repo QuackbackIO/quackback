@@ -629,7 +629,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
 
   return (
     <aside className="hidden w-72 shrink-0 flex-col xl:flex">
-      <Tabs defaultValue="details" className="min-h-0 flex-1 gap-0">
+      <Tabs defaultValue="details" variant="line" className="min-h-0 flex-1 gap-0">
         <TabsList className="m-3 mb-0 self-start">
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="copilot">
