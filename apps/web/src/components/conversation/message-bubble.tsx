@@ -80,10 +80,27 @@ export type BubbleSide = 'self' | 'peer'
  * agent's side of the admin thread) but swaps the fill for the amber tint
  * that has marked notes since the flat-row era — readable in both themes at
  * this opacity, same as the flag/note tints this replaces.
+ *
+ * `opts.agentSelf` scopes the softer fill to the admin thread's own side
+ * (human replies and Quinn's replies alike) so a full workday of reading it
+ * isn't spent against the saturated brand-primary yellow — human replies get
+ * a soft blue, `opts.assistant` (Quinn's own replies) get a soft purple so
+ * the two are visually distinct at a glance. Deliberately opt-in:
+ * `VisitorMessageBubble` never passes it, so the customer-facing
+ * widget/portal keeps the brand-primary bubble for the visitor's own
+ * messages.
  */
-export function bubbleClasses(side: BubbleSide, opts: { note?: boolean } = {}): string {
+export function bubbleClasses(
+  side: BubbleSide,
+  opts: { note?: boolean; agentSelf?: boolean; assistant?: boolean } = {}
+): string {
   if (opts.note) {
     return 'max-w-[85%] rounded-2xl border border-amber-400/25 bg-amber-400/10 px-3.5 py-2.5 text-foreground'
+  }
+  if (side === 'self' && opts.agentSelf) {
+    return opts.assistant
+      ? 'max-w-[85%] rounded-2xl bg-purple-500/15 px-3.5 py-2.5 text-foreground dark:bg-purple-500/20'
+      : 'max-w-[85%] rounded-2xl bg-blue-500/15 px-3.5 py-2.5 text-foreground dark:bg-blue-500/20'
   }
   return cn(
     'max-w-[85%] rounded-2xl px-3.5 py-2.5',
@@ -94,8 +111,12 @@ export function bubbleClasses(side: BubbleSide, opts: { note?: boolean } = {}): 
 /** Rich (TipTap) content's text color has to match the bubble's fill — on the
  *  brand-primary bubble it needs `text-primary-foreground` so prose text
  *  isn't near-invisible; everywhere else it's the standard body tone. */
-export function bubbleContentTextClass(side: BubbleSide, opts: { note?: boolean } = {}): string {
+export function bubbleContentTextClass(
+  side: BubbleSide,
+  opts: { note?: boolean; agentSelf?: boolean } = {}
+): string {
   if (opts.note) return 'text-foreground/90'
+  if (side === 'self' && opts.agentSelf) return 'text-foreground/90'
   return side === 'self' ? 'text-primary-foreground' : 'text-foreground/90'
 }
 
@@ -242,7 +263,12 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
     <div
       // The scroll/flash target for "jump to message" deep-links.
       data-message-id={message.id}
-      className={cn('group flex gap-2 py-1.5', self ? 'flex-row-reverse' : 'flex-row')}
+      // Named group ("message") scopes the hover toolbar to this row only —
+      // an unnamed `group` here would also satisfy every citation dot's own
+      // `group-hover:` (AssistantAnswer's CitationDot, nested inside this
+      // row), popping every citation's hovercard open at once instead of
+      // just the one under the pointer.
+      className={cn('group/message flex gap-2 py-1.5', self ? 'flex-row-reverse' : 'flex-row')}
     >
       <Avatar
         src={message.author?.avatarUrl ?? null}
@@ -266,7 +292,16 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         <div className="relative w-fit max-w-[85%]">
           <div
             className={cn(
-              jumbo ? 'max-w-full' : cn(bubbleClasses(side, { note: isNote }), 'max-w-full'),
+              jumbo
+                ? 'max-w-full'
+                : cn(
+                    bubbleClasses(side, {
+                      note: isNote,
+                      agentSelf: true,
+                      assistant: message.isAssistant,
+                    }),
+                    'max-w-full'
+                  ),
               // Animated flash for motion users; a static brand ring as the
               // reduced-motion equivalent (no background fight with the fill).
               highlighted &&
@@ -289,7 +324,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
               <EmbedHydration openMode="modal" onOpenInModal={onOpenPost}>
                 <RichTextContent
                   content={message.contentJson}
-                  className={cn('text-sm leading-relaxed', bubbleContentTextClass(side))}
+                  className={cn(
+                    'text-sm leading-relaxed',
+                    bubbleContentTextClass(side, { agentSelf: true })
+                  )}
                 />
               </EmbedHydration>
             ) : message.isAssistant ? (
@@ -312,12 +350,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
                     <button
                       type="button"
                       onClick={translation.onToggleOriginal}
-                      className={cn(
-                        'mt-0.5 text-[11px] underline decoration-dotted underline-offset-2 transition-colors',
-                        self
-                          ? 'text-primary-foreground/70 hover:text-primary-foreground'
-                          : 'text-muted-foreground/60 hover:text-foreground'
-                      )}
+                      className="mt-0.5 text-[11px] text-muted-foreground/60 underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
                     >
                       {translation.showingOriginal
                         ? 'Show translation'
@@ -343,7 +376,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             className={cn(
               'absolute -top-3 z-10 flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5 shadow-sm transition-opacity',
               self ? 'left-2' : 'right-2',
-              toolbarPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              toolbarPinned ? 'opacity-100' : 'opacity-0 group-hover/message:opacity-100'
             )}
           >
             <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>

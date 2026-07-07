@@ -16,7 +16,7 @@
  * that would otherwise hit real server functions.
  */
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import type { ConversationDTO, AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -358,7 +358,7 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     expect(screen.queryByText('Note')).not.toBeInTheDocument()
   })
 
-  it('a customer ticket keeps both Reply and Note tabs', async () => {
+  it('a customer ticket keeps both Reply and Note modes', async () => {
     // Repoint the ticket-detail queryFn for this one render via a fresh client
     // seeded with the customer variant.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -382,8 +382,9 @@ describe('AgentConversationThread — ticket capability wiring', () => {
         />
       </QueryClientProvider>
     )
-    expect(await screen.findByText('Reply')).toBeInTheDocument()
-    expect(screen.getByText('Note')).toBeInTheDocument()
+    const trigger = await screen.findByRole('button', { name: 'Reply' })
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
   })
 
   it('renders the ticket header controls + type badge', async () => {
@@ -396,10 +397,11 @@ describe('AgentConversationThread — ticket capability wiring', () => {
 })
 
 describe('AgentConversationThread — conversation kind unaffected', () => {
-  it('still renders the conversation detail panel and Reply/Note tabs', async () => {
+  it('still renders the conversation detail panel and the Reply/Note switcher', async () => {
     renderThread({ kind: 'conversation', id: 'conversation_1' })
-    expect(await screen.findByText('Reply')).toBeInTheDocument()
-    expect(screen.getByText('Note')).toBeInTheDocument()
+    const trigger = await screen.findByRole('button', { name: 'Reply' })
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+    expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
     expect(screen.getByTestId('inbox-detail-panel')).toBeInTheDocument()
   })
 })

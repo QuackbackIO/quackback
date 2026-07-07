@@ -175,6 +175,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -1626,40 +1628,16 @@ export function AgentConversationThread({
           </div>
         )}
 
-        {/* Composer */}
-        <div className="border-t border-border/50 p-3">
-          {/* Reply vs internal-note mode — a back_office/tracker ticket has no
-              reply capability, so Note is the only tab: hide the toggle and
-              force note mode (styled as today's note mode, per §2.5). */}
-          {capabilities.reply && (
-            <div className="mb-2 flex gap-1">
-              {(
-                [
-                  { mode: false, label: 'Reply' },
-                  { mode: true, label: 'Note' },
-                ] as const
-              ).map(({ mode, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setNoteMode(mode)}
-                  className={cn(
-                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
-                    noteMode === mode
-                      ? mode
-                        ? 'bg-amber-400/20 text-amber-700 dark:text-amber-300'
-                        : 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:bg-muted/60'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* Composer: the editor spans the full width on top, then the pending
-              attachment tray, then the actions (attach / emoji / saved replies)
-              and send. Enter sends; Shift+Enter inserts a newline. */}
+        {/* Composer — no top border: the composer should feel like a
+            continuation of the thread, not a separate panel. Horizontal
+            padding matches the message rows' `px-5` so the composer and the
+            thread above it share the same width. */}
+        <div className="px-5 py-3">
+          {/* Composer: the Reply/Note switcher gets its own row on top, then the
+              editor, the pending attachment tray, then the actions (attach,
+              emoji, saved replies) and send — one bordered box, one unified
+              control, instead of a separate mode toggle floating above it.
+              Enter sends; Shift+Enter inserts a newline. */}
           <div
             className={cn(
               'rounded-lg border px-3 py-2 focus-within:ring-2',
@@ -1668,6 +1646,39 @@ export function AgentConversationThread({
                 : 'border-border bg-background focus-within:ring-primary/20'
             )}
           >
+            {/* Reply vs internal-note mode — a back_office/tracker ticket has
+                no reply capability, so Note is the only mode: hide the
+                switcher and force note mode (styled as today's note mode,
+                per §2.5). */}
+            {capabilities.reply && (
+              <div className="mb-1.5 flex items-center">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                        noteMode
+                          ? 'bg-amber-400/20 text-amber-700 dark:text-amber-300'
+                          : 'bg-muted text-foreground hover:bg-muted/80'
+                      )}
+                    >
+                      {noteMode ? 'Note' : 'Reply'}
+                      <ChevronDownIcon className="h-3 w-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuRadioGroup
+                      value={noteMode ? 'note' : 'reply'}
+                      onValueChange={(value) => setNoteMode(value === 'note')}
+                    >
+                      <DropdownMenuRadioItem value="reply">Reply</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="note">Note</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -1693,11 +1704,11 @@ export function AgentConversationThread({
                 value={noteDraft.json ?? ''}
                 features={CONVERSATION_NOTE_FEATURES}
                 borderless
-                minHeight="1.5rem"
+                minHeight="4.5rem"
                 autofocus={noteKey > 0 ? 'end' : false}
                 disabled={noteMutation.isPending}
                 placeholder="Add an internal note for your team…"
-                className="max-h-32 overflow-y-auto"
+                className="max-h-64 overflow-y-auto"
                 onChange={onNoteChange}
                 onSubmit={onSend}
                 onImageUpload={upload}
@@ -1708,11 +1719,11 @@ export function AgentConversationThread({
                 value={replyDraft.json ?? ''}
                 features={CONVERSATION_EDITOR_FEATURES}
                 borderless
-                minHeight="1.5rem"
+                minHeight="4.5rem"
                 autofocus={replyKey > 0 ? 'end' : false}
                 disabled={sendMutation.isPending}
                 placeholder={isTicket ? 'Reply to the requester…' : 'Type your reply…'}
-                className="max-h-32 overflow-y-auto"
+                className="max-h-64 overflow-y-auto"
                 onChange={onReplyChange}
                 onSubmit={onSend}
                 onImageUpload={upload}
