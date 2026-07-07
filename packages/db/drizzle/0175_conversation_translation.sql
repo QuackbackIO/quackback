@@ -29,3 +29,9 @@ CREATE TABLE "conversation_message_translations" (
 ALTER TABLE "conversation_message_translations" ADD CONSTRAINT "conversation_message_translations_message_id_fkey" FOREIGN KEY ("conversation_message_id") REFERENCES "public"."conversation_messages"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "conversation_message_translations_unique_idx" ON "conversation_message_translations" USING btree ("conversation_message_id","locale");
+--> statement-breakpoint
+-- Backs the 180-day retention sweep for conversation_message_translations
+-- (cleanupExpiredMessageTranslations, conversation-translation.service.ts),
+-- mirroring assistant_tool_calls_created_at_idx's plain created_at index for
+-- the same DELETE ... WHERE created_at < cutoff shape.
+CREATE INDEX "conversation_message_translations_created_at_idx" ON "conversation_message_translations" USING btree ("created_at");

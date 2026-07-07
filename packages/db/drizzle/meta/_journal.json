@@ -899,80 +899,10 @@
       "breakpoints": true
     },
     {
-      "idx": 128,
-      "version": "7",
-      "when": 1783900800000,
-      "tag": "0128_post_tag_assignments_rename",
-      "breakpoints": true
-    },
-    {
-      "idx": 129,
-      "version": "7",
-      "when": 1783987200000,
-      "tag": "0129_post_tags_catalog_rename",
-      "breakpoints": true
-    },
-    {
-      "idx": 130,
-      "version": "7",
-      "when": 1784073600000,
-      "tag": "0130_post_comment_reactions_rename",
-      "breakpoints": true
-    },
-    {
-      "idx": 131,
-      "version": "7",
-      "when": 1784160000000,
-      "tag": "0131_post_comment_edit_history_rename",
-      "breakpoints": true
-    },
-    {
-      "idx": 132,
-      "version": "7",
-      "when": 1784246400000,
-      "tag": "0132_post_votes_rename",
-      "breakpoints": true
-    },
-    {
-      "idx": 133,
-      "version": "7",
-      "when": 1784332800000,
-      "tag": "0133_post_comments_rename",
-      "breakpoints": true
-    },
-    {
-      "idx": 134,
-      "version": "7",
-      "when": 1784419200000,
-      "tag": "0134_conversation_messages_rename",
-      "breakpoints": true
-    },
-    {
-      "idx": 135,
-      "version": "7",
-      "when": 1784505600000,
-      "tag": "0135_rename_stale_constraints",
-      "breakpoints": true
-    },
-    {
-      "idx": 136,
-      "version": "7",
-      "when": 1784592000000,
-      "tag": "0136_post_merge_suggestions_rename",
-      "breakpoints": true
-    },
-    {
       "idx": 137,
       "version": "7",
       "when": 1784678400000,
       "tag": "0137_visitor_analytics",
-      "breakpoints": true
-    },
-    {
-      "idx": 138,
-      "version": "7",
-      "when": 1784764800000,
-      "tag": "0138_visitor_devices",
       "breakpoints": true
     },
     {
@@ -1008,13 +938,6 @@
       "version": "7",
       "when": 1784765100000,
       "tag": "0143_channel_identities",
-      "breakpoints": true
-    },
-    {
-      "idx": 144,
-      "version": "7",
-      "when": 1784765160000,
-      "tag": "0144_assistant_involvement_offer",
       "breakpoints": true
     },
     {
@@ -1102,13 +1025,6 @@
       "breakpoints": true
     },
     {
-      "idx": 157,
-      "version": "7",
-      "when": 1784765940000,
-      "tag": "0157_companies_directory",
-      "breakpoints": true
-    },
-    {
       "idx": 158,
       "version": "7",
       "when": 1784766000000,
@@ -1134,13 +1050,6 @@
       "version": "7",
       "when": 1784766180000,
       "tag": "0161_kb_translations",
-      "breakpoints": true
-    },
-    {
-      "idx": 162,
-      "version": "7",
-      "when": 1784766240000,
-      "tag": "0162_workflow_run_exclusive_lock",
       "breakpoints": true
     },
     {
@@ -1172,13 +1081,6 @@
       "breakpoints": true
     },
     {
-      "idx": 167,
-      "version": "7",
-      "when": 1784766540000,
-      "tag": "0167_guidance_categories",
-      "breakpoints": true
-    },
-    {
       "idx": 168,
       "version": "7",
       "when": 1784766600000,
@@ -1207,13 +1109,6 @@
       "breakpoints": true
     },
     {
-      "idx": 172,
-      "version": "7",
-      "when": 1784766840000,
-      "tag": "0172_pending_action_idempotency",
-      "breakpoints": true
-    },
-    {
       "idx": 173,
       "version": "7",
       "when": 1784766900000,
@@ -1221,24 +1116,10 @@
       "breakpoints": true
     },
     {
-      "idx": 174,
-      "version": "7",
-      "when": 1784766960000,
-      "tag": "0174_copilot_usage_indexes",
-      "breakpoints": true
-    },
-    {
       "idx": 175,
       "version": "7",
       "when": 1784767020000,
       "tag": "0175_conversation_translation",
-      "breakpoints": true
-    },
-    {
-      "idx": 176,
-      "version": "7",
-      "when": 1784767080000,
-      "tag": "0176_conversation_message_translations_created_at_idx",
       "breakpoints": true
     },
     {
