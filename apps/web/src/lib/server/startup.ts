@@ -250,6 +250,41 @@ export function logStartupBanner(): void {
     })
     .catch((err) => log.error({ err }, 'failed to init changelog notify reconciler'))
 
+  // Status page publish-notification reconciler: same shape as the changelog
+  // one above, for status_incidents.notified_at (Status Product Spec §9).
+  // Runs shortly after startup, then every 5 minutes.
+  Promise.all([import('./domains/status/status.service'), import('@/lib/server/sweep-lock')])
+    .then(([{ reconcileStatusNotifications }, { withSweepLock }]) => {
+      const TEN_MIN = 10 * 60 * 1000
+      const runReconcile = () =>
+        withSweepLock('status_notify', TEN_MIN, async () => {
+          await reconcileStatusNotifications().catch((err) =>
+            log.error({ err }, 'status notify reconcile failed')
+          )
+        })
+      setTimeout(() => void runReconcile(), 28_000) // 28s delay (stagger after changelog's 25s)
+      setInterval(() => void runReconcile(), 5 * 60 * 1000) // Every 5 minutes
+    })
+    .catch((err) => log.error({ err }, 'failed to init status notify reconciler'))
+
+  // Scheduled-maintenance boot sweep: catches window start/complete
+  // transitions missed while the process was down (Status Product Spec §9).
+  // Runs shortly after startup, then every 5 minutes; each handler is
+  // idempotent so overlap with a live delayed job is harmless.
+  Promise.all([import('./domains/status/status.maintenance'), import('@/lib/server/sweep-lock')])
+    .then(([{ reconcileMaintenanceWindows }, { withSweepLock }]) => {
+      const TEN_MIN = 10 * 60 * 1000
+      const runReconcile = () =>
+        withSweepLock('status_maintenance_sweep', TEN_MIN, async () => {
+          await reconcileMaintenanceWindows().catch((err) =>
+            log.error({ err }, 'status maintenance window reconcile failed')
+          )
+        })
+      setTimeout(() => void runReconcile(), 31_000) // 31s delay (stagger after status notify's 28s)
+      setInterval(() => void runReconcile(), 5 * 60 * 1000) // Every 5 minutes
+    })
+    .catch((err) => log.error({ err }, 'failed to init status maintenance sweep'))
+
   // Ensure quackback feedback source exists (idempotent, creates on first startup)
   import('./domains/feedback/sources/quackback.source')
     .then(({ ensureQuackbackFeedbackSource }) => ensureQuackbackFeedbackSource())

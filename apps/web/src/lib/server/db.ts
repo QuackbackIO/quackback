@@ -344,6 +344,22 @@ export {
   helpCenterCategoryTranslationsRelations,
   LOCALE_TO_REGCONFIG,
   regconfigForLocale,
+  // Schema tables - status page
+  statusComponentGroups,
+  statusComponentGroupsRelations,
+  statusComponents,
+  statusComponentsRelations,
+  statusComponentEvents,
+  statusComponentEventsRelations,
+  statusIncidents,
+  statusIncidentsRelations,
+  statusIncidentUpdates,
+  statusIncidentUpdatesRelations,
+  statusIncidentComponents,
+  statusIncidentComponentsRelations,
+  statusSubscriptions,
+  statusSubscriptionsRelations,
+  statusIncidentTemplates,
   // Schema tables - push devices
   pushDevices,
   // Schema tables - assistant (Quinn) involvement record
@@ -426,6 +442,16 @@ export type {
 } from '@quackback/db'
 export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
 export type { ChangelogSubscriptionSource } from '@quackback/db'
+export type {
+  StatusComponentStatus,
+  StatusIncidentStatus,
+  StatusMaintenanceStatus,
+  StatusIncidentKind,
+  StatusIncidentImpact,
+  StatusComponentEventSource,
+  StatusSubscriptionScope,
+  StatusSubscriptionSource,
+} from '@quackback/db'
 export type { SlaPolicy, SlaEvent } from '@quackback/db'
 export type {
   ImportRunSource,

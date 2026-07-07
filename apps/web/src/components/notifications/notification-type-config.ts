@@ -6,6 +6,7 @@ import {
   BellIcon,
   TicketIcon,
   AtSymbolIcon,
+  SignalIcon,
 } from '@heroicons/react/24/solid'
 import type { NotificationType } from '@/lib/shared/types'
 
@@ -52,6 +53,11 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     icon: TicketIcon,
     iconClass: 'text-indigo-500',
     bgClass: 'bg-indigo-500/10',
+  },
+  status_incident: {
+    icon: SignalIcon,
+    iconClass: 'text-orange-500',
+    bgClass: 'bg-orange-500/10',
   },
 }
 

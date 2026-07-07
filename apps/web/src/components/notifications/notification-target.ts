@@ -63,5 +63,13 @@ export function getNotificationTarget(
     return { to: '/changelog' }
   }
 
+  // Deep-link to the specific status incident/maintenance, else the status page.
+  if (notification.type === 'status_incident') {
+    if (notification.incidentId) {
+      return { to: '/status/$incidentId', params: { incidentId: notification.incidentId } }
+    }
+    return { to: '/status' }
+  }
+
   return null
 }

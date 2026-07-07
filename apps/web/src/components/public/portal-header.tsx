@@ -68,8 +68,24 @@ export function PortalHeader({
   // Default true so a workspace that never customized this setting keeps
   // the changelog tab it had before this toggle existed.
   const changelogEnabled = settings?.changelogConfig?.portalTabEnabled ?? true
+  // Status tab: flag + product enabled + tab toggle. A non-public audience
+  // still needs a signed-in viewer to bother showing the tab; the route
+  // enforces the real per-viewer segment gate (settings here are
+  // workspace-global, not per-viewer).
+  const statusAudience = settings?.statusConfig?.audience ?? 'public'
+  const statusLoggedIn = !!session?.user && session.user.principalType !== 'anonymous'
+  const statusEnabled =
+    !!settings?.featureFlags?.statusPage &&
+    !!settings?.statusConfig?.enabled &&
+    (settings?.statusConfig?.portalTabEnabled ?? true) &&
+    (statusAudience === 'public' || statusLoggedIn)
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
-  const navItems = buildNavItems({ helpCenterEnabled, supportEnabled, changelogEnabled })
+  const navItems = buildNavItems({
+    helpCenterEnabled,
+    supportEnabled,
+    changelogEnabled,
+    statusEnabled,
+  })
 
   // Hide Log in / Sign up when no portal sign-in surface is usable.
   // Team members can still reach /admin/login directly. Counts any registered

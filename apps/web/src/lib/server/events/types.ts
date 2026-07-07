@@ -20,6 +20,12 @@ export const EVENT_TYPES = [
   'comment.updated',
   'comment.deleted',
   'changelog.published',
+  'status.incident_created',
+  'status.incident_updated',
+  'status.maintenance_scheduled',
+  'status.maintenance_started',
+  'status.maintenance_completed',
+  'status.component_changed',
   'conversation.created',
   'conversation.status_changed',
   'conversation.assigned',
@@ -163,6 +169,48 @@ export interface ChangelogPublishedPayload {
     publishedAt: string
     linkedPostCount: number
   }
+}
+
+// Status page events (Status Product Spec §9). Email fires only on the two
+// publish events (incident_created, maintenance_scheduled); the rest reach
+// in-app + webhooks/workflows only.
+export interface StatusIncidentEventData {
+  id: string
+  kind: 'incident' | 'maintenance'
+  title: string
+  status: string
+  impact: string
+  scheduledStartAt: string | null
+  scheduledEndAt: string | null
+  startedAt: string
+  componentIds: string[]
+}
+
+/** status.incident_created + status.maintenance_scheduled (the publish events). */
+export interface StatusIncidentPublishedPayload {
+  incident: StatusIncidentEventData
+}
+
+export interface StatusIncidentUpdatedPayload {
+  incidentId: string
+  kind: 'incident' | 'maintenance'
+  status: string
+  body: string
+}
+
+/** status.maintenance_started + status.maintenance_completed. */
+export interface StatusMaintenanceTransitionPayload {
+  incidentId: string
+  title: string
+  componentIds: string[]
+}
+
+export interface StatusComponentChangedPayload {
+  componentId: string
+  componentName: string
+  previousStatus: string
+  status: string
+  source: string
 }
 
 // Conversation / message events
@@ -380,6 +428,25 @@ export interface ChangelogPublishedEvent extends EventBase<'changelog.published'
   data: ChangelogPublishedPayload
 }
 
+export interface StatusIncidentCreatedEvent extends EventBase<'status.incident_created'> {
+  data: StatusIncidentPublishedPayload
+}
+export interface StatusMaintenanceScheduledEvent extends EventBase<'status.maintenance_scheduled'> {
+  data: StatusIncidentPublishedPayload
+}
+export interface StatusIncidentUpdatedEvent extends EventBase<'status.incident_updated'> {
+  data: StatusIncidentUpdatedPayload
+}
+export interface StatusMaintenanceStartedEvent extends EventBase<'status.maintenance_started'> {
+  data: StatusMaintenanceTransitionPayload
+}
+export interface StatusMaintenanceCompletedEvent extends EventBase<'status.maintenance_completed'> {
+  data: StatusMaintenanceTransitionPayload
+}
+export interface StatusComponentChangedEvent extends EventBase<'status.component_changed'> {
+  data: StatusComponentChangedPayload
+}
+
 export interface PostMentionedEvent extends EventBase<'post.mentioned'> {
   data: EventPostMentionedData
 }
@@ -453,6 +520,12 @@ export type EventData =
   | CommentUpdatedEvent
   | CommentDeletedEvent
   | ChangelogPublishedEvent
+  | StatusIncidentCreatedEvent
+  | StatusMaintenanceScheduledEvent
+  | StatusIncidentUpdatedEvent
+  | StatusMaintenanceStartedEvent
+  | StatusMaintenanceCompletedEvent
+  | StatusComponentChangedEvent
   | ConversationCreatedEvent
   | ConversationStatusChangedEvent
   | ConversationAssignedEvent

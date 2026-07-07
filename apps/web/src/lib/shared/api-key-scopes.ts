@@ -53,7 +53,9 @@ export const API_KEY_SCOPE_LABELS: Record<ApiKeyScope, string> = {
  * read:changelog scope, matching the MCP search / get_details convention.
  * Support (tickets) shares the chat scopes with conversations. AI rides the
  * feedback scopes like the other workspace-config families: its keys gate
- * assistant/connector configuration, not conversation access.
+ * assistant/connector configuration, not conversation access. Status page
+ * rides the feedback scopes too — `/api/v1/status/*` (Status Product Spec
+ * §10) has no dedicated REST scope of its own, same rationale as changelog.
  */
 const CATEGORY_SCOPES: Record<PermissionCategory, { read: ApiKeyScope; write: ApiKeyScope }> = {
   workspace: { read: 'read:feedback', write: 'write:feedback' },
@@ -70,6 +72,7 @@ const CATEGORY_SCOPES: Record<PermissionCategory, { read: ApiKeyScope; write: Ap
   integration: { read: 'read:feedback', write: 'write:feedback' },
   support: { read: 'read:chat', write: 'write:chat' },
   ai: { read: 'read:feedback', write: 'write:feedback' },
+  status_page: { read: 'read:feedback', write: 'write:feedback' },
 }
 
 const CATEGORY_BY_KEY = new Map<PermissionKey, PermissionCategory>(

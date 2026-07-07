@@ -42,6 +42,7 @@ import {
 } from './settings.types'
 import { publicHomeConfig, publicMessengerConfig } from './settings.widget'
 import { resolveChangelogSettings } from './settings.changelog'
+import { resolveStatusSettings } from './settings.status'
 import {
   parseJsonConfig,
   parseJsonOrNull,
@@ -853,6 +854,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
     const widgetConfig = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
     const helpCenterConfig = parseJsonConfig(org.helpCenterConfig, DEFAULT_HELP_CENTER_CONFIG)
     const changelogConfig = resolveChangelogSettings(org.metadata)
+    const statusConfig = resolveStatusSettings(org.metadata)
 
     const featureFlags: FeatureFlags = {
       ...DEFAULT_FEATURE_FLAGS,
@@ -892,6 +894,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       developerConfig,
       helpCenterConfig,
       changelogConfig,
+      statusConfig,
       customCss: org.customCss ?? '',
       publicAuthConfig: {
         oauth: filteredAuthOAuth,

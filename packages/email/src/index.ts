@@ -26,6 +26,9 @@ import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import { NewSignInEmail } from './templates/new-sign-in'
+import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
+import type { IncidentImpact } from './templates/status-incident-published'
+import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 
 /**
  * Get environment variable at runtime.
@@ -866,6 +869,126 @@ export async function sendFeedbackLinkedEmail(
 }
 
 // ============================================================================
+// Status Incident Published Email
+// ============================================================================
+
+interface SendStatusIncidentPublishedParams {
+  to: string
+  workspaceName: string
+  incidentTitle: string
+  impact: IncidentImpact
+  statusLabel: string
+  body: string
+  affectedComponents: Array<{ name: string; status: string }>
+  incidentUrl: string
+  unsubscribeUrl: string
+  logoUrl?: string
+}
+
+/** Sent once when a new incident is published on the workspace's status page. */
+export async function sendStatusIncidentPublishedEmail(
+  params: SendStatusIncidentPublishedParams
+): Promise<EmailResult> {
+  const {
+    to,
+    workspaceName,
+    incidentTitle,
+    impact,
+    statusLabel,
+    body,
+    affectedComponents,
+    incidentUrl,
+    unsubscribeUrl,
+    logoUrl,
+  } = params
+
+  if (getProvider() === 'console') {
+    log.debug(
+      { email_type: 'StatusIncidentPublishedEmail', to, incidentUrl },
+      '[dev] email preview (console provider)'
+    )
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject: `Incident: ${incidentTitle}`,
+    react: StatusIncidentPublishedEmail({
+      workspaceName,
+      incidentTitle,
+      impact,
+      statusLabel,
+      body,
+      affectedComponents,
+      incidentUrl,
+      unsubscribeUrl,
+      logoUrl,
+    }),
+  })
+}
+
+// ============================================================================
+// Status Maintenance Scheduled Email
+// ============================================================================
+
+interface SendStatusMaintenanceScheduledParams {
+  to: string
+  workspaceName: string
+  maintenanceTitle: string
+  body: string
+  /** Pre-formatted display string for the start of the maintenance window. */
+  startLabel: string
+  /** Pre-formatted display string for the end of the maintenance window. */
+  endLabel: string
+  affectedComponents: string[]
+  incidentUrl: string
+  unsubscribeUrl: string
+  logoUrl?: string
+}
+
+/** Sent once when maintenance is scheduled on the workspace's status page. */
+export async function sendStatusMaintenanceScheduledEmail(
+  params: SendStatusMaintenanceScheduledParams
+): Promise<EmailResult> {
+  const {
+    to,
+    workspaceName,
+    maintenanceTitle,
+    body,
+    startLabel,
+    endLabel,
+    affectedComponents,
+    incidentUrl,
+    unsubscribeUrl,
+    logoUrl,
+  } = params
+
+  if (getProvider() === 'console') {
+    log.debug(
+      { email_type: 'StatusMaintenanceScheduledEmail', to, incidentUrl },
+      '[dev] email preview (console provider)'
+    )
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject: `Scheduled maintenance: ${maintenanceTitle}`,
+    react: StatusMaintenanceScheduledEmail({
+      workspaceName,
+      maintenanceTitle,
+      body,
+      startLabel,
+      endLabel,
+      affectedComponents,
+      incidentUrl,
+      unsubscribeUrl,
+      logoUrl,
+    }),
+  })
+}
+
+// ============================================================================
 // Re-export templates for preview/testing
 // ============================================================================
 
@@ -881,3 +1004,6 @@ export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export { NewSignInEmail } from './templates/new-sign-in'
+export { StatusIncidentPublishedEmail } from './templates/status-incident-published'
+export type { IncidentImpact } from './templates/status-incident-published'
+export { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'

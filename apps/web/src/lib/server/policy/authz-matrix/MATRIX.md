@@ -95,10 +95,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | assistant.manage | ai | ✓ | · |
 | connector.manage | ai | ✓ | · |
 | copilot.use | ai | ✓ | ✓ |
+| status_page.manage | status_page | ✓ | · |
+| status_page.publish | status_page | ✓ | ✓ |
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 514 surfaces
+### Server functions (`requireAuth`) — 546 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -235,6 +237,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation-attributes.ts`::archiveConversationAttributeFn | conversation.manage |
 | `lib/server/functions/conversation-attributes.ts`::restoreConversationAttributeFn | conversation.manage |
 | `lib/server/functions/conversation-attributes.ts`::setConversationAttributeValueFn | DYNAMIC (conversation.set_attributes | ticket.set_status) |
+| `lib/server/functions/conversation-attributes.ts`::previewAttributeDetectionFn | conversation.manage |
+| `lib/server/functions/conversation-attributes.ts`::draftAttributeDescriptionsFn | conversation.manage |
+| `lib/server/functions/conversation-attributes.ts`::attributeValueCountsFn | conversation.view |
 | `lib/server/functions/conversation-segments.ts`::fetchInboxSegmentsWithCountsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsFn | conversation.view |
 | `lib/server/functions/conversation-tags.ts`::fetchConversationTagsWithCountsFn | conversation.view |
@@ -487,9 +492,37 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/sso.ts`::addProviderDomainFn | auth.manage |
 | `lib/server/functions/sso.ts`::verifyProviderDomainFn | auth.manage |
 | `lib/server/functions/sso.ts`::setDomainEnforcedFn | auth.manage |
+| `lib/server/functions/status-subscriptions.ts`::getMyStatusSubscriptionFn | END_USER (any authenticated) |
+| `lib/server/functions/status-subscriptions.ts`::subscribeStatusFn | END_USER (any authenticated) |
+| `lib/server/functions/status-subscriptions.ts`::unsubscribeStatusFn | END_USER (any authenticated) |
 | `lib/server/functions/status-sync.ts`::enableStatusSyncFn | integration.manage |
 | `lib/server/functions/status-sync.ts`::disableStatusSyncFn | integration.manage |
 | `lib/server/functions/status-sync.ts`::updateStatusMappingsFn | integration.manage |
+| `lib/server/functions/status.ts`::listStatusComponentsAdminFn | status_page.manage |
+| `lib/server/functions/status.ts`::createStatusComponentFn | status_page.manage |
+| `lib/server/functions/status.ts`::updateStatusComponentFn | status_page.manage |
+| `lib/server/functions/status.ts`::deleteStatusComponentFn | status_page.manage |
+| `lib/server/functions/status.ts`::reorderStatusComponentsFn | status_page.manage |
+| `lib/server/functions/status.ts`::setStatusComponentStatusFn | status_page.manage |
+| `lib/server/functions/status.ts`::createStatusGroupFn | status_page.manage |
+| `lib/server/functions/status.ts`::updateStatusGroupFn | status_page.manage |
+| `lib/server/functions/status.ts`::deleteStatusGroupFn | status_page.manage |
+| `lib/server/functions/status.ts`::reorderStatusGroupsFn | status_page.manage |
+| `lib/server/functions/status.ts`::createStatusIncidentFn | status_page.publish |
+| `lib/server/functions/status.ts`::updateStatusIncidentFn | status_page.publish |
+| `lib/server/functions/status.ts`::postStatusIncidentUpdateFn | status_page.publish |
+| `lib/server/functions/status.ts`::deleteStatusIncidentFn | status_page.publish |
+| `lib/server/functions/status.ts`::clearStatusHistoryFn | status_page.manage |
+| `lib/server/functions/status.ts`::getStatusIncidentAdminFn | status_page.publish |
+| `lib/server/functions/status.ts`::listStatusIncidentsAdminFn | status_page.publish |
+| `lib/server/functions/status.ts`::listStatusIncidentTemplatesFn | status_page.manage |
+| `lib/server/functions/status.ts`::createStatusIncidentTemplateFn | status_page.manage |
+| `lib/server/functions/status.ts`::updateStatusIncidentTemplateFn | status_page.manage |
+| `lib/server/functions/status.ts`::deleteStatusIncidentTemplateFn | status_page.manage |
+| `lib/server/functions/status.ts`::listStatusSubscriptionsAdminFn | status_page.manage |
+| `lib/server/functions/status.ts`::getStatusSubscriptionCountsFn | status_page.manage |
+| `lib/server/functions/status.ts`::getStatusSettingsFn | status_page.manage |
+| `lib/server/functions/status.ts`::updateStatusSettingsFn | status_page.manage |
 | `lib/server/functions/statuses.ts`::fetchStatusesFn | status.view |
 | `lib/server/functions/statuses.ts`::fetchStatusFn | status.view |
 | `lib/server/functions/statuses.ts`::createStatusFn | status.manage |
@@ -503,6 +536,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/subscriptions.ts`::adminUpdateVoterSubscriptionFn | post.vote_on_behalf |
 | `lib/server/functions/support-reporting.ts`::slaAttainmentFn | analytics.view |
 | `lib/server/functions/support-reporting.ts`::workflowEffectivenessFn | analytics.view |
+| `lib/server/functions/support-reporting.ts`::attributeBreakdownFn | analytics.view |
 | `lib/server/functions/teammate-preferences.ts`::getMyLanguagePreferenceFn | END_USER (any authenticated) |
 | `lib/server/functions/teammate-preferences.ts`::setMyLanguagePreferenceFn | END_USER (any authenticated) |
 | `lib/server/functions/teams.ts`::listTeamsFn | member.view |
@@ -617,7 +651,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/integrations/zendesk/functions.ts`::getZendeskConnectUrl | integration.manage |
 | `lib/server/integrations/zendesk/functions.ts`::searchZendeskUserFn | integration.view |
 
-### Public REST API (`withApiKeyAuth`) — 91 surfaces
+### Public REST API (`withApiKeyAuth`) — 100 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -684,6 +718,15 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/roadmaps/index.ts`::POST | roadmap.manage |
 | `routes/api/v1/segments/$slug.members.ts`::POST | segment.manage |
 | `routes/api/v1/segments/$slug.members.ts`::DELETE | segment.manage |
+| `routes/api/v1/status/components/$componentId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/status/components/$componentId.ts`::PATCH | status_page.manage |
+| `routes/api/v1/status/components/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/status/components/index.ts`::POST | status_page.manage |
+| `routes/api/v1/status/incidents/$incidentId.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/status/incidents/$incidentId.updates.ts`::POST | status_page.publish |
+| `routes/api/v1/status/incidents/index.ts`::GET | PUBLIC (any valid key) |
+| `routes/api/v1/status/incidents/index.ts`::POST | status_page.publish |
+| `routes/api/v1/status/summary.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/statuses/$statusId.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/statuses/$statusId.ts`::PATCH | status.manage |
 | `routes/api/v1/statuses/$statusId.ts`::DELETE | status.manage |
@@ -784,7 +827,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-162 of 760 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+167 of 806 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -864,6 +907,10 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/settings.ts`::fetchPublicAuthConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchPublicPortalConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchUserProfile | server-fn |
+| `lib/server/functions/status.ts`::getStatusIncidentPublicFn | server-fn |
+| `lib/server/functions/status.ts`::getStatusPageFn | server-fn |
+| `lib/server/functions/status.ts`::getStatusUptimeFn | server-fn |
+| `lib/server/functions/status.ts`::listStatusHistoryFn | server-fn |
 | `lib/server/functions/subscriptions.ts`::processUnsubscribeTokenFn | server-fn |
 | `lib/server/functions/uploads.ts`::checkS3ConfiguredFn | server-fn |
 | `lib/server/functions/uploads.ts`::getWidgetImageUploadUrlFn | server-fn |
@@ -949,6 +996,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/oauth/$integration/connect.ts`::GET | route |
 | `routes/robots[.]txt.ts`::GET | route |
 | `routes/sitemap[.]xml.ts`::GET | route |
+| `routes/status/feed.ts`::GET | route |
 | `routes/widget.tsx`::getPortalSessionToken | server-fn |
 | `routes/widget.tsx`::getWidgetLocale | server-fn |
 | `routes/widget.tsx`::setIframeHeaders | server-fn |

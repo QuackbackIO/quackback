@@ -14,6 +14,7 @@ export type NotificationType =
   | 'comment_created'
   | 'post_mentioned'
   | 'changelog_published'
+  | 'status_incident'
   | 'chat_message'
   | 'chat_mention'
   | 'ticket_status_changed'

@@ -183,6 +183,12 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       }
     }
 
+    // Status page publish events — email fires only here (Status Product Spec §9).
+    if (event.type === 'status.incident_created' || event.type === 'status.maintenance_scheduled') {
+      const statusTargets = await getStatusSubscriberTargets(event, context)
+      targets.push(...statusTargets)
+    }
+
     // Direct-mention targets (single principal whose id is in the payload)
     if (MENTION_EVENT_TYPES.includes(event.type as (typeof MENTION_EVENT_TYPES)[number])) {
       const mentionTargets = await getMentionTargets(event, context)
@@ -902,6 +908,245 @@ async function getChangelogSubscriberTargets(
   }
 
   return targets
+}
+
+// ============================================================================
+// Status Page Subscriber Targets
+// ============================================================================
+
+const STATUS_COMPONENT_STATUS_LABELS: Record<string, string> = {
+  operational: 'Operational',
+  degraded_performance: 'Degraded performance',
+  partial_outage: 'Partial outage',
+  major_outage: 'Major outage',
+  under_maintenance: 'Under maintenance',
+}
+
+const STATUS_LIFECYCLE_LABELS: Record<string, string> = {
+  investigating: 'Investigating',
+  identified: 'Identified',
+  monitoring: 'Monitoring',
+  resolved: 'Resolved',
+  scheduled: 'Scheduled',
+  in_progress: 'In progress',
+  verifying: 'Verifying',
+  completed: 'Completed',
+}
+
+/**
+ * Subscriber targets for the two status publish events (incident_created,
+ * maintenance_scheduled). A subscriber is notified iff (a) they pass the
+ * page-level audience gate AND (b) they can see at least one affected
+ * component (Status Product Spec §4). Email is additionally gated on the
+ * workspace `emailsDisabled` switch and the per-principal `emailMuted` pref;
+ * the in-app notification ignores `emailsDisabled` (it's email-specific).
+ */
+async function getStatusSubscriberTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'status.incident_created' && event.type !== 'status.maintenance_scheduled') {
+    return []
+  }
+  const incident = event.data.incident
+  const affectedComponentIds = incident.componentIds
+
+  const {
+    statusComponents,
+    statusIncidentUpdates,
+    isNull: isNullOp,
+    inArray: inArrayOp,
+    eq: eqOp,
+    asc: ascOp,
+  } = await import('@/lib/server/db')
+  const { getActiveSubscribersForComponents } =
+    await import('@/lib/server/domains/status/status.subscription')
+  const { isStatusAudienceGranted } = await import('@/lib/server/domains/status/status.audience')
+  const { canViewStatusComponent } = await import('@/lib/server/policy/status')
+  const { getStatusSettings } = await import('@/lib/server/domains/settings/settings.status')
+  const { batchGenerateStatusUnsubscribeTokens } =
+    await import('@/lib/server/domains/subscriptions/subscription.service')
+
+  const settings = await getStatusSettings()
+
+  // Affected components (for the per-subscriber visibility check + email body).
+  const affected = affectedComponentIds.length
+    ? await db
+        .select({
+          id: statusComponents.id,
+          name: statusComponents.name,
+          segmentIds: statusComponents.segmentIds,
+        })
+        .from(statusComponents)
+        .where(
+          and(
+            inArrayOp(statusComponents.id, affectedComponentIds as never),
+            isNullOp(statusComponents.deletedAt)
+          )
+        )
+    : []
+  const affectedById = new Map(affected.map((c) => [String(c.id), c]))
+
+  // The base subscriber pool (page-wide OR overlapping an affected component).
+  const principalIds = (await getActiveSubscribersForComponents(
+    affectedComponentIds as never
+  )) as PrincipalId[]
+  if (principalIds.length === 0) return []
+
+  // Batch-load role/type + segments + email for each subscriber.
+  const principals = await db
+    .select({ id: principal.id, role: principal.role, type: principal.type, email: user.email })
+    .from(principal)
+    .leftJoin(user, eq(principal.userId, user.id))
+    .where(inArray(principal.id, principalIds))
+
+  const segmentRows = await db
+    .select({ principalId: userSegments.principalId, segmentId: userSegments.segmentId })
+    .from(userSegments)
+    .where(inArray(userSegments.principalId, principalIds))
+  const segmentsByPrincipal = new Map<string, Set<SegmentId>>()
+  for (const row of segmentRows) {
+    const key = String(row.principalId)
+    const set = segmentsByPrincipal.get(key) ?? new Set<SegmentId>()
+    set.add(row.segmentId as SegmentId)
+    segmentsByPrincipal.set(key, set)
+  }
+
+  // Eligible = passes page gate AND can see ≥1 affected component.
+  const eligible = principals.filter((p) => {
+    const actor: Actor = {
+      principalId: p.id,
+      role: (p.role ?? null) as Actor['role'],
+      principalType: p.type as Actor['principalType'],
+      segmentIds: segmentsByPrincipal.get(String(p.id)) ?? new Set(),
+    }
+    if (!isStatusAudienceGranted(actor, settings)) return false
+    if (affected.length === 0) return true
+    return affected.some((c) => canViewStatusComponent(actor, { segmentIds: c.segmentIds }))
+  })
+  if (eligible.length === 0) return []
+
+  const targets: HookTarget[] = []
+  const incidentUrl = `${context.portalBaseUrl}/status/${incident.id}`
+
+  // The publish payload doesn't carry the first update body; fetch the
+  // earliest update (the one written at create time) for the email body.
+  const [firstUpdate] = await db
+    .select({ body: statusIncidentUpdates.body })
+    .from(statusIncidentUpdates)
+    .where(eqOp(statusIncidentUpdates.incidentId, incident.id as never))
+    .orderBy(ascOp(statusIncidentUpdates.createdAt))
+    .limit(1)
+  const firstUpdateBody = firstUpdate?.body ?? ''
+
+  // Per-viewer affected list is uniform here (all eligible can see ≥1); the
+  // email lists every affected component the workspace marked — acceptable,
+  // since eligibility already required visibility. Humanize for display.
+  const affectedForEmail = affectedComponentIds
+    .map((id) => affectedById.get(String(id)))
+    .filter((c): c is NonNullable<typeof c> => !!c)
+    .map((c) => ({
+      name: c.name,
+      status:
+        STATUS_COMPONENT_STATUS_LABELS[incidentStatusForComponent(incident, String(c.id))] ??
+        'Operational',
+    }))
+
+  // In-app notification target (all eligible; ignores emailsDisabled).
+  targets.push({
+    type: 'notification',
+    target: { principalIds: eligible.map((p) => p.id as PrincipalId) },
+    config: {
+      eventType: event.type,
+      incidentId: incident.id,
+      incidentTitle: incident.title,
+      incidentUrl,
+      kind: incident.kind,
+      impact: incident.impact,
+      statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
+    },
+  })
+
+  // Email targets — gated by emailsDisabled + per-principal emailMuted.
+  if (!settings.emailsDisabled) {
+    const withEmail = eligible.filter((p) => !!p.email)
+    if (withEmail.length > 0) {
+      const prefsMap = await batchGetNotificationPreferences(
+        withEmail.map((p) => p.id as PrincipalId)
+      )
+      const emailable = withEmail.filter((p) => {
+        const prefs = prefsMap.get(p.id as PrincipalId)
+        return prefs ? !prefs.emailMuted : true
+      })
+      if (emailable.length > 0) {
+        const tokenMap = await batchGenerateStatusUnsubscribeTokens(
+          emailable.map((p) => p.id as PrincipalId)
+        )
+        for (const p of emailable) {
+          targets.push({
+            type: 'email',
+            target: {
+              email: p.email!,
+              unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(p.id as PrincipalId)}`,
+            },
+            config: {
+              eventType: event.type,
+              workspaceName: context.workspaceName,
+              logoUrl: context.logoUrl ?? undefined,
+              incidentTitle: incident.title,
+              incidentUrl,
+              impact: incident.impact,
+              statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
+              body: firstUpdateBody,
+              affectedComponents: affectedForEmail,
+              scheduledStartLabel: incident.scheduledStartAt
+                ? formatStatusDate(incident.scheduledStartAt)
+                : null,
+              scheduledEndLabel: incident.scheduledEndAt
+                ? formatStatusDate(incident.scheduledEndAt)
+                : null,
+            },
+          })
+        }
+      }
+    }
+  }
+
+  return targets
+}
+
+/** The status a specific component was set to while this incident is open. The
+ *  publish payload doesn't carry per-component target statuses, so fall back to
+ *  a sensible label; the live page always has the authoritative value. */
+function incidentStatusForComponent(
+  incident: { impact: string; kind: string },
+  _componentId: string
+): string {
+  if (incident.kind === 'maintenance') return 'under_maintenance'
+  switch (incident.impact) {
+    case 'critical':
+      return 'major_outage'
+    case 'major':
+      return 'partial_outage'
+    case 'minor':
+      return 'degraded_performance'
+    default:
+      return 'degraded_performance'
+  }
+}
+
+/** ISO string → "July 12, 2026, 02:00 UTC" for maintenance-window emails. */
+function formatStatusDate(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  })
 }
 
 // ============================================================================

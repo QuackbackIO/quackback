@@ -83,6 +83,18 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/changelog-subscriptions.ts::getMyChangelogSubscriptionFn': END_USER(
     'signed-in caller reads their own changelog subscription status'
   ),
+  // Status page self-serve subscribe/unsubscribe: any authenticated principal
+  // manages their own status-page email subscription (anonymous sessions are
+  // rejected inside subscribeStatusFn, which opens the portal auth dialog).
+  'lib/server/functions/status-subscriptions.ts::subscribeStatusFn': END_USER(
+    'signed-in caller subscribes themself to status-page emails'
+  ),
+  'lib/server/functions/status-subscriptions.ts::unsubscribeStatusFn': END_USER(
+    'signed-in caller unsubscribes themself from status-page emails'
+  ),
+  'lib/server/functions/status-subscriptions.ts::getMyStatusSubscriptionFn': END_USER(
+    'signed-in caller reads their own status-page subscription status'
+  ),
   // Visitor conversations (widget + portal): any authenticated principal; team-vs-visitor
   // scope is refined inside each handler (see NOT_A_GATE entries below).
   'lib/server/functions/conversation.ts::sendConversationMessageFn': END_USER(
@@ -253,6 +265,14 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'routes/api/v1/apps/boards.ts::GET': PUBLIC_DATA('public board list'),
   'routes/api/v1/boards/$boardId.ts::GET': PUBLIC_DATA('public board'),
   'routes/api/v1/boards/index.ts::GET': PUBLIC_DATA('public board list'),
+  // Status page read API: a valid key reads the public status surface (the
+  // page snapshot, component list, and incident/maintenance history). Writes
+  // to these resources require STATUS_PAGE_MANAGE / STATUS_PAGE_PUBLISH.
+  'routes/api/v1/status/summary.ts::GET': PUBLIC_DATA('public status page summary'),
+  'routes/api/v1/status/components/index.ts::GET': PUBLIC_DATA('public status component list'),
+  'routes/api/v1/status/components/$componentId.ts::GET': PUBLIC_DATA('public status component'),
+  'routes/api/v1/status/incidents/index.ts::GET': PUBLIC_DATA('public status incident list'),
+  'routes/api/v1/status/incidents/$incidentId.ts::GET': PUBLIC_DATA('public status incident'),
   'routes/api/v1/help-center/articles/$articleId.feedback.ts::POST':
     PUBLIC_DATA('end-user article rating'),
   'routes/api/v1/help-center/articles/$articleId.ts::GET': PUBLIC_DATA('public help article'),

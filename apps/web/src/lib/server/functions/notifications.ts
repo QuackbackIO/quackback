@@ -70,6 +70,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
           const conversationId = n.metadata?.conversationId
           const ticketId = n.metadata?.ticketId
           const changelogId = n.metadata?.changelogId
+          const incidentId = n.metadata?.incidentId
           // Older comment_created rows predate actorName and only carry
           // commenterName — fall back so their avatar still renders.
           const actorName = n.metadata?.actorName ?? n.metadata?.commenterName
@@ -85,6 +86,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
             conversationId: typeof conversationId === 'string' ? conversationId : null,
             ticketId: typeof ticketId === 'string' ? ticketId : null,
             changelogId: typeof changelogId === 'string' ? changelogId : null,
+            incidentId: typeof incidentId === 'string' ? incidentId : null,
             actorName: typeof actorName === 'string' ? actorName : null,
             actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
             readAt: n.readAt?.toISOString() ?? null,

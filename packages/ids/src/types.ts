@@ -55,6 +55,24 @@ export type ChangelogCategoryId = TypeId<'changelog_category'>
 /** Changelog subscription ID - e.g., changelog_sub_01h455vb4pex5vsknk084sn02q */
 export type ChangelogSubscriptionId = TypeId<'changelog_sub'>
 
+/** Status page component ID - e.g., status_component_01h455vb4pex5vsknk084sn02q */
+export type StatusComponentId = TypeId<'status_component'>
+
+/** Status page component group ID - e.g., status_group_01h455vb4pex5vsknk084sn02q */
+export type StatusComponentGroupId = TypeId<'status_group'>
+
+/** Status incident/maintenance ID - e.g., status_incident_01h455vb4pex5vsknk084sn02q */
+export type StatusIncidentId = TypeId<'status_incident'>
+
+/** Status incident update / component event ID - e.g., status_update_01h455vb4pex5vsknk084sn02q */
+export type StatusUpdateId = TypeId<'status_update'>
+
+/** Status page subscription ID - e.g., status_sub_01h455vb4pex5vsknk084sn02q */
+export type StatusSubscriptionId = TypeId<'status_sub'>
+
+/** Status incident template ID - e.g., status_tmpl_01h455vb4pex5vsknk084sn02q */
+export type StatusIncidentTemplateId = TypeId<'status_tmpl'>
+
 /** Support-inbox conversation ID - e.g., conversation_01h455vb4pex5vsknk084sn02q */
 export type ConversationId = TypeId<'conversation'>
 
@@ -382,6 +400,12 @@ export interface EntityIdMap {
   changelog: ChangelogId
   changelog_category: ChangelogCategoryId
   changelog_sub: ChangelogSubscriptionId
+  status_component: StatusComponentId
+  status_group: StatusComponentGroupId
+  status_incident: StatusIncidentId
+  status_update: StatusUpdateId
+  status_sub: StatusSubscriptionId
+  status_tmpl: StatusIncidentTemplateId
   conversation: ConversationId
   conversation_message: ConversationMessageId
   conversation_tag: ConversationTagId

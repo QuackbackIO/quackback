@@ -15,6 +15,7 @@ import {
   QuestionMarkCircleIcon,
   SparklesIcon,
 } from '@heroicons/react/24/solid'
+import { SignalIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import {
@@ -71,6 +72,7 @@ const navItems = [
   { label: 'Roadmap', href: '/admin/roadmap', icon: MapIcon },
   { label: 'Changelog', href: '/admin/changelog', icon: DocumentTextIcon },
   { label: 'Help Center', href: '/admin/help-center', icon: BookOpenIcon },
+  { label: 'Status', href: '/admin/status', icon: SignalIcon },
   { label: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
   { label: 'AI & Automation', href: '/admin/automation/assistant', icon: SparklesIcon },
   { label: 'Users', href: '/admin/users', icon: UsersIcon },
@@ -124,7 +126,12 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
   // Members would only ever land on the access-denied page, so hide the cog.
   const isAdmin = userRole === 'admin'
   const flags = settings?.featureFlags as
-    | { helpCenter?: boolean; supportInbox?: boolean; supportTickets?: boolean }
+    | {
+        helpCenter?: boolean
+        supportInbox?: boolean
+        supportTickets?: boolean
+        statusPage?: boolean
+      }
     | undefined
   // The org's own logo (resolved in brandingData by the root loader, same source
   // PortalBrandMark uses); fall back to the Quackback mark when none is set.
@@ -134,6 +141,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
   const filteredNavItems = navItems.filter((item) => {
     if (item.href === '/admin/help-center') return flags?.helpCenter ?? false
+    if (item.href === '/admin/status') return flags?.statusPage ?? false
     // Support covers both conversations and tickets now — shown when either is
     // enabled (a tickets-only workspace still needs the shell, minus the
     // conversation affordances the unified route hides on its own).

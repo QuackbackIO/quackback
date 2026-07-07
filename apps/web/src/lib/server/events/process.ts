@@ -93,6 +93,17 @@ async function initializeQueue() {
         return
       }
 
+      // Handle scheduled-maintenance window sentinels. Both handlers re-fetch
+      // current DB state and self-guard, so a stale/duplicate fire is a no-op.
+      if (hookType === '__status_maintenance_start__') {
+        await handleStatusMaintenanceJob(hookConfig, 'start')
+        return
+      }
+      if (hookType === '__status_maintenance_complete__') {
+        await handleStatusMaintenanceJob(hookConfig, 'complete')
+        return
+      }
+
       const hook = await getHook(hookType)
       if (!hook) throw new UnrecoverableError(`Unknown hook: ${hookType}`)
 
@@ -370,6 +381,28 @@ async function handleDelayedChangelogPublish(hookConfig: Record<string, unknown>
     : { type: 'service' as const, displayName: 'scheduler' }
 
   await notifyChangelogPublished(changelogId as import('@quackback/ids').ChangelogId, actor, notify)
+}
+
+/**
+ * Handle a scheduled-maintenance window boundary job (auto-start / auto-complete).
+ * The handlers re-fetch DB state and guard on current status, so a stale job
+ * left by a reschedule, or a duplicate, is a harmless no-op.
+ */
+async function handleStatusMaintenanceJob(
+  hookConfig: Record<string, unknown>,
+  phase: 'start' | 'complete'
+): Promise<void> {
+  const incidentId = hookConfig.incidentId as string | undefined
+  if (!incidentId) return
+
+  const { handleMaintenanceStart, handleMaintenanceComplete } =
+    await import('@/lib/server/domains/status/status.maintenance')
+  const id = incidentId as import('@quackback/ids').StatusIncidentId
+  if (phase === 'start') {
+    await handleMaintenanceStart(id)
+  } else {
+    await handleMaintenanceComplete(id)
+  }
 }
 
 /**

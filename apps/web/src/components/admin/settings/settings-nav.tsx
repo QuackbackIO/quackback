@@ -22,6 +22,7 @@ import {
   DocumentDuplicateIcon,
   ArrowDownTrayIcon,
   ChevronDownIcon,
+  SignalIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types'
@@ -61,6 +62,7 @@ export function buildNavSections(flags?: {
   helpCenter?: boolean
   supportInbox?: boolean
   supportTickets?: boolean
+  statusPage?: boolean
 }): NavSection[] {
   const products: NavEntry[] = [
     {
@@ -117,6 +119,14 @@ export function buildNavSections(flags?: {
     icon: MegaphoneIcon,
     kids: [{ label: 'Settings', to: '/admin/settings/changelog', icon: MegaphoneIcon }],
   })
+
+  if (flags?.statusPage) {
+    products.push({
+      label: 'Status',
+      icon: SignalIcon,
+      kids: [{ label: 'Settings', to: '/admin/settings/status', icon: SignalIcon }],
+    })
+  }
 
   return [
     { label: 'Products', items: products },

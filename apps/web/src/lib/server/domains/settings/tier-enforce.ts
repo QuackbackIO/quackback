@@ -2,6 +2,7 @@ import { TierLimitError } from '../../errors/tier-limit-error'
 import { aiTokensThisMonth } from '../ai/usage-counter'
 import { getTierLimits } from './tier-limits.service'
 import type { TierFeatureFlags } from './tier-limits.types'
+import { db, isNull, sql, statusComponents } from '@/lib/server/db'
 
 interface EnforceCountLimitArgs {
   /** Null = unlimited. */
@@ -52,6 +53,30 @@ export async function assertTierFeature(
 ): Promise<void> {
   const limits = await getTierLimits()
   enforceFeatureGate({ enabled: limits.features[feature], feature, friendly })
+}
+
+/**
+ * Refuses to create another status component once the active (non-deleted)
+ * count would meet the plan's `maxStatusComponents` limit. Unlimited by
+ * default (no tier-limits row, or an explicit null) — matches every other
+ * count limit's OSS default. Call this from every status-component create
+ * path: the public REST API's `POST /api/v1/status/components` handler, and
+ * the admin server-fn create action.
+ */
+export async function enforceStatusComponentLimit(): Promise<void> {
+  const limits = await getTierLimits()
+  await enforceCountLimit({
+    limit: limits.maxStatusComponents,
+    name: 'maxStatusComponents',
+    friendly: 'status components',
+    currentCount: async () => {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(statusComponents)
+        .where(isNull(statusComponents.deletedAt))
+      return row?.count ?? 0
+    },
+  })
 }
 
 /**

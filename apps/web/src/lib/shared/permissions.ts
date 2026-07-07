@@ -123,6 +123,11 @@ export const PERMISSIONS = {
   ASSISTANT_MANAGE: 'assistant.manage',
   CONNECTOR_MANAGE: 'connector.manage',
   COPILOT_USE: 'copilot.use',
+
+  // status_page (named status_page.* to avoid colliding with the existing
+  // post-status-taxonomy STATUS_VIEW/STATUS_MANAGE keys above)
+  STATUS_PAGE_MANAGE: 'status_page.manage',
+  STATUS_PAGE_PUBLISH: 'status_page.publish',
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -144,6 +149,7 @@ export const PERMISSION_CATEGORIES = [
   'integration',
   'support',
   'ai',
+  'status_page',
 ] as const
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number]
@@ -185,6 +191,7 @@ export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   PERMISSIONS.CHANNEL_ACCOUNT_MANAGE,
   PERMISSIONS.ASSISTANT_MANAGE,
   PERMISSIONS.CONNECTOR_MANAGE,
+  PERMISSIONS.STATUS_PAGE_MANAGE,
 ]
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
@@ -221,6 +228,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
     PERMISSIONS.TAG_VIEW,
     PERMISSIONS.SUGGESTION_VIEW,
     PERMISSIONS.SUGGESTION_MANAGE,
+    PERMISSIONS.STATUS_PAGE_PUBLISH,
   ],
 }
 
@@ -327,4 +335,6 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
   { key: PERMISSIONS.ASSISTANT_MANAGE, category: 'ai' },
   { key: PERMISSIONS.CONNECTOR_MANAGE, category: 'ai' },
   { key: PERMISSIONS.COPILOT_USE, category: 'ai' },
+  { key: PERMISSIONS.STATUS_PAGE_MANAGE, category: 'status_page' },
+  { key: PERMISSIONS.STATUS_PAGE_PUBLISH, category: 'status_page' },
 ]

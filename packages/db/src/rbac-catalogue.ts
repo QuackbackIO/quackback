@@ -135,6 +135,12 @@ export const PERMISSIONS = {
   ASSISTANT_MANAGE: 'assistant.manage', // manage AI assistant behavior, guidance, and action controls
   CONNECTOR_MANAGE: 'connector.manage', // manage data connectors for external actions
   COPILOT_USE: 'copilot.use', // use the agent-facing Copilot assistant in the inbox
+
+  // category 'status_page' — the Status page product (Status Product Spec §6).
+  // Named status_page.* (not status.*) to avoid colliding with the existing
+  // post-status-taxonomy keys above (STATUS_VIEW/STATUS_MANAGE).
+  STATUS_PAGE_MANAGE: 'status_page.manage', // components, groups, settings, templates (workspace-admin)
+  STATUS_PAGE_PUBLISH: 'status_page.publish', // create / update / resolve incidents and maintenance
 } as const
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -158,6 +164,7 @@ export const PERMISSION_CATEGORIES = [
   'integration',
   'support',
   'ai',
+  'status_page',
 ] as const
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number]
@@ -572,6 +579,17 @@ export const PERMISSION_CATALOGUE: ReadonlyArray<{
     category: 'ai',
     description: 'Use the agent-facing Copilot assistant in the inbox',
   },
+
+  {
+    key: PERMISSIONS.STATUS_PAGE_MANAGE,
+    category: 'status_page',
+    description: 'Manage status page components, groups, settings, and templates',
+  },
+  {
+    key: PERMISSIONS.STATUS_PAGE_PUBLISH,
+    category: 'status_page',
+    description: 'Create, update, and resolve status incidents and maintenance windows',
+  },
 ]
 
 // --------------------------------------------------------------- presets ---
@@ -617,6 +635,9 @@ export const WORKSPACE_ADMIN_PERMISSIONS: readonly PermissionKey[] = [
   // AI infrastructure config (admin-only)
   PERMISSIONS.ASSISTANT_MANAGE,
   PERMISSIONS.CONNECTOR_MANAGE,
+  // Status page structure (components/groups/settings/templates) is
+  // admin-only; publishing incidents is a broader operator action (below).
+  PERMISSIONS.STATUS_PAGE_MANAGE,
 ]
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
@@ -662,6 +683,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleKey, PermissionKey[]> = {
     PERMISSIONS.TAG_VIEW,
     PERMISSIONS.SUGGESTION_VIEW,
     PERMISSIONS.SUGGESTION_MANAGE,
+    // on-call responders post incident/maintenance updates; only admins
+    // reshape the page (status_page.manage, above)
+    PERMISSIONS.STATUS_PAGE_PUBLISH,
     // deliberately NOT granted (destructive / identity / config): post.edit, post.delete,
     // post.set_author, comment.edit, conversation.manage_tags, conversation.manage
   ],

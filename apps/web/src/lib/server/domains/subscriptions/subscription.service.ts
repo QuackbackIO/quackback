@@ -75,10 +75,7 @@ export async function subscribeToPost(
   reason: SubscriptionReason,
   options?: SubscribeOptions
 ): Promise<void> {
-  log.debug(
-    { post_id: postId, principal_id: principalId, reason },
-    'subscribe to post'
-  )
+  log.debug({ post_id: postId, principal_id: principalId, reason }, 'subscribe to post')
   const executor = options?.tx ?? db
   const level = options?.level ?? 'all'
 
@@ -101,10 +98,7 @@ export async function subscribeToPost(
  * Unsubscribe a member from a post
  */
 export async function unsubscribeFromPost(principalId: PrincipalId, postId: PostId): Promise<void> {
-  log.debug(
-    { post_id: postId, principal_id: principalId },
-    'unsubscribe from post'
-  )
+  log.debug({ post_id: postId, principal_id: principalId }, 'unsubscribe from post')
   await db
     .delete(postSubscriptions)
     .where(
@@ -120,10 +114,7 @@ export async function updateSubscriptionLevel(
   postId: PostId,
   level: SubscriptionLevel
 ): Promise<void> {
-  log.debug(
-    { post_id: postId, principal_id: principalId, level },
-    'update subscription level'
-  )
+  log.debug({ post_id: postId, principal_id: principalId, level }, 'update subscription level')
   if (level === 'none') {
     await unsubscribeFromPost(principalId, postId)
     return
@@ -157,10 +148,7 @@ export async function getSubscriptionStatus(
   reason: SubscriptionReason | null
   level: SubscriptionLevel
 }> {
-  log.debug(
-    { post_id: postId, principal_id: principalId },
-    'get subscription status'
-  )
+  log.debug({ post_id: postId, principal_id: principalId }, 'get subscription status')
   const subscription = await db.query.postSubscriptions.findFirst({
     where: and(
       eq(postSubscriptions.principalId, principalId),
@@ -200,10 +188,7 @@ export async function getSubscribersForEvent(
   postId: PostId,
   eventType: NotificationEventType
 ): Promise<Subscriber[]> {
-  log.debug(
-    { post_id: postId, event_type: eventType },
-    'get subscribers for event'
-  )
+  log.debug({ post_id: postId, event_type: eventType }, 'get subscribers for event')
   // Determine which column to filter by
   const notifyColumn =
     eventType === 'comment'
@@ -312,10 +297,7 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesData = {
 export async function batchGetNotificationPreferences(
   principalIds: PrincipalId[]
 ): Promise<Map<PrincipalId, NotificationPreferencesData>> {
-  log.debug(
-    { count: principalIds.length },
-    'batch get notification preferences'
-  )
+  log.debug({ count: principalIds.length }, 'batch get notification preferences')
   if (principalIds.length === 0) return new Map()
 
   const rows = await db
@@ -403,10 +385,7 @@ export async function generateUnsubscribeToken(
   postId: PostId | null,
   action: 'unsubscribe_post' | 'unsubscribe_all'
 ): Promise<string> {
-  log.debug(
-    { principal_id: principalId, post_id: postId, action },
-    'generate unsubscribe token'
-  )
+  log.debug({ principal_id: principalId, post_id: postId, action }, 'generate unsubscribe token')
   const token = randomUUID()
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
@@ -460,6 +439,30 @@ export async function batchGenerateChangelogUnsubscribeTokens(
     principalId,
     postId: null,
     action: 'unsubscribe_changelog' as const,
+    expiresAt,
+  }))
+
+  await db.insert(unsubscribeTokens).values(tokens)
+
+  return new Map(tokens.map((t) => [t.principalId, t.token]))
+}
+
+/**
+ * Batch generate status-page unsubscribe tokens for multiple principals.
+ * Workspace-level (no postId), scopes the opt-out to status-page emails only.
+ */
+export async function batchGenerateStatusUnsubscribeTokens(
+  principalIds: PrincipalId[]
+): Promise<Map<PrincipalId, string>> {
+  if (principalIds.length === 0) return new Map()
+
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+
+  const tokens = principalIds.map((principalId) => ({
+    token: randomUUID(),
+    principalId,
+    postId: null,
+    action: 'unsubscribe_status' as const,
     expiresAt,
   }))
 
@@ -559,10 +562,14 @@ export async function processUnsubscribeToken(token: string): Promise<{
       await updateNotificationPreferences(tokenRecord.principalId, { emailMuted: true })
       break
     case 'unsubscribe_changelog': {
-      const { unsubscribeChangelog } = await import(
-        '@/lib/server/domains/changelog/changelog-subscription.service'
-      )
+      const { unsubscribeChangelog } =
+        await import('@/lib/server/domains/changelog/changelog-subscription.service')
       await unsubscribeChangelog(tokenRecord.principalId)
+      break
+    }
+    case 'unsubscribe_status': {
+      const { unsubscribe } = await import('@/lib/server/domains/status/status.subscription')
+      await unsubscribe(tokenRecord.principalId)
       break
     }
   }

@@ -30,6 +30,14 @@ export const ID_PREFIXES = {
   changelog_category: 'changelog_category',
   changelog_sub: 'changelog_sub',
 
+  // Status page
+  status_component: 'status_component',
+  status_group: 'status_group',
+  status_incident: 'status_incident',
+  status_update: 'status_update',
+  status_sub: 'status_sub',
+  status_tmpl: 'status_tmpl',
+
   // Conversations (support inbox)
   conversation: 'conversation',
   conversation_message: 'conversation_msg',

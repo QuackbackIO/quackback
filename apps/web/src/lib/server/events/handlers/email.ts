@@ -8,7 +8,10 @@ import {
   sendNewCommentEmail,
   sendChangelogPublishedEmail,
   sendPostMentionEmail,
+  sendStatusIncidentPublishedEmail,
+  sendStatusMaintenanceScheduledEmail,
 } from '@quackback/email'
+import type { IncidentImpact } from '@quackback/email'
 import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../hook-types'
 import type { EventData, EventPostMentionedData } from '../types'
 import { isRetryableError } from '../hook-utils'
@@ -72,6 +75,37 @@ export const emailHook: HookHandler = {
           unsubscribeUrl,
           logoUrl: cfg.logoUrl,
           from: changelogCfg.from as string | undefined,
+        })
+      } else if (event.type === 'status.incident_created') {
+        const c = config as Record<string, unknown>
+        result = await sendStatusIncidentPublishedEmail({
+          to: email,
+          incidentTitle: c.incidentTitle as string,
+          impact: (c.impact as IncidentImpact) ?? 'none',
+          statusLabel: c.statusLabel as string,
+          body: (c.body as string) ?? '',
+          affectedComponents:
+            (c.affectedComponents as Array<{ name: string; status: string }>) ?? [],
+          incidentUrl: c.incidentUrl as string,
+          workspaceName: cfg.workspaceName,
+          unsubscribeUrl: unsubscribeUrl ?? '',
+          logoUrl: cfg.logoUrl,
+        })
+      } else if (event.type === 'status.maintenance_scheduled') {
+        const c = config as Record<string, unknown>
+        result = await sendStatusMaintenanceScheduledEmail({
+          to: email,
+          maintenanceTitle: c.incidentTitle as string,
+          body: (c.body as string) ?? '',
+          startLabel: (c.scheduledStartLabel as string) ?? '',
+          endLabel: (c.scheduledEndLabel as string) ?? '',
+          affectedComponents: ((c.affectedComponents as Array<{ name: string }>) ?? []).map(
+            (a) => a.name
+          ),
+          incidentUrl: c.incidentUrl as string,
+          workspaceName: cfg.workspaceName,
+          unsubscribeUrl: unsubscribeUrl ?? '',
+          logoUrl: cfg.logoUrl,
         })
       } else {
         return { success: false, error: `Unsupported event type: ${event.type}` }

@@ -139,6 +139,10 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
       { name: 'Changelog', description: 'Manage changelog entries' },
       { name: 'Conversations', description: 'Manage support conversations' },
       { name: 'Tickets', description: 'Read support tickets' },
+      {
+        name: 'Status',
+        description: 'Manage the status page: components, incidents, and maintenance',
+      },
     ],
     paths: registeredPaths,
     components: {

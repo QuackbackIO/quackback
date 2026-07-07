@@ -21,6 +21,7 @@ function buildNotification(overrides: Partial<SerializedNotification>): Serializ
     conversationId: null,
     ticketId: null,
     changelogId: null,
+    incidentId: null,
     actorName: null,
     actorAvatarUrl: null,
     readAt: null,
@@ -130,6 +131,22 @@ describe('getNotificationTarget', () => {
   it('routes changelog_published without a changelogId to the changelog index', () => {
     const notification = buildNotification({ type: 'changelog_published', changelogId: null })
     expect(getNotificationTarget(notification)).toEqual({ to: '/changelog' })
+  })
+
+  it('routes status_incident with an incidentId to the specific incident', () => {
+    const notification = buildNotification({
+      type: 'status_incident',
+      incidentId: 'status_incident_1',
+    })
+    expect(getNotificationTarget(notification)).toEqual({
+      to: '/status/$incidentId',
+      params: { incidentId: 'status_incident_1' },
+    })
+  })
+
+  it('routes status_incident without an incidentId to the status index', () => {
+    const notification = buildNotification({ type: 'status_incident', incidentId: null })
+    expect(getNotificationTarget(notification)).toEqual({ to: '/status' })
   })
 
   it('returns null for chat_mention with no conversationId', () => {

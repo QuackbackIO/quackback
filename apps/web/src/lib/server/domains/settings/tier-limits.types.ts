@@ -52,6 +52,8 @@ export interface TierLimits {
   maxBoards: TierLimit<number>
   maxPosts: TierLimit<number>
   maxTeamSeats: TierLimit<number>
+  /** Active (non-deleted) status page components. */
+  maxStatusComponents: TierLimit<number>
 
   /**
    * Monthly LLM token budget (input + output combined). All AI features
@@ -73,6 +75,7 @@ export const OSS_TIER_LIMITS: TierLimits = {
   maxBoards: null,
   maxPosts: null,
   maxTeamSeats: null,
+  maxStatusComponents: null,
 
   aiTokensPerMonth: null,
 

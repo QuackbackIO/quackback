@@ -159,5 +159,28 @@ function buildNotifications(
     }))
   }
 
+  if (event.type === 'status.incident_created' || event.type === 'status.maintenance_scheduled') {
+    const c = config as Record<string, unknown>
+    const incidentTitle = (c.incidentTitle as string) ?? 'Status update'
+    const isMaintenance = event.type === 'status.maintenance_scheduled'
+    const title = isMaintenance
+      ? `Scheduled maintenance: ${incidentTitle}`
+      : `New incident: ${incidentTitle}`
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'status_incident' as NotificationType,
+      title,
+      body: truncate((c.statusLabel as string) ?? '', 150),
+      metadata: {
+        incidentId: c.incidentId,
+        incidentTitle,
+        incidentUrl: c.incidentUrl,
+        kind: c.kind,
+        impact: c.impact,
+        statusLabel: c.statusLabel,
+      },
+    }))
+  }
+
   return []
 }
