@@ -210,20 +210,20 @@ export function RoadmapSidebar({ selectedRoadmapId, onSelectRoadmap }: RoadmapSi
                   <div
                     key={roadmap.id}
                     className={cn(
-                      'group flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer font-medium transition-colors',
+                      'group flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer font-normal transition-colors',
                       selectedRoadmapId === roadmap.id
-                        ? 'bg-muted text-foreground'
+                        ? 'bg-muted text-foreground font-medium'
                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                     )}
                     onClick={() => onSelectRoadmap(roadmap.id)}
                   >
                     <MapIcon
                       className={cn(
-                        'h-3.5 w-3.5 shrink-0',
+                        'size-4 shrink-0',
                         selectedRoadmapId === roadmap.id ? 'text-primary' : ''
                       )}
                     />
-                    <span className="flex-1 text-xs truncate">{roadmap.name}</span>
+                    <span className="flex-1 text-[13px] truncate">{roadmap.name}</span>
                     {!roadmap.isPublic && (
                       <LockClosedIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
                     )}

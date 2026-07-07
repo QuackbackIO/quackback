@@ -281,7 +281,7 @@ function MonitoredChannelRow({
           }
           disabled={disabled || updateMutation.isPending}
         >
-          <SelectTrigger className="w-[140px] h-8 text-xs">
+          <SelectTrigger size="sm" className="w-[140px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

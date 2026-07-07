@@ -256,12 +256,12 @@ function WidgetCommentItem({
           </Avatar>
           <span className="text-xs font-medium text-foreground truncate">{authorName}</span>
           {comment.isTeamMember && (
-            <span className="text-[10px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0">
+            <span className="text-[11px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0">
               <FormattedMessage id="widget.commentList.teamBadge" defaultMessage="Team" />
             </span>
           )}
           {isPinned && (
-            <span className="text-[10px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0 inline-flex items-center gap-0.5">
+            <span className="text-[11px] px-1 py-px rounded bg-primary/15 text-primary font-medium shrink-0 inline-flex items-center gap-0.5">
               <MapPinIcon className="h-2.5 w-2.5" />
               <FormattedMessage id="widget.commentList.pinnedBadge" defaultMessage="Pinned" />
             </span>

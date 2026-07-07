@@ -34,7 +34,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 
 const triggerClass =
-  'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50'
+  'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50'
 
 /**
  * View + change a ticket's status. The trigger shows the current status chip; the
@@ -65,7 +65,7 @@ export function TicketStatusControl({
       <DropdownMenuTrigger asChild>
         <button type="button" disabled={mutation.isPending} className={cn(triggerClass, 'px-1.5')}>
           <TicketStatusChip status={ticket.status} />
-          <ChevronDownIcon className="h-3 w-3 shrink-0" />
+          <ChevronDownIcon className="size-3.5 shrink-0" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="max-h-80 overflow-y-auto">
@@ -73,7 +73,7 @@ export function TicketStatusControl({
           <DropdownMenuItem
             key={s.id}
             onClick={() => select(s.id)}
-            className="flex items-center gap-2 text-xs"
+            className="flex items-center gap-2"
           >
             <span
               className="inline-block size-2 shrink-0 rounded-full"
@@ -137,7 +137,7 @@ export function TicketAssigneeControl({
             <UserCircleIcon className="h-4 w-4" />
           )}
           <span className="max-w-28 truncate">{label}</span>
-          <ChevronDownIcon className="h-3 w-3 shrink-0" />
+          <ChevronDownIcon className="size-3.5 shrink-0" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
@@ -154,7 +154,7 @@ export function TicketAssigneeControl({
               Teams
             </DropdownMenuLabel>
             {assignee.teamId && (
-              <DropdownMenuItem onClick={() => run({ assigneeTeamId: null })} className="text-xs">
+              <DropdownMenuItem onClick={() => run({ assigneeTeamId: null })}>
                 Clear team
               </DropdownMenuItem>
             )}
@@ -162,7 +162,7 @@ export function TicketAssigneeControl({
               <DropdownMenuItem
                 key={t.id}
                 onClick={() => run({ assigneeTeamId: t.id })}
-                className="flex items-center gap-2 text-xs"
+                className="flex items-center gap-2"
               >
                 <span
                   className="inline-block size-2 shrink-0 rounded-full"
@@ -202,7 +202,7 @@ export function TicketPriorityControl({
         <button type="button" disabled={mutation.isPending} className={triggerClass}>
           <PriorityDot priority={ticket.priority} />
           {ticket.priority === 'none' ? 'Priority' : meta.label}
-          <ChevronDownIcon className="h-3 w-3 shrink-0" />
+          <ChevronDownIcon className="size-3.5 shrink-0" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

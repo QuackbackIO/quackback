@@ -101,7 +101,7 @@ export function SuggestionList({
               key={opt.value}
               type="button"
               className={cn(
-                'px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer whitespace-nowrap',
+                'px-2.5 py-1 rounded-full text-[13px] transition-colors cursor-pointer whitespace-nowrap',
                 sort === opt.value
                   ? 'bg-muted text-foreground font-medium'
                   : 'text-muted-foreground hover:bg-muted/50'

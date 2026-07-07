@@ -46,14 +46,14 @@ function TicketPicker({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          className="inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline"
         >
-          <PlusIcon className="h-3.5 w-3.5" /> {label}
+          <PlusIcon className="size-4" /> {label}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-72 w-64 overflow-y-auto">
         {options.length === 0 ? (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">No {type} tickets</div>
+          <div className="px-2 py-1.5 text-[13px] text-muted-foreground">No {type} tickets</div>
         ) : (
           options.map((t) => (
             <DropdownMenuItem

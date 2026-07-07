@@ -213,7 +213,7 @@ function StatusChip({
       <span>{label}</span>
       <span
         className={cn(
-          'rounded-full px-1.5 text-[10px] tabular-nums',
+          'rounded-full px-1.5 text-[11px] tabular-nums',
           active ? 'bg-primary/15 text-foreground' : 'bg-muted/50 text-muted-foreground'
         )}
       >

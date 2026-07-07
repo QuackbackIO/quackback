@@ -40,7 +40,7 @@ export function UserCard({ user, isSelected, onClick }: UserCardProps) {
             {user.name || 'Unnamed User'}
           </h3>
           {user.isLead ? (
-            <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Lead
             </span>
           ) : (

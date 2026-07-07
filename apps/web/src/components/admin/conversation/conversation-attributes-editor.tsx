@@ -126,7 +126,7 @@ function AttributeEditor({
           value={typeof value === 'string' && value !== '' ? value : NONE}
           onValueChange={(next) => onSet(next === NONE ? null : next)}
         >
-          <SelectTrigger size="sm" className="h-7 w-36 text-sm">
+          <SelectTrigger size="sm" className="w-36">
             <SelectValue placeholder="None" />
           </SelectTrigger>
           <SelectContent>
@@ -164,7 +164,6 @@ function AttributeEditor({
                   onSet(checked ? [...selected, o.id] : selected.filter((id) => id !== o.id))
                 }
                 onSelect={(e) => e.preventDefault()}
-                className="text-xs"
               >
                 {o.label}
               </DropdownMenuCheckboxItem>

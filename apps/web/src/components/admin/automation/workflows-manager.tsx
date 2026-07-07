@@ -405,7 +405,7 @@ function WorkflowRow({
           <span className="truncate text-sm font-semibold">{workflow.name}</span>
           {issue && (
             <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400"
               title={issue}
             >
               <ExclamationTriangleIcon className="size-3" />

@@ -215,12 +215,12 @@ export function AuthProviderCredentialsForm({
               }
             }}
           >
-            <SelectTrigger className="h-8 w-48 text-xs">
+            <SelectTrigger size="sm" className="w-48">
               <SelectValue placeholder="Pick a preset…" />
             </SelectTrigger>
             <SelectContent>
               {OIDC_PRESETS.map((p) => (
-                <SelectItem key={p.id} value={p.id} className="text-xs">
+                <SelectItem key={p.id} value={p.id}>
                   {p.label}
                 </SelectItem>
               ))}

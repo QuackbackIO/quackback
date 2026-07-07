@@ -112,7 +112,7 @@ function NotificationsPage() {
               <TabsTrigger value="unread">
                 Unread
                 {unreadCount > 0 && (
-                  <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+                  <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold">
                     {unreadCount}
                   </span>
                 )}

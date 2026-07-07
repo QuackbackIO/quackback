@@ -1339,24 +1339,16 @@ export function AgentConversationThread({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => snooze(inHours(4).toISOString())} className="text-xs">
+            <DropdownMenuItem onClick={() => snooze(inHours(4).toISOString())}>
               Later today
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => snooze(tomorrowAt(9).toISOString())}
-              className="text-xs"
-            >
+            <DropdownMenuItem onClick={() => snooze(tomorrowAt(9).toISOString())}>
               Tomorrow
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => snooze(nextMondayAt(9).toISOString())}
-              className="text-xs"
-            >
+            <DropdownMenuItem onClick={() => snooze(nextMondayAt(9).toISOString())}>
               Next week
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => snooze(null)} className="text-xs">
-              Until they reply
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => snooze(null)}>Until they reply</DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
                 setSnoozeCustomDate(tomorrowAt(9))
@@ -1364,7 +1356,6 @@ export function AgentConversationThread({
                 // so the two Radix overlays don't fight over it.
                 requestAnimationFrame(() => setSnoozeCustomOpen(true))
               }}
-              className="text-xs"
             >
               Pick a date &amp; time…
             </DropdownMenuItem>
@@ -1402,7 +1393,7 @@ export function AgentConversationThread({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => void exportTranscript()} className="text-xs">
+          <DropdownMenuItem onClick={() => void exportTranscript()}>
             <ArrowDownTrayIcon className="h-3.5 w-3.5" />
             {exporting ? 'Exporting…' : 'Export transcript'}
           </DropdownMenuItem>
@@ -1411,14 +1402,13 @@ export function AgentConversationThread({
               onClick={() =>
                 visitorBlocked ? unblockMutation.mutate() : setBlockConfirmOpen(true)
               }
-              className="text-xs"
             >
               <NoSymbolIcon className="h-3.5 w-3.5" />
               {visitorBlocked ? 'Unblock person' : 'Block person'}
             </DropdownMenuItem>
           )}
           {!isTicket && conversation && !isClosedConversation && (
-            <DropdownMenuItem onClick={() => setEndDialogOpen(true)} className="text-xs">
+            <DropdownMenuItem onClick={() => setEndDialogOpen(true)}>
               <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
               End conversation
             </DropdownMenuItem>
@@ -1428,7 +1418,6 @@ export function AgentConversationThread({
               onSelect={() =>
                 setConvertSeed({ title: convertDefaultTitle, content: convertDefaultContent })
               }
-              className="text-xs"
             >
               <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
               Convert to post
@@ -1440,14 +1429,13 @@ export function AgentConversationThread({
               <DropdownMenuItem
                 onClick={() => removeSlaMutation.mutate()}
                 disabled={removeSlaMutation.isPending}
-                className="text-xs"
               >
                 Remove SLA ({conversation.sla.policyName})
               </DropdownMenuItem>
             </>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={copyLink} className="text-xs">
+          <DropdownMenuItem onClick={copyLink}>
             <LinkIcon className="h-3.5 w-3.5" />
             Copy link
           </DropdownMenuItem>

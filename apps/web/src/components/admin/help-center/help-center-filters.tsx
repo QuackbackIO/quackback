@@ -48,9 +48,9 @@ export function HelpCenterFiltersPanel({
                 aria-selected={isSelected}
                 onClick={() => onStatusChange(item.id as HelpCenterStatusFilter)}
                 className={cn(
-                  'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors',
                   isSelected
-                    ? 'bg-muted text-foreground'
+                    ? 'bg-muted text-foreground font-medium'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
               >

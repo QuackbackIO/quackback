@@ -98,7 +98,7 @@ function LinkedTicketChip({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium',
+        'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
         CATEGORY_CHIP[ticket.statusCategory] ?? CATEGORY_CHIP.closed
       )}
     >
@@ -277,13 +277,13 @@ export function ConversationListColumn({
               type="button"
               aria-label="Sort the inbox"
               className={cn(
-                'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
                 sort !== 'recent'
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted'
               )}
             >
-              <BarsArrowDownIcon className="h-3.5 w-3.5" />
+              <BarsArrowDownIcon className="size-4" />
               {CONVERSATION_SORT_LABELS[sort]}
             </button>
           </DropdownMenuTrigger>
@@ -292,7 +292,7 @@ export function ConversationListColumn({
               <DropdownMenuItem
                 key={s}
                 onClick={() => onSort(s)}
-                className={cn('text-xs', s === sort && 'text-primary')}
+                className={cn(s === sort && 'text-primary')}
               >
                 {CONVERSATION_SORT_LABELS[s]}
               </DropdownMenuItem>
@@ -310,26 +310,20 @@ export function ConversationListColumn({
                 <button
                   type="button"
                   className={cn(
-                    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
                     facet !== 'all'
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:bg-muted'
                   )}
                 >
                   <span className="capitalize">{facet === 'all' ? 'Status' : facet}</span>
-                  <ChevronDownIcon className="h-3 w-3" />
+                  <ChevronDownIcon className="size-3.5" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => onFacet('all')} className="text-xs">
-                  All
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onFacet('all')}>All</DropdownMenuItem>
                 {TRIAGE_FACETS.map((f) => (
-                  <DropdownMenuItem
-                    key={f}
-                    onClick={() => onFacet(f)}
-                    className="text-xs capitalize"
-                  >
+                  <DropdownMenuItem key={f} onClick={() => onFacet(f)} className="capitalize">
                     {f}
                   </DropdownMenuItem>
                 ))}
@@ -342,7 +336,7 @@ export function ConversationListColumn({
                   type="button"
                   aria-label="Filter by priority"
                   className={cn(
-                    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                    'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
                     priorityFilter !== 'all'
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:bg-muted'
@@ -353,7 +347,7 @@ export function ConversationListColumn({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onPriorityFilter('all')} className="text-xs">
+                <DropdownMenuItem onClick={() => onPriorityFilter('all')}>
                   All priorities
                 </DropdownMenuItem>
                 <PriorityMenuItems
@@ -536,14 +530,14 @@ const ConversationRow = memo(function ConversationRow({
                   key={t.id}
                   name={t.name}
                   color={t.color}
-                  className="px-1.5 py-0 text-[10px]"
+                  className="px-1.5 py-0 text-[11px]"
                 />
               ))}
             </div>
           )}
         </div>
         {c.unreadCount > 0 && (
-          <span className="mt-1 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+          <span className="mt-1 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
             {c.unreadCount}
           </span>
         )}
@@ -605,7 +599,7 @@ const TicketRow = memo(function TicketRow({
         <div className="mt-1 flex shrink-0 flex-col items-end gap-1">
           <TicketAssigneeGlyph assignee={t.assignee} />
           {item.unreadCount > 0 && (
-            <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+            <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
               {item.unreadCount}
             </span>
           )}

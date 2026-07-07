@@ -171,7 +171,7 @@ function BrandingPage() {
             description="Control how light/dark mode works for portal visitors"
           >
             <Select value={state.themeMode} onValueChange={state.setThemeMode}>
-              <SelectTrigger className="w-full h-10">
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -182,7 +182,10 @@ function BrandingPage() {
             </Select>
           </SettingsCard>
 
-          <SettingsCard title="Theme" description="Choose a preset to set your portal's color palette">
+          <SettingsCard
+            title="Theme"
+            description="Choose a preset to set your portal's color palette"
+          >
             <div className="grid grid-cols-3 gap-2">
               {primaryPresetIds.map((presetId) => {
                 const preset = themePresets[presetId]
@@ -224,7 +227,7 @@ function BrandingPage() {
                     if (selectedFont) state.setFont(selectedFont.value)
                   }}
                 >
-                  <SelectTrigger className="w-full h-10">
+                  <SelectTrigger className="w-full">
                     <SelectValue>
                       <span style={{ fontFamily: state.font }}>
                         {FONT_OPTIONS.find((f) => f.id === state.currentFontId)?.name ||

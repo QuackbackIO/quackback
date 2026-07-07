@@ -164,7 +164,7 @@ export function VotersAvatarStack({
           ))}
           {remainingCount > 0 && (
             <span
-              className="relative flex items-center justify-center h-6 min-w-6 px-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background"
+              className="relative flex items-center justify-center h-6 min-w-6 px-1 rounded-full bg-muted text-[11px] font-medium text-muted-foreground ring-2 ring-background"
               style={{ zIndex: displayVoters.length + 1 }}
             >
               +{remainingCount}
@@ -192,7 +192,7 @@ export function VotersAvatarStack({
             <button
               type="button"
               className={cn(
-                'inline-flex items-center gap-1 text-xs',
+                'inline-flex items-center gap-1 text-[13px]',
                 'text-muted-foreground/60 hover:text-muted-foreground',
                 'transition-colors duration-150'
               )}
@@ -212,7 +212,7 @@ export function VotersAvatarStack({
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search members..."
-                    className="flex-1 text-xs bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+                    className="flex-1 text-[13px] bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
                   />
                 </div>
                 <div
@@ -232,7 +232,7 @@ export function VotersAvatarStack({
                         disabled={proxyVote.isPending}
                         className={cn(
                           'w-full flex items-center gap-2 px-2 py-1.5 rounded-md',
-                          'text-xs text-foreground/80 hover:bg-muted/60 hover:text-foreground',
+                          'text-[13px] text-foreground/80 hover:bg-muted/60 hover:text-foreground',
                           'transition-colors duration-100 text-left',
                           'disabled:opacity-50'
                         )}
@@ -257,9 +257,9 @@ export function VotersAvatarStack({
                     <button
                       type="button"
                       onClick={() => setMode('create')}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
                     >
-                      <PlusIcon className="h-3.5 w-3.5" />
+                      <PlusIcon className="size-4" />
                       Create new user
                     </button>
                   </div>

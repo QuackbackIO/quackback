@@ -15,7 +15,7 @@ export function ChannelBadge({ channel }: { channel: Channel }) {
   if (channel === 'messenger') return null
   const label = CHANNEL_LABEL[channel]
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
       {channel === 'email' && <EnvelopeIcon className="h-2.5 w-2.5" />}
       {label}
     </span>
@@ -25,7 +25,7 @@ export function ChannelBadge({ channel }: { channel: Channel }) {
 /** Flags to an agent that an offline reply has no address to reach. */
 export function NoEmailBadge() {
   return (
-    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+    <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
       No email
     </span>
   )

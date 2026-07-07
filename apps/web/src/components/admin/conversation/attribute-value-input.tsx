@@ -126,7 +126,6 @@ export function AttributeValueInput({
                   onChange(next.length === 0 ? null : next)
                 }}
                 onSelect={(e) => e.preventDefault()}
-                className="text-xs"
               >
                 {o.label}
               </DropdownMenuCheckboxItem>

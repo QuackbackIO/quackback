@@ -112,9 +112,9 @@ export function UserSegmentBadges({
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+              className="h-5 px-1.5 text-[13px] text-muted-foreground hover:text-foreground"
             >
-              <PlusIcon className="h-3 w-3 mr-0.5" />
+              <PlusIcon className="size-3.5 mr-0.5" />
               Add
             </Button>
           </PopoverTrigger>
@@ -126,7 +126,7 @@ export function UserSegmentBadges({
                   type="button"
                   onClick={() => handleAssign(seg.id as SegmentId)}
                   disabled={assignUsers.isPending}
-                  className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted/50 transition-colors disabled:opacity-50"
+                  className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-[13px] hover:bg-muted/50 transition-colors disabled:opacity-50"
                 >
                   <span
                     className="h-2 w-2 rounded-full shrink-0 ring-1 ring-inset ring-black/10"
@@ -163,7 +163,7 @@ export function CompactSegmentBadges({ segments, maxVisible = 2 }: CompactSegmen
       {visible.map((seg) => (
         <span
           key={seg.id}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full text-[10px] font-medium border leading-4"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded-full text-[11px] font-medium border leading-4"
           style={{
             backgroundColor: seg.color + '20',
             borderColor: seg.color + '40',

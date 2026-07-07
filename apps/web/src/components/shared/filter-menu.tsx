@@ -5,7 +5,7 @@ export function CircleIcon({ className }: { className?: string }) {
 }
 
 export const MENU_BUTTON_STYLES =
-  'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors'
+  'w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] hover:bg-muted/50 transition-colors'
 
 interface MenuButtonProps {
   onClick: () => void

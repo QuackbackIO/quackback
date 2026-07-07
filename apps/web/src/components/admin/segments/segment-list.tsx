@@ -61,12 +61,12 @@ function SegmentRow({
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm text-foreground truncate">{segment.name}</span>
             {segment.type === 'dynamic' ? (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
+              <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-4 gap-0.5">
                 <BoltIcon className="h-2.5 w-2.5" />
                 Dynamic
               </Badge>
             ) : (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-4">
                 Manual
               </Badge>
             )}

@@ -194,7 +194,7 @@ export function PortalHeader({
             {intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
             {item.to === '/support' && supportUnreadTotal > 0 && (
               <span
-                className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-[18px] text-primary-foreground"
+                className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
                 aria-label={intl.formatMessage(
                   {
                     id: 'portal.support.unreadBadge',

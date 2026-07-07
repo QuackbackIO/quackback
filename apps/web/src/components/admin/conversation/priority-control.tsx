@@ -50,7 +50,7 @@ export function PriorityMenuItems({
         <DropdownMenuItem
           key={opt.value}
           onClick={() => onSelect(opt.value)}
-          className="flex items-center gap-2 text-xs"
+          className="flex items-center gap-2"
         >
           <span
             className="inline-block size-2 shrink-0 rounded-full"
@@ -88,11 +88,11 @@ export function PriorityControl({
         <button
           type="button"
           disabled={mutation.isPending}
-          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted"
         >
           <PriorityDot priority={value} />
           {value === 'none' ? 'Priority' : meta.label}
-          <ChevronDownIcon className="h-3 w-3" />
+          <ChevronDownIcon className="size-3.5" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

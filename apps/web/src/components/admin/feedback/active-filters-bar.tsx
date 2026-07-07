@@ -192,7 +192,7 @@ function AddFilterButton({
           type="button"
           className={cn(
             'inline-flex items-center gap-1 px-2 py-0.5',
-            'rounded-full text-xs',
+            'rounded-full text-[13px]',
             'border border-dashed border-border/50',
             'text-muted-foreground hover:text-foreground',
             'hover:border-border hover:bg-muted/30',
@@ -226,12 +226,12 @@ function AddFilterButton({
                   }}
                   className={cn(
                     'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
-                    'text-xs text-left',
+                    'text-[13px] text-left',
                     'hover:bg-muted/50 transition-colors'
                   )}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Icon className="size-4 text-muted-foreground" />
                     {category.label}
                   </span>
                   {!isDirect && <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />}
@@ -244,7 +244,7 @@ function AddFilterButton({
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
-              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-muted-foreground hover:text-foreground border-b border-border/50"
+              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] text-muted-foreground hover:text-foreground border-b border-border/50"
             >
               <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
               Back
@@ -706,7 +706,7 @@ export function ActiveFiltersBar({
             type="button"
             onClick={onClearAll}
             className={cn(
-              'text-[11px] text-muted-foreground hover:text-foreground',
+              'text-[13px] text-muted-foreground hover:text-foreground',
               'px-1.5 py-0.5 rounded',
               'hover:bg-muted/50',
               'transition-colors'

@@ -35,20 +35,14 @@ export function AssigneeMenuItems({
 }) {
   return (
     <>
-      <DropdownMenuItem onClick={() => onSelect('me')} className="text-xs">
-        Assign to me
-      </DropdownMenuItem>
-      {showUnassign && (
-        <DropdownMenuItem onClick={() => onSelect(null)} className="text-xs">
-          Unassign
-        </DropdownMenuItem>
-      )}
+      <DropdownMenuItem onClick={() => onSelect('me')}>Assign to me</DropdownMenuItem>
+      {showUnassign && <DropdownMenuItem onClick={() => onSelect(null)}>Unassign</DropdownMenuItem>}
       {members && members.length > 0 && <DropdownMenuSeparator />}
       {members?.map((m) => (
         <DropdownMenuItem
           key={m.id}
           onClick={() => onSelect(m.id)}
-          className="flex items-center gap-2 text-xs"
+          className="flex items-center gap-2"
         >
           <Avatar src={m.image} name={m.name ?? m.email} className="size-5 text-[9px]" />
           <span className="truncate">{m.name ?? m.email}</span>
@@ -89,7 +83,7 @@ export function AssigneeControl({
         <button
           type="button"
           disabled={mutation.isPending}
-          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted"
         >
           {assignedAgent ? (
             <Avatar
@@ -101,7 +95,7 @@ export function AssigneeControl({
             <UserCircleIcon className="h-4 w-4" />
           )}
           <span className="max-w-28 truncate">{label}</span>
-          <ChevronDownIcon className="h-3 w-3" />
+          <ChevronDownIcon className="size-3.5" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">

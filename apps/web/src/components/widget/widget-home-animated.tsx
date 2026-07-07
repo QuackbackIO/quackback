@@ -530,7 +530,7 @@ export function WidgetHomeAnimated({
                       </SelectTrigger>
                       <SelectContent align="start">
                         {boards.map((b) => (
-                          <SelectItem key={b.id} value={b.id} className="text-xs py-1">
+                          <SelectItem key={b.id} value={b.id} className="py-1">
                             {b.name}
                           </SelectItem>
                         ))}

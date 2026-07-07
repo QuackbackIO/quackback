@@ -118,7 +118,7 @@ export function FilterChip({
                   type="button"
                   onClick={() => handleSelect(option.id)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-xs transition-colors',
+                    'w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] transition-colors',
                     option.id === valueId ? 'bg-muted/50 font-medium' : 'hover:bg-muted/50'
                   )}
                 >

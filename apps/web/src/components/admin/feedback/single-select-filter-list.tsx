@@ -32,9 +32,9 @@ export function FilterList<T extends { id: string; name: string }>({
             aria-selected={isSelected}
             onClick={(e) => handleClick(item.id, e)}
             className={cn(
-              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
+              'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors',
               isSelected
-                ? 'bg-muted text-foreground'
+                ? 'bg-muted text-foreground font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
@@ -68,7 +68,7 @@ export function StatusFilterList({ statuses, selectedSlugs, onSelect }: StatusFi
       renderItem={(status) => (
         <span className="flex items-center gap-2">
           <span
-            className="h-2 w-2 rounded-full shrink-0"
+            className="h-2.5 w-2.5 rounded-full shrink-0"
             style={{ backgroundColor: status.color }}
             aria-hidden="true"
           />

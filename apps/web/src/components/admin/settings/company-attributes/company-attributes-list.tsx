@@ -290,7 +290,7 @@ function AttributeRow({
             {attribute.key}
           </code>
           <span
-            className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${badgeClass}`}
+            className={`inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border ${badgeClass}`}
           >
             {typeInfo?.label ?? attribute.type}
             {attribute.type === 'currency' && attribute.currencyCode
@@ -340,7 +340,7 @@ function StandardFieldRow({ field }: { field: (typeof COMPANY_STANDARD_FIELDS)[n
             {field.key}
           </code>
           <span
-            className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${badgeClass}`}
+            className={`inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border ${badgeClass}`}
           >
             {typeLabel}
           </span>

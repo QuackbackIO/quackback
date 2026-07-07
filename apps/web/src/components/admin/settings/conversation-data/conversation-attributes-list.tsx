@@ -645,20 +645,20 @@ function AttributeRow({
           </code>
           <span
             className={cn(
-              'inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border',
+              'inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border',
               TYPE_BADGE_COLORS[attribute.fieldType as FieldType]
             )}
           >
             {typeInfo?.label ?? attribute.fieldType}
           </span>
           {attribute.sourceHint && (
-            <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border bg-muted text-muted-foreground border-border/50 capitalize">
+            <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-muted text-muted-foreground border-border/50 capitalize">
               {attribute.sourceHint}
             </span>
           )}
           {attribute.aiDetect && (
             <span
-              className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
+              className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
               title={
                 attribute.detectOnClose
                   ? 'Quinn classifies this attribute and re-checks on close'
@@ -669,12 +669,12 @@ function AttributeRow({
             </span>
           )}
           {attribute.requiredToClose && (
-            <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-600 border-amber-500/20">
+            <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-600 border-amber-500/20">
               Required to close
             </span>
           )}
           {archived && (
-            <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border bg-muted text-muted-foreground border-border/50">
+            <span className="inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded border bg-muted text-muted-foreground border-border/50">
               Archived
             </span>
           )}

@@ -25,6 +25,7 @@ import {
   SignalIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
+import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
 import type { FeatureFlags } from '@/lib/shared/types'
 
 interface NavItem {
@@ -201,9 +202,7 @@ function NavCard({ section, pathname }: { section: NavSection; pathname: string 
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.03]"
       >
-        <span className="text-xs font-semibold tracking-tight text-foreground/90">
-          {section.label}
-        </span>
+        <span className={NAV_SECTION_CLASS}>{section.label}</span>
         <ChevronDownIcon
           className={cn(
             'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-300 ease-out',
@@ -261,15 +260,16 @@ function NavGroupRows({
         onClick={() => setOpen((v) => !v)}
         tabIndex={parentOpen ? undefined : -1}
         className={cn(
-          'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors',
+          NAV_ITEM_CLASS,
+          'w-full font-medium',
           hasActiveKid ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
         )}
       >
-        <Icon className={cn('h-3.5 w-3.5 shrink-0', hasActiveKid && 'text-primary')} />
+        <Icon className={cn(NAV_ICON_CLASS, hasActiveKid && 'text-primary')} />
         <span className="truncate flex-1 text-left">{group.label}</span>
         <ChevronDownIcon
           className={cn(
-            'h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 ease-out',
+            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-out',
             !open && '-rotate-90'
           )}
         />
@@ -302,13 +302,13 @@ function NavLink({
       to={item.to}
       tabIndex={tabbable ? undefined : -1}
       className={cn(
-        'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+        NAV_ITEM_CLASS,
         isActive
-          ? 'bg-primary/10 text-foreground'
+          ? 'bg-primary/10 text-foreground font-medium'
           : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]'
       )}
     >
-      <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive && 'text-primary')} />
+      <Icon className={cn(NAV_ICON_CLASS, isActive && 'text-primary')} />
       <span className="truncate flex-1">{item.label}</span>
     </Link>
   )

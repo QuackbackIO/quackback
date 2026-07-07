@@ -50,6 +50,18 @@ export default tseslint.config(
           ],
         },
       ],
+      // Sizing standard (MENU-FILTER-SIZING-STANDARD.md): menu items render at
+      // 13px via the shadcn primitives, so a smaller text override on one of
+      // them is drift. Catches text-xs / text-[<=12px] on the item components.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "JSXOpeningElement[name.name=/^(DropdownMenuItem|DropdownMenuCheckboxItem|DropdownMenuRadioItem|CommandItem|SelectItem)$/] Literal[value=/text-xs|text-\\[(?:8|9|10|11|12)px\\]/]",
+          message:
+            "Menu items render at 13px via the primitive; remove the smaller text override (see MENU-FILTER-SIZING-STANDARD.md).",
+        },
+      ],
     },
   },
   // The exempted files still need the base TS rules, just without the import restriction

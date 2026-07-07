@@ -236,7 +236,7 @@ function CreateFromSuggestionContent({
                 </SelectTrigger>
                 <SelectContent>
                   {boards.map((board) => (
-                    <SelectItem key={board.id} value={board.id} className="text-xs">
+                    <SelectItem key={board.id} value={board.id}>
                       {board.name}
                     </SelectItem>
                   ))}
@@ -263,7 +263,7 @@ function CreateFromSuggestionContent({
                 </SelectTrigger>
                 <SelectContent>
                   {statuses.map((status) => (
-                    <SelectItem key={status.id} value={status.id} className="text-xs">
+                    <SelectItem key={status.id} value={status.id}>
                       <div className="flex items-center gap-1.5">
                         <span
                           className="h-2 w-2 rounded-full"

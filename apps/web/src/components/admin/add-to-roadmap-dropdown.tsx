@@ -68,7 +68,7 @@ export function AddToRoadmapDropdown({
           <MapIcon className="h-3.5 w-3.5" />
           Add to roadmap
           {roadmapCount > 0 && (
-            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
+            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[11px]">
               {roadmapCount}
             </Badge>
           )}

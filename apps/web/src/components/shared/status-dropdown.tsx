@@ -51,7 +51,7 @@ export function StatusDropdown({
             {currentStatus ? (
               <StatusBadge name={currentStatus.name} color={currentStatus.color} className="mb-1" />
             ) : (
-              <span className="text-xs text-muted-foreground">No status</span>
+              <span className="text-[13px] text-muted-foreground">No status</span>
             )}
           </button>
         ) : (
@@ -60,7 +60,7 @@ export function StatusDropdown({
             onClick={(e) => e.stopPropagation()}
             className={cn(
               'flex items-center gap-1 px-2 py-1 rounded',
-              'text-xs font-medium',
+              'text-[13px] font-medium',
               'bg-card border border-border/50',
               'hover:bg-muted/50 transition-colors',
               disabled && 'opacity-50 cursor-not-allowed'
@@ -81,7 +81,7 @@ export function StatusDropdown({
             type="button"
             onClick={() => handleStatusChange(status.id)}
             className={cn(
-              'w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm',
+              'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[13px]',
               'hover:bg-muted/50 transition-colors',
               status.id === currentStatus?.id && 'bg-muted/40'
             )}

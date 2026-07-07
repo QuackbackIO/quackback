@@ -52,7 +52,7 @@ export function SourceBadge({ source }: { source: 'api' | 'manual' }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide',
         source === 'manual'
           ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500'
           : 'bg-muted text-muted-foreground'
@@ -108,7 +108,11 @@ function FilterPredicateInput({
 }) {
   const isNumeric = kind === 'number'
   const isBool = kind === 'boolean'
-  const operators = isNumeric ? MRR_OPERATORS : isBool ? [{ value: 'eq', label: 'is' }] : STRING_FIELD_OPERATORS
+  const operators = isNumeric
+    ? MRR_OPERATORS
+    : isBool
+      ? [{ value: 'eq', label: 'is' }]
+      : STRING_FIELD_OPERATORS
   const [op, setOp] = useState(operators[0].value)
   const [value, setValue] = useState(isBool ? 'true' : '')
   const isPresenceOp = op === 'is_set' || op === 'is_not_set'
@@ -122,12 +126,12 @@ function FilterPredicateInput({
   return (
     <div className="p-2 space-y-2">
       <Select value={op} onValueChange={setOp}>
-        <SelectTrigger className="h-7 text-xs">
+        <SelectTrigger size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {operators.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="text-xs">
+            <SelectItem key={o.value} value={o.value}>
               {o.label}
             </SelectItem>
           ))}
@@ -136,16 +140,12 @@ function FilterPredicateInput({
       {!isPresenceOp &&
         (isBool ? (
           <Select value={value} onValueChange={setValue}>
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="true" className="text-xs">
-                True
-              </SelectItem>
-              <SelectItem value="false" className="text-xs">
-                False
-              </SelectItem>
+              <SelectItem value="true">True</SelectItem>
+              <SelectItem value="false">False</SelectItem>
             </SelectContent>
           </Select>
         ) : (
@@ -248,30 +248,30 @@ function AddCompanyFilterButton({
                 key={cat.key}
                 type="button"
                 onClick={() => setCategory(cat)}
-                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-left hover:bg-muted/50 transition-colors"
               >
                 <span className="flex items-center gap-2">
                   {cat.key === 'mrr' ? (
-                    <BanknotesIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <BanknotesIcon className="size-4 text-muted-foreground" />
                   ) : (
-                    <TagIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <TagIcon className="size-4 text-muted-foreground" />
                   )}
                   {cat.label}
                 </span>
-                <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
+                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               </button>
             ))}
             {sourceAvailable && (
               <button
                 type="button"
                 onClick={() => setCategory({ key: 'source', label: 'Source', kind: 'source' })}
-                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-left hover:bg-muted/50 transition-colors"
               >
                 <span className="flex items-center gap-2">
-                  <TagIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  <TagIcon className="size-4 text-muted-foreground" />
                   Source
                 </span>
-                <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
+                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               </button>
             )}
             {availableCustom.length > 0 && (
@@ -287,13 +287,13 @@ function AddCompanyFilterButton({
                     onClick={() =>
                       setCategory({ key: attr.key, label: attr.label, kind: attrKind(attr.type) })
                     }
-                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] text-left hover:bg-muted/50 transition-colors"
                   >
                     <span className="flex items-center gap-2">
-                      <TagIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <TagIcon className="size-4 text-muted-foreground" />
                       {attr.label}
                     </span>
-                    <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
+                    <ChevronRightIcon className="size-3.5 text-muted-foreground" />
                   </button>
                 ))}
               </>
@@ -316,7 +316,7 @@ function AddCompanyFilterButton({
                     key={source}
                     type="button"
                     onClick={() => apply(`source:eq:${source}`)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs capitalize hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] capitalize hover:bg-muted/50 transition-colors"
                   >
                     {source}
                   </button>

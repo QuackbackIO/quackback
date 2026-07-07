@@ -163,7 +163,7 @@ export function ConversationTagsManager() {
               <span className="min-w-0 flex-1 truncate text-sm font-medium">
                 {tag.name}
                 {tag.archived && (
-                  <span className="ml-2 inline-flex items-center rounded border border-border/50 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  <span className="ml-2 inline-flex items-center rounded border border-border/50 bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                     Archived
                   </span>
                 )}

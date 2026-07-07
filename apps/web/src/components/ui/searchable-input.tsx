@@ -180,7 +180,7 @@ export function SearchableInput({
                   value={opt.value}
                   onMouseDown={(e) => e.preventDefault()}
                   onSelect={() => select(opt)}
-                  className="flex items-center justify-between gap-2 text-xs"
+                  className="flex items-center justify-between gap-2"
                 >
                   <span className="truncate">{opt.label ?? opt.value}</span>
                   {opt.meta && (

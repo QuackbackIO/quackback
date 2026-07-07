@@ -51,7 +51,7 @@ export interface BulkActionBarProps {
 }
 
 const triggerClass =
-  'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50'
+  'inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[13px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50'
 
 export function BulkActionBar({
   count,
@@ -123,7 +123,7 @@ export function BulkActionBar({
                 <DropdownMenuItem
                   key={t.id}
                   onClick={() => onAssignTeam(t.id)}
-                  className="flex items-center gap-2 text-xs"
+                  className="flex items-center gap-2"
                 >
                   <span
                     className={cn('inline-block size-2 shrink-0 rounded-full')}
@@ -133,9 +133,7 @@ export function BulkActionBar({
                 </DropdownMenuItem>
               ))
             ) : (
-              <DropdownMenuItem disabled className="text-xs">
-                No teams
-              </DropdownMenuItem>
+              <DropdownMenuItem disabled>No teams</DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -172,27 +170,16 @@ export function BulkActionBar({
             <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
               Snooze until
             </DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => onSnooze(inHours(4).toISOString())}
-              className="text-xs"
-            >
+            <DropdownMenuItem onClick={() => onSnooze(inHours(4).toISOString())}>
               Later today
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onSnooze(tomorrowAt(9).toISOString())}
-              className="text-xs"
-            >
+            <DropdownMenuItem onClick={() => onSnooze(tomorrowAt(9).toISOString())}>
               Tomorrow
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onSnooze(nextMondayAt(9).toISOString())}
-              className="text-xs"
-            >
+            <DropdownMenuItem onClick={() => onSnooze(nextMondayAt(9).toISOString())}>
               Next week
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onSnooze(null)} className="text-xs">
-              Until they reply
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onSnooze(null)}>Until they reply</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

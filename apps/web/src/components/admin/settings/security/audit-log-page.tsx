@@ -311,13 +311,13 @@ export function AuditLogPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Select value={eventType} onValueChange={setEventType}>
-            <SelectTrigger className="h-9 w-full sm:w-64 text-xs">
+            <SelectTrigger size="sm" className="w-full sm:w-64">
               <SelectValue placeholder="Event type" />
             </SelectTrigger>
             <SelectContent>
               {/* Ungrouped items first */}
               {FILTER_EVENT_TYPES.filter((o) => !o.group).map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
               ))}
@@ -335,7 +335,7 @@ export function AuditLogPage() {
                     </p>
                   )}
                   {FILTER_EVENT_TYPES.filter((o) => o.group === group).map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
                   ))}
@@ -344,12 +344,12 @@ export function AuditLogPage() {
             </SelectContent>
           </Select>
           <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-            <SelectTrigger className="h-9 w-full sm:w-36 text-xs">
+            <SelectTrigger size="sm" className="w-full sm:w-36">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {TIME_RANGES.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>
               ))}

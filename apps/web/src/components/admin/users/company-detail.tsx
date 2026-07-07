@@ -134,7 +134,7 @@ function AttachMemberButton({ companyId }: { companyId: CompanyId }) {
         />
         <div className="max-h-56 space-y-0.5 overflow-y-auto">
           {candidates.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">No people found</p>
+            <p className="px-2 py-1.5 text-[13px] text-muted-foreground">No people found</p>
           ) : (
             candidates.map((person) => (
               <button
@@ -142,7 +142,7 @@ function AttachMemberButton({ companyId }: { companyId: CompanyId }) {
                 type="button"
                 disabled={busy}
                 onClick={() => attach(person.principalId)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted/60 disabled:opacity-50"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted/60 disabled:opacity-50"
               >
                 <Avatar
                   src={person.image}
@@ -321,7 +321,7 @@ function ActivitySection({ companyId }: { companyId: CompanyId }) {
                 </span>
                 <span
                   className={cn(
-                    'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                    'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium capitalize',
                     c.status === 'open'
                       ? 'bg-emerald-500/10 text-emerald-600'
                       : c.status === 'snoozed'
@@ -360,7 +360,7 @@ function ActivitySection({ companyId }: { companyId: CompanyId }) {
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm text-foreground">{t.title}</span>
                 <span
-                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium"
                   style={{ backgroundColor: `${t.status.color}1a`, color: t.status.color }}
                 >
                   {t.status.name}
@@ -488,7 +488,7 @@ function CompanyAttributesPanel({
                   value={draft[def.key] || 'unset'}
                   onValueChange={(v) => setDraft({ ...draft, [def.key]: v === 'unset' ? '' : v })}
                 >
-                  <SelectTrigger className="h-8 flex-1 text-sm">
+                  <SelectTrigger size="sm" className="flex-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

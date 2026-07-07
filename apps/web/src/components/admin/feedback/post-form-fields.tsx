@@ -66,7 +66,7 @@ export function PostFormFields({
                 </FormControl>
                 <SelectContent align="start">
                   {boards.map((board) => (
-                    <SelectItem key={board.id} value={board.id} className="text-xs py-1">
+                    <SelectItem key={board.id} value={board.id} className="py-1">
                       {board.name}
                     </SelectItem>
                   ))}
@@ -104,7 +104,7 @@ export function PostFormFields({
                 </FormControl>
                 <SelectContent align="start">
                   {statuses.map((status) => (
-                    <SelectItem key={status.id} value={status.id} className="text-xs py-1">
+                    <SelectItem key={status.id} value={status.id} className="py-1">
                       <div className="flex items-center gap-1.5">
                         <span
                           className="h-2 w-2 rounded-full"

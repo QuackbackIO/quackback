@@ -113,12 +113,12 @@ function ActivityFilterInput({
   return (
     <div className="p-2 space-y-2">
       <Select value={op} onValueChange={setOp}>
-        <SelectTrigger className="h-7 text-xs">
+        <SelectTrigger size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {ACTIVITY_OPERATORS.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="text-xs">
+            <SelectItem key={o.value} value={o.value}>
               {o.label}
             </SelectItem>
           ))}
@@ -237,12 +237,12 @@ function CustomAttrFilterInput({
   return (
     <div className="p-2 space-y-2">
       <Select value={op} onValueChange={setOp}>
-        <SelectTrigger className="h-7 text-xs">
+        <SelectTrigger size="sm">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {operators.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="text-xs">
+            <SelectItem key={o.value} value={o.value}>
               {o.label}
             </SelectItem>
           ))}
@@ -251,16 +251,12 @@ function CustomAttrFilterInput({
       {!isPresenceOp &&
         (isBool ? (
           <Select value={value} onValueChange={setValue}>
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="true" className="text-xs">
-                True
-              </SelectItem>
-              <SelectItem value="false" className="text-xs">
-                False
-              </SelectItem>
+              <SelectItem value="true">True</SelectItem>
+              <SelectItem value="false">False</SelectItem>
             </SelectContent>
           </Select>
         ) : (
@@ -362,7 +358,7 @@ function AddFilterButton({
           type="button"
           className={cn(
             'inline-flex items-center gap-1 px-2 py-0.5',
-            'rounded-full text-xs',
+            'rounded-full text-[13px]',
             'border border-dashed border-border/50',
             'text-muted-foreground hover:text-foreground',
             'hover:border-border hover:bg-muted/30',
@@ -379,7 +375,7 @@ function AddFilterButton({
             <button
               type="button"
               onClick={() => setActiveCustomAttr(null)}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[10px] text-muted-foreground hover:text-foreground border-b border-border/50"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] text-muted-foreground hover:text-foreground border-b border-border/50"
             >
               <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
               {activeCustomAttr.label}
@@ -408,12 +404,12 @@ function AddFilterButton({
                   }}
                   className={cn(
                     'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
-                    'text-xs text-left',
+                    'text-[13px] text-left',
                     'hover:bg-muted/50 transition-colors'
                   )}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Icon className="size-4 text-muted-foreground" />
                     {category.label}
                   </span>
                   <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
@@ -423,7 +419,7 @@ function AddFilterButton({
             {availableCustomAttrs.length > 0 && (
               <>
                 <div className="border-b border-border/30 my-1" />
-                <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Custom attributes
                 </div>
                 {availableCustomAttrs.map((attr) => (
@@ -435,12 +431,12 @@ function AddFilterButton({
                     }
                     className={cn(
                       'w-full flex items-center justify-between gap-2 px-2.5 py-1.5',
-                      'text-xs text-left',
+                      'text-[13px] text-left',
                       'hover:bg-muted/50 transition-colors'
                     )}
                   >
                     <span className="flex items-center gap-2">
-                      <AdjustmentsHorizontalIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <AdjustmentsHorizontalIcon className="size-4 text-muted-foreground" />
                       {attr.label}
                     </span>
                     <ChevronRightIcon className="h-3 w-3 text-muted-foreground" />
@@ -454,7 +450,7 @@ function AddFilterButton({
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[10px] text-muted-foreground hover:text-foreground border-b border-border/50"
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] text-muted-foreground hover:text-foreground border-b border-border/50"
             >
               <ChevronRightIcon className="h-2.5 w-2.5 rotate-180" />
               Back
@@ -465,14 +461,14 @@ function AddFilterButton({
                   <button
                     type="button"
                     onClick={() => handleSelectVerified(true)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] hover:bg-muted/50 transition-colors"
                   >
                     Verified only
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSelectVerified(false)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] hover:bg-muted/50 transition-colors"
                   >
                     Unverified only
                   </button>
@@ -486,7 +482,7 @@ function AddFilterButton({
                       key={preset.value}
                       type="button"
                       onClick={() => handleSelectDate(preset)}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-muted/50 transition-colors"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[13px] hover:bg-muted/50 transition-colors"
                     >
                       {preset.label}
                     </button>
@@ -726,7 +722,7 @@ export function UsersActiveFiltersBar({
           type="button"
           onClick={onClearFilters}
           className={cn(
-            'text-xs text-muted-foreground hover:text-foreground',
+            'text-[13px] text-muted-foreground hover:text-foreground',
             'px-2 py-1 rounded',
             'hover:bg-muted/50',
             'transition-colors'

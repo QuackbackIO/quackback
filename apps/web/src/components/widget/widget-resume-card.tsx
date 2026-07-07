@@ -77,7 +77,7 @@ export function WidgetResumeCard({
         </span>
       </span>
       {conversation.unreadCount > 0 ? (
-        <span className="shrink-0 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
+        <span className="shrink-0 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold">
           {conversation.unreadCount}
         </span>
       ) : (

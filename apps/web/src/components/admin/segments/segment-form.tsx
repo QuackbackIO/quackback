@@ -203,7 +203,7 @@ function RuleConditionRow({
           })
         }
       >
-        <SelectTrigger className="h-8 text-xs w-[160px] shrink-0">
+        <SelectTrigger size="sm" className="w-[160px] shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -224,14 +224,12 @@ function RuleConditionRow({
                     {label}
                   </SelectLabel>
                   {fields.map((field) => (
-                    <SelectItem key={field.key} value={field.key} className="text-xs">
+                    <SelectItem key={field.key} value={field.key}>
                       {field.label}
                     </SelectItem>
                   ))}
                   {group === 'attribute' && (
-                    <SelectItem value="metadata_key" className="text-xs">
-                      Custom Metadata Key
-                    </SelectItem>
+                    <SelectItem value="metadata_key">Custom Metadata Key</SelectItem>
                   )}
                 </SelectGroup>
               </React.Fragment>
@@ -248,7 +246,6 @@ function RuleConditionRow({
                   <SelectItem
                     key={`${CUSTOM_ATTR_PREFIX}${attr.key}`}
                     value={`${CUSTOM_ATTR_PREFIX}${attr.key}`}
-                    className="text-xs"
                   >
                     {attr.label}
                   </SelectItem>
@@ -267,7 +264,6 @@ function RuleConditionRow({
                   <SelectItem
                     key={`${COMPANY_ATTR_PREFIX}${attr.key}`}
                     value={`${COMPANY_ATTR_PREFIX}${attr.key}`}
-                    className="text-xs"
                   >
                     {attr.label}
                   </SelectItem>
@@ -283,12 +279,12 @@ function RuleConditionRow({
         value={condition.operator}
         onValueChange={(val) => onChange({ ...condition, operator: val as RuleOperator })}
       >
-        <SelectTrigger className="h-8 text-xs w-[130px] shrink-0">
+        <SelectTrigger size="sm" className="w-[130px] shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {operators.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+            <SelectItem key={opt.value} value={opt.value}>
               {opt.label}
             </SelectItem>
           ))}
@@ -309,12 +305,12 @@ function RuleConditionRow({
           value={condition.value || String(allowedValues[0])}
           onValueChange={(val) => onChange({ ...condition, value: val })}
         >
-          <SelectTrigger className="h-8 text-xs flex-1">
+          <SelectTrigger size="sm" className="flex-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {allowedValues.map((v) => (
-              <SelectItem key={v} value={v} className="text-xs">
+              <SelectItem key={v} value={v}>
                 {v}
               </SelectItem>
             ))}
@@ -326,16 +322,12 @@ function RuleConditionRow({
           value={condition.value || 'true'}
           onValueChange={(val) => onChange({ ...condition, value: val })}
         >
-          <SelectTrigger className="h-8 text-xs flex-1">
+          <SelectTrigger size="sm" className="flex-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="true" className="text-xs">
-              True
-            </SelectItem>
-            <SelectItem value="false" className="text-xs">
-              False
-            </SelectItem>
+            <SelectItem value="true">True</SelectItem>
+            <SelectItem value="false">False</SelectItem>
           </SelectContent>
         </Select>
       )}
@@ -427,16 +419,12 @@ function RuleBuilder({
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Users must match</span>
         <Select value={match} onValueChange={(v) => onMatchChange(v as 'all' | 'any')}>
-          <SelectTrigger className="h-7 w-20 text-xs">
+          <SelectTrigger size="sm" className="w-20">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all" className="text-xs">
-              ALL
-            </SelectItem>
-            <SelectItem value="any" className="text-xs">
-              ANY
-            </SelectItem>
+            <SelectItem value="all">ALL</SelectItem>
+            <SelectItem value="any">ANY</SelectItem>
           </SelectContent>
         </Select>
         <span>of these conditions:</span>

@@ -896,7 +896,7 @@ function HomeCustomizationCard({
                   }
                   disabled={isBusy}
                 >
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger size="sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1009,7 +1009,7 @@ function WidgetTranslationsCard({ translations }: { translations?: WidgetTransla
             onValueChange={(l) => void commit({ ...draft, [l]: {} })}
             disabled={saving}
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger size="sm">
               <SelectValue placeholder="Add a language" />
             </SelectTrigger>
             <SelectContent>
@@ -1404,7 +1404,7 @@ function WidgetInstallation({ secret, baseUrl }: { secret: string | null; baseUr
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Backend framework</Label>
                   <Select value={framework} onValueChange={setFramework}>
-                    <SelectTrigger className="h-8 text-xs">
+                    <SelectTrigger size="sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

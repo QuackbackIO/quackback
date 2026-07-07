@@ -9,11 +9,7 @@ import {
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ShieldCheckIcon } from '@heroicons/react/24/solid'
-import {
-  CalendarDaysIcon,
-  EllipsisHorizontalIcon,
-  MoonIcon,
-} from '@heroicons/react/24/outline'
+import { CalendarDaysIcon, EllipsisHorizontalIcon, MoonIcon } from '@heroicons/react/24/outline'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
 import {
@@ -191,7 +187,10 @@ function SlaSettingsPage() {
           {(
             [
               { id: 'live', label: `Live${live.length ? ` (${live.length})` : ''}` },
-              { id: 'archived', label: `Archived${archived.length ? ` (${archived.length})` : ''}` },
+              {
+                id: 'archived',
+                label: `Archived${archived.length ? ` (${archived.length})` : ''}`,
+              },
             ] as const
           ).map((t) => (
             <button
@@ -296,12 +295,12 @@ function PolicyRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{policy.name}</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
             <CalendarDaysIcon className="h-3 w-3" aria-hidden />
             {policy.officeHoursScheduleId ? 'Office hours' : '24/7'}
           </span>
           {policy.pauseOnSnooze && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               <MoonIcon className="h-3 w-3" aria-hidden />
               Pauses on snooze
             </span>
@@ -329,18 +328,12 @@ function PolicyRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {isArchived ? (
-            <DropdownMenuItem onClick={onRestore} className="text-xs">
-              Restore
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onRestore}>Restore</DropdownMenuItem>
           ) : (
             <>
-              <DropdownMenuItem onClick={onEdit} className="text-xs">
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onClone} className="text-xs">
-                Clone
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onArchive} className="text-xs text-destructive">
+              <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+              <DropdownMenuItem onClick={onClone}>Clone</DropdownMenuItem>
+              <DropdownMenuItem onClick={onArchive} className="text-destructive">
                 Archive
               </DropdownMenuItem>
             </>
@@ -427,8 +420,8 @@ function PolicyEditorDialog({
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit SLA policy' : 'New SLA policy'}</DialogTitle>
           <DialogDescription>
-            Targets count from the customer's message. Leave a target empty to skip it; at least
-            one is required.
+            Targets count from the customer's message. Leave a target empty to skip it; at least one
+            is required.
           </DialogDescription>
         </DialogHeader>
 
@@ -493,8 +486,8 @@ function PolicyEditorDialog({
             })}
             {editing && (
               <p className="text-[11px] text-muted-foreground">
-                Targets can be changed but not removed once set. Edits only affect conversations
-                the policy is applied to afterwards.
+                Targets can be changed but not removed once set. Edits only affect conversations the
+                policy is applied to afterwards.
               </p>
             )}
           </div>

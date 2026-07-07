@@ -137,7 +137,7 @@ export function UserCompanyControl({
               type="button"
               disabled={busy}
               onClick={() => attach(c.id as CompanyId)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs font-medium text-foreground/80 hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[13px] font-medium text-foreground/80 hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
             >
               <span className="flex-1 truncate">{c.name}</span>
               {current?.id === c.id && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-primary" />}
@@ -148,9 +148,9 @@ export function UserCompanyControl({
               type="button"
               disabled={busy}
               onClick={() => createAndAttach(filter.trim())}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs font-medium text-primary hover:bg-muted/60 disabled:opacity-50"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[13px] font-medium text-primary hover:bg-muted/60 disabled:opacity-50"
             >
-              <PlusIcon className="h-3.5 w-3.5 shrink-0" />
+              <PlusIcon className="size-4 shrink-0" />
               <span className="truncate">Create &ldquo;{filter.trim()}&rdquo;</span>
             </button>
           )}
@@ -160,9 +160,9 @@ export function UserCompanyControl({
             type="button"
             disabled={busy}
             onClick={detach}
-            className="mt-2 flex w-full items-center gap-2 border-t border-border/40 px-2 pt-2 text-start text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+            className="mt-2 flex w-full items-center gap-2 border-t border-border/40 px-2 pt-2 text-start text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
-            <XMarkIcon className="h-3.5 w-3.5 shrink-0" />
+            <XMarkIcon className="size-4 shrink-0" />
             Remove from company
           </button>
         )}

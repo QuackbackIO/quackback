@@ -79,7 +79,7 @@ export function InboxFiltersPanel({
       {/* Tags Filter */}
       {tags.length > 0 && (
         <FilterSection title="Tags" defaultOpen={true}>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {tags.map((tag) => {
               const isSelected = filters.tags?.includes(tag.id)
               return (
@@ -87,7 +87,7 @@ export function InboxFiltersPanel({
                   key={tag.id}
                   type="button"
                   onClick={() => handleTagToggle(tag.id)}
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors ${
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
                     isSelected
                       ? 'bg-foreground text-background'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -112,19 +112,19 @@ export function InboxFiltersPanel({
                   key={segment.id}
                   type="button"
                   onClick={(e) => handleSegmentSelect(segment.id, e.ctrlKey || e.metaKey)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
                     isSelected
                       ? 'bg-foreground/10 text-foreground font-medium'
                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                   }`}
                 >
                   <span
-                    className="h-2 w-2 rounded-full shrink-0"
+                    className="h-2.5 w-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: segment.color }}
                   />
                   <span className="truncate">{segment.name}</span>
                   {segment.memberCount != null && (
-                    <span className="ml-auto text-[10px] text-muted-foreground">
+                    <span className="ml-auto text-[11px] text-muted-foreground">
                       {segment.memberCount}
                     </span>
                   )}

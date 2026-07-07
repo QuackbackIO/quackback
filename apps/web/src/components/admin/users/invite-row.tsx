@@ -14,7 +14,7 @@ export function InviteStatusBadge({ status }: { status: string | null }) {
   switch (status) {
     case 'pending':
       return (
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+        <Badge variant="outline" className="text-[11px] px-1.5 py-0">
           Pending
         </Badge>
       )
@@ -22,26 +22,26 @@ export function InviteStatusBadge({ status }: { status: string | null }) {
       return (
         <Badge
           variant="outline"
-          className="border-green-500/30 text-green-600 text-[10px] px-1.5 py-0"
+          className="border-green-500/30 text-green-600 text-[11px] px-1.5 py-0"
         >
           Accepted
         </Badge>
       )
     case 'canceled':
       return (
-        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+        <Badge variant="secondary" className="text-[11px] px-1.5 py-0">
           Revoked
         </Badge>
       )
     case 'expired':
       return (
-        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+        <Badge variant="destructive" className="text-[11px] px-1.5 py-0">
           Expired
         </Badge>
       )
     default:
       return (
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+        <Badge variant="outline" className="text-[11px] px-1.5 py-0">
           {status ?? 'Unknown'}
         </Badge>
       )

@@ -278,7 +278,7 @@ export function FeedbackHeaderAnimated({
                 </SelectTrigger>
                 <SelectContent align="start">
                   {boards.map((board) => (
-                    <SelectItem key={board.id} value={board.id} className="text-xs py-1">
+                    <SelectItem key={board.id} value={board.id} className="py-1">
                       {board.name}
                     </SelectItem>
                   ))}

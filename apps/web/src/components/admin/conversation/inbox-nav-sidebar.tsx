@@ -214,9 +214,9 @@ export function scopeLabelFor(
 // inbox left pane reads as part of the same admin design system.
 const itemClass = (active: boolean) =>
   cn(
-    'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+    'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-normal transition-colors',
     active
-      ? 'bg-muted text-foreground'
+      ? 'bg-muted text-foreground font-medium'
       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
   )
 
@@ -411,9 +411,9 @@ function ViewsFilterSection({
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
                   {v.isPinned ? (
-                    <StarIcon className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                    <StarIcon className="size-4 shrink-0 text-amber-500" />
                   ) : (
-                    <FunnelIcon className={cn('h-3.5 w-3.5 shrink-0', active && 'text-primary')} />
+                    <FunnelIcon className={cn('size-4 shrink-0', active && 'text-primary')} />
                   )}
                   <span className="min-w-0 flex-1 truncate">{v.name}</span>
                 </button>
@@ -429,7 +429,7 @@ function ViewsFilterSection({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
-                      className="gap-2 text-xs"
+                      className="gap-2"
                       onClick={() => (v.isPinned ? unpin.mutate(v.id) : pin.mutate(v.id))}
                     >
                       {v.isPinned ? (
@@ -440,12 +440,10 @@ function ViewsFilterSection({
                       {v.isPinned ? 'Unpin' : 'Pin'}
                     </DropdownMenuItem>
                     {onEditView && (
-                      <DropdownMenuItem className="text-xs" onClick={() => onEditView(v)}>
-                        Edit
-                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEditView(v)}>Edit</DropdownMenuItem>
                     )}
                     <DropdownMenuItem
-                      className="text-xs text-destructive"
+                      className="text-destructive"
                       onClick={() => remove.mutate(v.id)}
                     >
                       Delete
@@ -545,7 +543,7 @@ export function InboxNavSidebar({
                   onClick={() => onSelect(item)}
                   className={itemClass(active)}
                 >
-                  <Icon className={cn('h-3.5 w-3.5 shrink-0', active && 'text-primary')} />
+                  <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
                   <span className="min-w-0 flex-1 truncate text-left">{label}</span>
                   <NavRowCount count={countForConversationView(view, counts)} />
                 </button>
@@ -568,7 +566,7 @@ export function InboxNavSidebar({
                     onClick={() => onSelect(item)}
                     className={itemClass(active)}
                   >
-                    <Icon className={cn('h-3.5 w-3.5 shrink-0', active && 'text-primary')} />
+                    <Icon className={cn('size-4 shrink-0', active && 'text-primary')} />
                     <span className="min-w-0 flex-1 truncate text-left">{label}</span>
                     <NavRowCount count={count} />
                   </button>
@@ -584,9 +582,7 @@ export function InboxNavSidebar({
             onClick={() => onSelect(quinnItem)}
             className={itemClass(quinnActive)}
           >
-            <QUINN_VIEW.Icon
-              className={cn('h-3.5 w-3.5 shrink-0', quinnActive && 'text-primary')}
-            />
+            <QUINN_VIEW.Icon className={cn('size-4 shrink-0', quinnActive && 'text-primary')} />
             {QUINN_VIEW.label}
           </button>
         </FilterSection>

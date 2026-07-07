@@ -29,7 +29,7 @@ export function PinnedComment({ comment, workspaceName }: PinnedCommentProps) {
             <span className="text-sm font-semibold text-foreground">
               {comment.authorName || workspaceName}
             </span>
-            <Badge className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-0">
+            <Badge className="text-[11px] px-1.5 py-0 bg-primary/15 text-primary border-0">
               <MapPinIcon className="h-2.5 w-2.5 me-0.5" />
               <FormattedMessage id="portal.pinnedComment.pinnedBadge" defaultMessage="Pinned" />
             </Badge>

@@ -325,7 +325,7 @@ export function LabelsCard({ initialCategories }: LabelsCardProps) {
               {category.segmentIds.length > 0 && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <button className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full hover:bg-muted/70">
+                    <button className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full hover:bg-muted/70">
                       {category.segmentIds.length} segment
                       {category.segmentIds.length === 1 ? '' : 's'}
                     </button>

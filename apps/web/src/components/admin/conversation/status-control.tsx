@@ -75,22 +75,19 @@ export function StatusControl({
             type="button"
             disabled={busy}
             title={wakeLabel ? `Snoozed until ${wakeLabel}` : undefined}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[13px] font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
             <span className="capitalize">{status}</span>
             {wakeLabel && <span className="text-muted-foreground">· {wakeLabel}</span>}
-            <ChevronDownIcon className="h-3 w-3 text-muted-foreground" />
+            <ChevronDownIcon className="size-3.5 text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {/* Open doubles as "unsnooze" — it clears any snooze timer. */}
-          <DropdownMenuItem onClick={() => statusMut.mutate('open')} className="text-xs capitalize">
+          <DropdownMenuItem onClick={() => statusMut.mutate('open')} className="capitalize">
             open
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => statusMut.mutate('closed')}
-            className="text-xs capitalize"
-          >
+          <DropdownMenuItem onClick={() => statusMut.mutate('closed')} className="capitalize">
             closed
           </DropdownMenuItem>
         </DropdownMenuContent>

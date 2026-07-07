@@ -171,7 +171,7 @@ export function ConversationTagsEditor({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search or create…"
-            className="mb-1.5 w-full rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-primary/20"
+            className="mb-1.5 w-full rounded-md border border-border bg-background px-2 py-1 text-[13px] outline-none focus:ring-2 focus:ring-primary/20"
           />
           <ScrollArea className="max-h-56">
             <div className="flex flex-col gap-0.5">
@@ -265,7 +265,7 @@ export function ConversationTagsEditor({
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: t.color }}
                       />
-                      <span className="truncate text-xs">{t.name}</span>
+                      <span className="truncate text-[13px]">{t.name}</span>
                       {applied && <CheckIcon className="h-3 w-3 shrink-0 text-primary" />}
                     </button>
                     <button
@@ -289,7 +289,7 @@ export function ConversationTagsEditor({
                       setQuery('')
                       setCreateColor(DEFAULT_TAG_COLOR)
                     }}
-                    className="flex w-full items-center gap-1.5 rounded-md py-1 text-left text-xs text-muted-foreground hover:text-foreground"
+                    className="flex w-full items-center gap-1.5 rounded-md py-1 text-left text-[13px] text-muted-foreground hover:text-foreground"
                   >
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full"

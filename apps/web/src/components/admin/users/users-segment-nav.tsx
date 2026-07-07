@@ -110,13 +110,13 @@ export function UsersSegmentNav({
               })
             }}
             className={cn(
-              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
+              'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors flex items-center gap-2',
               !hasSelection && !inInvitesMode && !inLeadsMode && !inCompaniesMode
-                ? 'bg-muted text-foreground'
+                ? 'bg-muted text-foreground font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
-            <UsersIcon className="h-3.5 w-3.5 shrink-0" />
+            <UsersIcon className="size-4 shrink-0" />
             <span className="flex-1 truncate">All users</span>
             <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
               {totalUserCount}
@@ -143,13 +143,13 @@ export function UsersSegmentNav({
               })
             }}
             className={cn(
-              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
+              'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors flex items-center gap-2',
               inLeadsMode
-                ? 'bg-muted text-foreground'
+                ? 'bg-muted text-foreground font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
-            <UserPlusIcon className="h-3.5 w-3.5 shrink-0" />
+            <UserPlusIcon className="size-4 shrink-0" />
             <span className="flex-1 truncate">All leads</span>
             {totalLeadCount !== undefined && (
               <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
@@ -178,13 +178,13 @@ export function UsersSegmentNav({
               })
             }}
             className={cn(
-              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
+              'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors flex items-center gap-2',
               inCompaniesMode
-                ? 'bg-muted text-foreground'
+                ? 'bg-muted text-foreground font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
-            <BuildingOffice2Icon className="h-3.5 w-3.5 shrink-0" />
+            <BuildingOffice2Icon className="size-4 shrink-0" />
             <span className="flex-1 truncate">All companies</span>
             {totalCompanyCount !== undefined && (
               <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
@@ -199,9 +199,9 @@ export function UsersSegmentNav({
           {visitorCount != null && (
             <Link
               to="/admin/analytics"
-              className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              className="w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors flex items-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted/50"
             >
-              <GlobeAltIcon className="h-3.5 w-3.5 shrink-0" />
+              <GlobeAltIcon className="size-4 shrink-0" />
               <span className="flex-1 truncate">Visitors (30d)</span>
               <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
                 {visitorCount.toLocaleString()}
@@ -218,13 +218,13 @@ export function UsersSegmentNav({
             search={(prev) => ({ ...prev, invites: 'pending' as const })}
             replace
             className={cn(
-              'w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-2',
+              'w-full text-left px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors flex items-center gap-2',
               inInvitesMode
-                ? 'bg-muted text-foreground'
+                ? 'bg-muted text-foreground font-medium'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
-            <EnvelopeIcon className="h-3.5 w-3.5 shrink-0" />
+            <EnvelopeIcon className="size-4 shrink-0" />
             <span className="flex-1 truncate">Invitations</span>
             {invitesPendingCount !== undefined && invitesPendingCount > 0 && (
               <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
@@ -317,7 +317,10 @@ function SegmentNavItem({
       <button
         type="button"
         onClick={(e) => onSelect(e.shiftKey)}
-        className="flex-1 min-w-0 flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-left"
+        className={cn(
+          'flex-1 min-w-0 flex items-center gap-2 px-2.5 py-1.5 text-[13px] text-left',
+          isSelected ? 'font-medium' : 'font-normal'
+        )}
       >
         <span className="flex-1 truncate">{segment.name}</span>
         {segment.type === 'dynamic' && (

@@ -117,7 +117,7 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
+        'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
         TONE_CLASSES[tone]
       )}
       title={`Due ${formatDate(dueAt)}`}
@@ -301,7 +301,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                   )
                 ) : null}
                 {contactBlocked && (
-                  <Badge variant="destructive" className="mt-1 text-[10px]">
+                  <Badge variant="destructive" className="mt-1 text-[11px]">
                     Blocked
                   </Badge>
                 )}
@@ -314,7 +314,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                 {detail.segments.map((s) => (
                   <span
                     key={s.id}
-                    className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                    className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium"
                     style={{ backgroundColor: `${s.color}1a`, color: s.color }}
                   >
                     {s.name}

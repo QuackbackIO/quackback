@@ -36,7 +36,7 @@ export function TicketTypeBadge({ type, className }: { type: TicketType; classNa
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium',
+        'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
         meta.className,
         className
       )}
@@ -73,7 +73,7 @@ export function TicketStatusChip({
   return (
     <span
       className={cn(
-        'inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium',
+        'inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
         CATEGORY_CHIP[status.category],
         className
       )}
@@ -102,7 +102,7 @@ export function TicketStageChip({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center rounded-full border border-border/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground',
+        'inline-flex shrink-0 items-center rounded-full border border-border/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground',
         className
       )}
     >

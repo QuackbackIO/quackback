@@ -180,7 +180,7 @@ function LiveHelpCenterFinder({
       <div className="px-3 pb-4 space-y-3">
         <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {articleListTitle}
             </span>
             {!isLoading && articles.length > 0 && (
@@ -298,7 +298,7 @@ function DeletedItemsView() {
 
       {/* Deleted categories */}
       <section className="px-3 pb-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           Deleted categories
         </h2>
         {categoriesLoading ? (
@@ -341,7 +341,7 @@ function DeletedItemsView() {
 
       {/* Deleted articles */}
       <section className="px-3 pb-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
           Deleted articles
         </h2>
         {articlesLoading ? (

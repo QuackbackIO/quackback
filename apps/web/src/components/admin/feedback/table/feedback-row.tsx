@@ -31,7 +31,7 @@ export function FeedbackRow({ post, statuses, duplicateCount, onClick }: Feedbac
         showAvatar={false}
       />
       {duplicateCount != null && duplicateCount > 0 && (
-        <span className="absolute top-3 right-3 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border text-muted-foreground bg-muted/40 border-border/40">
+        <span className="absolute top-3 right-3 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium border text-muted-foreground bg-muted/40 border-border/40">
           <Square2StackIcon className="h-3.5 w-3.5" />
           {duplicateCount === 1 ? '1 duplicate' : `${duplicateCount} duplicates`}
         </span>

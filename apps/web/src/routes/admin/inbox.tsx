@@ -140,7 +140,7 @@ function QuinnBucketChips({
             type="button"
             onClick={() => onChange(b.value)}
             className={cn(
-              'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+              'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-medium transition-colors',
               active
                 ? 'bg-primary/15 text-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -1405,20 +1405,18 @@ function CompanyInboxFilter({
             type="button"
             aria-label="Filter by company"
             className={cn(
-              'inline-flex min-w-0 shrink items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+              'inline-flex min-w-0 shrink items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
               value ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
             )}
           >
             <span className="truncate">{active?.name ?? 'All companies'}</span>
-            <ChevronDownIcon className="h-3 w-3 shrink-0" />
+            <ChevronDownIcon className="size-3.5 shrink-0" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-          <DropdownMenuItem onClick={() => onChange(undefined)} className="text-xs">
-            All companies
-          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onChange(undefined)}>All companies</DropdownMenuItem>
           {companies.map((co) => (
-            <DropdownMenuItem key={co.id} onClick={() => onChange(co.id)} className="text-xs">
+            <DropdownMenuItem key={co.id} onClick={() => onChange(co.id)}>
               {co.name}
             </DropdownMenuItem>
           ))}

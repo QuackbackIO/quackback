@@ -126,28 +126,28 @@ export function IntegrationList({ catalog, integrations }: IntegrationListProps)
           const statusBadge = isConnected ? (
             <Badge
               variant="outline"
-              className="border-green-500/30 text-green-600 text-[10px] px-1.5 py-0"
+              className="border-green-500/30 text-green-600 text-[11px] px-1.5 py-0"
             >
               Enabled
             </Badge>
           ) : isPaused ? (
             <Badge
               variant="outline"
-              className="border-yellow-500/30 text-yellow-600 text-[10px] px-1.5 py-0"
+              className="border-yellow-500/30 text-yellow-600 text-[11px] px-1.5 py-0"
             >
               Paused
             </Badge>
           ) : !entry.available && !entry.configurable ? (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+              className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
             >
               Coming soon
             </Badge>
           ) : !entry.available && entry.configurable ? (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
+              className="text-[11px] px-1.5 py-0 text-muted-foreground/60 border-border/40"
             >
               Not configured
             </Badge>

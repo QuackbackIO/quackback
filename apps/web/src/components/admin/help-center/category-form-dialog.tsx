@@ -129,7 +129,7 @@ function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId 
       <div className="flex items-center justify-between">
         <Label>Translations</Label>
         <Select value={locale ?? undefined} onValueChange={setLocale}>
-          <SelectTrigger size="sm" className="h-7 w-36 text-xs">
+          <SelectTrigger size="sm" className="w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -141,11 +141,7 @@ function CategoryTranslationsSection({ categoryId }: { categoryId: KbCategoryId 
           </SelectContent>
         </Select>
       </div>
-      <Input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Translated name"
-      />
+      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Translated name" />
       <Input
         value={description}
         onChange={(e) => setDescription(e.target.value)}

@@ -116,7 +116,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
     <div className="flex items-center gap-1">
       {types.includes('authored') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-primary/10 text-primary"
           title="Authored this post"
         >
           <PencilSquareIcon className="h-2.5 w-2.5" />
@@ -124,7 +124,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
       )}
       {types.includes('commented') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400"
           title="Commented on this post"
         >
           <ChatBubbleLeftIcon className="h-2.5 w-2.5" />
@@ -132,7 +132,7 @@ function EngagementBadges({ types }: { types: EngagedPost['engagementTypes'] }) 
       )}
       {types.includes('voted') && (
         <span
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400"
           title="Voted on this post"
         >
           <HandThumbUpIcon className="h-2.5 w-2.5" />
@@ -183,7 +183,7 @@ function EngagedPostCard({ post }: { post: EngagedPost }) {
           </div>
           <Badge
             variant="secondary"
-            className="text-[10px] font-normal bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
+            className="text-[11px] font-normal bg-muted/50 px-1.5 py-0 inline-flex items-center gap-0.5"
           >
             <Squares2X2Icon className="h-2.5 w-2.5 text-muted-foreground/40" />
             {post.boardName}
@@ -271,14 +271,14 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
             <button
               type="button"
               className={cn(
-                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
                 status !== 'all'
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted'
               )}
             >
               <span className="capitalize">{status === 'all' ? 'Status' : status}</span>
-              <ChevronDownIcon className="h-3 w-3" />
+              <ChevronDownIcon className="size-3.5" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -287,7 +287,6 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                 setStatus('all')
                 setExpandedId(null)
               }}
-              className="text-xs"
             >
               All statuses
             </DropdownMenuItem>
@@ -298,7 +297,7 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                   setStatus(s)
                   setExpandedId(null)
                 }}
-                className="text-xs capitalize"
+                className="capitalize"
               >
                 {s}
               </DropdownMenuItem>
@@ -332,7 +331,7 @@ function UserConversations({ principalId }: { principalId: PrincipalId }) {
                       </span>
                       <span
                         className={cn(
-                          'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                          'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium capitalize',
                           STATUS_STYLE[c.status]
                         )}
                       >

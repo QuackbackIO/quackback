@@ -125,7 +125,7 @@ export function UnreadDivider() {
   return (
     <div className="my-1.5 flex items-center gap-2" role="separator" aria-label="New messages">
       <span className="h-px flex-1 bg-primary/30" />
-      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
         New
       </span>
       <span className="h-px flex-1 bg-primary/30" />
@@ -523,12 +523,12 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
         >
           <span className="truncate">{authorName}</span>
           {message.isAssistant && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
               <SparklesIcon className="h-3 w-3" /> AI
             </span>
           )}
           {isNote && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
               <PencilSquareIcon className="h-3 w-3" /> Internal note
             </span>
           )}
@@ -635,7 +635,7 @@ export function VisitorMessageBubble({
             )}
           </p>
           {isAssistant && showAiLabel && (
-            <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
               AI
             </span>
           )}

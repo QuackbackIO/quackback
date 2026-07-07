@@ -491,7 +491,7 @@ export function PostCard({
             {tags.slice(0, 3).map((tag) => (
               <span
                 key={tag.id}
-                className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium"
+                className="inline-flex items-center px-1.5 py-0 rounded text-[11px] font-medium"
                 style={{
                   backgroundColor: tag.color + '20',
                   color: tag.color,
