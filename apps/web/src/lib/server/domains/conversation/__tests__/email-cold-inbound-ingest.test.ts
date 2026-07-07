@@ -84,6 +84,7 @@ const coldEmail = (over: Partial<ParsedInboundEmail> = {}): ParsedInboundEmail =
   subject: 'Help with billing',
   text: 'My invoice looks wrong.',
   messageId: `<${suffix()}@acme.com>`,
+  emailId: null,
   inReplyTo: null,
   references: [],
   autoSubmitted: null,

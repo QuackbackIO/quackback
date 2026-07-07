@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   isEmailConfigured,
+  getReceivedEmail,
   sendInvitationEmail,
   sendWelcomeEmail,
   sendMagicLinkEmail,
@@ -67,6 +68,14 @@ describe('isEmailConfigured', () => {
     process.env.EMAIL_SMTP_HOST = 'smtp.example.com'
     process.env.EMAIL_RESEND_API_KEY = 're_test_123'
     expect(isEmailConfigured()).toBe(true)
+  })
+})
+
+describe('getReceivedEmail', () => {
+  withCleanEnv()
+
+  it('returns null when no Resend API key is configured (no API call attempted)', async () => {
+    await expect(getReceivedEmail('em_x')).resolves.toBeNull()
   })
 })
 

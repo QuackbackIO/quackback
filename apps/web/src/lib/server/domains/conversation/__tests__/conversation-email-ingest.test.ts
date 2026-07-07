@@ -15,6 +15,7 @@ const REPLY_TO = inboundReplyToAddress('conversation_abc')!
 
 const sendVisitorMessage = vi.fn()
 const assertConversationSendRate = vi.fn()
+const getReceivedEmail = vi.fn<(...a: unknown[]) => Promise<{ text: string | null; html: string | null } | null>>()
 const resolveConversationByMessageIds = vi.fn<(...a: unknown[]) => Promise<string | null>>()
 const resolvePrincipalIdByEmail = vi.fn<(...a: unknown[]) => Promise<string | null>>()
 const uploadImageBuffer = vi.fn()
@@ -31,6 +32,11 @@ vi.mock('../conversation.email-store', () => ({
 
 vi.mock('../conversation.service', () => ({
   sendVisitorMessage: (...a: unknown[]) => sendVisitorMessage(...a),
+}))
+
+vi.mock('@quackback/email', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@quackback/email')>()),
+  getReceivedEmail: (...a: unknown[]) => getReceivedEmail(...a),
 }))
 
 vi.mock('../conversation.ratelimit', () => ({
@@ -106,6 +112,7 @@ beforeEach(() => {
   dupeRows = []
   sendVisitorMessage.mockResolvedValue({ created: false })
   assertConversationSendRate.mockResolvedValue(undefined)
+  getReceivedEmail.mockResolvedValue(null)
   resolveConversationByMessageIds.mockResolvedValue(null)
   resolvePrincipalIdByEmail.mockResolvedValue(null)
   uploadImageBuffer.mockImplementation(async (bytes: Buffer, mime: string) => ({
@@ -136,6 +143,80 @@ describe('ingestInboundEmail', () => {
     const result = await ingestInboundEmail(baseEvent)
 
     expect(result).toEqual({ status: 'duplicate' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  // Resend's `email.received` webhook is metadata-only (#320): the body must be
+  // fetched from the Received Emails API when the payload carries no text/html.
+  it('fetches the body from the Received Emails API when the payload is metadata-only (#320)', async () => {
+    getReceivedEmail.mockResolvedValueOnce({
+      text: 'Fetched reply.\n\nOn Mon wrote:\n> old',
+      html: null,
+    })
+
+    const result = await ingestInboundEmail({
+      type: 'email.received',
+      data: {
+        to: [REPLY_TO],
+        from: 'jane@example.com',
+        subject: 'Re: ticket',
+        email_id: 'em_123',
+        headers: [{ name: 'Message-ID', value: '<m-fetch@x>' }],
+      },
+    })
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    expect(getReceivedEmail).toHaveBeenCalledWith('em_123')
+    const [input] = sendVisitorMessage.mock.calls[0]
+    expect(input).toMatchObject({
+      content: 'Fetched reply.',
+      metadata: { source: 'email', emailMessageId: '<m-fetch@x>' },
+    })
+  })
+
+  it('falls back to the html body when the fetched email has no plain text', async () => {
+    getReceivedEmail.mockResolvedValueOnce({ text: null, html: '<p>Hello from html</p>' })
+
+    const result = await ingestInboundEmail({
+      type: 'email.received',
+      data: { to: [REPLY_TO], from: 'jane@example.com', email_id: 'em_html' },
+    })
+
+    expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
+    const [input] = sendVisitorMessage.mock.calls[0]
+    expect(input).toMatchObject({ content: 'Hello from html' })
+  })
+
+  it('does not call the Received Emails API when the payload carries inline text', async () => {
+    await ingestInboundEmail(baseEvent)
+
+    expect(getReceivedEmail).not.toHaveBeenCalled()
+  })
+
+  it('drops as empty when the received email cannot be found', async () => {
+    getReceivedEmail.mockResolvedValueOnce(null)
+
+    const result = await ingestInboundEmail({
+      type: 'email.received',
+      data: { to: [REPLY_TO], from: 'jane@example.com', email_id: 'em_gone' },
+    })
+
+    expect(result).toEqual({ status: 'empty' })
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+  })
+
+  it('propagates a transient Received Emails API failure so the delivery is retried', async () => {
+    getReceivedEmail.mockRejectedValueOnce(
+      new Error('received-email fetch failed: internal_server_error')
+    )
+
+    await expect(
+      ingestInboundEmail({
+        type: 'email.received',
+        data: { to: [REPLY_TO], from: 'jane@example.com', email_id: 'em_err' },
+      })
+    ).rejects.toThrow('received-email fetch failed')
+
     expect(sendVisitorMessage).not.toHaveBeenCalled()
   })
 
@@ -476,6 +557,7 @@ describe('ingestInboundEmail', () => {
       text: 'reply body',
       html: undefined,
       messageId: `<att-${seq++}@example.com>`,
+      emailId: null,
       inReplyTo: null,
       references: [],
       autoSubmitted: null,

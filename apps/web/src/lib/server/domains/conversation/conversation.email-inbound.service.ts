@@ -20,6 +20,7 @@ import type { ConversationId, PrincipalId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { normalizePrincipalType } from '@/lib/server/functions/auth-helpers'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
+import { getReceivedEmail } from '@quackback/email'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 import {
@@ -398,5 +399,21 @@ async function ingestColdInbound(parsed: ParsedInboundEmail): Promise<IngestInbo
 export async function ingestInboundEmail(event: unknown): Promise<IngestInboundResult> {
   const data =
     (event && typeof event === 'object' ? (event as { data?: unknown }).data : null) ?? null
-  return ingestParsedEmail(parseInboundEmail(data))
+  const parsed = parseInboundEmail(data)
+
+  // Resend's `email.received` webhook is metadata-only — it carries no text/html
+  // body. When the payload has no body but exposes the provider email id, fetch
+  // the full message from the Received Emails API (#320) and normalize it onto
+  // the parsed shape before the provider-neutral core runs. The IMAP front door
+  // never hits this (it carries the full RFC822 body, and `emailId` is null).
+  // `not_found`/no-API-key → null → falls through to the normal empty-body drop;
+  // any other fetch error throws → the webhook route 500s → Resend redelivers
+  // (idempotent via the Message-ID dedupe + the partial unique index).
+  if (!parsed.text && !parsed.html && parsed.emailId) {
+    const full = await getReceivedEmail(parsed.emailId)
+    if (full?.text) parsed.text = full.text
+    if (full?.html) parsed.html = full.html
+  }
+
+  return ingestParsedEmail(parsed)
 }

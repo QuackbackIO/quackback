@@ -43,6 +43,10 @@ export interface ParsedInboundEmail {
   html?: string
   /** Provider Message-ID (header preferred, email id as fallback) for dedupe. */
   messageId: string | null
+  /** Provider email id (Resend `email_id`) — used to fetch the body when the
+   *  webhook payload is metadata-only (Resend `email.received`, #320). Null for
+   *  the IMAP front door, which already carries the full RFC822 body. */
+  emailId: string | null
   /** Threading parent from the `In-Reply-To` header (bare id, no `<>`), or null. */
   inReplyTo: string | null
   /** All `References` ids (bare, no `<>`), oldest first — the threading chain. */
@@ -235,7 +239,12 @@ export function parseInboundEmail(data: unknown): ParsedInboundEmail {
     subject: asString(d.subject),
     text: asString(d.text),
     html: asString(d.html) ?? undefined,
-    messageId: readHeader(d.headers, 'message-id') ?? asString(d.email_id) ?? asString(d.id),
+    messageId:
+      readHeader(d.headers, 'message-id') ??
+      asString(d.message_id) ??
+      asString(d.email_id) ??
+      asString(d.id),
+    emailId: asString(d.email_id) ?? asString(d.id),
     ...readThreadingHeaders(d.headers),
     ...(attachments.length > 0 ? { attachments } : {}),
   }
@@ -468,6 +477,7 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
     text,
     html: html || undefined,
     messageId: readHeader(headers, 'message-id'),
+    emailId: null,
     ...readThreadingHeaders(headers),
     ...(attachments.length > 0 ? { attachments } : {}),
   }

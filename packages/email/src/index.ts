@@ -136,6 +136,26 @@ function buildThreadingHeaders(options: ThreadingOptions): Record<string, string
 }
 
 /**
+ * Fetch a received (inbound) email's content by its Resend email id.
+ * Resend's `email.received` webhook is metadata-only (no text/html body) —
+ * callers use this to pull the body before parsing (#320). Returns null when
+ * no Resend API key is configured or the email cannot be found; throws on
+ * other errors so the webhook route can 500 and let Resend redeliver.
+ */
+export async function getReceivedEmail(
+  emailId: string
+): Promise<{ text: string | null; html: string | null } | null> {
+  if (!getResendApiKey()) return null
+  const { data, error } = await getResend().emails.receiving.get(emailId)
+  if (error) {
+    log.warn({ emailId, error: error.name }, 'received-email fetch failed')
+    if (error.name === 'not_found') return null
+    throw new Error(`received-email fetch failed: ${error.name}`)
+  }
+  return { text: data?.text ?? null, html: data?.html ?? null }
+}
+
+/**
  * The single low-level send: provider selection (SMTP → Resend → console), the
  * anon-address guard, and RFC 5322 threading. Takes an explicit From and EITHER
  * a prerendered `html` body or a `react` element (the branded senders pass
