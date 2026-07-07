@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import {
   setWidgetToken,
+  setWidgetContextToken,
   clearWidgetToken,
   getWidgetToken,
   persistAnonymousToken,
@@ -27,7 +28,6 @@ import { normalizeLocale, DEFAULT_LOCALE, type SupportedLocale } from '@/lib/sha
 import { htmlLangDir } from '@/lib/shared/document-locale'
 import { useIntlSetup } from '@/lib/client/hooks/use-intl-setup'
 import { onIntlError } from '@/lib/client/intl-error'
-import { createWidgetIdentifyTokenFn } from '@/lib/server/functions/widget'
 
 interface WidgetUser {
   id: string
@@ -76,6 +76,8 @@ interface WidgetAuthProviderProps {
    *  SSR and triggers React hydration error #418 — see issue #133. An SDK
    *  postMessage (quackback:locale) still overrides it after mount. */
   initialLocale?: SupportedLocale
+  /** Signed server-resolved widget profile context for scoped embeds. */
+  widgetContextToken?: string | null
   children: ReactNode
 }
 
@@ -84,6 +86,7 @@ export function WidgetAuthProvider({
   portalSessionToken,
   hmacRequired,
   initialLocale,
+  widgetContextToken,
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
@@ -97,6 +100,10 @@ export function WidgetAuthProvider({
   // first client render matches the server (see issue #133).
   const [locale, setLocale] = useState<SupportedLocale>(initialLocale ?? DEFAULT_LOCALE)
   const messages = useIntlSetup(locale)
+
+  useEffect(() => {
+    setWidgetContextToken(widgetContextToken)
+  }, [widgetContextToken])
 
   // The widget is its own iframe document, and its locale can change at runtime
   // (the `quackback:locale` postMessage below). Unlike the portal, the root
@@ -240,9 +247,7 @@ export function WidgetAuthProvider({
           if (hmacRequired) return false
 
           const previousToken = getWidgetToken()
-          const { ssoToken } = await createWidgetIdentifyTokenFn({
-            data: { email, name: name || email.split('@')[0] },
-          })
+          const displayName = name || email.split('@')[0]
 
           const headers: Record<string, string> = { 'Content-Type': 'application/json' }
           if (previousToken) {
@@ -252,7 +257,12 @@ export function WidgetAuthProvider({
           const response = await fetch('/api/widget/identify', {
             method: 'POST',
             headers,
-            body: JSON.stringify(previousToken ? { ssoToken, previousToken } : { ssoToken }),
+            body: JSON.stringify({
+              id: email,
+              email,
+              name: displayName,
+              ...(previousToken ? { previousToken } : {}),
+            }),
           })
           if (!response.ok) return false
           applyIdentifyResult(await response.json())

@@ -72,9 +72,7 @@ export function NtfyConfig({ integrationId, initialEventMappings, enabled }: Ntf
           <Label htmlFor="enabled-toggle" className="text-base font-medium">
             Notifications enabled
           </Label>
-          <p className="text-xs text-muted-foreground">
-            Turn off to pause all ntfy notifications
-          </p>
+          <p className="text-xs text-muted-foreground">Turn off to pause all ntfy notifications</p>
         </div>
         <Switch
           id="enabled-toggle"
