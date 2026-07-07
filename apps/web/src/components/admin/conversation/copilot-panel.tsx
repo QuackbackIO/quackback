@@ -66,6 +66,7 @@ import {
   COPILOT_EVENTS,
   TRANSFORM_EVENTS,
   type CopilotActivityPayload,
+  type CopilotAnswerType,
   type CopilotCitation,
   type CopilotDeltaPayload,
   type CopilotErrorPayload,
@@ -113,7 +114,7 @@ async function extractHttpErrorMessage(res: Response): Promise<string> {
 type InsertMode = 'reply' | 'note'
 
 /** The answer card's "Add to composer & modify" menu rows (P2-C.1): the tone
- *  transforms Fin ships in its equivalent menu. */
+ *  transforms offered before inserting an answer into the composer. */
 const MODIFY_ROWS: { transform: TransformKind; label: string }[] = [
   { transform: 'my_tone', label: 'My tone of voice' },
   { transform: 'more_friendly', label: 'More friendly' },
@@ -148,6 +149,10 @@ export interface CopilotTurn {
   id: string
   question: string
   answer: string
+  /** Whether the answer is a customer-facing reply draft or internal analysis
+   *  (drives which action is primary in CopilotTurnView). Defaults to
+   *  `draft_reply` while streaming and until the final payload sets it. */
+  answerType: CopilotAnswerType
   citations: CopilotCitation[]
   internalSourced: boolean
   suppressed?: string
@@ -392,6 +397,7 @@ export function CopilotPanel({
             finished = true
             patch({
               answer: final.text || answer,
+              answerType: final.answerType,
               citations: final.citations,
               internalSourced: final.internalSourced,
               suppressed: final.suppressed,
@@ -436,6 +442,7 @@ export function CopilotPanel({
         id,
         question,
         answer: '',
+        answerType: 'draft_reply',
         citations: [],
         internalSourced: false,
         proposedActions: [],
@@ -459,6 +466,7 @@ export function CopilotPanel({
             ? {
                 ...t,
                 answer: '',
+                answerType: 'draft_reply' as const,
                 citations: [],
                 internalSourced: false,
                 suppressed: undefined,
@@ -665,6 +673,13 @@ function CopilotTurnView({
 }) {
   const streaming = turn.status === 'streaming'
   const actionsDisabled = streaming || transformBusy
+  // Analysis answers (guidance/reasoning about the conversation, not a reply to
+  // send) promote "Add as note" to the primary action and demote "Add to
+  // composer" into the overflow menu — inserting internal analysis into a
+  // customer-facing reply is the exact mismatch answerType exists to fix. A
+  // draft_reply answer (and every un-classified one, which defaults to it)
+  // keeps the historical layout: "Add to composer" primary.
+  const isAnalysis = turn.answerType === 'analysis'
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
@@ -693,10 +708,10 @@ function CopilotTurnView({
                 <Button
                   type="button"
                   size="sm"
-                  onClick={onAddToComposer}
+                  onClick={isAnalysis ? onAddAsNote : onAddToComposer}
                   disabled={actionsDisabled}
                 >
-                  Add to composer
+                  {isAnalysis ? 'Add as note' : 'Add to composer'}
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -710,15 +725,28 @@ function CopilotTurnView({
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Add to composer & modify</DropdownMenuLabel>
-                    {MODIFY_ROWS.map((row) => (
-                      <DropdownMenuItem key={row.transform} onClick={() => onModify(row.transform)}>
-                        <SparklesIcon className="h-3.5 w-3.5" />
-                        {row.label}
-                      </DropdownMenuItem>
-                    ))}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onAddAsNote}>Add as note</DropdownMenuItem>
+                    {isAnalysis ? (
+                      // The tone-rewrite rows are all about polishing a
+                      // customer reply, so they'd be noise on an analysis
+                      // answer; the menu here is just the demoted composer
+                      // escape hatch plus the shared "save as macro".
+                      <DropdownMenuItem onClick={onAddToComposer}>Add to composer</DropdownMenuItem>
+                    ) : (
+                      <>
+                        <DropdownMenuLabel>Add to composer & modify</DropdownMenuLabel>
+                        {MODIFY_ROWS.map((row) => (
+                          <DropdownMenuItem
+                            key={row.transform}
+                            onClick={() => onModify(row.transform)}
+                          >
+                            <SparklesIcon className="h-3.5 w-3.5" />
+                            {row.label}
+                          </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={onAddAsNote}>Add as note</DropdownMenuItem>
+                      </>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onSaveAsMacro}>Save as macro</DropdownMenuItem>
                   </DropdownMenuContent>

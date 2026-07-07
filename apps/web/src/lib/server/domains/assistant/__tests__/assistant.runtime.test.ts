@@ -777,6 +777,7 @@ describe('runAssistantTurn', () => {
 
     expect(result).toEqual({
       status: 'answered',
+      answerType: 'draft_reply',
       text: 'Use the reset link.',
       citations: [
         {
@@ -947,6 +948,36 @@ describe('runAssistantTurn', () => {
     })
   })
 
+  it("passes the model's answerType classification through to the result", async () => {
+    const object = {
+      text: 'The customer is writing in Swedish; wait for their actual request before acting.',
+      citations: [],
+      answerType: 'analysis',
+    }
+    mockChat.mockImplementation(() => chunkStream(completeRun(object)))
+
+    const result = await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('what language is he speaking?'),
+      surface: 'copilot',
+    })
+    expect(result.status === 'answered' && result.answerType).toBe('analysis')
+  })
+
+  it('defaults answerType to draft_reply when the model omits it', async () => {
+    // No answerType in the object — the customer-safe default must apply so an
+    // un-classified answer keeps the historical "Add to composer" affordance.
+    const object = { text: 'Try resetting from Settings.', citations: [] }
+    mockChat.mockImplementation(() => chunkStream(completeRun(object)))
+
+    const result = await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('how do I reset?'),
+      surface: 'copilot',
+    })
+    expect(result.status === 'answered' && result.answerType).toBe('draft_reply')
+  })
+
   it('retries once when the first stream yields no structured object', async () => {
     const object = { text: 'Second try.', citations: [] }
     mockChat
@@ -968,6 +999,7 @@ describe('runAssistantTurn', () => {
     const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('q') })
     expect(result).toEqual({
       status: 'answered',
+      answerType: 'draft_reply',
       text: ASSISTANT_FALLBACK_MESSAGE,
       citations: [],
       internalSourced: false,
@@ -1046,6 +1078,7 @@ describe('runAssistantTurn', () => {
 
     expect(result).toEqual({
       status: 'answered',
+      answerType: 'draft_reply',
       text: ASSISTANT_FALLBACK_MESSAGE,
       citations: [],
       internalSourced: false,
@@ -1226,6 +1259,7 @@ describe('runAssistantTurn', () => {
     const result = await runAssistantTurn({ ...baseInput, messages: customerAsks('reset?') })
     expect(result).toEqual({
       status: 'answered',
+      answerType: 'draft_reply',
       text: 'Click the reset link in your email.',
       citations: [],
       internalSourced: false,
@@ -1842,6 +1876,9 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
     expect(prompts).toHaveLength(2)
     expect(prompts[0]).toEqual(buildAssistantSystemPrompt('Quinn', WIDGET_LEGACY_TOOLS)[0])
     expect(prompts[1]).toBe(buildCopilotFramingPrompt())
+    // The copilot framing is where Quinn is taught to classify its answer, so
+    // the answerType instruction rides on this block and only this surface.
+    expect(prompts[1]).toContain('answerType')
   })
 
   it('widget surface: never adds the copilot framing block', async () => {

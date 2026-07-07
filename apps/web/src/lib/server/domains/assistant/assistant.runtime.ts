@@ -80,11 +80,24 @@ export interface EscalationOutcome {
   mode: 'offer' | 'handoff'
 }
 
+/**
+ * Whether an answered turn's `text` reads as a customer-facing reply draft or
+ * as internal analysis/guidance for the teammate. Only ever consumed on the
+ * copilot surface (the widget always sends its text to the customer), where it
+ * drives the sidebar's "Add to composer" vs "Add as note" button precedence.
+ * Defaults to `draft_reply` wherever the model doesn't classify (see the final
+ * return and the fallback), so it is strictly additive to existing behaviour.
+ */
+export type AssistantAnswerType = 'draft_reply' | 'analysis'
+
 /** What one turn produces. `suppressed` means the silence rule muted Quinn. */
 export type AssistantTurnResult =
   | {
       status: 'answered'
       text: string
+      /** Reply-draft vs analysis intent for this turn's `text` (copilot surface
+       *  only); `draft_reply` whenever the model didn't classify. */
+      answerType: AssistantAnswerType
       citations: AssistantCitation[]
       /** Whether any surviving citation is internal (`citations.some(c => c.internal)`), the
        *  server-derived flag the copilot leak gate reads; a customer-facing turn's citations
@@ -251,6 +264,11 @@ const assistantOutputSchema = z.object({
     .object({ reason: z.enum(ASSISTANT_HANDOFF_REASONS) })
     .nullable()
     .optional(),
+  // Copilot-only intent tag (see buildCopilotFramingPrompt). Optional: the
+  // widget's base prompt never asks for it, weak models may drop it, and the
+  // salvage paths only recover `text` — so every omission falls back to
+  // `draft_reply` at the return sites rather than failing validation.
+  answerType: z.enum(['draft_reply', 'analysis']).optional(),
 })
 
 type AssistantOutput = z.infer<typeof assistantOutputSchema>
@@ -590,6 +608,10 @@ export function buildCopilotFramingPrompt(): string {
     'You are answering a TEAMMATE who is working this conversation, not the customer in it.',
     'Reply to the teammate directly, in the second person, as their assistant.',
     'Team and internal sources are allowed here in addition to public ones; a source flagged internal must never be pasted into a customer-facing reply as-is.',
+    // The intent tag driving the sidebar's Add-to-composer vs Add-as-note
+    // precedence (see CopilotAnswerType). Add it to the JSON object alongside
+    // the fields already required above.
+    'In addition to the required fields, add an "answerType" field: "draft_reply" when your "text" is written to be sent to the customer as-is (a suggested reply), or "analysis" when your "text" is guidance, reasoning, a summary, or an answer to a question ABOUT the conversation that the teammate would not send to the customer verbatim. When in doubt between the two, prefer "analysis" only if the text plainly addresses the teammate rather than the customer.',
   ].join('\n')
 }
 
@@ -1005,6 +1027,9 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const fallback: AssistantAnsweredResult = {
     status: 'answered',
     text: ASSISTANT_FALLBACK_MESSAGE,
+    // A generic "try again" retry prompt is a customer-safe reply, not
+    // analysis, so it takes the neutral default like any un-classified answer.
+    answerType: 'draft_reply',
     citations: [],
     internalSourced: false,
     // Placeholder only: both return sites below always snapshot
@@ -1101,6 +1126,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   return {
     status: 'answered',
     text: relinkCitations(parsed.text, parsed.citations, citations),
+    // Quinn's self-classification (copilot surface only); every other surface
+    // omits it, and so does a model that didn't bother — both land on the
+    // customer-safe default, so this never demotes a widget reply.
+    answerType: parsed.answerType ?? 'draft_reply',
     citations,
     internalSourced: citations.some((c) => c.internal === true),
     proposedActions: [...toolContext.proposedActions],

@@ -42,6 +42,19 @@ export interface CopilotCitation {
   internal?: boolean
 }
 
+/**
+ * Which affordance a copilot answer's text is FOR — the intent signal the
+ * sidebar reads to decide whether "Add to composer" (a customer-facing reply
+ * draft) or "Add as note" (internal analysis/guidance for the teammate) is the
+ * primary action. Quinn self-classifies it as a field on its structured output
+ * (see `buildCopilotFramingPrompt`); the server defaults it to `draft_reply`
+ * whenever the model omits it, so an un-classified answer keeps the historical
+ * "Add to composer primary" behaviour and this can only ever improve, never
+ * regress, the affordance. Making the mode machine-readable per answer is what
+ * lets the button precedence follow it automatically.
+ */
+export type CopilotAnswerType = 'draft_reply' | 'analysis'
+
 /** copilot.v1.delta: one fragment of the streamed answer text. */
 export interface CopilotDeltaPayload {
   text: string
@@ -55,10 +68,10 @@ export interface CopilotActivityPayload {
 
 /**
  * A write-tool call this copilot turn turned into a pending-approval row
- * (P2-C.4, "act-on-approval"): the beyond-Fin edge where a Copilot answer can
- * propose a real action and a teammate approves it inline, without Quinn ever
- * running it directly from the Q&A turn. Mirrors `CopilotCitation`'s role for
- * citations: the client-safe shape of `AssistantProposedAction`.
+ * (P2-C.4, "act-on-approval"): a Copilot answer can propose a real action and a
+ * teammate approves it inline, without Quinn ever running it directly from the
+ * Q&A turn. Mirrors `CopilotCitation`'s role for citations: the client-safe
+ * shape of `AssistantProposedAction`.
  */
 export interface CopilotProposedAction {
   /** The `assistant_pending_actions` row id, what the approve/reject fns key on. */
@@ -85,6 +98,10 @@ export interface CopilotFinalPayload {
   internalSourced: boolean
   suppressed?: string
   proposedActions: CopilotProposedAction[]
+  /** Whether `text` is a customer-facing reply draft or internal analysis; see
+   *  `CopilotAnswerType`. Always `draft_reply` on a suppressed turn (no text,
+   *  no action buttons), and defaulted to `draft_reply` whenever Quinn omits it. */
+  answerType: CopilotAnswerType
 }
 
 /** copilot.v1.error: a terminal failure after the stream opened. */

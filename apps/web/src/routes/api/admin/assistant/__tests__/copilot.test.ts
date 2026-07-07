@@ -186,6 +186,7 @@ describe('POST /api/admin/assistant/copilot', () => {
           ],
           internalSourced: true,
           proposedActions: [],
+          answerType: 'analysis',
         }
       }
     )
@@ -205,6 +206,8 @@ describe('POST /api/admin/assistant/copilot', () => {
         ],
         internalSourced: true,
         proposedActions: [],
+        // The runtime's answerType classification is relayed verbatim.
+        answerType: 'analysis',
       },
     })
   })
@@ -222,6 +225,8 @@ describe('POST /api/admin/assistant/copilot', () => {
         internalSourced: false,
         suppressed: 'silence',
         proposedActions: [],
+        // No text ⇒ no action buttons; the neutral default keeps it well-formed.
+        answerType: 'draft_reply',
       },
     })
   })

@@ -18,9 +18,9 @@
  * each tool's configured mode: a copilot turn is a teammate asking Quinn a
  * question about the conversation, never Quinn acting in it directly, so a
  * write-tool call always turns into a pending-approval proposal instead of
- * running for real (P2-C.4, "act-on-approval", the beyond-Fin edge). This is
- * ONE documented exception to "never writes to it": proposing does insert a
- * real `assistant_pending_actions` row and an accompanying internal note on
+ * running for real (P2-C.4, "act-on-approval"). This is ONE documented
+ * exception to "never writes to it": proposing does insert a real
+ * `assistant_pending_actions` row and an accompanying internal note on
  * the conversation announcing it (surfacePendingActionNote, so other
  * teammates see the proposal in the thread without polling), but nothing
  * else. The write tool's own effect never runs, no OTHER conversation message
@@ -146,6 +146,9 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
           internalSourced: false,
           suppressed: result.reason,
           proposedActions: [],
+          // No text, so no action buttons render either way; the neutral
+          // default keeps the payload well-formed.
+          answerType: 'draft_reply',
         } satisfies CopilotFinalPayload)
       } else {
         sse.send(COPILOT_EVENTS.final, {
@@ -153,6 +156,7 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
           citations: result.citations,
           internalSourced: result.internalSourced,
           proposedActions: result.proposedActions ?? [],
+          answerType: result.answerType,
         } satisfies CopilotFinalPayload)
       }
     } catch (error) {

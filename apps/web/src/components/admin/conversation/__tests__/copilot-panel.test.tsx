@@ -2,9 +2,10 @@
 /**
  * <CopilotPanel>: the Quinn Copilot sidebar thread (COPILOT-SIDEBAR-UX.md
  * B.3/B.4). Covers the ask -> stream -> answer flow, the internal-source
- * leak gate on "Add to composer", the Answer-sources popover (flag-gated
- * rows, localStorage persistence, sourceTypes on the request), the
- * placeholder swap, and "New chat".
+ * leak gate on "Add to composer", the answerType button precedence (draft_reply
+ * keeps "Add to composer" primary; analysis promotes "Add as note" and demotes
+ * the composer), the Answer-sources popover (flag-gated rows, localStorage
+ * persistence, sourceTypes on the request), the placeholder swap, and "New chat".
  */
 import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
@@ -362,6 +363,65 @@ describe('<CopilotPanel> leak gate', () => {
 
     expect(onInsert).toHaveBeenCalledWith('Here is the internal-flavored answer.', 'note')
     expect(screen.queryByText('This answer uses internal sources')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> answerType button precedence', () => {
+  async function askWithAnswerType(answerType: 'draft_reply' | 'analysis') {
+    const frames = sseFrame(COPILOT_EVENTS.final, {
+      text: 'The customer is writing in Swedish.',
+      citations: [],
+      internalSourced: false,
+      answerType,
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(frames)))
+    const onInsert = vi.fn()
+    renderPanel({ onInsert })
+    await ask('What language is he speaking?')
+    await screen.findByText(/writing in Swedish/)
+    return onInsert
+  }
+
+  it('draft_reply keeps "Add to composer" as the primary action', async () => {
+    await askWithAnswerType('draft_reply')
+
+    // The visible primary button (not a menu item) is Add to composer.
+    expect(screen.getByRole('button', { name: /add to composer/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add as note' })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('analysis promotes "Add as note" to primary and inserts as a note directly', async () => {
+    const onInsert = await askWithAnswerType('analysis')
+
+    // Primary button is now Add as note; there is no primary Add to composer.
+    const primary = screen.getByRole('button', { name: 'Add as note' })
+    expect(primary).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^add to composer$/i })).not.toBeInTheDocument()
+
+    fireEvent.click(primary)
+    expect(onInsert).toHaveBeenCalledWith('The customer is writing in Swedish.', 'note')
+    vi.unstubAllGlobals()
+  })
+
+  it('analysis demotes "Add to composer" into the "..." menu (no tone-rewrite rows)', async () => {
+    const onInsert = await askWithAnswerType('analysis')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
+      button: 0,
+    })
+
+    // Add to composer is available as the demoted escape hatch...
+    const demoted = await screen.findByRole('menuitem', { name: /add to composer/i })
+    expect(demoted).toBeInTheDocument()
+    // ...but the customer-reply tone rewrites are gone (noise on analysis).
+    expect(screen.queryByText('Add to composer & modify')).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'More friendly' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Save as macro' })).toBeInTheDocument()
+
+    fireEvent.click(demoted)
+    expect(onInsert).toHaveBeenCalledWith('The customer is writing in Swedish.', 'reply')
     vi.unstubAllGlobals()
   })
 })
