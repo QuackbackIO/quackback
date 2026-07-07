@@ -13,19 +13,24 @@
  * route never calls; it calls the runtime seam (runAssistantTurn) directly,
  * exactly as the admin sandbox does.
  *
- * Write tools are forced to `writeToolPolicy: 'propose'` (see
+ * ACTION tools are forced to `writeToolPolicy: 'propose'` (see
  * `resolveEffectiveToolMode`) regardless of the assistantActions setting and
  * each tool's configured mode: a copilot turn is a teammate asking Quinn a
  * question about the conversation, never Quinn acting in it directly, so a
- * write-tool call always turns into a pending-approval proposal instead of
- * running for real (P2-C.4, "act-on-approval"). This is ONE documented
- * exception to "never writes to it": proposing does insert a real
- * `assistant_pending_actions` row and an accompanying internal note on
- * the conversation announcing it (surfacePendingActionNote, so other
- * teammates see the proposal in the thread without polling), but nothing
- * else. The write tool's own effect never runs, no OTHER conversation message
- * is written, and no involvement is opened. `proposedActions` on the final
- * payload mirrors what got proposed, straight off the tool context's ledger.
+ * write-tool call turns into a pending-approval proposal instead of running
+ * for real (P2-C.4, "act-on-approval"). The ONE exception is a metadata write
+ * (`set_attribute` — recording a classification attribute, `metadataWrite` on
+ * its spec): that is not an action, is guarded by the write path's AI-precedence
+ * rule, and runs autonomously here just like on the widget surface and the
+ * deterministic attribute classifier. So proposing is ONE documented exception
+ * to "never writes to it" and metadata classification is the OTHER: a proposal
+ * inserts a real `assistant_pending_actions` row and an accompanying internal
+ * note on the conversation announcing it (surfacePendingActionNote, so other
+ * teammates see the proposal in the thread without polling), while an
+ * autonomous metadata write sets the attribute via the single write path
+ * (src:'ai', never overwriting a human value). No OTHER conversation message is
+ * written and no involvement is opened. `proposedActions` on the final payload
+ * mirrors what got proposed, straight off the tool context's ledger.
  *
  * Gated on `copilot.use` (the authz matrix picks this up automatically) and
  * the `assistantCopilot` flag, mirroring sandbox.ts's SSE shape otherwise.

@@ -100,7 +100,13 @@ export function resolveEffectiveToolMode(
   }
   if (mode === 'disabled') return 'disabled'
   if (spec.risk === 'write') {
-    if (ctx.writeToolPolicy === 'propose') {
+    // The copilot surface proposes every genuine ACTION for teammate approval
+    // (P2-C.4), but a metadata write (recording a classification attribute) is
+    // not an action: it is guarded by the write path's AI-precedence rule and
+    // mirrors the deterministic classifier, so it is exempt from the forcing
+    // and falls through to its configured mode below (autonomous by default).
+    // See `metadataWrite` on AssistantToolSpec.
+    if (ctx.writeToolPolicy === 'propose' && !spec.metadataWrite) {
       if (!spec.supportedModes.includes('approval')) {
         log.warn(
           { tool: spec.name, mode: 'approval' },

@@ -80,6 +80,7 @@ vi.mock('@/lib/server/logger', () => ({
 
 import { assembleAssistantToolset, resolveEffectiveToolMode } from '../assistant.tools'
 import { makeToolTestContext, fakePendingActionRow } from './assistant-tool-fixtures'
+import { ASSISTANT_TOOL_SPECS } from '../assistant.toolspec'
 import type { AssistantToolContext, AssistantToolSpec } from '../assistant.toolspec'
 import type { AssistantToolControls } from '@/lib/server/domains/settings/settings.assistant'
 
@@ -799,6 +800,48 @@ describe('resolveEffectiveToolMode', () => {
     const spec = makeFakeWriteSpec()
     const c = ctx({ simulate: true, writeToolPolicy: 'propose' })
     expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('approval')
+  })
+
+  it('a metadataWrite tool is EXEMPT from propose-forcing and keeps its configured mode', () => {
+    // Attribute classification is metadata, not an action: on the copilot
+    // surface it must run under its configured mode like everywhere else,
+    // not be forced to a teammate-approval card. Mirrors set_attribute.
+    const spec = makeFakeWriteSpec({ metadataWrite: true })
+    const c = ctx({ simulate: false, writeToolPolicy: 'propose' })
+    expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('autonomous')
+    expect(resolveEffectiveToolMode(spec, 'approval', c)).toBe('approval')
+  })
+
+  it('a metadataWrite tool still previews under the simulate default (sandbox path)', () => {
+    // The exemption only lifts the propose-forcing; sandbox preview keys on
+    // simulate (policy unset ⇒ 'simulate'), so a metadata write still previews.
+    const spec = makeFakeWriteSpec({ metadataWrite: true })
+    const c = ctx({ simulate: true }) // writeToolPolicy unset ⇒ 'simulate'
+    expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('simulate')
+  })
+
+  it('disabled still wins for a metadataWrite tool', () => {
+    const spec = makeFakeWriteSpec({ metadataWrite: true })
+    expect(resolveEffectiveToolMode(spec, 'disabled', ctx({ writeToolPolicy: 'propose' }))).toBe(
+      'disabled'
+    )
+  })
+
+  it('real catalogue: set_attribute is the metadata write; the action tools are not', () => {
+    // The behaviour change, pinned against the real specs: under the copilot
+    // surface's propose policy, recording an attribute runs autonomously while
+    // every genuine action still proposes for teammate approval.
+    const proposeCtx = ctx({ simulate: false, writeToolPolicy: 'propose' })
+
+    const setAttribute = ASSISTANT_TOOL_SPECS['set_attribute']
+    expect(setAttribute.metadataWrite).toBe(true)
+    expect(resolveEffectiveToolMode(setAttribute, undefined, proposeCtx)).toBe('autonomous')
+
+    for (const name of ['end_conversation', 'create_ticket', 'capture_feedback']) {
+      const action = ASSISTANT_TOOL_SPECS[name]
+      expect(action.metadataWrite ?? false).toBe(false)
+      expect(resolveEffectiveToolMode(action, undefined, proposeCtx)).toBe('approval')
+    }
   })
 
   it("disabled still wins for a write tool under writeToolPolicy: 'propose'", () => {

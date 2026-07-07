@@ -275,6 +275,20 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
   risk: ToolRiskClass
   supportedModes: readonly ToolControlMode[]
   defaultMode: ToolControlMode
+  /**
+   * A write that records classification metadata about the item (an attribute
+   * value) rather than taking an outward action on it. Metadata writes are
+   * guarded by the AI-precedence rule in the single write path — an `src:'ai'`
+   * write can never overwrite a human/workflow/customer value (silent no-op) —
+   * so they carry none of the consequence of a close/ticket/publish. This is
+   * the one property the copilot surface's `writeToolPolicy: 'propose'` honours:
+   * a metadata write is NOT forced to approval there, so it runs under its
+   * configured mode like on every other surface (matching the deterministic
+   * attribute classifier, which never gates classification behind a teammate's
+   * approval). Absent/false ⇒ a genuine action, always proposed on the copilot
+   * surface. See `resolveEffectiveToolMode` (assistant.tools.ts).
+   */
+  metadataWrite?: boolean
   /** Checked via can(quinnActor, p) before execute (wiring lands in a later task). */
   permissions: readonly PermissionKey[]
   /**
@@ -675,6 +689,8 @@ function defineToolSpec<In, Out>(spec: {
   risk: ToolRiskClass
   supportedModes: readonly ToolControlMode[]
   defaultMode: ToolControlMode
+  /** See the field's doc on `AssistantToolSpec`. */
+  metadataWrite?: boolean
   permissions: readonly PermissionKey[]
   /** Defaults to `['conversation']` — every write tool defined below predates
    *  ticket-scoped turns; see the field's doc on `AssistantToolSpec`. */
@@ -722,6 +738,13 @@ const SPECS: readonly AssistantToolSpec[] = [
     risk: 'write',
     supportedModes: ['disabled', 'approval', 'autonomous'],
     defaultMode: 'autonomous',
+    // Recording an attribute is classification metadata, not an action on the
+    // conversation, and the write path's AI-precedence rule stops it clobbering
+    // a human value — so it is exempt from the copilot surface's propose-forcing
+    // and runs autonomously there too, matching the deterministic classifier and
+    // the widget surface. The genuine actions below (close/ticket/feedback) are
+    // not metadata writes and keep proposing on copilot.
+    metadataWrite: true,
     permissions: [PERMISSIONS.CONVERSATION_SET_ATTRIBUTES],
     definition: setAttributeTool,
     execute: executeSetAttribute,
