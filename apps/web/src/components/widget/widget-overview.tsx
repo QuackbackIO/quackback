@@ -1,6 +1,11 @@
 import type { ComponentType } from 'react'
 import { FormattedMessage } from 'react-intl'
-import { LightBulbIcon, ChatBubbleLeftRightIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
+import {
+  LightBulbIcon,
+  ChatBubbleLeftRightIcon,
+  ChevronRightIcon,
+  LifebuoyIcon,
+} from '@heroicons/react/24/solid'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/shared/utils'
 import { useChatSummary } from './use-chat-summary'
@@ -16,6 +21,8 @@ interface WidgetOverviewProps {
   onLeaveFeedback: () => void
   /** Open the support surface (help articles + messages). */
   onGetHelp: () => void
+  /** Open the support-ticket surface. */
+  onOpenSupport?: () => void
   /** Resume an in-flight conversation (opens the chat thread directly). */
   onResumeChat: () => void
   /** Open the full changelog. */
@@ -28,13 +35,14 @@ interface WidgetOverviewProps {
  * Aggregated Home — greets the visitor (with live-chat presence), surfaces a
  * recent-conversation resume card, routes to each enabled surface via action
  * cards, and shows an ambient latest-changelog teaser at the bottom. Rendered
- * only when 2+ content surfaces exist (see homeEnabled in widget-nav), so it
- * never shows a single redundant card.
+ * when 2+ content surfaces exist, or when Home is the only enabled landing
+ * surface (see homeEnabled in widget-nav).
  */
 export function WidgetOverview({
   tabs,
   onLeaveFeedback,
   onGetHelp,
+  onOpenSupport,
   onResumeChat,
   onSeeChangelog,
   onOpenChangelogEntry,
@@ -129,6 +137,25 @@ export function WidgetOverview({
                       defaultMessage="Chat with our team"
                     />
                   )
+                }
+              />
+            )}
+
+            {onOpenSupport && (
+              <ActionCard
+                icon={LifebuoyIcon}
+                onClick={onOpenSupport}
+                title={
+                  <FormattedMessage
+                    id="widget.support.card.title"
+                    defaultMessage="Contact support"
+                  />
+                }
+                subtitle={
+                  <FormattedMessage
+                    id="widget.support.card.description"
+                    defaultMessage="Get help directly from our team."
+                  />
                 }
               />
             )}

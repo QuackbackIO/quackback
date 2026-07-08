@@ -10,17 +10,22 @@ interface ServerTheme {
 }
 
 interface ServerConfig {
+  enabled?: boolean
   theme?: ServerTheme
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean; chat?: boolean; home?: boolean }
+  imageUploadsInWidget?: boolean
   hmacRequired?: boolean
+  ticketing?: { enabled: boolean }
+  widgetContextToken?: string
 }
 
-function jsonResponse(body: unknown, maxAge: number): Response {
+function jsonResponse(body: unknown, maxAge: number, cacheable = true): Response {
   return new Response(JSON.stringify(body), {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
-      'Cache-Control': `public, max-age=${maxAge}`,
+      'Cache-Control': cacheable ? `public, max-age=${maxAge}` : 'no-store',
+      Vary: 'Origin',
     },
   })
 }
@@ -71,18 +76,31 @@ async function extractThemeFromCss(css: string): Promise<ServerTheme> {
 export const Route = createFileRoute('/api/widget/config.json')({
   server: {
     handlers: {
-      GET: async () => {
-        const { getPublicWidgetConfig } =
-          await import('@/lib/server/domains/settings/settings.widget')
+      GET: async ({ request }) => {
         const { getBrandingConfig, getCustomCss } =
           await import('@/lib/server/domains/settings/settings.media')
+        const { resolveWidgetContext } = await import('@/lib/server/widget/context')
+
+        const url = new URL(request.url)
+        const widgetContext = await resolveWidgetContext(request, {
+          applicationKey:
+            url.searchParams.get('applicationKey') ?? url.searchParams.get('app') ?? undefined,
+          environment:
+            url.searchParams.get('environment') ?? url.searchParams.get('env') ?? undefined,
+          hostOrigin: url.searchParams.get('hostOrigin') ?? undefined,
+        })
 
         // Public projection: tabs are already flag-gated (e.g. chat behind the
         // experimental `chat` flag), so this endpoint just forwards them.
-        const widgetConfig = await getPublicWidgetConfig()
+        const widgetConfig = widgetContext.publicConfig
+        const cacheable = widgetContext.source === 'global'
 
         if (!widgetConfig.enabled) {
-          return jsonResponse({ enabled: false }, 60)
+          return jsonResponse(
+            { enabled: false, widgetContextToken: widgetContext.contextToken },
+            60,
+            cacheable
+          )
         }
 
         const theme: ServerTheme = {}
@@ -117,12 +135,16 @@ export const Route = createFileRoute('/api/widget/config.json')({
         }
 
         const config: ServerConfig = {
+          enabled: widgetConfig.enabled,
           theme: Object.keys(theme).length > 0 ? theme : undefined,
           tabs: widgetConfig.tabs,
-          hmacRequired: widgetConfig.hmacRequired,
+          imageUploadsInWidget: widgetConfig.imageUploadsInWidget,
+          hmacRequired: widgetConfig.hmacRequired ?? false,
+          ticketing: { enabled: widgetConfig.ticketing?.enabled ?? false },
+          widgetContextToken: widgetContext.contextToken,
         }
 
-        return jsonResponse(config, 3600)
+        return jsonResponse(config, 3600, cacheable)
       },
     },
   },

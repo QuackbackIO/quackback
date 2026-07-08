@@ -1,7 +1,17 @@
 'use client'
 
-import { useState } from 'react'
-import { PlusIcon, ArrowPathIcon, TrashIcon, KeyIcon } from '@heroicons/react/24/outline'
+import { useState, useTransition } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
+import {
+  PlusIcon,
+  ArrowPathIcon,
+  TrashIcon,
+  KeyIcon,
+  PencilIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+} from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { EllipsisVerticalIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -15,6 +25,10 @@ import { CreateApiKeyDialog } from './create-api-key-dialog'
 import { ApiKeyRevealDialog } from './api-key-reveal-dialog'
 import { RevokeApiKeyDialog } from './revoke-api-key-dialog'
 import { RotateApiKeyDialog } from './rotate-api-key-dialog'
+import { EditApiKeyDialog } from './edit-api-key-dialog'
+import { ApiKeyDetailPanel } from './api-key-detail-panel'
+import { WarningBox } from '@/components/shared/warning-box'
+import { acknowledgeLegacyApiKeyFn } from '@/lib/server/functions/api-keys'
 import type { ApiKey } from '@/lib/shared/types'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -23,12 +37,48 @@ interface ApiKeysSettingsProps {
 }
 
 export function ApiKeysSettings({ apiKeys }: ApiKeysSettingsProps) {
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const [, startTransition] = useTransition()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [revealDialogOpen, setRevealDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [rotateDialogOpen, setRotateDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedKey, setSelectedKey] = useState<ApiKey | null>(null)
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null)
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleAcknowledge = async (key: ApiKey) => {
+    if ((key.scopes ?? []).length === 0) {
+      // Open the edit dialog instead so they can pick scopes.
+      setSelectedKey(key)
+      setEditDialogOpen(true)
+      return
+    }
+    setAcknowledgingId(key.id)
+    try {
+      await acknowledgeLegacyApiKeyFn({ data: { id: key.id } })
+      startTransition(() => {
+        queryClient.invalidateQueries({ queryKey: ['admin', 'api-keys'] })
+        router.invalidate()
+      })
+    } catch (err) {
+      console.error('Failed to acknowledge legacy API key:', err)
+    } finally {
+      setAcknowledgingId(null)
+    }
+  }
 
   const handleKeyCreated = (key: ApiKey, plainTextKey: string) => {
     setNewKeyValue(plainTextKey)
@@ -54,8 +104,22 @@ export function ApiKeysSettings({ apiKeys }: ApiKeysSettingsProps) {
     setRotateDialogOpen(true)
   }
 
+  const handleEditClick = (key: ApiKey) => {
+    setSelectedKey(key)
+    setEditDialogOpen(true)
+  }
+
+  const legacyCount = apiKeys.filter((k) => k.compatLegacyFullAccess).length
+
   return (
     <div className="space-y-4">
+      {legacyCount > 0 && (
+        <WarningBox
+          variant="warning"
+          title={`${legacyCount} key${legacyCount === 1 ? '' : 's'} have legacy full access`}
+          description="Lock them down by selecting specific scopes and acknowledging the warning on each row."
+        />
+      )}
       {/* Empty state */}
       {apiKeys.length === 0 && (
         <div className="rounded-lg border border-dashed">
@@ -89,86 +153,135 @@ export function ApiKeysSettings({ apiKeys }: ApiKeysSettingsProps) {
       {/* API Keys list */}
       {apiKeys.length > 0 && (
         <div className="space-y-3">
-          {apiKeys.map((key) => (
-            <div
-              key={key.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border/50 p-4"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                  <KeyIcon className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{key.name}</p>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-muted-foreground">
-                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono w-fit">
-                      {key.keyPrefix}...
-                    </code>
-                    <span className="hidden sm:inline">·</span>
-                    <span>Created {formatDistanceToNow(key.createdAt, { addSuffix: true })}</span>
-                    {key.lastUsedAt ? (
-                      <>
+          {apiKeys.map((key) => {
+            const isExpanded = expandedIds.has(key.id)
+            return (
+              <div
+                key={key.id}
+                className="flex flex-col gap-2 rounded-lg border border-border/50 p-4"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button
+                      type="button"
+                      aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+                      onClick={() => toggleExpand(key.id)}
+                      className="text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      {isExpanded ? (
+                        <ChevronDownIcon className="h-4 w-4" />
+                      ) : (
+                        <ChevronRightIcon className="h-4 w-4" />
+                      )}
+                    </button>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <KeyIcon className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{key.name}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-muted-foreground">
+                        <code className="rounded bg-muted px-1.5 py-0.5 font-mono w-fit">
+                          {key.keyPrefix}...
+                        </code>
                         <span className="hidden sm:inline">·</span>
                         <span>
-                          Last used {formatDistanceToNow(key.lastUsedAt, { addSuffix: true })}
+                          Created {formatDistanceToNow(key.createdAt, { addSuffix: true })}
                         </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="hidden sm:inline">·</span>
-                        <span className="text-amber-600 dark:text-amber-400">Never used</span>
-                      </>
-                    )}
+                        {key.lastUsedAt ? (
+                          <>
+                            <span className="hidden sm:inline">·</span>
+                            <span>
+                              Last used {formatDistanceToNow(key.lastUsedAt, { addSuffix: true })}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="hidden sm:inline">·</span>
+                            <span className="text-amber-600 dark:text-amber-400">Never used</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Desktop: show buttons */}
+                  <div className="hidden sm:flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditClick(key)}
+                      aria-label={`Edit ${key.name} API key`}
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRotateClick(key)}
+                      aria-label={`Rotate ${key.name} API key`}
+                    >
+                      <ArrowPathIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRevokeClick(key)}
+                      aria-label={`Revoke ${key.name} API key`}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Mobile: dropdown menu */}
+                  <div className="sm:hidden self-end">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" aria-label="Key actions">
+                          <EllipsisVerticalIcon className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEditClick(key)}>
+                          <PencilIcon className="h-4 w-4 mr-2" />
+                          Edit Key
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleRotateClick(key)}>
+                          <ArrowPathIcon className="h-4 w-4 mr-2" />
+                          Rotate Key
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleRevokeClick(key)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <TrashIcon className="h-4 w-4 mr-2" />
+                          Revoke Key
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
-              </div>
 
-              {/* Desktop: show buttons */}
-              <div className="hidden sm:flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleRotateClick(key)}
-                  aria-label={`Rotate ${key.name} API key`}
-                >
-                  <ArrowPathIcon className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleRevokeClick(key)}
-                  aria-label={`Revoke ${key.name} API key`}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Mobile: dropdown menu */}
-              <div className="sm:hidden self-end">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" aria-label="Key actions">
-                      <EllipsisVerticalIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleRotateClick(key)}>
-                      <ArrowPathIcon className="h-4 w-4 mr-2" />
-                      Rotate Key
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleRevokeClick(key)}
-                      className="text-destructive focus:text-destructive"
+                {key.compatLegacyFullAccess && (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-2 text-xs">
+                    <span className="flex-1 text-amber-900 dark:text-amber-200">
+                      This key has full access (legacy). Lock it down by setting scopes.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAcknowledge(key)}
+                      disabled={acknowledgingId === key.id}
                     >
-                      <TrashIcon className="h-4 w-4 mr-2" />
-                      Revoke Key
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      {acknowledgingId === key.id ? 'Working…' : 'Acknowledge & lock down'}
+                    </Button>
+                  </div>
+                )}
+
+                {isExpanded && <ApiKeyDetailPanel apiKey={key} />}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -200,6 +313,12 @@ export function ApiKeysSettings({ apiKeys }: ApiKeysSettingsProps) {
             onOpenChange={setRotateDialogOpen}
             apiKey={selectedKey}
             onKeyRotated={handleKeyRotated}
+          />
+
+          <EditApiKeyDialog
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+            apiKey={selectedKey}
           />
         </>
       )}

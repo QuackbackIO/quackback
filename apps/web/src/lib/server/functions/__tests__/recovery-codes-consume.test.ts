@@ -61,6 +61,7 @@ vi.mock('@/lib/server/auth/magic-link-mint', () => ({
 
 vi.mock('@/lib/server/config', () => ({
   config: { baseUrl: 'https://acme.quackback.io' },
+  getBaseUrl: () => 'https://acme.quackback.io',
 }))
 
 // Stub Redis: the consume fn rate-limits via INCR + EXPIRE. We don't

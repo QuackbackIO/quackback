@@ -80,6 +80,8 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
         home: config.tabs?.home,
       },
       hmacRequired: config.identifyVerification ?? false,
+      imageUploadsInWidget: config.imageUploadsInWidget ?? true,
+      ticketing: { enabled: config.ticketing?.enabled ?? false },
       // Project only client-safe chat fields; cannedReplies is agent-only.
       chat: publicLiveChatConfig(config.chat ?? DEFAULT_LIVE_CHAT_CONFIG),
     }

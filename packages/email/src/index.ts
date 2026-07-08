@@ -26,6 +26,7 @@ import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
 import { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 import { NewSignInEmail } from './templates/new-sign-in'
+import { TicketEventEmail } from './templates/tickets/ticket-event'
 
 /**
  * Get environment variable at runtime.
@@ -790,3 +791,112 @@ export { FeedbackLinkedEmail } from './templates/feedback-linked'
 export { PasswordResetEmail } from './templates/password-reset'
 export { RecoveryCodeUsedEmail } from './templates/recovery-code-used'
 export { NewSignInEmail } from './templates/new-sign-in'
+export { TicketEventEmail } from './templates/tickets/ticket-event'
+
+// ============================================================================
+// Ticket Event Email (Phase 7.5)
+// ============================================================================
+
+interface SendTicketEventParams {
+  to: string
+  title: string
+  body?: string
+  summary?: string
+  eventLabel?: string
+  actorName?: string
+  occurredAt?: string
+  details?: Array<{ label: string; value: string }>
+  contentSections?: Array<{
+    title: string
+    body?: string
+    rows?: Array<{ label: string; value: string }>
+    tone?: 'default' | 'quote' | 'warning'
+  }>
+  quote?: string
+  ticketSubject: string
+  ticketUrl: string
+  workspaceName: string
+  unsubscribeUrl: string
+  logoUrl?: string
+  statusLabel?: string
+  priorityLabel?: string
+}
+
+/**
+ * Send a ticket-event notification email.
+ *
+ * One function for all 8 ticket events + 2 SLA events. The caller decides
+ * the title/body copy (per-event) and the receiver address.
+ */
+export async function sendTicketEventEmail(params: SendTicketEventParams): Promise<EmailResult> {
+  const {
+    to,
+    title,
+    body,
+    summary,
+    eventLabel,
+    actorName,
+    occurredAt,
+    details,
+    contentSections,
+    quote,
+    ticketSubject,
+    ticketUrl,
+    workspaceName,
+    unsubscribeUrl,
+    logoUrl,
+    statusLabel,
+    priorityLabel,
+  } = params
+
+  if (getProvider() === 'console') {
+    console.log('\n┌────────────────────────────────────────────────────────────')
+    console.log('│ [DEV] Ticket Event Email')
+    console.log('├────────────────────────────────────────────────────────────')
+    console.log(`│ To: ${to}`)
+    console.log(`│ Title: ${title}`)
+    if (eventLabel) console.log(`│ Event: ${eventLabel}`)
+    if (actorName) console.log(`│ Actor: ${actorName}`)
+    if (occurredAt) console.log(`│ Occurred: ${occurredAt}`)
+    if (summary ?? body) console.log(`│ Summary: ${summary ?? body}`)
+    if (details?.length) {
+      for (const detail of details) console.log(`│ ${detail.label}: ${detail.value}`)
+    }
+    if (contentSections?.length) {
+      for (const section of contentSections) {
+        console.log(`│ ${section.title}`)
+        if (section.body) console.log(`│   ${section.body}`)
+        for (const row of section.rows ?? []) console.log(`│   ${row.label}: ${row.value}`)
+      }
+    }
+    if (quote) console.log(`│ Quote: ${quote}`)
+    console.log(`│ Ticket: ${ticketSubject}`)
+    console.log(`│ URL: ${ticketUrl}`)
+    console.log(`│ Unsubscribe: ${unsubscribeUrl}`)
+    console.log('└────────────────────────────────────────────────────────────\n')
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject: title,
+    react: TicketEventEmail({
+      title,
+      body,
+      summary,
+      eventLabel,
+      actorName,
+      occurredAt,
+      details,
+      contentSections,
+      quote,
+      ticketSubject,
+      ticketUrl,
+      organizationName: workspaceName,
+      unsubscribeUrl,
+      logoUrl,
+      statusLabel,
+      priorityLabel,
+    }),
+  })
+}

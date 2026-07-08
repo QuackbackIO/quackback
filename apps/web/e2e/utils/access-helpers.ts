@@ -84,7 +84,10 @@ export function flushMagicLinkRateLimit(): void {
     ['exec', 'quackback-dragonfly', 'redis-cli', '--scan', '--pattern', 'signin:magiclink:*'],
     { encoding: 'utf-8' }
   )
-  const keys = scan.split('\n').map((k) => k.trim()).filter(Boolean)
+  const keys = scan
+    .split('\n')
+    .map((k) => k.trim())
+    .filter(Boolean)
   for (const key of keys) {
     execFileSync('docker', ['exec', 'quackback-dragonfly', 'redis-cli', 'del', key], {
       stdio: 'pipe',

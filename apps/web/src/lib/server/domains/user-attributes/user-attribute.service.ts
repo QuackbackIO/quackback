@@ -11,6 +11,41 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'user-attributes' })
 
+/**
+ * Best-effort webhook dispatch for user-attribute definition lifecycle events.
+ * Lazy import + `service` actor + try/catch so a dispatch failure never aborts
+ * the mutation. Mirrors the config-plane fire helpers.
+ */
+async function fireUserAttributeEvent(
+  kind: 'created' | 'updated' | 'deleted',
+  attribute: UserAttribute,
+  changedFields?: string[]
+): Promise<void> {
+  try {
+    const {
+      dispatchUserAttributeCreated,
+      dispatchUserAttributeUpdated,
+      dispatchUserAttributeDeleted,
+    } = await import('@/lib/server/events/dispatch')
+    const actor = { type: 'service' as const, displayName: 'user-attribute-system' }
+    const ref = {
+      id: attribute.id,
+      key: attribute.key,
+      label: attribute.label,
+      type: attribute.type,
+      currencyCode: attribute.currencyCode ?? null,
+      externalKey: attribute.externalKey ?? null,
+      createdAt: attribute.createdAt ? attribute.createdAt.toISOString() : null,
+      updatedAt: attribute.updatedAt ? attribute.updatedAt.toISOString() : null,
+    }
+    if (kind === 'created') await dispatchUserAttributeCreated(actor, ref)
+    else if (kind === 'updated') await dispatchUserAttributeUpdated(actor, ref, changedFields ?? [])
+    else await dispatchUserAttributeDeleted(actor, ref)
+  } catch (err) {
+    log.error({ err }, `failed to dispatch user_attribute.${kind} event`)
+  }
+}
+
 function rowToUserAttribute(row: typeof userAttributeDefinitions.$inferSelect): UserAttribute {
   return {
     id: row.id as UserAttributeId,
@@ -68,7 +103,9 @@ export async function createUserAttribute(input: CreateUserAttributeInput): Prom
       })
       .returning()
 
-    return rowToUserAttribute(row)
+    const attribute = rowToUserAttribute(row)
+    void fireUserAttributeEvent('created', attribute)
+    return attribute
   } catch (error) {
     if (error instanceof ValidationError) throw error
     if ((error as { code?: string }).code === '23505') {
@@ -112,7 +149,9 @@ export async function updateUserAttribute(
       .where(eq(userAttributeDefinitions.id, id))
       .returning()
 
-    return rowToUserAttribute(row)
+    const attribute = rowToUserAttribute(row)
+    void fireUserAttributeEvent('updated', attribute, Object.keys(updates))
+    return attribute
   } catch (error) {
     if (error instanceof NotFoundError || error instanceof ValidationError) throw error
     log.error({ err: error }, 'failed to update user attribute')
@@ -129,6 +168,7 @@ export async function deleteUserAttribute(id: UserAttributeId): Promise<void> {
       throw new NotFoundError('NOT_FOUND', `User attribute ${id} not found`)
     }
     await db.delete(userAttributeDefinitions).where(eq(userAttributeDefinitions.id, id))
+    void fireUserAttributeEvent('deleted', rowToUserAttribute(existing))
   } catch (error) {
     if (error instanceof NotFoundError) throw error
     log.error({ err: error }, 'failed to delete user attribute')

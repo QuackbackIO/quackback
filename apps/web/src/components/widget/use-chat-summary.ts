@@ -38,7 +38,10 @@ export function useChatSummary(enabled: boolean): ChatSummary {
     let cancelled = false
     void (async () => {
       try {
-        const res = await getMyChatFn({ headers: getWidgetAuthHeaders() })
+        const res = await getMyChatFn({
+          data: { surface: 'widget' },
+          headers: getWidgetAuthHeaders(),
+        })
         if (cancelled) return
         setThread({ conversation: res.conversation ?? null, teamName: res.teamName })
       } catch {

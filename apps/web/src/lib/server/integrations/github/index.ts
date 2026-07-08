@@ -3,6 +3,7 @@ import { githubHook } from './hook'
 import { githubInboundHandler } from './inbound'
 import { getGitHubOAuthUrl, exchangeGitHubCode, revokeGitHubToken } from './oauth'
 import { githubCatalog } from './catalog'
+import { ensureGitHubEventMappings } from './event-mappings'
 
 export const githubIntegration: IntegrationDefinition = {
   id: 'github',
@@ -28,6 +29,9 @@ export const githubIntegration: IntegrationDefinition = {
       helpUrl: 'https://github.com/settings/developers',
     },
   ],
+  async onConnect(integrationId) {
+    await ensureGitHubEventMappings({ integrationId })
+  },
   onDisconnect: (secrets, _config, credentials) =>
     revokeGitHubToken(secrets.accessToken as string, credentials),
 }
