@@ -213,6 +213,13 @@ export interface IdentifyPortalUserResult {
   createdAt: Date
   /** true if a new user was created, false if an existing user was updated */
   created: boolean
+  /**
+   * True when THIS call asserted the email as verified: the user was created
+   * with emailVerified=true, or an existing user was flipped false -> true.
+   * Callers audit the assertion (`user.email_verified.asserted`) when set —
+   * asserting a verified email is a trust decision that grants portal access.
+   */
+  emailVerifiedAsserted: boolean
 }
 
 /**

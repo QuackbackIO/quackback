@@ -46,6 +46,11 @@ export async function identifyPortalUser(
 
   const { validAttrs, attrRemovals } = await validateInputAttributes(input.attributes)
 
+  // Set when this call vouches for the email: created verified, or an
+  // existing user flipped false -> true. Surfaced so the caller can audit
+  // the assertion with the acting API credential.
+  let emailVerifiedAsserted = false
+
   // Apply updates to an existing user record and sync the principal
   async function applyUpdates(record: {
     id: UserId
@@ -61,6 +66,7 @@ export async function identifyPortalUser(
     if (input.image !== undefined && input.image !== record.image) userUpdates.image = input.image
     if (input.emailVerified !== undefined && input.emailVerified !== record.emailVerified) {
       userUpdates.emailVerified = input.emailVerified
+      if (input.emailVerified) emailVerifiedAsserted = true
     }
     // Merge attributes and externalId into metadata
     const metadataUpdates = { ...validAttrs }
@@ -139,6 +145,7 @@ export async function identifyPortalUser(
       })
 
       created = true
+      if (input.emailVerified === true) emailVerifiedAsserted = true
     } catch (err) {
       // Handle concurrent insert race condition (unique constraint on email)
       if (isUniqueViolation(err)) {
@@ -172,6 +179,7 @@ export async function identifyPortalUser(
     attributes: parseUserAttributes(userRecord.metadata ?? null),
     createdAt: userRecord.createdAt,
     created,
+    emailVerifiedAsserted,
   }
 }
 
