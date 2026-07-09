@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouteContext } from '@tanstack/react-router'
+import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -21,6 +22,18 @@ export function ExperimentalSettings() {
       // Invalidate the router to refresh bootstrap data
       window.location.reload()
     },
+    onError: (error, update) => {
+      // Revert optimistic local state for keys in the failed update
+      setLocalFlags((prev) => {
+        const next = { ...prev }
+        for (const key of Object.keys(update) as Array<keyof FeatureFlags>) {
+          const attempted = update[key]
+          if (typeof attempted === 'boolean') next[key] = !attempted
+        }
+        return next
+      })
+      toast.error(error instanceof Error ? error.message : "Couldn't update setting. Try again.")
+    },
   })
 
   const handleToggle = (key: keyof FeatureFlags, value: boolean) => {
@@ -33,8 +46,8 @@ export function ExperimentalSettings() {
       <div>
         <h2 className="text-lg font-semibold">Labs</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Turn experimental features on or off. They are still in development, so they may change or
-          be removed.
+          Toggle product modules and optional AI. Core products start on for new workspaces; AI and
+          privacy-sensitive features stay off until you enable them.
         </p>
       </div>
 

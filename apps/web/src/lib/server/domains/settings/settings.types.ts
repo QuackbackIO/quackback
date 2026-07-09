@@ -972,13 +972,30 @@ export interface FeatureFlags {
   statusPage: boolean
 }
 
+/**
+ * Defaults for a multi-product workspace.
+ *
+ * Product surfaces (Support, Help Center, Status, tickets, link previews)
+ * default **on** so nav and admin shells show the full platform without a
+ * Labs treasure-hunt. AI capabilities and anything that collects visitor
+ * data stay **off** until an operator opts in — they need a configured
+ * model and/or a privacy review (visitor analytics ships before its consent
+ * gate, so it must not start collecting on upgrade).
+ *
+ * Existing tenants with an explicit `featureFlags` JSON row keep stored
+ * values; only missing keys and null rows pick up these defaults (merged in
+ * settings.service).
+ */
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
-  helpCenter: false,
+  // Products — on
+  helpCenter: true,
+  supportInbox: true,
+  supportTickets: true,
+  statusPage: true,
+  linkPreviews: true,
+  // AI / privacy-sensitive — opt-in
   helpCenterAiAnswers: false,
   aiFeedbackExtraction: false,
-  supportInbox: false,
-  supportTickets: false,
-  linkPreviews: false,
   visitorAnalytics: false,
   visitorDeviceTracking: false,
   assistantActions: false,
@@ -989,7 +1006,6 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   assistantCopilot: false,
   inboxTranslation: false,
   aiAttributeDetection: false,
-  statusPage: false,
 }
 
 /**
@@ -1095,32 +1111,18 @@ export const LAB_SECTIONS: Array<{
   flags: Array<keyof FeatureFlags>
 }> = [
   {
-    title: 'Support',
-    description: 'Support your customers with Messenger and a self-serve help center.',
-    flags: [
-      'supportInbox',
-      'supportTickets',
-      'helpCenter',
-      'helpCenterAiAnswers',
-      'linkPreviews',
-      'statusPage',
-    ],
-  },
-  {
-    title: 'Feedback',
-    description: 'Understand your feedback faster, with AI that sorts and categorizes it for you.',
-    flags: ['aiFeedbackExtraction'],
-  },
-  {
-    title: 'Analytics',
-    description: 'Understand who visits your portal and widget, privately and without cookies.',
-    flags: ['visitorAnalytics', 'visitorDeviceTracking'],
+    title: 'Products',
+    description:
+      'Core modules of the platform. On by default for new workspaces; turn off any you do not need.',
+    flags: ['supportInbox', 'supportTickets', 'helpCenter', 'statusPage', 'linkPreviews'],
   },
   {
     title: 'AI',
     description:
-      'Enable your AI assistant to automate workflows and integrate with external data sources.',
+      'Optional AI capabilities. Require a configured model; off by default until you opt in.',
     flags: [
+      'helpCenterAiAnswers',
+      'aiFeedbackExtraction',
       'assistantActions',
       'dataConnectors',
       'assistantPostGrounding',
@@ -1130,5 +1132,11 @@ export const LAB_SECTIONS: Array<{
       'inboxTranslation',
       'aiAttributeDetection',
     ],
+  },
+  {
+    title: 'Privacy-sensitive',
+    description:
+      'Analytics about who visits your portal and widget. Review your privacy policy before enabling.',
+    flags: ['visitorAnalytics', 'visitorDeviceTracking'],
   },
 ]
