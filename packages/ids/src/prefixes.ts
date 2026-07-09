@@ -98,6 +98,7 @@ export const ID_PREFIXES = {
   platform_cred: 'platform_cred',
   event_mapping: 'event_mapping',
   post_external_link: 'post_external_link',
+  ticket_external_link: 'ticket_external_link',
   slack_monitor: 'slack_monitor',
 
   // Imports & exports hub

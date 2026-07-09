@@ -97,6 +97,7 @@ export type {
   PlatformCredentialId,
   EventMappingId,
   PostExternalLinkId,
+  TicketExternalLinkId,
   ImportRunId,
   PostSubscriptionId,
   NotifPrefId,

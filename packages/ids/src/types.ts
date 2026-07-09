@@ -106,6 +106,9 @@ export type EventMappingId = TypeId<'event_mapping'>
 /** Post external link ID - e.g., post_external_link_01h455vb4pex5vsknk084sn02q */
 export type PostExternalLinkId = TypeId<'post_external_link'>
 
+/** Ticket external link ID - e.g., ticket_external_link_01h455vb4pex5vsknk084sn02q */
+export type TicketExternalLinkId = TypeId<'ticket_external_link'>
+
 /** Slack channel monitor ID - e.g., slack_monitor_01h455vb4pex5vsknk084sn02q */
 export type SlackMonitorId = TypeId<'slack_monitor'>
 
@@ -417,6 +420,7 @@ export interface EntityIdMap {
   platform_cred: PlatformCredentialId
   event_mapping: EventMappingId
   post_external_link: PostExternalLinkId
+  ticket_external_link: TicketExternalLinkId
   slack_monitor: SlackMonitorId
   import_run: ImportRunId
   post_subscription: PostSubscriptionId
