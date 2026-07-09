@@ -39,6 +39,7 @@ vi.mock('@/lib/server/domains/ai/models', () => ({
   getChatModel: (...args: unknown[]) => mockGetChatModel(...args),
 }))
 
+import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { handleKbAsk, KB_ASK_MAX_QUERY_CHARS, KB_ASK_RATE_LIMIT } from '../kb-ask'
 import { parseAskAiSseBlock } from '@/components/help-center/ask-ai'
 import { makeKbArticle } from '@/lib/server/domains/assistant/__tests__/kb-fixtures'
@@ -283,8 +284,11 @@ describe('GET /api/widget/kb-ask', () => {
     expect((frames.at(-1)?.data as { code: string }).code).toBe('SYNTHESIS_FAILED')
   })
 
-  it('retrieves with the public audience', async () => {
+  it('retrieves with the public audience and an anonymous viewer for unidentified callers', async () => {
     await handleKbAsk({ request: makeRequest({ q: 'hello' }) })
-    expect(mockRetrieve).toHaveBeenCalledWith('hello', { audience: 'public' })
+    expect(mockRetrieve).toHaveBeenCalledWith('hello', {
+      audience: 'public',
+      viewer: ANONYMOUS_ACTOR,
+    })
   })
 })

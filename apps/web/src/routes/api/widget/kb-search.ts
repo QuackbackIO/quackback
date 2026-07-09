@@ -9,6 +9,7 @@ import {
   widgetCorsHeaders,
   widgetJsonError,
 } from '@/lib/server/widget/public-endpoint'
+import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'widget-kb-search' })
@@ -45,7 +46,10 @@ export async function handleKbSearch({ request }: { request: Request }): Promise
     const requestedLocale = url.searchParams.get('locale') ?? undefined
     const config = await getHelpCenterConfig()
     const locale = resolveSearchLocale(requestedLocale, config.locales.additional, config.locales.default)
-    const results = await hybridSearchForLocale(q, locale, limit)
+    // Identified widget users see segment-gated categories they belong to;
+    // unidentified callers stay anonymous (only ungated content).
+    const viewer = await resolveWidgetViewer()
+    const results = await hybridSearchForLocale(q, locale, limit, viewer)
 
     const articles = results.map((a) => ({
       id: a.id,

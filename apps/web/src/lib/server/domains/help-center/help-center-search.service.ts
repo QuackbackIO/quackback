@@ -21,6 +21,8 @@ import {
   regconfigForLocale,
 } from '@/lib/server/db'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+import { segmentGateFilter } from '@/lib/server/policy/segment-gate'
 import { generateKbQueryEmbedding } from './help-center-embedding.service'
 
 export const KEYWORD_WEIGHT = 0.4
@@ -92,15 +94,21 @@ export type HelpCenterAudience = 'public' | 'team'
 /**
  * THE visibility predicate for help-center content, parameterized by
  * audience. `public` is the public help-center slice (published, not
- * scheduled-future, not deleted, category public and not deleted); `team`
- * keeps drafts and private categories but never soft-deleted rows.
+ * scheduled-future, not deleted, category public and not deleted, and the
+ * category's segment gate admits `viewer`); `team` keeps drafts and
+ * private/gated categories but never soft-deleted rows.
+ *
+ * `viewer` drives the per-category segment gate ([] = everyone; see
+ * policy/segment-gate.ts). It is required so no public read path can forget
+ * to decide who is asking — pass ANONYMOUS_ACTOR for genuinely viewer-less
+ * surfaces (sitemap), which fail closed and see only ungated content.
  *
  * Every article query that joins helpCenterCategories must build its
  * predicate from this single owner: search, retrieval (AI answers), and
  * direct lookups must agree, or content hidden on one surface becomes
  * discoverable through another.
  */
-export function helpCenterVisibilityConditions(audience: HelpCenterAudience) {
+export function helpCenterVisibilityConditions(audience: HelpCenterAudience, viewer: Actor) {
   const base = [isNull(helpCenterArticles.deletedAt), isNull(helpCenterCategories.deletedAt)]
   if (audience === 'team') return base
   return [
@@ -108,7 +116,23 @@ export function helpCenterVisibilityConditions(audience: HelpCenterAudience) {
     isNotNull(helpCenterArticles.publishedAt),
     lte(helpCenterArticles.publishedAt, new Date()),
     eq(helpCenterCategories.isPublic, true),
+    segmentGateFilter(viewer, helpCenterCategories.segmentIds),
   ]
+}
+
+/**
+ * EXISTS-form of the 'public' branch of {@link helpCenterVisibilityConditions},
+ * for article queries that cannot join helpCenterCategories (e.g. relational
+ * findMany in the list reader). Must stay in lockstep with that owner.
+ */
+export function publicCategoryExistsCondition(viewer: Actor) {
+  return sql`EXISTS (
+    SELECT 1 FROM ${helpCenterCategories}
+    WHERE ${helpCenterCategories.id} = ${helpCenterArticles.categoryId}
+      AND ${helpCenterCategories.deletedAt} IS NULL
+      AND ${helpCenterCategories.isPublic} = true
+      AND ${segmentGateFilter(viewer, helpCenterCategories.segmentIds)}
+  )`
 }
 
 export interface HybridSearchResult {
@@ -149,16 +173,20 @@ export function computeHybridScore(
  * 2. If embedding is available: runs a hybrid query combining tsvector + pgvector
  * 3. If embedding is unavailable: falls back to keyword-only search
  */
-export async function hybridSearch(query: string, limit = 10): Promise<HybridSearchResult[]> {
+export async function hybridSearch(
+  query: string,
+  limit = 10,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HybridSearchResult[]> {
   const queryEmbedding = await generateKbQueryEmbedding(query, {
     pipelineStep: 'kb_search_query_embedding',
   })
 
   if (queryEmbedding) {
-    return hybridQuery(query, queryEmbedding, limit)
+    return hybridQuery(query, queryEmbedding, limit, viewer)
   }
 
-  return keywordOnlyQuery(query, limit)
+  return keywordOnlyQuery(query, limit, viewer)
 }
 
 /**
@@ -167,7 +195,8 @@ export async function hybridSearch(query: string, limit = 10): Promise<HybridSea
 async function hybridQuery(
   query: string,
   embedding: number[],
-  limit: number
+  limit: number,
+  viewer: Actor
 ): Promise<HybridSearchResult[]> {
   const vectorStr = `[${embedding.join(',')}]`
   const tsQuery = orTermsTsQuery(query)
@@ -196,8 +225,10 @@ async function hybridQuery(
       and(
         // Public slice via the shared owner (helpCenterVisibilityConditions):
         // search must match direct lookup or a hidden slug becomes
-        // discoverable via search even when direct lookup denies.
-        ...helpCenterVisibilityConditions('public'),
+        // discoverable via search even when direct lookup denies. The viewer
+        // drives the segment gate IN SQL, so restricted rows never enter the
+        // ranked pool (pagination stays correct; nothing leaks post-slice).
+        ...helpCenterVisibilityConditions('public', viewer),
         // A keyword hit must clear the ts_rank floor (OR-of-terms otherwise
         // admits a lone incidental term); a semantic hit above the cosine
         // floor always qualifies.
@@ -235,6 +266,12 @@ async function hybridQuery(
 
 export interface RankedArticleSearchOptions {
   audience: HelpCenterAudience
+  /**
+   * Viewer for the 'public' audience's segment gate. Defaults to
+   * ANONYMOUS_ACTOR (fail closed: only ungated content). Irrelevant for
+   * 'team', which bypasses the gate.
+   */
+  viewer?: Actor
   /** Size of the ranked pool. Callers paginate by slicing into it. */
   limit?: number
   categoryId?: string
@@ -257,7 +294,7 @@ export async function searchArticleIdsRanked(
   const { audience, categoryId, status } = options
   const limit = options.limit ?? RANKED_SEARCH_POOL
 
-  const conditions = helpCenterVisibilityConditions(audience)
+  const conditions = helpCenterVisibilityConditions(audience, options.viewer ?? ANONYMOUS_ACTOR)
   if (categoryId) {
     conditions.push(eq(helpCenterArticles.categoryId, categoryId as never))
   }
@@ -321,7 +358,11 @@ export async function searchArticleIdsRanked(
 /**
  * Keyword-only fallback when embedding generation is unavailable.
  */
-async function keywordOnlyQuery(query: string, limit: number): Promise<HybridSearchResult[]> {
+async function keywordOnlyQuery(
+  query: string,
+  limit: number,
+  viewer: Actor
+): Promise<HybridSearchResult[]> {
   const tsQuery = orTermsTsQuery(query)
 
   const results = await db
@@ -343,7 +384,7 @@ async function keywordOnlyQuery(query: string, limit: number): Promise<HybridSea
     )
     .where(
       and(
-        ...helpCenterVisibilityConditions('public'),
+        ...helpCenterVisibilityConditions('public', viewer),
         sql`${helpCenterArticles.searchVector} @@ ${tsQuery}`,
         sql`ts_rank(${helpCenterArticles.searchVector}, ${tsQuery}) > ${KEYWORD_RANK_FLOOR}`
       )
@@ -379,7 +420,8 @@ async function keywordOnlyQuery(query: string, limit: number): Promise<HybridSea
 async function keywordOnlyQueryForLocale(
   query: string,
   locale: string,
-  limit: number
+  limit: number,
+  viewer: Actor
 ): Promise<HybridSearchResult[]> {
   const tsQuery = orTermsTsQueryForLocale(query, locale)
 
@@ -417,7 +459,7 @@ async function keywordOnlyQueryForLocale(
       and(
         eq(helpCenterArticleTranslations.locale, locale),
         eq(helpCenterArticleTranslations.status, 'published'),
-        ...helpCenterVisibilityConditions('public'),
+        ...helpCenterVisibilityConditions('public', viewer),
         sql`${helpCenterArticleTranslations.searchVector} @@ ${tsQuery}`,
         sql`ts_rank(${helpCenterArticleTranslations.searchVector}, ${tsQuery}) > ${KEYWORD_RANK_FLOOR}`
       )
@@ -446,10 +488,11 @@ async function keywordOnlyQueryForLocale(
 export async function hybridSearchForLocale(
   query: string,
   locale: string,
-  limit = 10
+  limit = 10,
+  viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HybridSearchResult[]> {
-  if (locale === DEFAULT_LOCALE) return hybridSearch(query, limit)
-  return keywordOnlyQueryForLocale(query, locale, limit)
+  if (locale === DEFAULT_LOCALE) return hybridSearch(query, limit, viewer)
+  return keywordOnlyQueryForLocale(query, locale, limit, viewer)
 }
 
 /**

@@ -14,6 +14,7 @@
  */
 
 import { db, helpCenterArticles, helpCenterCategories, and, sql } from '@/lib/server/db'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { generateKbQueryEmbedding } from '@/lib/server/domains/help-center/help-center-embedding.service'
 import {
   helpCenterVisibilityConditions,
@@ -54,6 +55,13 @@ export interface RetrievedKbArticle {
 
 export interface RetrieveKbArticlesOptions {
   audience?: HelpCenterAudience
+  /**
+   * Viewer for the 'public' audience's per-category segment gate. Defaults to
+   * ANONYMOUS_ACTOR, which fails closed: with no resolvable viewer, articles
+   * under segment-gated categories are simply excluded from retrieval.
+   * Irrelevant for 'team' (gate bypassed).
+   */
+  viewer?: Actor
   topK?: number
   /**
    * Minimum cosine similarity for the semantic path (default: the answer
@@ -93,6 +101,7 @@ export async function retrieveKbArticles(
   options: RetrieveKbArticlesOptions = {}
 ): Promise<RetrievedKbArticle[]> {
   const audience = options.audience ?? 'public'
+  const viewer = options.viewer ?? ANONYMOUS_ACTOR
   const topK = options.topK ?? KB_ASK_TOP_K
   const minScore = options.minScore ?? SEMANTIC_SIMILARITY_FLOOR
   const keywordRankFloor = options.keywordRankFloor ?? KEYWORD_RANK_FLOOR
@@ -102,8 +111,8 @@ export async function retrieveKbArticles(
   })
 
   const rows = embedding
-    ? await hybridQuery(query, embedding, audience, topK, minScore, keywordRankFloor)
-    : await keywordQuery(query, audience, topK, keywordRankFloor)
+    ? await hybridQuery(query, embedding, audience, viewer, topK, minScore, keywordRankFloor)
+    : await keywordQuery(query, audience, viewer, topK, keywordRankFloor)
 
   return rows.map((r) => ({
     id: r.id,
@@ -130,10 +139,13 @@ interface RetrievalRow {
   isPublic: boolean
 }
 
-/** The same three predicates the 'public' branch of {@link helpCenterVisibilityConditions}
- *  requires, computed per row so a 'team' query (which admits both) can tell them apart. */
+/** The same predicates the 'public' branch of {@link helpCenterVisibilityConditions}
+ *  requires, computed per row so a 'team' query (which admits both) can tell them
+ *  apart. Includes the segment gate's everyone-case: an article under a
+ *  segment-gated category is NOT public-to-everyone, so the copilot leak gate
+ *  must treat it as internal on team-ceiling retrievals. */
 const isPublicRow = () =>
-  sql<boolean>`(${helpCenterCategories.isPublic} AND ${helpCenterArticles.publishedAt} IS NOT NULL AND ${helpCenterArticles.publishedAt} <= now())`
+  sql<boolean>`(${helpCenterCategories.isPublic} AND jsonb_array_length(${helpCenterCategories.segmentIds}) = 0 AND ${helpCenterArticles.publishedAt} IS NOT NULL AND ${helpCenterArticles.publishedAt} <= now())`
 
 /**
  * Hybrid retrieval: an article matches on a keyword hit OR a semantic hit above
@@ -149,6 +161,7 @@ async function hybridQuery(
   query: string,
   embedding: number[],
   audience: HelpCenterAudience,
+  viewer: Actor,
   topK: number,
   minScore: number,
   rankFloor: number
@@ -178,7 +191,7 @@ async function hybridQuery(
     )
     .where(
       and(
-        ...helpCenterVisibilityConditions(audience),
+        ...helpCenterVisibilityConditions(audience, viewer),
         // A keyword match must clear the same ts_rank floor as the keyword-only
         // path (OR-of-terms otherwise admits a lone incidental term); a semantic
         // match above the cosine floor always qualifies.
@@ -201,6 +214,7 @@ async function hybridQuery(
 async function keywordQuery(
   query: string,
   audience: HelpCenterAudience,
+  viewer: Actor,
   topK: number,
   rankFloor: number
 ): Promise<RetrievalRow[]> {
@@ -226,7 +240,7 @@ async function keywordQuery(
     )
     .where(
       and(
-        ...helpCenterVisibilityConditions(audience),
+        ...helpCenterVisibilityConditions(audience, viewer),
         sql`${helpCenterArticles.searchVector} @@ ${tsQuery}`,
         sql`ts_rank(${helpCenterArticles.searchVector}, ${tsQuery}) > ${rankFloor}`
       )

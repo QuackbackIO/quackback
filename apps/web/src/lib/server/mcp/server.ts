@@ -149,6 +149,21 @@ function registerResources(server: McpServer, auth: McpAuthContext) {
           ],
         }
       }
+      // Team-only, matching the article search/get_details tools: the raw
+      // category list includes private and segment-gated categories, which
+      // must not leak to an OAuth portal user holding the read:article scope.
+      const { isTeamMember } = await import('@/lib/shared/roles')
+      if (!isTeamMember(auth.role)) {
+        return {
+          contents: [
+            {
+              uri: 'quackback://help-center/categories',
+              mimeType: 'text/plain',
+              text: 'Error: This resource requires a team member (admin or member) role.',
+            },
+          ],
+        }
+      }
       const { listCategories } =
         await import('@/lib/server/domains/help-center/help-center.service')
       const categories = await listCategories()

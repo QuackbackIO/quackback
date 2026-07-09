@@ -41,6 +41,10 @@ export const Route = createFileRoute('/hc/sitemap.xml')({
         const additionalLocales = helpCenterConfig.locales?.additional ?? []
         const defaultLocale = helpCenterConfig.locales?.default ?? 'en'
 
+        // The sitemap is viewer-less by design: every listPublic* call below
+        // runs with its default ANONYMOUS_ACTOR viewer, so segment-gated
+        // categories and their articles simply never appear (only
+        // segmentIds=[] content is advertised to crawlers).
         let allUrls
         if (additionalLocales.length === 0) {
           // Fetch all public categories and published articles

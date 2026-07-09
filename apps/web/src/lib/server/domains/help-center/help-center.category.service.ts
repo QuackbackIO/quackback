@@ -12,6 +12,8 @@ import {
   inArray,
 } from '@/lib/server/db'
 import type { KbCategoryId, SegmentId } from '@quackback/ids'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { slugify } from '@/lib/shared/utils'
 import { uniqueHelpCenterSlug } from './help-center.slug'
@@ -170,10 +172,19 @@ export async function listCategories(
   })
 }
 
-export async function listPublicCategories(): Promise<HelpCenterCategoryWithCount[]> {
+export async function listPublicCategories(
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategoryWithCount[]> {
   const all = await listCategories()
   return all
-    .filter((cat) => cat.isPublic && cat.recursivePublishedArticleCount > 0)
+    .filter(
+      (cat) =>
+        cat.isPublic &&
+        // Segment gate ([] = everyone) — same per-category semantics as the
+        // article-side SQL predicate (helpCenterVisibilityConditions).
+        segmentGateAllows(viewer, cat.segmentIds) &&
+        cat.recursivePublishedArticleCount > 0
+    )
     .map((cat) => ({ ...cat, articleCount: cat.recursivePublishedArticleCount }))
 }
 
@@ -205,10 +216,17 @@ export async function getCategoryBySlug(slug: string): Promise<HelpCenterCategor
  *
  * Deliberately not built on helpCenterVisibilityConditions (the shared
  * article predicate owner): this query has no article join, so only the
- * category-side conditions (not deleted, isPublic) apply here. Keep the
- * category-side semantics in lockstep with that owner.
+ * category-side conditions (not deleted, isPublic, segment gate) apply
+ * here. Keep the category-side semantics in lockstep with that owner.
+ *
+ * A segment-gated category the viewer isn't a member of throws the same
+ * NotFoundError shape as a genuinely missing slug, so gated content can't
+ * be distinguished from nonexistent content.
  */
-export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterCategory> {
+export async function getPublicCategoryBySlug(
+  slug: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategory> {
   const category = await db.query.helpCenterCategories.findFirst({
     where: and(
       eq(helpCenterCategories.slug, slug),
@@ -216,7 +234,7 @@ export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterC
       eq(helpCenterCategories.isPublic, true)
     ),
   })
-  if (!category) {
+  if (!category || !segmentGateAllows(viewer, category.segmentIds)) {
     throw new NotFoundError('CATEGORY_NOT_FOUND', `Category with slug "${slug}" not found`)
   }
   return category

@@ -17,6 +17,7 @@ import {
   inArray,
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type {
   HelpCenterArticleWithCategory,
   ListArticlesParams,
@@ -25,8 +26,20 @@ import type {
 import {
   searchArticleIdsRanked,
   helpCenterVisibilityConditions,
+  publicCategoryExistsCondition,
   RANKED_SEARCH_POOL,
 } from './help-center-search.service'
+
+/**
+ * Who a list query serves. `team` (default) is the admin/MCP/REST surface:
+ * drafts and private/gated categories included. `public` narrows to the
+ * public help-center slice, with `viewer` driving the category segment gate
+ * (defaults to ANONYMOUS_ACTOR — fail closed).
+ */
+export interface ArticleListScope {
+  audience?: 'team' | 'public'
+  viewer?: Actor
+}
 
 // ============================================================================
 // Article Queries
@@ -53,7 +66,10 @@ const LIST_COLUMNS = {
   deletedAt: true,
 } as const
 
-export async function listArticles(params: ListArticlesParams): Promise<ArticleListResult> {
+export async function listArticles(
+  params: ListArticlesParams,
+  scope: ArticleListScope = {}
+): Promise<ArticleListResult> {
   const {
     categoryId,
     status = 'all',
@@ -63,15 +79,18 @@ export async function listArticles(params: ListArticlesParams): Promise<ArticleL
     showDeleted = false,
     sort = 'newest',
   } = params
+  const audience = scope.audience ?? 'team'
+  const viewer = scope.viewer ?? ANONYMOUS_ACTOR
   const now = new Date()
 
   // Text search rides the same hybrid ranking as the public help center
-  // (keyword + semantic), with team visibility (drafts, private categories).
+  // (keyword + semantic), with the caller's scope (team keeps drafts and
+  // private categories; public narrows to the viewer's slice).
   // The trash view keeps the plain keyword filter below: soft-deleted rows
   // are excluded from ranking by design.
   const searchTerm = search?.trim()
   if (searchTerm && !showDeleted) {
-    return listArticlesRanked(searchTerm, { categoryId, status, cursor, limit })
+    return listArticlesRanked(searchTerm, { categoryId, status, cursor, limit, audience, viewer })
   }
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -85,6 +104,13 @@ export async function listArticles(params: ListArticlesParams): Promise<ArticleL
 
   if (categoryId) {
     conditions.push(eq(helpCenterArticles.categoryId, categoryId as KbCategoryId))
+  }
+
+  // Public scope: the parent category must be live, public, and admit the
+  // viewer's segments (EXISTS form of the shared visibility owner — the
+  // relational findMany below has no category join to hang it on).
+  if (audience === 'public') {
+    conditions.push(publicCategoryExistsCondition(viewer))
   }
 
   if (!showDeleted) {
@@ -167,10 +193,13 @@ async function listArticlesRanked(
     status: 'draft' | 'published' | 'all'
     cursor?: string
     limit: number
+    audience: 'team' | 'public'
+    viewer: Actor
   }
 ): Promise<ArticleListResult> {
   const rankedIds = await searchArticleIdsRanked(searchTerm, {
-    audience: 'team',
+    audience: opts.audience,
+    viewer: opts.viewer,
     categoryId: opts.categoryId,
     status: opts.status,
     limit: RANKED_SEARCH_POOL,
@@ -253,16 +282,22 @@ async function resolveArticleRelations(
   })
 }
 
-export async function listPublicArticles(params: {
-  categoryId?: string
-  search?: string
-  cursor?: string
-  limit?: number
-}): Promise<ArticleListResult> {
-  return listArticles({ ...params, status: 'published' })
+export async function listPublicArticles(
+  params: {
+    categoryId?: string
+    search?: string
+    cursor?: string
+    limit?: number
+  },
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<ArticleListResult> {
+  return listArticles({ ...params, status: 'published' }, { audience: 'public', viewer })
 }
 
-export async function listPublicArticlesForCategory(categoryId: string) {
+export async function listPublicArticlesForCategory(
+  categoryId: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+) {
   // Join category so the shared public predicate can enforce isPublic +
   // non-deleted on the category side too. Without the join, an admin
   // marking a category private only hid it from the public nav; direct
@@ -285,7 +320,7 @@ export async function listPublicArticlesForCategory(categoryId: string) {
     .where(
       and(
         eq(helpCenterArticles.categoryId, categoryId as KbCategoryId),
-        ...helpCenterVisibilityConditions('public')
+        ...helpCenterVisibilityConditions('public', viewer)
       )
     )
     .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
@@ -296,7 +331,7 @@ export async function listPublicArticlesForCategory(categoryId: string) {
  * Powers the help-center homepage "Popular articles" list. Falls back to most
  * recently published on ties (e.g. a fresh install where every count is 0).
  */
-export async function listPopularPublicArticles(limit: number) {
+export async function listPopularPublicArticles(limit: number, viewer: Actor = ANONYMOUS_ACTOR) {
   return db
     .select({
       id: helpCenterArticles.id,
@@ -307,7 +342,7 @@ export async function listPopularPublicArticles(limit: number) {
     })
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
-    .where(and(...helpCenterVisibilityConditions('public')))
+    .where(and(...helpCenterVisibilityConditions('public', viewer)))
     .orderBy(desc(helpCenterArticles.viewCount), desc(helpCenterArticles.publishedAt))
     .limit(limit)
 }
