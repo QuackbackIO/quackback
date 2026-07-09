@@ -1,24 +1,14 @@
 /**
- * Office hours (§4.6): the pure DST-safe resolver (no DB) + the one-schedule
- * service (real DB, rolled back). The resolver is the piece SLA + workflows will
- * lean on, so its timezone/DST behavior is pinned hard.
+ * Office-hours clock math (§4.6): the pure DST-safe resolver and the
+ * settings-blob → engine-shape adapter (both DB-free). The resolver is the
+ * piece SLA + workflows lean on, so its timezone/DST behavior is pinned hard.
  */
-import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-
-import { createDbTestFixture } from '@/lib/server/__tests__/db-test-fixture'
-import { officeHoursSchedules } from '@/lib/server/db'
-
-vi.mock('@/lib/server/db', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/db')>()),
-  db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
-}))
+import { describe, it, expect } from 'vitest'
 
 import {
   isWithinOfficeHours,
   addOfficeHoursSeconds,
-  getDefaultSchedule,
-  upsertDefaultSchedule,
-  isWorkspaceWithinOfficeHours,
+  engineScheduleFromWorkspace,
 } from '../office-hours.service'
 
 // ---------------------------------------------------------------------------
@@ -131,49 +121,76 @@ describe('addOfficeHoursSeconds', () => {
 })
 
 // ---------------------------------------------------------------------------
-// The one workspace schedule (real DB)
+// Settings-blob schedule → engine shape
 // ---------------------------------------------------------------------------
 
-const fixture = await createDbTestFixture({
-  probe: async (db) => {
-    await db.select({ id: officeHoursSchedules.id }).from(officeHoursSchedules).limit(0)
-  },
-})
-
-describe.skipIf(!fixture.available)('office-hours.service (real DB, rolled back)', () => {
-  beforeEach(fixture.begin)
-  afterEach(fixture.rollback)
-  afterAll(fixture.close)
-
-  it('upserts the single default schedule (create then update, never duplicate)', async () => {
-    const created = await upsertDefaultSchedule({
-      timezone: 'Europe/London',
+describe('engineScheduleFromWorkspace', () => {
+  it('maps a disabled schedule to 24/7 (no windows)', () => {
+    const engine = engineScheduleFromWorkspace({
+      enabled: false,
+      timezone: 'Europe/Berlin',
       intervals: [{ day: 1, start: '09:00', end: '17:00' }],
     })
-    expect(created.isDefault).toBe(true)
-    expect(created.timezone).toBe('Europe/London')
-
-    const updated = await upsertDefaultSchedule({
-      timezone: 'Europe/Berlin',
-      intervals: [{ day: 2, start: '08:00', end: '16:00' }],
-    })
-    expect(updated.id).toBe(created.id) // same row, not a duplicate
-    expect(updated.timezone).toBe('Europe/Berlin')
-
-    const resolved = await getDefaultSchedule()
-    expect(resolved?.id).toBe(created.id)
+    expect(engine.intervals).toEqual([])
   })
 
-  it('resolves 24/7 when unconfigured, and the schedule once set', async () => {
-    // No schedule yet -> always open.
-    expect(await isWorkspaceWithinOfficeHours(new Date('2026-01-05T03:00:00Z'))).toBe(true)
-
-    await upsertDefaultSchedule({
-      timezone: 'UTC',
+  it('passes same-day windows through with the schedule timezone', () => {
+    const engine = engineScheduleFromWorkspace({
+      enabled: true,
+      timezone: 'Europe/Berlin',
       intervals: [{ day: 1, start: '09:00', end: '17:00' }],
     })
-    // Monday 10:00 UTC inside; Monday 20:00 UTC outside.
-    expect(await isWorkspaceWithinOfficeHours(new Date('2026-01-05T10:00:00Z'))).toBe(true)
-    expect(await isWorkspaceWithinOfficeHours(new Date('2026-01-05T20:00:00Z'))).toBe(false)
+    expect(engine).toEqual({
+      timezone: 'Europe/Berlin',
+      intervals: [{ day: 1, start: '09:00', end: '17:00' }],
+    })
+  })
+
+  it('splits an overnight window at midnight so the engine keeps its full span', () => {
+    const engine = engineScheduleFromWorkspace({
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [{ day: 6, start: '22:00', end: '06:00' }], // Sat night into Sunday
+    })
+    expect(engine.intervals).toEqual([
+      { day: 6, start: '22:00', end: '24:00' },
+      { day: 0, start: '00:00', end: '06:00' },
+    ])
+    // The engine resolves both halves as open time.
+    // 2026-01-10 is a Saturday; 23:00 Sat and 03:00 Sun are inside.
+    expect(isWithinOfficeHours(engine, new Date('2026-01-10T23:00:00Z'))).toBe(true)
+    expect(isWithinOfficeHours(engine, new Date('2026-01-11T03:00:00Z'))).toBe(true)
+    // 12:00 Sunday is outside.
+    expect(isWithinOfficeHours(engine, new Date('2026-01-11T12:00:00Z'))).toBe(false)
+  })
+
+  it('drops malformed windows; an enabled schedule with none left is 24/7', () => {
+    const engine = engineScheduleFromWorkspace({
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [{ day: 1, start: 'bad', end: 'worse' }],
+    })
+    expect(engine.intervals).toEqual([])
+    // Empty windows = 24/7 to the clock: a deadline must always land.
+    expect(
+      addOfficeHoursSeconds(engine, new Date('2026-01-05T10:00:00Z'), 3600).toISOString()
+    ).toBe('2026-01-05T11:00:00.000Z')
+  })
+
+  it("the split '24:00' close runs to (exclusive) midnight in the clock walk", () => {
+    // Sat 22:00-24:00 only: 1h from Sat 23:00 must finish at midnight sharp...
+    const engine = engineScheduleFromWorkspace({
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [{ day: 6, start: '22:00', end: '00:00' }], // legacy-style end-of-day
+    })
+    expect(engine.intervals).toEqual([{ day: 6, start: '22:00', end: '24:00' }])
+    expect(
+      addOfficeHoursSeconds(engine, new Date('2026-01-10T23:00:00Z'), 3600).toISOString()
+    ).toBe('2026-01-11T00:00:00.000Z')
+    // ...and 2h spills into NEXT Saturday's window (only window all week).
+    expect(
+      addOfficeHoursSeconds(engine, new Date('2026-01-10T23:00:00Z'), 2 * 3600).toISOString()
+    ).toBe('2026-01-17T23:00:00.000Z')
   })
 })

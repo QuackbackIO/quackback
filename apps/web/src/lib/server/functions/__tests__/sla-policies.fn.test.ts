@@ -40,7 +40,7 @@ const hoisted = vi.hoisted(() => ({
   updateSlaPolicy: vi.fn(),
   removeSlaFromConversation: vi.fn(),
   listWorkflows: vi.fn(),
-  getDefaultSchedule: vi.fn(),
+  getOfficeHoursSchedule: vi.fn(),
   conversationToDTO: vi.fn(),
   publishConversationUpdate: vi.fn(),
 }))
@@ -61,8 +61,8 @@ vi.mock('@/lib/server/domains/sla/sla.service', () => ({
 vi.mock('@/lib/server/domains/workflows/workflow.service', () => ({
   listWorkflows: hoisted.listWorkflows,
 }))
-vi.mock('@/lib/server/domains/office-hours/office-hours.service', () => ({
-  getDefaultSchedule: hoisted.getDefaultSchedule,
+vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
+  getOfficeHoursSchedule: hoisted.getOfficeHoursSchedule,
 }))
 vi.mock('@/lib/server/domains/conversation/conversation.query', () => ({
   conversationToDTO: hoisted.conversationToDTO,
@@ -74,6 +74,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
 import {
   archiveSlaPolicyFn,
   createSlaPolicyFn,
+  getSlaOfficeHoursFn,
   listSlaPoliciesFn,
   listSlaPolicyOptionsFn,
   removeConversationSlaFn,
@@ -209,6 +210,25 @@ describe('listSlaPolicyOptionsFn', () => {
   })
 })
 
+describe('getSlaOfficeHoursFn', () => {
+  it('reflects the workspace settings-blob schedule (the canonical hours source)', async () => {
+    hoisted.getOfficeHoursSchedule.mockResolvedValue({
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [{ day: 1, start: '09:00', end: '17:00' }],
+    })
+    expect(await getSlaOfficeHoursFn()).toEqual({ officeHoursEnabled: true })
+    expect(hoisted.requireAuth).toHaveBeenLastCalledWith({ permission: PERMISSIONS.SLA_MANAGE })
+
+    hoisted.getOfficeHoursSchedule.mockResolvedValue({
+      enabled: false,
+      timezone: 'UTC',
+      intervals: [],
+    })
+    expect(await getSlaOfficeHoursFn()).toEqual({ officeHoursEnabled: false })
+  })
+})
+
 describe('createSlaPolicyFn', () => {
   it('rejects a policy with no targets at the boundary', async () => {
     await expect(createSlaPolicyFn({ data: { name: 'Empty' } })).rejects.toThrow()
@@ -248,9 +268,9 @@ describe('updateSlaPolicyFn', () => {
 
   it('rejects an archived (or missing) policy', async () => {
     hoisted.getSlaPolicy.mockResolvedValue(null)
-    await expect(
-      updateSlaPolicyFn({ data: { id: 'sla_policy_gone', name: 'X' } })
-    ).rejects.toThrow('SLA policy not found')
+    await expect(updateSlaPolicyFn({ data: { id: 'sla_policy_gone', name: 'X' } })).rejects.toThrow(
+      'SLA policy not found'
+    )
   })
 })
 

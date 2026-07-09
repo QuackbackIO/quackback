@@ -12,7 +12,8 @@ import { db, eq, conversations } from '@/lib/server/db'
 import type { ConversationId } from '@quackback/ids'
 import { listTagsForConversation } from '@/lib/server/domains/conversation/conversation-tag.service'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
-import { isWorkspaceWithinOfficeHours } from '@/lib/server/domains/office-hours/office-hours.service'
+import { getOfficeHoursSchedule } from '@/lib/server/domains/settings/settings.office-hours'
+import { isWithinOfficeHours } from '@/lib/shared/office-hours'
 import type { ConditionContext } from './condition.evaluator'
 
 /**
@@ -40,12 +41,15 @@ export async function resolveConditionContext(
     .limit(1)
   if (!conv) return null
 
-  // Independent reads — run them together.
-  const [tags, segmentIds, officeHours] = await Promise.all([
+  // Independent reads — run them together. Office hours come from the
+  // workspace settings-blob schedule (the canonical hours source), evaluated
+  // 24/7-open when disabled.
+  const [tags, segmentIds, officeHoursSchedule] = await Promise.all([
     listTagsForConversation(conversationId),
     segmentIdsForPrincipal(conv.visitorPrincipalId),
-    isWorkspaceWithinOfficeHours(at),
+    getOfficeHoursSchedule(),
   ])
+  const officeHours = isWithinOfficeHours(officeHoursSchedule, at)
 
   const waitingMinutes = conv.waitingSince
     ? Math.max(0, Math.floor((at.getTime() - conv.waitingSince.getTime()) / 60000))

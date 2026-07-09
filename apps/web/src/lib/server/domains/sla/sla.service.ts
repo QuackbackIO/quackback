@@ -21,9 +21,10 @@ import type { ConversationId, SlaPolicyId } from '@quackback/ids'
 import { getSlaPolicy } from './sla-policy.service'
 import {
   addOfficeHoursSeconds,
+  engineScheduleFromWorkspace,
   getScheduleById,
-  getDefaultSchedule,
 } from '../office-hours/office-hours.service'
+import { getOfficeHoursSchedule } from '../settings/settings.office-hours'
 
 /**
  * The `conversations.sla_applied` shape: the one active SLA on a conversation.
@@ -57,16 +58,20 @@ export type SlaApplied = {
 }
 
 /**
- * The schedule a policy's clocks run on: its pinned schedule, else the workspace
- * default, else a 24/7 fallback — an unconfigured workspace never blocks a clock.
+ * The schedule a policy's clocks run on: its pinned table schedule if one is
+ * set and still exists, else the workspace office-hours schedule from the
+ * settings blob (the canonical hours source — the same one Messenger reply
+ * expectations and the workflows office-hours condition read). A disabled or
+ * unconfigured workspace schedule resolves 24/7, so it never blocks a clock.
  */
 async function resolveScheduleFor(
   policy: SlaPolicy
 ): Promise<{ timezone: string; intervals: { day: number; start: string; end: string }[] }> {
-  const schedule = policy.officeHoursScheduleId
-    ? await getScheduleById(policy.officeHoursScheduleId)
-    : await getDefaultSchedule()
-  return schedule ?? { timezone: 'UTC', intervals: [] }
+  if (policy.officeHoursScheduleId) {
+    const pinned = await getScheduleById(policy.officeHoursScheduleId)
+    if (pinned) return pinned
+  }
+  return engineScheduleFromWorkspace(await getOfficeHoursSchedule())
 }
 
 /**

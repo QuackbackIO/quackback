@@ -33,6 +33,17 @@ import {
 
 vi.mock('../action.executor', () => ({ applyAction: vi.fn().mockResolvedValue('ok') }))
 
+// Dispatch resolves a condition context, which reads the workspace office-hours
+// schedule from the settings blob — this ad hoc DB has no settings row, so pin
+// the default (disabled = 24/7) like condition.context.test.ts does.
+vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
+  getOfficeHoursSchedule: vi.fn(async () => ({
+    enabled: false,
+    timezone: 'UTC',
+    intervals: [],
+  })),
+}))
+
 // A real, non-transactional pool — bypasses config.ts's full env validation
 // (which the app's `db` singleton requires) the same way board-view-filter-
 // parity.test.ts and db-test-fixture.ts's own pool do. `max: 5` covers the

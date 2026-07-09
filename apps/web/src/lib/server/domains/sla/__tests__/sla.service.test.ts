@@ -22,6 +22,20 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+// The workspace office-hours schedule (settings blob) resolveScheduleFor falls
+// back to when a policy pins no table schedule. Mutable per test; the default
+// (disabled) is 24/7.
+const workspaceHours = vi.hoisted(() => ({
+  schedule: {
+    enabled: false,
+    timezone: 'UTC',
+    intervals: [] as { day: number; start: string; end: string }[],
+  },
+}))
+vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
+  getOfficeHoursSchedule: vi.fn(async () => workspaceHours.schedule),
+}))
+
 import { createSlaPolicy } from '../sla-policy.service'
 import {
   applySlaToConversation,
@@ -61,7 +75,10 @@ async function seedConversation(): Promise<ConversationId> {
 // it from an earlier sibling would tear the connection down before the later
 // blocks' beforeEach(fixture.begin) runs.
 describe.skipIf(!fixture.available)('applySlaToConversation (real DB, rolled back)', () => {
-  beforeEach(fixture.begin)
+  beforeEach(() => {
+    workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+    return fixture.begin()
+  })
   afterEach(fixture.rollback)
 
   it('stamps 24/7 wall-clock deadlines + logs an applied event', async () => {
@@ -122,6 +139,29 @@ describe.skipIf(!fixture.available)('applySlaToConversation (real DB, rolled bac
     )
     expect(applied.firstResponseDueAt).toBe('2026-01-06T10:00:00.000Z')
     expect(applied.timeToCloseDueAt).toBeNull() // untracked by this policy
+  })
+
+  it('honors the workspace settings-blob schedule when the policy pins none', async () => {
+    const conversationId = await seedConversation()
+    // Mon-Fri 09:00-17:00 UTC in the settings blob (the canonical hours source).
+    workspaceHours.schedule = {
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [1, 2, 3, 4, 5].map((day) => ({ day, start: '09:00', end: '17:00' })),
+    }
+    const policy = await createSlaPolicy({
+      name: 'Workspace-hours',
+      firstResponseTargetSecs: 2 * 3600,
+    })
+
+    // Fri 2026-01-09 16:00 + 2 open hours: 1h Fri (16->17), weekend closed,
+    // 1h Mon from 09:00 -> Mon 10:00 (NOT Fri 18:00).
+    const applied = await applySlaToConversation(
+      conversationId,
+      policy.id,
+      new Date('2026-01-09T16:00:00Z')
+    )
+    expect(applied.firstResponseDueAt).toBe('2026-01-12T10:00:00.000Z')
   })
 
   it('re-applying replaces the active SLA (one per conversation)', async () => {
@@ -219,7 +259,10 @@ describe.skipIf(!fixture.available)('applySlaToConversation (real DB, rolled bac
 })
 
 describe.skipIf(!fixture.available)('pause-on-snooze (real DB, rolled back)', () => {
-  beforeEach(fixture.begin)
+  beforeEach(() => {
+    workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+    return fixture.begin()
+  })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
