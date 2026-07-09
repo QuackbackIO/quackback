@@ -80,6 +80,7 @@ export const ID_PREFIXES = {
   // Tickets (support platform §4.2)
   ticket: 'ticket',
   ticket_status: 'ticket_status',
+  ticket_activity: 'ticket_activity',
 
   // Email channel (support platform §4.8)
   channel_account: 'channel_account',
