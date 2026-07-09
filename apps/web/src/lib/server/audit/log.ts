@@ -113,6 +113,13 @@ export type AuditEventType =
   | 'assistant.connector.created'
   | 'assistant.connector.updated'
   | 'assistant.connector.deleted'
+  // Verified-email assertion. `emailVerified: true` is a trust decision, not a
+  // data field — it grants the same portal access as a confirmed email
+  // (domain-match, invite claim, segment portal-access grants). Every path
+  // that lets an operator assert it without the user proving ownership emits
+  // one of these.
+  | 'user.email_verified.asserted' // per-user: admin contact creation, REST identify
+  | 'import.email_verified.asserted' // per-run CSV import summary; metadata carries the count
 
 /**
  * The subset of {@link AuditEventType} the AI config changelog reads back

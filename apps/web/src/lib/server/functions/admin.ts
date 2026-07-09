@@ -30,7 +30,6 @@ import {
   inArray,
 } from '@/lib/server/db'
 import {
-  createPrincipal,
   ensurePrincipalForUser,
   setPrincipalRole,
   syncPrincipalProfileById,
@@ -959,11 +958,14 @@ export const updatePortalUserFn = createServerFn({ method: 'POST' })
 
 /**
  * Create a new portal user (admin-only).
- * Used by the AuthorSelector when the admin wants to attribute feedback to someone not yet in the system.
+ * Used by the AuthorSelector when the admin wants to attribute feedback to
+ * someone not yet in the system, and by the Users view's "New person" dialog.
+ * Asserting `emailVerified` is audited — see domains/users/user.create.ts.
  */
 const createPortalUserSchema = z.object({
   name: z.string().min(1).max(200),
   email: z.string().email().optional(),
+  emailVerified: z.boolean().optional(),
 })
 
 export const createPortalUserFn = createServerFn({ method: 'POST' })
@@ -971,49 +973,47 @@ export const createPortalUserFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create portal user')
     try {
-      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+      const auth = await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
-      // Check email uniqueness if provided
-      if (data.email) {
-        const normalized = data.email.toLowerCase().trim()
-        const existing = await db
-          .select({ id: user.id })
-          .from(user)
-          .where(eq(user.email, normalized))
-          .limit(1)
-        if (existing.length > 0) {
-          throw new Error('A user with this email already exists')
-        }
-      }
-
-      const userId = generateId('user')
-      const principalId = generateId('principal')
-      const trimmedName = data.name.trim()
-
-      await db.insert(user).values({
-        id: userId,
-        name: trimmedName,
-        email: data.email ? data.email.toLowerCase().trim() : null,
-        emailVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const { createPortalUser } = await import('@/lib/server/domains/users/user.create')
+      const { actorFromAuth } = await import('@/lib/server/audit/log')
+      const result = await createPortalUser(data, {
+        actor: actorFromAuth(auth),
+        headers: getRequestHeaders(),
       })
 
-      await createPrincipal({
-        id: principalId,
-        userId,
-        role: 'user',
-        displayName: trimmedName,
-      })
-
-      log.info({ principal_id: principalId }, 'portal user created')
+      log.info({ principal_id: result.principalId }, 'portal user created')
       return {
-        principalId: principalId as string,
-        name: trimmedName,
-        email: data.email?.toLowerCase().trim() ?? null,
+        principalId: result.principalId as string,
+        name: result.name,
+        email: result.email,
+        emailVerified: result.emailVerified,
       }
     } catch (error) {
       log.error({ err: error }, 'create portal user failed')
+      throw error
+    }
+  })
+
+/**
+ * Look up existing identities for an email before creating a contact
+ * (dedup check for the "New person" dialog). Returns the user row matching
+ * the email (verified or not) plus EVERY anonymous lead whose captured
+ * contactEmail matches — leads are not unique per email.
+ */
+const findPortalUsersByEmailSchema = z.object({
+  email: z.string().email(),
+})
+
+export const findPortalUsersByEmailFn = createServerFn({ method: 'POST' })
+  .validator(findPortalUsersByEmailSchema)
+  .handler(async ({ data }) => {
+    try {
+      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+      const { findContactsByEmail } = await import('@/lib/server/domains/users/user.dedup')
+      return await findContactsByEmail(data.email)
+    } catch (error) {
+      log.error({ err: error }, 'find portal users by email failed')
       throw error
     }
   })
