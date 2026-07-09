@@ -24,6 +24,7 @@ import {
   conversationMessages,
   ticketConversations,
   principal,
+  teams,
   type Ticket,
   type ConversationPriority,
 } from '@/lib/server/db'
@@ -35,7 +36,7 @@ import {
 } from '@/lib/server/messages/message-core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import type { SQL } from 'drizzle-orm'
-import type { TicketId, TicketStatusId } from '@quackback/ids'
+import type { PrincipalId, TicketId, TicketStatusId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { ticketFilter } from '@/lib/server/policy/tickets'
@@ -58,6 +59,7 @@ import { createNotification } from '../notifications/notification.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { emitTicketCreated, emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
+import { recordTicketActivity } from './ticket-activity.service'
 import { ticketFtsMatch } from './ticket-search.service'
 import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
 import type {
@@ -420,6 +422,15 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   })
 
   log.info({ ticket_id: created.id, type: created.type }, 'ticket created')
+  // Durable timeline record (fire-and-forget, mirrors the post-side
+  // activity log). Written after the transaction commits so a failed
+  // activity insert can never abort the creation itself.
+  recordTicketActivity({
+    ticketId: created.id,
+    principalId: actor.principalId,
+    type: 'ticket.created',
+    metadata: { ticketType: created.type },
+  })
   void emitTicketCreated(actor, created, {
     category: defaultStatus.category,
     stage: resolveStage(defaultStatus),
@@ -455,12 +466,20 @@ export async function setTicketStatus(
   // its category to compute the transition.
   const [[target], [current]] = await Promise.all([
     db
-      .select({ category: ticketStatuses.category, publicStage: ticketStatuses.publicStage })
+      .select({
+        name: ticketStatuses.name,
+        category: ticketStatuses.category,
+        publicStage: ticketStatuses.publicStage,
+      })
       .from(ticketStatuses)
       .where(and(eq(ticketStatuses.id, statusId), isNull(ticketStatuses.deletedAt)))
       .limit(1),
     db
-      .select({ category: ticketStatuses.category, publicStage: ticketStatuses.publicStage })
+      .select({
+        name: ticketStatuses.name,
+        category: ticketStatuses.category,
+        publicStage: ticketStatuses.publicStage,
+      })
       .from(ticketStatuses)
       .where(eq(ticketStatuses.id, existing.statusId))
       .limit(1),
@@ -478,6 +497,23 @@ export async function setTicketStatus(
   if (stamp) patch.firstResponseAt = stamp
 
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
+
+  // Durable timeline record (fire-and-forget): EVERY real status move is
+  // recorded, including internal churn the customer-facing stage event below
+  // stays silent on. A same-status no-op set records nothing.
+  if (existing.statusId !== statusId) {
+    recordTicketActivity({
+      ticketId: id,
+      principalId: actor.principalId,
+      type: 'status.changed',
+      metadata: {
+        fromId: existing.statusId,
+        fromName: current?.name ?? null,
+        toId: statusId,
+        toName: target.name,
+      },
+    })
+  }
 
   // Realtime signal (unified inbox §3.2, M3), unconditional like the webhook
   // below — mirrors conversation.service's publish-right-after-the-UPDATE
@@ -588,12 +624,21 @@ async function postTicketStatusEvent(ticketId: TicketId, stageLabel: string): Pr
  * projecting status OR a `closed` category, move to the first open-category status
  * (clearing resolved_at + counting the reopen when leaving closed). No-op
  * otherwise. No permission check — the trigger is a requester reply on their own
- * ticket, verified upstream. Returns whether it moved.
+ * ticket, verified upstream (`byPrincipalId` is that requester, recorded as the
+ * activity actor; null keeps the event fully system-attributed). Returns
+ * whether it moved.
  */
-export async function autoReopenOnRequesterReply(id: TicketId): Promise<boolean> {
+export async function autoReopenOnRequesterReply(
+  id: TicketId,
+  byPrincipalId: PrincipalId | null = null
+): Promise<boolean> {
   const existing = await loadTicketOr404(id)
   const [current] = await db
-    .select({ category: ticketStatuses.category, publicStage: ticketStatuses.publicStage })
+    .select({
+      name: ticketStatuses.name,
+      category: ticketStatuses.category,
+      publicStage: ticketStatuses.publicStage,
+    })
     .from(ticketStatuses)
     .where(eq(ticketStatuses.id, existing.statusId))
     .limit(1)
@@ -602,7 +647,7 @@ export async function autoReopenOnRequesterReply(id: TicketId): Promise<boolean>
   if (!awaiting && current.category !== 'closed') return false
 
   const [firstOpen] = await db
-    .select({ id: ticketStatuses.id })
+    .select({ id: ticketStatuses.id, name: ticketStatuses.name })
     .from(ticketStatuses)
     .where(and(eq(ticketStatuses.category, 'open'), isNull(ticketStatuses.deletedAt)))
     .orderBy(asc(ticketStatuses.position))
@@ -617,6 +662,22 @@ export async function autoReopenOnRequesterReply(id: TicketId): Promise<boolean>
     patch.reopenedCount = sql`${tickets.reopenedCount} + 1` as unknown as number
   }
   await db.update(tickets).set(patch).where(eq(tickets.id, id))
+
+  // Durable timeline record (fire-and-forget): a distinct 'ticket.reopened'
+  // type — not 'status.changed' — so the timeline reads honestly ("reopened by
+  // the requester's reply") rather than as an anonymous status flip.
+  recordTicketActivity({
+    ticketId: id,
+    principalId: byPrincipalId,
+    type: 'ticket.reopened',
+    metadata: {
+      fromId: existing.statusId,
+      fromName: current.name,
+      toId: firstOpen.id,
+      toName: firstOpen.name,
+      trigger: 'requester_reply',
+    },
+  })
   return true
 }
 
@@ -676,8 +737,72 @@ export async function assignTicket(
       existing.assigneePrincipalId ?? null,
       existing.assigneeTeamId ?? null
     )
+    // Durable timeline record (fire-and-forget), same moved-only gate as the
+    // webhook. Names are resolved inline (the same idiom as the post domain's
+    // status activity) so the row is self-describing even after a principal
+    // or team is later deleted.
+    recordTicketActivity({
+      ticketId: id,
+      principalId: actor.principalId,
+      type: 'ticket.assigned',
+      metadata: await assignmentActivityMetadata(existing, updated),
+    })
   }
   return dto
+}
+
+/**
+ * from/to metadata for a 'ticket.assigned' activity row: only the side(s)
+ * that actually moved are included, each as id + display name (name lookups
+ * batched; a missing row resolves to a null name, never an error).
+ */
+async function assignmentActivityMetadata(
+  existing: Ticket,
+  updated: Ticket
+): Promise<Record<string, unknown>> {
+  const metadata: Record<string, unknown> = {}
+
+  if (existing.assigneePrincipalId !== updated.assigneePrincipalId) {
+    const ids = [existing.assigneePrincipalId, updated.assigneePrincipalId].filter(
+      (v): v is PrincipalId => v !== null
+    )
+    const rows = ids.length
+      ? await db
+          .select({ id: principal.id, name: principal.displayName })
+          .from(principal)
+          .where(inArray(principal.id, ids))
+      : []
+    const names = new Map(rows.map((r) => [r.id, r.name]))
+    metadata.fromPrincipalId = existing.assigneePrincipalId
+    metadata.fromPrincipalName = existing.assigneePrincipalId
+      ? (names.get(existing.assigneePrincipalId) ?? null)
+      : null
+    metadata.toPrincipalId = updated.assigneePrincipalId
+    metadata.toPrincipalName = updated.assigneePrincipalId
+      ? (names.get(updated.assigneePrincipalId) ?? null)
+      : null
+  }
+
+  if (existing.assigneeTeamId !== updated.assigneeTeamId) {
+    const ids = [existing.assigneeTeamId, updated.assigneeTeamId].filter((v) => v !== null)
+    const rows = ids.length
+      ? await db
+          .select({ id: teams.id, name: teams.name })
+          .from(teams)
+          .where(inArray(teams.id, ids))
+      : []
+    const names = new Map(rows.map((r) => [r.id, r.name]))
+    metadata.fromTeamId = existing.assigneeTeamId
+    metadata.fromTeamName = existing.assigneeTeamId
+      ? (names.get(existing.assigneeTeamId) ?? null)
+      : null
+    metadata.toTeamId = updated.assigneeTeamId
+    metadata.toTeamName = updated.assigneeTeamId
+      ? (names.get(updated.assigneeTeamId) ?? null)
+      : null
+  }
+
+  return metadata
 }
 
 /** Set a ticket's triage priority (reuses the conversation priority scale). */
@@ -693,6 +818,15 @@ export async function setTicketPriority(
   const stamp = firstResponseStamp(existing.firstResponseAt, isTeamMember(actor.role), now)
   if (stamp) patch.firstResponseAt = stamp
   const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
+  // Durable timeline record (fire-and-forget); a no-op re-set records nothing.
+  if (existing.priority !== priority) {
+    recordTicketActivity({
+      ticketId: id,
+      principalId: actor.principalId,
+      type: 'priority.changed',
+      metadata: { from: existing.priority, to: priority },
+    })
+  }
   // Realtime signal (unified inbox §3.2, M3).
   return publishTicketUpdated(updated)
 }
@@ -755,6 +889,13 @@ export async function softDeleteTicket(id: TicketId, actor: Actor): Promise<void
     .where(and(eq(tickets.id, id), isNull(tickets.deletedAt)))
     .returning()
   if (updated) {
+    // Durable timeline record (fire-and-forget) — invisible while the ticket
+    // stays soft-deleted, but it keeps the history honest if it is restored.
+    recordTicketActivity({
+      ticketId: id,
+      principalId: actor.principalId,
+      type: 'ticket.deleted',
+    })
     // Realtime signal (unified inbox §3.2, M3): the list re-query already
     // excludes a deleted ticket via ticketFilter, so the refetch this triggers
     // is what actually makes the row disappear for every other viewer.

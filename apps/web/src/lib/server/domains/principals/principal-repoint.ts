@@ -45,6 +45,7 @@ import {
   helpCenterArticleFeedback,
   channelIdentities,
   tickets,
+  ticketActivity,
   workflowRuns,
   workflowRunEvents,
   changelogSubscriptions,
@@ -340,6 +341,12 @@ export const REPOINT_STEPS: RepointStep[] = [
     tickets,
     'requester_principal_id',
     'Ticket requester. A ticket filed while anonymous (portal/Messenger) follows the person on merge. Unlike conversations.visitor_principal_id (ON DELETE RESTRICT), this FK is ON DELETE SET NULL, so this re-point step (not the constraint) is what keeps the ticket attributed when the anonymous principal is torn down.'
+  ),
+  simpleRepoint(
+    'ticket_activity',
+    ticketActivity,
+    'principal_id',
+    'Ticket activity-log attribution (mirrors post_activity). Anon actors write entries — a requester reply reopening their own ticket records them as the actor — so without a re-point the teardown nulls the actor.'
   ),
   fillIfEmpty(
     'contact_email',
