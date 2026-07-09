@@ -28,10 +28,12 @@ export function segmentGateAllows(actor: Actor, segmentIds: readonly string[]): 
 
 /**
  * SQL predicate over a jsonb string-array column (e.g.
- * `statusComponents.segmentIds`). Row-by-row truthiness must match
+ * `statusComponents.segmentIds`), or a pre-rendered SQL reference to one for
+ * contexts where a column object would be alias-rewritten (see
+ * publicCategoryExistsCondition). Row-by-row truthiness must match
  * {@link segmentGateAllows} exactly.
  */
-export function segmentGateFilter(actor: Actor, segmentIdsColumn: AnyPgColumn): SQL {
+export function segmentGateFilter(actor: Actor, segmentIdsColumn: AnyPgColumn | SQL): SQL {
   if (isTeamActor(actor)) return sql`true`
 
   const memberIds = Array.from(actor.segmentIds) as string[]

@@ -124,14 +124,23 @@ export function helpCenterVisibilityConditions(audience: HelpCenterAudience, vie
  * EXISTS-form of the 'public' branch of {@link helpCenterVisibilityConditions},
  * for article queries that cannot join helpCenterCategories (e.g. relational
  * findMany in the list reader). Must stay in lockstep with that owner.
+ *
+ * The kb_categories references are RAW identifiers, not drizzle column
+ * objects: the relational query builder rewrites every embedded column ref
+ * onto the root table's alias, which would silently remap these onto
+ * kb_articles ("column kb_articles.is_public does not exist" at best, a
+ * wrong-table predicate at worst). `${helpCenterArticles.categoryId}` is the
+ * one ref that SHOULD track the root alias, so it stays a column object.
+ * Pinned by the segment-gate integration test.
  */
 export function publicCategoryExistsCondition(viewer: Actor) {
+  const gate = segmentGateFilter(viewer, sql.raw('"kb_categories"."segment_ids"'))
   return sql`EXISTS (
-    SELECT 1 FROM ${helpCenterCategories}
-    WHERE ${helpCenterCategories.id} = ${helpCenterArticles.categoryId}
-      AND ${helpCenterCategories.deletedAt} IS NULL
-      AND ${helpCenterCategories.isPublic} = true
-      AND ${segmentGateFilter(viewer, helpCenterCategories.segmentIds)}
+    SELECT 1 FROM "kb_categories"
+    WHERE "kb_categories"."id" = ${helpCenterArticles.categoryId}
+      AND "kb_categories"."deleted_at" IS NULL
+      AND "kb_categories"."is_public" = true
+      AND ${gate}
   )`
 }
 
