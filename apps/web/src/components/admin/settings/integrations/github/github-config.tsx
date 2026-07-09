@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 import { fetchGitHubReposFn, type GitHubRepo } from '@/lib/server/integrations/github/functions'
 import { StatusSyncConfig } from '@/components/admin/settings/integrations/status-sync-config'
+import { TicketStatusSyncConfig } from '@/components/admin/settings/integrations/ticket-status-sync-config'
 import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 
 interface EventMapping {
@@ -210,6 +211,17 @@ export function GitHubConfig({
       )}
 
       <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="github"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={[
+          { id: 'Open', name: 'Open' },
+          { id: 'Closed', name: 'Closed' },
+        ]}
+      />
+
+      <TicketStatusSyncConfig
         integrationId={integrationId}
         integrationType="github"
         config={initialConfig}
