@@ -574,4 +574,57 @@ describe('attribute condition fields', () => {
       expect(conditionSummary(condition)).toBe('Unknown attribute plan is set')
     })
   })
+
+  describe('conversation.team — dynamic team options', () => {
+    const teamLabels = new Map([
+      ['team_support', 'Support'],
+      ['team_billing', 'Billing'],
+    ])
+
+    it('resolveConditionField fills options in from the live team map', () => {
+      const resolved = resolveConditionField('conversation.team', undefined, teamLabels)
+      expect(resolved.kind).toBe('choice')
+      expect(resolved.operators).toEqual(['eq', 'neq', 'is_set', 'is_empty'])
+      expect(resolved.options).toEqual([
+        { value: 'team_support', label: 'Support' },
+        { value: 'team_billing', label: 'Billing' },
+      ])
+    })
+
+    it('has no static options when no team map is supplied', () => {
+      const resolved = resolveConditionField('conversation.team')
+      expect(resolved.options).toEqual([])
+    })
+
+    it('conditionSummary renders the team name, not the raw id', () => {
+      const condition: GraphCondition = {
+        field: 'conversation.team',
+        op: 'eq',
+        value: 'team_support',
+      }
+      expect(conditionSummary(condition, undefined, teamLabels)).toBe('Team is Support')
+    })
+
+    it('conditionSummary falls back to the raw id for an unknown team', () => {
+      const condition: GraphCondition = { field: 'conversation.team', op: 'eq', value: 'team_gone' }
+      expect(conditionSummary(condition, undefined, teamLabels)).toBe('Team is team_gone')
+    })
+
+    it('conditionSummary renders is_empty with no value ("no team assigned")', () => {
+      const condition: GraphCondition = { field: 'conversation.team', op: 'is_empty' }
+      expect(conditionSummary(condition, undefined, teamLabels)).toBe('Team is empty')
+    })
+
+    it('round-trips through the draft encoding as a plain string id', () => {
+      const leaf: GraphCondition = { field: 'conversation.team', op: 'eq', value: 'team_support' }
+      const draft = conditionToDraft(leaf)
+      if (draft.kind !== 'simple') throw new Error('expected simple draft')
+      expect(draft.rules[0]).toEqual({
+        field: 'conversation.team',
+        op: 'eq',
+        value: 'team_support',
+      })
+      expect(draftToCondition(draft)).toEqual(leaf)
+    })
+  })
 })

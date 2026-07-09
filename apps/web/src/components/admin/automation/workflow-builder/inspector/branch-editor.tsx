@@ -95,7 +95,7 @@ export function BranchEditor({
                       {letter} · {path.key}
                     </div>
                     <div className="truncate text-[11px] text-muted-foreground">
-                      {conditionSummary(path.condition, labels.attributes)}
+                      {conditionSummary(path.condition, labels.attributes, labels.teams)}
                     </div>
                   </button>
                 </div>

@@ -68,6 +68,20 @@ describe('workflowGraphSchema', () => {
     expect(workflowGraphSchema.safeParse(badWait).success).toBe(false)
   })
 
+  it('accepts a conversation.team condition', () => {
+    const graph = {
+      nodes: [
+        {
+          id: 'g',
+          type: 'condition',
+          condition: { field: 'conversation.team', op: 'eq', value: 'team_1' },
+        },
+      ],
+      edges: [],
+    }
+    expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+  })
+
   it('rejects a condition with a typo/unknown field', () => {
     const typo = {
       nodes: [

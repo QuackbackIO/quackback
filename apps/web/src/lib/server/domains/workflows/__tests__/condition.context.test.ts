@@ -23,6 +23,7 @@ import {
   userSegments,
   user,
   principal,
+  teams,
 } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -57,8 +58,12 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it('assembles a full snapshot (status, waiting minutes, tags, segments, csat, message)', async () => {
+  it('assembles a full snapshot (status, waiting minutes, tags, segments, csat, message, team)', async () => {
     const principalId = await seedPrincipal()
+    const [team] = await testDb
+      .insert(teams)
+      .values({ name: `Support-${suffix()}` })
+      .returning()
     const waitingSince = new Date('2026-01-05T10:00:00Z')
     const [conv] = await testDb
       .insert(conversations)
@@ -69,6 +74,7 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
         waitingSince,
         csatRating: 4,
         customAttributes: { plan: { v: 'pro', src: 'teammate', at: '2026-01-05T09:00:00Z' } },
+        assignedTeamId: team!.id,
       })
       .returning()
 
@@ -97,6 +103,7 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(ctx!.conversation.priority).toBe('high')
     expect(ctx!.conversation.waitingMinutes).toBe(30)
     expect(ctx!.conversation.tagIds).toEqual([tagId])
+    expect(ctx!.conversation.assignedTeamId).toBe(team!.id)
     expect(ctx!.conversation.attributes).toEqual({
       plan: { v: 'pro', src: 'teammate', at: '2026-01-05T09:00:00Z' },
     })
@@ -113,6 +120,7 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
             { field: 'person.segments', op: 'includes_any', value: [segmentId] },
             { field: 'message.body', op: 'contains', value: 'help' },
             { field: 'conversation.attr.plan', op: 'eq', value: 'pro' },
+            { field: 'conversation.team', op: 'eq', value: team!.id },
           ],
         },
         ctx!
@@ -130,9 +138,11 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     const ctx = await resolveConditionContext(conv.id)
     expect(ctx!.conversation.waitingMinutes).toBeNull()
     expect(ctx!.conversation.tagIds).toEqual([])
+    expect(ctx!.conversation.assignedTeamId).toBeNull()
     expect(ctx!.person!.segmentIds).toEqual([])
     expect(ctx!.csatRating).toBeNull()
     expect(ctx!.message).toBeNull()
+    expect(evaluateCondition({ field: 'conversation.team', op: 'is_empty' }, ctx!)).toBe(true)
 
     expect(await resolveConditionContext(createId('conversation') as ConversationId)).toBeNull()
   })

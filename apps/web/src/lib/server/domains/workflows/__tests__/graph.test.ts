@@ -14,6 +14,7 @@ const ctx = (over: Partial<ConditionContext['conversation']> = {}): ConditionCon
     priority: 'high',
     waitingMinutes: 10,
     tagIds: [],
+    assignedTeamId: null,
     ...over,
   },
 })

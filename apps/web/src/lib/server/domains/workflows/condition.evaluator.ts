@@ -25,6 +25,8 @@ export interface ConditionContext {
     /** Minutes the customer has been waiting on a reply; null = nobody waiting. */
     waitingMinutes: number | null
     tagIds: string[]
+    /** The team the conversation is assigned to, or null when unassigned. */
+    assignedTeamId: string | null
     /** Raw custom_attributes ({ v, src, at } envelopes or bare legacy values);
      *  `conversation.attr.<key>` predicates read through readAttributeValue. */
     attributes?: Record<string, unknown>
@@ -76,6 +78,7 @@ export const CONDITION_FIELDS = [
   'conversation.priority',
   'conversation.waiting_minutes',
   'conversation.tags',
+  'conversation.team',
   'message.body',
   'message.sender',
   'person.segments',
@@ -109,6 +112,11 @@ function resolveField(field: string, ctx: ConditionContext): unknown {
       return ctx.conversation.waitingMinutes
     case 'conversation.tags':
       return ctx.conversation.tagIds
+    // Unassigned resolves to null, same as e.g. csat.rating: `eq <team>` is a
+    // non-match (null !== any team id), `neq <team>` matches (null !== <team>
+    // is true), and `is_empty` is the deliberate way to test for "no team".
+    case 'conversation.team':
+      return ctx.conversation.assignedTeamId
     case 'message.body':
       return ctx.message?.body ?? null
     case 'message.sender':
