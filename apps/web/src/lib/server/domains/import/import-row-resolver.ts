@@ -17,6 +17,19 @@ export const BATCH_SIZE = 100
 export const IMPORT_LINK_TYPE = 'import'
 
 /**
+ * Recognized truthy spellings for the email_verified column. Anything else
+ * (empty, absent, "no", "0", garbage) reads as false — asserting a verified
+ * email grants portal access, so the parse errs on the side of NOT trusted.
+ */
+const CSV_TRUTHY = new Set(['true', '1', 'yes'])
+
+/** Parse a CSV boolean cell: true/1/yes (case-insensitive), default false. */
+export function parseCsvBoolean(value: string | undefined): boolean {
+  if (!value) return false
+  return CSV_TRUTHY.has(value.trim().toLowerCase())
+}
+
+/**
  * CSV row validation schema
  */
 export const csvRowSchema = z.object({
@@ -27,6 +40,12 @@ export const csvRowSchema = z.object({
   board: z.string().optional(),
   author_name: z.string().optional(),
   author_email: z.string().email().optional().or(z.literal('')),
+  // Asserts the author's email as verified when this row CREATES the user.
+  // Existing users are never flipped by an import row.
+  email_verified: z
+    .string()
+    .optional()
+    .transform((val) => parseCsvBoolean(val)),
   vote_count: z
     .string()
     .optional()
@@ -197,7 +216,8 @@ export async function resolveRows(
     const principalId = await userResolver.resolve(
       row.author_email || null,
       row.author_name || null,
-      fallbackPrincipalId
+      fallbackPrincipalId,
+      row.email_verified
     )
     const isNewAuthor = userResolver.pendingCount > pendingBefore
 

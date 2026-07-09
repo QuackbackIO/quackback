@@ -10,6 +10,9 @@ const hoisted = vi.hoisted(() => ({
   completeImportRun: vi.fn(),
   failImportRun: vi.fn(),
   processImport: vi.fn(),
+  recordAuditEvent: vi.fn(),
+  principalFindFirst: vi.fn(),
+  userFindFirst: vi.fn(),
 }))
 
 vi.mock('../import-run.service', () => ({
@@ -21,6 +24,22 @@ vi.mock('../import-run.service', () => ({
 
 vi.mock('../import-service', () => ({
   processImport: hoisted.processImport,
+}))
+
+vi.mock('@/lib/server/db', () => ({
+  db: {
+    query: {
+      principal: { findFirst: hoisted.principalFindFirst },
+      user: { findFirst: hoisted.userFindFirst },
+    },
+  },
+  principal: { id: 'principal.id' },
+  user: { id: 'user.id' },
+  eq: (col: unknown, val: unknown) => ({ op: 'eq', col, val }),
+}))
+
+vi.mock('@/lib/server/audit/log', () => ({
+  recordAuditEvent: hoisted.recordAuditEvent,
 }))
 
 import { runImportCommitJob } from '../import-run-processor'
@@ -39,6 +58,12 @@ describe('runImportCommitJob', () => {
     hoisted.markImportRunRunning.mockResolvedValue(undefined)
     hoisted.completeImportRun.mockResolvedValue(undefined)
     hoisted.failImportRun.mockResolvedValue(undefined)
+    hoisted.principalFindFirst.mockResolvedValue({
+      userId: 'user_initiator',
+      role: 'admin',
+      type: 'user',
+    })
+    hoisted.userFindFirst.mockResolvedValue({ email: 'importer@example.com' })
   })
 
   it('creates the batch tag, marks the run running, then completes it with totals', async () => {
@@ -48,6 +73,7 @@ describe('runImportCommitJob', () => {
       skipped: 1,
       errors: [{ row: 3, message: 'bad row' }],
       createdTags: [],
+      verifiedAuthorsCreated: 0,
     })
 
     await runImportCommitJob({ runId: 'import_run_1' as never, source: 'csv', input: BASE_INPUT })
@@ -72,6 +98,7 @@ describe('runImportCommitJob', () => {
       skipped: 0,
       errors: [],
       createdTags: [],
+      verifiedAuthorsCreated: 0,
     })
 
     await runImportCommitJob({ runId: 'import_run_updated' as never, source: 'csv', input: BASE_INPUT })
@@ -100,5 +127,48 @@ describe('runImportCommitJob', () => {
     expect(hoisted.markImportRunRunning).not.toHaveBeenCalled()
     expect(hoisted.processImport).not.toHaveBeenCalled()
     expect(hoisted.failImportRun).toHaveBeenCalledWith('import_run_3', 'tag creation failed')
+  })
+
+  // The email_verified column asserts portal-granting trust, so a run that
+  // created verified users must leave ONE summary audit row — with the
+  // initiating actor and the count — never one per row.
+  it('emits one import.email_verified.asserted summary with actor + count', async () => {
+    hoisted.processImport.mockResolvedValue({
+      imported: 10,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+      createdTags: [],
+      verifiedAuthorsCreated: 3,
+    })
+
+    await runImportCommitJob({ runId: 'import_run_v' as never, source: 'csv', input: BASE_INPUT })
+
+    expect(hoisted.recordAuditEvent).toHaveBeenCalledTimes(1)
+    const call = hoisted.recordAuditEvent.mock.calls[0][0]
+    expect(call.event).toBe('import.email_verified.asserted')
+    expect(call.actor).toMatchObject({
+      userId: 'user_initiator',
+      email: 'importer@example.com',
+      role: 'admin',
+      type: 'user',
+    })
+    expect(call.target).toEqual({ type: 'import_run', id: 'import_run_v' })
+    expect(call.metadata).toEqual({ source: 'csv', count: 3 })
+  })
+
+  it('emits no verified-email summary when the run asserted none', async () => {
+    hoisted.processImport.mockResolvedValue({
+      imported: 10,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+      createdTags: [],
+      verifiedAuthorsCreated: 0,
+    })
+
+    await runImportCommitJob({ runId: 'import_run_n' as never, source: 'csv', input: BASE_INPUT })
+
+    expect(hoisted.recordAuditEvent).not.toHaveBeenCalled()
   })
 })

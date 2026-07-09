@@ -88,6 +88,7 @@ describe('buildRemappedCsv', () => {
     tags: null,
     author_name: null,
     author_email: null,
+    email_verified: null,
     vote_count: null,
     created_at: null,
     source_id: null,

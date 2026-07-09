@@ -61,6 +61,12 @@ export interface ImportResult {
   errors: ImportRowError[]
   /** List of tag names that were auto-created */
   createdTags: string[]
+  /**
+   * Users created with an asserted verified email (rows carrying a truthy
+   * email_verified column that introduced a new author/voter). Drives the
+   * per-run import.email_verified.asserted audit summary.
+   */
+  verifiedAuthorsCreated: number
 }
 
 /**

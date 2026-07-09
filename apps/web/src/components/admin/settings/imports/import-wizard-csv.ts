@@ -16,6 +16,7 @@ export type CanonicalFieldKey =
   | 'board'
   | 'author_name'
   | 'author_email'
+  | 'email_verified'
   | 'vote_count'
   | 'created_at'
   | 'source_id'
@@ -35,6 +36,7 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   { key: 'tags', label: 'Tags', required: false },
   { key: 'author_name', label: 'Author name', required: false },
   { key: 'author_email', label: 'Author email', required: false },
+  { key: 'email_verified', label: 'Email verified', required: false },
   { key: 'vote_count', label: 'Vote count', required: false },
   { key: 'created_at', label: 'Created at', required: false },
   { key: 'source_id', label: 'Source ID', required: false },
@@ -49,6 +51,7 @@ const SYNONYMS: Record<CanonicalFieldKey, string[]> = {
   tags: ['tags', 'labels'],
   author_name: ['author_name', 'author', 'creator', 'creator_name', 'idea_creator_name'],
   author_email: ['author_email', 'email', 'creator_email', 'idea_creator_email_address'],
+  email_verified: ['email_verified', 'verified', 'is_verified', 'email_is_verified'],
   vote_count: ['vote_count', 'votes', 'votecount', 'upvotes', 'voters_count'],
   created_at: ['created_at', 'created', 'date', 'timestamp', 'created_timestamp'],
   source_id: ['source_id', 'external_id', 'idea_id'],

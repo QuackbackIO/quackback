@@ -6,8 +6,8 @@
  * unit-testable without Redis: the worker's job handler is a thin call into
  * `runImportCommitJob`.
  */
-import type { ImportRunId } from '@quackback/ids'
-import type { ImportRunSource } from '@/lib/server/db'
+import type { ImportRunId, PrincipalId } from '@quackback/ids'
+import { db, eq, principal, user, type ImportRunSource } from '@/lib/server/db'
 import type { ImportInput } from './types'
 import { processImport } from './import-service'
 import {
@@ -16,6 +16,7 @@ import {
   completeImportRun,
   failImportRun,
 } from './import-run.service'
+import { recordAuditEvent, type AuditActorType } from '@/lib/server/audit/log'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'import-run-processor' })
@@ -54,8 +55,57 @@ export async function runImportCommitJob(data: ImportCommitJobData): Promise<voi
       },
       result.errors
     )
+
+    // ONE summary event per run that asserted verified emails (per-row events
+    // would flood the log on large imports). Asserting emailVerified grants
+    // portal access, so the trail records who ran the import and how many
+    // users it vouched for.
+    if (result.verifiedAuthorsCreated > 0) {
+      await recordVerifiedEmailSummary(
+        input.initiatedByPrincipalId,
+        runId,
+        source,
+        result.verifiedAuthorsCreated
+      )
+    }
   } catch (error) {
     log.error({ err: error, run_id: runId }, 'import commit job failed')
     await failImportRun(runId, error instanceof Error ? error.message : 'Import failed')
   }
+}
+
+/**
+ * Emit the per-run `import.email_verified.asserted` summary. The queue worker
+ * has no request context, so the actor is reconstructed from the run's
+ * initiating principal.
+ */
+async function recordVerifiedEmailSummary(
+  initiatedByPrincipalId: PrincipalId,
+  runId: ImportRunId,
+  source: ImportRunSource,
+  count: number
+): Promise<void> {
+  const initiator = await db.query.principal.findFirst({
+    where: eq(principal.id, initiatedByPrincipalId),
+    columns: { userId: true, role: true, type: true },
+  })
+  const initiatorUser = initiator?.userId
+    ? await db.query.user.findFirst({
+        where: eq(user.id, initiator.userId),
+        columns: { email: true },
+      })
+    : null
+
+  await recordAuditEvent({
+    event: 'import.email_verified.asserted',
+    actor: {
+      userId: initiator?.userId ?? null,
+      email: initiatorUser?.email ?? null,
+      role: initiator?.role ?? null,
+      type: (initiator?.type as AuditActorType | undefined) ?? null,
+    },
+    target: { type: 'import_run', id: runId },
+    after: { emailVerified: true },
+    metadata: { source, count },
+  })
 }
