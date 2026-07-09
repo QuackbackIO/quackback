@@ -1005,6 +1005,13 @@ const findPortalUsersByEmailSchema = z.object({
   email: z.string().email(),
 })
 
+// Type-only re-export so client callers of findPortalUsersByEmailFn can name
+// the result rows without importing from the server-only domains tree.
+export type {
+  ContactEmailMatch,
+  ContactEmailMatchType,
+} from '@/lib/server/domains/users/user.dedup'
+
 export const findPortalUsersByEmailFn = createServerFn({ method: 'POST' })
   .validator(findPortalUsersByEmailSchema)
   .handler(async ({ data }) => {

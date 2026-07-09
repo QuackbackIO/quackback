@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { UsersIcon } from '@heroicons/react/24/solid'
+import { useIntl } from 'react-intl'
+import { PlusIcon, UsersIcon } from '@heroicons/react/24/solid'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -33,6 +34,8 @@ interface UsersListProps {
   selectedSegmentIds: string[]
   onSelectSegment: (segmentId: string, shiftKey: boolean) => void
   onClearSegments: () => void
+  /** Opens the "New person" dialog; absent when the viewer can't manage people. */
+  onNewPerson?: () => void
 }
 
 const SORT_OPTIONS = [
@@ -119,7 +122,9 @@ export function UsersList({
   selectedSegmentIds,
   onSelectSegment,
   onClearSegments,
+  onNewPerson,
 }: UsersListProps) {
+  const intl = useIntl()
   const sort = filters.sort || 'newest'
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
@@ -226,6 +231,13 @@ export function UsersList({
             </button>
           ))}
         </div>
+        <div className="flex-1" />
+        {onNewPerson && (
+          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={onNewPerson}>
+            <PlusIcon className="h-3.5 w-3.5" />
+            {intl.formatMessage({ id: 'admin.people.new.trigger', defaultMessage: 'New person' })}
+          </Button>
+        )}
       </div>
 
       {/* Active Filters Bar - Always visible */}
