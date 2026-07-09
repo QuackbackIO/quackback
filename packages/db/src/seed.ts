@@ -21,13 +21,20 @@ import type {
   UserId,
   WorkspaceId,
   ChangelogId,
+  ChangelogCategoryId,
+  ChangelogProductId,
   RawFeedbackItemId,
 } from '@quackback/ids'
 import { user, account, settings, principal } from './schema/auth'
 import { boards, tags, roadmaps } from './schema/boards'
 import { posts, postTags, postRoadmaps, votes, comments } from './schema/posts'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
-import { changelogEntries, changelogEntryPosts } from './schema/changelog'
+import {
+  changelogCategories,
+  changelogEntries,
+  changelogEntryPosts,
+  changelogProducts,
+} from './schema/changelog'
 import { segments } from './schema/segments'
 import type { SegmentRules } from './schema/segments'
 import { feedbackSources, rawFeedbackItems, feedbackSignals } from './schema/feedback'
@@ -214,6 +221,8 @@ const changelogPresets = [
       'We heard your feedback loud and clear! Dark mode is finally here. Toggle it from Settings > Appearance or let your system preference decide. This update also includes improved contrast ratios for better accessibility.',
     status: 'published' as const,
     daysAgo: 3,
+    category: 'Feature',
+    product: 'Core app',
   },
   {
     title: 'Slack Integration Now Available',
@@ -221,6 +230,8 @@ const changelogPresets = [
       'Connect your workspace to Slack and get real-time notifications for new feedback, votes, and status changes. Set up custom channels for different boards and never miss important updates from your users.',
     status: 'published' as const,
     daysAgo: 14,
+    category: 'Integration',
+    product: 'Integrations',
   },
   {
     title: 'Export Your Data to CSV',
@@ -228,6 +239,8 @@ const changelogPresets = [
       'You can now export your posts, votes, and comments to CSV format. Perfect for reporting, analysis, or backing up your data. Find the export option in Settings > Data.',
     status: 'published' as const,
     daysAgo: 30,
+    category: 'Improvement',
+    product: 'Admin portal',
   },
   {
     title: 'Coming Soon: Mobile App',
@@ -235,12 +248,16 @@ const changelogPresets = [
       'We are excited to announce that our mobile app is in development! Stay tuned for iOS and Android apps that let you manage feedback on the go. Beta testing will begin next month.',
     status: 'scheduled' as const,
     daysAhead: 7,
+    category: 'Announcement',
+    product: 'Mobile',
   },
   {
     title: 'Improved Search & Filtering',
     content:
       'Finding feedback just got easier. Our new search now supports fuzzy matching, filters by status/board/tag, and remembers your recent searches. Plus, saved views are coming soon!',
     status: 'draft' as const,
+    category: 'Improvement',
+    product: 'Core app',
   },
   {
     title: 'Q1 2025 Roadmap Update',
@@ -248,7 +265,23 @@ const changelogPresets = [
       'Here is what we shipped this quarter and what is coming next. Thank you to everyone who submitted feedback - your input directly shapes our product direction.',
     status: 'published' as const,
     daysAgo: 45,
+    category: 'Announcement',
+    product: 'Core app',
   },
+]
+
+const changelogCategoryPresets = [
+  { name: 'Feature', slug: 'feature', color: '#22c55e' },
+  { name: 'Improvement', slug: 'improvement', color: '#3b82f6' },
+  { name: 'Integration', slug: 'integration', color: '#8b5cf6' },
+  { name: 'Announcement', slug: 'announcement', color: '#f59e0b' },
+]
+
+const changelogProductPresets = [
+  { name: 'Core app', slug: 'core-app' },
+  { name: 'Admin portal', slug: 'admin-portal' },
+  { name: 'Integrations', slug: 'integrations' },
+  { name: 'Mobile', slug: 'mobile' },
 ]
 
 const statusSlugs = ['open', 'under_review', 'planned', 'in_progress', 'complete', 'closed']
@@ -593,6 +626,23 @@ async function seed() {
     // Create changelog entries
     console.log('Creating changelog entries...')
 
+    const changelogCategoryRecords = changelogCategoryPresets.map((category) => ({
+      id: generateId('changelog_cat') as ChangelogCategoryId,
+      ...category,
+    }))
+    const changelogProductRecords = changelogProductPresets.map((product) => ({
+      id: generateId('changelog_prod') as ChangelogProductId,
+      ...product,
+    }))
+    await db.insert(changelogCategories).values(changelogCategoryRecords)
+    await db.insert(changelogProducts).values(changelogProductRecords)
+    const changelogCategoryByName = new Map(
+      changelogCategoryRecords.map((category) => [category.name, category.id])
+    )
+    const changelogProductByName = new Map(
+      changelogProductRecords.map((product) => [product.name, product.id])
+    )
+
     // Get posts with 'complete' status for linking
     const completePosts = postRecords.filter((p) => p.statusSlug === 'complete')
     let completePostIndex = 0
@@ -621,6 +671,8 @@ async function seed() {
         content: preset.content,
         contentJson: textToTipTapJson(preset.content),
         principalId: author.id,
+        categoryId: changelogCategoryByName.get(preset.category) ?? null,
+        productId: changelogProductByName.get(preset.product) ?? null,
         publishedAt,
         createdAt: publishedAt ?? new Date(),
         updatedAt: new Date(),
