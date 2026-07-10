@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "原因（選填）",
   "portal.moderation.reject.reasonPlaceholder": "為什麼要拒絕？",
   "portal.moderation.reject.cancel": "取消",
-  "portal.moderation.reject.confirm": "拒絕貼文"
+  "portal.moderation.reject.confirm": "拒絕貼文",
+  "admin.ticketActivity.title": "活動",
+  "admin.ticketActivity.system": "系統",
+  "admin.ticketActivity.created": "{actor} 建立了此工單",
+  "admin.ticketActivity.statusChanged": "{actor} 變更了狀態",
+  "admin.ticketActivity.assigned": "{actor} 指派給了 {name}",
+  "admin.ticketActivity.unassigned": "{actor} 移除了負責人",
+  "admin.ticketActivity.teamAssigned": "{actor} 指派給了 {name} 團隊",
+  "admin.ticketActivity.teamUnassigned": "{actor} 移除了團隊",
+  "admin.ticketActivity.assignmentUpdated": "{actor} 更新了指派",
+  "admin.ticketActivity.previously": "先前：{name}",
+  "admin.ticketActivity.priorityChanged": "{actor} 將優先順序設為 {priority}",
+  "admin.ticketActivity.reopened": "{actor} 透過回覆重新開啟了此工單",
+  "admin.ticketActivity.reopenedSystem": "因請求者回覆而重新開啟",
+  "admin.ticketActivity.deleted": "{actor} 刪除了此工單",
+  "admin.ticketActivity.empty": "尚無活動紀錄",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "未指派"
 }

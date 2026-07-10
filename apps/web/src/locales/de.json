@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "Grund (optional)",
   "portal.moderation.reject.reasonPlaceholder": "Warum wird dies abgelehnt?",
   "portal.moderation.reject.cancel": "Abbrechen",
-  "portal.moderation.reject.confirm": "Beitrag ablehnen"
+  "portal.moderation.reject.confirm": "Beitrag ablehnen",
+  "admin.ticketActivity.title": "Aktivität",
+  "admin.ticketActivity.system": "System",
+  "admin.ticketActivity.created": "{actor} hat dieses Ticket erstellt",
+  "admin.ticketActivity.statusChanged": "{actor} hat den Status geändert",
+  "admin.ticketActivity.assigned": "{actor} hat {name} zugewiesen",
+  "admin.ticketActivity.unassigned": "{actor} hat die Zuweisung entfernt",
+  "admin.ticketActivity.teamAssigned": "{actor} hat das Team {name} zugewiesen",
+  "admin.ticketActivity.teamUnassigned": "{actor} hat das Team entfernt",
+  "admin.ticketActivity.assignmentUpdated": "{actor} hat die Zuweisung aktualisiert",
+  "admin.ticketActivity.previously": "Zuvor: {name}",
+  "admin.ticketActivity.priorityChanged": "{actor} hat die Priorität auf {priority} gesetzt",
+  "admin.ticketActivity.reopened": "{actor} hat dieses Ticket durch eine Antwort wieder geöffnet",
+  "admin.ticketActivity.reopenedSystem": "Durch eine Antwort der anfragenden Person wieder geöffnet",
+  "admin.ticketActivity.deleted": "{actor} hat dieses Ticket gelöscht",
+  "admin.ticketActivity.empty": "Noch keine Aktivität aufgezeichnet",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "Nicht zugewiesen"
 }

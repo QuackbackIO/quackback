@@ -138,6 +138,10 @@ export function mockDbModule(): Record<string, unknown> {
       requesterPrincipalId: 'tickets.requesterPrincipalId',
       __name: 'tickets',
     },
+    ticketActivity: {
+      principalId: 'ticketActivity.principalId',
+      __name: 'ticket_activity',
+    },
     workflowRuns: {
       subjectPrincipalId: 'workflowRuns.subjectPrincipalId',
       __name: 'workflow_runs',

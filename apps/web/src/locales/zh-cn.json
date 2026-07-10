@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "原因（可选）",
   "portal.moderation.reject.reasonPlaceholder": "为什么要拒绝？",
   "portal.moderation.reject.cancel": "取消",
-  "portal.moderation.reject.confirm": "拒绝帖子"
+  "portal.moderation.reject.confirm": "拒绝帖子",
+  "admin.ticketActivity.title": "活动",
+  "admin.ticketActivity.system": "系统",
+  "admin.ticketActivity.created": "{actor} 创建了此工单",
+  "admin.ticketActivity.statusChanged": "{actor} 更改了状态",
+  "admin.ticketActivity.assigned": "{actor} 指派给了 {name}",
+  "admin.ticketActivity.unassigned": "{actor} 移除了负责人",
+  "admin.ticketActivity.teamAssigned": "{actor} 指派给了 {name} 团队",
+  "admin.ticketActivity.teamUnassigned": "{actor} 移除了团队",
+  "admin.ticketActivity.assignmentUpdated": "{actor} 更新了指派",
+  "admin.ticketActivity.previously": "此前：{name}",
+  "admin.ticketActivity.priorityChanged": "{actor} 将优先级设为 {priority}",
+  "admin.ticketActivity.reopened": "{actor} 通过回复重新打开了此工单",
+  "admin.ticketActivity.reopenedSystem": "因请求者回复而重新打开",
+  "admin.ticketActivity.deleted": "{actor} 删除了此工单",
+  "admin.ticketActivity.empty": "暂无活动记录",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "未指派"
 }

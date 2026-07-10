@@ -126,6 +126,25 @@ export const getTicketFn = createServerFn({ method: 'GET' })
     return getTicket(data.ticketId as TicketId)
   })
 
+/**
+ * The ticket's activity timeline (admin detail panel). Reads on TICKET_VIEW —
+ * the same permission as reading the ticket — with `assertTicketVisible` as
+ * the per-ticket visibility gate (unified inbox §2.5), so an agent who cannot
+ * see the ticket gets NotFound, never its history.
+ */
+export const fetchTicketActivityFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { listTicketActivity } = await import(
+      '@/lib/server/domains/tickets/ticket-activity.service'
+    )
+    return listTicketActivity(data.ticketId as TicketId)
+  })
+
 const createTicketSchema = z.object({
   type: ticketTypeSchema,
   title: z.string().min(1).max(300),

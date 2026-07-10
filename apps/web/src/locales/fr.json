@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "Raison (facultatif)",
   "portal.moderation.reject.reasonPlaceholder": "Pourquoi est-elle rejetée ?",
   "portal.moderation.reject.cancel": "Annuler",
-  "portal.moderation.reject.confirm": "Rejeter la publication"
+  "portal.moderation.reject.confirm": "Rejeter la publication",
+  "admin.ticketActivity.title": "Activité",
+  "admin.ticketActivity.system": "Système",
+  "admin.ticketActivity.created": "{actor} a créé ce ticket",
+  "admin.ticketActivity.statusChanged": "{actor} a modifié le statut",
+  "admin.ticketActivity.assigned": "{actor} a assigné {name}",
+  "admin.ticketActivity.unassigned": "{actor} a retiré l'assignation",
+  "admin.ticketActivity.teamAssigned": "{actor} a assigné l'équipe {name}",
+  "admin.ticketActivity.teamUnassigned": "{actor} a retiré l'équipe",
+  "admin.ticketActivity.assignmentUpdated": "{actor} a mis à jour l'assignation",
+  "admin.ticketActivity.previously": "Auparavant : {name}",
+  "admin.ticketActivity.priorityChanged": "{actor} a défini la priorité sur {priority}",
+  "admin.ticketActivity.reopened": "{actor} a rouvert ce ticket en répondant",
+  "admin.ticketActivity.reopenedSystem": "Rouvert par une réponse du demandeur",
+  "admin.ticketActivity.deleted": "{actor} a supprimé ce ticket",
+  "admin.ticketActivity.empty": "Aucune activité enregistrée pour l'instant",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "Non assigné"
 }

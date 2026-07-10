@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react'
+import { FormattedMessage } from 'react-intl'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useRouteContext } from '@tanstack/react-router'
 import {
@@ -52,6 +53,7 @@ import {
   TicketPriorityControl,
 } from '@/components/admin/inbox/ticket-controls'
 import { TicketLinks } from '@/components/admin/inbox/ticket-links'
+import { TicketActivityTimeline } from '@/components/admin/inbox/ticket-activity-timeline'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -578,7 +580,21 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
           </div>
         )}
 
-        {/* 6. Quinn AI activity — conversation-only. */}
+        {/* 6. Activity — the ticket's durable state-change timeline (created,
+              status moves incl. internal churn, assignment, priority, reopens).
+              Shown whenever a ticket is in scope: a ticket item, or a
+              conversation's linked customer ticket. */}
+        {ticket && (
+          <div className="space-y-3 border-t border-border/30 pt-4">
+            <span className="text-sm text-muted-foreground">
+              <FormattedMessage id="admin.ticketActivity.title" defaultMessage="Activity" />
+            </span>
+            <div className="border-t border-border/30" />
+            <TicketActivityTimeline ticketId={ticket.id} enabled={isVisible} />
+          </div>
+        )}
+
+        {/* 7. Quinn AI activity — conversation-only. */}
         {!isTicketItem && aiActivity && (
           <div className="space-y-2.5 border-t border-border/30 pt-4">
             <div className="flex items-center justify-between">

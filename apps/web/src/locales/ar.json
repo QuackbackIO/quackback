@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "السبب (اختياري)",
   "portal.moderation.reject.reasonPlaceholder": "لماذا يتم رفضه؟",
   "portal.moderation.reject.cancel": "إلغاء",
-  "portal.moderation.reject.confirm": "رفض المنشور"
+  "portal.moderation.reject.confirm": "رفض المنشور",
+  "admin.ticketActivity.title": "النشاط",
+  "admin.ticketActivity.system": "النظام",
+  "admin.ticketActivity.created": "أنشأ {actor} هذه التذكرة",
+  "admin.ticketActivity.statusChanged": "غيّر {actor} الحالة",
+  "admin.ticketActivity.assigned": "أسند {actor} التذكرة إلى {name}",
+  "admin.ticketActivity.unassigned": "أزال {actor} المسؤول المعيّن",
+  "admin.ticketActivity.teamAssigned": "أسند {actor} التذكرة إلى فريق {name}",
+  "admin.ticketActivity.teamUnassigned": "أزال {actor} الفريق",
+  "admin.ticketActivity.assignmentUpdated": "حدّث {actor} الإسناد",
+  "admin.ticketActivity.previously": "سابقًا: {name}",
+  "admin.ticketActivity.priorityChanged": "عيّن {actor} الأولوية إلى {priority}",
+  "admin.ticketActivity.reopened": "أعاد {actor} فتح هذه التذكرة بالرد",
+  "admin.ticketActivity.reopenedSystem": "أُعيد فتحها بعد رد مقدم الطلب",
+  "admin.ticketActivity.deleted": "حذف {actor} هذه التذكرة",
+  "admin.ticketActivity.empty": "لا يوجد نشاط مسجل بعد",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "غير مُسنَد"
 }

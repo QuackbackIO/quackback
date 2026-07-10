@@ -199,6 +199,9 @@ export type TicketId = TypeId<'ticket'>
 /** Ticket status ID - e.g., ticket_status_01h455vb4pex5vsknk084sn02q */
 export type TicketStatusId = TypeId<'ticket_status'>
 
+/** Ticket activity log ID - e.g., ticket_activity_01h455vb4pex5vsknk084sn02q */
+export type TicketActivityId = TypeId<'ticket_activity'>
+
 /** Channel account ID (§4.8) - e.g., channel_account_01h455vb4pex5vsknk084sn02q */
 export type ChannelAccountId = TypeId<'channel_account'>
 
@@ -376,6 +379,7 @@ export interface EntityIdMap {
   data_connector: DataConnectorId
   ticket: TicketId
   ticket_status: TicketStatusId
+  ticket_activity: TicketActivityId
   channel_account: ChannelAccountId
   sending_domain: SendingDomainId
   office_hours: OfficeHoursId

@@ -31,6 +31,13 @@ vi.mock('@/lib/server/config', () => ({
 // createTicket/setTicketStatus now fire it too, and it would otherwise touch
 // the real (unconfigured-in-tests) Redis client mid-rollback.
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEvent: vi.fn() }))
+// Neutralize the ticket activity log: this suite's write actors are unbacked
+// principal ids, and a real insert's FK failure would abort the fixture's
+// shared transaction. Covered in ticket-activity.service.test.ts instead.
+vi.mock('@/lib/server/domains/tickets/ticket-activity.service', () => ({
+  recordTicketActivity: vi.fn(),
+  listTicketActivity: vi.fn().mockResolvedValue([]),
+}))
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {

@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "Reason (optional)",
   "portal.moderation.reject.reasonPlaceholder": "Why is this being rejected?",
   "portal.moderation.reject.cancel": "Cancel",
-  "portal.moderation.reject.confirm": "Reject post"
+  "portal.moderation.reject.confirm": "Reject post",
+  "admin.ticketActivity.title": "Activity",
+  "admin.ticketActivity.system": "System",
+  "admin.ticketActivity.created": "{actor} created this ticket",
+  "admin.ticketActivity.statusChanged": "{actor} changed status",
+  "admin.ticketActivity.assigned": "{actor} assigned {name}",
+  "admin.ticketActivity.unassigned": "{actor} removed the assignee",
+  "admin.ticketActivity.teamAssigned": "{actor} assigned the {name} team",
+  "admin.ticketActivity.teamUnassigned": "{actor} removed the team",
+  "admin.ticketActivity.assignmentUpdated": "{actor} updated the assignment",
+  "admin.ticketActivity.previously": "Previously: {name}",
+  "admin.ticketActivity.priorityChanged": "{actor} set priority to {priority}",
+  "admin.ticketActivity.reopened": "{actor} reopened this ticket by replying",
+  "admin.ticketActivity.reopenedSystem": "Reopened by a requester reply",
+  "admin.ticketActivity.deleted": "{actor} deleted this ticket",
+  "admin.ticketActivity.empty": "No activity recorded yet",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "Unassigned"
 }

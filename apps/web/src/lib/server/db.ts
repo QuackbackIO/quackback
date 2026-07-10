@@ -182,6 +182,8 @@ export {
   ticketConversationsRelations,
   ticketLinks,
   ticketLinksRelations,
+  ticketActivity,
+  ticketActivityRelations,
   DEFAULT_TICKET_STATUSES,
   // Schema tables - email channel (support platform §4.8)
   channelAccounts,

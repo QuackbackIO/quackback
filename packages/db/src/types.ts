@@ -24,6 +24,7 @@ import type {
 } from './schema/conversation'
 import type { teams, teamMembers } from './schema/teams'
 import type { tickets, ticketStatuses, ticketConversations, ticketLinks } from './schema/tickets'
+import type { ticketActivity } from './schema/ticket-activity'
 import type { principal } from './schema/auth'
 
 // Status categories (defined here to avoid circular imports in tests)
@@ -547,6 +548,8 @@ export type TicketConversation = InferSelectModel<typeof ticketConversations>
 export type NewTicketConversation = InferInsertModel<typeof ticketConversations>
 export type TicketLink = InferSelectModel<typeof ticketLinks>
 export type NewTicketLink = InferInsertModel<typeof ticketLinks>
+export type TicketActivityEntity = InferSelectModel<typeof ticketActivity>
+export type NewTicketActivityEntity = InferInsertModel<typeof ticketActivity>
 
 // Reaction emoji constants (client-safe)
 export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'] as const

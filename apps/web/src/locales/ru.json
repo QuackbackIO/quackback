@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "Причина (необязательно)",
   "portal.moderation.reject.reasonPlaceholder": "Почему она отклоняется?",
   "portal.moderation.reject.cancel": "Отмена",
-  "portal.moderation.reject.confirm": "Отклонить публикацию"
+  "portal.moderation.reject.confirm": "Отклонить публикацию",
+  "admin.ticketActivity.title": "Активность",
+  "admin.ticketActivity.system": "Система",
+  "admin.ticketActivity.created": "{actor} создал(а) этот тикет",
+  "admin.ticketActivity.statusChanged": "{actor} изменил(а) статус",
+  "admin.ticketActivity.assigned": "{actor} назначил(а) {name}",
+  "admin.ticketActivity.unassigned": "{actor} снял(а) назначение",
+  "admin.ticketActivity.teamAssigned": "{actor} назначил(а) команду {name}",
+  "admin.ticketActivity.teamUnassigned": "{actor} убрал(а) команду",
+  "admin.ticketActivity.assignmentUpdated": "{actor} обновил(а) назначение",
+  "admin.ticketActivity.previously": "Ранее: {name}",
+  "admin.ticketActivity.priorityChanged": "{actor} установил(а) приоритет {priority}",
+  "admin.ticketActivity.reopened": "{actor} снова открыл(а) этот тикет, ответив в нём",
+  "admin.ticketActivity.reopenedSystem": "Открыт заново после ответа заявителя",
+  "admin.ticketActivity.deleted": "{actor} удалил(а) этот тикет",
+  "admin.ticketActivity.empty": "Активность пока не записана",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "Не назначено"
 }

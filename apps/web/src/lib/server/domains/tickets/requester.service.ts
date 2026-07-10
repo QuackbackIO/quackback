@@ -121,8 +121,10 @@ export async function replyToMyTicket(
     // A requester reply is not an agent "first response".
     stampFirstResponse: false,
   })
-  // A reply from a waiting/closed requester reopens the ticket (§4.2).
-  await autoReopenOnRequesterReply(input.ticketId)
+  // A reply from a waiting/closed requester reopens the ticket (§4.2). The
+  // requester is passed through as the activity actor so the timeline reads
+  // "reopened by <requester>'s reply", not as an anonymous system flip.
+  await autoReopenOnRequesterReply(input.ticketId, principalId)
   // Agent/integration-facing signal (senderType 'visitor'): customer activity
   // the team's integrations want, fire-and-forget after the write commits.
   void emitTicketReplied(actor, ticket, message)

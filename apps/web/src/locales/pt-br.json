@@ -675,5 +675,22 @@
   "portal.moderation.reject.reasonLabel": "Motivo (opcional)",
   "portal.moderation.reject.reasonPlaceholder": "Por que está sendo rejeitada?",
   "portal.moderation.reject.cancel": "Cancelar",
-  "portal.moderation.reject.confirm": "Rejeitar publicação"
+  "portal.moderation.reject.confirm": "Rejeitar publicação",
+  "admin.ticketActivity.title": "Atividade",
+  "admin.ticketActivity.system": "Sistema",
+  "admin.ticketActivity.created": "{actor} criou este ticket",
+  "admin.ticketActivity.statusChanged": "{actor} alterou o status",
+  "admin.ticketActivity.assigned": "{actor} atribuiu a {name}",
+  "admin.ticketActivity.unassigned": "{actor} removeu a atribuição",
+  "admin.ticketActivity.teamAssigned": "{actor} atribuiu à equipe {name}",
+  "admin.ticketActivity.teamUnassigned": "{actor} removeu a equipe",
+  "admin.ticketActivity.assignmentUpdated": "{actor} atualizou a atribuição",
+  "admin.ticketActivity.previously": "Anteriormente: {name}",
+  "admin.ticketActivity.priorityChanged": "{actor} definiu a prioridade como {priority}",
+  "admin.ticketActivity.reopened": "{actor} reabriu este ticket ao responder",
+  "admin.ticketActivity.reopenedSystem": "Reaberto por uma resposta do solicitante",
+  "admin.ticketActivity.deleted": "{actor} excluiu este ticket",
+  "admin.ticketActivity.empty": "Nenhuma atividade registrada ainda",
+  "admin.ticketActivity.fromTo": "{from} → {to}",
+  "admin.ticketActivity.none": "Não atribuído"
 }

@@ -59,6 +59,15 @@ vi.mock('../ticket.webhooks', () => webhooks)
 const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
 vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 
+// Neutralize the fire-and-forget activity log: this suite's actors are mostly
+// unbacked principal ids, and a real insert's FK failure would abort the
+// fixture's shared transaction. Writer coverage (types + metadata) lives in
+// ticket-activity.service.test.ts with backed principals.
+vi.mock('../ticket-activity.service', () => ({
+  recordTicketActivity: vi.fn(),
+  listTicketActivity: vi.fn().mockResolvedValue([]),
+}))
+
 // config getters validate the full env (absent in tests); provide just what the
 // attachment URL check (validateAttachments -> isTrustedAttachmentUrl) reads.
 vi.mock('@/lib/server/config', () => ({

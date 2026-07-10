@@ -23,6 +23,9 @@ import { ticketKeys } from '@/lib/client/queries/inbox'
 function applyTicket(queryClient: QueryClient, ticket: TicketDTO) {
   queryClient.setQueryData(ticketKeys.detail(ticket.id), ticket)
   void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+  // The write just appended to the ticket's activity timeline; refetch it so
+  // the detail panel's Activity section reflects the change immediately.
+  void queryClient.invalidateQueries({ queryKey: ['activity', 'ticket', ticket.id] })
 }
 
 export function useSetTicketStatus() {
