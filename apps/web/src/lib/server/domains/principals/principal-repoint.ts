@@ -48,6 +48,7 @@ import {
   workflowRuns,
   workflowRunEvents,
   changelogSubscriptions,
+  statusSubscriptions,
   principal,
   eq,
   and,
@@ -371,6 +372,13 @@ export const REPOINT_STEPS: RepointStep[] = [
     [],
     'Changelog subscriber state; unique on principal_id alone. An anon visitor auto-subscribed via contact capture should not lose that on merge, so it transfers to the target — but only when the target has no row of its own (the identified subscription/unsubscribe state wins).'
   ),
+  collisionRepoint(
+    'status_subscriptions',
+    statusSubscriptions,
+    'principal_id',
+    [],
+    'Status page subscriber state; unique on principal_id alone, same shape as changelog_subscriptions. Only self-serve subscribe is wired up today (and it rejects anonymous callers directly), but the source enum also carries auto/csv_import for parity with the changelog pipeline, so a future anon-eligible subscribe path is one merge decision away from being silently stranded without this step. Transfers to the target, but only when the target has no row of its own (the identified subscription/unsubscribe state wins).'
+  ),
 ]
 
 /**
@@ -409,6 +417,10 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
   'conversation_message_flags.principal_id': 'message flags are agent-only',
   'kb_articles.principal_id': 'help-center authors are team members',
   'changelog_entries.principal_id': 'changelog authors are team members',
+  'status_incidents.created_by':
+    'incidents/maintenance windows are authored by team members with status_page.publish; the merge source is always anonymous',
+  'status_incident_updates.created_by':
+    'incident updates are posted by team members with status_page.publish (same reasoning as status_incidents.created_by)',
   'post_merge_suggestions.resolved_by_principal_id': 'suggestion resolution is a team action',
   'feedback_suggestions.resolved_by_principal_id': 'suggestion resolution is a team action',
   'principal_role_assignments.principal_id':

@@ -150,6 +150,10 @@ export function mockDbModule(): Record<string, unknown> {
       principalId: 'changelogSubscriptions.principalId',
       __name: 'changelog_subscriptions',
     },
+    statusSubscriptions: {
+      principalId: 'statusSubscriptions.principalId',
+      __name: 'status_subscriptions',
+    },
     principal: {
       id: 'principal.id',
       userId: 'principal.userId',
