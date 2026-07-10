@@ -17,7 +17,6 @@ import type { ExternalStatus } from './status-sync-config'
 
 interface TicketStatusSyncConfigProps {
   integrationId: string
-  integrationType: string
   config: Record<string, unknown>
   enabled: boolean
   /** External statuses from the platform (e.g., GitHub issue Open/Closed) */
