@@ -185,12 +185,12 @@ export async function hasAnyLiveWorkflow(): Promise<boolean> {
 
 // --- Live-workflow attribute references (AI-ATTRIBUTES-PARITY-SPEC.md Phase 2) ---
 //
-// The Phase-2 live re-check cost gate: mirrors both Intercom's and
-// Featurebase's rule that a mid-conversation re-classification only runs when
-// some LIVE workflow condition actually branches on the attribute. No live
-// workflow references any AI attribute -> no re-check ever fires, so the
-// assistant orchestrator (a hot per-message path) can cheaply ask "is there
-// anything to re-check at all?" before spending on a classification call.
+// The Phase-2 live re-check cost gate: the industry-standard pattern where a
+// mid-conversation re-classification only runs when some LIVE workflow
+// condition actually branches on the attribute. No live workflow references
+// any AI attribute -> no re-check ever fires, so the assistant orchestrator
+// (a hot per-message path) can cheaply ask "is there anything to re-check at
+// all?" before spending on a classification call.
 
 /** Read the stored graph defensively — a malformed shape (or a still-empty
  *  draft) contributes no nodes rather than throwing. Mirrors

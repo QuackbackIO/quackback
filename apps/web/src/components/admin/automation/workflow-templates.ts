@@ -277,8 +277,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       class: 'customer_facing',
       // Quinn classifies conversation.attr.issue_type at hand-off (Settings >
       // Conversation data > "Let Quinn detect") — this branches on it the
-      // moment Quinn hands off, mirroring Intercom's Escalation Rules and
-      // Featurebase's Fibi workflow branches.
+      // moment Quinn hands off, the standard pattern for routing rules that
+      // act on an AI-classified attribute.
       triggerType: 'assistant.handed_off',
       graph: {
         nodes: [
