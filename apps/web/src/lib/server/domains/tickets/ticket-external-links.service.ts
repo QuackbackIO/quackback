@@ -133,19 +133,24 @@ export async function linkTicketToIssue(
   }
 
   const externalId = String(ref.number)
-  const existing = await db.query.ticketExternalLinks.findFirst({
-    where: and(
-      eq(ticketExternalLinks.ticketId, ticketId),
-      eq(ticketExternalLinks.integrationType, 'github'),
-      eq(ticketExternalLinks.externalId, externalId)
-    ),
-  })
+  const findExisting = () =>
+    db.query.ticketExternalLinks.findFirst({
+      where: and(
+        eq(ticketExternalLinks.ticketId, ticketId),
+        eq(ticketExternalLinks.integrationType, 'github'),
+        eq(ticketExternalLinks.externalId, externalId)
+      ),
+    })
+  const existing = await findExisting()
   if (existing) return toDTO(existing) // idempotent re-link
 
   const externalDisplayId = `${issueRepo}#${ref.number}`
   const externalUrl = `https://github.com/${issueRepo}/issues/${ref.number}`
 
   const created = await db.transaction(async (tx) => {
+    // onConflictDoNothing guards the pre-check race: a concurrent re-link of
+    // the same issue yields no row (and writes no duplicate audit note)
+    // instead of surfacing a unique-constraint error.
     const [row] = await tx
       .insert(ticketExternalLinks)
       .values({
@@ -156,7 +161,9 @@ export async function linkTicketToIssue(
         externalDisplayId,
         externalUrl,
       })
+      .onConflictDoNothing()
       .returning()
+    if (!row) return null
     // Team-only audit note on the ticket thread (never customer-visible).
     await emitTicketSystemMessage(
       ticketId,
@@ -167,6 +174,11 @@ export async function linkTicketToIssue(
     )
     return row
   })
+  if (!created) {
+    const winner = await findExisting()
+    if (winner) return toDTO(winner) // lost the race to an identical link
+    throw new ValidationError('LINK_FAILED', 'Could not link the issue. Please try again.')
+  }
 
   log.info(
     { ticket_id: ticketId, external_id: externalId, integration_id: integration.id },
