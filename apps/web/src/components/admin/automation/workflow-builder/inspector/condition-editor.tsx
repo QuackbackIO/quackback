@@ -63,6 +63,7 @@ export function ConditionEditor({
 }) {
   const { attributes, labels } = useWorkflowEntities()
   const attributeFieldDefs = labels.attributes ?? new Map<string, AttributeFieldDef>()
+  const teams = labels.teams ?? new Map<string, string>()
   const draft = conditionToDraft(condition)
 
   if (draft.kind === 'advanced') {
@@ -106,6 +107,7 @@ export function ConditionEditor({
           rule={rule}
           attributeFieldDefs={attributeFieldDefs}
           attributeItems={attributes}
+          teams={teams}
           onChange={(r) => updateRule(i, r)}
           onRemove={() => commit({ ...draft, rules: draft.rules.filter((_, j) => j !== i) })}
         />
@@ -132,16 +134,18 @@ function RuleRow({
   rule,
   attributeFieldDefs,
   attributeItems,
+  teams,
   onChange,
   onRemove,
 }: {
   rule: ConditionRuleDraft
   attributeFieldDefs: ReadonlyMap<string, AttributeFieldDef>
   attributeItems: ConversationAttributeItem[]
+  teams: ReadonlyMap<string, string>
   onChange: (rule: ConditionRuleDraft) => void
   onRemove: () => void
 }) {
-  const meta = resolveConditionField(rule.field, attributeFieldDefs)
+  const meta = resolveConditionField(rule.field, attributeFieldDefs, teams)
   const operators = meta.operators
   const needsValue = !VALUELESS_OPERATORS.has(rule.op)
   const unknownAttributeKey = isAttributeField(rule.field) && meta.unresolved
@@ -159,7 +163,9 @@ function RuleRow({
       onChange({ field, op, value })
       return
     }
-    const fieldMeta = CONDITION_FIELD_META[field]
+    // resolveConditionField (not the raw static meta) so conversation.team's
+    // live-loaded options pick a real default instead of always landing on ''.
+    const fieldMeta = resolveConditionField(field, attributeFieldDefs, teams)
     const op = OPERATORS_BY_KIND[fieldMeta.kind][0]!
     const value =
       fieldMeta.kind === 'choice'
@@ -231,7 +237,12 @@ function RuleRow({
           </SelectContent>
         </Select>
         {needsValue && (
-          <RuleValueEditor rule={rule} attributeItems={attributeItems} onChange={onChange} />
+          <RuleValueEditor
+            rule={rule}
+            attributeItems={attributeItems}
+            teams={teams}
+            onChange={onChange}
+          />
         )}
       </div>
     </div>
@@ -241,10 +252,12 @@ function RuleRow({
 function RuleValueEditor({
   rule,
   attributeItems,
+  teams,
   onChange,
 }: {
   rule: ConditionRuleDraft
   attributeItems: ConversationAttributeItem[]
+  teams: ReadonlyMap<string, string>
   onChange: (rule: ConditionRuleDraft) => void
 }) {
   if (isAttributeField(rule.field)) {
@@ -253,7 +266,7 @@ function RuleValueEditor({
     )
   }
 
-  const meta = CONDITION_FIELD_META[rule.field]
+  const meta = resolveConditionField(rule.field, undefined, teams)
   const set = (value: string) => onChange({ ...rule, value })
 
   if (meta.kind === 'choice') {

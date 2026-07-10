@@ -306,7 +306,7 @@ function buildStepNodeData(
         title: 'Continue if…',
         icon: 'condition',
         tone: 'violet',
-        meta: conditionSummary(step.condition, ctx.labels.attributes),
+        meta: conditionSummary(step.condition, ctx.labels.attributes, ctx.labels.teams),
       }
     case 'branch': {
       const n = step.paths.length
@@ -359,15 +359,16 @@ function triggerSections(
 /** Bold-highlighted rule-pill copy for one branch path's condition. */
 export function describeBranchPath(
   condition: GraphCondition,
-  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map()
+  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
+  teams: ReadonlyMap<string, string> = new Map()
 ): RulePart[] {
   const draft = conditionToDraft(condition)
   if (draft.kind === 'advanced') return [{ text: 'Custom condition' }]
   if (draft.rules.length === 0) return [{ text: 'No conditions · matches everything' }]
-  if (draft.rules.length > 1) return [{ text: conditionSummary(condition, attributes) }]
+  if (draft.rules.length > 1) return [{ text: conditionSummary(condition, attributes, teams) }]
 
   const rule = draft.rules[0]!
-  const meta = resolveConditionField(rule.field, attributes)
+  const meta = resolveConditionField(rule.field, attributes, teams)
   const op = OPERATOR_LABELS[rule.op]
   if (VALUELESS_OPERATORS.has(rule.op)) {
     return [{ text: 'If ' }, { text: meta.label, bold: true }, { text: ` ${op}` }]
@@ -463,7 +464,7 @@ function emitLane(
           data: {
             badge: PATH_LETTERS[pi] ?? String(pi + 1),
             name: path.key,
-            parts: describeBranchPath(path.condition, input.labels.attributes),
+            parts: describeBranchPath(path.condition, input.labels.attributes, input.labels.teams),
           },
         }
         acc.nodes.push(ruleNode)

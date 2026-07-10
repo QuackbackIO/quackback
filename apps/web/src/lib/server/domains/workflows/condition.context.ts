@@ -34,6 +34,7 @@ export async function resolveConditionContext(
       csatRating: conversations.csatRating,
       visitorPrincipalId: conversations.visitorPrincipalId,
       customAttributes: conversations.customAttributes,
+      assignedTeamId: conversations.assignedTeamId,
     })
     .from(conversations)
     .where(eq(conversations.id, conversationId))
@@ -58,6 +59,7 @@ export async function resolveConditionContext(
       priority: conv.priority,
       waitingMinutes,
       tagIds: tags.map((t) => t.id),
+      assignedTeamId: conv.assignedTeamId,
       // Raw envelopes; conversation.attr.<key> predicates unwrap on read.
       attributes: conv.customAttributes ?? {},
     },

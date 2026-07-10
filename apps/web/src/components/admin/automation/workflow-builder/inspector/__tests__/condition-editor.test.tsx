@@ -59,7 +59,12 @@ vi.mock('@/lib/client/hooks/use-team-members', () => ({
   useTeamMembers: () => ({ data: [] }),
 }))
 vi.mock('@/components/admin/conversation/inbox-nav-sidebar', () => ({
-  useInboxTeams: () => ({ data: [] }),
+  useInboxTeams: () => ({
+    data: [
+      { id: 'team_support', name: 'Support' },
+      { id: 'team_billing', name: 'Billing' },
+    ],
+  }),
 }))
 vi.mock('@/lib/server/functions/conversation-tags', () => ({
   fetchConversationTagsFn: vi.fn(async () => []),
@@ -185,6 +190,35 @@ describe('ConditionEditor — conversation attribute fields', () => {
   it('hides the value input entirely for is_set/is_empty on an attribute field', async () => {
     renderEditor({ field: 'conversation.attr.plan', op: 'is_set' })
     // Only field + operator selects — no third (value) control.
+    expect(document.querySelectorAll('select, input')).toHaveLength(2)
+  })
+})
+
+describe('ConditionEditor — conversation.team field', () => {
+  it('lists Team in the static field picker', async () => {
+    renderEditor()
+    fireEvent.click(await screen.findByText('Add rule'))
+    expect(within(fieldSelect()).getByText('Team')).toBeInTheDocument()
+  })
+
+  it('offers eq/neq/is_set/is_empty and a live team picker for the value', async () => {
+    renderEditor({ field: 'conversation.team', op: 'eq', value: 'team_support' })
+
+    const opLabels = within(operatorSelect())
+      .getAllByRole('option')
+      .map((o) => o.textContent)
+    expect(opLabels).toEqual(['is', 'is not', 'is set', 'is empty'])
+
+    const selects = document.querySelectorAll('select')
+    expect(selects).toHaveLength(3)
+    const valueSelect = selects[2] as HTMLSelectElement
+    expect(within(valueSelect).getByText('Support')).toBeInTheDocument()
+    expect(within(valueSelect).getByText('Billing')).toBeInTheDocument()
+    expect(valueSelect.value).toBe('team_support')
+  })
+
+  it('hides the value input for is_empty ("no team assigned")', async () => {
+    renderEditor({ field: 'conversation.team', op: 'is_empty' })
     expect(document.querySelectorAll('select, input')).toHaveLength(2)
   })
 })

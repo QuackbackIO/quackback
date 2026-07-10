@@ -17,6 +17,7 @@ const baseCtx = (over: Partial<ConditionContext> = {}): ConditionContext => ({
     priority: 'high',
     waitingMinutes: 45,
     tagIds: ['ctag_vip', 'ctag_billing'],
+    assignedTeamId: 'team_support',
     attributes: {
       // Envelope-shaped (the write path) and bare legacy values both resolve.
       plan: { v: 'pro', src: 'teammate', at: '2026-07-05T00:00:00.000Z' },
@@ -105,6 +106,26 @@ describe('evaluateCondition — leaves', () => {
   it('office-hours boolean', () => {
     ok({ field: 'office_hours', op: 'eq', value: true }, baseCtx({ officeHours: true }))
     no({ field: 'office_hours', op: 'eq', value: true }, baseCtx({ officeHours: false }))
+  })
+
+  it('conversation.team: eq / neq / is_set / is_empty, including the unassigned case', () => {
+    ok({ field: 'conversation.team', op: 'eq', value: 'team_support' })
+    no({ field: 'conversation.team', op: 'eq', value: 'team_billing' })
+    ok({ field: 'conversation.team', op: 'neq', value: 'team_billing' })
+    no({ field: 'conversation.team', op: 'neq', value: 'team_support' })
+    ok({ field: 'conversation.team', op: 'is_set' })
+    no({ field: 'conversation.team', op: 'is_empty' })
+
+    // Unassigned (assignedTeamId: null): eq to any concrete team is a
+    // non-match, neq to any concrete team matches (there's no team to equal),
+    // is_set is false, and is_empty — the deliberate "no team" test — holds.
+    const unassigned = baseCtx({
+      conversation: { ...baseCtx().conversation, assignedTeamId: null },
+    })
+    no({ field: 'conversation.team', op: 'eq', value: 'team_support' }, unassigned)
+    ok({ field: 'conversation.team', op: 'neq', value: 'team_support' }, unassigned)
+    no({ field: 'conversation.team', op: 'is_set' }, unassigned)
+    ok({ field: 'conversation.team', op: 'is_empty' }, unassigned)
   })
 
   it('is defensive: unknown field and type-mismatched compares never match', () => {

@@ -94,6 +94,7 @@ const ctx = (status = 'open'): ConditionContext => ({
     priority: 'none',
     waitingMinutes: null,
     tagIds: [],
+    assignedTeamId: null,
   },
 })
 

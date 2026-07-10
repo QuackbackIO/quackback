@@ -56,7 +56,7 @@ export type GraphCondition = Extract<GraphNode, { type: 'condition' }>['conditio
  */
 export const ATTRIBUTE_FIELD_PREFIX: typeof ServerAttributeFieldPrefix = 'conversation.attr.'
 
-/** The 10 built-in condition fields (mirrors the server's CONDITION_FIELDS). */
+/** The 11 built-in condition fields (mirrors the server's CONDITION_FIELDS). */
 export type StaticConditionField = (typeof CONDITION_FIELDS)[number]
 /** A dynamic `conversation.attr.<key>` predicate against a live attribute definition. */
 export type AttributeConditionField = `${typeof ATTRIBUTE_FIELD_PREFIX}${string}`
@@ -123,6 +123,10 @@ export const CONDITION_FIELD_META: Record<ConditionField, ConditionFieldMeta> = 
     kind: 'list',
     placeholder: 'Tag IDs, comma-separated',
   },
+  // No static options: the team list is live (WorkflowEntitiesProvider), so
+  // resolveConditionField fills `options` in from the `teams` map it's
+  // passed — the same lookup EntityLabels.teams already backs for actions.
+  'conversation.team': { label: 'Team', kind: 'choice' },
   'message.body': { label: 'Message body', kind: 'text', placeholder: 'Text to match' },
   'message.sender': {
     label: 'Message sender',
@@ -263,10 +267,13 @@ export interface ResolvedConditionField {
 
 /** Field metadata for both the static catalogue and attribute fields, the
  *  single place the visual editor and the canvas/outline summaries resolve
- *  a field's label / operators / value options from. */
+ *  a field's label / operators / value options from. `teams` fills in
+ *  conversation.team's options (id -> name, from the live team list) since
+ *  it — unlike the rest of the static catalogue — has no fixed option set. */
 export function resolveConditionField(
   field: ConditionField,
-  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map()
+  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
+  teams: ReadonlyMap<string, string> = new Map()
 ): ResolvedConditionField {
   if (isAttributeField(field)) {
     const key = attributeKeyFromField(field)
@@ -287,11 +294,15 @@ export function resolveConditionField(
     }
   }
   const meta = CONDITION_FIELD_META[field]
+  const options =
+    field === 'conversation.team'
+      ? Array.from(teams, ([value, label]) => ({ value, label }))
+      : meta.options
   return {
     label: meta.label,
     kind: meta.kind,
     operators: OPERATORS_BY_KIND[meta.kind],
-    options: meta.options,
+    options,
     placeholder: meta.placeholder,
   }
 }
@@ -1108,9 +1119,10 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
 
 function ruleSummary(
   rule: ConditionRuleDraft,
-  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map()
+  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
+  teams: ReadonlyMap<string, string> = new Map()
 ): string {
-  const meta = resolveConditionField(rule.field, attributes)
+  const meta = resolveConditionField(rule.field, attributes, teams)
   const op = OPERATOR_LABELS[rule.op]
   if (VALUELESS_OPERATORS.has(rule.op)) return `${meta.label} ${op}`
   let value = rule.value
@@ -1133,12 +1145,13 @@ function ruleSummary(
 
 export function conditionSummary(
   condition: GraphCondition,
-  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map()
+  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
+  teams: ReadonlyMap<string, string> = new Map()
 ): string {
   const draft = conditionToDraft(condition)
   if (draft.kind === 'advanced') return 'Custom condition'
   if (draft.rules.length === 0) return 'Matches everything'
-  const first = ruleSummary(draft.rules[0]!, attributes)
+  const first = ruleSummary(draft.rules[0]!, attributes, teams)
   if (draft.rules.length === 1) return first
   return `${first} +${draft.rules.length - 1} more`
 }
