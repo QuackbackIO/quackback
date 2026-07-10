@@ -17,6 +17,20 @@ export const BATCH_SIZE = 100
 export const IMPORT_LINK_TYPE = 'import'
 
 /**
+ * Recognized falsy spellings for the email_verified column. Import-created
+ * users default to VERIFIED — the shell has no credential accounts, so the
+ * real person must be able to claim it via SSO on first sign-in. An explicit
+ * false/0/no opts a dubious address out of that trust.
+ */
+const CSV_FALSY = new Set(['false', '0', 'no'])
+
+/** Parse the email_verified cell: false/0/no (case-insensitive) opt out; absent or anything else defaults to verified. */
+export function parseCsvEmailVerified(value: string | undefined): boolean {
+  if (!value || !value.trim()) return true
+  return !CSV_FALSY.has(value.trim().toLowerCase())
+}
+
+/**
  * CSV row validation schema
  */
 export const csvRowSchema = z.object({
@@ -27,6 +41,12 @@ export const csvRowSchema = z.object({
   board: z.string().optional(),
   author_name: z.string().optional(),
   author_email: z.string().email().optional().or(z.literal('')),
+  // Whether the author's email is verified when this row CREATES the user
+  // (default true — claimable shell). Existing users are never flipped.
+  email_verified: z
+    .string()
+    .optional()
+    .transform((val) => parseCsvEmailVerified(val)),
   vote_count: z
     .string()
     .optional()
@@ -197,7 +217,8 @@ export async function resolveRows(
     const principalId = await userResolver.resolve(
       row.author_email || null,
       row.author_name || null,
-      fallbackPrincipalId
+      fallbackPrincipalId,
+      row.email_verified
     )
     const isNewAuthor = userResolver.pendingCount > pendingBefore
 

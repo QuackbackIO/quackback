@@ -10,6 +10,7 @@ import { UserDetail } from '@/components/admin/users/user-detail'
 import { CompaniesView } from '@/components/admin/users/companies-view'
 import { CompanyDetail } from '@/components/admin/users/company-detail'
 import { InvitationsView } from '@/components/admin/users/invitations-view'
+import { NewPersonDialog } from '@/components/admin/users/new-person-dialog'
 import { useUsersFilters } from '@/components/admin/users/use-users-filters'
 import { usePortalInvites } from '@/components/admin/users/use-portal-invites'
 import { Route as UsersRoute } from '@/routes/admin/users'
@@ -163,6 +164,8 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
 
   // Segment dialog state
   const [createOpen, setCreateOpen] = useState(false)
+  // "New person" (ad-hoc contact) dialog state
+  const [newPersonOpen, setNewPersonOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<SegmentListItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<SegmentListItem | null>(null)
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null)
@@ -347,9 +350,19 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             selectedSegmentIds={filters.segmentIds ?? []}
             onSelectSegment={handleSelectSegment}
             onClearSegments={handleClearSegments}
+            onNewPerson={
+              currentMemberRole === 'admin' ? () => setNewPersonOpen(true) : undefined
+            }
           />
         )}
       </UsersLayout>
+
+      {/* New person (ad-hoc contact) dialog */}
+      <NewPersonDialog
+        open={newPersonOpen}
+        onOpenChange={setNewPersonOpen}
+        onViewPerson={(principalId) => setSelectedUserId(principalId)}
+      />
 
       {/* Create dialog */}
       <SegmentFormDialog
