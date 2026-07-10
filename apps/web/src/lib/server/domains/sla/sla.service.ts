@@ -9,7 +9,9 @@
  */
 import {
   db,
+  and,
   eq,
+  sql,
   conversations,
   slaEvents,
   type Conversation,
@@ -47,6 +49,11 @@ export type SlaApplied = {
   // state without a join back to the policy. Stamps written before this field
   // existed read as true (the policy default).
   pauseOnSnooze?: boolean
+  // ISO instant the clock was paused at (the conversation entered 'snoozed'
+  // under a pauseOnSnooze policy). Absent/null while the clock is running.
+  // Set by pauseSlaOnSnooze, cleared by resumeSlaFromSnooze once the
+  // still-unsettled deadlines have been shifted forward by the paused span.
+  pausedAt?: string | null
 }
 
 /**
@@ -119,69 +126,246 @@ async function loadSlaApplied(conversationId: ConversationId): Promise<SlaApplie
   return (row?.slaApplied as SlaApplied | undefined) ?? null
 }
 
-/** Persist a mutated stamp + append one clock event in a single spot (both writes
- *  always travel together, so callers never leave the stamp and log out of sync). */
+/**
+ * The CAS guard shared by every writer of `conversations.sla_applied`
+ * (pause/resume/settle): the update only lands while the stamp is still the
+ * exact one the caller read from — `appliedAt` identifies which SLA
+ * application it is, `pausedAt` identifies which pause state (or its absence,
+ * `null`) the caller computed its write from. A miss means a concurrent
+ * apply/pause/resume/settle already moved the stamp, and that write must win
+ * over this one rather than get overwritten. One helper so the three call
+ * sites can't drift on the predicate shape.
+ */
+function slaStampGuard(conversationId: ConversationId, appliedAt: string, pausedAt: string | null) {
+  return and(
+    eq(conversations.id, conversationId),
+    sql`${conversations.slaApplied} ->> 'appliedAt' = ${appliedAt}`,
+    pausedAt === null
+      ? sql`${conversations.slaApplied} ->> 'pausedAt' IS NULL`
+      : sql`${conversations.slaApplied} ->> 'pausedAt' = ${pausedAt}`
+  )
+}
+
+/**
+ * Persist a mutated stamp + append one clock event in a single spot (both writes
+ * always travel together, so callers never leave the stamp and log out of sync).
+ * Guarded by slaStampGuard on the `(appliedAt, pausedAt)` the caller computed
+ * `next` from — the same CAS pause/resume already use — so a concurrent
+ * pause/resume/settle that moved the stamp first wins instead of getting
+ * clobbered by this write. Returns whether the write landed; a caller whose
+ * guard misses must reload the stamp and recompute before retrying (see
+ * recordFirstResponse/recordResolution), the same trade-off pauseSlaOnSnooze's
+ * guard documents.
+ */
 async function commitClockEvent(
   conversationId: ConversationId,
   next: SlaApplied,
   kind: string,
   dueAt: string,
-  at: Date
-): Promise<void> {
+  at: Date,
+  guard: { appliedAt: string; pausedAt: string | null }
+): Promise<boolean> {
   const overdueMs = at.getTime() - new Date(dueAt).getTime()
-  await db
+  const [row] = await db
     .update(conversations)
     .set({ slaApplied: next, updatedAt: at })
-    .where(eq(conversations.id, conversationId))
+    .where(slaStampGuard(conversationId, guard.appliedAt, guard.pausedAt))
+    .returning({ id: conversations.id })
+  if (!row) return false
   await db.insert(slaEvents).values({
     conversationId,
     policyId: next.policyId,
     kind,
     meta: { dueAt, at: at.toISOString(), overdueSecs: Math.max(0, Math.round(overdueMs / 1000)) },
   })
+  return true
+}
+
+/**
+ * The deadline to judge a settle against: the stamped due date, shifted by any
+ * pause still active at `at`. Settling mid-snooze (e.g. a teammate replies to a
+ * still-snoozed conversation) doesn't itself resume the clock, since resume
+ * only happens when the conversation leaves 'snoozed', so this treats the
+ * elapsed pause up to the settle moment as excluded time, the same as an
+ * instantaneous resume-then-settle would. Once the conversation does resume,
+ * this reduces to the stamped due date (pausedAt is cleared by then).
+ */
+function dueAtForSettle(dueAt: string, pausedAt: string | null | undefined, at: Date): Date {
+  const due = new Date(dueAt)
+  if (!pausedAt) return due
+  const elapsedPauseMs = Math.max(0, at.getTime() - new Date(pausedAt).getTime())
+  return new Date(due.getTime() + elapsedPauseMs)
 }
 
 /**
  * Record the first teammate reply against the first-response clock and log
  * met/breached. Idempotent (only the first reply counts) and a no-op when no SLA
- * is applied or the policy doesn't track first response. Note: pause-on-snooze is
- * not yet reflected — the clock is the absolute deadline stamped at apply.
+ * is applied or the policy doesn't track first response. If the clock is
+ * currently paused (snoozed under pauseOnSnooze), the elapsed pause up to `at`
+ * is excluded, see dueAtForSettle.
+ *
+ * Guarded the same way as pause/resume (slaStampGuard): a concurrent
+ * pause/resume landing between this function's read and its write (e.g. a
+ * snooze resumes mid-settle, shifting the deadline and clearing pausedAt)
+ * loses the CAS. On that miss the stamp is reloaded and the settle recomputed
+ * exactly once against the fresh state — so it retries against the shifted
+ * deadline instead of writing a stale, un-shifted one that resurrects a
+ * pausedAt the resume already cleared. If the retry also misses (or the
+ * reload shows the clock already settled), this leaves it rather than
+ * clobber a newer write, the same trade-off pauseSlaOnSnooze documents.
  */
 export async function recordFirstResponse(
   conversationId: ConversationId,
   at: Date = new Date()
 ): Promise<void> {
-  const applied = await loadSlaApplied(conversationId)
-  if (!applied || !applied.firstResponseDueAt || applied.firstResponseAt) return
-  const breached = at.getTime() > new Date(applied.firstResponseDueAt).getTime()
-  await commitClockEvent(
-    conversationId,
-    { ...applied, firstResponseAt: at.toISOString() },
-    breached ? 'first_response_breached' : 'first_response_met',
-    applied.firstResponseDueAt,
-    at
-  )
+  let applied = await loadSlaApplied(conversationId)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!applied || !applied.firstResponseDueAt || applied.firstResponseAt) return
+    const dueAt = dueAtForSettle(applied.firstResponseDueAt, applied.pausedAt, at)
+    const breached = at.getTime() > dueAt.getTime()
+    const committed = await commitClockEvent(
+      conversationId,
+      { ...applied, firstResponseAt: at.toISOString() },
+      breached ? 'first_response_breached' : 'first_response_met',
+      dueAt.toISOString(),
+      at,
+      { appliedAt: applied.appliedAt, pausedAt: applied.pausedAt ?? null }
+    )
+    if (committed) return
+    applied = await loadSlaApplied(conversationId)
+  }
 }
 
 /**
  * Record the conversation's resolution against the time-to-close clock and log
  * met/breached. Idempotent and a no-op when no SLA is applied or the policy
- * doesn't track time-to-close.
+ * doesn't track time-to-close. If the clock is currently paused, the elapsed
+ * pause up to `at` is excluded, see dueAtForSettle. `preloaded` lets a caller
+ * that already has a fresh `SlaApplied` (e.g. resumeSlaFromSnooze's return, on
+ * a direct snoozed -> closed transition) skip the loadSlaApplied SELECT; pass
+ * `null` (resume was a no-op) or omit it and the `??` fallback loads it as
+ * usual. Guarded and retried on a CAS miss exactly like recordFirstResponse —
+ * see that doc comment. A preloaded stamp widens the window between when it
+ * was read and when this function writes it (it was already read once by the
+ * caller before reaching here), so it is just as likely to be stale as a
+ * fresh read: the same guarded-write-then-reload handles both uniformly,
+ * degrading a stale preloaded stamp to a reload rather than clobbering
+ * whatever is actually on the row.
  */
 export async function recordResolution(
+  conversationId: ConversationId,
+  at: Date = new Date(),
+  preloaded?: SlaApplied | null
+): Promise<void> {
+  let applied = preloaded ?? (await loadSlaApplied(conversationId))
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!applied || !applied.timeToCloseDueAt || applied.resolvedAt) return
+    const dueAt = dueAtForSettle(applied.timeToCloseDueAt, applied.pausedAt, at)
+    const breached = at.getTime() > dueAt.getTime()
+    const committed = await commitClockEvent(
+      conversationId,
+      { ...applied, resolvedAt: at.toISOString() },
+      breached ? 'resolution_breached' : 'resolution_met',
+      dueAt.toISOString(),
+      at,
+      { appliedAt: applied.appliedAt, pausedAt: applied.pausedAt ?? null }
+    )
+    if (committed) return
+    applied = await loadSlaApplied(conversationId)
+  }
+}
+
+/** Shift an ISO instant forward by `ms` milliseconds. */
+function shiftIso(iso: string, ms: number): string {
+  return new Date(new Date(iso).getTime() + ms).toISOString()
+}
+
+/**
+ * Pause-on-snooze (support platform §4.6): when a conversation with an active
+ * SLA whose policy opted into `pauseOnSnooze` enters 'snoozed', stamp the
+ * moment the clock stopped. The stamped deadlines themselves are left
+ * untouched here; they only shift once the paused duration is known, on
+ * resume. Uses a single guarded UPDATE (matches the appliedAt + pausedAt this
+ * call read) so a concurrent apply/pause/resume doesn't get clobbered. If the
+ * guard misses, this quietly skips rather than overwriting a newer stamp; the
+ * existing read-modify-write race in this domain is out of scope to fully fix.
+ * A no-op without an applied SLA, when the policy opted out of pausing, or
+ * when the clock is already paused (idempotent against a duplicate event).
+ */
+export async function pauseSlaOnSnooze(
   conversationId: ConversationId,
   at: Date = new Date()
 ): Promise<void> {
   const applied = await loadSlaApplied(conversationId)
-  if (!applied || !applied.timeToCloseDueAt || applied.resolvedAt) return
-  const breached = at.getTime() > new Date(applied.timeToCloseDueAt).getTime()
-  await commitClockEvent(
+  if (!applied || applied.pauseOnSnooze === false || applied.pausedAt) return
+
+  const next: SlaApplied = { ...applied, pausedAt: at.toISOString() }
+  const [row] = await db
+    .update(conversations)
+    .set({ slaApplied: next, updatedAt: at })
+    .where(slaStampGuard(conversationId, applied.appliedAt, null))
+    .returning({ id: conversations.id })
+  if (!row) return
+
+  await db.insert(slaEvents).values({
     conversationId,
-    { ...applied, resolvedAt: at.toISOString() },
-    breached ? 'resolution_breached' : 'resolution_met',
-    applied.timeToCloseDueAt,
-    at
-  )
+    policyId: applied.policyId,
+    kind: 'paused',
+    meta: { at: at.toISOString() },
+  })
+}
+
+/**
+ * Resume-from-snooze: shift every still-unsettled deadline forward by the
+ * paused duration (now - pausedAt) and clear the pause. A deadline whose
+ * outcome (firstResponseAt/resolvedAt) is already recorded is left untouched,
+ * since it settled against whatever was live at the time, pause or not. A
+ * deadline the policy never tracked is null and is likewise left untouched.
+ * The shift is a plain wall-clock delta rather than re-run through
+ * office-hours math, so on a schedule with closed hours inside the paused
+ * span this is a slight approximation; simple and exact for the common 24/7
+ * case. Same guarded-UPDATE approach as pauseSlaOnSnooze. A no-op (returning
+ * null) without an applied SLA or when the clock isn't currently paused;
+ * otherwise returns the post-resume stamp it wrote, so a caller settling a
+ * clock right after (e.g. the direct snoozed -> closed hook) can reuse it
+ * instead of reloading the row it just wrote.
+ */
+export async function resumeSlaFromSnooze(
+  conversationId: ConversationId,
+  at: Date = new Date()
+): Promise<SlaApplied | null> {
+  const applied = await loadSlaApplied(conversationId)
+  if (!applied || !applied.pausedAt) return null
+
+  const pausedAt = applied.pausedAt
+  const shiftMs = Math.max(0, at.getTime() - new Date(pausedAt).getTime())
+  const next: SlaApplied = {
+    ...applied,
+    pausedAt: null,
+    firstResponseDueAt:
+      !applied.firstResponseDueAt || applied.firstResponseAt
+        ? applied.firstResponseDueAt
+        : shiftIso(applied.firstResponseDueAt, shiftMs),
+    timeToCloseDueAt:
+      !applied.timeToCloseDueAt || applied.resolvedAt
+        ? applied.timeToCloseDueAt
+        : shiftIso(applied.timeToCloseDueAt, shiftMs),
+  }
+
+  const [row] = await db
+    .update(conversations)
+    .set({ slaApplied: next, updatedAt: at })
+    .where(slaStampGuard(conversationId, applied.appliedAt, pausedAt))
+    .returning({ id: conversations.id })
+  if (!row) return null
+
+  await db.insert(slaEvents).values({
+    conversationId,
+    policyId: applied.policyId,
+    kind: 'resumed',
+    meta: { pausedForSecs: Math.round(shiftMs / 1000), at: at.toISOString() },
+  })
+  return next
 }
 
 /**
