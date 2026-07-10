@@ -94,6 +94,18 @@ describe('withSweepLock', () => {
     expect(mockExecute).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps the lock row when keepUntilExpiry is true (skips the release DELETE)', async () => {
+    mockExecuteRows = [{ name: 'telemetry_ping', acquired_at: new Date() }]
+    const fn = vi.fn()
+
+    await withSweepLock('telemetry_ping', 82_800_000, fn, { keepUntilExpiry: true })
+
+    expect(fn).toHaveBeenCalledOnce()
+    // Only the INSERT runs — no release DELETE, so the row survives until
+    // its TTL expires and doubles as a "ran recently" marker.
+    expect(mockExecute).toHaveBeenCalledOnce()
+  })
+
   it('does NOT call execute when lock is acquired by another instance', async () => {
     // Already covered by the 'skips fn' test, but this explicitly
     // verifies that execute was called (it was — the check for rows

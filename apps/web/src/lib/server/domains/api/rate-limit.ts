@@ -1,46 +1,25 @@
 /**
- * Simple in-memory rate limiter for API authentication
- *
- * Uses a sliding window algorithm to track request counts per IP.
- * Designed to prevent brute-force attacks on API key authentication.
+ * Redis-backed fixed-window rate limiter for API authentication, shared
+ * across replicas. Built on the shared `redis-rate-bucket` primitive
+ * (INCR + EXPIRE NX) so this limiter shares plumbing with the sign-in
+ * limiters rather than re-implementing bucket bookkeeping.
  *
  * SECURITY NOTE: This trusts proxy headers (cf-connecting-ip, x-forwarded-for).
  * The application MUST be deployed behind a trusted reverse proxy (Cloudflare, nginx)
  * that sets these headers. Direct exposure to the internet allows header spoofing.
  */
-
-interface RateLimitEntry {
-  count: number
-  windowStart: number
-}
-
-const rateLimitStore = new Map<string, RateLimitEntry>()
+import {
+  bucketRetryAfter,
+  incrementBucket,
+  type RateBucketSpec,
+} from '@/lib/server/utils/redis-rate-bucket'
 
 // Configuration
-const WINDOW_MS = 60_000 // 1 minute
+const WINDOW_SECONDS = 60 // 1 minute
 const MAX_REQUESTS = 100 // 100 requests per minute per IP — used when tier limit is null (OSS)
 const IMPORT_MIN = 2000 // Floor for import-mode caps so a tight per-minute tier doesn't choke bulk imports
-const MAX_STORE_SIZE = 50_000 // Cap store size to prevent memory exhaustion
-const CLEANUP_INTERVAL_MS = 60_000 // Cleanup every minute
 
-// Cleanup old entries periodically
-let cleanupTimer: ReturnType<typeof setInterval> | null = null
-
-function startCleanup() {
-  if (cleanupTimer) return
-  cleanupTimer = setInterval(() => {
-    const now = Date.now()
-    for (const [key, entry] of rateLimitStore.entries()) {
-      if (now - entry.windowStart > WINDOW_MS) {
-        rateLimitStore.delete(key)
-      }
-    }
-  }, CLEANUP_INTERVAL_MS)
-  // Don't prevent process from exiting
-  cleanupTimer.unref?.()
-}
-
-startCleanup()
+const rateLimitKey = (ip: string): string => `api:rl:${ip}`
 
 /**
  * Check if a request is rate limited.
@@ -54,6 +33,10 @@ startCleanup()
  * cap by 20 (matching the historical 100 -> 2000 ratio).
  *
  * Self-hosters with no tier_limits row get null and fall back to MAX_REQUESTS.
+ *
+ * The counter is keyed by IP only (not mode), so import-mode and
+ * normal-mode calls for the same IP share one count — only the cap
+ * chosen per call differs. Fails open on Redis errors.
  */
 export async function checkRateLimit(
   ip: string,
@@ -63,32 +46,22 @@ export async function checkRateLimit(
   remaining: number
   retryAfter?: number
 }> {
-  const now = Date.now()
   const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
   const limits = await getTierLimits()
   const baseLimit = limits.apiRequestsPerMinute ?? MAX_REQUESTS
   const maxRequests = importMode ? Math.max(baseLimit * 20, IMPORT_MIN) : baseLimit
-  const entry = rateLimitStore.get(ip)
 
-  // New IP or window expired - reset
-  if (!entry || now - entry.windowStart > WINDOW_MS) {
-    // Cap store size to prevent memory exhaustion from spoofed IPs
-    if (rateLimitStore.size >= MAX_STORE_SIZE && !entry) {
-      return { allowed: false, remaining: 0, retryAfter: 60 }
-    }
-    rateLimitStore.set(ip, { count: 1, windowStart: now })
-    return { allowed: true, remaining: maxRequests - 1 }
+  const spec: RateBucketSpec = { key: rateLimitKey(ip), windowSeconds: WINDOW_SECONDS }
+  const { count } = await incrementBucket(spec)
+
+  // Redis error → fail open.
+  if (count === null) return { allowed: true, remaining: maxRequests }
+
+  if (count > maxRequests) {
+    return { allowed: false, remaining: 0, retryAfter: await bucketRetryAfter(spec) }
   }
 
-  // Within window - increment and check
-  entry.count++
-
-  if (entry.count > maxRequests) {
-    const retryAfter = Math.ceil((entry.windowStart + WINDOW_MS - now) / 1000)
-    return { allowed: false, remaining: 0, retryAfter }
-  }
-
-  return { allowed: true, remaining: maxRequests - entry.count }
+  return { allowed: true, remaining: Math.max(0, maxRequests - count) }
 }
 
 /**
