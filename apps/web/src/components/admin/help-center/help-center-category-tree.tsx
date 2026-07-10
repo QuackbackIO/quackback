@@ -14,6 +14,7 @@ export interface TreeCategory {
   description: string | null
   icon: string | null
   isPublic: boolean
+  segmentIds: string[]
   articleCount: number
   recursiveArticleCount: number
 }

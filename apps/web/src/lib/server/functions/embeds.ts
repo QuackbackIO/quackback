@@ -219,7 +219,9 @@ export const getEmbedPreviewFn = createServerFn({ method: 'GET' })
           getChangelog: getPublicChangelogMetaById,
           getArticle: async (slug: string) => {
             try {
-              return await getPublicArticleBySlug(slug)
+              // The actor drives the category segment gate: a gated article
+              // embeds as unavailable for non-members, same as a missing one.
+              return await getPublicArticleBySlug(slug, actor)
             } catch {
               return null
             }

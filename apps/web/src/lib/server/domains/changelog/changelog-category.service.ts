@@ -16,7 +16,8 @@ import {
 } from '@/lib/server/db'
 import type { ChangelogCategoryId, ChangelogId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
-import { isTeamActor, type Actor } from '@/lib/server/policy/types'
+import type { Actor } from '@/lib/server/policy/types'
+import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import type {
   ChangelogCategory,
   CreateChangelogCategoryInput,
@@ -232,18 +233,12 @@ export async function setEntryCategories(
  * Categories with an empty segmentIds list ([] = everyone) never restrict.
  * An entry with no categories, or only ungated ones, is always visible.
  * Team actors bypass the gate entirely (mirrors `tierAllows`/`boardViewFilter`).
+ * Per-category semantics come from the shared segment-gate primitive
+ * (policy/segment-gate.ts).
  */
 export function categoryGateAllows(
   categories: Array<{ segmentIds: string[] }>,
   actor: Actor
 ): boolean {
-  if (isTeamActor(actor)) return true
-  for (const category of categories) {
-    if (category.segmentIds.length === 0) continue
-    const isMember =
-      actor.principalType === 'user' &&
-      category.segmentIds.some((id) => actor.segmentIds.has(id as never))
-    if (!isMember) return false
-  }
-  return true
+  return categories.every((category) => segmentGateAllows(actor, category.segmentIds))
 }

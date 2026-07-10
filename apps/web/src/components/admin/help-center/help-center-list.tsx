@@ -196,6 +196,7 @@ export function HelpCenterList() {
                 description: categoryDialogState.category.description,
                 icon: categoryDialogState.category.icon,
                 isPublic: categoryDialogState.category.isPublic,
+                segmentIds: categoryDialogState.category.segmentIds,
                 parentId: categoryDialogState.category.parentId,
               }
             : undefined

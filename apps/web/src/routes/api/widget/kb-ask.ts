@@ -34,6 +34,8 @@ import {
   widgetCorsHeaders,
   widgetJsonError,
 } from '@/lib/server/widget/public-endpoint'
+import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
+import type { Actor } from '@/lib/server/policy/types'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logAiUsage, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
@@ -67,13 +69,15 @@ function toSourceMeta(a: RetrievedKbArticle): KbAskSourceMeta {
  */
 async function relatedArticles(
   query: string,
-  retrieved: RetrievedKbArticle[]
+  retrieved: RetrievedKbArticle[],
+  viewer: Actor
 ): Promise<RetrievedKbArticle[]> {
   if (retrieved.length > 0) return retrieved.slice(0, KB_ASK_RELATED_TOP_K)
   try {
     // topK already caps the row count in SQL, so no post-slice is needed.
     return await retrieveKbArticles(query, {
       audience: 'public',
+      viewer,
       minScore: RELATED_SIMILARITY_FLOOR,
       topK: KB_ASK_RELATED_TOP_K,
     })
@@ -136,9 +140,13 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
   }
 
   const retrievalStartedAt = Date.now()
+  // Identified widget users may answer from segment-gated categories they
+  // belong to; unidentified callers resolve anonymous and see only ungated
+  // articles (fail closed).
+  const viewer = await resolveWidgetViewer()
   let articles
   try {
-    articles = await retrieveKbArticles(query, { audience: 'public' })
+    articles = await retrieveKbArticles(query, { audience: 'public', viewer })
   } catch (error) {
     log.error({ err: error }, 'kb ask retrieval failed')
     return widgetJsonError(500, 'SERVER_ERROR', 'Answer lookup failed')
@@ -153,7 +161,7 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
       // would stream to the client before the final no_answer overrides them.
       // Emit a graceful miss with related near-misses instead.
       if (articles.length === 0) {
-        const related = await relatedArticles(query, articles)
+        const related = await relatedArticles(query, articles, viewer)
         void logAiUsage({
           pipelineStep: 'help_center_answers',
           callType: 'chat_completion',
@@ -198,7 +206,7 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
 
       // Graceful miss: keep the model's contextual reply, and suggest related
       // near-misses as clickable next steps.
-      const related = await relatedArticles(query, articles)
+      const related = await relatedArticles(query, articles, viewer)
       sse.send(KB_ASK_EVENTS.final, {
         kind: 'no_answer',
         answer: result.answer,

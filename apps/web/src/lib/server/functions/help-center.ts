@@ -5,7 +5,13 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { KbCategoryId, KbArticleId, PrincipalId } from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { requireAuth, getOptionalAuth } from './auth-helpers'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+import {
+  requireAuth,
+  getOptionalAuth,
+  hasAuthCredentials,
+  policyActorFromAuth,
+} from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listCategories,
@@ -53,6 +59,19 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'help-center' })
 
+/**
+ * Resolve the public help-center viewer for the category segment gate.
+ * Anonymous requests skip the DB entirely (fail closed: gated content is
+ * invisible); signed-in requests resolve segment memberships via the
+ * standard policy-actor path.
+ */
+async function publicViewer(): Promise<Actor> {
+  // Cookie (portal) or Bearer (widget iframe) — anything else is anonymous
+  // without a DB round-trip, and fails closed on gated content.
+  if (!hasAuthCredentials()) return ANONYMOUS_ACTOR
+  return policyActorFromAuth(await getOptionalAuth())
+}
+
 // ============================================================================
 // Helper: serialize article dates
 // ============================================================================
@@ -98,7 +117,10 @@ export const listPublicCategoriesFn = createServerFn({ method: 'GET' })
     const { listPublicCategoriesForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
-    const categories = await listPublicCategoriesForLocale(data.locale ?? DEFAULT_LOCALE)
+    const categories = await listPublicCategoriesForLocale(
+      data.locale ?? DEFAULT_LOCALE,
+      await publicViewer()
+    )
     return categories.map(serializeCategory)
   })
 
@@ -122,7 +144,8 @@ export const getPublicCategoryBySlugFn = createServerFn({ method: 'GET' })
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const category = await getPublicCategoryBySlugForLocale(
       data.slug,
-      data.locale ?? DEFAULT_LOCALE
+      data.locale ?? DEFAULT_LOCALE,
+      await publicViewer()
     )
     return serializeCategory(category)
   })
@@ -199,7 +222,7 @@ export const restoreArticleFn = createServerFn({ method: 'POST' })
 export const listPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(listPublicArticlesSchema)
   .handler(async ({ data }) => {
-    const result = await listPublicArticles(data)
+    const result = await listPublicArticles(data, await publicViewer())
     return {
       ...result,
       items: result.items.map(serializeArticle),
@@ -214,7 +237,8 @@ export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
     const articles = await listPublicArticlesForCategoryLocale(
       data.categoryId,
-      data.locale ?? DEFAULT_LOCALE
+      data.locale ?? DEFAULT_LOCALE,
+      await publicViewer()
     )
     return articles.map((a) => ({
       ...a,
@@ -231,7 +255,7 @@ export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
 export const listPopularPublicArticlesFn = createServerFn({ method: 'GET' })
   .validator(z.object({ limit: z.number().int().min(1).max(20).optional() }))
   .handler(async ({ data }) => {
-    return listPopularPublicArticles(data.limit ?? 6)
+    return listPopularPublicArticles(data.limit ?? 6, await publicViewer())
   })
 
 export const getArticleFn = createServerFn({ method: 'GET' })
@@ -248,7 +272,11 @@ export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
     const { getPublicArticleBySlugForLocale } =
       await import('@/lib/server/domains/help-center/help-center-locale.query')
     const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
-    const article = await getPublicArticleBySlugForLocale(data.slug, data.locale ?? DEFAULT_LOCALE)
+    const article = await getPublicArticleBySlugForLocale(
+      data.slug,
+      data.locale ?? DEFAULT_LOCALE,
+      await publicViewer()
+    )
     const { helpfulCount: _h, notHelpfulCount: _n, ...publicArticle } = serializeArticle(article)
     return publicArticle
   })
@@ -335,5 +363,5 @@ export const searchPublicArticlesFn = createServerFn({ method: 'GET' })
       ])
     const config = await getHelpCenterConfig()
     const locale = resolveSearchLocale(data.locale, config.locales.additional, config.locales.default)
-    return hybridSearchForLocale(data.query, locale, data.limit ?? 10)
+    return hybridSearchForLocale(data.query, locale, data.limit ?? 10, await publicViewer())
   })

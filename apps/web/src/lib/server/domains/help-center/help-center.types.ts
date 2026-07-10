@@ -32,6 +32,8 @@ export interface HelpCenterCategory {
   description: string | null
   icon: string | null
   isPublic: boolean
+  /** Segments a public category is restricted to; [] = everyone. */
+  segmentIds: string[]
   position: number
   createdAt: Date
   updatedAt: Date

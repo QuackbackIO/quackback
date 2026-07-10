@@ -21,7 +21,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CategoryIcon, ICON_LOOKUP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
+import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
 import { cn } from '@/lib/shared/utils'
+import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { useCreateCategory, useUpdateCategory } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import {
@@ -185,6 +187,7 @@ interface CategoryFormDialogProps {
     description: string | null
     icon: string | null
     isPublic: boolean
+    segmentIds: string[]
     parentId: KbCategoryId | null
   }
   /** Pre-selected parent when creating a new category (ignored if initialValues is set). */
@@ -207,6 +210,7 @@ export function CategoryFormDialog({
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [isPublic, setIsPublic] = useState(true)
+  const [segmentIds, setSegmentIds] = useState<string[]>([])
   const [parentId, setParentId] = useState<KbCategoryId | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const [iconSearch, setIconSearch] = useState('')
@@ -217,9 +221,18 @@ export function CategoryFormDialog({
       setName(initialValues?.name || '')
       setDescription(initialValues?.description || '')
       setIsPublic(initialValues?.isPublic ?? true)
+      setSegmentIds(initialValues?.segmentIds ?? [])
       setParentId(initialValues?.parentId ?? defaultParentId ?? null)
     }
   }, [open, initialValues, defaultParentId])
+
+  const segmentsQuery = useQuery({
+    queryKey: ['admin', 'segments'] as const,
+    queryFn: () => listSegmentsFn(),
+    staleTime: 60_000,
+    enabled: open,
+  })
+  const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   const { data: allCategories = [] } = useQuery({
     ...helpCenterQueries.categories(),
@@ -272,6 +285,7 @@ export function CategoryFormDialog({
         description: trimmedDesc || null,
         icon,
         isPublic,
+        segmentIds: isPublic ? segmentIds : [],
         parentId,
       })
     } else {
@@ -280,6 +294,7 @@ export function CategoryFormDialog({
         description: trimmedDesc || undefined,
         icon,
         isPublic,
+        segmentIds: isPublic ? segmentIds : [],
         parentId,
       })
       onCreated?.(result.id)
@@ -404,6 +419,25 @@ export function CategoryFormDialog({
             </div>
             <Switch checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
+
+          {isPublic && segments.length > 0 && (
+            <div className="space-y-2">
+              <Label>
+                Restrict to segments{' '}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Leave empty to show this category and its articles to everyone. Selecting segments
+                limits them to signed-in members of those segments.
+              </p>
+              <SegmentMultiSelect
+                segments={segments}
+                value={segmentIds}
+                onChange={setSegmentIds}
+                ariaLabel="Category segment gate"
+              />
+            </div>
+          )}
 
           {isEdit && <CategoryTranslationsSection categoryId={initialValues.id} />}
 

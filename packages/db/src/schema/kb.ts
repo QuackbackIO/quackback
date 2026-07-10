@@ -91,6 +91,9 @@ export const helpCenterCategories = pgTable(
     description: text('description'),
     icon: text('icon'),
     isPublic: boolean('is_public').default(true).notNull(),
+    // Segments a PUBLIC category is restricted to; [] = everyone. Ignored when
+    // isPublic=false (team-only). Articles inherit their category's gate.
+    segmentIds: jsonb('segment_ids').$type<string[]>().notNull().default([]),
     position: integer('position').default(0).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

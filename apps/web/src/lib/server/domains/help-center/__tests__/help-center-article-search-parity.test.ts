@@ -45,6 +45,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import { listArticles } from '../help-center.article.query'
+import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 
 function dbRow(id: string) {
   return {
@@ -84,6 +85,7 @@ describe('listArticles hybrid search parity', () => {
 
     expect(mockSearchArticleIdsRanked).toHaveBeenCalledWith('dark mode', {
       audience: 'team',
+      viewer: ANONYMOUS_ACTOR,
       categoryId: undefined,
       status: 'all',
       limit: 50,
@@ -122,6 +124,7 @@ describe('listArticles hybrid search parity', () => {
     await listArticles({ search: 'q', categoryId: 'kb_category_7', status: 'draft' })
     expect(mockSearchArticleIdsRanked).toHaveBeenCalledWith('q', {
       audience: 'team',
+      viewer: ANONYMOUS_ACTOR,
       categoryId: 'kb_category_7',
       status: 'draft',
       limit: 50,

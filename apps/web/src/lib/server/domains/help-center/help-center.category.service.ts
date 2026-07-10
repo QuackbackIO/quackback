@@ -2,6 +2,7 @@ import {
   db,
   helpCenterCategories,
   helpCenterArticles,
+  segments,
   eq,
   and,
   isNull,
@@ -10,7 +11,9 @@ import {
   sql,
   inArray,
 } from '@/lib/server/db'
-import type { KbCategoryId } from '@quackback/ids'
+import type { KbCategoryId, SegmentId } from '@quackback/ids'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
+import { segmentGateAllows } from '@/lib/server/policy/segment-gate'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { slugify } from '@/lib/shared/utils'
 import { uniqueHelpCenterSlug } from './help-center.slug'
@@ -169,10 +172,19 @@ export async function listCategories(
   })
 }
 
-export async function listPublicCategories(): Promise<HelpCenterCategoryWithCount[]> {
+export async function listPublicCategories(
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategoryWithCount[]> {
   const all = await listCategories()
   return all
-    .filter((cat) => cat.isPublic && cat.recursivePublishedArticleCount > 0)
+    .filter(
+      (cat) =>
+        cat.isPublic &&
+        // Segment gate ([] = everyone) — same per-category semantics as the
+        // article-side SQL predicate (helpCenterVisibilityConditions).
+        segmentGateAllows(viewer, cat.segmentIds) &&
+        cat.recursivePublishedArticleCount > 0
+    )
     .map((cat) => ({ ...cat, articleCount: cat.recursivePublishedArticleCount }))
 }
 
@@ -204,10 +216,17 @@ export async function getCategoryBySlug(slug: string): Promise<HelpCenterCategor
  *
  * Deliberately not built on helpCenterVisibilityConditions (the shared
  * article predicate owner): this query has no article join, so only the
- * category-side conditions (not deleted, isPublic) apply here. Keep the
- * category-side semantics in lockstep with that owner.
+ * category-side conditions (not deleted, isPublic, segment gate) apply
+ * here. Keep the category-side semantics in lockstep with that owner.
+ *
+ * A segment-gated category the viewer isn't a member of throws the same
+ * NotFoundError shape as a genuinely missing slug, so gated content can't
+ * be distinguished from nonexistent content.
  */
-export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterCategory> {
+export async function getPublicCategoryBySlug(
+  slug: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterCategory> {
   const category = await db.query.helpCenterCategories.findFirst({
     where: and(
       eq(helpCenterCategories.slug, slug),
@@ -215,7 +234,7 @@ export async function getPublicCategoryBySlug(slug: string): Promise<HelpCenterC
       eq(helpCenterCategories.isPublic, true)
     ),
   })
-  if (!category) {
+  if (!category || !segmentGateAllows(viewer, category.segmentIds)) {
     throw new NotFoundError('CATEGORY_NOT_FOUND', `Category with slug "${slug}" not found`)
   }
   return category
@@ -230,6 +249,26 @@ const findCategorySlugConflict = (slug: string) =>
     where: eq(helpCenterCategories.slug, slug),
     columns: { id: true },
   })
+
+/**
+ * Validate a segment-gate list: every id must be an existing, non-deleted
+ * segment. Returns the deduplicated list. Rejecting unknown ids (rather than
+ * silently dropping them) surfaces admin typos and stale client state.
+ */
+async function validateSegmentIds(segmentIds: string[]): Promise<string[]> {
+  const unique = [...new Set(segmentIds)]
+  if (unique.length === 0) return []
+  const rows = await db.query.segments.findMany({
+    where: and(inArray(segments.id, unique as SegmentId[]), isNull(segments.deletedAt)),
+    columns: { id: true },
+  })
+  const valid = new Set<string>(rows.map((r) => r.id))
+  const unknown = unique.filter((id) => !valid.has(id))
+  if (unknown.length > 0) {
+    throw new ValidationError('VALIDATION_ERROR', `Unknown segment id(s): ${unknown.join(', ')}`)
+  }
+  return unique
+}
 
 export async function createCategory(input: CreateCategoryInput): Promise<HelpCenterCategory> {
   const name = input.name?.trim()
@@ -260,6 +299,7 @@ export async function createCategory(input: CreateCategoryInput): Promise<HelpCe
       slug,
       description: input.description?.trim() || null,
       isPublic: input.isPublic ?? true,
+      segmentIds: input.segmentIds ? await validateSegmentIds(input.segmentIds) : [],
       position: input.position ?? 0,
       parentId: (input.parentId as KbCategoryId) ?? null,
       icon: input.icon ?? null,
@@ -284,6 +324,8 @@ export async function updateCategory(
     )
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
   if (input.isPublic !== undefined) updateData.isPublic = input.isPublic
+  if (input.segmentIds !== undefined)
+    updateData.segmentIds = await validateSegmentIds(input.segmentIds)
   if (input.position !== undefined) updateData.position = input.position
   if (input.icon !== undefined) updateData.icon = input.icon ?? null
 

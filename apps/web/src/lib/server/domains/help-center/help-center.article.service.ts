@@ -10,6 +10,7 @@ import {
   sql,
 } from '@/lib/server/db'
 import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
 import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
@@ -83,16 +84,22 @@ export async function getArticleBySlug(slug: string): Promise<HelpCenterArticleW
   return resolveArticleWithCategory(article)
 }
 
-export async function getPublicArticleBySlug(slug: string): Promise<HelpCenterArticleWithCategory> {
+export async function getPublicArticleBySlug(
+  slug: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<HelpCenterArticleWithCategory> {
   // Join the parent category so the shared public predicate
   // (helpCenterVisibilityConditions, the single owner) also enforces
-  // category.isPublic: an article under a private category must not be
-  // reachable by slug.
+  // category.isPublic and the viewer's segment gate: an article under a
+  // private or gated category must not be reachable by slug, and a gated
+  // one 404s identically to a missing one.
   const rows = await db
     .select({ article: helpCenterArticles })
     .from(helpCenterArticles)
     .innerJoin(helpCenterCategories, eq(helpCenterArticles.categoryId, helpCenterCategories.id))
-    .where(and(eq(helpCenterArticles.slug, slug), ...helpCenterVisibilityConditions('public')))
+    .where(
+      and(eq(helpCenterArticles.slug, slug), ...helpCenterVisibilityConditions('public', viewer))
+    )
     .limit(1)
   const article = rows[0]?.article
   if (!article) {

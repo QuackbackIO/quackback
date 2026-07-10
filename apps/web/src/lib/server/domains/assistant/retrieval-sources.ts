@@ -97,6 +97,11 @@ function helpArticleUrl(categorySlug: string, slug: string): string {
 export const kbKnowledgeSource: KnowledgeSource = {
   sourceType: 'article',
   async retrieve(query, ceiling) {
+    // No viewer is threaded here, so at the 'public' ceiling retrieval fails
+    // closed: articles under segment-gated categories are excluded entirely
+    // (retrieveKbArticles defaults its viewer to ANONYMOUS_ACTOR). The 'team'
+    // ceiling bypasses the gate and relies on the isPublic/internal flag for
+    // the copilot leak gate.
     const articles = await retrieveKbArticles(query, { audience: toHelpCenterAudience(ceiling) })
     return articles.map((a) => ({
       id: a.id,
