@@ -15,8 +15,8 @@ import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
 import {
   archiveSlaPolicyFn,
   createSlaPolicyFn,
+  getSlaOfficeHoursFn,
   listSlaPoliciesFn,
-  listSlaScheduleOptionsFn,
   restoreSlaPolicyFn,
   updateSlaPolicyFn,
   type SlaPolicyDTO,
@@ -56,9 +56,9 @@ const slaPoliciesQuery = queryOptions({
   staleTime: 30_000,
 })
 
-const slaSchedulesQuery = queryOptions({
-  queryKey: ['settings', 'slaScheduleOptions'],
-  queryFn: () => listSlaScheduleOptionsFn(),
+const slaOfficeHoursQuery = queryOptions({
+  queryKey: ['settings', 'slaOfficeHours'],
+  queryFn: () => getSlaOfficeHoursFn(),
   staleTime: 5 * 60 * 1000,
 })
 
@@ -128,6 +128,8 @@ type EditorState =
 function SlaSettingsPage() {
   const queryClient = useQueryClient()
   const { data: policies } = useSuspenseQuery(slaPoliciesQuery)
+  const { data: officeHours } = useQuery(slaOfficeHoursQuery)
+  const officeHoursEnabled = officeHours?.officeHoursEnabled ?? false
   const [tab, setTab] = useState<'live' | 'archived'>('live')
   const [editor, setEditor] = useState<EditorState>(null)
 
@@ -220,6 +222,7 @@ function SlaSettingsPage() {
               <PolicyRow
                 key={p.id}
                 policy={p}
+                officeHoursEnabled={officeHoursEnabled}
                 onEdit={() => setEditor({ mode: 'edit', policy: p })}
                 onClone={() => setEditor({ mode: 'create', seed: p })}
                 onArchive={() => archiveMutation.mutate(p.id)}
@@ -248,8 +251,8 @@ function SlaSettingsPage() {
             only, never clocks already running.
           </li>
           <li>
-            Clocks count office hours when the policy uses a schedule; without one they run around
-            the clock.
+            Clocks count only your workspace office hours when they are configured; otherwise they
+            run around the clock.
           </li>
           <li>
             Archived policies can no longer be applied, but they stay on conversations that already
@@ -277,12 +280,14 @@ function SlaSettingsPage() {
 
 function PolicyRow({
   policy,
+  officeHoursEnabled,
   onEdit,
   onClone,
   onArchive,
   onRestore,
 }: {
   policy: SlaPolicyDTO
+  officeHoursEnabled: boolean
   onEdit: () => void
   onClone: () => void
   onArchive: () => void
@@ -297,7 +302,7 @@ function PolicyRow({
           <span className="text-sm font-medium">{policy.name}</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
             <CalendarDaysIcon className="h-3 w-3" aria-hidden />
-            {policy.officeHoursScheduleId ? 'Office hours' : '24/7'}
+            {officeHoursEnabled ? 'Office hours' : '24/7'}
           </span>
           {policy.pauseOnSnooze && (
             <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -367,12 +372,10 @@ function PolicyEditorDialog({
     timeToCloseTargetSecs: toDraft(seed?.timeToCloseTargetSecs ?? null),
   })
   const [pauseOnSnooze, setPauseOnSnooze] = useState(seed?.pauseOnSnooze ?? true)
-  // 'none' = no schedule (24/7); the Select can't carry an empty-string value.
-  const [scheduleId, setScheduleId] = useState(seed?.officeHoursScheduleId ?? 'none')
   const [error, setError] = useState<string | null>(null)
 
-  const { data: schedules } = useQuery(slaSchedulesQuery)
-  const scheduleOptions = schedules ?? []
+  const { data: officeHours } = useQuery(slaOfficeHoursQuery)
+  const officeHoursEnabled = officeHours?.officeHoursEnabled ?? false
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -395,7 +398,6 @@ function PolicyEditorDialog({
         name: name.trim(),
         ...parsed,
         pauseOnSnooze,
-        officeHoursScheduleId: scheduleId === 'none' ? null : scheduleId,
       }
       if (editing) {
         const result = await updateSlaPolicyFn({ data: { id: editing.id, ...payload } })
@@ -510,21 +512,10 @@ function PolicyEditorDialog({
 
           <div className="space-y-1.5">
             <Label>Business hours</Label>
-            <Select value={scheduleId} onValueChange={setScheduleId}>
-              <SelectTrigger className="w-full" aria-label="Business hours">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">24/7 (no schedule)</SelectItem>
-                {scheduleOptions.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    Office hours ({s.name})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <p className="text-xs text-muted-foreground">
-              With a schedule, clocks only count time inside your office hours.
+              {officeHoursEnabled
+                ? 'Clocks count only time inside your workspace office hours.'
+                : 'Clocks run around the clock. Set office hours in Settings to make clocks count only open time.'}
             </p>
           </div>
 

@@ -17,7 +17,10 @@
  *     SLA clocks running on conversations that are actually done.
  *
  * All four recorders are idempotent and no-op without an applied SLA, so this
- * can react to every matching event unconditionally.
+ * can react to every matching event unconditionally. Deadlines that pass with
+ * NO further event are caught by the per-minute sweep in
+ * sla-breach-sweep-queue.ts; both paths share the breach-noted markers on the
+ * stamp so each breach is logged exactly once.
  *
  * A conversation.status_changed straight from 'snoozed' to 'closed' resumes
  * before it resolves, so the close settles against the pause-shifted deadline

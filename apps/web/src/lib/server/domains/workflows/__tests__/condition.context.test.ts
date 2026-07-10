@@ -31,6 +31,19 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
+// The workspace office-hours schedule (settings blob). Mutable per test; the
+// default (disabled) evaluates 24/7-open.
+const workspaceHours = vi.hoisted(() => ({
+  schedule: {
+    enabled: false,
+    timezone: 'UTC',
+    intervals: [] as { day: number; start: string; end: string }[],
+  },
+}))
+vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
+  getOfficeHoursSchedule: vi.fn(async () => workspaceHours.schedule),
+}))
+
 import { resolveConditionContext } from '../condition.context'
 import { evaluateCondition } from '../condition.evaluator'
 
@@ -54,7 +67,10 @@ async function seedPrincipal(): Promise<PrincipalId> {
 }
 
 describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled back)', () => {
-  beforeEach(fixture.begin)
+  beforeEach(() => {
+    workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+    return fixture.begin()
+  })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
@@ -110,6 +126,8 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(ctx!.person!.segmentIds).toEqual([segmentId])
     expect(ctx!.csatRating).toBe(4)
     expect(ctx!.message).toEqual({ body: 'Please help' })
+    // Disabled workspace schedule = 24/7 = always within office hours.
+    expect(ctx!.officeHours).toBe(true)
 
     // And it drives the evaluator end-to-end.
     expect(
@@ -145,5 +163,23 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(evaluateCondition({ field: 'conversation.team', op: 'is_empty' }, ctx!)).toBe(true)
 
     expect(await resolveConditionContext(createId('conversation') as ConversationId)).toBeNull()
+  })
+
+  it('evaluates the workspace settings-blob office hours at the snapshot instant', async () => {
+    const principalId = await seedPrincipal()
+    const [conv] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: principalId, channel: 'messenger' })
+      .returning()
+    // Mon 09:00-17:00 UTC. 2026-01-05 is a Monday.
+    workspaceHours.schedule = {
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [{ day: 1, start: '09:00', end: '17:00' }],
+    }
+    const inside = await resolveConditionContext(conv.id, { at: new Date('2026-01-05T10:00:00Z') })
+    expect(inside!.officeHours).toBe(true)
+    const outside = await resolveConditionContext(conv.id, { at: new Date('2026-01-05T20:00:00Z') })
+    expect(outside!.officeHours).toBe(false)
   })
 })

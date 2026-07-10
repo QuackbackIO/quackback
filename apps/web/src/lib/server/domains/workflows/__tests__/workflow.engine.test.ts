@@ -48,6 +48,16 @@ vi.mock('../condition.context', async (importOriginal) => {
   const original = await importOriginal<typeof import('../condition.context')>()
   return { ...original, resolveConditionContext: vi.fn(original.resolveConditionContext) }
 })
+// Resume rebuilds its condition context, which reads the workspace office-hours
+// schedule from the settings blob — the fixture has no settings row, so pin the
+// default (disabled = 24/7) like condition.context.test.ts does.
+vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
+  getOfficeHoursSchedule: vi.fn(async () => ({
+    enabled: false,
+    timezone: 'UTC',
+    intervals: [],
+  })),
+}))
 
 import { createWorkflow, setWorkflowStatus } from '../workflow.service'
 import { runWorkflow, resumeWorkflowRun, interruptWaitingRuns } from '../workflow.engine'

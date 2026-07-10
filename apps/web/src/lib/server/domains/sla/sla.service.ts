@@ -4,13 +4,16 @@
  * action calls this; it is never matched ambiently. The computed deadlines are
  * office-hours aware and SNAPSHOT the policy's targets, so a later edit to the
  * policy never moves a clock that is already running on a live conversation.
- * Lazy breach evaluation (the next sub-step) reads `sla_applied` and appends to
- * the append-only `sla_events` log.
+ * Breach evaluation reads `sla_applied` and appends to the append-only
+ * `sla_events` log, from two directions that share one recording path:
+ * lazily on agent reply / close (sla.event-hooks.ts), and via the per-minute
+ * sweep (sla-breach-sweep-queue.ts) for deadlines that pass with no event.
  */
 import {
   db,
   and,
   eq,
+  isNotNull,
   sql,
   conversations,
   slaEvents,
@@ -21,9 +24,10 @@ import type { ConversationId, SlaPolicyId } from '@quackback/ids'
 import { getSlaPolicy } from './sla-policy.service'
 import {
   addOfficeHoursSeconds,
+  engineScheduleFromWorkspace,
   getScheduleById,
-  getDefaultSchedule,
 } from '../office-hours/office-hours.service'
+import { getOfficeHoursSchedule } from '../settings/settings.office-hours'
 
 /**
  * The `conversations.sla_applied` shape: the one active SLA on a conversation.
@@ -45,6 +49,11 @@ export type SlaApplied = {
   // (set by the breach evaluator), or null while that clock is still open.
   firstResponseAt?: string | null
   resolvedAt?: string | null
+  // Breach-noted markers: set the moment a breach event is logged (by the
+  // sweep or the lazy evaluator), so repeated sweeps and a late settle stay
+  // exactly-once on the sla_events log. Unset on old stamps = not yet noted.
+  firstResponseBreachedAt?: string | null
+  resolutionBreachedAt?: string | null
   // Snapshot of the policy's pause rule so the inbox chip can show a paused
   // state without a join back to the policy. Stamps written before this field
   // existed read as true (the policy default).
@@ -57,16 +66,20 @@ export type SlaApplied = {
 }
 
 /**
- * The schedule a policy's clocks run on: its pinned schedule, else the workspace
- * default, else a 24/7 fallback — an unconfigured workspace never blocks a clock.
+ * The schedule a policy's clocks run on: its pinned table schedule if one is
+ * set and still exists, else the workspace office-hours schedule from the
+ * settings blob (the canonical hours source — the same one Messenger reply
+ * expectations and the workflows office-hours condition read). A disabled or
+ * unconfigured workspace schedule resolves 24/7, so it never blocks a clock.
  */
 async function resolveScheduleFor(
   policy: SlaPolicy
 ): Promise<{ timezone: string; intervals: { day: number; start: string; end: string }[] }> {
-  const schedule = policy.officeHoursScheduleId
-    ? await getScheduleById(policy.officeHoursScheduleId)
-    : await getDefaultSchedule()
-  return schedule ?? { timezone: 'UTC', intervals: [] }
+  if (policy.officeHoursScheduleId) {
+    const pinned = await getScheduleById(policy.officeHoursScheduleId)
+    if (pinned) return pinned
+  }
+  return engineScheduleFromWorkspace(await getOfficeHoursSchedule())
 }
 
 /**
@@ -146,17 +159,53 @@ function slaStampGuard(conversationId: ConversationId, appliedAt: string, paused
   )
 }
 
+/** Append one clock event to the log — the single meta shape both the lazy
+ *  evaluator and the sweep record with. */
+async function insertClockEvent(
+  conversationId: ConversationId,
+  policyId: SlaPolicyId,
+  kind: string,
+  dueAt: string,
+  at: Date
+): Promise<void> {
+  const overdueMs = at.getTime() - new Date(dueAt).getTime()
+  await db.insert(slaEvents).values({
+    conversationId,
+    policyId,
+    kind,
+    meta: { dueAt, at: at.toISOString(), overdueSecs: Math.max(0, Math.round(overdueMs / 1000)) },
+  })
+}
+
 /**
- * Persist a mutated stamp + append one clock event in a single spot (both writes
- * always travel together, so callers never leave the stamp and log out of sync).
- * Guarded by slaStampGuard on the `(appliedAt, pausedAt)` the caller computed
- * `next` from — the same CAS pause/resume already use — so a concurrent
+ * Persist a mutated stamp with NO clock event — for settling a clock whose
+ * breach the sweep already logged (the event must stay exactly-once). Guarded
+ * by slaStampGuard on the `(appliedAt, pausedAt)` the caller computed `next`
+ * from — the same CAS pause/resume already use — so a concurrent
  * pause/resume/settle that moved the stamp first wins instead of getting
  * clobbered by this write. Returns whether the write landed; a caller whose
  * guard misses must reload the stamp and recompute before retrying (see
  * recordFirstResponse/recordResolution), the same trade-off pauseSlaOnSnooze's
  * guard documents.
  */
+async function commitStamp(
+  conversationId: ConversationId,
+  next: SlaApplied,
+  at: Date,
+  guard: { appliedAt: string; pausedAt: string | null }
+): Promise<boolean> {
+  const [row] = await db
+    .update(conversations)
+    .set({ slaApplied: next, updatedAt: at })
+    .where(slaStampGuard(conversationId, guard.appliedAt, guard.pausedAt))
+    .returning({ id: conversations.id })
+  return Boolean(row)
+}
+
+/** Persist a mutated stamp + append one clock event in a single spot (both
+ *  writes always travel together, so callers never leave the stamp and log out
+ *  of sync). Same guarded write as commitStamp — the event is logged only when
+ *  the stamp write landed. */
 async function commitClockEvent(
   conversationId: ConversationId,
   next: SlaApplied,
@@ -165,19 +214,8 @@ async function commitClockEvent(
   at: Date,
   guard: { appliedAt: string; pausedAt: string | null }
 ): Promise<boolean> {
-  const overdueMs = at.getTime() - new Date(dueAt).getTime()
-  const [row] = await db
-    .update(conversations)
-    .set({ slaApplied: next, updatedAt: at })
-    .where(slaStampGuard(conversationId, guard.appliedAt, guard.pausedAt))
-    .returning({ id: conversations.id })
-  if (!row) return false
-  await db.insert(slaEvents).values({
-    conversationId,
-    policyId: next.policyId,
-    kind,
-    meta: { dueAt, at: at.toISOString(), overdueSecs: Math.max(0, Math.round(overdueMs / 1000)) },
-  })
+  if (!(await commitStamp(conversationId, next, at, guard))) return false
+  await insertClockEvent(conversationId, next.policyId, kind, dueAt, at)
   return true
 }
 
@@ -202,7 +240,9 @@ function dueAtForSettle(dueAt: string, pausedAt: string | null | undefined, at: 
  * met/breached. Idempotent (only the first reply counts) and a no-op when no SLA
  * is applied or the policy doesn't track first response. If the clock is
  * currently paused (snoozed under pauseOnSnooze), the elapsed pause up to `at`
- * is excluded, see dueAtForSettle.
+ * is excluded, see dueAtForSettle. When the sweep already noted the breach
+ * (firstResponseBreachedAt is set), the reply only settles the clock — no
+ * second event.
  *
  * Guarded the same way as pause/resume (slaStampGuard): a concurrent
  * pause/resume landing between this function's read and its write (e.g. a
@@ -221,16 +261,31 @@ export async function recordFirstResponse(
   let applied = await loadSlaApplied(conversationId)
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!applied || !applied.firstResponseDueAt || applied.firstResponseAt) return
-    const dueAt = dueAtForSettle(applied.firstResponseDueAt, applied.pausedAt, at)
-    const breached = at.getTime() > dueAt.getTime()
-    const committed = await commitClockEvent(
-      conversationId,
-      { ...applied, firstResponseAt: at.toISOString() },
-      breached ? 'first_response_breached' : 'first_response_met',
-      dueAt.toISOString(),
-      at,
-      { appliedAt: applied.appliedAt, pausedAt: applied.pausedAt ?? null }
-    )
+    const guard = { appliedAt: applied.appliedAt, pausedAt: applied.pausedAt ?? null }
+    let committed: boolean
+    if (applied.firstResponseBreachedAt) {
+      committed = await commitStamp(
+        conversationId,
+        { ...applied, firstResponseAt: at.toISOString() },
+        at,
+        guard
+      )
+    } else {
+      const dueAt = dueAtForSettle(applied.firstResponseDueAt, applied.pausedAt, at)
+      const breached = at.getTime() > dueAt.getTime()
+      committed = await commitClockEvent(
+        conversationId,
+        {
+          ...applied,
+          firstResponseAt: at.toISOString(),
+          ...(breached ? { firstResponseBreachedAt: at.toISOString() } : {}),
+        },
+        breached ? 'first_response_breached' : 'first_response_met',
+        dueAt.toISOString(),
+        at,
+        guard
+      )
+    }
     if (committed) return
     applied = await loadSlaApplied(conversationId)
   }
@@ -240,7 +295,9 @@ export async function recordFirstResponse(
  * Record the conversation's resolution against the time-to-close clock and log
  * met/breached. Idempotent and a no-op when no SLA is applied or the policy
  * doesn't track time-to-close. If the clock is currently paused, the elapsed
- * pause up to `at` is excluded, see dueAtForSettle. `preloaded` lets a caller
+ * pause up to `at` is excluded, see dueAtForSettle. When the sweep already
+ * noted the breach (resolutionBreachedAt is set), the close only settles the
+ * clock — no second event. `preloaded` lets a caller
  * that already has a fresh `SlaApplied` (e.g. resumeSlaFromSnooze's return, on
  * a direct snoozed -> closed transition) skip the loadSlaApplied SELECT; pass
  * `null` (resume was a no-op) or omit it and the `??` fallback loads it as
@@ -260,16 +317,31 @@ export async function recordResolution(
   let applied = preloaded ?? (await loadSlaApplied(conversationId))
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!applied || !applied.timeToCloseDueAt || applied.resolvedAt) return
-    const dueAt = dueAtForSettle(applied.timeToCloseDueAt, applied.pausedAt, at)
-    const breached = at.getTime() > dueAt.getTime()
-    const committed = await commitClockEvent(
-      conversationId,
-      { ...applied, resolvedAt: at.toISOString() },
-      breached ? 'resolution_breached' : 'resolution_met',
-      dueAt.toISOString(),
-      at,
-      { appliedAt: applied.appliedAt, pausedAt: applied.pausedAt ?? null }
-    )
+    const guard = { appliedAt: applied.appliedAt, pausedAt: applied.pausedAt ?? null }
+    let committed: boolean
+    if (applied.resolutionBreachedAt) {
+      committed = await commitStamp(
+        conversationId,
+        { ...applied, resolvedAt: at.toISOString() },
+        at,
+        guard
+      )
+    } else {
+      const dueAt = dueAtForSettle(applied.timeToCloseDueAt, applied.pausedAt, at)
+      const breached = at.getTime() > dueAt.getTime()
+      committed = await commitClockEvent(
+        conversationId,
+        {
+          ...applied,
+          resolvedAt: at.toISOString(),
+          ...(breached ? { resolutionBreachedAt: at.toISOString() } : {}),
+        },
+        breached ? 'resolution_breached' : 'resolution_met',
+        dueAt.toISOString(),
+        at,
+        guard
+      )
+    }
     if (committed) return
     applied = await loadSlaApplied(conversationId)
   }
@@ -366,6 +438,106 @@ export async function resumeSlaFromSnooze(
     meta: { pausedForSecs: Math.round(shiftMs / 1000), at: at.toISOString() },
   })
   return next
+}
+
+// Upper bound on conversations handled per sweep run; anything beyond waits a
+// minute for the next tick (the SQL filter keeps re-finding them).
+const SWEEP_BATCH_LIMIT = 500
+
+// The two stamped clocks the sweep can find overdue, as stamp-field descriptors
+// so both run through the one claim-then-log path below.
+const SWEEP_CLOCKS = [
+  {
+    kind: 'first_response_breached',
+    dueField: 'firstResponseDueAt',
+    settledField: 'firstResponseAt',
+    markerField: 'firstResponseBreachedAt',
+  },
+  {
+    kind: 'resolution_breached',
+    dueField: 'timeToCloseDueAt',
+    settledField: 'resolvedAt',
+    markerField: 'resolutionBreachedAt',
+  },
+] as const
+
+/**
+ * The breach sweep (run every minute by sla-breach-sweep-queue): find
+ * conversations whose stamped first-response / time-to-close deadline has
+ * passed with no settle and no breach noted yet, and record the breach.
+ *
+ * Exactly-once: each breach is CLAIMED before its event is logged, with a
+ * single UPDATE that merges the breach-noted marker into the live stamp. The
+ * claim's predicate is slaStampGuard — the same CAS every other stamp writer
+ * (pause/resume/settle) uses — narrowed to the clock being claimed: the due
+ * date must still be the scanned one (a pause+resume cycle between scan and
+ * write keeps pausedAt null but shifts the deadline) and the clock must still
+ * be unsettled and unmarked. So a lazy evaluation (agent reply / close), a
+ * pause, or a re-apply racing the sweep across its wide scan-to-write span
+ * can't produce a duplicate event, and the jsonb merge can never clobber a
+ * concurrently-settled stamp.
+ *
+ * Pause-aware: a stamp whose clock is currently paused (pausedAt set, not yet
+ * resumed) never breaches — the scan excludes it in SQL and the loop re-checks
+ * in JS. Resume shifts the unsettled deadlines forward by the paused span, so
+ * once the conversation leaves snooze the normal scan judges the shifted
+ * deadline. Returns the number recorded.
+ */
+export async function sweepOverdueSlaBreaches(
+  at: Date = new Date()
+): Promise<{ recorded: number }> {
+  const now = at.toISOString() // ISO-8601 compares lexicographically = chronologically
+  const rows = await db
+    .select({ id: conversations.id, slaApplied: conversations.slaApplied })
+    .from(conversations)
+    .where(
+      and(
+        isNotNull(conversations.slaApplied),
+        sql`(${conversations.slaApplied} ->> 'pausedAt') IS NULL`,
+        sql`(
+          ((${conversations.slaApplied} ->> 'firstResponseDueAt') < ${now}
+            AND (${conversations.slaApplied} ->> 'firstResponseAt') IS NULL
+            AND (${conversations.slaApplied} ->> 'firstResponseBreachedAt') IS NULL)
+          OR ((${conversations.slaApplied} ->> 'timeToCloseDueAt') < ${now}
+            AND (${conversations.slaApplied} ->> 'resolvedAt') IS NULL
+            AND (${conversations.slaApplied} ->> 'resolutionBreachedAt') IS NULL)
+        )`
+      )
+    )
+    .limit(SWEEP_BATCH_LIMIT)
+
+  let recorded = 0
+  for (const row of rows) {
+    // Re-check in JS (the recording rule lives here; SQL only narrows the scan).
+    const applied = row.slaApplied as SlaApplied
+    if (applied.pausedAt) continue // paused clocks are stopped, never overdue
+    for (const clock of SWEEP_CLOCKS) {
+      const dueAt = applied[clock.dueField]
+      if (!dueAt || applied[clock.settledField] || applied[clock.markerField]) continue
+      if (at.getTime() <= new Date(dueAt).getTime()) continue
+      const claimed = await db
+        .update(conversations)
+        .set({
+          slaApplied: sql`${conversations.slaApplied} || ${JSON.stringify({
+            [clock.markerField]: at.toISOString(),
+          })}::jsonb`,
+          updatedAt: at,
+        })
+        .where(
+          and(
+            slaStampGuard(row.id, applied.appliedAt, null),
+            sql`(${conversations.slaApplied} ->> ${clock.dueField}) = ${dueAt}`,
+            sql`(${conversations.slaApplied} ->> ${clock.settledField}) IS NULL`,
+            sql`(${conversations.slaApplied} ->> ${clock.markerField}) IS NULL`
+          )
+        )
+        .returning({ id: conversations.id })
+      if (claimed.length === 0) continue // settled, paused, re-applied, or noted meanwhile
+      await insertClockEvent(row.id, applied.policyId, clock.kind, dueAt, at)
+      recorded++
+    }
+  }
+  return { recorded }
 }
 
 /**

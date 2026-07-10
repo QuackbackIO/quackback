@@ -1,9 +1,11 @@
 /**
- * Office hours (support platform §4.6): the one workspace schedule + the DST-safe
- * resolver every consumer (Messenger reply-expectations, the workflows
- * office-hours condition, Quinn handover, SLA clocks) uses the same way. An empty
- * or unconfigured schedule is 24/7. Pure resolver kept exported + DB-free so it
- * unit-tests without a fixture.
+ * Office-hours clock math (support platform §4.6): the DST-safe resolver and
+ * duration walker the SLA clocks run on. The workspace schedule itself lives in
+ * the settings blob (settings.office-hours.ts, the canonical source every
+ * consumer — Messenger reply-expectations, the workflows office-hours
+ * condition, Quinn handover, SLA clocks — reads); this module adapts that
+ * schedule to the engine shape and does the math. An empty schedule is 24/7.
+ * Pure resolvers kept exported + DB-free so they unit-test without a fixture.
  */
 import {
   db,
@@ -16,6 +18,13 @@ import type { OfficeHoursId } from '@quackback/ids'
 // The DST-safe timezone primitives live in one place (shared with Messenger /
 // Quinn / the settings resolver) so office-hours math can never drift.
 import { zonedParts, zonedWallClockToUtc, parseHm } from '@/lib/shared/office-hours'
+import type { OfficeHoursSchedule as WorkspaceOfficeHoursSchedule } from '@/lib/shared/office-hours'
+
+/** Minutes for an engine-window end: '24:00' is an exclusive end-of-day close
+ *  (used by the overnight split in {@link engineScheduleFromWorkspace}). */
+function parseEnd(end: string): number {
+  return end === '24:00' ? 24 * 60 : parseHm(end)
+}
 
 /** Keep only well-formed windows (end after start, valid day + times). */
 function validIntervals(
@@ -24,7 +33,7 @@ function validIntervals(
   const out: Array<{ day: number; s: number; e: number }> = []
   for (const i of intervals) {
     const s = parseHm(i.start)
-    const e = parseHm(i.end)
+    const e = parseEnd(i.end)
     if (
       !Number.isNaN(s) &&
       !Number.isNaN(e) &&
@@ -112,10 +121,41 @@ export function addOfficeHoursSeconds(
 }
 
 // ---------------------------------------------------------------------------
-// The one workspace schedule (v1)
+// Schedule sources
 // ---------------------------------------------------------------------------
 
-/** A schedule by id (e.g. the one an SLA policy pins), or null. */
+/**
+ * Adapt the workspace settings-blob schedule (the canonical hours source, see
+ * settings.office-hours.ts) to the clock-engine shape:
+ *
+ *  - Disabled = 24/7 (no windows).
+ *  - Overnight windows (end < start) are split at midnight into a same-day
+ *    window closing at '24:00' plus a next-day window from '00:00', because the
+ *    engine walks same-day windows only.
+ *  - An enabled schedule with no valid windows also resolves to 24/7: "never
+ *    open" would block an SLA clock forever, and a deadline must always land.
+ */
+export function engineScheduleFromWorkspace(
+  schedule: WorkspaceOfficeHoursSchedule
+): Pick<OfficeHoursSchedule, 'timezone' | 'intervals'> {
+  if (!schedule.enabled) return { timezone: 'UTC', intervals: [] }
+  const intervals: OfficeHoursInterval[] = []
+  for (const iv of schedule.intervals) {
+    const s = parseHm(iv.start)
+    const e = parseHm(iv.end)
+    if (Number.isNaN(s) || Number.isNaN(e) || s === e) continue
+    if (e > s) {
+      intervals.push({ day: iv.day, start: iv.start, end: iv.end })
+    } else {
+      intervals.push({ day: iv.day, start: iv.start, end: '24:00' })
+      if (e > 0) intervals.push({ day: (iv.day + 1) % 7, start: '00:00', end: iv.end })
+    }
+  }
+  return { timezone: schedule.timezone || 'UTC', intervals }
+}
+
+/** A table schedule by id (the one an SLA policy pins), or null. The table has
+ *  no workspace-level writer — only pinned rows are ever read. */
 export async function getScheduleById(id: OfficeHoursId): Promise<OfficeHoursSchedule | null> {
   const [row] = await db
     .select()
@@ -123,53 +163,4 @@ export async function getScheduleById(id: OfficeHoursId): Promise<OfficeHoursSch
     .where(eq(officeHoursSchedules.id, id))
     .limit(1)
   return row ?? null
-}
-
-/** The workspace's default schedule, or null when none is configured (= 24/7). */
-export async function getDefaultSchedule(): Promise<OfficeHoursSchedule | null> {
-  const [row] = await db
-    .select()
-    .from(officeHoursSchedules)
-    .where(eq(officeHoursSchedules.isDefault, true))
-    .limit(1)
-  return row ?? null
-}
-
-/** Create or update the single default schedule (the workspace's one schedule). */
-export async function upsertDefaultSchedule(input: {
-  name?: string
-  timezone: string
-  intervals: OfficeHoursInterval[]
-}): Promise<OfficeHoursSchedule> {
-  const existing = await getDefaultSchedule()
-  if (existing) {
-    const [updated] = await db
-      .update(officeHoursSchedules)
-      .set({
-        name: input.name ?? existing.name,
-        timezone: input.timezone,
-        intervals: input.intervals,
-        updatedAt: new Date(),
-      })
-      .where(eq(officeHoursSchedules.id, existing.id))
-      .returning()
-    return updated
-  }
-  const [created] = await db
-    .insert(officeHoursSchedules)
-    .values({
-      name: input.name ?? 'Default',
-      timezone: input.timezone,
-      intervals: input.intervals,
-      isDefault: true,
-    })
-    .returning()
-  return created
-}
-
-/** Whether the workspace is within office hours now (or at `at`). Unconfigured
- *  = 24/7. The shared entry point for every consumer. */
-export async function isWorkspaceWithinOfficeHours(at: Date = new Date()): Promise<boolean> {
-  const schedule = await getDefaultSchedule()
-  return schedule ? isWithinOfficeHours(schedule, at) : true
 }

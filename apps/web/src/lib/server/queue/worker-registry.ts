@@ -97,6 +97,18 @@ export const WORKER_REGISTRY: readonly WorkerEntry[] = [
       ),
   },
   {
+    // Per-minute SLA breach recorder for deadlines that pass with no event.
+    name: 'sla-breach-sweep',
+    init: () =>
+      import('@/lib/server/domains/sla/sla-breach-sweep-queue').then((m) =>
+        m.initSlaBreachSweepWorker()
+      ),
+    close: () =>
+      import('@/lib/server/domains/sla/sla-breach-sweep-queue').then((m) =>
+        m.closeSlaBreachSweepQueue()
+      ),
+  },
+  {
     name: 'snooze-sweep',
     init: () =>
       import('@/lib/server/domains/conversation/snooze-sweep-queue').then((m) =>

@@ -27,7 +27,7 @@ import {
 } from '@/lib/server/domains/sla/sla-policy.service'
 import { removeSlaFromConversation } from '@/lib/server/domains/sla/sla.service'
 import { listWorkflows } from '@/lib/server/domains/workflows/workflow.service'
-import { getDefaultSchedule } from '@/lib/server/domains/office-hours/office-hours.service'
+import { getOfficeHoursSchedule } from '@/lib/server/domains/settings/settings.office-hours'
 
 /** A workflow that applies a policy, as listed on rows and in-use warnings. */
 export interface SlaWorkflowRef {
@@ -172,12 +172,14 @@ export const listSlaPolicyOptionsFn = createServerFn({ method: 'GET' }).handler(
   }
 )
 
-/** Schedules offered by the policy editor (the single default schedule, v1). */
-export const listSlaScheduleOptionsFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<{ id: string; name: string }[]> => {
+/** Whether the workspace office-hours schedule (the settings blob, the same
+ *  source Messenger and the workflows condition read) is enabled — the policy
+ *  editor's "which clock do these targets run on" hint. */
+export const getSlaOfficeHoursFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<{ officeHoursEnabled: boolean }> => {
     await requireAuth({ permission: PERMISSIONS.SLA_MANAGE })
-    const schedule = await getDefaultSchedule()
-    return schedule ? [{ id: schedule.id, name: schedule.name }] : []
+    const schedule = await getOfficeHoursSchedule()
+    return { officeHoursEnabled: schedule.enabled }
   }
 )
 

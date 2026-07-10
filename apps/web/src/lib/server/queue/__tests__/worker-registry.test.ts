@@ -24,6 +24,7 @@ const WORKER_MODULES = [
   'domains/help-center/help-center-translate-queue.ts',
   'domains/import/import-queue.ts',
   'domains/principals/anon-sweep-queue.ts',
+  'domains/sla/sla-breach-sweep-queue.ts',
   'domains/workflows/workflow-dispatch-queue.ts',
   'domains/workflows/workflow-sweep-queue.ts',
   'domains/workflows/workflow-wait-queue.ts',
