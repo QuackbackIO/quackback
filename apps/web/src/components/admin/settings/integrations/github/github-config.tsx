@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 import { fetchGitHubReposFn, type GitHubRepo } from '@/lib/server/integrations/github/functions'
 import { StatusSyncConfig } from '@/components/admin/settings/integrations/status-sync-config'
+import { TicketStatusSyncConfig } from '@/components/admin/settings/integrations/ticket-status-sync-config'
 import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 
 interface EventMapping {
@@ -86,9 +87,13 @@ export function GitHubConfig({
     updateMutation.mutate({ id: integrationId, enabled: checked })
   }
 
-  const handleRepoChange = (repoId: string) => {
-    setSelectedRepo(repoId)
-    updateMutation.mutate({ id: integrationId, config: { channelId: repoId } })
+  // channelId must be the "owner/repo" full name: every server consumer
+  // (issue creation in github/hook.ts, webhook registration, and the ticket
+  // link service's repo check) uses it in /repos/{owner}/{repo} API paths,
+  // where a numeric repo id 404s.
+  const handleRepoChange = (ownerRepo: string) => {
+    setSelectedRepo(ownerRepo)
+    updateMutation.mutate({ id: integrationId, config: { channelId: ownerRepo } })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {
@@ -158,7 +163,7 @@ export function GitHubConfig({
             </SelectTrigger>
             <SelectContent>
               {repos.map((repo) => (
-                <SelectItem key={repo.id} value={repo.id.toString()}>
+                <SelectItem key={repo.id} value={repo.fullName}>
                   <div className="flex items-center gap-2">
                     <FolderIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{repo.fullName}</span>
@@ -212,6 +217,16 @@ export function GitHubConfig({
       <StatusSyncConfig
         integrationId={integrationId}
         integrationType="github"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={[
+          { id: 'Open', name: 'Open' },
+          { id: 'Closed', name: 'Closed' },
+        ]}
+      />
+
+      <TicketStatusSyncConfig
+        integrationId={integrationId}
         config={initialConfig}
         enabled={integrationEnabled}
         externalStatuses={[

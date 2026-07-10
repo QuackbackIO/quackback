@@ -208,6 +208,8 @@ export {
   // Schema tables - external links
   postExternalLinks,
   postExternalLinksRelations,
+  ticketExternalLinks,
+  ticketExternalLinksRelations,
   // Schema tables - import runs (imports & exports hub)
   importRuns,
   importRunsRelations,

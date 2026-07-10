@@ -25,6 +25,7 @@ import {
   getTicketStageLabelsFn,
   listTicketMessagesFn,
   getTicketLinksFn,
+  fetchTicketExternalLinksFn,
 } from '@/lib/server/functions/tickets'
 import type { TicketListFilter } from '@/lib/server/domains/tickets'
 import { asAgentMessage } from '@/lib/shared/conversation/types'
@@ -63,6 +64,8 @@ export const ticketKeys = {
   thread: (id: TicketId) => [...ticketKeys.all(), 'thread', id] as const,
   /** A single ticket's tracker links (the tracker it belongs to, or its linked tickets). */
   links: (id: TicketId) => [...ticketKeys.all(), 'links', id] as const,
+  /** A single ticket's external issue links (GitHub). */
+  externalLinks: (id: TicketId) => [...ticketKeys.all(), 'external-links', id] as const,
 }
 
 export const ticketQueries = {
@@ -97,6 +100,14 @@ export const ticketQueries = {
     queryOptions({
       queryKey: ticketKeys.links(id),
       queryFn: () => getTicketLinksFn({ data: { ticketId: id } }),
+      staleTime: 30_000,
+    }),
+
+  /** A ticket's linked GitHub issues, plus whether the integration is connected. */
+  externalLinks: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.externalLinks(id),
+      queryFn: () => fetchTicketExternalLinksFn({ data: { ticketId: id } }),
       staleTime: 30_000,
     }),
 }

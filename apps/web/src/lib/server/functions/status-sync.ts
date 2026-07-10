@@ -34,6 +34,11 @@ const updateStatusMappingsSchema = z.object({
   statusMappings: z.record(z.string(), z.string().nullable()),
 })
 
+const updateTicketStatusMappingsSchema = z.object({
+  integrationId: z.string(),
+  ticketStatusMappings: z.record(z.string(), z.string().nullable()),
+})
+
 /**
  * Enable status sync by registering an inbound webhook with the external platform.
  */
@@ -269,6 +274,48 @@ export const updateStatusMappingsFn = createServerFn({ method: 'POST' })
       return { success: true }
     } catch (error) {
       log.error({ err: error }, 'update status mappings failed')
+      throw error
+    }
+  })
+
+/**
+ * Update ticket status mappings for an integration — the ticket-side sibling
+ * of updateStatusMappingsFn (external status name -> ticket_statuses id),
+ * consumed by the inbound webhook handler's ticket branch.
+ */
+export const updateTicketStatusMappingsFn = createServerFn({ method: 'POST' })
+  .validator(updateTicketStatusMappingsSchema)
+  .handler(async ({ data }) => {
+    log.debug(
+      {
+        integration_id: data.integrationId,
+        mapping_count: Object.keys(data.ticketStatusMappings).length,
+      },
+      'update ticket status mappings'
+    )
+    try {
+      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+
+      const integrationId = data.integrationId as IntegrationId
+      const integration = await db.query.integrations.findFirst({
+        where: eq(integrations.id, integrationId),
+        columns: { config: true },
+      })
+
+      if (!integration) throw new Error('Integration not found')
+
+      const existingConfig = (integration.config ?? {}) as Record<string, unknown>
+      await db
+        .update(integrations)
+        .set({
+          config: { ...existingConfig, ticketStatusMappings: data.ticketStatusMappings },
+          updatedAt: new Date(),
+        })
+        .where(eq(integrations.id, integrationId))
+
+      return { success: true }
+    } catch (error) {
+      log.error({ err: error }, 'update ticket status mappings failed')
       throw error
     }
   })

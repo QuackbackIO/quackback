@@ -58,7 +58,12 @@ export {
 } from './integrations'
 
 // Status sync mutations
-export { useEnableStatusSync, useDisableStatusSync, useUpdateStatusMappings } from './status-sync'
+export {
+  useEnableStatusSync,
+  useDisableStatusSync,
+  useUpdateStatusMappings,
+  useUpdateTicketStatusMappings,
+} from './status-sync'
 
 // Platform credential mutations
 export { useSavePlatformCredentials, useDeletePlatformCredentials } from './platform-credentials'

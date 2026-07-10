@@ -435,6 +435,8 @@ export type ConversationSystemEventKind =
   | 'ticket_linked'
   | 'ticket_created'
   | 'assistant_action_expired'
+  | 'external_linked'
+  | 'external_unlinked'
 
 export interface ConversationSystemEvent {
   kind: ConversationSystemEventKind
@@ -449,6 +451,11 @@ export interface ConversationSystemEvent {
    *  create-ticket flow) — team-only, the ticket itself may not be visible to
    *  the customer. */
   ticketReference?: string
+  /** External issue reference (e.g. "acme/widgets#142") for
+   *  'external_linked' / 'external_unlinked' — team-only. */
+  externalReference?: string
+  /** External issue URL for 'external_linked' / 'external_unlinked' — team-only. */
+  externalUrl?: string
 }
 
 // An agent-only suggestion (carried on an internal note) to track a resolved
