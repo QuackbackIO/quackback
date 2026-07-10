@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { checkOnboardingState } from '@/lib/server/functions/admin'
 import { getSettings } from '@/lib/server/functions/workspace'
 import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
+import { normalizeOutcome, OUTCOME_HOME } from '@/lib/shared/launch-checklist'
 
 export const Route = createFileRoute('/onboarding/_layout/complete')({
   loader: async ({ context }) => {
@@ -30,6 +31,7 @@ export const Route = createFileRoute('/onboarding/_layout/complete')({
 
     return {
       workspaceName: settings?.name ?? 'Your workspace',
+      useCase: state.setupState?.useCase,
     }
   },
   component: CompleteStep,
@@ -37,7 +39,8 @@ export const Route = createFileRoute('/onboarding/_layout/complete')({
 
 function CompleteStep() {
   const navigate = useNavigate()
-  const { workspaceName } = Route.useLoaderData()
+  const { workspaceName, useCase } = Route.useLoaderData()
+  const outcomeHome = OUTCOME_HOME[normalizeOutcome(useCase)]
 
   return (
     <div className="w-full max-w-md mx-auto text-center">
@@ -61,7 +64,7 @@ function CompleteStep() {
         </Button>
         <Button
           variant="ghost"
-          onClick={() => navigate({ to: '/admin/feedback' })}
+          onClick={() => navigate({ to: outcomeHome.href })}
           className="w-full h-11"
         >
           I&apos;ll explore on my own

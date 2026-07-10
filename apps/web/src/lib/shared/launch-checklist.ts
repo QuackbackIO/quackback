@@ -196,15 +196,7 @@ export function buildLaunchTasks(
 
   const skipped = new Set(status.skippedLaunchTasks ?? [])
 
-  // Deduplicate by id while preserving order
-  const seen = new Set<string>()
-  return tasks
-    .filter((t) => {
-      if (seen.has(t.id)) return false
-      seen.add(t.id)
-      return true
-    })
-    .map((t) => ({ ...t, isSkipped: skipped.has(t.id) }))
+  return tasks.map((t) => ({ ...t, isSkipped: skipped.has(t.id) }))
 }
 
 export function launchChecklistSummary(
@@ -213,8 +205,6 @@ export function launchChecklistSummary(
 ): {
   tasks: LaunchTask[]
   outcome: OnboardingOutcome
-  /** Tasks with isCompleted true (excludes skipped-but-not-done tasks) */
-  completedCount: number
   /** Tasks resolved one way or another — completed or explicitly skipped */
   doneCount: number
   remaining: number
@@ -223,7 +213,6 @@ export function launchChecklistSummary(
 } {
   const outcome = outcomeOverride ?? normalizeOutcome(status.useCase)
   const tasks = buildLaunchTasks(status, outcome)
-  const completedCount = tasks.filter((t) => t.isCompleted).length
   const doneCount = tasks.filter((t) => t.isCompleted || t.isSkipped).length
   const remaining = tasks.length - doneCount
 
@@ -239,7 +228,6 @@ export function launchChecklistSummary(
   return {
     tasks,
     outcome,
-    completedCount,
     doneCount,
     remaining,
     allComplete: remaining === 0,

@@ -4,7 +4,6 @@ import {
   ChatBubbleOvalLeftEllipsisIcon,
   PuzzlePieceIcon,
   WrenchScrewdriverIcon,
-  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import type { ComponentType } from 'react'
 import { normalizeOnboardingOutcome, type UseCaseType } from '@/lib/shared/db-types'
@@ -49,14 +48,6 @@ export const DEFAULT_BOARD_OPTIONS: DefaultBoardOption[] = [
     description: 'Requests for tools and connections',
     icon: PuzzlePieceIcon,
     useCases: ['product_feedback', 'saas'],
-  },
-  {
-    id: 'ux-feedback',
-    name: 'UX Feedback',
-    description: 'Usability and experience feedback',
-    icon: SparklesIcon,
-    // Kept for consumer legacy paths; product_feedback covers most new signups
-    useCases: ['consumer'],
   },
   {
     id: 'product-ideas',
@@ -114,12 +105,7 @@ export function getBoardOptionsForUseCase(useCase?: UseCaseType): DefaultBoardOp
     return DEFAULT_BOARD_OPTIONS.filter((b) => b.useCases.includes('product_feedback'))
   }
 
-  const offered = DEFAULT_BOARD_OPTIONS.filter((b) => b.useCases.includes(resolved))
-  // Always show at least the product-feedback core if an outcome has no boards
-  // (shouldn't happen) — safety net.
-  return offered.length > 0
-    ? offered
-    : DEFAULT_BOARD_OPTIONS.filter((b) => b.useCases.includes('product_feedback'))
+  return DEFAULT_BOARD_OPTIONS.filter((b) => b.useCases.includes(resolved))
 }
 
 /**

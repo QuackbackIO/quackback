@@ -116,7 +116,7 @@ describe('buildLaunchTasks', () => {
 describe('launchChecklistSummary', () => {
   it('reports remaining and headline for incomplete product_feedback', () => {
     const s = launchChecklistSummary({ ...base, useCase: 'product_feedback', hasBoards: true })
-    expect(s.completedCount).toBe(1)
+    expect(s.tasks.filter((t) => t.isCompleted).length).toBe(1)
     expect(s.remaining).toBe(5)
     expect(s.allComplete).toBe(false)
     expect(s.headline).toMatch(/first customer response/)
@@ -128,13 +128,13 @@ describe('launchChecklistSummary', () => {
     expect(s.remaining).toBe(0)
   })
 
-  it('counts a skipped task toward doneCount/remaining but not completedCount', () => {
+  it('counts a skipped task toward doneCount/remaining but not isCompleted', () => {
     const s = launchChecklistSummary({
       ...allDoneProductFeedback,
       hasBranding: false,
       skippedLaunchTasks: ['customize-branding'],
     })
-    expect(s.completedCount).toBe(5)
+    expect(s.tasks.filter((t) => t.isCompleted).length).toBe(5)
     expect(s.doneCount).toBe(6)
     expect(s.remaining).toBe(0)
     expect(s.allComplete).toBe(true)
