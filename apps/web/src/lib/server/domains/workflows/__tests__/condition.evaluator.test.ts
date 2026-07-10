@@ -116,14 +116,15 @@ describe('evaluateCondition — leaves', () => {
     ok({ field: 'conversation.team', op: 'is_set' })
     no({ field: 'conversation.team', op: 'is_empty' })
 
-    // Unassigned (assignedTeamId: null): eq to any concrete team is a
-    // non-match, neq to any concrete team matches (there's no team to equal),
-    // is_set is false, and is_empty — the deliberate "no team" test — holds.
+    // Unassigned (assignedTeamId: null): per the evaluator's null contract
+    // every operator is a non-match — including neq, so rules never silently
+    // fire on unassigned conversations — and is_empty is the deliberate
+    // "no team" test.
     const unassigned = baseCtx({
       conversation: { ...baseCtx().conversation, assignedTeamId: null },
     })
     no({ field: 'conversation.team', op: 'eq', value: 'team_support' }, unassigned)
-    ok({ field: 'conversation.team', op: 'neq', value: 'team_support' }, unassigned)
+    no({ field: 'conversation.team', op: 'neq', value: 'team_support' }, unassigned)
     no({ field: 'conversation.team', op: 'is_set' }, unassigned)
     ok({ field: 'conversation.team', op: 'is_empty' }, unassigned)
   })

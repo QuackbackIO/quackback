@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 548 surfaces
+### Server functions (`requireAuth`) — 553 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -126,6 +126,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::getPortalUserFn | people.view |
 | `lib/server/functions/admin.ts`::updatePortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::createPortalUserFn | people.manage |
+| `lib/server/functions/admin.ts`::findPortalUsersByEmailFn | people.manage |
 | `lib/server/functions/admin.ts`::deletePortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::sendInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::cancelInvitationFn | member.manage |
@@ -500,6 +501,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/status-sync.ts`::enableStatusSyncFn | integration.manage |
 | `lib/server/functions/status-sync.ts`::disableStatusSyncFn | integration.manage |
 | `lib/server/functions/status-sync.ts`::updateStatusMappingsFn | integration.manage |
+| `lib/server/functions/status-sync.ts`::updateTicketStatusMappingsFn | integration.manage |
 | `lib/server/functions/status.ts`::listStatusComponentsAdminFn | status_page.manage |
 | `lib/server/functions/status.ts`::createStatusComponentFn | status_page.manage |
 | `lib/server/functions/status.ts`::updateStatusComponentFn | status_page.manage |
@@ -561,6 +563,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::getTicketLinksFn | ticket.view |
 | `lib/server/functions/tickets.ts`::linkTicketToTrackerFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::unlinkTicketFromTrackerFn | ticket.assign |
+| `lib/server/functions/tickets.ts`::fetchTicketExternalLinksFn | ticket.view |
+| `lib/server/functions/tickets.ts`::linkTicketIssueFn | ticket.assign |
+| `lib/server/functions/tickets.ts`::unlinkTicketIssueFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::linkTicketToConversationFn | ticket.create |
 | `lib/server/functions/tickets.ts`::listTicketStatusesFn | ticket.view |
 | `lib/server/functions/tickets.ts`::createTicketStatusFn | ticket.manage_types |
@@ -830,7 +835,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-167 of 808 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+167 of 813 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

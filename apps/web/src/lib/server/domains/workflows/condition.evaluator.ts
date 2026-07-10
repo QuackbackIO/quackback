@@ -122,9 +122,9 @@ function resolveField(field: string, ctx: ConditionContext): unknown {
       return ctx.conversation.waitingMinutes
     case 'conversation.tags':
       return ctx.conversation.tagIds
-    // Unassigned resolves to null, same as e.g. csat.rating: `eq <team>` is a
-    // non-match (null !== any team id), `neq <team>` matches (null !== <team>
-    // is true), and `is_empty` is the deliberate way to test for "no team".
+    // Unassigned resolves to null, same as e.g. csat.rating: per applyOp's
+    // null contract every operator is a non-match, and `is_empty` is the
+    // deliberate way to test for "no team".
     case 'conversation.team':
       return ctx.conversation.assignedTeamId
     case 'message.body':
