@@ -77,13 +77,31 @@ export function validateAttributeValue(
   }
 }
 
+/** The visible refusal thrown when a customer-sourced write loses the
+ *  write-once precedence rule (see setConversationAttribute's doc). Distinct
+ *  from the AI rule (a silent no-op): a customer submitting a collect block
+ *  is a caller that needs to know its write didn't happen, not one that can
+ *  poll for a state change. */
+export const CUSTOMER_ATTRIBUTE_LOCKED_CODE = 'ATTRIBUTE_LOCKED'
+
 /**
  * Set (or unset, with null) one attribute on a conversation or ticket.
  * Validates against the registry definition, wraps the value in a
  * `{ v, src, at }` envelope, and merges it into custom_attributes atomically
  * (sibling keys written concurrently are preserved). Returns the row's
- * updated attributes. An AI write onto a slot another source filled is a
- * silent no-op (classifier runs must not error), returning the current state.
+ * updated attributes.
+ *
+ * Two source-specific precedence rules gate the write:
+ *   - AI (`src: 'ai'`) onto a slot another source filled is a SILENT no-op
+ *     (classifier runs must not error), returning the current state.
+ *   - customer (`src: 'customer'`, the conversational-block collect/
+ *     collect_reply resume) onto a slot already holding a non-'ai',
+ *     non-empty value is a VISIBLE refusal (throws ATTRIBUTE_LOCKED) — a
+ *     collect block's write-once semantics ("only our team can change this
+ *     now"): teammate/workflow writes always win over the customer, and the
+ *     customer may still fill an empty slot or one only AI has touched.
+ *     Callers that must proceed regardless (the collect resume path) catch
+ *     this and continue without overwriting.
  */
 export async function setConversationAttribute(
   target: SetAttributeTarget,
@@ -119,6 +137,18 @@ export async function setConversationAttribute(
     // Occupied by teammate/workflow/customer or a legacy value of unknown
     // provenance: AI only overwrites its own writes.
     if (readAttributeValue(current[key])?.src !== 'ai') return current
+  }
+  if (src === 'customer' && attributeHasValue(current[key])) {
+    // Occupied by teammate/workflow/customer or a legacy value of unknown
+    // provenance: a customer write may only fill an empty slot or one only
+    // AI has touched. Unlike the AI rule above, this is a VISIBLE refusal —
+    // see the doc comment.
+    if (readAttributeValue(current[key])?.src !== 'ai') {
+      throw new ValidationError(
+        CUSTOMER_ATTRIBUTE_LOCKED_CODE,
+        `Attribute '${key}' is already set and can no longer be changed by the customer`
+      )
+    }
   }
 
   const patch =

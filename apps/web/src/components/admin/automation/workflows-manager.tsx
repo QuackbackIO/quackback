@@ -381,13 +381,15 @@ function GroupHeader({ trigger, count }: { trigger: TriggerMeta; count: number }
 
 /** First problem worth badging on a row: a structural graph error, or the
  *  first step whose config is unresolved (per `actionIssue`, which also treats
- *  template needs-setup placeholders as unset). Null when clean. */
-function rowIssue(graph: unknown): string | null {
+ *  template needs-setup placeholders as unset), including the class-rule
+ *  check (Phase C, slice C-6) against the row's own stored class. Null when
+ *  clean. */
+function rowIssue(graph: unknown, workflowClass: WorkflowDTO['class']): string | null {
   const checked = validateGraph(graph)
   if (!checked.ok) return checked.error
   const tree = graphToTree(checked.value)
   if (!tree.ok) return tree.error
-  const [first] = collectStepIssues(tree.value).values()
+  const [first] = collectStepIssues(tree.value, workflowClass).values()
   return first ?? null
 }
 
@@ -406,7 +408,7 @@ function WorkflowRow({
 }) {
   // Structural problems (bad JSON, cycles) and unresolved step config (a team
   // never picked, a template's needs-setup placeholder) both badge the row.
-  const issue = rowIssue(workflow.graph)
+  const issue = rowIssue(workflow.graph, workflow.class)
   const status = STATUS_META[workflow.status as StatusValue] ?? STATUS_META.draft
   const started = metrics?.started ?? 0
   const completed = metrics?.completed ?? 0

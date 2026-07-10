@@ -40,6 +40,11 @@ export interface ConditionContext {
     /** Raw custom_attributes ({ v, src, at } envelopes or bare legacy values);
      *  `conversation.attr.<key>` predicates read through readAttributeValue. */
     attributes?: Record<string, unknown>
+    /** The conversation's visitor principal — the actor a block CSAT resume
+     *  records the rating as (recordCsat requires the caller to BE the
+     *  visitor). Not a condition field; carried here purely so the engine
+     *  doesn't need a second query to learn it. */
+    visitorPrincipalId?: string | null
   }
   message?: { body: string; senderType?: 'visitor' | 'agent' } | null
   person?: { segmentIds: string[] } | null
@@ -47,7 +52,33 @@ export interface ConditionContext {
   officeHours?: boolean | null
   /** The conversation's last CSAT rating (1-5), or null. */
   csatRating?: number | null
+  /** The customer's structured reply, threaded in ONLY when resuming a run
+   *  parked at an input wait (resumeWorkflowRun's blockAnswer option). The
+   *  walker reads this to tell "reached this interactive node fresh" (park)
+   *  from "resuming this exact node" (route/write and continue) apart — see
+   *  graph.ts's per-kind handling. Absent on every ordinary trigger walk. */
+  blockAnswer?: BlockAnswer | null
+  /** How Quinn's turn ended, threaded in ONLY when resuming a run parked at
+   *  a `let_assistant_answer` wait (resumeWorkflowRun's assistantOutcome
+   *  option) — the walker's equivalent of blockAnswer for that node kind
+   *  (Phase C, slice C-6). 'escalated' = assistant.handed_off fired for this
+   *  conversation (a human is needed); 'resolved' = the conversation closed
+   *  while parked there (read as "Quinn resolved it" — the classic
+   *  resolved-then-follow-up pattern). Absent on every ordinary trigger walk. */
+  assistantOutcome?: AssistantOutcome | null
 }
+
+/** See ConditionContext.assistantOutcome's doc. */
+export type AssistantOutcome = 'escalated' | 'resolved'
+
+/** The customer's structured reply to a parked interactive block, resolved
+ *  from its stored BlockReplyMetadata (event-trigger.ts) and threaded into a
+ *  resume's ConditionContext. One variant per interactive node kind. */
+export type BlockAnswer =
+  | { kind: 'buttons'; buttonKey: string }
+  | { kind: 'collect'; value: string | number | boolean }
+  | { kind: 'collectReply'; value: string }
+  | { kind: 'csat'; rating: number; comment?: string }
 
 export type ConditionOperator =
   | 'eq'

@@ -20,6 +20,8 @@ import type {
   TiptapContent,
   ConversationEndReason,
   TranslatedFromMetadata,
+  WorkflowBlockPayload,
+  BlockReplyMetadata,
 } from '@/lib/shared/db-types'
 import { CONVERSATION_END_REASONS } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
@@ -136,7 +138,31 @@ export interface ConversationMessageDTO {
   /** Structured event for a 'system' message, so clients can localize it; null
    *  for ordinary messages (and legacy system rows, which fall back to content). */
   systemEvent: ConversationSystemEvent | null
+  /** The structured block this message renders (Phase C conversational block
+   *  layer), so a widget/inbox client can render its interactive affordance
+   *  instead of the plain-text fallback in `content`. Null for an ordinary
+   *  message. Optional (rather than required like systemEvent) so the many
+   *  pre-existing DTO fixtures across the codebase don't all need updating in
+   *  this server-only slice; toMessageDTO always sets it explicitly. */
+  block?: WorkflowBlockPayload | null
+  /** The structured reply this message carries when it answers a block. Null
+   *  for an ordinary message (including a degraded free-text reply). Same
+   *  optionality rationale as `block`. */
+  blockReply?: BlockReplyMetadata | null
 }
+
+/**
+ * A conversational block's derived interaction state (Phase C, PHASE-C-
+ * BLOCK-CONTRACT.md §"Widget state derivation" — see conversation-rows.ts's
+ * `computeBlockStates` for the full derivation rules and their doc comment).
+ * Lives here (lib/shared, not the components/shared/conversation module that
+ * computes it) purely so lib/client code — which `no-restricted-imports`
+ * forbids from reaching into `components/` — can still type a block-states
+ * map without duplicating the union; `conversation-rows.ts` re-exports this
+ * same type for every existing components-side import to keep working
+ * unchanged.
+ */
+export type BlockState = 'pending' | 'chosen' | 'superseded'
 
 /** One emoji reaction bucket on a message. `hasReacted` is viewer-relative
  *  (structurally identical to the comment-domain CommentReactionCount). */

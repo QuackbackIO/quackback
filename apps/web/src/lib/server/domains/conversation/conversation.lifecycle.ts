@@ -10,10 +10,24 @@ import type { ConversationStatus, ConversationEndReason } from '@/lib/shared/con
 
 /**
  * A visitor message always surfaces the conversation — it returns to 'open'
- * from any prior state: a reply wakes a 'snoozed' thread and reopens a 'closed'
- * one. (No parameter: the result never depends on the prior status.)
+ * from any prior state: a reply wakes a 'snoozed' thread and reopens a
+ * 'closed' one. ONE exception (SF3, Phase C conversational block layer): a
+ * MATCHED structured reply (a CSAT rating, a button tap, ...) answering a
+ * block a workflow posted on an ALREADY-closed conversation is the intended
+ * flow — a post-close CSAT survey or a post-close button prompt, not the
+ * customer reopening the thread — so it leaves 'closed' as-is instead.
+ * `hasMatchedBlockReply` must be the send-time resolution result
+ * (`resolvedBlockReply !== null` in conversation.service.ts — i.e. the reply
+ * genuinely echoes a real, same-conversation, agent-authored, unanswered
+ * block), never the raw client-supplied blockReply payload: an unmatched/
+ * stale/forged one degrades to an ordinary free-text send and still reopens,
+ * same as before this exception existed.
  */
-export function applyVisitorReopenStatus(): ConversationStatus {
+export function applyVisitorReopenStatus(
+  priorStatus: ConversationStatus,
+  hasMatchedBlockReply: boolean
+): ConversationStatus {
+  if (priorStatus === 'closed' && hasMatchedBlockReply) return 'closed'
   return 'open'
 }
 

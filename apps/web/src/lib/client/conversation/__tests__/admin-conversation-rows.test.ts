@@ -53,4 +53,50 @@ describe('buildAdminConversationRows', () => {
     })
     expect(rows.map((r) => r.key)).toEqual(['load-older', 'unread', 'm1', 'm2', 'seen', 'typing'])
   })
+
+  // CF3: threads each message's derived block state through so
+  // AgentMessageBubble can render an answered/superseded block as resolved
+  // instead of always implying it's still live.
+  describe('blockStates', () => {
+    it('sets blockState from the map when a message id is present', () => {
+      const rows = buildAdminConversationRows({
+        messages: [msg('m1'), msg('m2')],
+        hasMoreOlder: false,
+        firstUnreadId: null,
+        showSeen: false,
+        showTyping: false,
+        blockStates: new Map([
+          ['m1', 'chosen'],
+          ['m2', 'superseded'],
+        ]),
+      })
+      const byKey = Object.fromEntries(
+        rows.filter((r) => r.type === 'message').map((r) => [r.key, r.blockState])
+      )
+      expect(byKey).toEqual({ m1: 'chosen', m2: 'superseded' })
+    })
+
+    it('leaves blockState undefined for a message the map has no entry for', () => {
+      const rows = buildAdminConversationRows({
+        messages: [msg('m1')],
+        hasMoreOlder: false,
+        firstUnreadId: null,
+        showSeen: false,
+        showTyping: false,
+        blockStates: new Map(),
+      })
+      expect(rows.find((r) => r.key === 'm1')).toMatchObject({ blockState: undefined })
+    })
+
+    it('leaves blockState undefined when no map is passed at all', () => {
+      const rows = buildAdminConversationRows({
+        messages: [msg('m1')],
+        hasMoreOlder: false,
+        firstUnreadId: null,
+        showSeen: false,
+        showTyping: false,
+      })
+      expect(rows.find((r) => r.key === 'm1')).toMatchObject({ blockState: undefined })
+    })
+  })
 })

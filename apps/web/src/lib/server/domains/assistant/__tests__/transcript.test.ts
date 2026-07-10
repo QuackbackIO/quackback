@@ -80,6 +80,80 @@ describe('buildConversationTranscript', () => {
   })
 })
 
+/**
+ * Phase C conversational block layer (slice C-1) open item: this renderer
+ * must never need to understand `block`/`blockReply` — every block kind's
+ * honest plain-text fallback lives in `content` by construction (the
+ * contract's core guarantee), so the existing content-only renderer already
+ * grounds Quinn correctly on a block-bearing thread with no code change.
+ */
+describe('conversational block messages (Phase C, slice C-1) render from content alone', () => {
+  it('renders every block kind as an ordinary Agent line, using content only', () => {
+    const transcript = buildConversationTranscript([
+      msg({ senderType: 'visitor', content: 'I need help' }),
+      msg({
+        senderType: 'agent',
+        content: 'How can we help?\n[Billing] [Technical issue]',
+        block: {
+          v: 1,
+          runId: 'workflow_run_1',
+          nodeId: 'n1',
+          waiting: true,
+          kind: 'buttons',
+          options: [
+            { key: 'billing', label: 'Billing' },
+            { key: 'tech', label: 'Technical issue' },
+          ],
+          allowTyping: false,
+        },
+      }),
+      msg({
+        senderType: 'agent',
+        content: "We're online — typically replies in under an hour.",
+        block: {
+          v: 1,
+          runId: 'workflow_run_1',
+          nodeId: 'n2',
+          waiting: false,
+          kind: 'replyTime',
+          status: 'online',
+        },
+      }),
+      msg({
+        senderType: 'agent',
+        content: 'How would you rate this conversation?\n😞 🙁 😐 🙂 😄',
+        block: {
+          v: 1,
+          runId: 'workflow_run_1',
+          nodeId: 'n3',
+          waiting: true,
+          kind: 'csat',
+          allowTypingInterrupt: true,
+          commentPrompt: 'Add a comment',
+        },
+      }),
+      msg({
+        senderType: 'visitor',
+        content: 'Billing',
+        blockReply: {
+          kind: 'buttons',
+          inReplyToMessageId: 'conversation_msg_block1',
+          buttonKey: 'billing',
+        },
+      }),
+    ])
+    expect(transcript).toBe(
+      [
+        'Customer: I need help',
+        'Agent: How can we help?\n[Billing] [Technical issue]',
+        "Agent: We're online — typically replies in under an hour.",
+        'Agent: How would you rate this conversation?\n😞 🙁 😐 🙂 😄',
+        'Customer: Billing',
+      ].join('\n')
+    )
+  })
+})
+
 describe('internal-note labelling (D1)', () => {
   it('labels an internal note distinctly from a customer-visible agent reply', () => {
     const transcript = buildConversationTranscript([

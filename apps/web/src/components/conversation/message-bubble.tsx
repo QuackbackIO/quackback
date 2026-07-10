@@ -47,9 +47,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { REACTION_EMOJIS } from '@/lib/shared/db-types'
+import { Badge } from '@/components/ui/badge'
+import { REACTION_EMOJIS, CSAT_FACES } from '@/lib/shared/db-types'
 import { cn } from '@/lib/shared/utils'
-import type { TiptapContent } from '@/lib/shared/db-types'
+import type { TiptapContent, WorkflowBlockPayload } from '@/lib/shared/db-types'
 import type { ConversationMessageId } from '@quackback/ids'
 import type {
   AgentConversationMessageDTO,
@@ -57,6 +58,7 @@ import type {
   ConversationMessageCitation,
 } from '@/lib/shared/conversation/types'
 import type { MessageTranslationDisplay } from '@/lib/shared/conversation/translation'
+import type { BlockState } from '@/components/shared/conversation/conversation-rows'
 import {
   AssistantSourcesTrace,
   AssistantAnswer,
@@ -65,6 +67,77 @@ import { PendingActionCard } from '@/components/conversation/pending-action-card
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/** `issue_type` -> "Issue type" — good enough for an attribute key with no
+ *  display-name lookup available on the message payload (the block snapshot
+ *  only ever carries the raw key). */
+function humanizeAttributeKey(key: string): string {
+  const words = key.replace(/[_-]+/g, ' ').trim()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * Read-only rendering of a conversational block's affordance for the agent
+ * inbox (PHASE-C-CONVERSATIONAL-UX-BRIEF.md — the admin thread shows the
+ * prompt bubble plus a passive summary of what the customer sees: a chip row
+ * for buttons, a "waiting for" caption for collect, an inert emoji row for
+ * CSAT. Never interactive — an agent cannot answer on the customer's behalf
+ * by tapping here. `message`/`replyTime` blocks have no affordance beyond
+ * the prompt bubble itself, so this renders nothing for them.
+ *
+ * `state` is the same conversation-rows.ts derivation the customer-facing
+ * widget renders from (undefined only for a caller that hasn't threaded a
+ * block-states map through yet, treated like 'pending' below so the summary
+ * degrades to its original always-live look rather than guessing wrong).
+ * Answered/superseded no longer render as if the block were still awaiting a
+ * reply — collect flips its caption to a quiet "Answered", and buttons dims
+ * to signal the options are no longer live (the "Waiting for: …" caption that
+ * never resolved once the customer replied was the bug this fixes).
+ */
+function AgentBlockSummary({ block, state }: { block: WorkflowBlockPayload; state?: BlockState }) {
+  const resolved = state === 'chosen' || state === 'superseded'
+  switch (block.kind) {
+    case 'buttons':
+      return (
+        <div
+          className={cn('mt-1.5 flex flex-wrap gap-1', resolved && 'opacity-60 grayscale')}
+          aria-hidden
+        >
+          {block.options.map((o) => (
+            <Badge
+              key={o.key}
+              variant="outline"
+              size="sm"
+              shape="pill"
+              className="bg-background/60"
+            >
+              {o.label}
+            </Badge>
+          ))}
+        </div>
+      )
+    case 'collect':
+    case 'collectReply':
+      if (state === 'superseded') return null
+      return (
+        <p className="mt-1 text-[11px] text-muted-foreground/80">
+          {state === 'chosen'
+            ? `Answered: ${humanizeAttributeKey(block.attributeKey)}`
+            : `Waiting for: ${humanizeAttributeKey(block.attributeKey)}`}
+        </p>
+      )
+    case 'csat':
+      return (
+        <div className="mt-1.5 flex gap-1 text-base leading-none opacity-70" aria-hidden>
+          {CSAT_FACES.map((face) => (
+            <span key={face}>{face}</span>
+          ))}
+        </div>
+      )
+    default:
+      return null
+  }
 }
 
 /** 'self' = the thread's own side (visitor in the messenger; agent/assistant
@@ -169,6 +242,13 @@ interface AgentMessageBubbleProps {
    *  of an incoming customer message, or the teammate's pre-translation
    *  original of an outgoing reply that was translated before sending). */
   translation?: MessageTranslationDisplay
+  /** This message's own interactive-block state (conversation-rows.ts's pure
+   *  derivation), when `message.block` is an interactive kind — undefined for
+   *  every other message, and for a caller that hasn't threaded a block-states
+   *  map through (AgentBlockSummary then falls back to its original
+   *  always-live rendering). Read-only: unlike the widget, the admin thread
+   *  never lets an agent answer on the customer's behalf here. */
+  blockState?: BlockState
 }
 
 interface VisitorMessageBubbleProps {
@@ -207,6 +287,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   highlighted = false,
   linkPreviews = false,
   translation,
+  blockState,
 }: AgentMessageBubbleProps) {
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
@@ -366,6 +447,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             {linkPreviews && !isNote && (
               <LinkPreviews content={message.content} contentJson={message.contentJson} />
             )}
+            {message.block && <AgentBlockSummary block={message.block} state={blockState} />}
           </div>
 
           {/* Hover toolbar: inbox affordances. Anchored to the bubble's

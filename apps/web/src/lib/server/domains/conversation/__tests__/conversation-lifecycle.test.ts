@@ -34,8 +34,19 @@ describe('unreadWatermarkFromAnchor', () => {
 })
 
 describe('applyVisitorReopenStatus', () => {
-  it('a visitor message always surfaces the thread (returns open)', () => {
-    expect(applyVisitorReopenStatus()).toBe('open')
+  it('an ordinary visitor message always surfaces the thread (returns open) from any prior status', () => {
+    expect(applyVisitorReopenStatus('open', false)).toBe('open')
+    expect(applyVisitorReopenStatus('snoozed', false)).toBe('open')
+    expect(applyVisitorReopenStatus('closed', false)).toBe('open')
+  })
+
+  it('a matched blockReply on an open/snoozed conversation still surfaces it (no carve-out to apply)', () => {
+    expect(applyVisitorReopenStatus('open', true)).toBe('open')
+    expect(applyVisitorReopenStatus('snoozed', true)).toBe('open')
+  })
+
+  it('SF3: a matched blockReply on an ALREADY-closed conversation leaves it closed (post-close CSAT/button flow)', () => {
+    expect(applyVisitorReopenStatus('closed', true)).toBe('closed')
   })
 })
 

@@ -98,9 +98,17 @@ async function triggerLiveAttributeRecheck(conversationId: ConversationId): Prom
  * reply as an ordinary assistant-authored message, maintains the involvement
  * record, and executes any escalation the engine decided on. Best-effort
  * throughout — the caller invokes it fire-and-forget.
+ *
+ * `opts.stepInstructions` (Phase C conversational block layer, slice C-6):
+ * threaded straight onto the turn's input, folded into just this one turn's
+ * system prompt (see assistant.runtime.ts's buildStepInstructionsPrompt) —
+ * never persisted config. Only action.executor.ts's `let_assistant_answer`
+ * case ever passes this; every other caller (the ordinary customer-message
+ * turn in conversation.service.ts) omits it.
  */
 export async function runAssistantTurnForConversation(
-  conversationId: ConversationId
+  conversationId: ConversationId,
+  opts?: { stepInstructions?: string | null }
 ): Promise<void> {
   if (!isAssistantConfigured()) return
 
@@ -188,6 +196,7 @@ export async function runAssistantTurnForConversation(
       involvementId: active?.id ?? null,
       latestCustomerMessageId,
       escalationAlreadyOffered: active?.escalationOfferedAt != null,
+      stepInstructions: opts?.stepInstructions ?? null,
       onActivity: (activity) => {
         if (activity.kind === 'thinking') streamed = ''
         publishActivity(activityToStatus(activity))

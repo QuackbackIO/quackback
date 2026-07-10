@@ -14,6 +14,9 @@ import {
   MAX_FREQUENCY_CAP_COUNT,
   MAX_FREQUENCY_CAP_DAYS,
   MAX_WAIT_SECONDS,
+  MAX_ASSISTANT_STEP_INSTRUCTIONS,
+  PARKING_BLOCK_KINDS,
+  classRestrictedNodeIssue,
   duplicateStepIdMessage,
   missingStepMessage,
   undeclaredBranchPathMessage,
@@ -25,7 +28,7 @@ import type {
 // Re-exported so every other cap symbol (and now these two bounds) flows
 // through this module: the one client-side boundary onto workflow.schemas.ts
 // for the feature, instead of individual editors reaching past it.
-export { MAX_FREQUENCY_CAP_COUNT, MAX_FREQUENCY_CAP_DAYS }
+export { MAX_FREQUENCY_CAP_COUNT, MAX_FREQUENCY_CAP_DAYS, MAX_ASSISTANT_STEP_INSTRUCTIONS }
 import type {
   ATTRIBUTE_FIELD_PREFIX as ServerAttributeFieldPrefix,
   CONDITION_FIELDS,
@@ -36,6 +39,9 @@ import { DISPATCHABLE_TRIGGER_TYPES } from '@/lib/shared/workflow-trigger-types'
 
 export type { ConditionOperator } from '@/lib/server/domains/workflows/condition.evaluator'
 import type { ConditionOperator } from '@/lib/server/domains/workflows/condition.evaluator'
+import { CSAT_FACES } from '@/lib/shared/db-types'
+import type { TiptapContent } from '@/lib/shared/db-types'
+import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 
 // ---------------------------------------------------------------------------
 // Graph JSON types (plain-string ids: the exact shape the save mutation takes)
@@ -47,6 +53,165 @@ export type GraphEdge = WorkflowGraphJson['edges'][number]
 export type GraphAction = Extract<GraphNode, { type: 'action' }>['action']
 export type ActionType = GraphAction['type']
 export type GraphCondition = Extract<GraphNode, { type: 'condition' }>['condition']
+
+// ---------------------------------------------------------------------------
+// Conversational block kinds (Phase C, slice C-5 — the visual builder side of
+// the 8 node kinds C-1 added to the runtime: workflow.schemas.ts / graph.ts).
+// Body types are derived from GraphNode (the zod-inferred shape) rather than
+// re-declared, the same "derive, don't duplicate" pattern GraphAction /
+// GraphCondition already use above — a server-side field addition/rename
+// fails typecheck here too.
+// ---------------------------------------------------------------------------
+export type BlockBody = Extract<GraphNode, { type: 'message' }>['body']
+export type GraphButtonOption = Extract<GraphNode, { type: 'reply_buttons' }>['options'][number]
+export type GraphAttributeOption = NonNullable<
+  Extract<GraphNode, { type: 'collect_data' }>['options']
+>[number]
+export type CollectFieldType = Extract<GraphNode, { type: 'collect_data' }>['fieldType']
+
+export type BlockStepKind =
+  | 'message'
+  | 'show_reply_time'
+  | 'let_assistant_answer'
+  | 'disable_composer'
+  | 'reply_buttons'
+  | 'collect_data'
+  | 'collect_reply'
+  | 'request_csat'
+
+export const BLOCK_STEP_LABELS: Record<BlockStepKind, string> = {
+  message: 'Message',
+  show_reply_time: 'Show expected reply time',
+  let_assistant_answer: 'Let Quinn answer',
+  disable_composer: 'Disable replies',
+  reply_buttons: 'Reply buttons',
+  collect_data: 'Collect data',
+  collect_reply: 'Collect customer reply',
+  request_csat: 'Ask for a rating',
+}
+
+/** The palette's SEND group: posts a message (or nothing, for the pure
+ *  control-flow kinds) and continues immediately. */
+export const SEND_BLOCK_KINDS: readonly BlockStepKind[] = [
+  'message',
+  'show_reply_time',
+  'let_assistant_answer',
+  'disable_composer',
+]
+/** The palette's COLLECT group: posts a message and parks the run for the
+ *  customer's structured reply. */
+export const COLLECT_BLOCK_KINDS: readonly BlockStepKind[] = [
+  'reply_buttons',
+  'collect_data',
+  'collect_reply',
+  'request_csat',
+]
+
+/** A minimal, schema-valid empty rich-text body — one empty paragraph. */
+export const EMPTY_BLOCK_BODY: BlockBody = { type: 'doc', content: [{ type: 'paragraph' }] }
+
+// blockBodySchema's z.ZodType annotation (workflow.schemas.ts) declares
+// `content?: unknown[]` rather than a self-referencing array — a deliberate
+// simplification there, not something this module should fight — so every
+// recursive walk below casts one level at a time via this helper instead of
+// threading `as BlockBody[]` through each call site.
+function bodyChildren(node: BlockBody): BlockBody[] {
+  return (node.content ?? []) as BlockBody[]
+}
+
+/** True when a block body carries no visible text — gates the builder's
+ *  issues chip (an unwritten prompt can't go live). `BlockBody` and
+ *  `TiptapContent` are the same doc/paragraph/text JSON shape (the
+ *  block-body schema is deliberately less strict about `content`'s element
+ *  type — see bodyChildren's comment — hence the cast), so this defers to
+ *  the one shared empty-doc rule (`lib/shared/utils/is-empty-tiptap-doc.ts`,
+ *  also used by the widget-side welcome card) rather than re-implementing
+ *  the same paragraph/heading/blockquote/text walk here. */
+export function isBlockBodyEmpty(body: BlockBody | undefined): boolean {
+  return isEmptyTiptapDoc(body as unknown as TiptapContent | undefined)
+}
+
+function blockBodyText(body: BlockBody): string {
+  const parts: string[] = []
+  const walk = (node: BlockBody) => {
+    if (node.text) parts.push(node.text)
+    bodyChildren(node).forEach(walk)
+  }
+  walk(body)
+  return parts.join(' ').replace(/\s+/g, ' ').trim()
+}
+
+/** A short plain-text preview of a block's rich body, for canvas cards and
+ *  outline rows — the closest thing the builder has to "what the customer
+ *  will see" without rendering the full rich text. */
+export function blockBodyPreview(body: BlockBody | undefined, maxLen = 80): string {
+  const text = body ? blockBodyText(body) : ''
+  if (!text) return 'Empty message'
+  return text.length > maxLen ? `${text.slice(0, maxLen - 1)}…` : text
+}
+
+/** Append a `{key|}` dynamic-variable token (WORKFLOW_VARIABLE_CATALOGUE,
+ *  lib/shared/workflows/interpolate.ts's token syntax) to a block body's last
+ *  paragraph, or a fresh one if the body is empty. The fallback text after
+ *  `|` starts blank — the admin types it in place as ordinary rich text, the
+ *  "fallback affordance" the design brief calls for, since the token is just
+ *  literal characters once inserted (no special widget needed). Used by the
+ *  message editor's insert-variable menu; a pure function so the caller (the
+ *  React component) stays a thin wrapper. */
+export function insertVariableToken(body: BlockBody, key: string): BlockBody {
+  const token = `{${key}|}`
+  const content = [...bodyChildren(body)]
+  const last = content[content.length - 1]
+  if (last && last.type === 'paragraph') {
+    content[content.length - 1] = {
+      ...last,
+      content: [...bodyChildren(last), { type: 'text', text: token }],
+    }
+  } else {
+    content.push({ type: 'paragraph', content: [{ type: 'text', text: token }] })
+  }
+  return { ...body, content }
+}
+
+/** Ratings the request_csat block can branch on (mirrors the server walker's
+ *  `String(rating)` exact-match branch keys, graph.ts's request_csat resume
+ *  case — a 5-emoji CSAT per the design brief, keyed 1-5 low to high). */
+export const RATING_KEYS = ['1', '2', '3', '4', '5'] as const
+export type RatingKey = (typeof RATING_KEYS)[number]
+/** Derived from the canonical CSAT_FACES (index = rating-1) rather than its
+ *  own hardcoded set, so the canvas summary (flow-layout.ts) shows the exact
+ *  row the customer actually taps in the widget — not a lookalike-but-
+ *  different emoji set authored separately here. */
+export const RATING_EMOJI: Record<RatingKey, string> = Object.fromEntries(
+  RATING_KEYS.map((key, i) => [key, CSAT_FACES[i]])
+) as Record<RatingKey, string>
+const RATING_TEXT: Record<RatingKey, string> = {
+  '1': 'Very unhappy',
+  '2': 'Unhappy',
+  '3': 'Neutral',
+  '4': 'Happy',
+  '5': 'Very happy',
+}
+/** The rating editor's add-path menu labels ("😞 Very unhappy" etc.) — built
+ *  from RATING_EMOJI rather than its own hardcoded glyph set (the bug this
+ *  fixes: the editor previously pinned an old 😡/😍 pair the canvas and the
+ *  customer-facing widget had already moved off of, via CSAT_FACES). */
+export const RATING_LABELS: Record<RatingKey, string> = Object.fromEntries(
+  RATING_KEYS.map((key) => [key, `${RATING_EMOJI[key]} ${RATING_TEXT[key]}`])
+) as Record<RatingKey, string>
+
+/** Fixed path keys for let_assistant_answer's two edges — the default
+ *  (unlabeled) continuation and the labeled "escalated to a human" edge
+ *  (graph.ts: reserved for a later invocation seam, not yet consulted by the
+ *  runtime walker — see this module's round-trip tests for why the builder
+ *  still authors it: the edge is schema-valid and forward-compatible today). */
+export const LET_ASSISTANT_DEFAULT_KEY = 'continue'
+export const LET_ASSISTANT_ESCALATED_KEY = 'escalated'
+
+/** Attribute field types collect_data supports (a subset of the full
+ *  registry — mirrors workflow.schemas.ts's collect_data.fieldType enum;
+ *  multi_select/checkbox have no collect_data equivalent in the v1 runtime). */
+export const COLLECT_FIELD_TYPES: readonly CollectFieldType[] = ['text', 'number', 'select', 'date']
 
 /**
  * Mirrors condition.evaluator's ATTRIBUTE_FIELD_PREFIX. The type-only import
@@ -315,6 +480,11 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   set_priority: 'Set priority',
   snooze: 'Snooze',
   close: 'Close conversation',
+  // Mirrors `close` (no config — just the action kind) so a low-rating/
+  // follow-up path can hand a closed conversation back to an active queue
+  // (support platform's reopen action — see workflow.schemas.ts's action
+  // union and this file's other `close` cases for the pattern this follows).
+  reopen: 'Reopen conversation',
   apply_sla: 'Apply SLA policy',
   set_attribute: 'Set attribute',
 }
@@ -460,6 +630,8 @@ export function defaultAction(type: ActionType): GraphAction {
       return { type, untilIso: null }
     case 'close':
       return { type }
+    case 'reopen':
+      return { type }
     case 'apply_sla':
       return { type, policyId: '' }
     case 'set_attribute':
@@ -496,15 +668,105 @@ export interface BranchPath {
   steps: TreeStep[]
 }
 
+/** A labeled outgoing path shared by every conversational-block kind that
+ *  "spawns paths via edges" the way a branch node does (task's framing):
+ *  reply_buttons (one path per button key), request_csat (one path per wired
+ *  rating digit), and let_assistant_answer (its fixed default/escalated
+ *  pair). Unlike BranchPath, a KeyedPath carries no condition — routing is by
+ *  exact key match against the customer's structured reply (button key,
+ *  rating digit) or is fixed (let_assistant_answer), never evaluated. See
+ *  graph.ts's resume-path comment for how the server walker matches each. */
+export interface KeyedPath {
+  key: string
+  label: string
+  steps: TreeStep[]
+}
+
 export type TreeStep =
   | { id: string; kind: 'action'; action: GraphAction }
   | { id: string; kind: 'condition'; condition: GraphCondition }
   | { id: string; kind: 'wait'; seconds: number }
   | { id: string; kind: 'branch'; paths: BranchPath[] }
+  // ── Conversational block kinds (Phase C, slice C-5) ───────────────────────
+  | { id: string; kind: 'message'; body: BlockBody }
+  | { id: string; kind: 'show_reply_time' }
+  | { id: string; kind: 'disable_composer' }
+  | {
+      id: string
+      kind: 'collect_data'
+      body: BlockBody
+      attributeKey: string
+      fieldType: CollectFieldType
+      options?: GraphAttributeOption[]
+      required: boolean
+    }
+  | { id: string; kind: 'collect_reply'; body: BlockBody; attributeKey: string }
+  /** paths: exactly LET_ASSISTANT_DEFAULT_KEY + LET_ASSISTANT_ESCALATED_KEY,
+   *  always both present (not user add/remove/reorderable — see the
+   *  let-assistant editor). instructions/autoCloseOverride (Phase C, slice
+   *  C-6) mirror the server node's own optional fields verbatim. */
+  | {
+      id: string
+      kind: 'let_assistant_answer'
+      instructions?: string
+      autoCloseOverride?: boolean
+      paths: KeyedPath[]
+    }
+  | { id: string; kind: 'reply_buttons'; body: BlockBody; allowTyping: boolean; paths: KeyedPath[] }
+  | {
+      id: string
+      kind: 'request_csat'
+      body: BlockBody
+      allowTypingInterrupt: boolean
+      commentPrompt?: string
+      /** Zero or more wired rating digits ('1'..'5'); a rating with no path
+       *  just records and ends the run there (see graph.ts's request_csat
+       *  resume case — no matching branch edge is a valid, terminal outcome). */
+      paths: KeyedPath[]
+    }
 
 export interface WorkflowTree {
   triggerId: string
   steps: TreeStep[]
+}
+
+/**
+ * The labeled paths a step "spawns via edges" (branch keys), normalized to
+ * one shape regardless of kind — branch's own BranchPath (label reads as its
+ * key, since a rule pill's name IS the key there), reply_buttons/
+ * request_csat/let_assistant_answer's native KeyedPath. Null for every other
+ * kind (nothing to fan out). Shared by the tree-editing helpers below and the
+ * canvas auto-layout (flow-layout.ts), which both need to walk/measure every
+ * fan-out kind the same way instead of hand-copying a `kind === 'branch'`
+ * special case per call site.
+ */
+export function stepPaths(step: TreeStep): KeyedPath[] | null {
+  switch (step.kind) {
+    case 'branch':
+      return step.paths.map((p) => ({ key: p.key, label: p.key, steps: p.steps }))
+    case 'reply_buttons':
+    case 'request_csat':
+    case 'let_assistant_answer':
+      return step.paths
+    default:
+      return null
+  }
+}
+
+/** Write a fan-out step's named path back with new `steps`, preserving every
+ *  other field (a branch path's condition, a button's label, ...). Paired
+ *  with stepPaths for the tree-editing helpers' read/modify/write cycle. */
+function withPathSteps(step: TreeStep, key: string, steps: TreeStep[]): TreeStep {
+  switch (step.kind) {
+    case 'branch':
+      return { ...step, paths: step.paths.map((p) => (p.key === key ? { ...p, steps } : p)) }
+    case 'reply_buttons':
+    case 'request_csat':
+    case 'let_assistant_answer':
+      return { ...step, paths: step.paths.map((p) => (p.key === key ? { ...p, steps } : p)) }
+    default:
+      return step
+  }
 }
 
 export function newTree(): WorkflowTree {
@@ -514,7 +776,8 @@ export function newTree(): WorkflowTree {
 function collectIds(steps: TreeStep[], into: Set<string>): void {
   for (const step of steps) {
     into.add(step.id)
-    if (step.kind === 'branch') for (const p of step.paths) collectIds(p.steps, into)
+    const paths = stepPaths(step)
+    if (paths) for (const p of paths) collectIds(p.steps, into)
   }
 }
 
@@ -553,23 +816,84 @@ export function createStep(
       }
     case 'wait':
       return { id, kind, seconds: 3600 }
+    // ── Conversational block kinds (Phase C, slice C-5) ───────────────────
+    case 'message':
+      return { id, kind, body: EMPTY_BLOCK_BODY }
+    case 'show_reply_time':
+      return { id, kind }
+    case 'disable_composer':
+      return { id, kind }
+    case 'collect_data':
+      return {
+        id,
+        kind,
+        body: EMPTY_BLOCK_BODY,
+        attributeKey: '',
+        fieldType: 'text',
+        required: false,
+      }
+    case 'collect_reply':
+      return { id, kind, body: EMPTY_BLOCK_BODY, attributeKey: '' }
+    case 'let_assistant_answer':
+      return {
+        id,
+        kind,
+        paths: [
+          { key: LET_ASSISTANT_DEFAULT_KEY, label: 'Continues', steps: [] },
+          { key: LET_ASSISTANT_ESCALATED_KEY, label: 'If escalated to a human', steps: [] },
+        ],
+      }
+    case 'reply_buttons':
+      return {
+        id,
+        kind,
+        body: EMPTY_BLOCK_BODY,
+        allowTyping: false,
+        paths: [
+          { key: 'option_1', label: 'Option 1', steps: [] },
+          { key: 'option_2', label: 'Option 2', steps: [] },
+        ],
+      }
+    case 'request_csat':
+      // Starts with no wired rating paths (not one per digit): request_csat
+      // has no declared-keys field on the node (unlike reply_buttons'
+      // `options` or branch's `branches`), so a wired-but-empty path has no
+      // edge to survive a JSON-mode round-trip on — see this module's
+      // round-trip test for request_csat. Defaulting to zero avoids handing
+      // the admin 5 paths that would silently vanish before they've added a
+      // step to any of them; the CSAT editor's "Add path for rating N" wires
+      // them in one at a time instead.
+      return {
+        id,
+        kind,
+        body: EMPTY_BLOCK_BODY,
+        allowTypingInterrupt: true,
+        paths: [],
+      }
   }
 }
 
 /**
- * Insert a step at `index`. Inserting a branch splits the path: the steps
- * after the insertion point move into the branch's first path, so no step
- * ever follows a branch within one path.
+ * Insert a step at `index`. Inserting a branch (or any other fan-out kind —
+ * reply_buttons/request_csat/let_assistant_answer) splits the path: the
+ * steps after the insertion point move into the new step's first declared
+ * path, so no step ever follows a fan-out step within one lane.
  */
 export function insertStep(steps: TreeStep[], index: number, step: TreeStep): TreeStep[] {
   const head = steps.slice(0, index)
   const tail = steps.slice(index)
-  if (step.kind !== 'branch' || tail.length === 0) return [...head, step, ...tail]
-  const [first, ...rest] = step.paths
-  const firstPath: BranchPath = first
-    ? { ...first, steps: [...first.steps, ...tail] }
-    : { key: 'Path 1', condition: {}, steps: tail }
-  return [...head, { ...step, paths: [firstPath, ...rest] }]
+  if (tail.length === 0) return [...head, step, ...tail]
+  if (step.kind === 'branch') {
+    const [first, ...rest] = step.paths
+    const firstPath: BranchPath = first
+      ? { ...first, steps: [...first.steps, ...tail] }
+      : { key: 'Path 1', condition: {}, steps: tail }
+    return [...head, { ...step, paths: [firstPath, ...rest] }]
+  }
+  const paths = stepPaths(step)
+  if (!paths || !paths[0]) return [...head, step, ...tail]
+  const merged = withPathSteps(step, paths[0].key, [...paths[0].steps, ...tail])
+  return [...head, merged]
 }
 
 /** Steps in a subtree, for "this deletes N steps" confirmations. */
@@ -577,7 +901,8 @@ export function countSteps(steps: TreeStep[]): number {
   let n = 0
   for (const step of steps) {
     n++
-    if (step.kind === 'branch') for (const p of step.paths) n += countSteps(p.steps)
+    const paths = stepPaths(step)
+    if (paths) for (const p of paths) n += countSteps(p.steps)
   }
   return n
 }
@@ -621,6 +946,14 @@ function validateCondition(v: unknown, where: string): string | null {
   return null
 }
 
+/** Shallow check that a body value is at least shaped like a TipTap doc (has
+ *  a `type`) — mirrors the server's blockBodySchema CALIBRATION: catching a
+ *  shape the interpolator/walker can't make sense of, not a full recursive
+ *  mirror (the server re-validates the whole tree on save either way). */
+function validateBlockBody(v: unknown, where: string): string | null {
+  return isRecord(v) && nonEmptyString(v.type) ? null : `${where}: the message needs content`
+}
+
 function validateAction(v: unknown, where: string): string | null {
   if (!isRecord(v)) return `${where}: the action must be an object`
   if (!isActionType(v.type)) return `${where}: unknown action "${String(v.type)}"`
@@ -649,6 +982,7 @@ function validateAction(v: unknown, where: string): string | null {
         ? null
         : `${where}: snooze needs a UTC timestamp (e.g. 2026-08-01T09:00:00Z) or null`
     case 'close':
+    case 'reopen':
       return null
     case 'apply_sla':
       return nonEmptyString(v.policyId) ? null : `${where}: enter an SLA policy id`
@@ -719,6 +1053,82 @@ export function validateGraph(input: unknown): Result<WorkflowGraphJson> {
         }
         if (node.seconds > MAX_WAIT_SECONDS) {
           return fail(`${where}: a wait can be at most ${durationPhrase(MAX_WAIT_SECONDS)}`)
+        }
+        break
+      }
+      // ── Conversational block kinds (Phase C, slice C-5) ──────────────────
+      case 'message': {
+        const err = validateBlockBody(node.body, where)
+        if (err) return fail(err)
+        break
+      }
+      case 'show_reply_time':
+      case 'disable_composer':
+        break
+      case 'let_assistant_answer':
+        // The escalated edge (if present) is validated below like a branch's
+        // labeled edges: only 'escalated' is a declared path off this node.
+        branchKeysByNodeId.set(node.id, new Set([LET_ASSISTANT_ESCALATED_KEY]))
+        if (node.instructions !== undefined) {
+          if (typeof node.instructions !== 'string') {
+            return fail(`${where}: "instructions" must be a string when present`)
+          }
+          if (node.instructions.length > MAX_ASSISTANT_STEP_INSTRUCTIONS) {
+            return fail(
+              `${where}: instructions must be at most ${MAX_ASSISTANT_STEP_INSTRUCTIONS} characters`
+            )
+          }
+        }
+        if (node.autoCloseOverride !== undefined && typeof node.autoCloseOverride !== 'boolean') {
+          return fail(`${where}: "autoCloseOverride" must be true or false when present`)
+        }
+        break
+      case 'reply_buttons': {
+        const err = validateBlockBody(node.body, where)
+        if (err) return fail(err)
+        if (!Array.isArray(node.options) || node.options.length === 0) {
+          return fail(`${where}: add at least one button`)
+        }
+        const keys = new Set<string>()
+        for (const opt of node.options) {
+          if (!isRecord(opt) || !nonEmptyString(opt.key) || !nonEmptyString(opt.label)) {
+            return fail(`${where}: every button needs a key and a label`)
+          }
+          keys.add(opt.key)
+        }
+        // Reuses the same edge-branch-key check the general edge loop below
+        // already runs for a 'branch' node's declared keys — a button's key
+        // IS a branch key from the walker's point of view (graph.ts:
+        // reply_buttons resumes via the same branch-edge matching).
+        branchKeysByNodeId.set(node.id, keys)
+        if (typeof node.allowTyping !== 'boolean') {
+          return fail(`${where}: "allowTyping" must be true or false`)
+        }
+        break
+      }
+      case 'collect_data': {
+        const err = validateBlockBody(node.body, where)
+        if (err) return fail(err)
+        if (!nonEmptyString(node.attributeKey)) return fail(`${where}: choose an attribute`)
+        if (!COLLECT_FIELD_TYPES.includes(node.fieldType as CollectFieldType)) {
+          return fail(`${where}: unknown field type "${String(node.fieldType)}"`)
+        }
+        if (typeof node.required !== 'boolean') {
+          return fail(`${where}: "required" must be true or false`)
+        }
+        break
+      }
+      case 'collect_reply': {
+        const err = validateBlockBody(node.body, where)
+        if (err) return fail(err)
+        if (!nonEmptyString(node.attributeKey)) return fail(`${where}: choose an attribute`)
+        break
+      }
+      case 'request_csat': {
+        const err = validateBlockBody(node.body, where)
+        if (err) return fail(err)
+        if (typeof node.allowTypingInterrupt !== 'boolean') {
+          return fail(`${where}: "allowTypingInterrupt" must be true or false`)
         }
         break
       }
@@ -851,15 +1261,163 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
         steps.push({ id: node.id, kind: 'branch', paths })
         return { ok: true, value: steps }
       }
+
+      // ── reply_buttons: one path per declared button key (Phase C, C-5) ───
+      if (node.type === 'reply_buttons') {
+        const keys = new Set(node.options.map((o) => o.key))
+        if (keys.size !== node.options.length) {
+          return fail(`reply buttons "${node.id}" has duplicate button keys`)
+        }
+        const edgeByKey = new Map<string, GraphEdge>()
+        for (const edge of outgoing.get(node.id) ?? []) {
+          if (edge.branch === undefined) {
+            return fail(`reply buttons "${node.id}" has an unlabeled outgoing connection`)
+          }
+          if (!keys.has(edge.branch)) {
+            return fail(
+              `reply buttons "${node.id}" has a connection for an unknown button "${edge.branch}"`
+            )
+          }
+          if (edgeByKey.has(edge.branch)) {
+            return fail(
+              `reply buttons "${node.id}" has two connections for button "${edge.branch}"`
+            )
+          }
+          edgeByKey.set(edge.branch, edge)
+        }
+        const paths: KeyedPath[] = []
+        for (const opt of node.options) {
+          const sub = walkFrom(edgeByKey.get(opt.key)?.to)
+          if (!sub.ok) return sub
+          paths.push({ key: opt.key, label: opt.label, steps: sub.value })
+        }
+        steps.push({
+          id: node.id,
+          kind: 'reply_buttons',
+          body: node.body,
+          allowTyping: node.allowTyping,
+          paths,
+        })
+        return { ok: true, value: steps }
+      }
+
+      // ── request_csat: one path per WIRED rating digit, if any (C-5) ──────
+      if (node.type === 'request_csat') {
+        const edgeByKey = new Map<string, GraphEdge>()
+        for (const edge of outgoing.get(node.id) ?? []) {
+          if (
+            edge.branch === undefined ||
+            !(RATING_KEYS as readonly string[]).includes(edge.branch)
+          ) {
+            return fail(
+              `ask-for-rating "${node.id}" has a connection with an unexpected label ("${edge.branch ?? 'none'}")`
+            )
+          }
+          if (edgeByKey.has(edge.branch)) {
+            return fail(`ask-for-rating "${node.id}" has two connections for rating ${edge.branch}`)
+          }
+          edgeByKey.set(edge.branch, edge)
+        }
+        const paths: KeyedPath[] = []
+        for (const key of RATING_KEYS) {
+          const edge = edgeByKey.get(key)
+          if (!edge) continue // that rating isn't wired: no path to show
+          const sub = walkFrom(edge.to)
+          if (!sub.ok) return sub
+          paths.push({ key, label: RATING_LABELS[key], steps: sub.value })
+        }
+        steps.push({
+          id: node.id,
+          kind: 'request_csat',
+          body: node.body,
+          allowTypingInterrupt: node.allowTypingInterrupt,
+          commentPrompt: node.commentPrompt,
+          paths,
+        })
+        return { ok: true, value: steps }
+      }
+
+      // ── let_assistant_answer: default (unlabeled) + optional 'escalated' ─
+      if (node.type === 'let_assistant_answer') {
+        const outs = outgoing.get(node.id) ?? []
+        const continueEdges = outs.filter((e) => e.branch === undefined)
+        const escalatedEdges = outs.filter((e) => e.branch === LET_ASSISTANT_ESCALATED_KEY)
+        const other = outs.filter(
+          (e) => e.branch !== undefined && e.branch !== LET_ASSISTANT_ESCALATED_KEY
+        )
+        if (other.length > 0) {
+          return fail(
+            `"Let Quinn answer" step "${node.id}" has a connection for an unknown path "${other[0]!.branch}"`
+          )
+        }
+        if (continueEdges.length > 1) {
+          return fail(`"Let Quinn answer" step "${node.id}" has more than one default connection`)
+        }
+        if (escalatedEdges.length > 1) {
+          return fail(`"Let Quinn answer" step "${node.id}" has more than one escalated connection`)
+        }
+        const continueSub = walkFrom(continueEdges[0]?.to)
+        if (!continueSub.ok) return continueSub
+        const escalatedSub = walkFrom(escalatedEdges[0]?.to)
+        if (!escalatedSub.ok) return escalatedSub
+        steps.push({
+          id: node.id,
+          kind: 'let_assistant_answer',
+          instructions: node.instructions,
+          autoCloseOverride: node.autoCloseOverride,
+          paths: [
+            { key: LET_ASSISTANT_DEFAULT_KEY, label: 'Continues', steps: continueSub.value },
+            {
+              key: LET_ASSISTANT_ESCALATED_KEY,
+              label: 'If escalated to a human',
+              steps: escalatedSub.value,
+            },
+          ],
+        })
+        return { ok: true, value: steps }
+      }
+
       const next = singleSuccessor(node)
       if (!next.ok) return next
-      steps.push(
-        node.type === 'action'
-          ? { id: node.id, kind: 'action', action: node.action }
-          : node.type === 'condition'
-            ? { id: node.id, kind: 'condition', condition: node.condition }
-            : { id: node.id, kind: 'wait', seconds: node.seconds }
-      )
+      switch (node.type) {
+        case 'action':
+          steps.push({ id: node.id, kind: 'action', action: node.action })
+          break
+        case 'condition':
+          steps.push({ id: node.id, kind: 'condition', condition: node.condition })
+          break
+        case 'wait':
+          steps.push({ id: node.id, kind: 'wait', seconds: node.seconds })
+          break
+        case 'message':
+          steps.push({ id: node.id, kind: 'message', body: node.body })
+          break
+        case 'show_reply_time':
+          steps.push({ id: node.id, kind: 'show_reply_time' })
+          break
+        case 'disable_composer':
+          steps.push({ id: node.id, kind: 'disable_composer' })
+          break
+        case 'collect_data':
+          steps.push({
+            id: node.id,
+            kind: 'collect_data',
+            body: node.body,
+            attributeKey: node.attributeKey,
+            fieldType: node.fieldType,
+            options: node.options,
+            required: node.required,
+          })
+          break
+        case 'collect_reply':
+          steps.push({
+            id: node.id,
+            kind: 'collect_reply',
+            body: node.body,
+            attributeKey: node.attributeKey,
+          })
+          break
+      }
       currentId = next.value
     }
     return { ok: true, value: steps }
@@ -909,6 +1467,68 @@ export function treeToGraph(tree: WorkflowTree): WorkflowGraphJson {
           })
           for (const p of step.paths) emit(p.steps, step.id, p.key)
           break
+        // ── Conversational block kinds (Phase C, slice C-5) ───────────────
+        case 'message':
+          nodes.push({ id: step.id, type: 'message', body: step.body })
+          break
+        case 'show_reply_time':
+          nodes.push({ id: step.id, type: 'show_reply_time' })
+          break
+        case 'disable_composer':
+          nodes.push({ id: step.id, type: 'disable_composer' })
+          break
+        case 'collect_data':
+          nodes.push({
+            id: step.id,
+            type: 'collect_data',
+            body: step.body,
+            attributeKey: step.attributeKey,
+            fieldType: step.fieldType,
+            options: step.options,
+            required: step.required,
+          })
+          break
+        case 'collect_reply':
+          nodes.push({
+            id: step.id,
+            type: 'collect_reply',
+            body: step.body,
+            attributeKey: step.attributeKey,
+          })
+          break
+        case 'reply_buttons':
+          nodes.push({
+            id: step.id,
+            type: 'reply_buttons',
+            body: step.body,
+            options: step.paths.map((p) => ({ key: p.key, label: p.label })),
+            allowTyping: step.allowTyping,
+          })
+          for (const p of step.paths) emit(p.steps, step.id, p.key)
+          break
+        case 'request_csat':
+          nodes.push({
+            id: step.id,
+            type: 'request_csat',
+            body: step.body,
+            allowTypingInterrupt: step.allowTypingInterrupt,
+            commentPrompt: step.commentPrompt,
+          })
+          for (const p of step.paths) emit(p.steps, step.id, p.key)
+          break
+        case 'let_assistant_answer': {
+          nodes.push({
+            id: step.id,
+            type: 'let_assistant_answer',
+            instructions: step.instructions,
+            autoCloseOverride: step.autoCloseOverride,
+          })
+          const continuePath = step.paths.find((p) => p.key === LET_ASSISTANT_DEFAULT_KEY)
+          const escalatedPath = step.paths.find((p) => p.key === LET_ASSISTANT_ESCALATED_KEY)
+          if (continuePath) emit(continuePath.steps, step.id)
+          if (escalatedPath) emit(escalatedPath.steps, step.id, LET_ASSISTANT_ESCALATED_KEY)
+          break
+        }
       }
       prev = step.id
     }
@@ -1110,6 +1730,8 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
         : 'Snooze until they reply'
     case 'close':
       return 'Close the conversation'
+    case 'reopen':
+      return 'Reopen the conversation'
     case 'apply_sla':
       return `Apply SLA ${named(action.policyId, labels.slaPolicies, '…')}`
     case 'set_attribute':
@@ -1267,8 +1889,9 @@ export function stepsAtLocation(tree: WorkflowTree, location: StepLocation): Tre
   let steps = tree.steps
   for (const hop of location.path) {
     const branch = steps.find((s) => s.id === hop.branchId)
-    if (!branch || branch.kind !== 'branch') return []
-    const path = branch.paths.find((p) => p.key === hop.pathKey)
+    const paths = branch ? stepPaths(branch) : null
+    if (!paths) return []
+    const path = paths.find((p) => p.key === hop.pathKey)
     steps = path ? path.steps : []
   }
   return steps
@@ -1283,15 +1906,12 @@ function replaceStepsAtLocation(
   const replaceIn = (current: TreeStep[], hops: StepLocation['path']): TreeStep[] => {
     const [hop, ...rest] = hops
     return current.map((s) => {
-      if (!hop || s.id !== hop.branchId || s.kind !== 'branch') return s
-      return {
-        ...s,
-        paths: s.paths.map((p) =>
-          p.key !== hop.pathKey
-            ? p
-            : { ...p, steps: rest.length === 0 ? steps : replaceIn(p.steps, rest) }
-        ),
-      }
+      if (!hop || s.id !== hop.branchId) return s
+      const paths = stepPaths(s)
+      if (!paths) return s
+      const path = paths.find((p) => p.key === hop.pathKey)
+      const nextSteps = rest.length === 0 ? steps : replaceIn(path?.steps ?? [], rest)
+      return withPathSteps(s, hop.pathKey, nextSteps)
     })
   }
   return { ...tree, steps: replaceIn(tree.steps, location.path) }
@@ -1308,8 +1928,9 @@ export function findStepById(
   ): { step: TreeStep; location: StepLocation } | null => {
     for (const step of steps) {
       if (step.id === id) return { step, location }
-      if (step.kind === 'branch') {
-        for (const p of step.paths) {
+      const paths = stepPaths(step)
+      if (paths) {
+        for (const p of paths) {
           const found = search(p.steps, {
             path: [...location.path, { branchId: step.id, pathKey: p.key }],
           })
@@ -1388,6 +2009,76 @@ export function isNeedsSetupRef(v: string | undefined): boolean {
 
 const isSetRef = (v: string | undefined): boolean => Boolean(v) && !isNeedsSetupRef(v)
 
+// ---------------------------------------------------------------------------
+// Conversational block summaries + issues (Phase C, slice C-5): the outline
+// row / canvas card text for each of the 8 new kinds, and the collectStepIssues
+// rules the "Set live" gate enforces for them.
+// ---------------------------------------------------------------------------
+
+function attributeLabel(key: string, attributes: ReadonlyMap<string, AttributeFieldDef>): string {
+  if (!key) return 'Choose an attribute…'
+  return attributes.get(key)?.label ?? key
+}
+
+export function collectDataSummary(
+  step: Extract<TreeStep, { kind: 'collect_data' }>,
+  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map()
+): string {
+  return `Collect ${attributeLabel(step.attributeKey, attributes)}`
+}
+
+export function collectReplySummary(
+  step: Extract<TreeStep, { kind: 'collect_reply' }>,
+  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map()
+): string {
+  return `Save reply to ${attributeLabel(step.attributeKey, attributes)}`
+}
+
+export function replyButtonsSummary(step: Extract<TreeStep, { kind: 'reply_buttons' }>): string {
+  const labels = step.paths.map((p) => p.label).filter(Boolean)
+  return labels.length === 0 ? 'No buttons yet' : labels.join(' · ')
+}
+
+export function csatSummary(step: Extract<TreeStep, { kind: 'request_csat' }>): string {
+  const n = step.paths.length
+  return n === 0
+    ? 'Ask for a rating'
+    : `Ask for a rating · branches on ${n} rating${n === 1 ? '' : 's'}`
+}
+
+/** Kinds SEND_BLOCK_KINDS/COLLECT_BLOCK_KINDS both cover — every
+ *  conversational block, for the standalone-disable_composer adjacency
+ *  check below (only the two interactive/interrupt-relevant kinds count as
+ *  "adjacent", per the contract's interrupt matrix). */
+const INTERRUPT_RELEVANT_KINDS = new Set<TreeStep['kind']>(['reply_buttons', 'request_csat'])
+
+/** Per-block-kind "Set live" issue, mirroring actionIssue's shape for the
+ *  pre-existing action steps. Covers the brief's amendment-3-adjacent gate
+ *  rules: an empty message body, zero buttons, a missing attribute pick. */
+function blockStepIssue(step: TreeStep): string | null {
+  switch (step.kind) {
+    case 'message':
+      return isBlockBodyEmpty(step.body) ? 'Write the message' : null
+    case 'reply_buttons':
+      if (step.paths.length === 0) return 'Add at least one button'
+      if (step.paths.some((p) => !p.label.trim())) return 'Every button needs a label'
+      return isBlockBodyEmpty(step.body) ? 'Write the prompt' : null
+    case 'collect_data':
+      // isSetRef (not a bare truthiness check) so a template's needs-setup-
+      // attribute sentinel also reads as unresolved, same as every other
+      // workspace ref (team/policy/tag) actionIssue already gates on.
+      if (!isSetRef(step.attributeKey)) return 'Choose an attribute'
+      return isBlockBodyEmpty(step.body) ? 'Write the prompt' : null
+    case 'collect_reply':
+      if (!isSetRef(step.attributeKey)) return 'Choose an attribute'
+      return isBlockBodyEmpty(step.body) ? 'Write the prompt' : null
+    case 'request_csat':
+      return isBlockBodyEmpty(step.body) ? 'Write the prompt' : null
+    default:
+      return null
+  }
+}
+
 export function actionIssue(action: GraphAction): string | null {
   switch (action.type) {
     case 'assign_agent':
@@ -1409,21 +2100,59 @@ export function actionIssue(action: GraphAction): string | null {
       return 'seconds' in action && action.seconds <= 0 ? 'Choose how long to snooze for' : null
     case 'set_priority':
     case 'close':
+    case 'reopen':
       return null
   }
 }
 
-/** Every step id in the tree with an unresolved issue, mapped to its message. */
-export function collectStepIssues(tree: WorkflowTree): Map<string, string> {
+/** The class-rule gate's chip message (Phase C, slice C-6) — short enough for
+ *  the inspector's issue banner, unlike classRestrictedNodeIssue's longer
+ *  server-side wording naming the mechanism (this step is already selected,
+ *  so it doesn't need to be named again). */
+const CLASS_RESTRICTED_STEP_MESSAGE =
+  'Only allowed in a customer-facing workflow — a background run parked here could never resume'
+
+/** Every step id in the tree with an unresolved issue, mapped to its message.
+ *  Amendment 3 (PHASE-C-BLOCK-CONTRACT.md): a standalone disable_composer (no
+ *  adjacent reply_buttons/request_csat sibling in the same lane) is a runtime
+ *  no-op, not a save-blocking error, but the gate still warns on it — the
+ *  same soft-issue treatment every other entry in this map already gets
+ *  (present in the count, but never a `blocking` structural failure).
+ *
+ *  `workflowClass` (Phase C, slice C-6): a parking-kind step (PARKING_BLOCK_
+ *  KINDS — reply_buttons/collect_data/collect_reply/request_csat/
+ *  let_assistant_answer/disable_composer) is flagged when the workflow isn't
+ *  customer_facing, mirroring workflow.schemas.ts's classRestrictedNodeIssue
+ *  (the server's save-time refusal) so the builder catches this before Set
+ *  Live rather than only on a rejected save. This check wins over every other
+ *  per-kind issue below for the same step — "wrong workflow entirely" is the
+ *  more fundamental problem to fix first. Defaults to 'customer_facing' (the
+ *  permissive case) so every existing call site/fixture that predates this
+ *  parameter keeps behaving exactly as before. */
+export function collectStepIssues(
+  tree: WorkflowTree,
+  workflowClass: WorkflowClassValue = 'customer_facing'
+): Map<string, string> {
   const issues = new Map<string, string>()
   const walk = (steps: TreeStep[]) => {
-    for (const step of steps) {
-      if (step.kind === 'action') {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i]!
+      if (workflowClass !== 'customer_facing' && PARKING_BLOCK_KINDS.has(step.kind)) {
+        issues.set(step.id, CLASS_RESTRICTED_STEP_MESSAGE)
+      } else if (step.kind === 'action') {
         const message = actionIssue(step.action)
         if (message) issues.set(step.id, message)
-      } else if (step.kind === 'branch') {
-        for (const p of step.paths) walk(p.steps)
+      } else if (step.kind === 'disable_composer') {
+        const adjacent = (s: TreeStep | undefined) => !!s && INTERRUPT_RELEVANT_KINDS.has(s.kind)
+        if (!adjacent(steps[i - 1]) && !adjacent(steps[i + 1])) {
+          issues.set(step.id, 'Place this next to a reply-buttons or rating step, or remove it')
+        }
+      } else {
+        const message = blockStepIssue(step)
+        if (message) issues.set(step.id, message)
       }
+      const paths = stepPaths(step)
+      if (paths) for (const p of paths) walk(p.steps)
     }
   }
   walk(tree.steps)
@@ -1438,14 +2167,25 @@ export interface DraftIssues {
   blocking: string | null
 }
 
-/** Validation summary for the top bar's issues chip and the Set-live gate. */
-export function draftIssues(draft: GraphDraft): DraftIssues {
+/** Validation summary for the top bar's issues chip and the Set-live gate.
+ *  `workflowClass` (Phase C, slice C-6, default 'customer_facing' — see
+ *  collectStepIssues' doc) also gates JSON mode: a JSON edit is the same
+ *  "already-stored-shape" write path create/updateWorkflowFn validates
+ *  server-side, so a parking-kind node saved into a non-customer_facing
+ *  workflow via JSON mode is surfaced here as a blocking error too, instead
+ *  of only failing as a server 400 after Save is clicked. */
+export function draftIssues(
+  draft: GraphDraft,
+  workflowClass: WorkflowClassValue = 'customer_facing'
+): DraftIssues {
   if (draft.mode === 'json') {
     const parsed = parseWorkflowGraphText(draft.text)
     if (!parsed.ok) return { count: 1, ids: new Set(), firstId: null, blocking: parsed.error }
+    const classIssue = classRestrictedNodeIssue(parsed.value, workflowClass)
+    if (classIssue) return { count: 1, ids: new Set(), firstId: null, blocking: classIssue }
     return { count: 0, ids: new Set(), firstId: null, blocking: null }
   }
-  const stepIssues = collectStepIssues(draft.tree)
+  const stepIssues = collectStepIssues(draft.tree, workflowClass)
   const ids = new Set(stepIssues.keys())
   const [firstId = null] = ids
   return { count: ids.size, ids, firstId, blocking: null }
@@ -1475,6 +2215,22 @@ function stepLabel(step: TreeStep, labels: EntityLabels): string {
       return waitSummary(step.seconds)
     case 'branch':
       return `Branch · ${step.paths.length} path${step.paths.length === 1 ? '' : 's'}`
+    case 'message':
+      return blockBodyPreview(step.body)
+    case 'show_reply_time':
+      return BLOCK_STEP_LABELS.show_reply_time
+    case 'disable_composer':
+      return BLOCK_STEP_LABELS.disable_composer
+    case 'let_assistant_answer':
+      return BLOCK_STEP_LABELS.let_assistant_answer
+    case 'reply_buttons':
+      return replyButtonsSummary(step)
+    case 'collect_data':
+      return collectDataSummary(step, labels.attributes)
+    case 'collect_reply':
+      return collectReplySummary(step, labels.attributes)
+    case 'request_csat':
+      return csatSummary(step)
   }
 }
 
@@ -1496,12 +2252,13 @@ export function deriveOutline(
         depth,
         hasIssue: issues.has(step.id),
       })
-      if (step.kind === 'branch') {
-        step.paths.forEach((p, i) => {
+      const paths = stepPaths(step)
+      if (paths) {
+        paths.forEach((p, i) => {
           const letter = PATH_LETTERS[i] ?? String(i + 1)
           entries.push({
             kind: 'path-header',
-            label: `Path ${letter} · ${p.key}`,
+            label: `Path ${letter} · ${p.label}`,
             depth: depth + 1,
           })
           walk(p.steps, depth + 1)
@@ -1535,9 +2292,9 @@ export function describeInsertionContext(
 
   const lastHop = location.path[location.path.length - 1]!
   const branch = findStepById(tree, lastHop.branchId)?.step
-  const paths = branch?.kind === 'branch' ? branch.paths : []
+  const paths = branch ? (stepPaths(branch) ?? []) : []
   const pathIndex = paths.findIndex((p) => p.key === lastHop.pathKey)
   const letter = PATH_LETTERS[pathIndex] ?? String(pathIndex + 1)
-  const label = `path ${letter} · ${lastHop.pathKey}`
+  const label = `path ${letter} · ${paths[pathIndex]?.label ?? lastHop.pathKey}`
   return appending ? `Appends to ${label}` : `Inserts in ${label}`
 }

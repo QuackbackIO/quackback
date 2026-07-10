@@ -166,9 +166,27 @@ describe('renderConversationTranscript — deriving text and images from content
   })
 
   it('still falls back to "(no text content)" when neither content nor contentJson has anything', () => {
-    const out = renderConversationTranscript({ id: 'c' }, [
-      msg({ content: '', contentJson: null }),
-    ])
+    const out = renderConversationTranscript({ id: 'c' }, [msg({ content: '', contentJson: null })])
     expect(out).toContain('(no text content)')
+  })
+
+  /**
+   * Phase C conversational block layer (slice C-1) open item: this export
+   * renderer's TranscriptMessage type (a Pick over ConversationMessageDTO)
+   * doesn't even include `block`/`blockReply` — it structurally can't read
+   * them. A block message's honest plain-text fallback in `content` is what
+   * carries it, exactly like any other agent message.
+   */
+  it('renders a conversational block message (Phase C) as an ordinary agent line, via content', () => {
+    const out = renderConversationTranscript({ id: 'c' }, [
+      msg({
+        senderType: 'agent',
+        isAssistant: true,
+        author: { displayName: 'Quinn' } as TranscriptMessage['author'],
+        content: 'Pick one\n[Billing] [Technical issue]',
+        contentJson: { type: 'doc', content: [{ type: 'text', text: 'Pick one' }] },
+      }),
+    ])
+    expect(out).toContain('Quinn (assistant): Pick one\n[Billing] [Technical issue]')
   })
 })

@@ -51,4 +51,29 @@ describe('StepPalette', () => {
     fireEvent.click(screen.getByText('Set priority'))
     expect(onInsert).toHaveBeenLastCalledWith('action', 'set_priority')
   })
+
+  it('lists the Send and Collect conversational-block groups above Logic/Actions', () => {
+    render(<StepPalette onInsert={vi.fn()} />)
+    expect(screen.getByText('Send')).toBeInTheDocument()
+    expect(screen.getByText('Collect')).toBeInTheDocument()
+    expect(screen.getByText('Message')).toBeInTheDocument()
+    expect(screen.getByText('Show expected reply time')).toBeInTheDocument()
+    expect(screen.getByText('Let Quinn answer')).toBeInTheDocument()
+    expect(screen.getByText('Disable replies')).toBeInTheDocument()
+    expect(screen.getByText('Reply buttons')).toBeInTheDocument()
+    expect(screen.getByText('Collect data')).toBeInTheDocument()
+    expect(screen.getByText('Collect customer reply')).toBeInTheDocument()
+    expect(screen.getByText('Ask for a rating')).toBeInTheDocument()
+  })
+
+  it('inserts a conversational block step with no action type', () => {
+    const onInsert = vi.fn()
+    render(<StepPalette onInsert={onInsert} />)
+
+    fireEvent.click(screen.getByText('Reply buttons'))
+    expect(onInsert).toHaveBeenLastCalledWith('reply_buttons')
+
+    fireEvent.click(screen.getByText('Ask for a rating'))
+    expect(onInsert).toHaveBeenLastCalledWith('request_csat')
+  })
 })

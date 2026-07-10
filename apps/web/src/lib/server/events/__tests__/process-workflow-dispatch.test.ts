@@ -91,6 +91,14 @@ function postCreatedEvent(): EventData {
   } as unknown as EventData
 }
 
+// vi.waitFor's default 1000ms timeout flakes on a cold-cache first run (module
+// resolution, mock setup lag) — every fire-and-forget assertion below shares
+// this one helper with a longer budget instead of each hand-rolling its own
+// vi.waitFor(..., { timeout }) call.
+function waitForAssertion(assertion: () => void): Promise<void> {
+  return vi.waitFor(assertion, { timeout: 5000 })
+}
+
 describe('processEvent workflow-dispatch enqueue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -98,12 +106,12 @@ describe('processEvent workflow-dispatch enqueue', () => {
 
   // The enqueue is fire-and-forget (not awaited by processEvent — a caught,
   // logged, never-retried failure buys no durability from awaiting it), so
-  // these assert against the mock via vi.waitFor instead of immediately after
-  // processEvent's own promise settles.
+  // these assert against the mock via waitForAssertion instead of immediately
+  // after processEvent's own promise settles.
   it('enqueues the event when it maps to a workflow trigger', async () => {
     const event = messageCreatedEvent()
     await processEvent(event)
-    await vi.waitFor(() => expect(mockEnqueueWorkflowDispatch).toHaveBeenCalledWith(event))
+    await waitForAssertion(() => expect(mockEnqueueWorkflowDispatch).toHaveBeenCalledWith(event))
   })
 
   it('skips the enqueue for an event with no workflow trigger mapping', async () => {
@@ -117,7 +125,7 @@ describe('processEvent workflow-dispatch enqueue', () => {
     // Let this test's own fire-and-forget chain finish (consume the
     // mockRejectedValueOnce) before the next test starts, so it can't bleed
     // into a later test's call-count assertions.
-    await vi.waitFor(() => expect(mockEnqueueWorkflowDispatch).toHaveBeenCalled())
+    await waitForAssertion(() => expect(mockEnqueueWorkflowDispatch).toHaveBeenCalled())
   })
 
   it('skips the enqueue when the workspace has no live workflow at all (gate false)', async () => {
@@ -125,7 +133,7 @@ describe('processEvent workflow-dispatch enqueue', () => {
     const event = messageCreatedEvent()
     await processEvent(event)
     // Give the fire-and-forget chain a tick to run before asserting a negative.
-    await vi.waitFor(() => expect(mockHasAnyLiveWorkflow).toHaveBeenCalled())
+    await waitForAssertion(() => expect(mockHasAnyLiveWorkflow).toHaveBeenCalled())
     expect(mockEnqueueWorkflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -133,6 +141,6 @@ describe('processEvent workflow-dispatch enqueue', () => {
     mockHasAnyLiveWorkflow.mockResolvedValueOnce(true)
     const event = messageCreatedEvent()
     await processEvent(event)
-    await vi.waitFor(() => expect(mockEnqueueWorkflowDispatch).toHaveBeenCalledWith(event))
+    await waitForAssertion(() => expect(mockEnqueueWorkflowDispatch).toHaveBeenCalledWith(event))
   })
 })

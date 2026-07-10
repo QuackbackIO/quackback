@@ -206,10 +206,12 @@ export function useWorkflowBuilder(workflow: WorkflowDTO) {
 
   const stepIssues = useMemo(
     () =>
-      graphDraft.mode === 'visual' ? collectStepIssues(graphDraft.tree) : new Map<string, string>(),
-    [graphDraft]
+      graphDraft.mode === 'visual'
+        ? collectStepIssues(graphDraft.tree, workflowClass)
+        : new Map<string, string>(),
+    [graphDraft, workflowClass]
   )
-  const issues = useMemo(() => draftIssues(graphDraft), [graphDraft])
+  const issues = useMemo(() => draftIssues(graphDraft, workflowClass), [graphDraft, workflowClass])
   const outline = useMemo(
     () =>
       graphDraft.mode === 'visual'

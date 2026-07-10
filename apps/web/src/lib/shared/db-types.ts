@@ -36,6 +36,8 @@ export {
   TICKET_STAGES,
   USE_CASE_TYPES,
   ONBOARDING_OUTCOMES,
+  INTERACTIVE_BLOCK_KINDS,
+  CSAT_FACES,
 } from '@quackback/db/types'
 export type {
   AccessTier,

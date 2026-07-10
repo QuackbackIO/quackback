@@ -7,17 +7,25 @@
  */
 import type { ComponentType } from 'react'
 import { BoltIcon, ClockIcon, FunnelIcon, PlusIcon, ShareIcon } from '@heroicons/react/24/outline'
-import { ACTION_ICONS, GATE_TINT, STEP_TINT } from '../step-visuals'
+import { ACTION_ICONS, BLOCK_ICONS, GATE_TINT, STEP_TINT } from '../step-visuals'
 import type { BuilderSelection } from '../types'
 import type { TriggerSettingsDraft } from '../use-workflow-builder'
 import { ActionEditor } from './action-editor'
 import { BranchEditor } from './branch-editor'
+import { CollectDataEditor } from './collect-data-editor'
+import { CollectReplyEditor } from './collect-reply-editor'
 import { ConditionEditor } from './condition-editor'
+import { CsatEditor } from './csat-editor'
+import { LetAssistantAnswerEditor } from './let-assistant-editor'
+import { MessageEditor } from './message-editor'
 import { StepPalette } from './palette'
+import { ReplyButtonsEditor } from './reply-buttons-editor'
+import { ReplyTimeEditor } from './reply-time-editor'
 import { TriggerEditor } from './trigger-editor'
 import { WaitEditor } from './wait-editor'
 import {
   ACTION_LABELS,
+  BLOCK_STEP_LABELS,
   describeInsertionContext,
   findStepById,
   type ActionType,
@@ -152,6 +160,58 @@ export function InspectorPanel({
             onChange={(seconds) => onUpdateStep((s) => (s.kind === 'wait' ? { ...s, seconds } : s))}
           />
         </div>
+      </div>
+    )
+  }
+
+  // ── Conversational block kinds (Phase C, slice C-5) ─────────────────────
+  if (step.kind !== 'action') {
+    const header = (
+      <InspectorHeader
+        icon={BLOCK_ICONS[step.kind]}
+        tint="bg-pink-500/10 text-pink-700 dark:text-pink-300"
+        title={BLOCK_STEP_LABELS[step.kind]}
+        subtitle="Message"
+      />
+    )
+    const body = (
+      <div className="space-y-2.5 p-3">
+        {issue && (
+          <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-500">
+            {issue}
+          </p>
+        )}
+        {step.kind === 'message' && (
+          <MessageEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
+        {step.kind === 'show_reply_time' && <ReplyTimeEditor />}
+        {step.kind === 'disable_composer' && (
+          <p className="text-xs text-muted-foreground">
+            Disables the composer for the block immediately adjacent to this step (a reply-buttons
+            or ask-for-rating step). No effect on its own.
+          </p>
+        )}
+        {step.kind === 'let_assistant_answer' && (
+          <LetAssistantAnswerEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
+        {step.kind === 'reply_buttons' && (
+          <ReplyButtonsEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
+        {step.kind === 'collect_data' && (
+          <CollectDataEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
+        {step.kind === 'collect_reply' && (
+          <CollectReplyEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
+        {step.kind === 'request_csat' && (
+          <CsatEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
+      </div>
+    )
+    return (
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        {header}
+        {body}
       </div>
     )
   }

@@ -104,9 +104,57 @@ const actionSchema = z.union([
   }),
   snoozeActionSchema,
   z.object({ type: z.literal('close') }),
+  // (SF4) `close`'s counterpart — see action.executor.ts's WorkflowAction doc
+  // for why this is workflows-only, not shared with macro.schemas.ts's
+  // separate MacroAction catalogue.
+  z.object({ type: z.literal('reopen') }),
   z.object({ type: z.literal('apply_sla'), policyId: z.string().min(1) }),
   z.object({ type: z.literal('set_attribute'), key: z.string().min(1), value: z.unknown() }),
 ])
+
+// Conversational block kinds (Phase C, slice C-1). `blockBodySchema` is a
+// deliberately permissive TipTap-shaped recursive schema — CALIBRATION: like
+// the rest of this module, it exists to catch a shape the walker/interpolator
+// can't make sense of (not a `text`/`content` field means the node isn't
+// walkable), not to enumerate an allowed node/mark-type catalogue the way
+// lib/shared/schemas/posts.ts's tiptapContentSchema does for post bodies —
+// the message-block editor is a separate authoring surface with its own
+// palette, and duplicating that catalogue here would only drift from it.
+const blockBodySchema: z.ZodType<{
+  type: string
+  content?: unknown[]
+  text?: string
+  marks?: { type: string; attrs?: Record<string, string | number | boolean | null> }[]
+  attrs?: Record<string, string | number | boolean | null>
+}> = z.lazy(() =>
+  z.object({
+    type: z.string().min(1),
+    content: z.array(blockBodySchema).optional(),
+    text: z.string().optional(),
+    marks: z
+      .array(
+        z.object({
+          type: z.string().min(1),
+          attrs: z
+            .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+            .optional(),
+        })
+      )
+      .optional(),
+    attrs: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .optional(),
+  })
+)
+
+/** A per-step assistant instruction (Phase C, slice C-6) longer than this is
+ *  almost certainly a copy-pasted persona/policy doc, not a one-time
+ *  instruction for a single hand-off — bounded generously, same rationale as
+ *  MAX_WAIT_SECONDS/MAX_FREQUENCY_CAP_COUNT above. */
+export const MAX_ASSISTANT_STEP_INSTRUCTIONS = 2000
+
+const buttonOptionSchema = z.object({ key: z.string().min(1), label: z.string().min(1).max(80) })
+const attributeOptionSchema = z.object({ id: z.string().min(1), label: z.string().min(1) })
 
 const nodeSchema = z.discriminatedUnion('type', [
   z.object({ id: z.string().min(1), type: z.literal('trigger') }),
@@ -122,7 +170,72 @@ const nodeSchema = z.discriminatedUnion('type', [
     type: z.literal('wait'),
     seconds: z.number().int().min(0).max(MAX_WAIT_SECONDS),
   }),
+  // ── Conversational block kinds (Phase C, slice C-1) ──────────────────────
+  z.object({ id: z.string().min(1), type: z.literal('message'), body: blockBodySchema }),
+  z.object({ id: z.string().min(1), type: z.literal('show_reply_time') }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('let_assistant_answer'),
+    // Both optional (Phase C, slice C-6): a one-time per-step instruction
+    // folded into just this turn's prompt (see assistant.runtime.ts's
+    // buildStepInstructionsPrompt), and a reserved auto-close override with
+    // no backing runtime knob yet — see graph.ts's WorkflowNode doc for why
+    // the walker leaves autoCloseOverride deliberately unread.
+    instructions: z.string().max(MAX_ASSISTANT_STEP_INSTRUCTIONS).optional(),
+    autoCloseOverride: z.boolean().optional(),
+  }),
+  z.object({ id: z.string().min(1), type: z.literal('disable_composer') }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('reply_buttons'),
+    body: blockBodySchema,
+    // At least one option: a buttons block with none is unusable at runtime
+    // (nothing to tap, the run can never resume by button match). The soft
+    // 2-8 usability cap from the UX brief is builder-warning territory, not
+    // a hard save rejection.
+    options: z.array(buttonOptionSchema).min(1),
+    allowTyping: z.boolean(),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('collect_data'),
+    body: blockBodySchema,
+    attributeKey: z.string().min(1),
+    fieldType: z.enum(['text', 'number', 'select', 'date']),
+    options: z.array(attributeOptionSchema).optional(),
+    required: z.boolean(),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('collect_reply'),
+    body: blockBodySchema,
+    attributeKey: z.string().min(1),
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('request_csat'),
+    body: blockBodySchema,
+    allowTypingInterrupt: z.boolean(),
+    commentPrompt: z.string().max(200).optional(),
+  }),
 ])
+
+/** The 8 conversational-block node kinds (Phase C, slice C-1) — every
+ *  nodeSchema variant above that isn't a generic control-flow step (trigger/
+ *  action/condition/branch/wait). Exported so the client's hand-authored
+ *  BLOCK_STEP_LABELS catalogue (workflow-graph.ts) can be asserted to cover
+ *  exactly this set — a drift guardrail test, since nothing else ties a new
+ *  node kind added here to the client ever learning about it. */
+export const BLOCK_NODE_TYPES = [
+  'message',
+  'show_reply_time',
+  'let_assistant_answer',
+  'disable_composer',
+  'reply_buttons',
+  'collect_data',
+  'collect_reply',
+  'request_csat',
+] as const
 
 const edgeSchema = z.object({
   from: z.string().min(1),
@@ -208,6 +321,63 @@ export const workflowGraphSchema = z
       }
     }
   })
+
+/**
+ * Node kinds whose runtime PARKS the run awaiting an external resume signal
+ * (Phase C, slices C-1/C-6): reply_buttons / collect_data / collect_reply /
+ * request_csat wait for a customer's matching structured reply
+ * (event-trigger.ts's tryResumeInputWait); let_assistant_answer waits for
+ * Quinn's own hand-off/close signal (tryResumeAssistantWait).
+ * disable_composer never parks on its own, but it only ever makes sense
+ * adjacent to one of the above (it's builder sugar forcing allowTyping:false
+ * on its neighbor), so it's restricted the same way — an admin who wants it
+ * has to be building a customer-facing journey in the first place.
+ *
+ * CALIBRATION: restricted to `customer_facing` because the only two runtime
+ * mechanisms that can ever find and resume a parked run —
+ * findWaitingCustomerFacingRun (event-trigger.ts, both resume paths) and the
+ * customer_facing exclusive lock (the partial unique index on
+ * workflow_runs) — only ever look at customer_facing runs. A `background`
+ * workflow reaching one of these nodes parks exactly the same way (the
+ * walker doesn't know or care about class), but nothing will ever find that
+ * row to resume it: it is unreachable and parks forever, a silent 'waiting'
+ * leak with no recovery path (even the sweeper's orphan pass only reschedules
+ * timer waits — see workflow-sweep.ts). `message` and `show_reply_time` post
+ * and continue immediately — no park, so no such hazard — and stay legal in
+ * any class.
+ */
+export const PARKING_BLOCK_KINDS: ReadonlySet<string> = new Set([
+  'reply_buttons',
+  'collect_data',
+  'collect_reply',
+  'request_csat',
+  'let_assistant_answer',
+  'disable_composer',
+])
+
+/**
+ * The class-rule check (Phase C, slice C-6): null when `graph` has no
+ * PARKING_BLOCK_KINDS node, or `workflowClass` is 'customer_facing' (always
+ * legal there); otherwise a readable message naming the first offending step.
+ * Called at save (functions/workflows.ts's create/update handlers) with the
+ * EFFECTIVE class (the incoming patch's class, or the workflow's current
+ * stored class when a graph-only update doesn't touch it) — applies to writes
+ * only, same "an already-stored graph is never re-validated on read" rule
+ * this whole module follows (see the module doc).
+ */
+export function classRestrictedNodeIssue(
+  graph: { nodes: readonly { id: string; type: string }[] },
+  workflowClass: 'customer_facing' | 'background'
+): string | null {
+  if (workflowClass === 'customer_facing') return null
+  const offending = graph.nodes.find((n) => PARKING_BLOCK_KINDS.has(n.type))
+  if (!offending) return null
+  return (
+    `Step "${offending.id}" (${offending.type}) parks the run awaiting a reply — only a ` +
+    `customer_facing workflow can ever resume it (the resume lookup and the exclusive lock ` +
+    `only cover customer-facing runs; a background run parked here is unreachable).`
+  )
+}
 
 /** A per-(workflow, person) run cap, read by dispatcher.guards.ts's
  *  frequencyCapAllows off `trigger_settings.frequencyCap`. 'once' and

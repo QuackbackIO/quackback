@@ -62,8 +62,43 @@ const attachmentSchema = z.object({
   size: z.number().int().nonnegative(),
 })
 
+// A structured reply to a conversational block (Phase C, slice C-1). The
+// server never trusts any of this beyond the shape here — the canonical
+// echo/validation against the referenced block's own config happens in
+// conversation.service.ts's resolveVisitorBlockReply; an invalid/stale/
+// second reply degrades to an ordinary free-text send using `content` below,
+// never an error (so this schema itself stays permissive on VALUES, only
+// pinning the shape).
+const blockReplySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('buttons'),
+    inReplyToMessageId: z.string().min(1),
+    buttonKey: z.string().min(1).max(80),
+  }),
+  z.object({
+    kind: z.literal('collect'),
+    inReplyToMessageId: z.string().min(1),
+    value: z.union([z.string().max(500), z.number(), z.boolean()]),
+  }),
+  z.object({
+    kind: z.literal('collectReply'),
+    inReplyToMessageId: z.string().min(1),
+    value: z.string().min(1).max(MAX_CONVERSATION_MESSAGE_LENGTH),
+  }),
+  z.object({
+    kind: z.literal('csat'),
+    inReplyToMessageId: z.string().min(1),
+    rating: z.number().int().min(1).max(5),
+    comment: z.string().max(2000).optional(),
+  }),
+])
+
 // Content may be empty only when attachments are present (validated in the
-// service); allow empty here and let the service enforce the real rule.
+// service); allow empty here and let the service enforce the real rule. A
+// blockReply (Phase C, slice C-1) also allows empty content — a resolved
+// reply supplies its own server-derived echo; the widget is still expected
+// to send a sensible `content` alongside it as a defense-in-depth fallback
+// for the (never-an-error) degrade path.
 const sendMessageSchema = z.object({
   conversationId: z.string().optional(),
   content: z.string().max(MAX_CONVERSATION_MESSAGE_LENGTH).default(''),
@@ -71,6 +106,7 @@ const sendMessageSchema = z.object({
   // the plain `content` is the doc's text, kept for previews/notifications/search.
   contentJson: z.unknown().nullable().optional(),
   attachments: z.array(attachmentSchema).max(MAX_CONVERSATION_ATTACHMENTS).optional(),
+  blockReply: blockReplySchema.optional(),
   /** Optional pre-chat email capture (anonymous visitors). */
 })
 
@@ -278,6 +314,16 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
         // conversation.email-inbound.service.ts (a different boundary that never
         // reaches this function) and ALWAYS reopen, the only viable behavior on
         // email mid-thread.
+        //
+        // SF3 carve-out: a MATCHED structured reply (a post-close CSAT rating,
+        // a post-close button tap, ...) is the intended flow, not the customer
+        // reopening the thread (see conversation.lifecycle.ts's
+        // applyVisitorReopenStatus) — this gate must not reject it just
+        // because the conversation happens to be closed. The match is
+        // resolved the SAME way sendVisitorMessage itself will (below), not
+        // just "a blockReply is present on the payload": a forged/stale/
+        // unmatched one is functionally an ordinary free-text reply and must
+        // still be refused here like any other.
         if (data.conversationId) {
           const { getMessengerConfig } =
             await import('@/lib/server/domains/settings/settings.widget')
@@ -290,10 +336,22 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
               ctx.principal.id
             )
             if (conversation?.status === 'closed') {
-              throw new ConflictError(
-                'CONVERSATION_CLOSED',
-                'This conversation has been closed. Please start a new one.'
-              )
+              const matchedBlockReply = data.blockReply
+                ? await (async () => {
+                    const { resolveVisitorBlockReply } =
+                      await import('@/lib/server/domains/conversation/conversation.service')
+                    return resolveVisitorBlockReply(
+                      data.conversationId as ConversationId,
+                      data.blockReply!
+                    )
+                  })()
+                : null
+              if (!matchedBlockReply) {
+                throw new ConflictError(
+                  'CONVERSATION_CLOSED',
+                  'This conversation has been closed. Please start a new one.'
+                )
+              }
             }
           }
         }
@@ -314,6 +372,7 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
           conversationId: data.conversationId as ConversationId | undefined,
           content: data.content,
           attachments: data.attachments as ConversationAttachment[] | undefined,
+          blockReply: data.blockReply,
         },
         {
           principalId: ctx.principal.id,

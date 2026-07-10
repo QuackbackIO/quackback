@@ -23,7 +23,16 @@ import type { ConditionContext } from './condition.evaluator'
  */
 export async function resolveConditionContext(
   conversationId: ConversationId,
-  opts: { message?: { body: string; senderType?: 'visitor' | 'agent' } | null; at?: Date } = {}
+  opts: {
+    message?: { body: string; senderType?: 'visitor' | 'agent' } | null
+    at?: Date
+    /** Threaded straight onto the returned snapshot — see ConditionContext's
+     *  doc. Only resumeWorkflowRun ever passes this. */
+    blockAnswer?: ConditionContext['blockAnswer']
+    /** Threaded straight onto the returned snapshot — see ConditionContext's
+     *  doc (Phase C, slice C-6). Only resumeWorkflowRun ever passes this. */
+    assistantOutcome?: ConditionContext['assistantOutcome']
+  } = {}
 ): Promise<ConditionContext | null> {
   const at = opts.at ?? new Date()
   const [conv] = await db
@@ -66,10 +75,13 @@ export async function resolveConditionContext(
       assignedTeamId: conv.assignedTeamId,
       // Raw envelopes; conversation.attr.<key> predicates unwrap on read.
       attributes: conv.customAttributes ?? {},
+      visitorPrincipalId: conv.visitorPrincipalId,
     },
     message: opts.message ?? null,
     person: { segmentIds: [...segmentIds] },
     officeHours,
     csatRating: conv.csatRating ?? null,
+    blockAnswer: opts.blockAnswer ?? null,
+    assistantOutcome: opts.assistantOutcome ?? null,
   }
 }

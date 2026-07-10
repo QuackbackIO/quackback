@@ -6,6 +6,7 @@ import type {
   AgentConversationMessageDTO,
   ConversationDTO,
 } from '@/lib/shared/conversation/types'
+import type { BlockReplyInput } from './block-reply'
 
 /** Author identity passed into a send call (resolved from the auth context). */
 export interface ConversationAuthorInput {
@@ -25,6 +26,13 @@ export interface SendVisitorMessageInput {
   visitorEmail?: string
   /** Channel provenance (e.g. inbound email message-id) persisted on the message. */
   metadata?: ConversationMessageMetadata
+  /** A structured reply to a conversational block (Phase C, slice C-1) — the
+   *  client's claimed answer, re-derived/validated server-side (see
+   *  block-reply.ts's resolveBlockReply) before it's ever trusted. Degrades
+   *  to an ordinary free-text send (using `content` above) rather than an
+   *  error when invalid, stale, or a second reply to an already-answered
+   *  block. */
+  blockReply?: BlockReplyInput
 }
 
 export interface SendVisitorMessageResult {

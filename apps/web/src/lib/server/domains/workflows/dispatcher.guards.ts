@@ -19,10 +19,13 @@ import {
   workflows,
   workflowRuns,
   workflowRunEvents,
+  conversationMessages,
   type Workflow,
+  type WorkflowRun,
   type Transaction,
+  type BlockReplyMetadata,
 } from '@/lib/server/db'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, ConversationMessageId } from '@quackback/ids'
 import type { FrequencyCap } from './workflow.schemas'
 
 type Executor = typeof db | Transaction
@@ -144,4 +147,57 @@ export async function hasActiveCustomerFacingRun(conversationId: ConversationId)
     )
     .limit(1)
   return Boolean(row)
+}
+
+/**
+ * The conversation's parked customer-facing run, or null — event-trigger.ts's
+ * resume-vs-interrupt check (Phase C, slice C-1). Filters `state = 'waiting'`
+ * only (a 'running' row has nothing parked to match a reply against) and
+ * reads `workflowRuns.customerFacing` directly (denormalized at run-insert
+ * time, per the schema doc) rather than joining `workflows` the way
+ * hasActiveCustomerFacingRun does — the exclusive-lock partial index means at
+ * most one row can ever match, so there is nothing a join could additionally
+ * narrow here. Served by the existing `workflow_runs_conversation_state_idx`
+ * (conversationId, state) index; the one indexed lookup the contract calls
+ * for on every visitor message.created.
+ *
+ * Selects only `id` + `cursor` (not the full row, which includes the
+ * multi-KB `graph` snapshot) — both call sites (event-trigger.ts's
+ * tryResumeInputWait/tryResumeAssistantWait) only ever read `run.id` and
+ * `readCursor(run)`, and readCursor's own parameter type
+ * (`Pick<WorkflowRun, 'cursor'>`) already only needs the latter.
+ */
+export async function findWaitingCustomerFacingRun(
+  conversationId: ConversationId
+): Promise<Pick<WorkflowRun, 'id' | 'cursor'> | null> {
+  const [row] = await db
+    .select({ id: workflowRuns.id, cursor: workflowRuns.cursor })
+    .from(workflowRuns)
+    .where(
+      and(
+        eq(workflowRuns.conversationId, conversationId),
+        eq(workflowRuns.state, 'waiting'),
+        eq(workflowRuns.customerFacing, true)
+      )
+    )
+    .limit(1)
+  return row ?? null
+}
+
+/**
+ * A message's stored structured reply, by primary key — the narrow second
+ * read event-trigger.ts's resume-vs-interrupt check makes, and ONLY after
+ * findWaitingCustomerFacingRun above found an actual candidate to match
+ * against; an ordinary message.created event (the overwhelming majority, no
+ * waiting customer_facing run on the conversation) never reaches this.
+ */
+export async function readMessageBlockReply(
+  messageId: ConversationMessageId
+): Promise<BlockReplyMetadata | null> {
+  const [row] = await db
+    .select({ metadata: conversationMessages.metadata })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, messageId))
+    .limit(1)
+  return row?.metadata?.blockReply ?? null
 }

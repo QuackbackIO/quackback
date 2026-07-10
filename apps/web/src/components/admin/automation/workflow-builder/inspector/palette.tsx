@@ -1,15 +1,26 @@
 /**
  * The step palette: shown in the inspector when a "+" connector is active
- * instead of a step. A search box filters by label; groups are Logic
- * (condition/branch/wait) and Actions (all 9 action types), each icon tinted
- * by the same tone the canvas card for that step kind uses. Clicking an item
+ * instead of a step. A search box filters by label; groups are SEND and
+ * COLLECT (the 8 conversational block kinds, Phase C slice C-5) above the
+ * pre-existing Logic (condition/branch/wait) and Actions (all 9 action
+ * types) groups, per the design brief's §4/§5.12 — each icon tinted by the
+ * same tone the canvas card for that step kind uses. Clicking an item
  * inserts that step at the active insertion point and selects it.
  */
 import { useState, type ComponentType } from 'react'
 import { ClockIcon, FunnelIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'
-import { ACTION_ICONS, TONE_TILE } from '../step-visuals'
+import { ACTION_ICONS, BLOCK_ICONS, TONE_TILE } from '../step-visuals'
 import { ACTION_TONE, type Tone } from '../flow-layout'
-import { ACTION_LABELS, ACTION_TYPES, type ActionType, type TreeStep } from '../../workflow-graph'
+import {
+  ACTION_LABELS,
+  ACTION_TYPES,
+  BLOCK_STEP_LABELS,
+  COLLECT_BLOCK_KINDS,
+  SEND_BLOCK_KINDS,
+  type ActionType,
+  type BlockStepKind,
+  type TreeStep,
+} from '../../workflow-graph'
 
 interface PaletteItem {
   label: string
@@ -25,6 +36,14 @@ export function StepPalette({
 }) {
   const [query, setQuery] = useState('')
 
+  const blockItem = (kind: BlockStepKind): PaletteItem => ({
+    label: BLOCK_STEP_LABELS[kind],
+    icon: BLOCK_ICONS[kind],
+    tone: 'pink',
+    onSelect: () => onInsert(kind),
+  })
+  const send: PaletteItem[] = SEND_BLOCK_KINDS.map(blockItem)
+  const collect: PaletteItem[] = COLLECT_BLOCK_KINDS.map(blockItem)
   const logic: PaletteItem[] = [
     { label: 'Condition', icon: FunnelIcon, tone: 'violet', onSelect: () => onInsert('condition') },
     {
@@ -45,6 +64,8 @@ export function StepPalette({
   const q = query.trim().toLowerCase()
   const matches = (item: PaletteItem) => !q || item.label.toLowerCase().includes(q)
   const groups = [
+    { label: 'Send', items: send.filter(matches) },
+    { label: 'Collect', items: collect.filter(matches) },
     { label: 'Logic', items: logic.filter(matches) },
     { label: 'Actions', items: actions.filter(matches) },
   ].filter((g) => g.items.length > 0)

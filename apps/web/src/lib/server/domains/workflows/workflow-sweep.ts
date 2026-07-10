@@ -104,10 +104,22 @@ export async function sweepStaleRunningRuns(now: Date): Promise<number> {
  */
 export async function sweepOrphanedWaitingRuns(now: Date): Promise<number> {
   const due = sql`coalesce((${workflowRuns.cursor}->>'waitStartedAt')::timestamptz, ${workflowRuns.startedAt}) + make_interval(secs => coalesce((${workflowRuns.cursor}->>'waitSeconds')::numeric, 0)) <= ${now.toISOString()}::timestamptz`
+  // A non-timer park (Phase C: an interactive block's 'input' wait, slice
+  // C-1; a let_assistant_answer's 'assistant' wait, slice C-6) schedules NO
+  // BullMQ timer — it resumes on an external signal (the customer's
+  // structured reply, or assistant.handed_off / conversation close via
+  // event-trigger.ts), not a clock. Its cursor's waitSeconds is always 0, so
+  // the `due` expression above would otherwise mark it due immediately after
+  // park and this pass would try to "reschedule" a timer for a wait that was
+  // never supposed to have one. Checked as a positive "is this a timer wait"
+  // filter (rather than excluding each non-timer kind by name) so a future
+  // non-timer waitKind is excluded automatically instead of silently falling
+  // through this filter until someone remembers to add it here too.
+  const isTimerWait = sql`coalesce(${workflowRuns.cursor}->>'waitKind', 'timer') = 'timer'`
   const candidates = await db
     .select()
     .from(workflowRuns)
-    .where(and(eq(workflowRuns.state, 'waiting'), due))
+    .where(and(eq(workflowRuns.state, 'waiting'), due, isTimerWait))
     .orderBy(asc(workflowRuns.startedAt))
     .limit(SWEEP_BATCH_SIZE)
 

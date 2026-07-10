@@ -19,6 +19,7 @@ import {
   duplicateStepIdMessage,
   missingStepMessage,
   undeclaredBranchPathMessage,
+  classRestrictedNodeIssue,
 } from '../workflow.schemas'
 
 describe('workflowGraphSchema', () => {
@@ -61,6 +62,144 @@ describe('workflowGraphSchema', () => {
       ],
     }
     expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+  })
+
+  // Phase C conversational block layer (slice C-1).
+  describe('conversational block node kinds', () => {
+    const body = { type: 'doc', content: [{ type: 'text', text: 'Hi {first_name}!' }] }
+
+    it('accepts every block node kind', () => {
+      const graph = {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          { id: 'msg', type: 'message', body },
+          { id: 'rt', type: 'show_reply_time' },
+          { id: 'la', type: 'let_assistant_answer' },
+          { id: 'dc', type: 'disable_composer' },
+          {
+            id: 'btn',
+            type: 'reply_buttons',
+            body,
+            options: [{ key: 'yes', label: 'Yes' }],
+            allowTyping: false,
+          },
+          {
+            id: 'cd',
+            type: 'collect_data',
+            body,
+            attributeKey: 'email',
+            fieldType: 'text',
+            required: true,
+          },
+          { id: 'cr', type: 'collect_reply', body, attributeKey: 'feedback' },
+          {
+            id: 'csat',
+            type: 'request_csat',
+            body,
+            allowTypingInterrupt: true,
+            commentPrompt: 'Add a comment',
+          },
+        ],
+        edges: [
+          { from: 't', to: 'msg' },
+          { from: 'btn', to: 'cd', branch: 'yes' },
+        ],
+      }
+      expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+    })
+
+    it('accepts a collect_data node with no options (a text/number/date field has none)', () => {
+      const graph = {
+        nodes: [
+          {
+            id: 'cd',
+            type: 'collect_data',
+            body,
+            attributeKey: 'email',
+            fieldType: 'text',
+            required: false,
+          },
+        ],
+        edges: [],
+      }
+      expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+    })
+
+    it('rejects a reply_buttons node with zero options: unusable at runtime', () => {
+      const graph = {
+        nodes: [{ id: 'btn', type: 'reply_buttons', body, options: [], allowTyping: false }],
+        edges: [],
+      }
+      expect(workflowGraphSchema.safeParse(graph).success).toBe(false)
+    })
+
+    it('rejects a block body missing entirely, and a malformed body shape', () => {
+      const missing = { nodes: [{ id: 'msg', type: 'message' }], edges: [] }
+      expect(workflowGraphSchema.safeParse(missing).success).toBe(false)
+
+      const malformed = { nodes: [{ id: 'msg', type: 'message', body: 'not a doc' }], edges: [] }
+      expect(workflowGraphSchema.safeParse(malformed).success).toBe(false)
+    })
+
+    it('rejects a collect_data node missing its attributeKey or fieldType', () => {
+      const noKey = {
+        nodes: [{ id: 'cd', type: 'collect_data', body, fieldType: 'text', required: true }],
+        edges: [],
+      }
+      expect(workflowGraphSchema.safeParse(noKey).success).toBe(false)
+
+      const badFieldType = {
+        nodes: [
+          {
+            id: 'cd',
+            type: 'collect_data',
+            body,
+            attributeKey: 'email',
+            fieldType: 'bogus',
+            required: true,
+          },
+        ],
+        edges: [],
+      }
+      expect(workflowGraphSchema.safeParse(badFieldType).success).toBe(false)
+    })
+
+    it('let_assistant_answer (Phase C, slice C-6): accepts instructions + autoCloseOverride, rejects instructions past the bound', () => {
+      const withFields = {
+        nodes: [
+          {
+            id: 'la',
+            type: 'let_assistant_answer',
+            instructions: 'Focus on billing only',
+            autoCloseOverride: true,
+          },
+        ],
+        edges: [],
+      }
+      expect(workflowGraphSchema.safeParse(withFields).success).toBe(true)
+
+      const tooLong = {
+        nodes: [{ id: 'la', type: 'let_assistant_answer', instructions: 'x'.repeat(2001) }],
+        edges: [],
+      }
+      expect(workflowGraphSchema.safeParse(tooLong).success).toBe(false)
+    })
+
+    it('JSON-mode tolerance: a block node still tolerates a dangling/unlabeled edge the same as every other kind (structural checks only)', () => {
+      // Two message nodes, no edge between them at all — the walker (graph.ts)
+      // just ends the path early; save-validation doesn't reject an
+      // unreachable/disconnected node, mirroring the module's stated
+      // calibration for every other node kind.
+      const graph = {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          { id: 'msg1', type: 'message', body },
+          { id: 'msg2', type: 'message', body },
+        ],
+        edges: [{ from: 't', to: 'msg1' }],
+      }
+      expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+    })
   })
 
   it('rejects an unknown action type, a bad snooze, and a negative wait', () => {
@@ -450,5 +589,57 @@ describe('triggerSettingsSchema: frequencyCap', () => {
     // Only the known `frequencyCap` key is shape-validated — every other key
     // in the bag, however misspelled, is a free-form pass-through.
     expect(triggerSettingsSchema.safeParse({ chanels: ['email'] }).success).toBe(true)
+  })
+})
+
+// Phase C, slice C-6: the class rule for parking blocks.
+describe('classRestrictedNodeIssue', () => {
+  const parkingNode = { id: 'csat', type: 'request_csat' }
+  const sendNode = { id: 'msg', type: 'message' }
+
+  it('is null for a customer_facing workflow regardless of node kinds', () => {
+    expect(classRestrictedNodeIssue({ nodes: [parkingNode] }, 'customer_facing')).toBeNull()
+  })
+
+  it('is null for a background workflow with no parking-kind node', () => {
+    expect(classRestrictedNodeIssue({ nodes: [sendNode] }, 'background')).toBeNull()
+  })
+
+  it.each([
+    'reply_buttons',
+    'collect_data',
+    'collect_reply',
+    'request_csat',
+    'let_assistant_answer',
+    'disable_composer',
+  ])('flags a %s node in a background workflow, naming the offending step', (type) => {
+    const issue = classRestrictedNodeIssue({ nodes: [{ id: 'x', type }] }, 'background')
+    expect(issue).not.toBeNull()
+    expect(issue).toContain('"x"')
+    expect(issue).toContain(type)
+  })
+
+  it('names the FIRST offending node when several parking kinds are present', () => {
+    const issue = classRestrictedNodeIssue(
+      {
+        nodes: [
+          sendNode,
+          { id: 'first-bad', type: 'reply_buttons' },
+          { id: 'second-bad', type: 'request_csat' },
+        ],
+      },
+      'background'
+    )
+    expect(issue).toContain('"first-bad"')
+    expect(issue).not.toContain('"second-bad"')
+  })
+
+  it('message and show_reply_time stay legal in a background workflow', () => {
+    expect(
+      classRestrictedNodeIssue(
+        { nodes: [sendNode, { id: 'rt', type: 'show_reply_time' }] },
+        'background'
+      )
+    ).toBeNull()
   })
 })

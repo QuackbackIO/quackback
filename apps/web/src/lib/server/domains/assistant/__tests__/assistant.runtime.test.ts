@@ -197,6 +197,7 @@ import {
   isSubstantiveAnswer,
   buildAssistantSystemPrompt,
   buildSurfaceInstructionsPrompt,
+  buildStepInstructionsPrompt,
   buildBasicsPrompt,
   buildGuidancePrompt,
   buildCopilotFramingPrompt,
@@ -610,6 +611,25 @@ describe('buildSurfaceInstructionsPrompt', () => {
 
   it('contains no em dashes', () => {
     const block = buildSurfaceInstructionsPrompt('Be concise.')
+    expect(block).not.toContain('—')
+  })
+})
+
+describe('buildStepInstructionsPrompt (Phase C conversational block layer, slice C-6)', () => {
+  it('returns null when there is no per-step instruction to add', () => {
+    expect(buildStepInstructionsPrompt(undefined)).toBeNull()
+    expect(buildStepInstructionsPrompt(null)).toBeNull()
+    expect(buildStepInstructionsPrompt('   ')).toBeNull()
+  })
+
+  it('carries the instructions text, framed to yield to the base rules on conflict', () => {
+    const block = buildStepInstructionsPrompt('Focus only on billing questions.')
+    expect(block).toContain('Focus only on billing questions.')
+    expect(block!.toLowerCase()).toContain('rules above')
+  })
+
+  it('contains no em dashes', () => {
+    const block = buildStepInstructionsPrompt('Be concise.')
     expect(block).not.toContain('—')
   })
 })
@@ -1938,6 +1958,67 @@ describe('runAssistantTurn: prompt assembly (basics + surface instructions + gui
     expect(prompts[1]).toBe('Write in a friendly tone. Keep answers concise.')
     expect(prompts[2]).toContain('Be extra warm.')
     expect(prompts[3]).toContain('Refunds')
+  })
+
+  it('Phase C, slice C-6: a stepInstructions input adds one more block, last, after guidance', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantConfig.mockResolvedValue({
+      toolControls: {},
+      basics: { tone: 'friendly', length: 'concise' },
+      surfaces: { widget: { instructions: 'Be extra warm.' } },
+    })
+    mockListGuidanceRules.mockResolvedValue([
+      { id: 'assistant_guidance_1', title: 'Refunds', body: 'Mention the policy.' },
+    ])
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('hi'),
+      surface: 'widget',
+      stepInstructions: 'Focus only on billing questions.',
+    })
+
+    const prompts = systemPromptsFromLastCall()
+    expect(prompts).toHaveLength(5)
+    expect(prompts[4]).toContain('Focus only on billing questions.')
+  })
+
+  it('a stepInstructions input still applies even when the actions flag is off (assistantConfig never fetched)', async () => {
+    mockIsFeatureEnabled.mockResolvedValue(false)
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('hi'),
+      stepInstructions: 'Focus only on billing questions.',
+    })
+
+    const prompts = systemPromptsFromLastCall()
+    expect(prompts.at(-1)).toContain('Focus only on billing questions.')
+    expect(mockGetAssistantConfig).not.toHaveBeenCalled()
+  })
+
+  it('SF7: suppresses stepInstructions (alongside basics/surface/guidance) when the config read itself fails, unlike the flag-off case above', async () => {
+    mockActionsFlag(true)
+    mockGetAssistantConfig.mockRejectedValue(new Error('settings row corrupt'))
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('hi'),
+      surface: 'widget',
+      stepInstructions: 'Focus only on billing questions.',
+    })
+
+    const prompts = systemPromptsFromLastCall()
+    // Only the base JSON-contract prompt element remains — no basics, no
+    // surface, no guidance, and (the fix) no step instruction either. A
+    // config load failure must not crash the whole turn (the attempt loop
+    // still runs and answers), but it must produce a consistent, fully
+    // degraded prompt rather than a partial one with the step instruction
+    // dangling alone.
+    expect(prompts.some((p) => p.includes('Focus only on billing questions.'))).toBe(false)
   })
 
   it('adds no basics element when nothing is saved, even with surface + guidance present', async () => {

@@ -16,6 +16,7 @@ import {
   db,
   and,
   eq,
+  ne,
   inArray,
   sql,
   workflowRuns,
@@ -31,12 +32,20 @@ import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import { isUniqueViolation } from '@/lib/server/utils'
-import { applyAction } from './action.executor'
+import { applyAction, type ResolvedBlockDeps } from './action.executor'
 import { walkWorkflow, type WorkflowGraph, type WalkResult } from './graph'
-import type { ConditionContext } from './condition.evaluator'
+import type { ConditionContext, BlockAnswer, AssistantOutcome } from './condition.evaluator'
 import { getWorkflow } from './workflow.service'
 import { resolveConditionContext } from './condition.context'
-import { scheduleWorkflowResume, readCursor, type WaitCursor } from './workflow-wait-queue'
+import { resolveWorkflowVariables } from './workflow-variables'
+import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
+import {
+  scheduleWorkflowResume,
+  readCursor,
+  type WaitCursor,
+  type InputWaitCursor,
+  type WaitKind,
+} from './workflow-wait-queue'
 import { hasFrequencyCap, claimFrequencyCapSlot } from './dispatcher.guards'
 
 const log = logger.child({ component: 'workflow-engine' })
@@ -64,10 +73,31 @@ function workflowActor(): Actor {
   return boundedServiceActor(AUTOMATION_PERMISSIONS)
 }
 
-/** Read the stored graph defensively — a malformed shape becomes an empty graph
- *  (no nodes) so the walk simply produces nothing rather than throwing. */
-function readGraph(workflow: Workflow): WorkflowGraph {
-  const g = workflow.graph as unknown as Partial<WorkflowGraph> | null
+/** The conversation's visitor, as an Actor — for the one action
+ *  (`record_csat`) that must run as the customer, not the run's own service
+ *  actor: `recordCsat` requires its caller to BE the conversation's visitor
+ *  (amendment 1), and the emitted csat_submitted event needs a human actor so
+ *  it can legitimately trigger other workflows. `principalType: 'anonymous'`
+ *  is a safe default here (an identified visitor's real type doesn't change
+ *  the ownership check either path relies on — see canViewConversation /
+ *  recordCsat's own `actor.principalId !== conversation.visitorPrincipalId`
+ *  check), only `toEventActor` cares that it isn't 'service'. */
+function visitorActor(visitorPrincipalId: PrincipalId | null): Actor {
+  return {
+    principalId: visitorPrincipalId,
+    role: null,
+    principalType: 'anonymous',
+    segmentIds: new Set(),
+  }
+}
+
+/** Read a stored graph defensively: a malformed shape becomes an empty graph
+ *  (no nodes) so the walk simply produces nothing rather than throwing. Takes
+ *  the raw jsonb value directly (a workflow's live graph, or a run's pinned
+ *  snapshot of one) rather than a Workflow, so the same defensive handling
+ *  covers both call sites in this module. */
+function readGraph(graph: unknown): WorkflowGraph {
+  const g = graph as Partial<WorkflowGraph> | null
   return {
     nodes: Array.isArray(g?.nodes) ? g!.nodes : [],
     edges: Array.isArray(g?.edges) ? g!.edges : [],
@@ -134,8 +164,11 @@ export interface RunWorkflowOptions {
  * silent no-op), OR when the customer_facing exclusive lock was lost, OR when
  * a frequency cap denied the run on its authoritative re-check (see below). On
  * a wait the run is left in state 'waiting' with the resume node in its
- * cursor; Slice 5e schedules the timer and resumes.
+ * cursor; Slice 5e schedules the timer and resumes. The run also pins a copy
+ * of the workflow's graph at insert time (see the `graph` field below), and a
+ * resume later walks that snapshot rather than the workflow's live graph.
  *
+
  * customer_facing exclusive lock: the dispatcher's hasActiveCustomerFacingRun
  * is only a cheap pre-check, so two triggers can both pass it and race here —
  * the partial unique index on workflow_runs is the real lock, and losing that
@@ -163,7 +196,7 @@ export async function runWorkflow(
   ctx: ConditionContext,
   opts: RunWorkflowOptions
 ): Promise<WorkflowRun | null> {
-  const plan = walkWorkflow(readGraph(workflow), ctx)
+  const plan = walkWorkflow(readGraph(workflow.graph), ctx)
   if (plan.actions.length === 0 && plan.status !== 'waiting') return null
 
   const subjectPrincipalId = opts.subjectPrincipalId ?? null
@@ -187,6 +220,11 @@ export async function runWorkflow(
           subjectPrincipalId,
           state: 'running',
           customerFacing: workflow.class === 'customer_facing',
+          // Pin the run to the graph as it exists right now. A resume later
+          // walks this snapshot, not whatever the workflow has become by then
+          // (see resumeWorkflowRun); it is identical to the live graph at this
+          // instant, so the initial walk above needed no change.
+          graph: workflow.graph,
         })
         .returning()
       // Same transaction as the run insert (see doc comment above) — not a
@@ -204,13 +242,13 @@ export async function runWorkflow(
   }
   if (!run) return null // frequency cap denied on the authoritative re-check
 
-  return applyPlanAndSettle(run, workflow, plan, opts.conversationId, subjectPrincipalId)
+  return applyPlanAndSettle(run, workflow, plan, opts.conversationId, subjectPrincipalId, ctx)
 }
 
 /**
  * Run the actions of a walk plan (best-effort) then settle the run: on a wait,
- * persist the resume cursor + schedule the durable timer and stay 'waiting'; else
- * mark it done. Shared by a fresh run and a resumed one.
+ * persist the resume cursor and, for a timer wait, schedule the durable timer;
+ * else mark it done. Shared by a fresh run and a resumed one.
  *
  * Both settle paths are guarded on `state = 'running'`: interruptWaitingRuns can
  * flip a run to 'interrupted' while its actions are still executing (a reply or
@@ -219,22 +257,104 @@ export async function runWorkflow(
  * interrupted concurrently: skip the run event and, on the waiting path, skip
  * scheduling a timer for a run that is no longer parked, and return the run's
  * current row instead of the stale one this function started with.
+ *
+ * `ctx` (Phase C, slice C-1) is the same resolved snapshot the walk itself ran
+ * against — passed through purely so a `record_csat` action can be applied as
+ * the conversation's VISITOR (ctx.conversation.visitorPrincipalId) rather than
+ * the run's own service actor (see visitorActor's doc); every other action is
+ * unaffected.
  */
 async function applyPlanAndSettle(
   run: WorkflowRun,
   workflow: Workflow,
   plan: WalkResult,
   conversationId: ConversationId,
-  subjectPrincipalId: PrincipalId | null
+  subjectPrincipalId: PrincipalId | null,
+  ctx: ConditionContext
 ): Promise<WorkflowRun | null> {
   const actor = workflowActor()
+  // Per-plan resolution (SF8 perf fix), mirroring the resolve-once
+  // ConditionContext pattern the walk itself already uses: a plan with N
+  // chained send_block actions (message, then buttons, ...) previously paid
+  // ~3N queries (ensureAssistantPrincipal + resolveWorkflowVariables's own
+  // two reads, ALL re-run per action inside sendBlock). Resolved once here,
+  // before the loop, only when the plan actually has a send_block to feed —
+  // a plan with none (the common case) pays nothing extra. A failure here
+  // propagates uncaught, same policy as resolveConditionContext's own reads:
+  // by the time a plan exists, this conversation is known to exist (the walk
+  // itself already required it), so a failure resolving these is a genuine
+  // error, not a normal "nothing to send".
+  const resolvedBlockDeps: ResolvedBlockDeps | undefined = plan.actions.some(
+    (a) => a.type === 'send_block'
+  )
+    ? await (async () => {
+        const [variables, assistant] = await Promise.all([
+          resolveWorkflowVariables(conversationId),
+          ensureAssistantPrincipal(),
+        ])
+        return { variables, assistant }
+      })()
+    : undefined
+  // Set only when a send_block action posts a message — the one block kind
+  // that also parks (status 'waiting', waitKind 'input') stamps it onto the
+  // InputWaitCursor below as the correlation key a customer's reply matches
+  // against.
+  let blockMessageId: string | null = null
   for (const action of plan.actions) {
     try {
-      await applyAction(action, { conversationId, actor })
+      const actionActor =
+        action.type === 'record_csat'
+          ? visitorActor((ctx.conversation.visitorPrincipalId ?? null) as PrincipalId | null)
+          : actor
+      const result = await applyAction(action, {
+        conversationId,
+        actor: actionActor,
+        runId: run.id,
+        resolvedBlockDeps,
+      })
+      if (result.blockMessageId) blockMessageId = result.blockMessageId
     } catch (err) {
       log.error({ err, action: action.type, workflowId: workflow.id }, 'workflow action failed')
       await logRunEvent(run.id, workflow.id, subjectPrincipalId, `action_failed:${action.type}`)
     }
+  }
+
+  if (plan.status === 'waiting' && (plan.waitKind === 'input' || plan.waitKind === 'assistant')) {
+    // Interactive block / let_assistant_answer park: no BullMQ timer for
+    // either — resumed by event-trigger.ts on a matching structured reply
+    // ('input') or Quinn's own hand-off/close signal ('assistant'), never a
+    // clock (see workflow-wait-queue.ts's WaitCursor doc for why the orphan
+    // sweeper must never touch either of these). Only 'input' carries the
+    // extra block-correlation fields; 'assistant' has nothing else to
+    // stamp beyond the node to resume at.
+    const waitSeq = (readCursor(run).waitSeq ?? 0) + 1
+    const cursor: WaitCursor | InputWaitCursor =
+      plan.waitKind === 'input'
+        ? {
+            waitKind: 'input',
+            resumeNodeId: plan.resumeNodeId!,
+            blockMessageId: blockMessageId ?? '',
+            blockKind: plan.blockKind!,
+            allowTypingInterrupt: plan.allowTypingInterrupt ?? false,
+            expiresAt: null,
+            waitSeconds: 0,
+            waitSeq,
+            waitStartedAt: new Date().toISOString(),
+          }
+        : {
+            waitKind: 'assistant',
+            resumeNodeId: plan.resumeNodeId!,
+            waitSeconds: 0,
+            waitSeq,
+            waitStartedAt: new Date().toISOString(),
+          }
+    const waiting = await settleRunning(run.id, {
+      state: 'waiting',
+      cursor: cursor as unknown as Record<string, unknown>,
+    })
+    if (!waiting) return currentRun(run.id)
+    await logRunEvent(run.id, workflow.id, subjectPrincipalId, 'waiting')
+    return waiting
   }
 
   if (plan.status === 'waiting') {
@@ -243,6 +363,7 @@ async function applyPlanAndSettle(
     // its own durable-timer job id instead of colliding with an earlier one.
     const waitSeq = (readCursor(run).waitSeq ?? 0) + 1
     const cursor: WaitCursor = {
+      waitKind: 'timer',
       resumeNodeId: plan.resumeNodeId ?? null,
       waitSeconds,
       waitSeq,
@@ -287,18 +408,41 @@ async function settleTerminal(
  * how recently the run actually became live.
  *
  * Only a successful claim goes on to load the workflow, condition context, and
- * resume node. A paused (or otherwise non-live) workflow does not act post-wait
- * (pausing only stops new dispatches, not runs already parked) — except that a
- * run parked at a successor-less wait had nothing left to run and settles
- * 'done' regardless of status. The original triggering message is not
- * available post-wait, so a post-wait message condition sees none.
+ * resume node. The workflow row is loaded purely to gate on its current
+ * status; the walk itself uses the run's own `graph` snapshot (stamped at
+ * insert time by runWorkflow), never the workflow's live graph. Editing the
+ * workflow, or deleting the resume node, while a run sits parked at a wait
+ * must not change what a resumed run does: without the snapshot, a resume
+ * would walk arbitrary new logic, or silently settle the run 'done' if the
+ * resume node no longer exists. A paused (or otherwise non-live) workflow
+ * does not act post-wait (pausing only stops new dispatches, not runs already
+ * parked), except that a run parked at a successor-less wait had nothing
+ * left to run and settles 'done' regardless of status. The original
+ * triggering message is not available post-wait, so a post-wait message
+ * condition sees none.
  *
  * Any throw after the claim reverts it (guarded, so a concurrent interrupt
  * still wins) and rethrows: without the revert, the retry's claim would match
  * zero rows (state is already 'running') and silently no-op, stranding the run
- * until the sweeper interrupts it — losing its post-wait actions.
+ * until the sweeper interrupts it — losing its post-wait actions. This same
+ * atomic claim is what makes a blockAnswer resume retry-safe (Phase C, slice
+ * C-1): a BullMQ-style retry, or event-trigger.ts racing a second matching
+ * reply, both see the run already 'running' and no-op here exactly like a
+ * timer-wait retry does.
+ *
+ * `opts.blockAnswer` (Phase C, slice C-1): threaded into the resume's
+ * ConditionContext ONLY — never persisted — so the walker resuming an
+ * interactive block node (graph.ts) can route/write the customer's answer.
+ * `opts.assistantOutcome` (Phase C, slice C-6) is the same idea for a
+ * `let_assistant_answer` park: threaded into the ConditionContext ONLY so the
+ * walker can pick the escalated-vs-default edge. Only event-trigger.ts's
+ * resume-vs-interrupt checks ever pass either; a timer-fired resume (the wait
+ * worker) calls this with no opts, exactly as before.
  */
-export async function resumeWorkflowRun(runId: WorkflowRun['id']): Promise<WorkflowRun | null> {
+export async function resumeWorkflowRun(
+  runId: WorkflowRun['id'],
+  opts?: { blockAnswer?: BlockAnswer; assistantOutcome?: AssistantOutcome }
+): Promise<WorkflowRun | null> {
   const [claimed] = await db
     .update(workflowRuns)
     .set({
@@ -322,20 +466,28 @@ export async function resumeWorkflowRun(runId: WorkflowRun['id']): Promise<Workf
     }
 
     const ctx = claimed.conversationId
-      ? await resolveConditionContext(claimed.conversationId)
+      ? await resolveConditionContext(claimed.conversationId, {
+          blockAnswer: opts?.blockAnswer,
+          assistantOutcome: opts?.assistantOutcome,
+        })
       : null
     if (!workflow || !claimed.conversationId || !ctx) {
       // The workflow or conversation vanished while parked — settle it.
       return await settleTerminal(claimed, 'interrupted')
     }
 
-    const plan = walkWorkflow(readGraph(workflow), ctx, resumeNodeId)
+    // The pinned snapshot, not workflow.graph: the workflow row above is only
+    // consulted for its status (live/paused/gone), never re-walked. Editing
+    // the workflow, or deleting the resume node, while this run sat parked
+    // must not change what it does on resume.
+    const plan = walkWorkflow(readGraph(claimed.graph), ctx, resumeNodeId)
     return await applyPlanAndSettle(
       claimed,
       workflow,
       plan,
       claimed.conversationId,
-      claimed.subjectPrincipalId
+      claimed.subjectPrincipalId,
+      ctx
     )
   } catch (err) {
     await db
@@ -351,17 +503,47 @@ export async function resumeWorkflowRun(runId: WorkflowRun['id']): Promise<Workf
  * waits, per §4.6). Returns how many were interrupted. Wired into the reply/close
  * paths as a follow-up; the wait worker also re-checks state, so a late timer on
  * an interrupted run is already a no-op.
+ *
+ * Cursor-aware (Phase C, slice C-6) via two independent, narrowly-scoped
+ * carve-outs — this stays a blunt "everything on the conversation" UPDATE by
+ * default, since a reply or close interrupting every OTHER pending wait is
+ * still exactly the right behavior:
+ *
+ *  - `excludeWaitKind` — event-trigger.ts passes `'assistant'` ONLY on a
+ *    VISITOR message.created: a multi-turn conversation with Quinn is normal,
+ *    so a visitor's message must never end a parked let_assistant_answer
+ *    wait. A teammate message passes no exclusion (a human taking over ends
+ *    the assistant's turn same as everything else); neither does a close (see
+ *    the next bullet — a parked assistant-wait resumes on close instead).
+ *    Typed as the full `WaitKind` union (matching the sweeper's own
+ *    future-proof style, see workflow-sweep.ts's isTimerWait) rather than the
+ *    single literal any call site happens to pass today, so a future wait
+ *    kind is excludable here without widening this signature again.
+ *  - `excludeRunId` — event-trigger.ts passes the specific run id it just
+ *    resumed (via tryResumeAssistantWait on a close event, or tryResumeInputWait
+ *    on a matched structured reply) so THIS interrupt call — which still
+ *    needs to end every OTHER waiting run on the conversation, exactly as
+ *    before — doesn't also undo that resume, whether the resumed run already
+ *    settled or re-parked at a new wait in the same call.
  */
-export async function interruptWaitingRuns(conversationId: ConversationId): Promise<number> {
+export async function interruptWaitingRuns(
+  conversationId: ConversationId,
+  opts?: { excludeRunId?: WorkflowRun['id']; excludeWaitKind?: WaitKind }
+): Promise<number> {
+  const filters = [
+    eq(workflowRuns.conversationId, conversationId),
+    inArray(workflowRuns.state, ['running', 'waiting']),
+  ]
+  if (opts?.excludeRunId) filters.push(ne(workflowRuns.id, opts.excludeRunId))
+  if (opts?.excludeWaitKind) {
+    filters.push(
+      sql`coalesce(${workflowRuns.cursor}->>'waitKind', 'timer') <> ${opts.excludeWaitKind}`
+    )
+  }
   const interrupted = await db
     .update(workflowRuns)
     .set({ state: 'interrupted', endedAt: new Date() })
-    .where(
-      and(
-        eq(workflowRuns.conversationId, conversationId),
-        inArray(workflowRuns.state, ['running', 'waiting'])
-      )
-    )
+    .where(and(...filters))
     .returning({ id: workflowRuns.id })
   return interrupted.length
 }

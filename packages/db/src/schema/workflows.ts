@@ -87,6 +87,15 @@ export const workflowRuns = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    // The workflow's graph as of the moment this run started: a snapshot, not a
+    // live reference. A run must finish walking the logic it began with even if
+    // the workflow is edited while the run sits parked at a wait; re-reading the
+    // live graph at resume would otherwise walk arbitrary new logic, or silently
+    // settle the run done if the resume node was deleted.
+    graph: jsonb('graph')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },
@@ -110,6 +119,9 @@ export const workflowRuns = pgTable(
       .on(table.conversationId, table.state)
       .where(sql`"conversation_id" IS NOT NULL`),
     index('workflow_runs_state_idx').on(table.state),
+    // workflowEffectiveness (workflow-reporting.ts) filters by a started_at
+    // range with no other narrowing predicate; a plain btree serves it directly.
+    index('workflow_runs_started_at_idx').on(table.startedAt),
     // The exclusive lock itself: at most one running/waiting customer_facing run
     // per conversation, enforced by Postgres. The pre-check in dispatcher.guards
     // can't close the TOCTOU gap on its own; this index is what actually does.

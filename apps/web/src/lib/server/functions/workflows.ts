@@ -26,6 +26,7 @@ import {
   workflowGraphSchema,
   triggerSettingsSchema,
   triggerTypeSchema,
+  classRestrictedNodeIssue,
   type ValidatedWorkflowGraph,
 } from '@/lib/server/domains/workflows/workflow.schemas'
 
@@ -110,6 +111,14 @@ export const createWorkflowFn = createServerFn({ method: 'POST' })
   .validator(createSchema)
   .handler(async ({ data }): Promise<WorkflowDTO> => {
     const ctx = await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    // Class rule for parking blocks (Phase C, slice C-6): both fields are
+    // already in hand on create (class is required, not optional, on
+    // createSchema), so no extra read is needed here — see updateWorkflowFn
+    // for why an update needs one.
+    if (data.graph) {
+      const issue = classRestrictedNodeIssue(data.graph, data.class)
+      if (issue) throw new Error(issue)
+    }
     return serializeWorkflow(
       await createWorkflow({
         name: data.name,
@@ -127,6 +136,33 @@ export const updateWorkflowFn = createServerFn({ method: 'POST' })
   .validator(updateSchema)
   .handler(async ({ data }): Promise<WorkflowDTO> => {
     await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    // Class rule for parking blocks (Phase C, slice C-6): `class` is optional
+    // on an update (a graph-only save doesn't necessarily touch it), so the
+    // EFFECTIVE class a graph edit must be checked against is the incoming
+    // one when present, else whatever the workflow is stored as today.
+    if (data.graph) {
+      const effectiveClass = data.class ?? (await getWorkflow(data.id as WorkflowId))?.class
+      if (effectiveClass) {
+        const issue = classRestrictedNodeIssue(data.graph, effectiveClass)
+        if (issue) throw new Error(issue)
+      }
+    } else if (data.class) {
+      // A class-only patch (no graph in this request) still changes the
+      // EFFECTIVE class the STORED graph is checked against — e.g. flipping
+      // an existing parking-block workflow from customer_facing to
+      // background must be rejected too, not just a class+graph edit made in
+      // the same request. Without this branch, `if (data.graph)` above never
+      // runs and the flip silently lands on an unreachable parked run.
+      const stored = await getWorkflow(data.id as WorkflowId)
+      const storedNodes = stored?.graph?.nodes
+      if (stored && Array.isArray(storedNodes)) {
+        const issue = classRestrictedNodeIssue(
+          { nodes: storedNodes as { id: string; type: string }[] },
+          data.class
+        )
+        if (issue) throw new Error(issue)
+      }
+    }
     return serializeWorkflow(
       await updateWorkflow(data.id as WorkflowId, {
         name: data.name,

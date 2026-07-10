@@ -427,6 +427,75 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
         .where(eq(workflowRunEvents.runId, run.id))
       expect(events.map((e) => e.kind)).toEqual(['swept_rescheduled'])
     })
+
+    it('never examines a parked input wait: no timer was ever scheduled for one', async () => {
+      const conversationId = await seedConversation()
+      const wf = await seedWorkflow('customer_facing')
+      // Parked long enough ago that a timer wait with the same waitStartedAt
+      // would clearly be "due" — an input wait has waitSeconds: 0, so the SQL
+      // due-filter alone would otherwise select it on every tick forever.
+      const cursor = {
+        waitKind: 'input',
+        resumeNodeId: 'n1',
+        blockMessageId: 'conversation_message_1',
+        blockKind: 'buttons',
+        allowTypingInterrupt: false,
+        expiresAt: null,
+        waitSeconds: 0,
+        waitSeq: 1,
+        waitStartedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      }
+      const [run] = await testDb
+        .insert(workflowRuns)
+        .values({
+          workflowId: wf.id,
+          conversationId,
+          state: 'waiting',
+          cursor,
+          customerFacing: true,
+        })
+        .returning()
+
+      const count = await sweepOrphanedWaitingRuns(new Date())
+      expect(count).toBe(0)
+      expect(getWorkflowWaitJob).not.toHaveBeenCalled()
+      expect(scheduleWorkflowResume).not.toHaveBeenCalled()
+
+      const [after] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, run.id))
+      expect(after.state).toBe('waiting') // left parked, untouched
+      expect(after.cursor).toEqual(cursor)
+    })
+
+    it('never examines a parked assistant wait either (Phase C, slice C-6): no timer was ever scheduled for one', async () => {
+      const conversationId = await seedConversation()
+      const wf = await seedWorkflow('customer_facing')
+      const cursor = {
+        waitKind: 'assistant',
+        resumeNodeId: 'la',
+        waitSeconds: 0,
+        waitSeq: 1,
+        waitStartedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      }
+      const [run] = await testDb
+        .insert(workflowRuns)
+        .values({
+          workflowId: wf.id,
+          conversationId,
+          state: 'waiting',
+          cursor,
+          customerFacing: true,
+        })
+        .returning()
+
+      const count = await sweepOrphanedWaitingRuns(new Date())
+      expect(count).toBe(0)
+      expect(getWorkflowWaitJob).not.toHaveBeenCalled()
+      expect(scheduleWorkflowResume).not.toHaveBeenCalled()
+
+      const [after] = await testDb.select().from(workflowRuns).where(eq(workflowRuns.id, run.id))
+      expect(after.state).toBe('waiting') // left parked, untouched
+      expect(after.cursor).toEqual(cursor)
+    })
   })
 
   describe('sweepWorkflowRuns', () => {

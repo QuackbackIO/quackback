@@ -3,6 +3,7 @@
  *  amount+unit duration input, all lifted from the old popover editors
  *  verbatim (ClampedIntInput is new; see its own doc comment). */
 import { useState } from 'react'
+import { arrayMove } from '@dnd-kit/sortable'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -13,12 +14,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  countSteps,
   isNeedsSetupRef,
   WAIT_UNITS,
   secondsToWaitParts,
+  type TreeStep,
   type WaitUnit,
 } from '../../workflow-graph'
 import type { EntityOption } from '../entities'
+import { ConfirmDeleteDialog } from '../step-visuals'
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -112,6 +116,65 @@ export function ClampedIntInput({
       className={className}
     />
   )
+}
+
+/**
+ * Confirm-before-removing-a-path-with-steps: shared by every block editor
+ * whose paths spawn their own step subtree the way a branch path does
+ * (reply_buttons' button paths, request_csat's rating paths, and — since
+ * branch-editor.tsx adopted this hook too — branch's own paths). A path with
+ * no nested steps removes immediately (nothing to lose); one with steps opens
+ * a confirm dialog naming the step count first. Keyed by the path's own
+ * `key`, never an array index — an index drifts the moment the paths array
+ * reorders or gains/loses an entry between the click and the confirm (the
+ * editors had drifted onto index vs key independently before this was pulled
+ * out). Generic over the path shape (`KeyedPath` has a `label`; branch's own
+ * `BranchPath` doesn't) — `labelOf` picks what the confirm dialog names.
+ */
+export function usePathRemovalConfirm<T extends { key: string; steps: TreeStep[] }>(
+  paths: T[],
+  onRemove: (key: string) => void,
+  labelOf: (path: T) => string
+) {
+  const [confirmKey, setConfirmKey] = useState<string | null>(null)
+  const confirmPath = paths.find((p) => p.key === confirmKey) ?? null
+
+  const requestRemove = (path: T) => {
+    if (countSteps(path.steps) > 0) setConfirmKey(path.key)
+    else onRemove(path.key)
+  }
+
+  const confirmDialog = (
+    <ConfirmDeleteDialog
+      open={confirmKey !== null}
+      onOpenChange={(open) => !open && setConfirmKey(null)}
+      title={confirmPath ? `Remove "${labelOf(confirmPath)}"?` : ''}
+      description={
+        confirmPath ? `Its ${countSteps(confirmPath.steps)} step(s) will be removed with it.` : ''
+      }
+      onConfirm={() => {
+        if (confirmKey !== null) onRemove(confirmKey)
+        setConfirmKey(null)
+      }}
+    />
+  )
+
+  return { requestRemove, confirmDialog }
+}
+
+/**
+ * Swap a path with its adjacent neighbor (dir -1 = up, +1 = down) — shared by
+ * branch-editor and reply-buttons-editor's up/down reorder buttons (both
+ * reimplemented this by hand before being pulled out here). A thin wrapper
+ * over @dnd-kit/sortable's `arrayMove` (already the drag-reorder primitive in
+ * 4 other admin surfaces) rather than a hand-rolled index swap; no-ops past
+ * either end, returning the SAME array reference so callers can cheaply check
+ * `next === paths` to skip a no-op update.
+ */
+export function movePathAdjacent<T>(paths: T[], i: number, dir: -1 | 1): T[] {
+  const j = i + dir
+  if (j < 0 || j >= paths.length) return paths
+  return arrayMove(paths, i, j)
 }
 
 /** The amount+unit duration input, shared by the wait step (wait-editor.tsx)

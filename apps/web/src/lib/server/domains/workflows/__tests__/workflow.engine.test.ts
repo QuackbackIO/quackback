@@ -8,17 +8,25 @@
  * fixture rollback.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import { createId, type PrincipalId, type UserId, type ConversationId } from '@quackback/ids'
+import {
+  createId,
+  toUuid,
+  type PrincipalId,
+  type UserId,
+  type ConversationId,
+} from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   conversations,
   workflowRuns,
   workflowRunEvents,
+  workflows,
   user,
   principal,
   eq,
   and,
+  sql,
 } from '@/lib/server/db'
 import type { ConditionContext } from '../condition.evaluator'
 import type { WorkflowGraph } from '../graph'
@@ -58,11 +66,32 @@ vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
     intervals: [],
   })),
 }))
+// Same wrap-not-replace treatment as condition.context above (SF8): applyAction
+// itself is fully mocked in this file, so send_block's OWN internal calls to
+// these never happen here — these spies exist purely to prove
+// applyPlanAndSettle's hoisted per-plan resolution (see workflow.engine.ts)
+// calls each exactly once per plan, however many send_block actions it has.
+vi.mock('../workflow-variables', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../workflow-variables')>()
+  return { ...original, resolveWorkflowVariables: vi.fn(original.resolveWorkflowVariables) }
+})
+vi.mock('@/lib/server/domains/assistant/assistant.principal', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@/lib/server/domains/assistant/assistant.principal')>()
+  return { ...original, ensureAssistantPrincipal: vi.fn(original.ensureAssistantPrincipal) }
+})
 
-import { createWorkflow, setWorkflowStatus } from '../workflow.service'
+import {
+  createWorkflow,
+  setWorkflowStatus,
+  updateWorkflow,
+  softDeleteWorkflow,
+} from '../workflow.service'
 import { runWorkflow, resumeWorkflowRun, interruptWaitingRuns } from '../workflow.engine'
 import { workflowWaitJobId } from '../workflow-wait-queue'
 import { resolveConditionContext } from '../condition.context'
+import { resolveWorkflowVariables } from '../workflow-variables'
+import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -759,6 +788,847 @@ describe.skipIf(!fixture.available)('runWorkflow (real DB, rolled back)', () => 
         .where(and(eq(workflowRunEvents.workflowId, wf.id), eq(workflowRunEvents.kind, 'started')))
       expect(events).toHaveLength(1)
       expect(events[0].runId).toBe(run!.id)
+    })
+  })
+
+  describe('graph-version snapshot pinning (G1 regression)', () => {
+    it('resumes on the ORIGINAL post-wait action, ignoring an edit made while the run was parked', async () => {
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'wait then close',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      expect(waiting?.state).toBe('waiting')
+      // The run's own snapshot, not a live reference, pinned at insert time.
+      expect(waiting?.graph).toMatchObject({ nodes: expect.any(Array) })
+
+      // Edit the workflow while the run sits parked: the post-wait node 'a' now
+      // sets priority instead of closing. A live workflow (still 'live', still
+      // has a node with this id) is exactly the case that used to silently walk
+      // the new logic instead of the run's original path.
+      await updateWorkflow(wf.id, {
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'set_priority', priority: 'urgent' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+
+      const resumed = await resumeWorkflowRun(waiting!.id)
+      expect(resumed?.state).toBe('done')
+      // The ORIGINAL action ran, not the edited one.
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toEqual({ type: 'close' })
+    })
+
+    it('resumes down the ORIGINAL path when the resume node was deleted from the live graph, instead of silently settling done', async () => {
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'wait then close',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      expect(waiting?.state).toBe('waiting')
+      expect(waiting?.cursor).toMatchObject({ resumeNodeId: 'a' })
+
+      // Delete the resume node from the live workflow while the run is parked.
+      // Against the live graph, walking from 'a' finds no such node and the old
+      // code path would silently settle the run 'done' with no action taken.
+      await updateWorkflow(wf.id, {
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+          ],
+          edges: [{ from: 't', to: 'w' }],
+        },
+      })
+
+      const resumed = await resumeWorkflowRun(waiting!.id)
+      expect(resumed?.state).toBe('done')
+      // The action still ran: the snapshot still has node 'a', unlike the live
+      // graph. A silent no-action 'done' (the bug) would leave this at 0.
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toEqual({ type: 'close' })
+    })
+
+    it('still interrupts (does not act) a run parked at a wait whose workflow was soft-deleted', async () => {
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'wait then close',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      expect(waiting?.state).toBe('waiting')
+
+      // The workflow itself is deleted while the run sits parked. The graph
+      // snapshot has nothing to do with this: a vanished workflow must still
+      // settle the run interrupted rather than act on a snapshot of something
+      // that no longer exists.
+      await softDeleteWorkflow(wf.id)
+
+      const resumed = await resumeWorkflowRun(waiting!.id)
+      expect(resumed?.state).toBe('interrupted')
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+
+    it('resumes correctly after a backfill-style repair of a run stranded with an empty graph snapshot (0184/0185 regression)', async () => {
+      // 0184 added workflow_runs.graph with a bare '{}' default and no
+      // backfill: a run that was already parked 'waiting' at deploy time
+      // carries an empty snapshot. Simulate that stranded row directly
+      // (rather than via runWorkflow, which always stamps the real graph),
+      // confirm the empty snapshot really does drop the post-wait action,
+      // then apply 0185's backfill UPDATE and confirm the same run resumes
+      // into the real graph instead.
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'wait then close',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+      await setWorkflowStatus(wf.id, 'live')
+
+      const [stranded] = await testDb
+        .insert(workflowRuns)
+        .values({
+          workflowId: wf.id,
+          conversationId,
+          state: 'waiting',
+          graph: {}, // the pre-backfill default, not a real snapshot
+          cursor: { resumeNodeId: 'a' },
+        })
+        .returning()
+
+      // 0185's backfill: UPDATE workflow_runs SET graph = workflows.graph
+      // FROM workflows WHERE workflow_runs.workflow_id = workflows.id AND
+      // workflow_runs.graph = '{}'::jsonb — scoped here to this one row.
+      // (Raw sql bypasses the TypeID<->uuid column mapping, so ids are
+      // converted to their raw uuid form with toUuid before interpolation.)
+      await testDb.execute(sql`
+        UPDATE ${workflowRuns}
+        SET graph = ${workflows}.graph
+        FROM ${workflows}
+        WHERE ${workflowRuns}.workflow_id = ${workflows}.id
+          AND ${workflowRuns}.id = ${toUuid(stranded.id)}
+          AND ${workflowRuns}.graph = '{}'::jsonb
+      `)
+
+      const resumed = await resumeWorkflowRun(stranded.id)
+      expect(resumed?.state).toBe('done')
+      // The backfilled snapshot carries the real post-wait action, unlike the
+      // stranded '{}' it replaced — a silent no-action 'done' (the bug the
+      // backfill fixes) would leave this at 0.
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toEqual({ type: 'close' })
+    })
+  })
+
+  describe('conversational block layer (Phase C, slice C-1)', () => {
+    /** A graph with one interactive reply_buttons node, matching graph.test.ts's
+     *  fixture: two labeled branches, keyed by the button's own key. */
+    function buttonsGraph(): WorkflowGraph {
+      return {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          {
+            id: 'b',
+            type: 'reply_buttons',
+            body: { type: 'doc', content: [{ type: 'text', text: 'Pick one' }] },
+            options: [
+              { key: 'yes', label: 'Yes' },
+              { key: 'no', label: 'No' },
+            ],
+            allowTyping: false,
+          },
+          { id: 'a_yes', type: 'action', action: { type: 'set_priority', priority: 'urgent' } },
+          { id: 'a_no', type: 'action', action: { type: 'close' } },
+        ],
+        edges: [
+          { from: 't', to: 'b' },
+          { from: 'b', to: 'a_yes', branch: 'yes' },
+          { from: 'b', to: 'a_no', branch: 'no' },
+        ],
+      } as WorkflowGraph
+    }
+
+    it('parks at an interactive block with an InputWaitCursor and schedules NO durable timer', async () => {
+      applyAction.mockResolvedValueOnce({
+        label: 'sent buttons block',
+        blockMessageId: 'conversation_message_block1',
+      })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Ask yes/no',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: buttonsGraph(),
+      })
+
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      expect(run?.state).toBe('waiting')
+      expect(run?.cursor).toMatchObject({
+        waitKind: 'input',
+        resumeNodeId: 'b', // the interactive node's OWN id, not a successor
+        blockMessageId: 'conversation_message_block1',
+        blockKind: 'buttons',
+        allowTypingInterrupt: false,
+      })
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toMatchObject({ type: 'send_block', nodeId: 'b' })
+      // The defining behavior of an input wait: no BullMQ timer.
+      expect(scheduleWorkflowResume).not.toHaveBeenCalled()
+
+      const events = await testDb
+        .select()
+        .from(workflowRunEvents)
+        .where(eq(workflowRunEvents.runId, run!.id))
+      expect(events.map((e) => e.kind).sort()).toEqual(['started', 'waiting'])
+    })
+
+    it('resumes at the interactive node itself with a matching blockAnswer and routes by buttonKey', async () => {
+      applyAction.mockResolvedValueOnce({
+        label: 'sent buttons block',
+        blockMessageId: 'conversation_message_block2',
+      })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Ask yes/no',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: buttonsGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      expect(waiting?.state).toBe('waiting')
+      applyAction.mockClear()
+
+      const resumed = await resumeWorkflowRun(waiting!.id, {
+        blockAnswer: { kind: 'buttons', buttonKey: 'no' },
+      })
+      expect(resumed?.state).toBe('done')
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toEqual({ type: 'close' }) // the 'no' branch
+
+      const events = await testDb
+        .select()
+        .from(workflowRunEvents)
+        .where(eq(workflowRunEvents.runId, waiting!.id))
+      expect(events.map((e) => e.kind).sort()).toEqual(['completed', 'started', 'waiting'])
+    })
+
+    it('blockAnswer resume retry-safety: the atomic claim no-ops a second concurrent resume attempt', async () => {
+      applyAction.mockResolvedValueOnce({
+        label: 'sent buttons block',
+        blockMessageId: 'conversation_message_block3',
+      })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Ask yes/no',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: buttonsGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      applyAction.mockClear()
+
+      // Two "attempts" at the same resume (e.g. a BullMQ-style retry, or
+      // event-trigger.ts racing a second matching reply) — only the first
+      // claim (waiting -> running) succeeds; the second sees the run already
+      // claimed and no-ops, exactly like a timer-wait retry already does.
+      const [first, second] = await Promise.all([
+        resumeWorkflowRun(waiting!.id, { blockAnswer: { kind: 'buttons', buttonKey: 'yes' } }),
+        resumeWorkflowRun(waiting!.id, { blockAnswer: { kind: 'buttons', buttonKey: 'yes' } }),
+      ])
+      const results = [first, second]
+      expect(results.filter((r) => r !== null)).toHaveLength(1)
+      expect(applyAction).toHaveBeenCalledTimes(1) // the 'yes' branch action ran exactly once
+
+      const [after] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, waiting!.id))
+      expect(after.state).toBe('done')
+    })
+
+    it('does not resume an input-wait run that was interrupted while parked (a teammate/free-text reply superseded it)', async () => {
+      applyAction.mockResolvedValueOnce({
+        label: 'sent buttons block',
+        blockMessageId: 'conversation_message_block4',
+      })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Ask yes/no',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: buttonsGraph(),
+      })
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      applyAction.mockClear()
+
+      expect(await interruptWaitingRuns(conversationId)).toBe(1)
+
+      const resumed = await resumeWorkflowRun(waiting!.id, {
+        blockAnswer: { kind: 'buttons', buttonKey: 'yes' },
+      })
+      expect(resumed).toBeNull()
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+
+    it('CSAT resume applies record_csat as the conversation VISITOR, not the run’s own service actor (amendment 1)', async () => {
+      applyAction.mockResolvedValueOnce({
+        label: 'sent csat block',
+        blockMessageId: 'conversation_message_block5',
+      })
+      const conversationId = await seedConversation()
+      const [{ visitorPrincipalId }] = await testDb
+        .select({ visitorPrincipalId: conversations.visitorPrincipalId })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+
+      const wf = await createWorkflow({
+        name: 'Ask for a rating',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            {
+              id: 'csat',
+              type: 'request_csat',
+              body: { type: 'doc', content: [{ type: 'text', text: 'Rate us' }] },
+              allowTypingInterrupt: false,
+            },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'csat' },
+            { from: 'csat', to: 'a', branch: '5' },
+          ],
+        },
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      expect(waiting?.state).toBe('waiting')
+      applyAction.mockClear()
+
+      const resumed = await resumeWorkflowRun(waiting!.id, {
+        blockAnswer: { kind: 'csat', rating: 5, comment: 'Great!' },
+      })
+      expect(resumed?.state).toBe('done')
+
+      // Two actions this resume: record_csat (the rating), then the branch's close.
+      expect(applyAction).toHaveBeenCalledTimes(2)
+      const [csatAction, csatCtx] = applyAction.mock.calls[0]!
+      expect(csatAction).toEqual({ type: 'record_csat', rating: 5, comment: 'Great!' })
+      // The engine's own service actor has principalType 'service' and a null
+      // principalId — record_csat's actor must be neither: it must resolve to
+      // the conversation's real visitor (recordCsat requires the caller to BE
+      // the visitor, and the resulting csat_submitted event needs a human
+      // actor to legitimately trigger other workflows).
+      expect(csatCtx.actor.principalType).not.toBe('service')
+      expect(csatCtx.actor.principalId).toBe(visitorPrincipalId)
+
+      expect(applyAction.mock.calls[1][0]).toEqual({ type: 'close' })
+      // Every other action in the same resume still runs as the ordinary
+      // workflow service actor.
+      expect(applyAction.mock.calls[1][1].actor.principalType).toBe('service')
+    })
+
+    it('SF8: resolves send_block deps (assistant principal + variables) exactly ONCE for a plan with multiple chained send_block actions', async () => {
+      vi.mocked(resolveWorkflowVariables).mockClear()
+      vi.mocked(ensureAssistantPrincipal).mockClear()
+      const conversationId = await seedConversation()
+      // Two plain 'message' nodes in a row: each pushes its own send_block
+      // action but neither parks (only the interactive kinds — buttons,
+      // collect, collectReply, csat — park), so both land in ONE plan.
+      const wf = await createWorkflow({
+        name: 'Two messages then close',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            {
+              id: 'm1',
+              type: 'message',
+              body: { type: 'doc', content: [{ type: 'text', text: 'First' }] },
+            },
+            {
+              id: 'm2',
+              type: 'message',
+              body: { type: 'doc', content: [{ type: 'text', text: 'Second' }] },
+            },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'm1' },
+            { from: 'm1', to: 'm2' },
+            { from: 'm2', to: 'a' },
+          ],
+        } as WorkflowGraph,
+      })
+      await setWorkflowStatus(wf.id, 'live')
+
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      expect(run?.state).toBe('done')
+
+      // Three actions applied (two send_block + close), but the per-plan
+      // deps resolved only once each — not once per send_block.
+      expect(applyAction).toHaveBeenCalledTimes(3)
+      expect(resolveWorkflowVariables).toHaveBeenCalledTimes(1)
+      expect(resolveWorkflowVariables).toHaveBeenCalledWith(conversationId)
+      expect(ensureAssistantPrincipal).toHaveBeenCalledTimes(1)
+      // Both send_block calls received the SAME resolved deps object.
+      const sendBlockCalls = applyAction.mock.calls.filter(
+        (c: unknown[]) => (c[0] as { type: string }).type === 'send_block'
+      )
+      expect(sendBlockCalls).toHaveLength(2)
+      expect(sendBlockCalls[0][1].resolvedBlockDeps).toBeDefined()
+      expect(sendBlockCalls[0][1].resolvedBlockDeps).toBe(sendBlockCalls[1][1].resolvedBlockDeps)
+    })
+
+    it('SF8: a plan with NO send_block never resolves the block deps at all', async () => {
+      vi.mocked(resolveWorkflowVariables).mockClear()
+      vi.mocked(ensureAssistantPrincipal).mockClear()
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Just close',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [{ from: 't', to: 'a' }],
+        },
+      })
+      await setWorkflowStatus(wf.id, 'live')
+
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      expect(run?.state).toBe('done')
+
+      expect(resolveWorkflowVariables).not.toHaveBeenCalled()
+      expect(ensureAssistantPrincipal).not.toHaveBeenCalled()
+      const [, callCtx] = applyAction.mock.calls[0]!
+      expect(callCtx.resolvedBlockDeps).toBeUndefined()
+    })
+  })
+
+  describe('let_assistant_answer parking (Phase C, slice C-6)', () => {
+    /** A let_assistant_answer node with both a labeled escalated edge and an
+     *  unlabeled default edge, each leading to a distinguishable action. */
+    function assistantGraph(): WorkflowGraph {
+      return {
+        nodes: [
+          { id: 't', type: 'trigger' },
+          { id: 'la', type: 'let_assistant_answer', instructions: 'Focus on billing only' },
+          { id: 'a_default', type: 'action', action: { type: 'close' } },
+          {
+            id: 'a_escalated',
+            type: 'action',
+            action: { type: 'set_priority', priority: 'urgent' },
+          },
+        ],
+        edges: [
+          { from: 't', to: 'la' },
+          { from: 'la', to: 'a_default' },
+          { from: 'la', to: 'a_escalated', branch: 'escalated' },
+        ],
+      } as WorkflowGraph
+    }
+
+    it('parks with an assistant WaitCursor and schedules NO durable timer', async () => {
+      applyAction.mockResolvedValueOnce({ label: 'handed to assistant' })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+
+      const run = await runWorkflow(wf, ctx(), { conversationId })
+      expect(run?.state).toBe('waiting')
+      expect(run?.cursor).toMatchObject({ waitKind: 'assistant', resumeNodeId: 'la' })
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toEqual({
+        type: 'let_assistant_answer',
+        instructions: 'Focus on billing only',
+      })
+      // The defining behavior of a non-timer wait: no BullMQ timer scheduled.
+      expect(scheduleWorkflowResume).not.toHaveBeenCalled()
+
+      const events = await testDb
+        .select()
+        .from(workflowRunEvents)
+        .where(eq(workflowRunEvents.runId, run!.id))
+      expect(events.map((e) => e.kind).sort()).toEqual(['started', 'waiting'])
+    })
+
+    it('resumes with outcome "escalated": follows the labeled escalated edge', async () => {
+      applyAction.mockResolvedValueOnce({ label: 'handed to assistant' })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      expect(waiting?.state).toBe('waiting')
+      applyAction.mockClear()
+
+      const resumed = await resumeWorkflowRun(waiting!.id, { assistantOutcome: 'escalated' })
+      expect(resumed?.state).toBe('done')
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toEqual({ type: 'set_priority', priority: 'urgent' })
+    })
+
+    it('resumes with outcome "resolved": follows the unlabeled default edge', async () => {
+      applyAction.mockResolvedValueOnce({ label: 'handed to assistant' })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      applyAction.mockClear()
+
+      const resumed = await resumeWorkflowRun(waiting!.id, { assistantOutcome: 'resolved' })
+      expect(resumed?.state).toBe('done')
+      expect(applyAction).toHaveBeenCalledTimes(1)
+      expect(applyAction.mock.calls[0][0]).toEqual({ type: 'close' })
+    })
+
+    it('assistantOutcome resume retry-safety: the atomic claim no-ops a second concurrent resume attempt', async () => {
+      applyAction.mockResolvedValueOnce({ label: 'handed to assistant' })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      applyAction.mockClear()
+
+      // Two "attempts" at the same resume (e.g. event-trigger.ts's
+      // assistant.handed_off resume racing a close resume) — only the first
+      // claim (waiting -> running) succeeds; the second sees the run already
+      // claimed and no-ops, exactly like a blockAnswer/timer-wait retry.
+      const [first, second] = await Promise.all([
+        resumeWorkflowRun(waiting!.id, { assistantOutcome: 'escalated' }),
+        resumeWorkflowRun(waiting!.id, { assistantOutcome: 'escalated' }),
+      ])
+      const results = [first, second]
+      expect(results.filter((r) => r !== null)).toHaveLength(1)
+      expect(applyAction).toHaveBeenCalledTimes(1)
+
+      const [after] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, waiting!.id))
+      expect(after.state).toBe('done')
+    })
+
+    it('does not resume an assistant-wait run that was interrupted while parked (a teammate takeover superseded it)', async () => {
+      applyAction.mockResolvedValueOnce({ label: 'handed to assistant' })
+      const conversationId = await seedConversation()
+      const wf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: assistantGraph(),
+      })
+      const waiting = await runWorkflow(wf, ctx(), { conversationId })
+      applyAction.mockClear()
+
+      expect(await interruptWaitingRuns(conversationId)).toBe(1)
+
+      const resumed = await resumeWorkflowRun(waiting!.id, { assistantOutcome: 'escalated' })
+      expect(resumed).toBeNull()
+      expect(applyAction).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('interruptWaitingRuns cursor-aware exclusions (Phase C, slice C-6)', () => {
+    it('excludeWaitKind leaves an assistant-wait run alone but still interrupts a plain timer wait on the same conversation', async () => {
+      applyAction.mockResolvedValueOnce({ label: 'handed to assistant' })
+      const conversationId = await seedConversation()
+
+      const assistantWf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'la', type: 'let_assistant_answer' },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'la' },
+            { from: 'la', to: 'a' },
+          ],
+        },
+      })
+      const assistantWaiting = await runWorkflow(assistantWf, ctx(), { conversationId })
+      expect(assistantWaiting?.cursor).toMatchObject({ waitKind: 'assistant' })
+
+      const timerWf = await createWorkflow({
+        name: 'wait then close',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+      const timerWaiting = await runWorkflow(timerWf, ctx(), { conversationId })
+      expect(timerWaiting?.cursor).toMatchObject({ waitKind: 'timer' })
+
+      const interrupted = await interruptWaitingRuns(conversationId, {
+        excludeWaitKind: 'assistant',
+      })
+      expect(interrupted).toBe(1) // only the timer wait
+
+      const [assistantAfter] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, assistantWaiting!.id))
+      expect(assistantAfter.state).toBe('waiting') // untouched
+
+      const [timerAfter] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, timerWaiting!.id))
+      expect(timerAfter.state).toBe('interrupted')
+    })
+
+    it('excludeRunId leaves the just-resumed run alone but still interrupts every other waiting run on the conversation', async () => {
+      applyAction.mockResolvedValue({ label: 'handed to assistant' })
+      const conversationId = await seedConversation()
+
+      const assistantWf = await createWorkflow({
+        name: 'Let Quinn answer',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'la', type: 'let_assistant_answer' },
+            { id: 'w', type: 'wait', seconds: 60 },
+          ],
+          edges: [
+            { from: 't', to: 'la' },
+            { from: 'la', to: 'w' },
+          ],
+        },
+      })
+      await setWorkflowStatus(assistantWf.id, 'live')
+      const assistantWaiting = await runWorkflow(assistantWf, ctx(), { conversationId })
+
+      // Resolve it (close's resume-instead-of-interrupt) — it re-parks at the
+      // wait node that follows on its default edge.
+      const resumed = await resumeWorkflowRun(assistantWaiting!.id, {
+        assistantOutcome: 'resolved',
+      })
+      expect(resumed?.state).toBe('waiting')
+      expect(resumed?.cursor).toMatchObject({ waitKind: 'timer' })
+
+      const otherWf = await createWorkflow({
+        name: 'wait then close (background)',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+      const otherWaiting = await runWorkflow(otherWf, ctx(), { conversationId })
+
+      const interrupted = await interruptWaitingRuns(conversationId, {
+        excludeRunId: resumed!.id,
+      })
+      expect(interrupted).toBe(1) // only the other background run
+
+      const [resumedAfter] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, resumed!.id))
+      expect(resumedAfter.state).toBe('waiting') // untouched, still re-parked
+
+      const [otherAfter] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, otherWaiting!.id))
+      expect(otherAfter.state).toBe('interrupted')
+    })
+
+    it('SF3: a close that resumes a run into a NEWLY-parked INPUT wait (not just a timer) survives the same close-triggered interrupt', async () => {
+      // Mirrors event-trigger.ts's own close sequence exactly: resumeWorkflowRun
+      // (via tryResumeAssistantWait) runs to completion — including any re-park
+      // — BEFORE dispatchWorkflowsForEvent calls interruptWaitingRuns with
+      // excludeRunId. The re-park landing on an 'input' wait (a CSAT/buttons
+      // block a workflow posts right after resolving) rather than a plain
+      // timer is the case the SF3 review flagged specifically: a post-close
+      // CSAT survey must not be interrupted by the very close that triggered it.
+      applyAction.mockResolvedValue({
+        label: 'sent csat block',
+        blockMessageId: 'conversation_message_postclose_csat',
+      })
+      const conversationId = await seedConversation()
+
+      const assistantWf = await createWorkflow({
+        name: 'Let Quinn answer, then CSAT',
+        class: 'customer_facing',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'la', type: 'let_assistant_answer' },
+            {
+              id: 'csat',
+              type: 'request_csat',
+              body: { type: 'doc', content: [{ type: 'text', text: 'How did we do?' }] },
+              allowTypingInterrupt: false,
+            },
+          ],
+          edges: [
+            { from: 't', to: 'la' },
+            { from: 'la', to: 'csat' },
+          ],
+        },
+      })
+      await setWorkflowStatus(assistantWf.id, 'live')
+      const assistantWaiting = await runWorkflow(assistantWf, ctx(), { conversationId })
+
+      // The close's own resume-instead-of-interrupt (tryResumeAssistantWait's
+      // equivalent call): resolves down the default edge into the CSAT block,
+      // which parks fresh at an INPUT wait (not a timer).
+      const resumed = await resumeWorkflowRun(assistantWaiting!.id, {
+        assistantOutcome: 'resolved',
+      })
+      expect(resumed?.state).toBe('waiting')
+      expect(resumed?.cursor).toMatchObject({
+        waitKind: 'input',
+        blockKind: 'csat',
+        blockMessageId: 'conversation_message_postclose_csat',
+      })
+
+      const otherWf = await createWorkflow({
+        name: 'idle auto-close timer (background)',
+        class: 'background',
+        triggerType: 'conversation.created',
+        graph: {
+          nodes: [
+            { id: 't', type: 'trigger' },
+            { id: 'w', type: 'wait', seconds: 60 },
+            { id: 'a', type: 'action', action: { type: 'close' } },
+          ],
+          edges: [
+            { from: 't', to: 'w' },
+            { from: 'w', to: 'a' },
+          ],
+        },
+      })
+      const otherWaiting = await runWorkflow(otherWf, ctx(), { conversationId })
+
+      // The close's own trailing interrupt call — same excludeRunId shape
+      // dispatchWorkflowsForEvent passes.
+      const interrupted = await interruptWaitingRuns(conversationId, { excludeRunId: resumed!.id })
+      expect(interrupted).toBe(1) // only the sibling background timer
+
+      const [resumedAfter] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, resumed!.id))
+      expect(resumedAfter.state).toBe('waiting') // the newly-parked input wait survives
+      expect(resumedAfter.cursor).toMatchObject({ waitKind: 'input' })
+
+      const [otherAfter] = await testDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, otherWaiting!.id))
+      expect(otherAfter.state).toBe('interrupted')
     })
   })
 })

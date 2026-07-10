@@ -16,6 +16,7 @@ import {
   isNotNull,
   lte,
   inArray,
+  sql,
   conversations,
   conversationMessages,
   principal,
@@ -25,6 +26,7 @@ import {
   type AssistantPendingActionSurface,
   type ConversationMessageMetadata,
 } from '@/lib/server/db'
+import { resolveBlockReply, type BlockReplyInput, type ResolvedBlockReply } from './block-reply'
 import { isTeamMember } from '@/lib/shared/roles'
 import type { ConversationAttachment, ConversationMessageCitation, Team } from '@/lib/server/db'
 import { getTeam } from '@/lib/server/domains/teams'
@@ -54,6 +56,7 @@ import {
   type ConversationDTO,
   type ConversationSide,
   type AgentConversationMessageDTO,
+  type ConversationMessageDTO,
 } from '@/lib/shared/conversation/types'
 import {
   applyVisitorReopenStatus,
@@ -205,6 +208,60 @@ export async function captureVisitorContactEmail(
   return { captured: true }
 }
 
+/**
+ * Look up the block message a structured reply claims to answer, plus
+ * whether it's already been answered, and resolve the canonical echo (or
+ * null to degrade — see block-reply.ts's resolveBlockReply for every case).
+ * A standalone read, not inside sendVisitorMessage's transaction: the
+ * "already answered" check is best-effort — the run's atomic
+ * waiting->running claim (workflow.engine.ts's resumeWorkflowRun), not this,
+ * is the true arbiter of a losing double-tap (see block-reply.ts's module
+ * doc) — so relaxing it to a plain read costs nothing real and keeps the
+ * overwhelmingly common non-blockReply send from paying for a lookup it
+ * never needs.
+ *
+ * Exported (SF3) so functions/conversation.ts's "prevent replies to closed
+ * conversations" gate can run this SAME resolution before rejecting a send —
+ * it needs to know whether a blockReply is a genuine match (not just present
+ * on the payload) before letting it bypass that gate. sendVisitorMessage
+ * below still re-resolves independently when it actually runs; the redundant
+ * read only ever happens on that gate's narrow, opt-in, already-closed path.
+ */
+export async function resolveVisitorBlockReply(
+  conversationId: ConversationId,
+  input: BlockReplyInput
+): Promise<ResolvedBlockReply | null> {
+  const [blockMessage] = await db
+    .select({
+      id: conversationMessages.id,
+      conversationId: conversationMessages.conversationId,
+      senderType: conversationMessages.senderType,
+      metadata: conversationMessages.metadata,
+    })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, input.inReplyToMessageId as ConversationMessageId))
+    .limit(1)
+
+  // A blockReply may only ever answer a block posted on the SAME
+  // conversation it's arriving on — never an error, just degrades like any
+  // other invalid reference.
+  const belongsHere = blockMessage?.conversationId === conversationId
+  const [alreadyAnswered] = belongsHere
+    ? await db
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, conversationId),
+            sql`${conversationMessages.metadata}->'blockReply'->>'inReplyToMessageId' = ${input.inReplyToMessageId}`
+          )
+        )
+        .limit(1)
+    : []
+
+  return resolveBlockReply(belongsHere ? blockMessage : null, !!alreadyAnswered, input)
+}
+
 /** Visitor send. Starts a conversation when no conversationId is supplied. */
 export async function sendVisitorMessage(
   input: SendVisitorMessageInput,
@@ -218,25 +275,50 @@ export async function sendVisitorMessage(
   if (await isBlocked(author.principalId)) {
     throw new ForbiddenError('BLOCKED', 'You are not able to send messages here.')
   }
+
+  // Phase C conversational block layer (slice C-1): resolve a structured
+  // reply BEFORE deriving `content` below — a valid resolution supplies its
+  // own server-derived canonical echo (the client's own display text is
+  // NEVER trusted) and forgoes any client-supplied rich doc; an invalid/
+  // stale/second one simply resolves to null and the rest of this function
+  // proceeds exactly as an ordinary free-text send (never an error). A
+  // blockReply targeting no conversation at all (a brand-new thread) can
+  // never be valid — nothing to have parked a block on yet.
+  const resolvedBlockReply =
+    input.blockReply && input.conversationId
+      ? await resolveVisitorBlockReply(input.conversationId, input.blockReply)
+      : null
+
   const attachments = validateAttachments(input.attachments)
   // Rich-composer doc (inline embeds/images): sanitized on write, like the agent
   // path — but no mention extraction (a visitor carries no team @-mentions), and
-  // visitor-authored inline images may only reference our own storage.
-  const safeContentJson = contentJson
-    ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
-    : null
+  // visitor-authored inline images may only reference our own storage. A
+  // resolved block reply carries no rich doc of its own (its content IS the
+  // canonical echo), so any client-supplied contentJson alongside it is dropped.
+  const safeContentJson = resolvedBlockReply
+    ? null
+    : contentJson
+      ? sanitizeTiptapContent(contentJson, { restrictImagesToTrustedOrigins: true })
+      : null
   // A text-less rich message is valid only when it carries an inline image or a
   // shared post; this label also backs the list preview + notification body. A
   // doc with neither (an empty doc) yields '' → treated as no content below.
-  const fallbackLabel = richMessageFallbackLabel(safeContentJson)
+  const fallbackLabel = resolvedBlockReply ? '' : richMessageFallbackLabel(safeContentJson)
   // Empty content is valid when there are attachments OR a doc with a real
   // content node (image/embed-only message). resolveMessageContent derives a
   // plaintext mirror from the doc when the caller sent blank content
   // alongside a text-bearing one (e.g. a client that only serializes contentJson).
-  const content = validateContent(
-    resolveMessageContent(input.content, safeContentJson),
-    attachments.length > 0 || !!fallbackLabel
-  )
+  // A resolved block reply's content is already guaranteed non-empty by
+  // resolveBlockReply's own per-kind validation, so it skips validateContent.
+  const content = resolvedBlockReply
+    ? resolvedBlockReply.content
+    : validateContent(
+        resolveMessageContent(input.content, safeContentJson),
+        attachments.length > 0 || !!fallbackLabel
+      )
+  const messageMetadata: ConversationMessageMetadata | null = resolvedBlockReply
+    ? { ...input.metadata, ...resolvedBlockReply.metadata }
+    : (input.metadata ?? null)
 
   let created = false
   // The conversation's status BEFORE this message, so the assistant trigger can
@@ -288,7 +370,7 @@ export async function sendVisitorMessage(
         content,
         contentJson: safeContentJson,
         attachments: attachments.length > 0 ? attachments : null,
-        metadata: input.metadata ?? null,
+        metadata: messageMetadata,
       })
       .returning()
 
@@ -299,7 +381,11 @@ export async function sendVisitorMessage(
         ? normalizeEmail(input.visitorEmail)
         : undefined
 
-    const visitorNextStatus = applyVisitorReopenStatus()
+    // SF3: a matched structured reply (resolvedBlockReply non-null) answering
+    // a block posted on an already-closed conversation is the intended
+    // post-close CSAT/button flow, not the customer reopening the thread —
+    // see applyVisitorReopenStatus's doc.
+    const visitorNextStatus = applyVisitorReopenStatus(conversation.status, !!resolvedBlockReply)
     const [updated] = await tx
       .update(conversations)
       .set({
@@ -314,8 +400,15 @@ export async function sendVisitorMessage(
         // already running (the oldest unanswered message wins).
         waitingSince: conversation.waitingSince ?? message.createdAt,
         // Keep resolvedAt consistent with the new status — a reply that reopens
-        // a closed thread must clear the stale resolution timestamp.
-        resolvedAt: resolvedAtForStatus(visitorNextStatus, message.createdAt),
+        // a closed thread must clear the stale resolution timestamp. The one
+        // case that stays 'closed' (the post-close matched-blockReply carve-out
+        // above) must NOT bump resolvedAt to this message's time either — the
+        // conversation's original resolution moment is untouched by a CSAT tap
+        // answering it after the fact.
+        resolvedAt:
+          visitorNextStatus === 'closed'
+            ? conversation.resolvedAt
+            : resolvedAtForStatus(visitorNextStatus, message.createdAt),
         updatedAt: message.createdAt,
         ...(captureEmail ? { visitorEmail: captureEmail } : {}),
       })
@@ -1548,13 +1641,25 @@ export function shouldConsiderAssistant(
  * realtime publish; the visitor agent-reply NOTIFICATION is suppressed (an
  * assistant reply is instant and in-session, not an offline follow-up), but the
  * message still webhooks as an ordinary conversation message.
+ *
+ * `contentJson`/`metadata` (Phase C conversational block layer): a block send
+ * carries its resolved rich body as contentJson and its structured payload as
+ * metadata.block. Both default to null/undefined so Quinn's own two call
+ * sites (a plain-text answer, the handover line) are unaffected. Returns the
+ * posted message's DTO so a block send can read back its id (stamped onto an
+ * InputWaitCursor when the plan parks right after).
  */
 export async function appendAssistantReply(
   conversationId: ConversationId,
   content: string,
   author: ConversationAuthorInput,
-  opts: { waiting: boolean; citations?: ConversationMessageCitation[] }
-): Promise<void> {
+  opts: {
+    waiting: boolean
+    citations?: ConversationMessageCitation[]
+    contentJson?: TiptapContent | null
+    metadata?: ConversationMessageMetadata | null
+  }
+): Promise<ConversationMessageDTO> {
   const txResult = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select()
@@ -1569,7 +1674,9 @@ export async function appendAssistantReply(
         principalId: author.principalId,
         senderType: 'agent',
         content,
+        contentJson: opts.contentJson ?? null,
         citations: opts.citations?.length ? opts.citations : null,
+        metadata: opts.metadata ?? null,
       })
       .returning()
     const nextStatus = applyAgentReopenStatus(existing.status)
@@ -1602,6 +1709,7 @@ export async function appendAssistantReply(
     txResult.message,
     txResult.conversation
   )
+  return messageDTO
 }
 
 /**

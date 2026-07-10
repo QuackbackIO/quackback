@@ -87,6 +87,7 @@ import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import { resolveDefaultClosedStatusId } from '@/lib/shared/tickets'
 import { AgentMessageBubble, UnreadDivider } from '@/components/conversation/message-bubble'
+import { computeBlockStates } from '@/components/shared/conversation/conversation-rows'
 import {
   ThreadViewport,
   useMarkReadOnIncoming,
@@ -501,6 +502,18 @@ export function AgentConversationThread({
     new Date(conversation.visitorLastReadAt).getTime() >=
       new Date(lastAgentMessage.createdAt).getTime()
 
+  // Phase C conversational block layer, agent side (CF3): the same pure
+  // derivation the customer-facing widget renders from (conversation-rows.ts),
+  // computed ONCE per [messages, conversation.status] and threaded into rows
+  // so AgentMessageBubble's read-only block summary can tell an answered
+  // block from a still-pending one instead of always rendering the "live"
+  // look. A ticket carries no block messages, so this is a harmless no-op map
+  // for that path.
+  const blockStates = useMemo(
+    () => computeBlockStates(messages, conversation?.status === 'closed'),
+    [messages, conversation?.status]
+  )
+
   // Flatten the thread into virtualized rows (load-older → messages w/ unread
   // divider → empty → seen → typing). anchorTo:'end' + followOnAppend keep the
   // view pinned to the newest message and stick to the bottom as messages stream
@@ -515,8 +528,17 @@ export function AgentConversationThread({
         firstUnreadId,
         showSeen: lastAgentSeen && !isVisitorTyping,
         showTyping: capabilities.typing && isVisitorTyping,
+        blockStates,
       }),
-    [messages, hasMoreOlder, firstUnreadId, lastAgentSeen, isVisitorTyping, capabilities.typing]
+    [
+      messages,
+      hasMoreOlder,
+      firstUnreadId,
+      lastAgentSeen,
+      isVisitorTyping,
+      capabilities.typing,
+      blockStates,
+    ]
   )
 
   // A pending `?m=` jump owns the initial scroll, so consume the one-shot
@@ -1226,6 +1248,7 @@ export function AgentConversationThread({
             onTrackSuggestion={capabilities.convertToPost ? handleTrackSuggestion : undefined}
             linkPreviews={linkPreviewsEnabled}
             translation={inboxTranslation.translationFor(m)}
+            blockState={row.blockState}
           />
         )
       }

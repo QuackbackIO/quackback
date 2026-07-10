@@ -2,8 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } fro
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import type { JSONContent } from '@tiptap/core'
-import { buildConversationRows, type ConversationRow } from './conversation-rows'
+import {
+  buildConversationRows,
+  computeBlockStates,
+  deriveComposerLock,
+  derivePendingBlock,
+  hasCsatBlockMessage,
+  type ConversationRow,
+} from './conversation-rows'
 import { AssistantWorkingTrace, AssistantStreamingBubble } from './assistant-turn'
+import {
+  BlockButtonsRow,
+  BlockCollectField,
+  BlockCsatRow,
+  BlockReplyTimeCaption,
+} from './block-affordance'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ArrowUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
@@ -40,6 +53,8 @@ import { conversationKeys } from '@/components/conversation/query-keys'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
+import { CSAT_FACES } from '@/lib/shared/db-types'
+import type { BlockReplyMetadata } from '@/lib/shared/db-types'
 import {
   getMyConversationFn,
   sendConversationMessageFn,
@@ -203,6 +218,12 @@ export function VisitorConversationThread({
   // doc persists as contentJson; the reset signal clears the editor on send).
   const composer = useComposerDoc()
   const [sending, setSending] = useState(false)
+  // Phase C conversational block layer: the block message currently awaiting
+  // its structured-send response — the optimistic tap-disable (contract
+  // idempotency: a losing double-tap must never fire a second send). Cleared
+  // whether the send lands or fails; a failure leaves the affordance
+  // tappable again for a retry, matching every other send path in this file.
+  const [submittingBlockId, setSubmittingBlockId] = useState<string | null>(null)
 
   const scrollViewportRef = useRef<HTMLDivElement>(null)
   // Monotonic CSAT submit counter: a later submit (comment) bumps it so a stale
@@ -520,9 +541,90 @@ export function VisitorConversationThread({
     }).catch(() => setCsatCommentDone(false)) // reopen the box for a retry on failure
   }, [conversationId, csatRating, csatComment, getAuthHeaders])
 
-  // Prompt for a rating once the conversation is closed and not yet rated.
+  // Phase C conversational block layer: a structured reply (button tap /
+  // collect submit / CSAT rating) rides the SAME send path as an ordinary
+  // message, plus the `blockReply` correlation (server-derived echo — this
+  // module's `content` is only a defense-in-depth fallback for the never-an-
+  // error degrade path). Optimistic tap-disable via `submittingBlockId`;
+  // the SSE echo (or refetch) is what actually flips the block's derived
+  // state to 'chosen', collapsing the affordance — no local "chosen" flag.
+  const sendBlockReply = useCallback(
+    async (blockReply: BlockReplyMetadata, displayText: string) => {
+      if (!conversationId || submittingBlockId) return
+      setSubmittingBlockId(blockReply.inReplyToMessageId)
+      try {
+        const res = await sendConversationMessageFn({
+          data: { conversationId, content: displayText, blockReply },
+          headers: getAuthHeaders(),
+        })
+        queryClient.setQueryData(
+          conversationKeys.visitorThread(conversationId),
+          (prev: VisitorThreadCache | undefined) => appendSentVisitorMessage(prev, res)
+        )
+      } catch {
+        // Leave it tappable again for a retry.
+      } finally {
+        setSubmittingBlockId(null)
+      }
+    },
+    [conversationId, submittingBlockId, getAuthHeaders, queryClient]
+  )
+
+  const handleButtonTap = useCallback(
+    (messageId: string, buttonKey: string, label: string) => {
+      void sendBlockReply({ kind: 'buttons', inReplyToMessageId: messageId, buttonKey }, label)
+    },
+    [sendBlockReply]
+  )
+  const handleCollectSubmit = useCallback(
+    (messageId: string, value: string, displayText: string) => {
+      void sendBlockReply({ kind: 'collect', inReplyToMessageId: messageId, value }, displayText)
+    },
+    [sendBlockReply]
+  )
+  const handleCsatRate = useCallback(
+    (messageId: string, rating: number) => {
+      void sendBlockReply(
+        { kind: 'csat', inReplyToMessageId: messageId, rating },
+        CSAT_FACES[rating - 1]
+      )
+    },
+    [sendBlockReply]
+  )
+  // The optional comment (amendment 1: "updates the same record best-effort
+  // after the fact; it never parks the run") is NOT a second structured
+  // reply — the rating tap already consumed this block's one-time
+  // correlation, so a second blockReply targeting it would degrade to plain
+  // text. It rides the existing direct recordCsat RPC instead (the same one
+  // the post-conversation star prompt below uses) — amendment 1's "CSAT
+  // writes through recordCsat, latest-wins" is exactly this reuse.
+  const handleCsatComment = useCallback(
+    (rating: number, comment: string) => {
+      if (!conversationId) return
+      void submitCsatFn({
+        data: { conversationId, rating, comment: comment || undefined },
+        headers: getAuthHeaders(),
+      })
+    },
+    [conversationId, getAuthHeaders]
+  )
+
+  // A workflow `request_csat` block message already IS the CSAT ask for this
+  // thread — in every state: pending is the live ask, chosen means a rating
+  // is already on file, and even a superseded-unanswered one shouldn't stack
+  // a second ask underneath it (the visitor already saw one). The legacy
+  // end-of-thread prompt below predates the Phase C block layer and would
+  // otherwise double-ask whenever a workflow also wires up request_csat.
+  const hasCsatBlock = useMemo(() => hasCsatBlockMessage(messages), [messages])
+
+  // Prompt for a rating once the conversation is closed and not yet rated —
+  // suppressed whenever a request_csat block already asked (see above).
   const showCsatPrompt =
-    !!conversationId && conversationStatus === 'closed' && csatRating == null && messages.length > 0
+    !!conversationId &&
+    conversationStatus === 'closed' &&
+    csatRating == null &&
+    messages.length > 0 &&
+    !hasCsatBlock
 
   // Help-center deflection: as the visitor types their first message (before a
   // conversation exists), suggest relevant articles so they can self-serve.
@@ -586,6 +688,16 @@ export function VisitorConversationThread({
   const showOfflineHint =
     !assistant && !available && (canEmailReply ? Boolean(offlineMessage) : true)
 
+  // Phase C conversational block layer: every block's derived state, computed
+  // ONCE per [messages, conversationStatus] change and threaded into rows,
+  // the composer lock, and the collectReply auto-correlate-on-send below —
+  // rather than each of those independently re-scanning `messages` (see
+  // conversation-rows.ts's computeBlockStates doc).
+  const blockStates = useMemo(
+    () => computeBlockStates(messages, conversationStatus === 'closed'),
+    [messages, conversationStatus]
+  )
+
   // Flatten the thread into virtualized rows. anchorTo:'end' + followOnAppend
   // keep the view pinned to the newest message and stick to the bottom as
   // messages stream in; getItemKey (message id) lets the virtualizer hold the
@@ -605,7 +717,15 @@ export function VisitorConversationThread({
         assistantStream,
         // Only while closed: a reopen (agent reply / new visitor message) must
         // drop the rating prompt, the comment follow-up, and the thanks notice.
-        showCsat: conversationStatus === 'closed' && (showCsatPrompt || csatRating != null),
+        // Also suppressed whenever a request_csat block already asked (CF2) —
+        // the legacy footer's own "thanks" would otherwise double up with the
+        // block's.
+        showCsat:
+          conversationStatus === 'closed' &&
+          !hasCsatBlock &&
+          (showCsatPrompt || csatRating != null),
+        conversationStatus,
+        blockStates,
       }),
     [
       messages,
@@ -618,9 +738,32 @@ export function VisitorConversationThread({
       assistantStream,
       showCsatPrompt,
       csatRating,
+      hasCsatBlock,
       conversationStatus,
+      blockStates,
     ]
   )
+
+  // Composer lock (contract §"Interrupt matrix"): a pending buttons/csat
+  // block with typing disallowed disables the composer in place; restored
+  // automatically the instant the pending block resolves (no client memory —
+  // re-derived from `messages` on every render, same as `rows`).
+  const composerLock = useMemo(
+    () => deriveComposerLock(messages, conversationStatus, blockStates),
+    [messages, conversationStatus, blockStates]
+  )
+  const composerLockHint =
+    composerLock.lockedBy === 'buttons'
+      ? intl.formatMessage({
+          id: 'widget.messenger.composer.lockedButtons',
+          defaultMessage: 'Choose an option above',
+        })
+      : composerLock.lockedBy === 'csat'
+        ? intl.formatMessage({
+            id: 'widget.messenger.composer.lockedCsat',
+            defaultMessage: 'Rate your conversation above',
+          })
+        : null
 
   const virtualizer = useThreadVirtualizer({
     rows,
@@ -644,7 +787,14 @@ export function VisitorConversationThread({
     const doc = composer.docRef.current
     const hasAttachments = pendingAttachments.length > 0
     // Sendable when there's typed text, an inline embed, or a tray attachment.
-    if ((!text && !docHasContentNode(doc) && !hasAttachments) || sending || uploading) return
+    if (
+      (!text && !docHasContentNode(doc) && !hasAttachments) ||
+      sending ||
+      uploading ||
+      composerLock.disabled
+    ) {
+      return
+    }
     setSending(true)
 
     const ready = await ensureSession()
@@ -654,6 +804,23 @@ export function VisitorConversationThread({
       return
     }
     try {
+      // A pending `collectReply` block has no dedicated affordance of its
+      // own (unlike buttons/collect/csat) — the always-enabled composer IS
+      // its UI. Attach the block's own correlation so this ordinary-looking
+      // send resumes the parked run instead of interrupting it (event-
+      // trigger.ts only resumes when `blockReply.inReplyToMessageId` matches
+      // the run's InputWaitCursor). Every other pending kind either has its
+      // own affordance (buttons/collect/csat) or leaves nothing pending, so
+      // this is the one case the plain composer path needs to know about.
+      const pendingCollectReply = derivePendingBlock(messages, conversationStatus, blockStates)
+      const blockReply =
+        pendingCollectReply?.block.kind === 'collectReply' && text
+          ? ({
+              kind: 'collectReply',
+              inReplyToMessageId: pendingCollectReply.messageId,
+              value: text,
+            } as const)
+          : undefined
       const res = await sendConversationMessageFn({
         data: {
           conversationId: conversationId ?? undefined,
@@ -662,6 +829,7 @@ export function VisitorConversationThread({
           // attachments (the tray) — matching admin.
           contentJson: doc,
           attachments: hasAttachments ? pendingAttachments : undefined,
+          blockReply,
         },
         headers: getAuthHeaders(),
       })
@@ -699,6 +867,10 @@ export function VisitorConversationThread({
     getAuthHeaders,
     onConversationStarted,
     queryClient,
+    messages,
+    conversationStatus,
+    blockStates,
+    composerLock.disabled,
   ])
 
   const renderRow = (row: ConversationRow) => {
@@ -739,7 +911,14 @@ export function VisitorConversationThread({
       case 'message': {
         const m = row.message
         const isVisitor = m.senderType === 'visitor'
-        return (
+        const block = m.block
+        // "Show expected reply time" is a quiet system-style caption, never a
+        // chat bubble — localized client-side from `block.status` (the
+        // stored `content` is only the English transcript/email fallback).
+        if (block?.kind === 'replyTime') {
+          return <BlockReplyTimeCaption status={block.status} />
+        }
+        const bubble = (
           <VisitorMessageBubble
             side={isVisitor ? 'self' : 'peer'}
             authorName={isVisitor ? undefined : (m.author?.displayName ?? teamName ?? undefined)}
@@ -754,6 +933,45 @@ export function VisitorConversationThread({
             getAuthHeaders={getAuthHeaders}
             embedOpenMode={embedOpenMode}
           />
+        )
+        // `message` blocks (and every non-block message) are just the free
+        // assistant bubble above — no affordance. Interactive kinds render
+        // their affordance below it, gated by the pure-derived `blockState`.
+        if (!block || row.blockState === undefined) return bubble
+        const submitting = submittingBlockId === (m.id as unknown as string)
+        return (
+          <div className="flex flex-col items-start">
+            {bubble}
+            {block.kind === 'buttons' && (
+              <BlockButtonsRow
+                block={block}
+                state={row.blockState}
+                submitting={submitting}
+                onTap={(buttonKey, label) =>
+                  handleButtonTap(m.id as unknown as string, buttonKey, label)
+                }
+              />
+            )}
+            {(block.kind === 'collect' || block.kind === 'collectReply') && (
+              <BlockCollectField
+                block={block}
+                state={row.blockState}
+                submitting={submitting}
+                onSubmit={(value, displayText) =>
+                  handleCollectSubmit(m.id as unknown as string, value, displayText)
+                }
+              />
+            )}
+            {block.kind === 'csat' && (
+              <BlockCsatRow
+                block={block}
+                state={row.blockState}
+                submitting={submitting}
+                onRate={(rating) => handleCsatRate(m.id as unknown as string, rating)}
+                onComment={(rating, comment) => handleCsatComment(rating, comment)}
+              />
+            )}
+          </div>
         )
       }
       case 'system': {
@@ -1056,33 +1274,47 @@ export function VisitorConversationThread({
             className="[&_[data-slot=scroll-area-viewport]]:max-h-32"
             scrollBarClassName="w-1.5"
           >
-            <Suspense
-              fallback={
-                <div
-                  aria-hidden="true"
-                  className="min-h-[1.5rem] select-none py-1 text-sm text-muted-foreground/50"
-                >
-                  {composerPlaceholder}
-                </div>
-              }
-            >
-              <LazyRichTextEditor
-                // Remounts the editor to clear it after a send (no imperative
-                // ref exists to call clearContent()) — resetSignal starts at 0
-                // (no remount, no autofocus on first mount) and increments on
-                // every successful send, at which point we DO want focus back
-                // so the visitor can keep typing without re-clicking.
-                key={composer.resetSignal}
-                borderless
-                minHeight="1.5rem"
-                disabled={sending}
-                placeholder={composerPlaceholder}
-                features={VISITOR_CONVERSATION_FEATURES}
-                autofocus={composer.resetSignal > 0 ? 'end' : false}
-                onChange={handleEditorChange}
-                onSubmit={send}
-              />
-            </Suspense>
+            {composerLock.disabled ? (
+              // Disabled-in-place, same slot/min-height as the editor and its
+              // own Suspense fallback below — zero layout shift switching
+              // between the two, and this re-derives every render (no client
+              // memory), so it's restored automatically the instant the
+              // pending block resolves.
+              <div
+                role="status"
+                className="min-h-[1.5rem] select-none py-1 text-sm text-muted-foreground/50"
+              >
+                {composerLockHint}
+              </div>
+            ) : (
+              <Suspense
+                fallback={
+                  <div
+                    aria-hidden="true"
+                    className="min-h-[1.5rem] select-none py-1 text-sm text-muted-foreground/50"
+                  >
+                    {composerPlaceholder}
+                  </div>
+                }
+              >
+                <LazyRichTextEditor
+                  // Remounts the editor to clear it after a send (no imperative
+                  // ref exists to call clearContent()) — resetSignal starts at 0
+                  // (no remount, no autofocus on first mount) and increments on
+                  // every successful send, at which point we DO want focus back
+                  // so the visitor can keep typing without re-clicking.
+                  key={composer.resetSignal}
+                  borderless
+                  minHeight="1.5rem"
+                  disabled={sending}
+                  placeholder={composerPlaceholder}
+                  features={VISITOR_CONVERSATION_FEATURES}
+                  autofocus={composer.resetSignal > 0 ? 'end' : false}
+                  onChange={handleEditorChange}
+                  onSubmit={send}
+                />
+              </Suspense>
+            )}
           </ScrollArea>
           <ComposerAttachmentTray attachments={pendingAttachments} onRemove={removeAttachment} />
           {uploadError && <p className="px-1 pt-1 text-[11px] text-destructive">{uploadError}</p>}
@@ -1094,6 +1326,7 @@ export function VisitorConversationThread({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
+              disabled={composerLock.disabled}
               className="shrink-0 flex items-center justify-center size-8 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40 transition-colors"
               aria-label={intl.formatMessage({
                 id: 'widget.messenger.attach',
@@ -1111,7 +1344,8 @@ export function VisitorConversationThread({
                   !composer.hasContentNode &&
                   pendingAttachments.length === 0) ||
                 sending ||
-                uploading
+                uploading ||
+                composerLock.disabled
               }
               className="shrink-0 flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground disabled:opacity-40 transition-opacity"
               aria-label={intl.formatMessage({

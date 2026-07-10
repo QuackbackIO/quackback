@@ -256,6 +256,12 @@ export function ActionEditor({
           Closes the conversation and ends the run for this path.
         </p>
       )}
+
+      {action.type === 'reopen' && (
+        <p className="text-xs text-muted-foreground">
+          Reopens a closed conversation, moving it back into an active queue.
+        </p>
+      )}
     </div>
   )
 }

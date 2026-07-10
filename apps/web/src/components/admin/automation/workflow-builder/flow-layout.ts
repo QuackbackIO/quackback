@@ -18,25 +18,34 @@
  */
 import {
   ACTION_LABELS,
+  BLOCK_STEP_LABELS,
   durationPhrase,
   frequencyCapSummary,
   OPERATOR_LABELS,
   PATH_LETTERS,
   PRIORITY_LABELS,
+  RATING_EMOJI,
+  RATING_KEYS,
   TRIGGER_CHANNELS,
   VALUELESS_OPERATORS,
+  blockBodyPreview,
+  collectDataSummary,
+  collectReplySummary,
   conditionSummary,
   conditionToDraft,
   countSteps,
   isNeedsSetupRef,
   resolveConditionField,
+  stepPaths,
   waitSummary,
   type ActionType,
   type AttributeFieldDef,
+  type BlockStepKind,
   type EntityLabels,
   type FrequencyCap,
   type GraphAction,
   type GraphCondition,
+  type KeyedPath,
   type StepLocation,
   type TreeStep,
   type WorkflowTree,
@@ -64,10 +73,11 @@ const NODE_H_PLAIN = 88
 // straight to <ReactFlow nodes=.../edges=.../>.
 // ---------------------------------------------------------------------------
 
-export type Tone = 'amber' | 'violet' | 'green' | 'blue'
+export type Tone = 'amber' | 'violet' | 'green' | 'blue' | 'pink'
 
-/** Icon lookup key: the trigger, a step kind, or (for actions) the action type. */
-export type IconKey = 'trigger' | 'condition' | 'branch' | 'wait' | ActionType
+/** Icon lookup key: the trigger, a step kind, (for actions) the action type,
+ *  or (for conversational blocks) the block kind. */
+export type IconKey = 'trigger' | 'condition' | 'branch' | 'wait' | ActionType | BlockStepKind
 
 export interface ChipData {
   label: string
@@ -181,12 +191,15 @@ export interface FlowLayoutInput {
 // Column-width measurement (bottom-up) and pixel conversion
 // ---------------------------------------------------------------------------
 
-/** Number of COLW-wide columns a lane needs: 1, unless it ends in a branch,
- *  in which case it's the sum of its paths' widths (each at least 1). */
+/** Number of COLW-wide columns a lane needs: 1, unless it ends in a fan-out
+ *  step (branch, or a conversational block that spawns paths — reply_buttons/
+ *  request_csat/let_assistant_answer), in which case it's the sum of its
+ *  paths' widths (each at least 1). */
 export function laneWidth(steps: TreeStep[]): number {
   const last = steps[steps.length - 1]
-  if (last && last.kind === 'branch') {
-    const total = last.paths.reduce((sum, p) => sum + laneWidth(p.steps), 0)
+  const paths = last ? stepPaths(last) : null
+  if (paths) {
+    const total = paths.reduce((sum, p) => sum + laneWidth(p.steps), 0)
     return Math.max(1, total)
   }
   return 1
@@ -237,6 +250,7 @@ export const ACTION_TONE: Record<ActionType, Tone> = {
   set_attribute: 'green',
   snooze: 'amber',
   close: 'blue',
+  reopen: 'blue',
 }
 
 /** Ref -> display name, tolerant of an unset or needs-setup-template ref. */
@@ -284,6 +298,7 @@ function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
         },
       ]
     case 'close':
+    case 'reopen':
       return []
   }
 }
@@ -336,7 +351,92 @@ function buildStepNodeData(
         icon: step.action.type,
         tone: ACTION_TONE[step.action.type],
         chips: actionChips(step.action, ctx.labels),
-        meta: step.action.type === 'close' ? 'Ends the workflow' : undefined,
+        meta:
+          step.action.type === 'close'
+            ? 'Ends the workflow'
+            : step.action.type === 'reopen'
+              ? 'Reactivates the conversation'
+              : undefined,
+      }
+    // ── Conversational block kinds (Phase C, slice C-5) ───────────────────
+    // Every card previews the customer-visible content per the design
+    // brief's "a message that happens to be interactive": a body excerpt,
+    // button labels as chips, or an emoji row — never just a config summary.
+    case 'message':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.message,
+        icon: 'message',
+        tone: 'pink',
+        meta: blockBodyPreview(step.body),
+      }
+    case 'show_reply_time':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.show_reply_time,
+        icon: 'show_reply_time',
+        tone: 'pink',
+        meta: "We're online — typically replies in under an hour.",
+      }
+    case 'disable_composer':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.disable_composer,
+        icon: 'disable_composer',
+        tone: 'pink',
+        meta: 'Composer hint: “Choose an option above”',
+      }
+    case 'let_assistant_answer':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.let_assistant_answer,
+        icon: 'let_assistant_answer',
+        tone: 'pink',
+        meta: 'Hands the turn to Quinn',
+        nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
+      }
+    case 'reply_buttons':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.reply_buttons,
+        icon: 'reply_buttons',
+        tone: 'pink',
+        meta: blockBodyPreview(step.body),
+        chips: step.paths.map((p) => ({ label: p.label })),
+        nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
+      }
+    case 'collect_data':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.collect_data,
+        icon: 'collect_data',
+        tone: 'pink',
+        meta: collectDataSummary(step, ctx.labels.attributes),
+      }
+    case 'collect_reply':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.collect_reply,
+        icon: 'collect_reply',
+        tone: 'pink',
+        meta: collectReplySummary(step, ctx.labels.attributes),
+      }
+    case 'request_csat':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.request_csat,
+        icon: 'request_csat',
+        tone: 'pink',
+        meta: RATING_KEYS.map((k) => RATING_EMOJI[k]).join(' '),
+        nestedCount: step.paths.reduce((sum, p) => sum + countSteps(p.steps), 0),
       }
   }
 }
@@ -393,6 +493,25 @@ export function describeBranchPath(
   ]
 }
 
+/** Rule-pill copy for one fan-out path, per kind: a branch path describes its
+ *  condition (unchanged, via describeBranchPath); reply_buttons/request_csat/
+ *  let_assistant_answer paths have no condition to evaluate — their pill just
+ *  names the button/rating/outcome, matching the design brief's "button
+ *  paths labeled by button text; escalation edge labeled". */
+function fanPathParts(
+  step: TreeStep,
+  path: KeyedPath,
+  attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
+  teams: ReadonlyMap<string, string> = new Map()
+): RulePart[] {
+  if (step.kind === 'branch') {
+    const branchPath = step.paths.find((p) => p.key === path.key)
+    return branchPath ? describeBranchPath(branchPath.condition, attributes, teams) : []
+  }
+  if (step.kind === 'reply_buttons') return [{ text: `“${path.label}”`, bold: true }]
+  return [{ text: path.label, bold: true }]
+}
+
 // ---------------------------------------------------------------------------
 // Recursive layout
 // ---------------------------------------------------------------------------
@@ -445,12 +564,13 @@ function emitLane(
     prevId = step.id
     cursorY += NODE_H_PLAIN + EDGE_GAP
 
-    if (step.kind === 'branch') {
-      const widths = step.paths.map((p) => laneWidth(p.steps))
+    const fan = stepPaths(step)
+    if (fan) {
+      const widths = fan.map((p) => laneWidth(p.steps))
       let colCursor = colStart
       const ruleY = cursorY + RULE_GAP
-      for (let pi = 0; pi < step.paths.length; pi++) {
-        const path = step.paths[pi]!
+      for (let pi = 0; pi < fan.length; pi++) {
+        const path = fan[pi]!
         const pSpan = widths[pi]!
         const childLocation: StepLocation = {
           path: [...location.path, { branchId: step.id, pathKey: path.key }],
@@ -463,8 +583,8 @@ function emitLane(
           draggable: true,
           data: {
             badge: PATH_LETTERS[pi] ?? String(pi + 1),
-            name: path.key,
-            parts: describeBranchPath(path.condition, input.labels.attributes, input.labels.teams),
+            name: path.label,
+            parts: fanPathParts(step, path, input.labels.attributes, input.labels.teams),
           },
         }
         acc.nodes.push(ruleNode)
@@ -481,7 +601,7 @@ function emitLane(
         )
         colCursor += pSpan
       }
-      return // a branch is always the last step of its lane; no trailing tail
+      return // a fan-out step is always the last step of its lane; no trailing tail
     }
   }
 

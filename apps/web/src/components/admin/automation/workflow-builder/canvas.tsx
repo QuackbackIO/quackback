@@ -52,6 +52,7 @@ import {
   ShareIcon,
   XMarkIcon,
   AdjustmentsHorizontalIcon,
+  ArrowUturnLeftIcon,
   CheckCircleIcon,
   ClockIcon,
   FlagIcon,
@@ -62,7 +63,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { useWorkflowEntities } from './entities'
-import { ConfirmDeleteDialog, TONE_TILE } from './step-visuals'
+import { BLOCK_ICONS, ConfirmDeleteDialog, TONE_TILE } from './step-visuals'
 import type { BuilderSelection } from './types'
 import type { FrequencyCap, StepLocation, WorkflowTree } from '../workflow-graph'
 import {
@@ -94,8 +95,10 @@ const ICONS: Record<IconKey, ComponentType<{ className?: string }>> = {
   set_priority: FlagIcon,
   snooze: MoonIcon,
   close: CheckCircleIcon,
+  reopen: ArrowUturnLeftIcon,
   apply_sla: ShieldCheckIcon,
   set_attribute: AdjustmentsHorizontalIcon,
+  ...BLOCK_ICONS,
 }
 
 const TONE_CHIP = TONE_TILE

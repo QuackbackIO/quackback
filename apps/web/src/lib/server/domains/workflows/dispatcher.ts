@@ -41,7 +41,30 @@ export interface WorkflowTrigger {
   message?: { body: string; senderType?: 'visitor' | 'agent' } | null
 }
 
-export async function dispatchWorkflowTrigger(trigger: WorkflowTrigger): Promise<void> {
+export interface DispatchWorkflowTriggerOpts {
+  /**
+   * The caller (dispatchWorkflowsForEvent) may already know whether a
+   * customer-facing run is active on this conversation — it just resumed one
+   * (still active) or just settled every waiting run via interruptWaitingRuns
+   * (nothing left) earlier in the SAME dispatch cycle. Passing that answer
+   * here skips this function's own hasActiveCustomerFacingRun SELECT, which
+   * would otherwise just re-read what the caller already learned.
+   *
+   * Only ever a hint, never authoritative: the partial unique index on
+   * workflow_runs is still the real exclusive lock (runWorkflow's insert
+   * catches a 23505 the same way regardless of this hint), so a stale value
+   * — a resumed run settling to terminal a moment later, or an interrupt call
+   * that excluded one run — only costs an extra no-op insert attempt at
+   * worst, never lets a second customer-facing run actually land. Omitted
+   * (undefined) falls back to the original query, unchanged.
+   */
+  activeCustomerFacingRunHint?: boolean
+}
+
+export async function dispatchWorkflowTrigger(
+  trigger: WorkflowTrigger,
+  opts?: DispatchWorkflowTriggerOpts
+): Promise<void> {
   // Human-caused only: an automated (service) actor never re-triggers workflows
   // unless the trigger's mapping explicitly vouched for it (allowServiceActor).
   if (trigger.actorType === 'service' && !trigger.allowServiceActor) return
@@ -54,12 +77,15 @@ export async function dispatchWorkflowTrigger(trigger: WorkflowTrigger): Promise
 
   // Resolve the snapshot once (every condition reads the same instant) and, only
   // when there are customer_facing workflows, probe the exclusive lock — both are
-  // independent, so run them together.
+  // independent, so run them together. The hint (see DispatchWorkflowTriggerOpts)
+  // skips the probe entirely when the caller already knows the answer.
   const [ctx, alreadyLocked] = await Promise.all([
     resolveConditionContext(trigger.conversationId, { message: trigger.message }),
-    customerFacing.length > 0
-      ? hasActiveCustomerFacingRun(trigger.conversationId)
-      : Promise.resolve(false),
+    customerFacing.length === 0
+      ? Promise.resolve(false)
+      : opts?.activeCustomerFacingRunHint !== undefined
+        ? Promise.resolve(opts.activeCustomerFacingRunHint)
+        : hasActiveCustomerFacingRun(trigger.conversationId),
   ])
   if (!ctx) return
 

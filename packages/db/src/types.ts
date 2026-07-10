@@ -477,6 +477,97 @@ export interface AssistantPendingActionSurface {
   summary: string
 }
 
+// Workflow conversational-block layer (Phase C, slice C-1). A block is an
+// ordinary senderType:'agent' message authored by the assistant service
+// principal; its structured shape lives in metadata.block, mirroring the
+// systemEvent precedent — content ALWAYS carries an honest plain-text
+// fallback, contentJson carries the resolved rich prompt body (variables
+// already substituted server-side; a raw {token} never reaches storage).
+export type WorkflowBlockKind =
+  | 'message'
+  | 'buttons'
+  | 'collect'
+  | 'collectReply'
+  | 'csat'
+  | 'replyTime'
+
+/** Block kinds that park the run awaiting a customer reply — the only ones
+ *  that ever produce a BlockState (widget conversation-rows.ts's derivation)
+ *  or need an active-run check before continuing (the engine's
+ *  action.executor.ts). The remaining kinds (message/replyTime) post and
+ *  continue immediately. */
+export const INTERACTIVE_BLOCK_KINDS: ReadonlySet<WorkflowBlockKind> = new Set([
+  'buttons',
+  'collect',
+  'collectReply',
+  'csat',
+])
+
+/** The five CSAT satisfaction faces, low to high — index = rating-1. The one
+ *  canonical order/glyph set every surface that renders or echoes a CSAT
+ *  rating shares: the widget's block affordance row, the admin inbox's
+ *  read-only summary, the server's stored-reply echo + honest plain-text
+ *  fallback, and the workflow builder's rating-path labels. */
+export const CSAT_FACES = ['😞', '🙁', '😐', '🙂', '😄'] as const
+
+interface WorkflowBlockPayloadBase {
+  /** Payload schema version, so a future shape change can branch on it. */
+  v: 1
+  /** The workflow run that posted this block. */
+  runId: string
+  /** The graph node that posted this block. */
+  nodeId: string
+  /** True for an interactive kind that parked the run awaiting this exact
+   *  reply (buttons/collect/collectReply/csat); false for a SEND kind
+   *  (message/replyTime) that posted and continued immediately. */
+  waiting: boolean
+}
+
+export interface WorkflowBlockButtonOption {
+  key: string
+  label: string
+}
+
+/** A snapshot of one collect-data option (select/multi_select fields), so a
+ *  later definition edit can't retroactively change what the customer chose
+ *  from. */
+export interface WorkflowBlockAttributeOption {
+  id: string
+  label: string
+}
+
+export type WorkflowBlockPayload =
+  | (WorkflowBlockPayloadBase & { kind: 'message' })
+  | (WorkflowBlockPayloadBase & {
+      kind: 'buttons'
+      options: WorkflowBlockButtonOption[]
+      allowTyping: boolean
+    })
+  | (WorkflowBlockPayloadBase & {
+      kind: 'collect'
+      attributeKey: string
+      fieldType: 'text' | 'number' | 'select' | 'date'
+      options?: WorkflowBlockAttributeOption[]
+      required: boolean
+    })
+  | (WorkflowBlockPayloadBase & { kind: 'collectReply'; attributeKey: string })
+  | (WorkflowBlockPayloadBase & {
+      kind: 'csat'
+      allowTypingInterrupt: boolean
+      commentPrompt: string
+    })
+  | (WorkflowBlockPayloadBase & { kind: 'replyTime'; status: 'online' | 'away' })
+
+/** The customer's structured reply to a block, stored on the VISITOR message
+ *  it was sent as. `inReplyToMessageId` is the block message's own id — the
+ *  correlation key (unique per park occurrence, collision-proof where
+ *  runId+nodeId is not, since a graph can revisit the same node). */
+export type BlockReplyMetadata =
+  | { kind: 'buttons'; inReplyToMessageId: string; buttonKey: string }
+  | { kind: 'collect'; inReplyToMessageId: string; value: string | number | boolean }
+  | { kind: 'collectReply'; inReplyToMessageId: string; value: string }
+  | { kind: 'csat'; inReplyToMessageId: string; rating: number; comment?: string }
+
 export interface ConversationMessageMetadata {
   /** The channel this message arrived through, when not the in-app messenger. */
   source?: 'email'
@@ -506,6 +597,12 @@ export interface ConversationMessageMetadata {
    *  back to "Show original". Surfaced only via the agent DTO, never to the
    *  visitor. */
   translatedFrom?: TranslatedFromMetadata
+  /** The structured block this assistant-authored message renders (Phase C
+   *  conversational block layer). Null/absent for an ordinary message. */
+  block?: WorkflowBlockPayload
+  /** The structured reply this visitor-authored message carries, when it was
+   *  sent in answer to a block. Null/absent for an ordinary message. */
+  blockReply?: BlockReplyMetadata
 }
 
 /** See `ConversationMessageMetadata.translatedFrom`. */

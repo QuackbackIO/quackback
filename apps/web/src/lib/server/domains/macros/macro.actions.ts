@@ -71,7 +71,7 @@ export async function applyMacroActions(
     const workflowAction = toWorkflowAction(action)
     if (!workflowAction) continue
     try {
-      const label = await applyAction(workflowAction, { conversationId, actor })
+      const { label } = await applyAction(workflowAction, { conversationId, actor })
       if (label) applied.push(label)
     } catch (err) {
       log.error({ err, action: action.type, conversationId }, 'macro action failed')

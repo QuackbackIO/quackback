@@ -139,5 +139,7 @@ export function toMessageDTO(
     contentJson: message.contentJson ?? null,
     viaEmail: message.metadata?.source === 'email',
     systemEvent: message.metadata?.systemEvent ?? null,
+    block: message.metadata?.block ?? null,
+    blockReply: message.metadata?.blockReply ?? null,
   }
 }

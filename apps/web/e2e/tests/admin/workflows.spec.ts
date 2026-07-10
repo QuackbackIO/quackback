@@ -14,6 +14,7 @@ import { setSupportSurfaces } from '../../utils/db-helpers'
  */
 
 const TEMPLATE_NAME = 'Route conversations to the right team'
+const FRONT_DOOR_TEMPLATE_NAME = 'Front-door triage bot'
 
 /** The list row is a `div[role=button]` inside the `.divide-y` group list —
  *  not a semantic <tr>/<li>, so scope by structure + text rather than role,
@@ -48,6 +49,7 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     // Best-effort cleanup even when an earlier assertion throws — the test
     // body also cleans up on the happy path, but this is the fallback.
     await deleteWorkflowsNamed(page, TEMPLATE_NAME).catch(() => {})
+    await deleteWorkflowsNamed(page, FRONT_DOOR_TEMPLATE_NAME).catch(() => {})
   })
 
   test('list page renders with a New workflow control', async ({ page }) => {
@@ -130,5 +132,75 @@ test.describe('Admin Workflows', { tag: '@smoke' }, () => {
     // Cleanup: delete through the row's own dropdown + confirm dialog.
     await deleteWorkflowsNamed(page, TEMPLATE_NAME)
     await expect(workflowRow(page, TEMPLATE_NAME)).toBeHidden()
+  })
+
+  test('front-door triage bot hero template opens with reply-button paths and needs setup', async ({
+    page,
+  }) => {
+    await page.goto('/admin/automation/workflows')
+
+    // Same hydration guard as the sibling test above.
+    const galleryDialog = page.getByRole('dialog', { name: 'Create a new workflow' })
+    await expect(async () => {
+      await page.getByRole('button', { name: 'New workflow' }).click()
+      await page.getByRole('menuitem', { name: 'Create from template' }).click({ timeout: 2000 })
+      await expect(galleryDialog).toBeVisible({ timeout: 2000 })
+    }).toPass({ timeout: 15000 })
+
+    // The hero template lives in the new "Customer facing" category (Phase C,
+    // slice C-5) rather than "Popular", so switch the category rail first.
+    await galleryDialog.getByRole('button', { name: 'Customer facing' }).click()
+    const templateCard = galleryDialog.getByRole('button', {
+      name: new RegExp(FRONT_DOOR_TEMPLATE_NAME),
+    })
+    await expect(templateCard).toBeVisible()
+    await templateCard.click()
+    await expect(page).toHaveURL(/\/admin\/automation\/workflows\/[^/]+$/, { timeout: 15000 })
+
+    await expect(page.getByRole('textbox', { name: 'Workflow name' })).toHaveValue(
+      FRONT_DOOR_TEMPLATE_NAME,
+      { timeout: 15000 }
+    )
+
+    // Canvas: the trigger card renders the trigger label.
+    await expect(
+      page.locator('[data-step-id]').filter({ hasText: 'New conversation' })
+    ).toBeVisible()
+
+    // Outline rail: the reply-buttons step fans out one path per button, and
+    // the path header uses the button's own label (not its internal key).
+    const outline = page.getByRole('navigation', { name: 'Workflow outline' })
+    await expect(outline.getByText('New conversation')).toBeVisible()
+    await expect(outline.getByText('Path A · Product question')).toBeVisible()
+    await expect(outline.getByText('Path B · Report a bug')).toBeVisible()
+    await expect(outline.getByText('Path C · Billing')).toBeVisible()
+    await expect(outline.getByText('Path D · Talk to sales')).toBeVisible()
+
+    // Every workspace ref (team/SLA policy/tag/attribute) in the template
+    // ships as an unresolved needs-setup sentinel: 3 "assign to team" from
+    // the Quinn hand-off branch, 1 collect-data attribute + 2 assign/SLA from
+    // the bug path, 2 assign/SLA from the billing path, and 3 assign/tag/
+    // collect-data from the sales path — 11 in total (see
+    // workflow-templates.ts's front-door-triage-bot payload).
+    await expect(page.getByRole('button', { name: '11 issues' })).toBeVisible({
+      timeout: 10000,
+    })
+
+    // The Visual/JSON toggle still works: JSON mode shows the raw graph...
+    await page.getByRole('button', { name: 'JSON' }).click()
+    const jsonTextbox = page.getByRole('textbox', { name: 'Workflow graph JSON' })
+    await expect(jsonTextbox).toBeVisible()
+    await expect(jsonTextbox).toHaveValue(/welcome_message/)
+    // ...and switching back to Visual restores the canvas.
+    await page.getByRole('button', { name: 'Visual' }).click()
+    await expect(
+      page.locator('[data-step-id]').filter({ hasText: 'New conversation' })
+    ).toBeVisible()
+
+    // Cleanup: delete through the row's own dropdown + confirm dialog.
+    await page.getByRole('link', { name: 'Back to workflows' }).click()
+    await expect(page).toHaveURL(/\/admin\/automation\/workflows$/, { timeout: 15000 })
+    await deleteWorkflowsNamed(page, FRONT_DOOR_TEMPLATE_NAME)
+    await expect(workflowRow(page, FRONT_DOOR_TEMPLATE_NAME)).toBeHidden()
   })
 })

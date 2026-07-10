@@ -10,14 +10,12 @@ import { ChevronDownIcon, ChevronUpIcon, PlusIcon } from '@heroicons/react/24/ou
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ConfirmDeleteDialog } from '../step-visuals'
 import { useWorkflowEntities } from '../entities'
 import { ConditionEditor } from './condition-editor'
-import { Field } from './shared'
+import { Field, movePathAdjacent, usePathRemovalConfirm } from './shared'
 import {
   PATH_LETTERS,
   conditionSummary,
-  countSteps,
   type BranchPath,
   type TreeStep,
 } from '../../workflow-graph'
@@ -31,23 +29,26 @@ export function BranchEditor({
 }) {
   const { labels } = useWorkflowEntities()
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [confirmIndex, setConfirmIndex] = useState<number | null>(null)
 
   const updatePath = (i: number, path: BranchPath) =>
     onChange({ ...step, paths: step.paths.map((p, j) => (j === i ? path : p)) })
-  const removePath = (i: number) => {
-    onChange({ ...step, paths: step.paths.filter((_, j) => j !== i) })
+  const removePath = (key: string) => {
+    onChange({ ...step, paths: step.paths.filter((p) => p.key !== key) })
     setExpanded(null)
   }
+  // Branch paths have no separate `label` — the path's own `key` doubles as
+  // its display name (see PathNameField below), so the confirm dialog names
+  // itself off `key` rather than a `label` field BranchPath doesn't carry.
+  const { requestRemove, confirmDialog } = usePathRemovalConfirm(
+    step.paths,
+    removePath,
+    (p) => p.key
+  )
   const movePath = (i: number, dir: -1 | 1) => {
-    const j = i + dir
-    if (j < 0 || j >= step.paths.length) return
-    const next = [...step.paths]
-    const tmp = next[i]!
-    next[i] = next[j]!
-    next[j] = tmp
+    const next = movePathAdjacent(step.paths, i, dir)
+    if (next === step.paths) return
     onChange({ ...step, paths: next })
-    setExpanded(j)
+    setExpanded(i + dir)
   }
   const addPath = () => {
     const used = new Set(step.paths.map((p) => p.key))
@@ -61,10 +62,9 @@ export function BranchEditor({
       <Field label="Paths">
         <div className="space-y-2">
           {step.paths.map((path, i) => {
-            const stepCount = countSteps(path.steps)
             const letter = PATH_LETTERS[i] ?? String(i + 1)
             return (
-              <div key={i} className="rounded-md border">
+              <div key={path.key} className="rounded-md border">
                 <div className="flex items-center gap-1.5 p-1.5">
                   <div className="flex flex-col">
                     <button
@@ -74,7 +74,7 @@ export function BranchEditor({
                       onClick={() => movePath(i, -1)}
                       className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                     >
-                      <ChevronUpIcon className="size-3" />
+                      <ChevronUpIcon className="size-3.5" />
                     </button>
                     <button
                       type="button"
@@ -83,7 +83,7 @@ export function BranchEditor({
                       onClick={() => movePath(i, 1)}
                       className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                     >
-                      <ChevronDownIcon className="size-3" />
+                      <ChevronDownIcon className="size-3.5" />
                     </button>
                   </div>
                   <button
@@ -117,7 +117,7 @@ export function BranchEditor({
                         variant="ghost"
                         size="sm"
                         className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                        onClick={() => (stepCount > 0 ? setConfirmIndex(i) : removePath(i))}
+                        onClick={() => requestRemove(path)}
                       >
                         Remove path
                       </Button>
@@ -144,17 +144,7 @@ export function BranchEditor({
         through.
       </p>
 
-      <ConfirmDeleteDialog
-        open={confirmIndex !== null}
-        onOpenChange={(open) => !open && setConfirmIndex(null)}
-        title={confirmIndex !== null ? `Remove "${step.paths[confirmIndex]?.key}"?` : ''}
-        description={
-          confirmIndex !== null
-            ? `Its ${countSteps(step.paths[confirmIndex]?.steps ?? [])} step(s) will be removed with it.`
-            : ''
-        }
-        onConfirm={() => confirmIndex !== null && removePath(confirmIndex)}
-      />
+      {confirmDialog}
     </div>
   )
 }

@@ -837,8 +837,11 @@ export async function listMessages(
   const ordered = [...page].reverse() // oldest-first for rendering
   // Stash the agent-only suggestion off each internal note's metadata while we
   // still have the raw rows, so the agent enrichment can attach it without a
-  // second `SELECT metadata` round-trip. `toMessageDTO` deliberately drops the
-  // metadata, so this map is the only carrier — and it never leaves the server.
+  // second `SELECT metadata` round-trip. `toMessageDTO` forwards ordinary
+  // client-safe metadata (e.g. `block`/`blockReply`, Phase C's conversational
+  // block layer) but still never exposes these agent-only extras
+  // (postSuggestion, assistantPendingAction, translatedFrom) — this map is
+  // their only carrier, and it never leaves the server.
   const postSuggestions = new Map<ConversationMessageId, PostSuggestion>()
   const pendingActionPointers = new Map<ConversationMessageId, AssistantPendingActionSurface>()
   const translatedFromPointers = new Map<ConversationMessageId, TranslatedFromMetadata>()

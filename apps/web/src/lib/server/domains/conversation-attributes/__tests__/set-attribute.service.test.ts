@@ -190,6 +190,87 @@ describe.skipIf(!fixture.available)('setConversationAttribute (real DB, rolled b
     expect((await conversationAttributes(legacyConversation)).plan).toBe('legacy')
   })
 
+  it('lets a customer fill an empty slot or one only AI has touched, but refuses to overwrite teammate/workflow/legacy values', async () => {
+    await createConversationAttribute({ key: 'plan', label: 'Plan', fieldType: 'text' })
+
+    // Empty slot: the customer may fill it.
+    const emptyConversation = await seedConversation()
+    await setConversationAttribute({ conversationId: emptyConversation }, 'plan', 'pro', 'customer')
+    expect(
+      readAttributeValue((await conversationAttributes(emptyConversation)).plan)
+    ).toMatchObject({ v: 'pro', src: 'customer' })
+
+    // AI-only slot: the customer may overwrite AI's own guess.
+    const aiConversation = await seedConversation()
+    await setConversationAttribute({ conversationId: aiConversation }, 'plan', 'starter', 'ai')
+    await setConversationAttribute({ conversationId: aiConversation }, 'plan', 'growth', 'customer')
+    expect(readAttributeValue((await conversationAttributes(aiConversation)).plan)).toMatchObject({
+      v: 'growth',
+      src: 'customer',
+    })
+
+    // Teammate-set slot: the customer is refused, visibly (not a silent no-op).
+    const teammateConversation = await seedConversation()
+    await setConversationAttribute(
+      { conversationId: teammateConversation },
+      'plan',
+      'pro',
+      'teammate'
+    )
+    await expect(
+      setConversationAttribute(
+        { conversationId: teammateConversation },
+        'plan',
+        'other',
+        'customer'
+      )
+    ).rejects.toMatchObject({ code: 'ATTRIBUTE_LOCKED' })
+    expect(
+      readAttributeValue((await conversationAttributes(teammateConversation)).plan)
+    ).toMatchObject({ v: 'pro', src: 'teammate' })
+
+    // Workflow-set slot: same refusal.
+    const workflowConversation = await seedConversation()
+    await setConversationAttribute(
+      { conversationId: workflowConversation },
+      'plan',
+      'wf',
+      'workflow'
+    )
+    await expect(
+      setConversationAttribute(
+        { conversationId: workflowConversation },
+        'plan',
+        'other',
+        'customer'
+      )
+    ).rejects.toMatchObject({ code: 'ATTRIBUTE_LOCKED' })
+
+    // A customer's own prior write also can't be silently re-clobbered by a
+    // second customer submission (write-once, not last-write-wins).
+    const customerConversation = await seedConversation()
+    await setConversationAttribute(
+      { conversationId: customerConversation },
+      'plan',
+      'pro',
+      'customer'
+    )
+    await expect(
+      setConversationAttribute(
+        { conversationId: customerConversation },
+        'plan',
+        'other',
+        'customer'
+      )
+    ).rejects.toMatchObject({ code: 'ATTRIBUTE_LOCKED' })
+
+    // Bare legacy value (unknown provenance): the customer is refused too.
+    const legacyConversation = await seedConversation({ plan: 'legacy' })
+    await expect(
+      setConversationAttribute({ conversationId: legacyConversation }, 'plan', 'other', 'customer')
+    ).rejects.toMatchObject({ code: 'ATTRIBUTE_LOCKED' })
+  })
+
   it('writes to a ticket target through the same path', async () => {
     await createConversationAttribute({ key: 'plan', label: 'Plan', fieldType: 'text' })
     const ticketId = await seedTicket()
