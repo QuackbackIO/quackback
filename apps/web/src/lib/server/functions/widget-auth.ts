@@ -1,9 +1,9 @@
-import type { PrincipalId, UserId, WorkspaceId } from '@quackback/ids'
+import type { ContactId, PrincipalId, UserId, WorkspaceId } from '@quackback/ids'
 import { generateId } from '@quackback/ids'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import type { Role } from '@/lib/server/auth'
 import { auth } from '@/lib/server/auth'
-import { db, session, principal, eq, and, gt } from '@/lib/server/db'
+import { db, session, principal, contactUserLinks, eq, and, gt } from '@/lib/server/db'
 import { shouldRollSession, WIDGET_SESSION_TTL_MS } from './widget-session-roll'
 import { logger } from '@/lib/server/logger'
 
@@ -26,27 +26,47 @@ export interface WidgetAuthContext {
     role: Role
     type: string
   }
+  /**
+   * The CRM contact this widget user is linked to via `contact_user_links`,
+   * if any. Populated by `linkContactForWidgetUser` during a verified
+   * `POST /api/widget/identify`. Required for ticket list/detail/reply
+   * authorisation; null for anonymous or unverified-identify sessions.
+   */
+  contactId: ContactId | null
 }
 
 /**
- * Returns widget auth context from `Authorization: Bearer <token>`, or null if
- * invalid/expired.
+ * Returns widget auth context from `Authorization: Bearer <token>`, or null if invalid/expired.
+ *
+ * When called from an extracted API-route handler function, pass the `request`
+ * object so headers are read directly instead of relying on TanStack Start's
+ * `getRequestHeaders()` async-context (which may not be available in extracted
+ * handler references).
  *
  * `roll` extends an active anonymous session's 7-day TTL on use (at most once
  * per 24h, mirroring Better Auth's updateAge) — set it only on the validation-
- * only `/api/widget/session` endpoint, never on per-message hot paths. The raw
- * token lookup is unchanged; the roll is an additive UPDATE after validation, so
- * the proven validation path can't regress.
+ * only `/api/widget/session` endpoint, never on per-message hot paths.
  */
-export async function getWidgetSession(opts?: {
-  roll?: boolean
-}): Promise<WidgetAuthContext | null> {
-  log.debug('get widget session')
+export async function getWidgetSession(
+  arg?: Request | { request?: Request; roll?: boolean }
+): Promise<WidgetAuthContext | null> {
+  const request = arg instanceof Request ? arg : arg?.request
+  const roll = arg instanceof Request ? false : (arg?.roll ?? false)
+  log.debug(`[fn:widget-auth] getWidgetSession`)
   try {
-    const headers = getRequestHeaders()
+    const headers = request ? request.headers : getRequestHeaders()
     const authHeader = headers.get('authorization')
-    // Bearer is the widget's sole credential — the visitor's localStorage token.
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) || null : null
+    if (!authHeader?.startsWith('Bearer ')) return null
+
+    const rawToken = authHeader.slice(7)
+    if (!rawToken) return null
+
+    // better-auth session cookies are formatted as `{token}.{hmac}`. The DB
+    // stores only the bare token part. When the widget reuses a portal session
+    // cookie (same-origin SSR path) the Bearer value includes the HMAC suffix,
+    // so we strip it before querying. Tokens from the identify flow are already
+    // bare, so splitting on '.' and taking the first segment is safe for both.
+    const token = rawToken.split('.')[0]
     if (!token) return null
 
     const sessionRecord = await db.query.session.findFirst({
@@ -81,10 +101,17 @@ export async function getWidgetSession(opts?: {
       principalRecord = created
     }
 
+    // Resolve linked CRM contact (if any) so callers can authorise on
+    // requesterContactId without a second round-trip. A user can in theory
+    // have multiple links (rare); the first match is sufficient for
+    // ownership predicates that pivot on contactId.
+    const contactLink = await db.query.contactUserLinks.findFirst({
+      where: eq(contactUserLinks.userId, userId),
+    })
     // Roll the session's expiry forward on active use so a returning visitor
     // isn't cut off 7 days after their first mint. Gated to ≥24h since the last
     // touch so rapid reloads don't each write.
-    if (opts?.roll && shouldRollSession(sessionRecord.updatedAt, Date.now())) {
+    if (roll && shouldRollSession(sessionRecord.updatedAt, Date.now())) {
       const nowDate = new Date()
       await db
         .update(session)
@@ -109,6 +136,7 @@ export async function getWidgetSession(opts?: {
         role: principalRecord.role as Role,
         type: principalRecord.type ?? 'user',
       },
+      contactId: (contactLink?.contactId as ContactId | undefined) ?? null,
     }
   } catch (error) {
     log.error({ err: error }, 'get widget session failed')

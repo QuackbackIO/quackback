@@ -5,6 +5,7 @@ import { contentPreview } from '@/lib/shared/utils/string'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -20,7 +21,7 @@ interface WidgetChangelogProps {
 
 export function WidgetChangelog({ onEntrySelect }: WidgetChangelogProps) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery(
-    publicChangelogQueries.list()
+    publicChangelogQueries.list(getWidgetAuthHeaders())
   )
 
   const entries = data?.pages.flatMap((page) => page.items) ?? []

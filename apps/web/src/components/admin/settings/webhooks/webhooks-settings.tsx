@@ -2,7 +2,13 @@
 
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { PlusIcon, BoltIcon, TrashIcon, PencilIcon } from '@heroicons/react/24/outline'
+import {
+  PlusIcon,
+  BoltIcon,
+  TrashIcon,
+  PencilIcon,
+  QueueListIcon,
+} from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { EllipsisVerticalIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
@@ -16,6 +22,7 @@ import {
 import { CreateWebhookDialog } from './create-webhook-dialog'
 import { EditWebhookDialog } from './edit-webhook-dialog'
 import { DeleteWebhookDialog } from './delete-webhook-dialog'
+import { WebhookDeliveriesDrawer } from './webhook-deliveries-drawer'
 import type { Webhook } from '@/lib/shared/types'
 
 const EVENT_LABELS: Record<string, string> = {
@@ -33,6 +40,7 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editWebhook, setEditWebhook] = useState<Webhook | null>(null)
   const [deleteWebhook, setDeleteWebhook] = useState<Webhook | null>(null)
+  const [deliveriesWebhook, setDeliveriesWebhook] = useState<Webhook | null>(null)
 
   const getStatusBadge = (webhook: Webhook) => {
     if (webhook.status === 'disabled') {
@@ -148,6 +156,14 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => setDeliveriesWebhook(webhook)}
+                  aria-label={`View deliveries for ${webhook.url}`}
+                >
+                  <QueueListIcon className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setEditWebhook(webhook)}
                   aria-label={`Edit webhook ${webhook.url}`}
                 >
@@ -173,6 +189,10 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setDeliveriesWebhook(webhook)}>
+                      <QueueListIcon className="h-4 w-4 mr-2" />
+                      View deliveries
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setEditWebhook(webhook)}>
                       <PencilIcon className="h-4 w-4 mr-2" />
                       Edit Webhook
@@ -210,6 +230,11 @@ export function WebhooksSettings({ webhooks }: WebhooksSettingsProps) {
           onOpenChange={(open) => !open && setDeleteWebhook(null)}
         />
       )}
+
+      <WebhookDeliveriesDrawer
+        webhook={deliveriesWebhook}
+        onOpenChange={(open) => !open && setDeliveriesWebhook(null)}
+      />
     </div>
   )
 }

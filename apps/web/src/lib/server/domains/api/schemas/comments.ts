@@ -104,6 +104,22 @@ const UpdateCommentSchema = z
   })
   .meta({ description: 'Update comment request body' })
 
+const CommentReactionRequestSchema = z
+  .object({
+    emoji: z.string().min(1).max(64).meta({ example: '👍' }),
+  })
+  .meta({ description: 'Comment reaction request body' })
+
+const CommentReactionResponseSchema = z.object({
+  commentId: TypeIdSchema,
+  emoji: z.string().meta({ example: '👍' }),
+  added: z.boolean().meta({
+    description:
+      'Whether the reaction is now present after the mutation. DELETE returns false when removed.',
+  }),
+  reactions: z.array(ReactionCountSchema),
+})
+
 // Register GET /posts/{postId}/comments
 registerPath('/posts/{postId}/comments', {
   get: {
@@ -290,6 +306,94 @@ registerPath('/comments/{commentId}', {
     ],
     responses: {
       204: { description: 'Comment deleted' },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      404: {
+        description: 'Comment not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+})
+
+registerPath('/comments/{commentId}/reactions', {
+  post: {
+    tags: ['Comments'],
+    summary: 'Add an emoji reaction to a comment',
+    parameters: [
+      {
+        name: 'commentId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' },
+        description: 'Comment ID',
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: asSchema(CommentReactionRequestSchema) } },
+    },
+    responses: {
+      200: {
+        description: 'Reaction state after the add operation',
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(CommentReactionResponseSchema, 'Comment reaction'),
+          },
+        },
+      },
+      400: {
+        description: 'Validation error',
+        content: { 'application/json': { schema: ValidationErrorSchema } },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+      404: {
+        description: 'Comment not found',
+        content: { 'application/json': { schema: NotFoundErrorSchema } },
+      },
+    },
+  },
+  delete: {
+    tags: ['Comments'],
+    summary: 'Remove an emoji reaction from a comment',
+    parameters: [
+      {
+        name: 'commentId',
+        in: 'path',
+        required: true,
+        schema: { type: 'string' },
+        description: 'Comment ID',
+      },
+      {
+        name: 'emoji',
+        in: 'query',
+        required: false,
+        schema: { type: 'string' },
+        description: 'Emoji to remove. May also be provided in the JSON body.',
+      },
+    ],
+    requestBody: {
+      required: false,
+      content: { 'application/json': { schema: asSchema(CommentReactionRequestSchema) } },
+    },
+    responses: {
+      200: {
+        description: 'Reaction state after the remove operation',
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(CommentReactionResponseSchema, 'Comment reaction'),
+          },
+        },
+      },
+      400: {
+        description: 'Validation error',
+        content: { 'application/json': { schema: ValidationErrorSchema } },
+      },
       401: {
         description: 'Unauthorized',
         content: { 'application/json': { schema: UnauthorizedErrorSchema } },

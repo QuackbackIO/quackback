@@ -50,32 +50,34 @@ const DEFAULT_JOB_OPTS = {
 // ============================================================================
 
 let initPromise: Promise<{
-  queue: Queue<SegmentEvalJobData>
-  worker: Worker<SegmentEvalJobData>
+  queue: Queue
+  worker: Worker
 }> | null = null
 
-function ensureQueue(): Promise<Queue<SegmentEvalJobData>> {
+function ensureQueue(): Promise<Queue> {
   if (!initPromise) {
     initPromise = initializeQueue().catch((err) => {
       initPromise = null
       throw err
     })
   }
-  return initPromise.then(({ queue }) => queue)
+  const promise = initPromise
+  if (!promise) throw new Error('Segment scheduler queue failed to initialize')
+  return promise.then(({ queue }) => queue)
 }
 
 async function initializeQueue() {
   const connection = getQueueRedis()
 
-  const queue = new Queue<SegmentEvalJobData>(QUEUE_NAME, {
+  const queue = new Queue(QUEUE_NAME, {
     connection,
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<SegmentEvalJobData>(
+  const worker = new Worker(
     QUEUE_NAME,
     async (job) => {
-      const { segmentId } = job.data
+      const { segmentId } = job.data as SegmentEvalJobData
       log.debug({ segment_id: segmentId }, 'evaluating segment')
 
       // Lazy import to avoid circular deps
@@ -164,10 +166,7 @@ export async function upsertSegmentEvaluationSchedule(
     }
   )
 
-  log.info(
-    { segment_id: segmentId, pattern: schedule.pattern },
-    'scheduled segment evaluation'
-  )
+  log.info({ segment_id: segmentId, pattern: schedule.pattern }, 'scheduled segment evaluation')
 }
 
 /**
