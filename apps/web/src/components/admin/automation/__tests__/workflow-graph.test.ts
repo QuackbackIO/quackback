@@ -56,6 +56,8 @@ import {
   resolveConditionField,
   toAttributeFieldDefs,
   treeToGraph,
+  TRIGGER_LABELS,
+  TRIGGER_TYPES,
   validateGraph,
   type ConnectorMeta,
   type GraphAction,
@@ -1323,6 +1325,60 @@ describe('snooze action: relative duration', () => {
     const result = validateGraph(graphBad)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toMatch(/write the note/)
+  })
+
+  it('set_ticket_status: defaults to an unset statusId, summarizes with the labels map, and flags an unset one as an issue', () => {
+    expect(defaultAction('set_ticket_status')).toEqual({ type: 'set_ticket_status', statusId: '' })
+    expect(actionSummary({ type: 'set_ticket_status', statusId: '' })).toBe(
+      'Set ticket status to a status…'
+    )
+    expect(
+      actionSummary(
+        { type: 'set_ticket_status', statusId: 'ticket_status_1' },
+        { ticketStatuses: new Map([['ticket_status_1', 'Resolved']]) }
+      )
+    ).toBe('Set ticket status to Resolved')
+    expect(actionIssue({ type: 'set_ticket_status', statusId: '' })).toBe('Choose a ticket status')
+    expect(actionIssue({ type: 'set_ticket_status', statusId: 'ticket_status_1' })).toBeNull()
+  })
+
+  it('set_ticket_status: validateGraph accepts a chosen status, rejects an unset one', () => {
+    const graphOk = {
+      nodes: [
+        { id: 'a', type: 'action', action: { type: 'set_ticket_status', statusId: 'status_1' } },
+      ],
+      edges: [],
+    }
+    expect(validateGraph(graphOk).ok).toBe(true)
+
+    const graphBad = {
+      nodes: [{ id: 'a', type: 'action', action: { type: 'set_ticket_status', statusId: '' } }],
+      edges: [],
+    }
+    const result = validateGraph(graphBad)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/choose a ticket status/)
+  })
+
+  it('convert_to_ticket: has no settings, summarizes as a plain phrase, and never has an issue', () => {
+    expect(defaultAction('convert_to_ticket')).toEqual({ type: 'convert_to_ticket' })
+    expect(actionSummary({ type: 'convert_to_ticket' })).toBe('Convert to a ticket')
+    expect(actionIssue({ type: 'convert_to_ticket' })).toBeNull()
+  })
+
+  it('convert_to_ticket: validateGraph accepts the bare action', () => {
+    const graph = {
+      nodes: [{ id: 'a', type: 'action', action: { type: 'convert_to_ticket' } }],
+      edges: [],
+    }
+    expect(validateGraph(graph).ok).toBe(true)
+  })
+
+  it('the two ticket triggers are pickable, with labels, in TRIGGER_TYPES/TRIGGER_LABELS', () => {
+    expect(TRIGGER_TYPES).toContain('ticket.created')
+    expect(TRIGGER_TYPES).toContain('ticket.status_changed')
+    expect(TRIGGER_LABELS['ticket.created']).toBe('Ticket created')
+    expect(TRIGGER_LABELS['ticket.status_changed']).toBe('Ticket status changed')
   })
 
   it('surfaces the zero-duration issue through collectStepIssues, same as any other action', () => {

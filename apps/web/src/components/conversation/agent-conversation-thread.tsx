@@ -115,6 +115,7 @@ import {
 } from '@/components/conversation/thread-capabilities'
 import { conversationKeys } from '@/components/conversation/query-keys'
 import { MacroPicker } from '@/components/conversation/macro-picker'
+import { WorkflowRunPicker } from '@/components/conversation/workflow-run-picker'
 import { PriorityControl } from '@/components/admin/conversation/priority-control'
 import { AssigneeControl } from '@/components/admin/conversation/assignee-control'
 import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
@@ -1769,6 +1770,16 @@ export function AgentConversationThread({
                   onInsert={insertIntoReply}
                   onApplied={refreshThread}
                 />
+              )}
+              {/* Manual workflow runs (§4.6): no dedicated capability flag
+                  exists for this — it reuses `capabilities.macros` since both
+                  are the same "conversation-only inbox action, not available
+                  on a back_office/tracker ticket" shape (see
+                  thread-capabilities.ts's doc for what that flag already
+                  covers) rather than adding a capability that would always
+                  equal `macros` today. */}
+              {capabilities.macros && !noteMode && conversationId && (
+                <WorkflowRunPicker conversationId={conversationId} onApplied={refreshThread} />
               )}
               <div className="flex-1" />
               <button

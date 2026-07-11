@@ -1,8 +1,21 @@
 /**
  * Event bus -> workflow trigger bridge (support platform §4.6, Slice 5d-iii). Maps
  * a dispatched conversation/message event to a WorkflowTrigger and hands it to the
- * dispatcher. Non-conversation events (posts, comments, tickets, ...) map to null;
- * ticket-scoped triggers are a later extension.
+ * dispatcher. Non-conversation events (posts, comments, ...) map to null.
+ *
+ * Ticket triggers (ticket.created / ticket.status_changed) are conversation-linked
+ * tickets ONLY — a ticket event's own payload never carries a conversationId (see
+ * ticket.webhooks.ts's EventTicketRef/EventTicketData), and the dispatcher is
+ * conversation-keyed (WorkflowTrigger.conversationId is required), so these two
+ * event types need an extra async step: dispatchWorkflowsForEvent's own ticket
+ * branch below resolves the ticket's linked CUSTOMER conversation (one indexed
+ * lookup — ticket_conversations' real primary key leads with ticket_id) BEFORE
+ * calling eventToWorkflowTrigger, and passes the answer as `resolvedConversationId`.
+ * No linked conversation -> the event maps to null (no dispatch). Since
+ * eventToWorkflowTrigger itself stays synchronous (events/process.ts's own cheap
+ * pre-filter calls it with no resolution info, purely to ask "could this event
+ * type ever become a trigger" before enqueuing onto the durable dispatch queue —
+ * see the ticket cases below for how that caller is kept working).
  *
  * dispatchWorkflowsForEvent is invoked from the workflow-dispatch BullMQ job
  * (workflow-dispatch-queue.ts) rather than fire-and-forget straight off the
@@ -36,23 +49,68 @@ import type {
   ConversationId,
   PrincipalId,
   ConversationMessageId,
+  TicketId,
   WorkflowId,
   WorkflowRunId,
 } from '@quackback/ids'
 import type { PrincipalType } from '@/lib/server/policy/types'
 import type { BlockReplyMetadata, WorkflowRun } from '@/lib/server/db'
+import { db, eq, and, ticketConversations } from '@/lib/server/db'
+import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { BlockAnswer, AssistantOutcome } from './condition.evaluator'
 import { dispatchWorkflowTrigger, type WorkflowTrigger } from './dispatcher'
 import { interruptWaitingRuns, resumeWorkflowRun } from './workflow.engine'
 import { findWaitingCustomerFacingRun, readMessageBlockReply } from './dispatcher.guards'
 import { readCursor } from './workflow-wait-queue'
 
+/**
+ * Placeholder conversationId returned ONLY when eventToWorkflowTrigger is
+ * called for a ticket event with no resolution info at all (see the module
+ * doc). The two callers that ever hit this branch — events/process.ts's
+ * coarse pre-filter and this file's own DISPATCHABLE_TRIGGER_TYPES sync test
+ * — only ever check the return value for truthiness/nullness, never read
+ * this field, so a fake id here is safe: were it ever accidentally threaded
+ * through to a real dispatch, resolveConditionContext would simply fail to
+ * find a matching conversation and fail closed, rather than acting on the
+ * wrong one.
+ */
+const UNRESOLVED_TICKET_CONVERSATION_ID = '' as ConversationId
+
+/**
+ * The linked CUSTOMER ticket's conversation id for `ticketId`, or null when
+ * it has none. One indexed lookup: ticket_conversations' real primary key
+ * leads with ticket_id (see the schema's own doc), so filtering by ticketId
+ * is a straight PK read, not a scan.
+ */
+async function resolveTicketConversationId(ticketId: string): Promise<ConversationId | null> {
+  const [row] = await db
+    .select({ conversationId: ticketConversations.conversationId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.ticketId, ticketId as TicketId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return (row?.conversationId as ConversationId | undefined) ?? null
+}
+
 /** Map an event to a workflow trigger, or null when it isn't conversation-scoped.
  *  The event's trigger_type is its event type verbatim, so a workflow subscribes
  *  by the same name the bus dispatches. The switch below is the source of truth
  *  DISPATCHABLE_TRIGGER_TYPES (lib/shared/workflow-trigger-types.ts) mirrors for
  *  authoring validation — keep the two in sync by hand when a case is added. */
-export function eventToWorkflowTrigger(event: EventData): WorkflowTrigger | null {
+export function eventToWorkflowTrigger(
+  event: EventData,
+  /** Ticket events only: the ticket's linked customer conversation, resolved
+   *  ASYNCHRONOUSLY by dispatchWorkflowsForEvent's own ticket branch before
+   *  calling this (otherwise synchronous) function — see the module doc.
+   *  `null` = resolved, definitely no linked conversation (maps to null
+   *  here); omitted = not resolved at all (the coarse pre-filter / sync-test
+   *  callers), which must NOT be read as "definitely unlinked". */
+  resolvedConversationId?: ConversationId | null
+): WorkflowTrigger | null {
   // An automated (service) actor is carried through; the dispatcher gates it out.
   const actorType: PrincipalType = event.actor?.type === 'service' ? 'service' : 'user'
 
@@ -177,6 +235,49 @@ export function eventToWorkflowTrigger(event: EventData): WorkflowTrigger | null
         allowServiceActor: true,
         subjectPrincipalId: null,
         message: null,
+      }
+    }
+    case 'ticket.created': {
+      // Do NOT opt into allowServiceActor: a workflow's own set_ticket_status/
+      // convert_to_ticket action runs under the engine's bounded service actor
+      // (action.executor.ts's ticketActionActor), and ticket.created is never
+      // itself produced by an action, so no loop-safety opt-out is needed —
+      // the automated-actor gate simply blocks a service-authored ticket.created
+      // from ever reaching here (there isn't one in practice for this event).
+      if (resolvedConversationId === null) return null
+      return {
+        triggerType: event.type,
+        conversationId: resolvedConversationId ?? UNRESOLVED_TICKET_CONVERSATION_ID,
+        actorType,
+        subjectPrincipalId: null,
+        message: null,
+      }
+    }
+    case 'ticket.status_changed': {
+      // Loop safety: setTicketStatus (called by the engine's set_ticket_status
+      // action, via a bounded service actor) fires this same event type. No
+      // allowServiceActor opt-out here means the human-actor gate blocks a
+      // workflow's own status write from ever re-triggering a
+      // ticket.status_changed workflow — see action.executor.test.ts's
+      // dedicated loop-safety coverage.
+      if (resolvedConversationId === null) return null
+      // previousStatus/newStatus are already the INTERNAL CATEGORY axis (see
+      // ticket.webhooks.ts's TicketStatusChangedPayload doc — not the raw
+      // status name), so no extra status lookup is needed here. A genuine
+      // category crossing (previousStatus !== newStatus; same-category churn
+      // between two statuses that share a category is NOT a crossing) is what
+      // triggerSettings.ticketStatusCategory's "enters this category" wording
+      // means — dispatcher.ts's own per-workflow filter compares against this
+      // resolved value, never the raw event payload.
+      const { previousStatus, newStatus } = event.data
+      return {
+        triggerType: event.type,
+        conversationId: resolvedConversationId ?? UNRESOLVED_TICKET_CONVERSATION_ID,
+        actorType,
+        subjectPrincipalId: null,
+        message: null,
+        ticketStatusCategory:
+          previousStatus === newStatus ? null : (newStatus as TicketStatusCategory),
       }
     }
     default:
@@ -371,6 +472,24 @@ export async function dispatchWorkflowsForEvent(event: EventData): Promise<void>
     await dispatchWorkflowTrigger(trigger, {
       targetWorkflowId: event.data.workflowId as WorkflowId,
     })
+    return
+  }
+
+  // Ticket triggers (ticket.created / ticket.status_changed): resolve the
+  // ticket's linked customer conversation FIRST (the async step
+  // eventToWorkflowTrigger itself can't do — see its doc), then hand the
+  // resolved id to eventToWorkflowTrigger to build the real trigger. No
+  // linked conversation -> no dispatch. Ticket events never interrupt/resume
+  // anything (that machinery is keyed off message/close activity on the
+  // conversation side, not a ticket lifecycle event), so — like the
+  // unresponsive pair above — this dispatches straight through rather than
+  // falling into the interrupt-then-dispatch machinery below.
+  if (event.type === 'ticket.created' || event.type === 'ticket.status_changed') {
+    const conversationId = await resolveTicketConversationId(event.data.ticket.id)
+    if (!conversationId) return
+    const trigger = eventToWorkflowTrigger(event, conversationId)
+    if (!trigger) return // unreachable: a resolved conversationId always builds a trigger
+    await dispatchWorkflowTrigger(trigger)
     return
   }
 

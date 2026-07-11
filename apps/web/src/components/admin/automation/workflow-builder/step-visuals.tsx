@@ -24,6 +24,7 @@ import {
   SignalIcon,
   SparklesIcon,
   TagIcon,
+  TicketIcon,
   UserGroupIcon,
   UserPlusIcon,
 } from '@heroicons/react/24/outline'
@@ -52,6 +53,8 @@ export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
   apply_sla: ShieldCheckIcon,
   set_attribute: AdjustmentsHorizontalIcon,
   add_note: DocumentTextIcon,
+  set_ticket_status: TicketIcon,
+  convert_to_ticket: TicketIcon,
 }
 
 /** Icons for the 8 conversational block kinds (Phase C, slice C-5) — every

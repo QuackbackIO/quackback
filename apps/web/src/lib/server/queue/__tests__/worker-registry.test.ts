@@ -26,6 +26,7 @@ const WORKER_MODULES = [
   'domains/principals/anon-sweep-queue.ts',
   'domains/sla/sla-breach-sweep-queue.ts',
   'domains/workflows/workflow-dispatch-queue.ts',
+  'domains/workflows/workflow-retention-queue.ts',
   'domains/workflows/workflow-sweep-queue.ts',
   'domains/workflows/workflow-wait-queue.ts',
   'events/process.ts',

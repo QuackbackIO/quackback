@@ -52,6 +52,23 @@
  * add_note from ever re-triggering a note-triggered workflow. Plain text v1
  * (bounded by MAX_CONVERSATION_MESSAGE_LENGTH at the schema, workflow.schemas.ts)
  * — no rich body / mentions yet.
+ *
+ * `set_ticket_status` resolves the conversation's linked CUSTOMER ticket
+ * (getLinkedCustomerTicket, the same join the unified detail panel reads) and
+ * calls the tickets domain's setTicketStatus with a locally widened actor
+ * (ticketActionActor) — no linked ticket throws, which the engine logs as
+ * action_failed and continues past, the same policy add_tag/apply_sla already
+ * get on a bad ref. Loop safety: setTicketStatus fires ticket.status_changed,
+ * and event-trigger.ts's mapping for it does NOT set `allowServiceActor`, so
+ * the human-actor gate blocks this action from ever re-triggering a
+ * ticket.status_changed workflow. `convert_to_ticket` is a no-op success
+ * ('already a ticket') when the conversation already has a linked customer
+ * ticket; otherwise it creates one (title from the conversation's subject or
+ * its first visitor message, requester the conversation's visitor) via the
+ * tickets domain's createTicketCore directly (bypasses createTicket's own
+ * permission gate by design — see createTicketCore's doc) and links it via
+ * ticket-conversation-link.service's linkTicketToConversation. Both are
+ * class-agnostic fire-and-continue side effects, like close/add_note.
  */
 import type {
   ConversationId,
@@ -61,6 +78,7 @@ import type {
   SlaPolicyId,
   ConversationMessageId,
   DataConnectorId,
+  TicketStatusId,
 } from '@quackback/ids'
 import type {
   ConversationPriority,
@@ -72,7 +90,11 @@ import type {
 import {
   db,
   eq,
+  and,
+  asc,
+  isNull,
   conversations,
+  conversationMessages,
   principal,
   user,
   INTERACTIVE_BLOCK_KINDS,
@@ -81,6 +103,9 @@ import {
 import type { TiptapContent } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
+import type { PermissionKey } from '@/lib/shared/permissions'
+import { PERMISSIONS } from '@/lib/shared/permissions'
+import { boundedServiceActor } from '@/lib/server/policy/service-actor'
 
 import * as conversationService from '@/lib/server/domains/conversation/conversation.service'
 import * as tagService from '@/lib/server/domains/conversation/conversation-tag.service'
@@ -101,8 +126,38 @@ import type {
   ConnectorRuntimeContext,
 } from '@/lib/server/domains/connectors/connector.types'
 import { NotFoundError } from '@/lib/shared/errors'
+import * as ticketService from '@/lib/server/domains/tickets/ticket.service'
+import { linkTicketToConversation } from '@/lib/server/domains/tickets/ticket-conversation-link.service'
+import { getLinkedCustomerTicket } from '@/lib/server/domains/inbox/inbox.query'
+import { resolveReplyRecipient } from '@/lib/server/domains/conversation/conversation.recipient'
 
 const log = logger.child({ component: 'workflow-action-executor' })
+
+/**
+ * Ticket action permissions (set_ticket_status / convert_to_ticket): the
+ * engine's own bounded service actor (workflow.engine.ts's workflowActor,
+ * AUTOMATION_PERMISSIONS) predates ticket actions and carries no `ticket.*`
+ * keys — rather than widen that shared ceiling for every other workflow
+ * action too, these two actions widen ONLY their own actor, locally, to add
+ * exactly the two ticket permissions they need. A human actor (a macro
+ * calling applyAction directly) already carries its real permission set via
+ * role and passes through unchanged — neither action is in the macro
+ * catalogue today (workflow.schemas.ts's actionSchema is workflows-only, like
+ * `reopen` before it), so in practice this only ever widens the engine's own
+ * service actor.
+ */
+const TICKET_ACTION_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
+  PERMISSIONS.TICKET_SET_STATUS,
+  PERMISSIONS.TICKET_CREATE,
+])
+
+function ticketActionActor(actor: Actor): Actor {
+  if (actor.principalType !== 'service') return actor
+  return boundedServiceActor(
+    new Set([...(actor.permissions ?? []), ...TICKET_ACTION_PERMISSIONS]),
+    actor.principalId
+  )
+}
 
 /** send_block's own dependencies, pre-resolved once for an entire plan (SF8
  *  perf fix) rather than re-fetched per action: workflow.engine.ts's
@@ -200,6 +255,11 @@ export type WorkflowAction =
   | { type: 'record_csat'; rating: number; comment?: string }
   // Plain-text v1 internal note — see the module doc's `add_note` paragraph.
   | { type: 'add_note'; body: string }
+  // Ticket actions (ticket-actions extension) — see this module's doc for
+  // the resolve-the-linked-ticket-then-throw-if-none policy both share, and
+  // ticketActionActor's doc for why they run under a locally widened actor.
+  | { type: 'set_ticket_status'; statusId: TicketStatusId }
+  | { type: 'convert_to_ticket' }
 
 export interface ActionResult {
   /** A short label of what happened, or null for a deferred no-op. */
@@ -330,7 +390,83 @@ async function sendBlock(
       metadata: { block: buildBlockPayload(block, { runId, nodeId }, replyTimeStatus) },
     }
   )
+
+  // CSAT-over-email (support platform's CSAT-over-email extension): best-effort,
+  // must never fail the block send itself — maybeSendCsatRequestEmail swallows
+  // and logs every failure internally.
+  if (block.kind === 'csat') {
+    await maybeSendCsatRequestEmail(conversationId, resolvedBody)
+  }
+
   return messageDTO.id
+}
+
+/**
+ * When a `request_csat` block posts on a conversation whose active channel is
+ * EMAIL (`conversations.channel === 'email'` — set only for a cold-inbound
+ * email conversation, conversation.email-cold-inbound.ts; the widget/messenger
+ * channels never set it), the customer's only view of this block is their
+ * inbox, where the in-app emoji row is inert — so this ALSO sends a dedicated
+ * rating-request email with real, one-click emoji links (packages/email's
+ * csat-request template). Reuses the exact same offline-reachability signal
+ * conversation.notify.ts's notifyAgentReply uses (resolveReplyRecipient over
+ * the visitor's account email / captured contact email), not a new one.
+ *
+ * Best-effort by design: an email provider outage must never fail the block
+ * send (the block already posted in-app above), so every failure is caught
+ * and logged here rather than propagated.
+ */
+async function maybeSendCsatRequestEmail(
+  conversationId: ConversationId,
+  resolvedBody: TiptapContent | null
+): Promise<void> {
+  try {
+    const [conv] = await db
+      .select({
+        channel: conversations.channel,
+        visitorPrincipalId: conversations.visitorPrincipalId,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1)
+    if (!conv || conv.channel !== 'email' || !conv.visitorPrincipalId) return
+    const visitorPrincipalId = conv.visitorPrincipalId
+
+    const [visitor] = await db
+      .select({ type: principal.type, email: user.email, contactEmail: principal.contactEmail })
+      .from(principal)
+      .leftJoin(user, eq(principal.userId, user.id))
+      .where(eq(principal.id, visitorPrincipalId))
+      .limit(1)
+    const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, null)
+    if (!recipient) return
+
+    const { buildHookContext } = await import('@/lib/server/events/hook-context')
+    const ctx = await buildHookContext()
+    if (!ctx) return
+
+    const { mintCsatEmailToken } = await import('@/lib/server/functions/csat-email')
+    const token = mintCsatEmailToken(conversationId, visitorPrincipalId)
+    const base = `${ctx.portalBaseUrl.replace(/\/$/, '')}/csat?token=${encodeURIComponent(token)}`
+    const ratingUrls = [1, 2, 3, 4, 5].map((r) => `${base}&rating=${r}`) as [
+      string,
+      string,
+      string,
+      string,
+      string,
+    ]
+
+    const { sendCsatRequestEmail } = await import('@quackback/email')
+    await sendCsatRequestEmail({
+      to: recipient,
+      promptText: resolvedBody ? tiptapJsonToText(resolvedBody) : '',
+      ratingUrls,
+      workspaceName: ctx.workspaceName,
+      logoUrl: ctx.logoUrl ?? undefined,
+    })
+  } catch (err) {
+    log.warn({ err, conversationId }, 'csat request email failed')
+  }
 }
 
 /**
@@ -448,6 +584,73 @@ export async function applyAction(
       )
       return label('note added')
     }
+    case 'set_ticket_status': {
+      const linked = await getLinkedCustomerTicket(conversationId)
+      if (!linked) {
+        throw new NotFoundError('NOT_FOUND', 'This conversation has no linked ticket')
+      }
+      await ticketService.setTicketStatus(linked.id, action.statusId, ticketActionActor(actor))
+      return label('ticket status updated')
+    }
+    case 'convert_to_ticket': {
+      const existing = await getLinkedCustomerTicket(conversationId)
+      if (existing) return label('already a ticket')
+
+      const linkActor = ticketActionActor(actor)
+      const { title, requesterPrincipalId } = await deriveTicketOpeningFields(conversationId)
+      const ticket = await ticketService.createTicketCore(
+        { type: 'customer', title, requesterPrincipalId },
+        linkActor
+      )
+      await linkTicketToConversation(ticket.id, conversationId, linkActor)
+      return label('converted to ticket')
+    }
+  }
+}
+
+/**
+ * Title + requester for a fresh ticket opened from a conversation
+ * (`convert_to_ticket`): the conversation's own subject when it has one, else
+ * an excerpt of its first VISITOR message (mirrors
+ * agent-conversation-thread.tsx's manual convert-to-ticket dialog default —
+ * `conversation.subject ?? firstVisitorMessage.content.trim().slice(0, 200)`),
+ * falling back to a plain placeholder for the rare case neither exists (an
+ * empty conversation). The requester is always the conversation's visitor
+ * principal, whether or not it resolves to a real principal (createTicketCore
+ * accepts null).
+ */
+async function deriveTicketOpeningFields(
+  conversationId: ConversationId
+): Promise<{ title: string; requesterPrincipalId: PrincipalId | null }> {
+  const [conv] = await db
+    .select({
+      subject: conversations.subject,
+      visitorPrincipalId: conversations.visitorPrincipalId,
+    })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  if (!conv) throw new NotFoundError('NOT_FOUND', 'Conversation not found')
+
+  let title = conv.subject?.trim() || ''
+  if (!title) {
+    const [firstVisitorMessage] = await db
+      .select({ content: conversationMessages.content })
+      .from(conversationMessages)
+      .where(
+        and(
+          eq(conversationMessages.conversationId, conversationId),
+          eq(conversationMessages.senderType, 'visitor'),
+          isNull(conversationMessages.deletedAt)
+        )
+      )
+      .orderBy(asc(conversationMessages.createdAt))
+      .limit(1)
+    title = firstVisitorMessage?.content.trim().slice(0, 200) || 'Untitled ticket'
+  }
+  return {
+    title,
+    requesterPrincipalId: (conv.visitorPrincipalId ?? null) as PrincipalId | null,
   }
 }
 

@@ -33,6 +33,14 @@ export const DISPATCHABLE_TRIGGER_TYPES = [
   'conversation.teammate_unresponsive',
   'sla.approaching_breach',
   'sla.breached',
+  // Ticket triggers (conversation-linked tickets only, support platform's
+  // ticket-triggers extension): a ticket event's own payload carries no
+  // conversationId, so these only ever dispatch when the ticket has a linked
+  // CUSTOMER conversation (ticket_conversations) — event-trigger.ts's
+  // dispatchWorkflowsForEvent resolves that join before mapping the event,
+  // and maps to no dispatch at all when there's no link.
+  'ticket.created',
+  'ticket.status_changed',
 ] as const
 
 export type DispatchableTriggerType = (typeof DISPATCHABLE_TRIGGER_TYPES)[number]

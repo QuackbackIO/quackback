@@ -59,6 +59,7 @@ import {
   FlagIcon,
   ShieldCheckIcon,
   TagIcon,
+  TicketIcon,
   UserGroupIcon,
   UserPlusIcon,
 } from '@heroicons/react/24/outline'
@@ -106,6 +107,8 @@ const ICONS: Record<IconKey, ComponentType<{ className?: string }>> = {
   apply_sla: ShieldCheckIcon,
   set_attribute: AdjustmentsHorizontalIcon,
   add_note: DocumentTextIcon,
+  set_ticket_status: TicketIcon,
+  convert_to_ticket: TicketIcon,
   call_connector: CALL_CONNECTOR_ICON,
   ...BLOCK_ICONS,
 }

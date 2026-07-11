@@ -51,7 +51,7 @@ export function ActionEditor({
   action: GraphAction
   onChange: (action: GraphAction) => void
 }) {
-  const { members, teams, tags, slaPolicies, attributes } = useWorkflowEntities()
+  const { members, teams, tags, slaPolicies, ticketStatuses, attributes } = useWorkflowEntities()
 
   const setSnoozeMode = (mode: SnoozeMode) => {
     if (mode === 'reply') return onChange({ type: 'snooze', untilIso: null })
@@ -278,6 +278,28 @@ export function ActionEditor({
       {action.type === 'reopen' && (
         <p className="text-xs text-muted-foreground">
           Reopens a closed conversation, moving it back into an active queue.
+        </p>
+      )}
+
+      {action.type === 'set_ticket_status' && (
+        <Field label="Ticket status">
+          <EntitySelect
+            value={action.statusId}
+            placeholder="Choose ticket status"
+            items={ticketStatuses}
+            onChange={(statusId) => onChange({ ...action, statusId })}
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Applies to the conversation&apos;s linked customer ticket. No linked ticket fails this
+            step.
+          </p>
+        </Field>
+      )}
+
+      {action.type === 'convert_to_ticket' && (
+        <p className="text-xs text-muted-foreground">
+          Creates a customer ticket from this conversation and links it. Already linked to a ticket?
+          Does nothing.
         </p>
       )}
     </div>

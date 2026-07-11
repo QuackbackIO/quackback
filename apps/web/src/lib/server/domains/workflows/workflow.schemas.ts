@@ -27,6 +27,7 @@ import {
 } from './condition.evaluator'
 import { DISPATCHABLE_TRIGGER_TYPES } from '@/lib/shared/workflow-trigger-types'
 import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
+import { TICKET_STATUS_CATEGORIES } from '@/lib/shared/db-types'
 
 /** Every dynamic attribute prefix a condition field may carry, alongside the
  *  static CONDITION_FIELDS catalogue — conversation/person/company
@@ -136,6 +137,13 @@ const actionSchema = z.union([
     type: z.literal('add_note'),
     body: z.string().min(1).max(MAX_CONVERSATION_MESSAGE_LENGTH),
   }),
+  // Ticket actions (support platform's ticket-actions extension) — see
+  // action.executor.ts's WorkflowAction doc for the resolve-the-linked-ticket
+  // + throw-if-none policy both share.
+  z.object({ type: z.literal('set_ticket_status'), statusId: z.string().min(1) }),
+  // No settings: a no-op when the conversation already has a linked customer
+  // ticket, else creates one and links it.
+  z.object({ type: z.literal('convert_to_ticket') }),
 ])
 
 // Conversational block kinds (Phase C, slice C-1). `blockBodySchema` is a
@@ -525,6 +533,18 @@ export const DEFAULT_BREACH_LEAD_MINUTES = 15
  *  when present, via `.catchall(z.unknown())` rather than `.strict()` or a
  *  plain `z.record`, so an unrecognized key still round-trips instead of
  *  being rejected or silently dropped. */
+/** `triggerSettings.ticketStatusCategory` (ticket triggers extension):
+ *  `ticket.status_changed` only — restricts the trigger to firing when the
+ *  ticket ENTERS this category (a genuine crossing, not same-category churn;
+ *  see event-trigger.ts's ticket.status_changed case for how "entered" is
+ *  resolved off the event's own previous/new category fields). Absent =
+ *  "any status change" (the default, never restricts). Enforced at dispatch
+ *  by dispatcher.ts's own per-workflow filter, alongside channel/audience/
+ *  sendWindow — ticket triggers aren't conversation-condition-evaluable the
+ *  way the rest of the catalogue is, so this rides the same triggerSettings
+ *  bag rather than a new condition field. */
+export const ticketStatusCategorySchema = z.enum(TICKET_STATUS_CATEGORIES)
+
 export const triggerSettingsSchema = z
   .object({
     frequencyCap: frequencyCapSchema.optional(),
@@ -532,6 +552,7 @@ export const triggerSettingsSchema = z
     sendWindow: sendWindowSchema.optional(),
     inactivityMinutes: z.number().int().min(1).max(MAX_INACTIVITY_MINUTES).optional(),
     breachLeadMinutes: z.number().int().min(1).max(MAX_BREACH_LEAD_MINUTES).optional(),
+    ticketStatusCategory: ticketStatusCategorySchema.optional(),
   })
   .catchall(z.unknown())
 

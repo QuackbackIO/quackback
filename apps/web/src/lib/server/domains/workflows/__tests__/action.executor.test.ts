@@ -87,6 +87,39 @@ vi.mock('@/lib/server/domains/assistant/assistant.orchestrator', () => ({
   runAssistantTurnForConversation,
 }))
 
+// Ticket actions (set_ticket_status / convert_to_ticket) + CSAT-over-email's
+// own dependencies — each mocked at its own seam so this stays a unit test of
+// action.executor.ts's dispatch/resolution logic, not an integration test of
+// the tickets domain or the email package.
+const {
+  setTicketStatus,
+  createTicketCore,
+  linkTicketToConversation,
+  getLinkedCustomerTicket,
+  buildHookContext,
+  mintCsatEmailToken,
+  sendCsatRequestEmail,
+} = vi.hoisted(() => ({
+  setTicketStatus: vi.fn(),
+  createTicketCore: vi.fn(),
+  linkTicketToConversation: vi.fn(),
+  getLinkedCustomerTicket: vi.fn(),
+  buildHookContext: vi.fn(),
+  mintCsatEmailToken: vi.fn(),
+  sendCsatRequestEmail: vi.fn(),
+}))
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  setTicketStatus,
+  createTicketCore,
+}))
+vi.mock('@/lib/server/domains/tickets/ticket-conversation-link.service', () => ({
+  linkTicketToConversation,
+}))
+vi.mock('@/lib/server/domains/inbox/inbox.query', () => ({ getLinkedCustomerTicket }))
+vi.mock('@/lib/server/events/hook-context', () => ({ buildHookContext }))
+vi.mock('@/lib/server/functions/csat-email', () => ({ mintCsatEmailToken }))
+vi.mock('@quackback/email', () => ({ sendCsatRequestEmail }))
+
 // executeCallConnectorNode's own dependencies: the connector row lookup +
 // the shared HTTP executor (both mocked so this stays a unit test of the
 // interpolation/coercion/routing logic, not a connector.execute integration
@@ -143,21 +176,44 @@ beforeEach(() => {
 
   mockConnectorRuntimeRow.current = null
   mockConnectorRuntimeRow.error = null
-  mockDbSelect.mockImplementation(() => ({
-    from: () => ({
-      innerJoin: () => ({
-        leftJoin: () => ({
-          where: () => ({
-            limit: async () => {
-              if (mockConnectorRuntimeRow.error) throw mockConnectorRuntimeRow.error
-              return mockConnectorRuntimeRow.current ? [mockConnectorRuntimeRow.current] : []
-            },
-          }),
-        }),
-      }),
-    }),
-  }))
+  // A generic chainable stub (every drizzle verb no-ops back to itself,
+  // terminal `.limit()` resolves the connector-runtime row) so it satisfies
+  // every raw db.select shape this file's code under test can produce:
+  // connector.toolspec's own .from().innerJoin().leftJoin().where().limit(),
+  // AND the ticket-actions/CSAT-over-email additions' simpler
+  // .from().where().limit() / .from().where().orderBy().limit() /
+  // .from().leftJoin().where().limit() shapes. Individual tests below
+  // override with mockImplementationOnce for their own specific rows.
+  mockDbSelect.mockImplementation(() => {
+    const chain = {
+      from: () => chain,
+      innerJoin: () => chain,
+      leftJoin: () => chain,
+      where: () => chain,
+      orderBy: () => chain,
+      limit: async () => {
+        if (mockConnectorRuntimeRow.error) throw mockConnectorRuntimeRow.error
+        return mockConnectorRuntimeRow.current ? [mockConnectorRuntimeRow.current] : []
+      },
+    }
+    return chain
+  })
 })
+
+/** A one-shot db.select chain resolving `rows` at `.limit()` — for the
+ *  ticket-actions/CSAT-over-email tests below, queued via
+ *  mockDbSelect.mockImplementationOnce in call order. */
+function selectChainOnce(rows: unknown[]) {
+  const chain = {
+    from: () => chain,
+    innerJoin: () => chain,
+    leftJoin: () => chain,
+    where: () => chain,
+    orderBy: () => chain,
+    limit: async () => rows,
+  }
+  return chain
+}
 
 describe('applyAction', () => {
   it('dispatches each state-change action to its service with the right args', async () => {
@@ -466,6 +522,86 @@ describe('applyAction', () => {
     })
   })
 
+  describe('send_block csat -> CSAT-over-email', () => {
+    const csatBody = { type: 'doc', content: [{ type: 'text', text: 'How did we do?' }] }
+    const csatAction = {
+      type: 'send_block' as const,
+      nodeId: 'n_csat',
+      block: { kind: 'csat' as const, body: csatBody, allowTypingInterrupt: true },
+    }
+
+    it('does not send an email when the conversation channel is not email', async () => {
+      mockDbSelect.mockImplementationOnce(() =>
+        selectChainOnce([{ channel: 'messenger', visitorPrincipalId: 'principal_visitor' }])
+      )
+      await applyAction(csatAction, ctx)
+      expect(sendCsatRequestEmail).not.toHaveBeenCalled()
+    })
+
+    it('does not send an email when the conversation has no visitor principal', async () => {
+      mockDbSelect.mockImplementationOnce(() =>
+        selectChainOnce([{ channel: 'email', visitorPrincipalId: null }])
+      )
+      await applyAction(csatAction, ctx)
+      expect(sendCsatRequestEmail).not.toHaveBeenCalled()
+    })
+
+    it('sends the CSAT-over-email request when the channel is email and the visitor is reachable', async () => {
+      mockDbSelect
+        .mockImplementationOnce(() =>
+          selectChainOnce([{ channel: 'email', visitorPrincipalId: 'principal_visitor' }])
+        )
+        .mockImplementationOnce(() =>
+          selectChainOnce([{ type: 'user', email: 'visitor@example.com', contactEmail: null }])
+        )
+      buildHookContext.mockResolvedValue({
+        workspaceName: 'Acme',
+        portalBaseUrl: 'https://acme.example.com',
+        logoUrl: null,
+      })
+      mintCsatEmailToken.mockReturnValue('signed-token')
+      sendCsatRequestEmail.mockResolvedValue({ sent: true })
+
+      const result = await applyAction(csatAction, ctx)
+      expect(result).toMatchObject({ label: 'sent csat block' })
+
+      expect(mintCsatEmailToken).toHaveBeenCalledWith(conversationId, 'principal_visitor')
+      expect(sendCsatRequestEmail).toHaveBeenCalledWith({
+        to: 'visitor@example.com',
+        promptText: 'How did we do?',
+        ratingUrls: [
+          'https://acme.example.com/csat?token=signed-token&rating=1',
+          'https://acme.example.com/csat?token=signed-token&rating=2',
+          'https://acme.example.com/csat?token=signed-token&rating=3',
+          'https://acme.example.com/csat?token=signed-token&rating=4',
+          'https://acme.example.com/csat?token=signed-token&rating=5',
+        ],
+        workspaceName: 'Acme',
+        logoUrl: undefined,
+      })
+    })
+
+    it('never fails the block send when the email send itself throws (best-effort)', async () => {
+      mockDbSelect
+        .mockImplementationOnce(() =>
+          selectChainOnce([{ channel: 'email', visitorPrincipalId: 'principal_visitor' }])
+        )
+        .mockImplementationOnce(() =>
+          selectChainOnce([{ type: 'user', email: 'visitor@example.com', contactEmail: null }])
+        )
+      buildHookContext.mockResolvedValue({
+        workspaceName: 'Acme',
+        portalBaseUrl: 'https://acme.example.com',
+        logoUrl: null,
+      })
+      mintCsatEmailToken.mockReturnValue('signed-token')
+      sendCsatRequestEmail.mockRejectedValue(new Error('provider down'))
+
+      const result = await applyAction(csatAction, ctx)
+      expect(result).toMatchObject({ label: 'sent csat block' })
+    })
+  })
+
   describe('let_assistant_answer', () => {
     it('hands the turn to Quinn out-of-band and returns immediately', async () => {
       let resolveTurn: () => void = () => {}
@@ -548,6 +684,116 @@ describe('applyAction', () => {
       addAgentNote.mockRejectedValue(new Error('Message cannot be empty'))
       await expect(applyAction({ type: 'add_note', body: '' }, ctx)).rejects.toThrow(
         'Message cannot be empty'
+      )
+    })
+  })
+
+  describe('set_ticket_status', () => {
+    it('resolves the linked customer ticket and calls setTicketStatus with a locally widened service actor', async () => {
+      getLinkedCustomerTicket.mockResolvedValue({
+        id: 'ticket_1',
+        number: 1,
+        statusName: 'Open',
+        statusCategory: 'open',
+      })
+      setTicketStatus.mockResolvedValue({ id: 'ticket_1' })
+      const engineActor = {
+        principalId: null,
+        role: 'admin',
+        principalType: 'service',
+        permissions: new Set(['conversation.view']),
+      } as unknown as Actor
+
+      const result = await applyAction(
+        { type: 'set_ticket_status', statusId: 'ticket_status_1' as never },
+        { conversationId, actor: engineActor }
+      )
+      expect(result).toMatchObject({ label: 'ticket status updated' })
+      expect(getLinkedCustomerTicket).toHaveBeenCalledWith(conversationId)
+      expect(setTicketStatus).toHaveBeenCalledTimes(1)
+      const [ticketIdArg, statusIdArg, actorArg] = setTicketStatus.mock.calls[0]!
+      expect(ticketIdArg).toBe('ticket_1')
+      expect(statusIdArg).toBe('ticket_status_1')
+      // Widened locally: the engine's own service actor gains the two ticket
+      // permissions without losing whatever it already had.
+      expect(actorArg.principalType).toBe('service')
+      expect(actorArg.permissions.has('conversation.view')).toBe(true)
+      expect(actorArg.permissions.has('ticket.set_status')).toBe(true)
+      expect(actorArg.permissions.has('ticket.create')).toBe(true)
+    })
+
+    it('passes a human actor through unchanged (no widening)', async () => {
+      getLinkedCustomerTicket.mockResolvedValue({ id: 'ticket_1' })
+      setTicketStatus.mockResolvedValue({ id: 'ticket_1' })
+      await applyAction({ type: 'set_ticket_status', statusId: 'ticket_status_1' as never }, ctx)
+      const [, , actorArg] = setTicketStatus.mock.calls[0]!
+      expect(actorArg).toBe(actor)
+    })
+
+    it('throws when the conversation has no linked ticket (the engine logs action_failed and continues)', async () => {
+      getLinkedCustomerTicket.mockResolvedValue(null)
+      await expect(
+        applyAction({ type: 'set_ticket_status', statusId: 'ticket_status_1' as never }, ctx)
+      ).rejects.toThrow(NotFoundError)
+      expect(setTicketStatus).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('convert_to_ticket', () => {
+    it('is a no-op when the conversation already has a linked customer ticket', async () => {
+      getLinkedCustomerTicket.mockResolvedValue({
+        id: 'ticket_1',
+        number: 1,
+        statusName: 'Open',
+        statusCategory: 'open',
+      })
+      const result = await applyAction({ type: 'convert_to_ticket' }, ctx)
+      expect(result).toMatchObject({ label: 'already a ticket' })
+      expect(createTicketCore).not.toHaveBeenCalled()
+      expect(linkTicketToConversation).not.toHaveBeenCalled()
+    })
+
+    it('creates a customer ticket from the conversation subject and links it, when unlinked', async () => {
+      getLinkedCustomerTicket.mockResolvedValue(null)
+      mockDbSelect.mockImplementationOnce(() =>
+        selectChainOnce([{ subject: 'Cannot log in', visitorPrincipalId: 'principal_visitor' }])
+      )
+      createTicketCore.mockResolvedValue({ id: 'ticket_2' })
+
+      const engineActor = {
+        principalId: null,
+        role: 'admin',
+        principalType: 'service',
+      } as unknown as Actor
+      const result = await applyAction(
+        { type: 'convert_to_ticket' },
+        { conversationId, actor: engineActor }
+      )
+      expect(result).toMatchObject({ label: 'converted to ticket' })
+      expect(createTicketCore).toHaveBeenCalledWith(
+        { type: 'customer', title: 'Cannot log in', requesterPrincipalId: 'principal_visitor' },
+        expect.objectContaining({ principalType: 'service' })
+      )
+      expect(linkTicketToConversation).toHaveBeenCalledWith(
+        'ticket_2',
+        conversationId,
+        expect.objectContaining({ principalType: 'service' })
+      )
+    })
+
+    it('falls back to the first visitor message excerpt when the conversation has no subject', async () => {
+      getLinkedCustomerTicket.mockResolvedValue(null)
+      mockDbSelect
+        .mockImplementationOnce(() =>
+          selectChainOnce([{ subject: null, visitorPrincipalId: 'principal_visitor' }])
+        )
+        .mockImplementationOnce(() => selectChainOnce([{ content: 'Hi, my account is locked' }]))
+      createTicketCore.mockResolvedValue({ id: 'ticket_3' })
+
+      await applyAction({ type: 'convert_to_ticket' }, ctx)
+      expect(createTicketCore).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Hi, my account is locked' }),
+        expect.anything()
       )
     })
   })

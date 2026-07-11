@@ -12,7 +12,8 @@ import { createServerFn } from '@tanstack/react-start'
 import type { WorkflowId, WorkflowVersionId, ConversationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import type { Workflow, WorkflowClass, WorkflowStatus } from '@/lib/server/db'
+import type { Workflow, WorkflowClass, WorkflowStatus, WorkflowRunState } from '@/lib/server/db'
+import { isUniqueViolation } from '@/lib/server/utils'
 import {
   listWorkflows,
   getWorkflow,
@@ -31,6 +32,9 @@ import {
   type WorkflowPreviewResult,
   type WorkflowPreviewTraceEntry,
 } from '@/lib/server/domains/workflows/workflow-preview'
+import { runWorkflow } from '@/lib/server/domains/workflows/workflow.engine'
+import { resolveConditionContext } from '@/lib/server/domains/workflows/condition.context'
+import { hasActiveCustomerFacingRun } from '@/lib/server/domains/workflows/dispatcher.guards'
 
 export type { WorkflowPreviewResult, WorkflowPreviewTraceEntry }
 import type { WorkflowGraph } from '@/lib/server/domains/workflows/graph'
@@ -335,4 +339,130 @@ export const previewWorkflowFn = createServerFn({ method: 'POST' })
       workflowId: data.workflowId as WorkflowId,
       conversationId: data.conversationId as ConversationId,
     })
+  })
+
+// --- Manual workflow runs (inbox action) ---
+//
+// A teammate can fire a live workflow on the conversation they're looking at
+// right now, from the composer (workflow-run-picker.tsx) — the same
+// deliberate-human-override idea as applying a macro. Gated on
+// conversation.reply, NOT workflow.manage: this mirrors applyMacroFn's stance
+// in functions/macros.ts (an inbox action any replying teammate can take,
+// not an authoring privilege), and running a workflow manually changes
+// nothing about how it's configured.
+
+export interface RunnableWorkflowDTO {
+  id: string
+  name: string
+  class: WorkflowClass
+  triggerType: string
+}
+
+const runnableFilter = (w: Workflow): boolean => w.status === 'live'
+
+/**
+ * Live workflows a teammate can fire manually from the inbox — a minimal DTO
+ * (no graph/triggerSettings; the picker only ever shows name + class). Built
+ * off listWorkflows() (this domain's only "every workflow" read) filtered to
+ * `status === 'live'` here rather than adding a new service query, since the
+ * manager's own list is already cheap and infrequently large.
+ */
+export const listRunnableWorkflowsFn = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<RunnableWorkflowDTO[]> => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const all = await listWorkflows()
+    return all.filter(runnableFilter).map((w) => ({
+      id: w.id,
+      name: w.name,
+      class: w.class,
+      triggerType: w.triggerType,
+    }))
+  }
+)
+
+const runManuallySchema = z.object({ workflowId: z.string(), conversationId: z.string() })
+
+export type RunWorkflowManuallyResult =
+  | { ok: true; runId: string; state: WorkflowRunState }
+  | { ok: false; reason: 'locked' | 'nothing_to_do' | 'not_live' }
+
+/**
+ * Fire one live workflow against one conversation, right now, as a deliberate
+ * teammate action — NOT via dispatchWorkflowTrigger. The dispatcher's
+ * `targetWorkflowId` mode still enforces the workflow's own trigger-type
+ * match, channel scope, audience, and send-window (it's built for the
+ * timer-driven unresponsive triggers, which ARE a kind of trigger firing);
+ * a manual run is a human choosing to run this automation on this
+ * conversation right now, so none of those trigger-time targeting guards
+ * apply here — they would just make "run this workflow" silently no-op for
+ * reasons a teammate staring at the conversation has no way to see.
+ * runWorkflow (workflow.engine.ts) is called directly with the same
+ * `ConditionContext` the dispatcher itself would resolve, so every GRAPH
+ * condition (branches, gates) still evaluates normally — only the
+ * trigger-time targeting layer is bypassed, not the workflow's own logic.
+ *
+ * `subjectPrincipalId: null` is deliberate, not an oversight: it bypasses the
+ * per-person frequency cap (hasFrequencyCap / claimFrequencyCapSlot in
+ * dispatcher.guards.ts only ever gate when there's a real subject to key on),
+ * since a manual run is an explicit agent action the cap was never meant to
+ * throttle. The 'started' run event workflow.engine.ts's runWorkflow writes
+ * inside the same transaction still gets a null subject, so nothing is
+ * miscounted against a real person's cap ledger.
+ *
+ * The customer_facing exclusive lock (the partial unique index on
+ * workflow_runs) is NOT bypassed — it's structural, not a trigger-time guard.
+ * hasActiveCustomerFacingRun is checked up front for a customer_facing
+ * workflow, mirroring the dispatcher's own cheap pre-check (see
+ * dispatcher.ts's `activeCustomerFacingRunHint` doc): a pre-check only, not
+ * the real lock, so a race lost between this check and runWorkflow's insert
+ * still surfaces as 'nothing_to_do' rather than 'locked' (runWorkflow itself
+ * catches that unique violation internally and returns null — see its own
+ * doc — so by the time control returns here the two causes are no longer
+ * distinguishable). Rare and harmless: the run simply didn't start, exactly
+ * as reported.
+ */
+export const runWorkflowManuallyFn = createServerFn({ method: 'POST' })
+  .validator(runManuallySchema)
+  .handler(async ({ data }): Promise<RunWorkflowManuallyResult> => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const workflow = await getWorkflow(data.workflowId as WorkflowId)
+    if (!workflow || workflow.status !== 'live') {
+      return { ok: false, reason: 'not_live' }
+    }
+    const conversationId = data.conversationId as ConversationId
+
+    if (
+      workflow.class === 'customer_facing' &&
+      (await hasActiveCustomerFacingRun(conversationId))
+    ) {
+      return { ok: false, reason: 'locked' }
+    }
+
+    const ctx = await resolveConditionContext(conversationId)
+    if (!ctx) {
+      // The conversation vanished between the picker rendering and this call
+      // (deleted/closed-out from under the agent) — nothing to run against.
+      return { ok: false, reason: 'nothing_to_do' }
+    }
+
+    try {
+      const run = await runWorkflow(workflow, ctx, { conversationId, subjectPrincipalId: null })
+      if (!run) {
+        // Either the walk produced no actions and wasn't waiting (a genuine
+        // no-op), or the exclusive lock was lost on the authoritative
+        // re-check despite the pre-check above (see this fn's doc) — both
+        // report the same friendly reason to the UI.
+        return { ok: false, reason: 'nothing_to_do' }
+      }
+      return { ok: true, runId: run.id, state: run.state }
+    } catch (err) {
+      // Defense in depth: runWorkflow already catches its own unique
+      // violation and returns null (see workflow.engine.ts), so this branch
+      // should be unreachable in practice — kept as a structured fallback
+      // rather than letting a lock race surface as an unhandled 500.
+      if (isUniqueViolation(err)) {
+        return { ok: false, reason: 'locked' }
+      }
+      throw err
+    }
   })

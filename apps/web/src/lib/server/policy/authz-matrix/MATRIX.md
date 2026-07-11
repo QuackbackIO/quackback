@@ -101,7 +101,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 560 surfaces
+### Server functions (`requireAuth`) — 562 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -619,6 +619,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::listWorkflowVersionsFn | routing.manage |
 | `lib/server/functions/workflows.ts`::restoreWorkflowVersionFn | workflow.manage |
 | `lib/server/functions/workflows.ts`::previewWorkflowFn | routing.manage |
+| `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
+| `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
 | `lib/server/integrations/asana/functions.ts`::getAsanaConnectUrl | integration.manage |
 | `lib/server/integrations/asana/functions.ts`::fetchAsanaProjectsFn | integration.manage |
 | `lib/server/integrations/azure-devops/functions.ts`::connectAzureDevOpsFn | integration.manage |
@@ -842,7 +844,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-167 of 820 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+168 of 823 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -863,6 +865,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/conversation.ts`::getMyConversationFn | server-fn |
 | `lib/server/functions/conversation.ts`::getMyConversationsFn | server-fn |
 | `lib/server/functions/conversation.ts`::getWidgetTeamAvatarsFn | server-fn |
+| `lib/server/functions/csat-email.ts`::recordCsatViaTokenFn | server-fn |
 | `lib/server/functions/embeds.ts`::getEmbedPreviewFn | server-fn |
 | `lib/server/functions/help-center-redirect-rules.ts`::resolveHelpCenterRedirectFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicArticleBySlugFn | server-fn |

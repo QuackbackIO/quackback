@@ -310,3 +310,33 @@ describe('TriggerEditor — Audience unreachable-field warning', () => {
     expect(screen.queryByText(/never carries one — it will never match/)).not.toBeInTheDocument()
   })
 })
+
+/** The <select> under the "Status category filter" field label — only
+ *  rendered for the ticket.status_changed trigger. */
+function ticketStatusCategorySelect(): HTMLSelectElement {
+  const label = screen.getByText('Status category filter')
+  return label.parentElement!.querySelector('select') as HTMLSelectElement
+}
+
+describe('TriggerEditor — ticket.status_changed status category filter', () => {
+  it('is not shown for any other trigger type', () => {
+    renderEditor()
+    expect(screen.queryByText('Status category filter')).not.toBeInTheDocument()
+  })
+
+  it('defaults to "Any status change" (unset key) once the trigger is ticket.status_changed', () => {
+    renderEditor()
+    fireEvent.change(triggerTypeSelect(), { target: { value: 'ticket.status_changed' } })
+    expect(ticketStatusCategorySelect().value).toBe('any')
+  })
+
+  it('setting a category writes ticketStatusCategory; switching back to "Any status change" drops the key entirely', () => {
+    renderEditor()
+    fireEvent.change(triggerTypeSelect(), { target: { value: 'ticket.status_changed' } })
+    fireEvent.change(ticketStatusCategorySelect(), { target: { value: 'closed' } })
+    expect(ticketStatusCategorySelect().value).toBe('closed')
+
+    fireEvent.change(ticketStatusCategorySelect(), { target: { value: 'any' } })
+    expect(ticketStatusCategorySelect().value).toBe('any')
+  })
+})

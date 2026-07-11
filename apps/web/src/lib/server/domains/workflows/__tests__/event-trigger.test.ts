@@ -193,15 +193,109 @@ describe('eventToWorkflowTrigger', () => {
   })
 
   it('returns null for non-conversation events', () => {
-    for (const type of [
-      'post.created',
-      'comment.created',
-      'ticket.created',
-      'changelog.published',
-    ]) {
+    for (const type of ['post.created', 'comment.created', 'changelog.published']) {
       const event = { ...base, type, actor: userActor, data: {} } as unknown as EventData
       expect(eventToWorkflowTrigger(event)).toBeNull()
     }
+  })
+})
+
+/**
+ * Ticket triggers (ticket.created / ticket.status_changed) are conversation-
+ * linked tickets ONLY: the event payload never carries a conversationId, so
+ * eventToWorkflowTrigger takes it as an explicit second argument, resolved
+ * asynchronously by dispatchWorkflowsForEvent's own ticket branch (covered at
+ * the dispatch level in event-trigger-dispatch.test.ts) BEFORE this mapping
+ * runs. Called with no second argument at all (the coarse events/process.ts
+ * pre-filter, or this file's own DISPATCHABLE_TRIGGER_TYPES sync test below)
+ * must NOT read as "definitely unlinked" — only an explicit resolved `null`
+ * does.
+ */
+describe('eventToWorkflowTrigger: ticket triggers', () => {
+  const ticketCreated = (): EventData =>
+    ({
+      ...base,
+      type: 'ticket.created',
+      actor: userActor,
+      data: {
+        ticket: {
+          id: 'ticket_1',
+          number: 42,
+          type: 'customer',
+          priority: 'none',
+          title: 'Cannot log in',
+          status: 'open',
+          stage: 'new',
+          requesterPrincipalId: 'principal_visitor',
+          companyId: null,
+          createdAt: '2026-01-05T09:00:00Z',
+          updatedAt: '2026-01-05T09:00:00Z',
+          resolvedAt: null,
+        },
+      },
+    }) as unknown as EventData
+
+  const ticketStatusChanged = (previousStatus: string, newStatus: string): EventData =>
+    ({
+      ...base,
+      type: 'ticket.status_changed',
+      actor: userActor,
+      data: {
+        ticket: { id: 'ticket_1', number: 42, type: 'customer', priority: 'none' },
+        previousStatus,
+        newStatus,
+        stage: 'new',
+      },
+    }) as unknown as EventData
+
+  it('maps ticket.created to the resolved conversationId when given one', () => {
+    const trigger = eventToWorkflowTrigger(ticketCreated(), 'conversation_9' as never)
+    expect(trigger).toMatchObject({
+      triggerType: 'ticket.created',
+      conversationId: 'conversation_9',
+      actorType: 'user',
+      subjectPrincipalId: null,
+      message: null,
+    })
+    expect(trigger?.allowServiceActor).toBeUndefined()
+  })
+
+  it('maps ticket.created to null when explicitly resolved to no linked conversation', () => {
+    expect(eventToWorkflowTrigger(ticketCreated(), null)).toBeNull()
+  })
+
+  it('maps ticket.status_changed to the resolved conversationId, with the entered category when the category genuinely crosses', () => {
+    const trigger = eventToWorkflowTrigger(
+      ticketStatusChanged('open', 'closed'),
+      'conversation_9' as never
+    )
+    expect(trigger).toMatchObject({
+      triggerType: 'ticket.status_changed',
+      conversationId: 'conversation_9',
+      ticketStatusCategory: 'closed',
+    })
+  })
+
+  it('resolves ticketStatusCategory to null for same-category churn (no genuine crossing)', () => {
+    const trigger = eventToWorkflowTrigger(
+      ticketStatusChanged('open', 'open'),
+      'conversation_9' as never
+    )
+    expect(trigger).toMatchObject({ ticketStatusCategory: null })
+  })
+
+  it('maps ticket.status_changed to null when explicitly resolved to no linked conversation', () => {
+    expect(eventToWorkflowTrigger(ticketStatusChanged('open', 'closed'), null)).toBeNull()
+  })
+
+  it('does NOT opt a service-authored ticket.status_changed out of the automated-actor gate (loop guard: a workflow set_ticket_status action must not re-trigger ticket.status_changed workflows)', () => {
+    const event = {
+      ...ticketStatusChanged('open', 'pending'),
+      actor: serviceActor,
+    } as unknown as EventData
+    const trigger = eventToWorkflowTrigger(event, 'conversation_9' as never)
+    expect(trigger?.actorType).toBe('service')
+    expect(trigger?.allowServiceActor).toBeUndefined()
   })
 })
 
@@ -282,6 +376,30 @@ describe('DISPATCHABLE_TRIGGER_TYPES stays in sync with the switch', () => {
           conversationId: 'conversation_1',
           clock: 'first_response',
           dueAt: '2026-01-05T11:00:00Z',
+        })
+      case 'ticket.created':
+        return withData(type, {
+          ticket: {
+            id: 'ticket_1',
+            number: 1,
+            type: 'customer',
+            priority: 'none',
+            title: 'A ticket',
+            status: 'open',
+            stage: 'new',
+            requesterPrincipalId: null,
+            companyId: null,
+            createdAt: '2026-01-05T09:00:00Z',
+            updatedAt: '2026-01-05T09:00:00Z',
+            resolvedAt: null,
+          },
+        })
+      case 'ticket.status_changed':
+        return withData(type, {
+          ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+          previousStatus: 'open',
+          newStatus: 'closed',
+          stage: 'new',
         })
     }
   }

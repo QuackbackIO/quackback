@@ -3,6 +3,7 @@ import {
   listWorkflowsFn,
   getWorkflowFn,
   listWorkflowVersionsFn,
+  listRunnableWorkflowsFn,
 } from '@/lib/server/functions/workflows'
 
 /** Query keys for the workflows manager (AI & Automation). */
@@ -10,6 +11,7 @@ export const workflowKeys = {
   all: () => ['workflows'] as const,
   detail: (id: string) => ['workflows', id] as const,
   versions: (id: string) => ['workflows', id, 'versions'] as const,
+  runnable: () => ['workflows', 'runnable'] as const,
 }
 
 /** Every workflow, in drag order (the AI & Automation manager list). */
@@ -38,4 +40,14 @@ export const workflowVersionsQuery = (id: string | null) =>
     queryFn: () => listWorkflowVersionsFn({ data: { workflowId: id! } }),
     enabled: id !== null,
     staleTime: 10 * 1000,
+  })
+
+/** Live workflows a teammate can fire manually from the inbox composer
+ *  (workflow-run-picker.tsx) — same staleness idiom as macrosQuery, since
+ *  this is the same kind of rarely-changing composer-toolbar list. */
+export const runnableWorkflowsQuery = () =>
+  queryOptions({
+    queryKey: workflowKeys.runnable(),
+    queryFn: () => listRunnableWorkflowsFn(),
+    staleTime: 60 * 1000,
   })

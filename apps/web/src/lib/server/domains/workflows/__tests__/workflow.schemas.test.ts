@@ -768,6 +768,52 @@ describe('triggerSettingsSchema: breachLeadMinutes (sla.approaching_breach)', ()
   })
 })
 
+describe('triggerSettingsSchema: ticketStatusCategory (ticket.status_changed)', () => {
+  it('accepts an absent key ("any status change") and each real category', () => {
+    expect(triggerSettingsSchema.safeParse({}).success).toBe(true)
+    for (const category of ['open', 'pending', 'closed']) {
+      expect(triggerSettingsSchema.safeParse({ ticketStatusCategory: category }).success).toBe(true)
+    }
+  })
+
+  it('rejects an unknown category', () => {
+    expect(triggerSettingsSchema.safeParse({ ticketStatusCategory: 'sometimes' }).success).toBe(
+      false
+    )
+  })
+})
+
+describe('ticket actions (set_ticket_status / convert_to_ticket)', () => {
+  const graphWithAction = (action: unknown) => ({
+    nodes: [{ id: 'a', type: 'action', action }],
+    edges: [],
+  })
+
+  it('accepts set_ticket_status with a non-empty statusId', () => {
+    expect(
+      workflowGraphSchema.safeParse(
+        graphWithAction({ type: 'set_ticket_status', statusId: 'ticket_status_1' })
+      ).success
+    ).toBe(true)
+  })
+
+  it('rejects set_ticket_status with an empty/missing statusId', () => {
+    expect(
+      workflowGraphSchema.safeParse(graphWithAction({ type: 'set_ticket_status', statusId: '' }))
+        .success
+    ).toBe(false)
+    expect(
+      workflowGraphSchema.safeParse(graphWithAction({ type: 'set_ticket_status' })).success
+    ).toBe(false)
+  })
+
+  it('accepts convert_to_ticket with no settings', () => {
+    expect(
+      workflowGraphSchema.safeParse(graphWithAction({ type: 'convert_to_ticket' })).success
+    ).toBe(true)
+  })
+})
+
 describe('call_connector node', () => {
   const graphWithConnector = (node: Record<string, unknown>) => ({
     nodes: [

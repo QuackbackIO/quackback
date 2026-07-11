@@ -26,6 +26,8 @@ import {
   MAX_INACTIVITY_MINUTES,
   SEND_WINDOW_LABELS,
   SEND_WINDOW_TYPES,
+  TICKET_STATUS_CATEGORY_LABELS,
+  TICKET_STATUS_CATEGORY_TYPES,
   TRIGGER_CHANNELS,
   TRIGGER_DESCRIPTIONS,
   TRIGGER_LABELS,
@@ -144,6 +146,20 @@ export function TriggerEditor({
   const setBreachLeadMinutes = (value: number) =>
     onChangeTriggerSettings({ ...triggerSettings, breachLeadMinutes: value })
 
+  // ticket.status_changed's own optional filter (ticket triggers extension):
+  // "any" is never written back either, same absence-reads-as-no-op
+  // convention frequencyCap/sendWindow use above.
+  const isTicketStatusChangedTrigger = triggerType === 'ticket.status_changed'
+  const ticketStatusCategory = (triggerSettings.ticketStatusCategory as string | undefined) ?? 'any'
+  const setTicketStatusCategory = (next: string) =>
+    setDroppableSetting(
+      triggerSettings,
+      onChangeTriggerSettings,
+      'ticketStatusCategory',
+      next,
+      next === 'any'
+    )
+
   return (
     <div className="space-y-4">
       <Field label="When this happens">
@@ -186,6 +202,28 @@ export function TriggerEditor({
           max={MAX_BREACH_LEAD_MINUTES}
           onCommit={setBreachLeadMinutes}
         />
+      )}
+
+      {isTicketStatusChangedTrigger && (
+        <Field label="Status category filter">
+          <Select value={ticketStatusCategory} onValueChange={setTicketStatusCategory}>
+            <SelectTrigger size="sm" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Any status change</SelectItem>
+              {TICKET_STATUS_CATEGORY_TYPES.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {TICKET_STATUS_CATEGORY_LABELS[c]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Fires only when the ticket enters this status category. Only fires for a ticket with a
+            linked conversation.
+          </p>
+        </Field>
       )}
 
       <Field label="Channels">

@@ -63,8 +63,8 @@ import { DISPATCHABLE_TRIGGER_TYPES } from '@/lib/shared/workflow-trigger-types'
 
 export type { ConditionOperator } from '@/lib/server/domains/workflows/condition.evaluator'
 import type { ConditionOperator } from '@/lib/server/domains/workflows/condition.evaluator'
-import { CSAT_FACES } from '@/lib/shared/db-types'
-import type { TiptapContent } from '@/lib/shared/db-types'
+import { CSAT_FACES, TICKET_STATUS_CATEGORIES } from '@/lib/shared/db-types'
+import type { TiptapContent, TicketStatusCategory } from '@/lib/shared/db-types'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { truncate } from '@/lib/shared/utils/string'
 
@@ -697,8 +697,24 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   set_attribute: 'Set attribute',
   // Plain-text v1 internal note — see action.executor.ts's `add_note` doc.
   add_note: 'Add internal note',
+  // Ticket actions (ticket-actions extension) — see action.executor.ts's
+  // module doc for the resolve-the-linked-ticket policy both share.
+  set_ticket_status: 'Set ticket status',
+  convert_to_ticket: 'Convert to ticket',
 }
 export const ACTION_TYPES = Object.keys(ACTION_LABELS) as ActionType[]
+
+/** Labels for the ticket status CATEGORY axis — shared by
+ *  trigger-editor.tsx's ticketStatusCategory picker (a trigger setting, not a
+ *  live status). Mirrors TICKET_STATUS_CATEGORIES (lib/shared/db-types); no
+ *  existing client-side label map covers this axis (the admin ticket-status
+ *  settings UI labels individual live statuses, not the coarser category). */
+export const TICKET_STATUS_CATEGORY_LABELS: Record<TicketStatusCategory, string> = {
+  open: 'Open',
+  pending: 'Pending',
+  closed: 'Closed',
+}
+export const TICKET_STATUS_CATEGORY_TYPES = TICKET_STATUS_CATEGORIES
 
 // ---------------------------------------------------------------------------
 // Trigger / class / status catalogues (workflow-level, not step-level): the
@@ -726,6 +742,8 @@ export const TRIGGER_LABELS: Record<TriggerType, string> = {
   'conversation.teammate_unresponsive': 'Teammate hasn’t responded',
   'sla.approaching_breach': 'SLA approaching breach',
   'sla.breached': 'SLA breached',
+  'ticket.created': 'Ticket created',
+  'ticket.status_changed': 'Ticket status changed',
 }
 
 /** The two timer-driven unresponsive triggers (support platform §4.6) — the
@@ -752,6 +770,10 @@ export const TRIGGER_DESCRIPTIONS: Partial<Record<TriggerType, string>> = {
     'Runs once when an applied SLA’s first-response or resolution clock enters its lead window. Set the lead time below.',
   'sla.breached':
     'Runs once when an applied SLA’s first-response or resolution clock passes its due date with nothing settling it.',
+  'ticket.created':
+    'Only fires for a ticket that has a linked conversation — a standalone ticket with no linked conversation never triggers this.',
+  'ticket.status_changed':
+    'Only fires for a ticket that has a linked conversation. Optionally restrict it to when the ticket enters a specific status category below.',
 }
 
 /** Trigger label for a stored triggerType, tolerant of an unknown/legacy value. */
@@ -986,6 +1008,10 @@ export function defaultAction(type: ActionType): GraphAction {
       return { type, key: '', value: '' }
     case 'add_note':
       return { type, body: '' }
+    case 'set_ticket_status':
+      return { type, statusId: '' }
+    case 'convert_to_ticket':
+      return { type }
   }
 }
 
@@ -1378,6 +1404,10 @@ function validateAction(v: unknown, where: string): string | null {
       return nonEmptyString(v.key) ? null : `${where}: enter an attribute key`
     case 'add_note':
       return nonEmptyString(v.body) ? null : `${where}: write the note`
+    case 'set_ticket_status':
+      return nonEmptyString(v.statusId) ? null : `${where}: choose a ticket status`
+    case 'convert_to_ticket':
+      return null
   }
 }
 
@@ -2377,6 +2407,9 @@ export interface EntityLabels {
    *  "id -> live name, tolerant of unset/needs-setup" role as members/teams/
    *  tags/slaPolicies above. */
   connectors?: ReadonlyMap<string, string>
+  /** Ticket status id -> display name, for set_ticket_status step summaries —
+   *  same role as `tags`/`slaPolicies` above. */
+  ticketStatuses?: ReadonlyMap<string, string>
 }
 
 const shortId = (id: string): string => (id.length > 14 ? `${id.slice(0, 14)}…` : id)
@@ -2412,6 +2445,10 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
       return action.key ? `Set ${action.key}` : 'Set an attribute…'
     case 'add_note':
       return action.body.trim() ? `Note: ${truncate(action.body.trim(), 60)}` : 'Add a note…'
+    case 'set_ticket_status':
+      return `Set ticket status to ${named(action.statusId, labels.ticketStatuses, 'a status…')}`
+    case 'convert_to_ticket':
+      return 'Convert to a ticket'
   }
 }
 
@@ -2851,9 +2888,12 @@ export function actionIssue(action: GraphAction): string | null {
       return 'seconds' in action && action.seconds <= 0 ? 'Choose how long to snooze for' : null
     case 'add_note':
       return action.body.trim() ? null : 'Write the note'
+    case 'set_ticket_status':
+      return isSetRef(action.statusId) ? null : 'Choose a ticket status'
     case 'set_priority':
     case 'close':
     case 'reopen':
+    case 'convert_to_ticket':
       return null
   }
 }

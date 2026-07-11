@@ -284,6 +284,8 @@ export const ACTION_TONE: Record<ActionType, Tone> = {
   close: 'blue',
   reopen: 'blue',
   add_note: 'green',
+  set_ticket_status: 'green',
+  convert_to_ticket: 'blue',
 }
 
 /** Ref -> display name, tolerant of an unset or needs-setup-template ref. */
@@ -332,8 +334,11 @@ function actionChips(action: GraphAction, labels: EntityLabels): ChipData[] {
       ]
     case 'add_note':
       return [{ label: action.body.trim() ? truncate(action.body.trim(), 40) : 'Write a note…' }]
+    case 'set_ticket_status':
+      return [{ label: named(action.statusId, labels.ticketStatuses, 'Choose a status…') }]
     case 'close':
     case 'reopen':
+    case 'convert_to_ticket':
       return []
   }
 }

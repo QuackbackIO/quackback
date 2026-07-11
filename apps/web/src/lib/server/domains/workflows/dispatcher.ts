@@ -30,6 +30,7 @@
 import type { ConversationId, PrincipalId, WorkflowId } from '@quackback/ids'
 import type { PrincipalType } from '@/lib/server/policy/types'
 import type { Workflow } from '@/lib/server/db'
+import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import { listLiveWorkflowsForTrigger, getWorkflow } from './workflow.service'
 import { resolveConditionContext } from './condition.context'
@@ -170,6 +171,16 @@ export interface WorkflowTrigger {
   subjectPrincipalId?: PrincipalId | null
   /** The triggering message (body + sender), if the trigger carried one. */
   message?: { body: string; senderType?: 'visitor' | 'agent' } | null
+  /**
+   * `ticket.status_changed` only (ticket triggers extension): the category
+   * the ticket ENTERED on this event — a genuine crossing, resolved once by
+   * event-trigger.ts off the event's own previous/new category fields — or
+   * null when this status_changed event is same-category churn. Undefined
+   * for every other trigger type. `ticketStatusCategoryAllows` below compares
+   * a live workflow's own `triggerSettings.ticketStatusCategory` against
+   * this, never against a raw event payload.
+   */
+  ticketStatusCategory?: TicketStatusCategory | null
 }
 
 export interface DispatchWorkflowTriggerOpts {
@@ -205,6 +216,25 @@ export interface DispatchWorkflowTriggerOpts {
    * qualifies.
    */
   targetWorkflowId?: WorkflowId
+}
+
+/**
+ * Whether `workflow`'s `triggerSettings.ticketStatusCategory` (ticket
+ * triggers extension — workflow.schemas.ts's ticketStatusCategorySchema)
+ * permits this dispatch. Only ever restricts `ticket.status_changed`; every
+ * other trigger type (including the trigger's own OTHER ticket type,
+ * ticket.created) always allows, same as channelAllows/audienceAllows'
+ * "nothing configured, or not applicable -> allow" stance. Lives here rather
+ * than dispatcher.guards.ts (which owns every other per-workflow filter)
+ * because this one needs no DB/condition-context access — a pure read off
+ * the trigger + the workflow's own stored settings, evaluated inline in both
+ * loops below alongside the other pure pre-checks.
+ */
+function ticketStatusCategoryAllows(workflow: Workflow, trigger: WorkflowTrigger): boolean {
+  if (trigger.triggerType !== 'ticket.status_changed') return true
+  const configured = workflow.triggerSettings.ticketStatusCategory
+  if (typeof configured !== 'string') return true // "Any status change" (unset)
+  return trigger.ticketStatusCategory === configured
 }
 
 export async function dispatchWorkflowTrigger(
@@ -267,6 +297,7 @@ export async function dispatchWorkflowTrigger(
   if (customerFacing.length > 0 && !alreadyLocked) {
     for (const wf of customerFacing) {
       if (!channelAllows(wf, ctx.conversation.channel)) continue
+      if (!ticketStatusCategoryAllows(wf, trigger)) continue
       if (!audienceAllows(wf, ctx)) continue
       if (!sendWindowAllows(wf, ctx)) continue
       if (!(await frequencyCapAllows(wf, subject))) continue
@@ -294,6 +325,7 @@ export async function dispatchWorkflowTrigger(
     background.map(async (wf) => {
       try {
         if (!channelAllows(wf, ctx.conversation.channel)) return
+        if (!ticketStatusCategoryAllows(wf, trigger)) return
         if (!audienceAllows(wf, ctx)) return
         if (!sendWindowAllows(wf, ctx)) return
         if (await frequencyCapAllows(wf, subject)) await start(wf)

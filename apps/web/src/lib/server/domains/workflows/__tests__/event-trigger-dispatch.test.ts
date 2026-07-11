@@ -28,6 +28,21 @@ vi.mock('../workflow.engine', () => ({ interruptWaitingRuns, resumeWorkflowRun }
 // before it existed.
 vi.mock('../dispatcher.guards', () => ({ findWaitingCustomerFacingRun, readMessageBlockReply }))
 
+// Ticket triggers' own async pre-resolution (resolveTicketConversationId):
+// one indexed ticket_conversations lookup, mocked at the db chain — every
+// pre-existing test above never touches this (no ticket event).
+const mockTicketConversationRow = vi.hoisted(() => ({
+  current: null as { conversationId: string } | null,
+}))
+const mockDbSelect = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/server/db')>()
+  return {
+    ...original,
+    db: { select: (...args: unknown[]) => mockDbSelect(...args) },
+  }
+})
+
 import { dispatchWorkflowsForEvent } from '../event-trigger'
 
 const order: string[] = []
@@ -43,6 +58,17 @@ beforeEach(() => {
   })
   findWaitingCustomerFacingRun.mockResolvedValue(null)
   readMessageBlockReply.mockResolvedValue(null)
+
+  mockTicketConversationRow.current = null
+  mockDbSelect.mockImplementation(() => {
+    const chain = {
+      from: () => chain,
+      where: () => chain,
+      limit: async () =>
+        mockTicketConversationRow.current ? [mockTicketConversationRow.current] : [],
+    }
+    return chain
+  })
 })
 
 const base = { id: 'evt', timestamp: '2026-01-05T10:00:00Z', actor: { type: 'user' as const } }
@@ -569,6 +595,81 @@ describe('dispatchWorkflowsForEvent', () => {
       expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
         excludeWaitKind: undefined,
       })
+    })
+  })
+
+  // Ticket triggers (ticket.created / ticket.status_changed): conversation-
+  // linked tickets only — the async pre-resolution (ticket_conversations
+  // join) runs BEFORE eventToWorkflowTrigger builds the real trigger, and
+  // dispatches straight through (no interrupt/resume machinery), mirroring
+  // the unresponsive pair's own early-return branch above.
+  describe('ticket triggers', () => {
+    const ticketEvent = (
+      type: 'ticket.created' | 'ticket.status_changed',
+      extra: Record<string, unknown> = {}
+    ): EventData =>
+      ({
+        ...base,
+        type,
+        data: {
+          ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+          ...(type === 'ticket.status_changed'
+            ? { previousStatus: 'open', newStatus: 'closed', stage: 'new' }
+            : {
+                ticket: {
+                  id: 'ticket_1',
+                  number: 1,
+                  type: 'customer',
+                  priority: 'none',
+                  title: 'A ticket',
+                  status: 'open',
+                  stage: 'new',
+                  requesterPrincipalId: null,
+                  companyId: null,
+                  createdAt: '2026-01-05T09:00:00Z',
+                  updatedAt: '2026-01-05T09:00:00Z',
+                  resolvedAt: null,
+                },
+              }),
+          ...extra,
+        },
+      }) as unknown as EventData
+
+    it('dispatches straight through (no interrupt) when the ticket has a linked customer conversation', async () => {
+      mockTicketConversationRow.current = { conversationId: 'conversation_linked' }
+      await dispatchWorkflowsForEvent(ticketEvent('ticket.created'))
+      expect(interruptWaitingRuns).not.toHaveBeenCalled()
+      expect(dispatchWorkflowTrigger).toHaveBeenCalledWith(
+        expect.objectContaining({
+          triggerType: 'ticket.created',
+          conversationId: 'conversation_linked',
+        })
+      )
+    })
+
+    it('does not dispatch at all when the ticket has no linked conversation', async () => {
+      mockTicketConversationRow.current = null
+      await dispatchWorkflowsForEvent(ticketEvent('ticket.created'))
+      expect(dispatchWorkflowTrigger).not.toHaveBeenCalled()
+      expect(interruptWaitingRuns).not.toHaveBeenCalled()
+    })
+
+    it('resolves ticket.status_changed the same way, carrying the entered category', async () => {
+      mockTicketConversationRow.current = { conversationId: 'conversation_linked' }
+      await dispatchWorkflowsForEvent(ticketEvent('ticket.status_changed'))
+      expect(dispatchWorkflowTrigger).toHaveBeenCalledWith(
+        expect.objectContaining({
+          triggerType: 'ticket.status_changed',
+          conversationId: 'conversation_linked',
+          ticketStatusCategory: 'closed',
+        })
+      )
+    })
+
+    it('ticket.status_changed with no linked conversation does not dispatch', async () => {
+      mockTicketConversationRow.current = null
+      await dispatchWorkflowsForEvent(ticketEvent('ticket.status_changed'))
+      expect(dispatchWorkflowTrigger).not.toHaveBeenCalled()
     })
   })
 })

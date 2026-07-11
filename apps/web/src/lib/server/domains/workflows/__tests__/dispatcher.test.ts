@@ -295,6 +295,47 @@ describe('dispatchWorkflowTrigger — sendWindow', () => {
   })
 })
 
+describe('dispatchWorkflowTrigger — ticket triggers', () => {
+  it('loop guard: a service-authored ticket.status_changed trigger (a workflow set_ticket_status action writing its own status) never dispatches — event-trigger.ts does not opt it out of the human-actor gate', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([wf('status_wf', 'background')])
+    await dispatchWorkflowTrigger(
+      trigger({ triggerType: 'ticket.status_changed', actorType: 'service' })
+    )
+    expect(listLiveWorkflowsForTrigger).not.toHaveBeenCalled()
+    expect(runWorkflow).not.toHaveBeenCalled()
+  })
+
+  it('ticketStatusCategory only restricts ticket.status_changed, matching the entered category (customer_facing, first match wins)', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('cf1', 'customer_facing', { ticketStatusCategory: 'closed' }),
+      wf('cf2', 'customer_facing', { ticketStatusCategory: 'pending' }),
+    ])
+    await dispatchWorkflowTrigger(
+      trigger({ triggerType: 'ticket.status_changed', ticketStatusCategory: 'closed' })
+    )
+    expect(ranIds()).toEqual(['cf1'])
+  })
+
+  it('an unconfigured ticketStatusCategory ("any status change") never restricts', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('bg1', 'background'),
+      wf('bg2', 'background', { ticketStatusCategory: 'open' }),
+    ])
+    await dispatchWorkflowTrigger(
+      trigger({ triggerType: 'ticket.status_changed', ticketStatusCategory: null })
+    )
+    expect(ranIds()).toEqual(['bg1'])
+  })
+
+  it('is never applied to ticket.created (or any other trigger type)', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('bg1', 'background', { ticketStatusCategory: 'closed' }),
+    ])
+    await dispatchWorkflowTrigger(trigger({ triggerType: 'ticket.created' }))
+    expect(ranIds()).toEqual(['bg1'])
+  })
+})
+
 describe('dispatchWorkflowTrigger — person/company context gating', () => {
   it('skips the person/company join when no live workflow references a person./company. field', async () => {
     listLiveWorkflowsForTrigger.mockResolvedValue([

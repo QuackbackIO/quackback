@@ -29,6 +29,7 @@ import { NewSignInEmail } from './templates/new-sign-in'
 import { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 import type { IncidentImpact } from './templates/status-incident-published'
 import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
+import { CsatRequestEmail } from './templates/csat-request'
 
 /**
  * Get environment variable at runtime.
@@ -1009,6 +1010,43 @@ export async function sendStatusMaintenanceScheduledEmail(
 }
 
 // ============================================================================
+// CSAT-over-email request (support platform's CSAT-over-email extension)
+// ============================================================================
+
+interface SendCsatRequestEmailParams {
+  to: string
+  /** The workflow block's own prompt text (plain), or '' when the block body
+   *  resolved to nothing. */
+  promptText: string
+  /** One rating link per face (rating 1 through 5, in order) — all 5 share
+   *  one signed token; only the `rating` query param differs per link. */
+  ratingUrls: readonly [string, string, string, string, string]
+  workspaceName: string
+  logoUrl?: string
+}
+
+/** Sent by the workflow engine's send_block csat path (action.executor.ts)
+ *  when the block posts on an email-channel conversation — the customer's
+ *  only view of the block is their inbox, where the in-app emoji row is
+ *  inert, so this carries real one-click rating links instead. */
+export async function sendCsatRequestEmail(
+  params: SendCsatRequestEmailParams
+): Promise<EmailResult> {
+  const { to, promptText, ratingUrls, workspaceName, logoUrl } = params
+
+  if (getProvider() === 'console') {
+    log.debug({ email_type: 'CsatRequestEmail', to }, '[dev] email preview (console provider)')
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to,
+    subject: `How did we do, ${workspaceName}?`,
+    react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
+  })
+}
+
+// ============================================================================
 // Re-export templates for preview/testing
 // ============================================================================
 
@@ -1027,3 +1065,4 @@ export { NewSignInEmail } from './templates/new-sign-in'
 export { StatusIncidentPublishedEmail } from './templates/status-incident-published'
 export type { IncidentImpact } from './templates/status-incident-published'
 export { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
+export { CsatRequestEmail } from './templates/csat-request'

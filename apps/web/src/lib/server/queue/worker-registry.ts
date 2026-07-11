@@ -174,6 +174,19 @@ export const WORKER_REGISTRY: readonly WorkerEntry[] = [
       ),
   },
   {
+    // Workflow run retention (§4.6 run retention). Daily compaction of old
+    // terminal runs' graph snapshots — see workflow-retention.ts.
+    name: 'workflow-retention',
+    init: () =>
+      import('@/lib/server/domains/workflows/workflow-retention-queue').then((m) =>
+        m.initWorkflowRetentionWorker()
+      ),
+    close: () =>
+      import('@/lib/server/domains/workflows/workflow-retention-queue').then((m) =>
+        m.closeWorkflowRetentionQueue()
+      ),
+  },
+  {
     // Async import commit (Imports & exports hub §I1). Initializes on first enqueue.
     name: 'import',
     close: () =>
