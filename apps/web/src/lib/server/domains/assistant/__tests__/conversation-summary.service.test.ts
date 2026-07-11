@@ -182,6 +182,24 @@ describe('summarizeConversationOnClose', () => {
     )
   })
 
+  it("usage-logs the call under its own pipelineStep 'conversation_summary', never 'copilot_summary'", async () => {
+    // The step name is load-bearing twice over: it makes the fire-and-forget
+    // close summarizer count against aiTokensPerMonth at all, and it keeps
+    // this automatic spend out of analytics/copilot-usage.ts, which counts
+    // 'copilot_summary' rows as on-demand Summarize-chip calls.
+    await summarizeConversationOnClose(CONVERSATION_ID)
+
+    expect(mockWithUsageLogging).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipelineStep: 'conversation_summary',
+        callType: 'chat_completion',
+        metadata: { conversationId: CONVERSATION_ID },
+      }),
+      expect.any(Function),
+      expect.any(Function)
+    )
+  })
+
   it('is a no-op when the AI client is not configured', async () => {
     mockGetOpenAI.mockReturnValue(null as unknown as never)
 

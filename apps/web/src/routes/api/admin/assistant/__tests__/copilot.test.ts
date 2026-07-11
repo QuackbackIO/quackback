@@ -19,6 +19,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
   policyActorFromAuth: (...args: unknown[]) => mockPolicyActorFromAuth(...args),
 }))
+// The gate's 403-vs-500 split discriminates on isAuthDenialError, which the
+// gate imports from the pure leaf module auth-errors.ts — left unmocked here
+// so the denial tests below run against the REAL vocabulary matcher.
 
 const mockIsAssistantConfigured = vi.fn()
 const mockRunAssistantTurn = vi.fn()
@@ -115,10 +118,30 @@ const validBody = { conversationId: CONVERSATION_ID, question: 'What is the refu
 
 describe('POST /api/admin/assistant/copilot', () => {
   it('403s when the caller lacks copilot.use', async () => {
-    mockRequireAuth.mockRejectedValue(new Error('forbidden'))
+    // A genuine denial, in requireAuth's own message vocabulary — the gate
+    // discriminates on it (see auth-helpers.ts's isAuthDenialError).
+    mockRequireAuth.mockRejectedValue(
+      new Error("Access denied: Requires permission 'copilot.use', role member lacks it")
+    )
     const res = await handleCopilot({ request: makeRequest(validBody) })
     expect(res.status).toBe(403)
     expect(mockIsFeatureEnabled).not.toHaveBeenCalled()
+    expect(mockRunAssistantTurn).not.toHaveBeenCalled()
+  })
+
+  it('403s an unauthenticated caller (the other half of the denial vocabulary)', async () => {
+    mockRequireAuth.mockRejectedValue(new Error('Authentication required'))
+    const res = await handleCopilot({ request: makeRequest(validBody) })
+    expect(res.status).toBe(403)
+  })
+
+  it('rethrows an infrastructure failure from the auth check instead of mapping it to 403', async () => {
+    // A transient session-store failure is a 500, never "Copilot access
+    // required" — the gate only maps requireAuth's denial vocabulary.
+    mockRequireAuth.mockRejectedValue(new Error('session store unavailable'))
+    await expect(handleCopilot({ request: makeRequest(validBody) })).rejects.toThrow(
+      'session store unavailable'
+    )
     expect(mockRunAssistantTurn).not.toHaveBeenCalled()
   })
 
@@ -252,6 +275,24 @@ describe('POST /api/admin/assistant/copilot', () => {
     expect(mockRunAssistantTurn).toHaveBeenCalledWith(
       expect.objectContaining({ actorPrincipalId: 'principal_1' })
     )
+  })
+
+  it("threads the gate's resolved actor into the turn as askerActor (the metadata-write ceiling)", async () => {
+    // The metadata-write ceiling (P2-C.4 hardening): the actor the route
+    // hands the runtime must be THE SAME one the viewability gate resolved —
+    // the asking teammate's own permission set — so a copilot.use-only
+    // teammate can never trigger a direct set_attribute they could not
+    // perform themselves.
+    const resolvedActor = {
+      principalId: 'principal_1',
+      permissions: new Set(['conversation.set_attributes']),
+    }
+    mockPolicyActorFromAuth.mockResolvedValue(resolvedActor)
+
+    await handleCopilot({ request: makeRequest(validBody) })
+
+    const input = mockRunAssistantTurn.mock.calls[0][0] as { askerActor?: unknown }
+    expect(input.askerActor).toBe(resolvedActor)
   })
 
   it('relays a turn that proposed a write-tool action: the pending action surfaces on the final payload untouched', async () => {

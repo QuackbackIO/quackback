@@ -9,7 +9,15 @@
  * before it can reach a customer-facing composer (B.4's leak gate) — "Add as
  * note" never confirms, from anywhere.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type Ref,
+} from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -19,14 +27,23 @@ import {
   ClipboardDocumentListIcon,
   EllipsisHorizontalIcon,
   FunnelIcon,
+  HandThumbDownIcon,
+  HandThumbUpIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
   ShieldCheckIcon,
   SparklesIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { PaperAirplaneIcon, StopIcon } from '@heroicons/react/24/solid'
+import {
+  HandThumbDownIcon as HandThumbDownSolidIcon,
+  HandThumbUpIcon as HandThumbUpSolidIcon,
+  PaperAirplaneIcon,
+  StopIcon,
+} from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -79,6 +96,7 @@ import {
   type TransformErrorPayload,
 } from '@/lib/shared/assistant/copilot-contract'
 import { formatConversationSummaryNote } from '@/lib/shared/assistant/copilot-format'
+import { recordCopilotEvent, type CopilotEventInput } from '@/lib/client/copilot-events'
 import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 import type { InboxItemRef } from '@/lib/shared/inbox/items'
 import {
@@ -96,6 +114,16 @@ function itemRefBody(item: InboxItemRef): { conversationId: string } | { ticketI
 const MAX_QUESTION_CHARS = 4000
 const MAX_HISTORY_ENTRIES = 20
 const GENERIC_ERROR = 'Something went wrong. Try again.'
+
+/**
+ * Panel-scoped bindings, surfaced in the inbox shortcut help panel. These are
+ * NOT bound by use-inbox-keyboard — the panel's own keydown handler owns them
+ * (they only fire while focus is inside the Copilot panel), so they live here
+ * next to that handler rather than in the inbox action registry.
+ */
+export const COPILOT_PANEL_SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
+  { keys: '⌘↵', label: 'Insert last Copilot answer (with the ask box empty)' },
+]
 
 /** Pull the server's `{error:{message}}` body off a failed SSE turn's HTTP
  *  response, falling back to GENERIC_ERROR for a non-JSON (or empty) body.
@@ -138,11 +166,21 @@ const FORMAT_ROWS: { transform: TransformKind; label: string }[] = [
  *  point until it settles (only one transform runs at a time). */
 type TransformState = { scope: 'answer'; turnId: string } | { scope: 'composer' }
 
+/** The usage event to record once an insert actually happens — carried
+ *  alongside the text so the leak-gate confirm logs on proceed, never on the
+ *  initial (possibly cancelled) click. Names the GESTURE kind (what was
+ *  inserted); WHERE it lands is the destination axis performInsert adds from
+ *  its own `mode`. `internalSourced` doubles as the leak-gate flag itself
+ *  (requestInsert gates on it); it is absent on an unfinalized turn's events
+ *  (no final frame ever carried the server-derived signal). */
+type InsertEventMeta = Pick<CopilotEventInput, 'eventType' | 'answerType' | 'internalSourced'>
+
 /** An answer (or a transform of one) awaiting the internal-source leak-gate
  *  confirm: carries the text to actually insert, since a modify transform's
  *  result differs from the turn's original `answer`. */
 interface PendingInsert {
   text: string
+  event: InsertEventMeta
 }
 
 export interface CopilotTurn {
@@ -155,6 +193,11 @@ export interface CopilotTurn {
   answerType: CopilotAnswerType
   citations: CopilotCitation[]
   internalSourced: boolean
+  /** True only once the final SSE frame landed. `internalSourced`/`answerType`
+   *  arrive ON that frame, so an aborted or truncated turn still holds their
+   *  ask-time defaults — every consumer that would route text toward the
+   *  customer-facing composer must fail closed (note-only) until this is set. */
+  finalized: boolean
   suppressed?: string
   /** Write-tool calls this turn proposed (P2-C.4, act-on-approval); empty
    *  unless the model called a write tool, since every write tool proposes
@@ -236,12 +279,23 @@ function buildHistory(turns: CopilotTurn[]): CopilotHistoryEntry[] {
   return out.slice(-MAX_HISTORY_ENTRIES)
 }
 
+/** The turn-scoped qualifiers every usage event carries. `internalSourced` is
+ *  omitted (not asserted `false`) on an unfinalized turn — the final frame
+ *  that carries the server-derived signal never arrived. */
+function turnMeta(turn: CopilotTurn): Pick<CopilotEventInput, 'answerType' | 'internalSourced'> {
+  return {
+    answerType: turn.answerType,
+    ...(turn.finalized ? { internalSourced: turn.internalSourced } : {}),
+  }
+}
+
 export function CopilotPanel({
   item,
   flags,
   onInsert,
   getComposerText,
   onReplaceComposerText,
+  askInputRef,
 }: {
   /** The open item (unified inbox §2.9) — grounds the turn on the
    *  conversation or ticket's own thread + drives the Summarize chip. */
@@ -253,6 +307,9 @@ export function CopilotPanel({
   getComposerText: () => string
   /** Replace the reply composer's content with a Format transform's result. */
   onReplaceComposerText: (text: string) => void
+  /** The ask textarea's DOM node, for hosts that focus it from outside
+   *  (e.g. an inbox keyboard shortcut). */
+  askInputRef?: Ref<HTMLTextAreaElement>
 }) {
   const { principal } = useRouteContext({ from: '/admin' }) as { principal?: { id: string } | null }
   const { data: widgetConfig } = useQuery(settingsQueries.widgetConfig())
@@ -290,16 +347,41 @@ export function CopilotPanel({
   useEffect(() => stop, [stop])
   useEffect(() => stopTransform, [stopTransform])
 
-  // Route an answer (or a transform of one) to the insert callback, gating on
-  // the leak-gate confirm when the SOURCE answer was internal-sourced:
-  // transforming text never launders it, so a modify result inherits the
-  // originating turn's `internalSourced` flag rather than re-deriving one.
-  const requestInsert = useCallback(
-    (text: string, internalSourced: boolean) => {
-      if (internalSourced) setPendingInsert({ text })
-      else onInsert(text, 'reply')
+  // Fire-and-forget usage logging (inserts + thumbs feedback). recordCopilotEvent
+  // swallows every failure, so a logging hiccup can never affect the insert.
+  const logEvent = useCallback(
+    (event: Omit<CopilotEventInput, 'item'>) =>
+      recordCopilotEvent({ item: itemRefBody(item), ...event }),
+    [item]
+  )
+
+  // The single insert seam: route text into the host composer AND record the
+  // matching usage event, so the two can never be paired inconsistently
+  // across call sites. The event keeps its gesture kind (answer / transform /
+  // summary); WHERE it landed is the orthogonal `destination` axis, filled in
+  // here from the insert mode itself so the two can never disagree.
+  const performInsert = useCallback(
+    (text: string, mode: InsertMode, event: InsertEventMeta) => {
+      onInsert(text, mode)
+      logEvent({ ...event, destination: mode })
     },
-    [onInsert]
+    [onInsert, logEvent]
+  )
+
+  // Route an answer (or a transform of one) toward the reply composer, gating
+  // on the leak-gate confirm when the SOURCE answer was internal-sourced (the
+  // event meta carries that flag): transforming text never launders it, so a
+  // modify result inherits the originating turn's `internalSourced` rather
+  // than re-deriving one.
+  const requestInsert = useCallback(
+    (text: string, event: InsertEventMeta) => {
+      if (event.internalSourced) {
+        setPendingInsert({ text, event })
+      } else {
+        performInsert(text, 'reply', event)
+      }
+    },
+    [performInsert]
   )
 
   const runTransform = useCallback(
@@ -345,7 +427,9 @@ export function CopilotPanel({
       setTransformState({ scope: 'answer', turnId: turn.id })
       try {
         const result = await runTransform(transform, turn.answer)
-        if (result) requestInsert(result, turn.internalSourced)
+        if (result) {
+          requestInsert(result, { eventType: 'transform_inserted', ...turnMeta(turn) })
+        }
       } finally {
         setTransformState(null)
       }
@@ -395,11 +479,14 @@ export function CopilotPanel({
           [COPILOT_EVENTS.final]: (data) => {
             const final = data as CopilotFinalPayload
             finished = true
+            // The ONLY place `finalized` flips true: the flags below are
+            // trustworthy exactly when this frame arrived.
             patch({
               answer: final.text || answer,
               answerType: final.answerType,
               citations: final.citations,
               internalSourced: final.internalSourced,
+              finalized: true,
               suppressed: final.suppressed,
               proposedActions: final.proposedActions ?? [],
               status: 'done',
@@ -416,10 +503,14 @@ export function CopilotPanel({
           patch({ status: 'error', errorMessage: await extractHttpErrorMessage(res) })
         },
         onStreamEnd: () => {
+          // Ended without a final frame: the turn stays unfinalized, so the
+          // card falls back to the note-only affordance (see CopilotTurnView).
           if (!finished) patch({ status: 'done', activity: null })
         },
         onAbort: () => {
-          // Stopped intentionally — keep whatever streamed so far.
+          // Stopped intentionally — keep whatever streamed so far, but the
+          // turn is NOT finalized: no final frame means no trustworthy
+          // internalSourced/answerType, so no customer-facing insert.
           patch({ status: 'done', activity: null })
         },
         onError: () => {
@@ -445,6 +536,7 @@ export function CopilotPanel({
         answerType: 'draft_reply',
         citations: [],
         internalSourced: false,
+        finalized: false,
         proposedActions: [],
         status: 'streaming',
         activity: null,
@@ -469,6 +561,7 @@ export function CopilotPanel({
                 answerType: 'draft_reply' as const,
                 citations: [],
                 internalSourced: false,
+                finalized: false,
                 suppressed: undefined,
                 proposedActions: [],
                 errorMessage: undefined,
@@ -490,8 +583,42 @@ export function CopilotPanel({
   }, [busy])
 
   const handleAddToComposer = useCallback(
-    (turn: CopilotTurn) => requestInsert(turn.answer, turn.internalSourced),
+    (turn: CopilotTurn) =>
+      requestInsert(turn.answer, { eventType: 'answer_inserted', ...turnMeta(turn) }),
     [requestInsert]
+  )
+
+  // Never leak-gated ("Add as note" never confirms, from anywhere);
+  // performInsert records the answer_inserted gesture with destination 'note'.
+  const handleAddAsNote = useCallback(
+    (turn: CopilotTurn) =>
+      performInsert(turn.answer, 'note', { eventType: 'answer_inserted', ...turnMeta(turn) }),
+    [performInsert]
+  )
+
+  // Cmd/Ctrl+Enter anywhere inside the panel (COPILOT_PANEL_SHORTCUTS):
+  // trigger the LAST completed answer's primary action — the same handlers
+  // the buttons call, so the leak-gate confirm and usage logging apply
+  // unchanged. The panel's dialogs (leak gate, save-as-macro) render in
+  // portals outside this subtree, so their keydowns never reach this handler.
+  const insertLastAnswer = useCallback(() => {
+    if (busy || transforming) return // mirrors the buttons' disabled state
+    const last = turns.findLast((t) => t.status === 'done' && !!t.answer && !t.suppressed)
+    if (!last) return
+    // An unfinalized (aborted/truncated) turn fails closed alongside analysis
+    // answers: note-only, matching the card's own affordances.
+    if (!last.finalized || last.answerType === 'analysis') handleAddAsNote(last)
+    else handleAddToComposer(last)
+  }, [busy, transforming, turns, handleAddAsNote, handleAddToComposer])
+
+  const onPanelKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        insertLastAnswer()
+      }
+    },
+    [insertLastAnswer]
   )
 
   const summarizeNow = useCallback(async () => {
@@ -502,16 +629,20 @@ export function CopilotPanel({
         item.kind === 'conversation'
           ? await summarizeConversationNowFn({ data: { conversationId: item.id } })
           : await summarizeTicketNowFn({ data: { ticketId: item.id } })
-      onInsert(formatConversationSummaryNote(result.question, result.bullets), 'note')
+      performInsert(formatConversationSummaryNote(result.question, result.bullets), 'note', {
+        eventType: 'summary_inserted',
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to summarize the conversation')
     } finally {
       setSummarizing(false)
     }
-  }, [busy, summarizing, item, onInsert])
+  }, [busy, summarizing, item, performInsert])
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // Bubble-phase only: fires for keydowns on the panel's own focusable
+    // children (ask input, answer buttons), never globally.
+    <div className="flex h-full min-h-0 flex-col" onKeyDown={onPanelKeyDown}>
       <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
         <div className="flex items-center gap-2">
           <Avatar src={assistant?.avatarUrl} name={assistantName} className="size-6 text-[10px]" />
@@ -531,7 +662,7 @@ export function CopilotPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {turns.length === 0 ? (
-          <CopilotEmptyState />
+          <CopilotEmptyState assistantName={assistantName} />
         ) : (
           <div className="space-y-4">
             {turns.map((turn) => (
@@ -539,10 +670,18 @@ export function CopilotPanel({
                 key={turn.id}
                 turn={turn}
                 onAddToComposer={() => handleAddToComposer(turn)}
-                onAddAsNote={() => onInsert(turn.answer, 'note')}
+                onAddAsNote={() => handleAddAsNote(turn)}
                 onSaveAsMacro={() => setSaveMacroTurnId(turn.id)}
                 onRetry={() => retry(turn.id)}
                 onModify={(transform) => void modifyAnswer(turn, transform)}
+                onFeedback={(rating, reason) =>
+                  logEvent({
+                    eventType: 'feedback',
+                    rating,
+                    ...(reason ? { reason } : {}),
+                    ...turnMeta(turn),
+                  })
+                }
                 transformBusy={transforming}
                 isTransforming={
                   transformState?.scope === 'answer' && transformState.turnId === turn.id
@@ -554,6 +693,7 @@ export function CopilotPanel({
       </div>
 
       <CopilotAskInput
+        inputRef={askInputRef}
         value={input}
         onChange={setInput}
         onSubmit={ask}
@@ -593,7 +733,7 @@ export function CopilotPanel({
               type="button"
               variant="secondary"
               onClick={() => {
-                if (pendingInsert) onInsert(pendingInsert.text, 'note')
+                if (pendingInsert) performInsert(pendingInsert.text, 'note', pendingInsert.event)
                 setPendingInsert(null)
               }}
             >
@@ -603,7 +743,7 @@ export function CopilotPanel({
               type="button"
               className={buttonVariants({ variant: 'destructive' })}
               onClick={() => {
-                if (pendingInsert) onInsert(pendingInsert.text, 'reply')
+                if (pendingInsert) performInsert(pendingInsert.text, 'reply', pendingInsert.event)
                 setPendingInsert(null)
               }}
             >
@@ -616,12 +756,12 @@ export function CopilotPanel({
   )
 }
 
-function CopilotEmptyState() {
+function CopilotEmptyState({ assistantName }: { assistantName: string }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-2 py-6 text-center">
       <SparklesIcon className="h-8 w-8 text-primary/60" />
       <p className="text-sm font-medium text-foreground">
-        Ask Quinn anything about this conversation.
+        Ask {assistantName} anything about this conversation.
       </p>
       <ul className="w-full space-y-2.5 text-left text-xs text-muted-foreground">
         <li className="flex items-start gap-2">
@@ -655,6 +795,7 @@ function CopilotTurnView({
   onSaveAsMacro,
   onRetry,
   onModify,
+  onFeedback,
   transformBusy,
   isTransforming,
 }: {
@@ -665,6 +806,9 @@ function CopilotTurnView({
   onRetry: () => void
   /** Run a modify transform on this turn's answer (P2-C.1). */
   onModify: (transform: TransformKind) => void
+  /** Record a thumbs rating (and an optional thumbs-down reason) for this
+   *  turn's answer. Fire-and-forget — the latch below is purely local. */
+  onFeedback: (rating: 'up' | 'down', reason?: string) => void
   /** Any transform (this turn's or another's) is in flight: disables this
    *  card's own entry points too, so only one transform runs at a time. */
   transformBusy: boolean
@@ -703,8 +847,20 @@ function CopilotTurnView({
         ) : (
           <>
             <AssistantAnswer text={turn.answer} citations={turn.citations} caret={streaming} />
-            {!streaming && turn.answer && (
-              <div className="mt-2 flex items-center gap-1.5">
+            {!streaming && turn.answer && !turn.finalized && (
+              // Aborted/truncated turn: the final frame carrying the
+              // server-derived internalSourced/answerType never arrived, so
+              // there is nothing to gate a customer-facing insert on — fail
+              // closed to the one affordance that never needs the gate.
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Button type="button" size="sm" onClick={onAddAsNote} disabled={actionsDisabled}>
+                  Add as note
+                </Button>
+                <CopilotTurnFeedback onFeedback={onFeedback} />
+              </div>
+            )}
+            {!streaming && turn.answer && turn.finalized && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <Button
                   type="button"
                   size="sm"
@@ -757,6 +913,7 @@ function CopilotTurnView({
                     Rewriting…
                   </span>
                 )}
+                <CopilotTurnFeedback onFeedback={onFeedback} />
               </div>
             )}
           </>
@@ -771,7 +928,128 @@ function CopilotTurnView({
   )
 }
 
+/** Compact thumbs up/down at a completed answer's footer: single-select,
+ *  latched once chosen but switchable, with an optional one-line reason input
+ *  on thumbs-down. The latch is per-turn component state only (no persistence
+ *  across reloads). Thumbs-up reports through `onFeedback` immediately;
+ *  thumbs-down reports once when its reason input resolves (see `choose`).
+ *  Rendered inside the actions row (which flex-wraps), so the thumbs sit
+ *  right-aligned on the row and the reason input drops to its own full-width
+ *  line. */
+function CopilotTurnFeedback({
+  onFeedback,
+}: {
+  onFeedback: (rating: 'up' | 'down', reason?: string) => void
+}) {
+  const [rating, setRating] = useState<'up' | 'down' | null>(null)
+  const [reasonOpen, setReasonOpen] = useState(false)
+  const [reason, setReason] = useState('')
+
+  // A thumbs-down logs exactly ONCE, when its reason input resolves: Send
+  // logs it WITH the reason, the X dismiss logs it without one. Logging on
+  // the initial click too would double-count every reasoned downvote.
+  // Thumbs-up has no reason step, so it logs immediately — and switching to
+  // it while a downvote's input is open discards that pending downvote (the
+  // final resolution is the only event). Accepted leak: unmounting mid-input
+  // (item switch / New chat) drops that downvote entirely.
+  const choose = (next: 'up' | 'down') => {
+    if (rating === next) return // latched: re-clicking the chosen thumb is a no-op
+    setRating(next)
+    setReason('')
+    if (next === 'up') {
+      setReasonOpen(false)
+      onFeedback('up')
+    } else {
+      setReasonOpen(true)
+    }
+  }
+
+  const resolveDown = (withReason: boolean) => {
+    const trimmed = reason.trim()
+    if (withReason && !trimmed) return
+    onFeedback('down', withReason ? trimmed : undefined)
+    setReasonOpen(false)
+    setReason('')
+  }
+
+  return (
+    <>
+      <div className="ms-auto flex items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Good answer"
+          aria-pressed={rating === 'up'}
+          onClick={() => choose('up')}
+          className={cn(rating === 'up' && 'text-foreground')}
+        >
+          {rating === 'up' ? (
+            <HandThumbUpSolidIcon className="size-4" />
+          ) : (
+            <HandThumbUpIcon className="size-4" />
+          )}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Bad answer"
+          aria-pressed={rating === 'down'}
+          onClick={() => choose('down')}
+          className={cn(rating === 'down' && 'text-foreground')}
+        >
+          {rating === 'down' ? (
+            <HandThumbDownSolidIcon className="size-4" />
+          ) : (
+            <HandThumbDownIcon className="size-4" />
+          )}
+        </Button>
+      </div>
+      {reasonOpen && (
+        <div className="flex w-full items-center gap-1.5">
+          <Input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="What was wrong? (optional)"
+            aria-label="Feedback reason"
+            maxLength={500}
+            className="h-8 flex-1 text-[13px]"
+            onKeyDown={(e) => {
+              // Cmd/Ctrl+Enter bubbles to the panel handler (insert the last
+              // answer) instead of sending the reason.
+              if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+                e.preventDefault()
+                resolveDown(true)
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => resolveDown(true)}
+            disabled={!reason.trim()}
+          >
+            Send
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Dismiss feedback reason"
+            onClick={() => resolveDown(false)}
+          >
+            <XMarkIcon className="size-4" />
+          </Button>
+        </div>
+      )}
+    </>
+  )
+}
+
 function CopilotAskInput({
+  inputRef,
   value,
   onChange,
   onSubmit,
@@ -788,6 +1066,8 @@ function CopilotAskInput({
   formatBusy,
   composerEmpty,
 }: {
+  /** See CopilotPanel's askInputRef: the textarea node for outside focus. */
+  inputRef?: Ref<HTMLTextAreaElement>
   value: string
   onChange: (value: string) => void
   onSubmit: () => void
@@ -855,6 +1135,7 @@ function CopilotAskInput({
       </div>
       <div className="relative rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-primary/20">
         <Textarea
+          ref={inputRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -863,7 +1144,20 @@ function CopilotAskInput({
           disabled={busy}
           className="resize-none border-0 pe-16 shadow-none focus-visible:ring-0"
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key !== 'Enter') return
+            // Cmd/Ctrl+Enter with a drafted question SUBMITS it (the chat-app
+            // muscle memory); only an empty input lets the chord bubble to the
+            // panel's own keydown handler (insert the last answer).
+            if (e.metaKey || e.ctrlKey) {
+              if (value.trim()) {
+                e.preventDefault()
+                e.stopPropagation()
+                onSubmit()
+              }
+              return
+            }
+            // Plain Enter submits; Shift+Enter inserts a newline.
+            if (!e.shiftKey) {
               e.preventDefault()
               onSubmit()
             }

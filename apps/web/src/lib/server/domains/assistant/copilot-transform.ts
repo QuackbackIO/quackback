@@ -22,10 +22,9 @@ import { z } from 'zod'
 import { db, conversationMessages, eq, and, desc, isNull } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { getChatModel } from '@/lib/server/domains/ai/models'
-import { stripCodeFences } from '@/lib/server/domains/ai/config'
 import { truncate } from '@/lib/shared/utils/string'
 import type { TransformKind } from '@/lib/shared/assistant/copilot-contract'
-import { runSynthesis, safeJsonRepair } from './synthesis-core'
+import { runSynthesis, salvageJsonWithSchema } from './synthesis-core'
 import { wrapUntrustedText } from './injection-guard'
 
 /** How far back we look for the teammate's own outbound replies. */
@@ -128,26 +127,6 @@ export function buildTransformSystemPrompts(
   return blocks
 }
 
-/** Recover a well-formed `{ text }` object from raw model text when the
- *  stream produced no validated structured object: same fenced/jsonrepair
- *  fallback chain as Ask AI's `salvageAnswer`. */
-function salvageTransformOutput(raw: string | undefined): unknown | null {
-  const trimmed = raw?.trim()
-  if (!trimmed) return null
-  for (const candidate of [trimmed, stripCodeFences(trimmed)]) {
-    for (const text of [candidate, safeJsonRepair(candidate)]) {
-      if (!text) continue
-      try {
-        const parsed = transformOutputSchema.safeParse(JSON.parse(text))
-        if (parsed.success) return parsed.data
-      } catch {
-        // Not valid JSON even after repair: fall through to the next candidate.
-      }
-    }
-  }
-  return null
-}
-
 export interface RunCopilotTransformParams {
   transform: TransformKind
   /** The text to transform (the streamed answer, or the teammate's draft). */
@@ -193,7 +172,7 @@ export async function runCopilotTransform(
     tools: null,
     deltaField: 'text',
     salvageMode: 'strict',
-    salvage: (raw) => salvageTransformOutput(raw),
+    salvage: (raw) => salvageJsonWithSchema(transformOutputSchema, raw),
     onFailure: 'throw',
     signal: params.signal,
     onTextDelta: params.onTextDelta,

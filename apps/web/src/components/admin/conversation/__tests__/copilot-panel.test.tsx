@@ -31,15 +31,6 @@ vi.mock('@tanstack/react-router', () => ({
   useRouteContext: () => ({ principal: { id: 'principal_1' } }),
 }))
 
-vi.mock('@/lib/client/queries/settings', () => ({
-  settingsQueries: {
-    widgetConfig: () => ({
-      queryKey: ['settings', 'widgetConfig'],
-      queryFn: async () => ({ messenger: { assistant: { name: 'Quinn', avatarUrl: '' } } }),
-    }),
-  },
-}))
-
 const hoisted = vi.hoisted(() => ({
   saveCopilotAnswerAsMacroFn: vi.fn(),
   summarizeConversationNowFn: vi.fn(),
@@ -48,6 +39,22 @@ const hoisted = vi.hoisted(() => ({
   getAssistantPendingActionFn: vi.fn(),
   approveAssistantActionFn: vi.fn(),
   rejectAssistantActionFn: vi.fn(),
+  recordCopilotEvent: vi.fn(),
+  // Mutable so the configured-name test can swap the assistant's name.
+  widgetConfig: { messenger: { assistant: { name: 'Quinn', avatarUrl: '' } } },
+}))
+
+vi.mock('@/lib/client/queries/settings', () => ({
+  settingsQueries: {
+    widgetConfig: () => ({
+      queryKey: ['settings', 'widgetConfig'],
+      queryFn: async () => hoisted.widgetConfig,
+    }),
+  },
+}))
+
+vi.mock('@/lib/client/copilot-events', () => ({
+  recordCopilotEvent: hoisted.recordCopilotEvent,
 }))
 
 vi.mock('@/lib/server/functions/macros', () => ({
@@ -151,9 +158,43 @@ async function ask(question: string) {
   fireEvent.keyDown(textarea, { key: 'Enter' })
 }
 
+const DEFAULT_ANSWER = 'A public answer.'
+
+/** The single final-frame builder every describe shares: one completed turn's
+ *  final SSE payload, any field overridable per test. */
+function finalFrame(overrides: Record<string, unknown> = {}) {
+  return sseFrame(COPILOT_EVENTS.final, {
+    text: DEFAULT_ANSWER,
+    citations: [],
+    internalSourced: false,
+    answerType: 'draft_reply',
+    ...overrides,
+  })
+}
+
+/** Substring matcher for an answer's rendered text — citation markers render
+ *  as dots, so match the prefix before the first `[n]`. */
+function answerMatcher(text: string): RegExp {
+  const head = text.split('[')[0].trim()
+  return new RegExp(head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+}
+
+/** The single ask-flow helper every describe shares: stub fetch with one
+ *  finalFrame turn, render the panel, ask, and wait for the answer to land.
+ *  Returns the host-composer insert spy. */
+async function askAnswer(final: Record<string, unknown> = {}, question = 'Question?') {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(finalFrame(final))))
+  const onInsert = vi.fn()
+  renderPanel({ onInsert })
+  await ask(question)
+  await screen.findByText(answerMatcher((final.text as string) ?? DEFAULT_ANSWER))
+  return onInsert
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   window.localStorage.clear()
+  hoisted.widgetConfig = { messenger: { assistant: { name: 'Quinn', avatarUrl: '' } } }
 })
 
 function proposedActionRow(overrides: Record<string, unknown> = {}) {
@@ -284,25 +325,217 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
   })
 })
 
-describe('<CopilotPanel> leak gate', () => {
-  async function askAndGetAnswer(internalSourced: boolean) {
-    const frames = sseFrame(COPILOT_EVENTS.final, {
-      text: 'Here is the internal-flavored answer.',
-      citations: [
-        { type: 'snippet', id: 'snippet_1', title: 'Internal note', url: '', internal: true },
-      ],
-      internalSourced,
+describe('<CopilotPanel> Cmd/Ctrl+Enter inserts the last answer', () => {
+  function modEnter(mod: { metaKey?: boolean; ctrlKey?: boolean } = { metaKey: true }) {
+    fireEvent.keyDown(screen.getByPlaceholderText(/ask a (follow-up )?question/i), {
+      key: 'Enter',
+      ...mod,
     })
+  }
+
+  it('triggers the draft_reply primary action (Add to composer) with the same event logging', async () => {
+    const onInsert = await askAnswer()
+
+    modEnter()
+
+    expect(onInsert).toHaveBeenCalledWith('A public answer.', 'reply')
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'answer_inserted',
+      destination: 'reply',
+      answerType: 'draft_reply',
+      internalSourced: false,
+    })
+    // The ask box was empty, so the mod chord is not a submit — no second ask.
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('works with Ctrl as the modifier too', async () => {
+    const onInsert = await askAnswer()
+
+    modEnter({ ctrlKey: true })
+
+    expect(onInsert).toHaveBeenCalledWith('A public answer.', 'reply')
+    vi.unstubAllGlobals()
+  })
+
+  it('SUBMITS instead of inserting when the ask box has a drafted question (C5)', async () => {
+    const onInsert = await askAnswer()
+
+    // Draft a follow-up but do not press plain Enter.
+    await userEvent.type(
+      screen.getByPlaceholderText(/ask a (follow-up )?question/i),
+      'A follow-up?'
+    )
+    modEnter()
+
+    // The chord submitted the question (second fetch), no insert happened.
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2)
+    expect(onInsert).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('triggers Add as note for an analysis answer', async () => {
+    const onInsert = await askAnswer({ answerType: 'analysis' }, 'What language is this?')
+
+    modEnter()
+
+    expect(onInsert).toHaveBeenCalledWith('A public answer.', 'note')
+    vi.unstubAllGlobals()
+  })
+
+  it('still routes an internal-sourced answer through the leak-gate confirm', async () => {
+    const onInsert = await askAnswer({ internalSourced: true })
+
+    modEnter()
+
+    expect(await screen.findByText('This answer uses internal sources')).toBeInTheDocument()
+    expect(onInsert).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('acts on the LAST completed turn when there are several', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockStreamingResponse(finalFrame({ text: 'First answer.' })))
+      .mockResolvedValueOnce(mockStreamingResponse(finalFrame({ text: 'Second answer.' })))
+    vi.stubGlobal('fetch', fetchMock)
+    const onInsert = vi.fn()
+    renderPanel({ onInsert })
+    await ask('First?')
+    await screen.findByText('First answer.')
+    await ask('Second?')
+    await screen.findByText('Second answer.')
+
+    modEnter()
+
+    expect(onInsert).toHaveBeenCalledWith('Second answer.', 'reply')
+    vi.unstubAllGlobals()
+  })
+
+  it('is a no-op with no completed answer yet', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    const onInsert = vi.fn()
+    renderPanel({ onInsert })
+
+    modEnter()
+
+    expect(onInsert).not.toHaveBeenCalled()
+    expect(hoisted.recordCopilotEvent).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('plain Enter still submits the question (unchanged)', async () => {
+    await askAnswer()
+
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> unfinalized (aborted/truncated) turns fail closed', () => {
+  /** A turn whose stream ends after deltas with NO final frame — what an
+   *  aborted (Stop) or truncated stream leaves behind: status done, but
+   *  internalSourced/answerType never arrived. */
+  async function askAborted() {
+    const frames =
+      sseFrame(COPILOT_EVENTS.delta, { text: 'A partial ' }) +
+      sseFrame(COPILOT_EVENTS.delta, { text: 'answer.' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(frames)))
     const onInsert = vi.fn()
     renderPanel({ onInsert })
-    await ask('What should I do?')
-    await screen.findByText(/Here is the internal-flavored answer/)
+    await ask('Question?')
+    await screen.findByText('A partial answer.')
+    // The turn settled (the ask input re-enabled) without a final frame.
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(/ask a follow-up question/i)).not.toBeDisabled()
+    )
     return onInsert
   }
 
+  it('offers ONLY "Add as note" — no composer button, no modify menu', async () => {
+    await askAborted()
+
+    expect(screen.getByRole('button', { name: 'Add as note' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add to composer/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /more answer actions/i })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('"Add as note" inserts the partial text and logs WITHOUT internalSourced', async () => {
+    const onInsert = await askAborted()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add as note' }))
+
+    expect(onInsert).toHaveBeenCalledWith('A partial answer.', 'note')
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(1)
+    const event = hoisted.recordCopilotEvent.mock.calls[0][0] as Record<string, unknown>
+    expect(event).toMatchObject({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'answer_inserted',
+      destination: 'note',
+    })
+    // Omitted, never asserted false: the leak-gate signal never arrived.
+    expect('internalSourced' in event).toBe(false)
+    vi.unstubAllGlobals()
+  })
+
+  it('Cmd+Enter treats the unfinalized turn as note-only', async () => {
+    const onInsert = await askAborted()
+
+    fireEvent.keyDown(screen.getByPlaceholderText(/ask a (follow-up )?question/i), {
+      key: 'Enter',
+      metaKey: true,
+    })
+
+    expect(onInsert).toHaveBeenCalledWith('A partial answer.', 'note')
+    expect(onInsert).not.toHaveBeenCalledWith(expect.anything(), 'reply')
+    vi.unstubAllGlobals()
+  })
+
+  it('a finalized turn after an aborted one restores the composer affordance for itself', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockStreamingResponse(sseFrame(COPILOT_EVENTS.delta, { text: 'Partial one.' }))
+      )
+      .mockResolvedValueOnce(mockStreamingResponse(finalFrame({ text: 'Complete answer.' })))
+    vi.stubGlobal('fetch', fetchMock)
+    const onInsert = vi.fn()
+    renderPanel({ onInsert })
+    await ask('First?')
+    await screen.findByText('Partial one.')
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText(/ask a follow-up question/i)).not.toBeDisabled()
+    )
+    await ask('Second?')
+    await screen.findByText('Complete answer.')
+
+    // The finalized turn has the full affordances; Cmd+Enter targets it.
+    expect(screen.getByRole('button', { name: /add to composer/i })).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByPlaceholderText(/ask a (follow-up )?question/i), {
+      key: 'Enter',
+      metaKey: true,
+    })
+    expect(onInsert).toHaveBeenCalledWith('Complete answer.', 'reply')
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> leak gate', () => {
+  // Final-frame overrides for an internal-sourced answer (askAnswer merges
+  // them into the shared finalFrame defaults).
+  const INTERNAL_FINAL = {
+    text: 'Here is the internal-flavored answer.',
+    citations: [
+      { type: 'snippet', id: 'snippet_1', title: 'Internal note', url: '', internal: true },
+    ],
+    internalSourced: true,
+  }
+
   it('opens the confirm dialog on Add to composer when internalSourced is true', async () => {
-    const onInsert = await askAndGetAnswer(true)
+    const onInsert = await askAnswer(INTERNAL_FINAL, 'What should I do?')
 
     fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
 
@@ -312,7 +545,7 @@ describe('<CopilotPanel> leak gate', () => {
   })
 
   it('"Add to composer anyway" inserts into the reply composer', async () => {
-    const onInsert = await askAndGetAnswer(true)
+    const onInsert = await askAnswer(INTERNAL_FINAL, 'What should I do?')
     fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
     await screen.findByText('This answer uses internal sources')
 
@@ -323,7 +556,7 @@ describe('<CopilotPanel> leak gate', () => {
   })
 
   it('"Add as note" from the confirm dialog inserts as a note, no further confirm', async () => {
-    const onInsert = await askAndGetAnswer(true)
+    const onInsert = await askAnswer(INTERNAL_FINAL, 'What should I do?')
     fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
     await screen.findByText('This answer uses internal sources')
 
@@ -334,16 +567,7 @@ describe('<CopilotPanel> leak gate', () => {
   })
 
   it('inserts directly with no dialog when internalSourced is false', async () => {
-    const frames = sseFrame(COPILOT_EVENTS.final, {
-      text: 'A plain public answer.',
-      citations: [],
-      internalSourced: false,
-    })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(frames)))
-    const onInsert = vi.fn()
-    renderPanel({ onInsert })
-    await ask('A public question?')
-    await screen.findByText('A plain public answer.')
+    const onInsert = await askAnswer({ text: 'A plain public answer.' }, 'A public question?')
 
     fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
 
@@ -353,7 +577,7 @@ describe('<CopilotPanel> leak gate', () => {
   })
 
   it('"Add as note" from the "..." menu always inserts as a note without any confirm', async () => {
-    const onInsert = await askAndGetAnswer(true)
+    const onInsert = await askAnswer(INTERNAL_FINAL, 'What should I do?')
 
     // Radix DropdownMenuTrigger opens on pointerDown, not click.
     fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
@@ -368,20 +592,11 @@ describe('<CopilotPanel> leak gate', () => {
 })
 
 describe('<CopilotPanel> answerType button precedence', () => {
-  async function askWithAnswerType(answerType: 'draft_reply' | 'analysis') {
-    const frames = sseFrame(COPILOT_EVENTS.final, {
-      text: 'The customer is writing in Swedish.',
-      citations: [],
-      internalSourced: false,
-      answerType,
-    })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(frames)))
-    const onInsert = vi.fn()
-    renderPanel({ onInsert })
-    await ask('What language is he speaking?')
-    await screen.findByText(/writing in Swedish/)
-    return onInsert
-  }
+  const askWithAnswerType = (answerType: 'draft_reply' | 'analysis') =>
+    askAnswer(
+      { text: 'The customer is writing in Swedish.', answerType },
+      'What language is he speaking?'
+    )
 
   it('draft_reply keeps "Add to composer" as the primary action', async () => {
     await askWithAnswerType('draft_reply')
@@ -609,24 +824,22 @@ describe('<CopilotPanel> Answer-sources popover', () => {
 })
 
 describe('<CopilotPanel> Save as macro', () => {
-  async function askAndGetAnswer(internalSourced = false) {
-    const frames = sseFrame(COPILOT_EVENTS.final, {
-      text: 'Refunds are processed within 30 days [1].',
-      citations: [
-        {
-          type: 'article',
-          id: 'article_1',
-          title: 'Refund policy',
-          url: 'https://help.example.com/refunds',
-        },
-      ],
-      internalSourced,
-    })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(frames)))
-    renderPanel()
-    await ask('What is the refund window?')
-    await screen.findByText(/Refunds are processed within 30 days/)
-  }
+  const askAndGetAnswer = (internalSourced = false) =>
+    askAnswer(
+      {
+        text: 'Refunds are processed within 30 days [1].',
+        citations: [
+          {
+            type: 'article',
+            id: 'article_1',
+            title: 'Refund policy',
+            url: 'https://help.example.com/refunds',
+          },
+        ],
+        internalSourced,
+      },
+      'What is the refund window?'
+    )
 
   async function openSaveAsMacroDialog() {
     // Radix DropdownMenuTrigger opens on pointerDown, not click.
@@ -770,6 +983,359 @@ describe('<CopilotPanel> empty state', () => {
     renderPanel()
 
     expect(screen.getByText('Can take actions for you, with your approval.')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('uses the configured assistant name in the headline', async () => {
+    hoisted.widgetConfig = { messenger: { assistant: { name: 'Fin', avatarUrl: '' } } }
+    vi.stubGlobal('fetch', vi.fn())
+    renderPanel()
+
+    expect(await screen.findByText('Ask Fin anything about this conversation.')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> usage events', () => {
+  it('logs answer_inserted with destination reply on Add to composer', async () => {
+    await askAnswer()
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
+
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'answer_inserted',
+      destination: 'reply',
+      answerType: 'draft_reply',
+      internalSourced: false,
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('logs answer_inserted with destination note on Add as note from the "..." menu', async () => {
+    await askAnswer()
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
+      button: 0,
+    })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Add as note' }))
+
+    // Same gesture kind as the composer insert — the note landing is the
+    // destination axis, never a different event type.
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'answer_inserted',
+      destination: 'note',
+      answerType: 'draft_reply',
+      internalSourced: false,
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('logs nothing until the leak-gate confirm, then answer_inserted on proceed', async () => {
+    await askAnswer({ internalSourced: true })
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
+    await screen.findByText('This answer uses internal sources')
+    expect(hoisted.recordCopilotEvent).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer anyway/i }))
+
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'answer_inserted',
+      destination: 'reply',
+      answerType: 'draft_reply',
+      internalSourced: true,
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('logs destination note when the leak-gate confirm resolves to Add as note', async () => {
+    await askAnswer({ internalSourced: true })
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
+    await screen.findByText('This answer uses internal sources')
+    fireEvent.click(screen.getByRole('button', { name: 'Add as note' }))
+
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'answer_inserted',
+      destination: 'note',
+      answerType: 'draft_reply',
+      internalSourced: true,
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('logs transform_inserted when a modify-menu transform result inserts', async () => {
+    stubFetchByUrl({
+      copilot: finalFrame({ text: 'Here is the original answer.' }),
+      transform: transformSseFrames('Here is the FRIENDLIER answer.'),
+    })
+    const onInsert = vi.fn()
+    renderPanel({ onInsert })
+    await ask('What should I do?')
+    await screen.findByText(/Here is the original answer/)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
+      button: 0,
+    })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'More friendly' }))
+
+    await waitFor(() => {
+      expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+        item: { conversationId: CONVERSATION_ID },
+        eventType: 'transform_inserted',
+        destination: 'reply',
+        answerType: 'draft_reply',
+        internalSourced: false,
+      })
+    })
+    vi.unstubAllGlobals()
+  })
+
+  it('logs summary_inserted with destination note when the Summarize chip writes its note', async () => {
+    hoisted.summarizeConversationNowFn.mockResolvedValue({
+      question: 'Refund window',
+      bullets: ['Explained the 30-day window.'],
+    })
+    const onInsert = vi.fn()
+    renderPanel({ onInsert })
+
+    fireEvent.click(screen.getByRole('button', { name: /^summarize$/i }))
+
+    await waitFor(() => {
+      expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+        item: { conversationId: CONVERSATION_ID },
+        eventType: 'summary_inserted',
+        destination: 'note',
+      })
+    })
+  })
+})
+
+describe('<CopilotPanel> thumbs feedback', () => {
+  it('thumbs up latches (aria-pressed) and logs a feedback event immediately', async () => {
+    await askAnswer()
+
+    const up = screen.getByRole('button', { name: 'Good answer' })
+    expect(up).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(up)
+
+    expect(up).toHaveAttribute('aria-pressed', 'true')
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'feedback',
+      rating: 'up',
+      answerType: 'draft_reply',
+      internalSourced: false,
+    })
+    // No reason input on thumbs up.
+    expect(screen.queryByLabelText('Feedback reason')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('re-clicking the latched thumb does not fire a duplicate event', async () => {
+    await askAnswer()
+
+    const up = screen.getByRole('button', { name: 'Good answer' })
+    fireEvent.click(up)
+    fireEvent.click(up)
+
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('thumbs down latches and opens the reason input WITHOUT logging yet', async () => {
+    await askAnswer()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bad answer' }))
+
+    expect(screen.getByRole('button', { name: 'Bad answer' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(await screen.findByLabelText('Feedback reason')).toBeInTheDocument()
+    // The downvote logs once, when the input resolves — not on the click.
+    expect(hoisted.recordCopilotEvent).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('Send logs the downvote exactly once, with the reason', async () => {
+    await askAnswer({ answerType: 'analysis' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bad answer' }))
+
+    const reasonInput = await screen.findByLabelText('Feedback reason')
+    fireEvent.change(reasonInput, { target: { value: 'Missed the actual question' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(1)
+    expect(hoisted.recordCopilotEvent).toHaveBeenLastCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'feedback',
+      rating: 'down',
+      reason: 'Missed the actual question',
+      answerType: 'analysis',
+      internalSourced: false,
+    })
+    // The input dismisses after sending.
+    expect(screen.queryByLabelText('Feedback reason')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('the X dismiss logs the downvote exactly once, without a reason', async () => {
+    await askAnswer()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bad answer' }))
+    const reasonInput = await screen.findByLabelText('Feedback reason')
+    // Typed but dismissed: the stale text must not ride along (or prefill later).
+    fireEvent.change(reasonInput, { target: { value: 'never mind' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss feedback reason' }))
+
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(1)
+    expect(hoisted.recordCopilotEvent).toHaveBeenLastCalledWith({
+      item: { conversationId: CONVERSATION_ID },
+      eventType: 'feedback',
+      rating: 'down',
+      answerType: 'draft_reply',
+      internalSourced: false,
+    })
+    expect(screen.queryByLabelText('Feedback reason')).not.toBeInTheDocument()
+
+    // Re-opening (up, then down again) starts from a blank input, and the
+    // resolution logs the final downvote only.
+    fireEvent.click(screen.getByRole('button', { name: 'Good answer' })) // logs up
+    fireEvent.click(screen.getByRole('button', { name: 'Bad answer' }))
+    expect(screen.getByLabelText('Feedback reason')).toHaveValue('')
+    vi.unstubAllGlobals()
+  })
+
+  it('switching up then down logs the up immediately and the down only on resolve', async () => {
+    await askAnswer()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Good answer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bad answer' }))
+
+    // Only the thumbs-up so far; the pending downvote awaits Send/dismiss.
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(1)
+    expect(hoisted.recordCopilotEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ eventType: 'feedback', rating: 'up' })
+    )
+    expect(screen.getByRole('button', { name: 'Good answer' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(screen.getByRole('button', { name: 'Bad answer' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss feedback reason' }))
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(2)
+    expect(hoisted.recordCopilotEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ eventType: 'feedback', rating: 'down' })
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('switching down (pending) to up discards the unresolved downvote — only the up logs', async () => {
+    await askAnswer()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bad answer' }))
+    await screen.findByLabelText('Feedback reason')
+    fireEvent.click(screen.getByRole('button', { name: 'Good answer' }))
+
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(1)
+    expect(hoisted.recordCopilotEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ eventType: 'feedback', rating: 'up' })
+    )
+    // The input closes with the pending downvote dropped.
+    expect(screen.queryByLabelText('Feedback reason')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('Enter in the reason input sends; an empty input stays open unsent', async () => {
+    await askAnswer()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bad answer' }))
+    const reasonInput = await screen.findByLabelText('Feedback reason')
+    fireEvent.keyDown(reasonInput, { key: 'Enter' }) // empty: nothing logs, stays open
+    expect(hoisted.recordCopilotEvent).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Feedback reason')).toBeInTheDocument()
+
+    fireEvent.change(reasonInput, { target: { value: 'Too vague' } })
+    fireEvent.keyDown(reasonInput, { key: 'Enter' })
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledTimes(1)
+    expect(hoisted.recordCopilotEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rating: 'down', reason: 'Too vague' })
+    )
+    expect(screen.queryByLabelText('Feedback reason')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('renders no thumbs on a suppressed turn', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(mockStreamingResponse(finalFrame({ text: '', suppressed: 'silence' })))
+    )
+    renderPanel()
+    await ask('Anything?')
+    await screen.findByText(/could not find enough to answer/i)
+
+    expect(screen.queryByRole('button', { name: 'Good answer' })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> source freshness line', () => {
+  it('shows "Updated … ago" in the source row hovercard when updatedAt is present', async () => {
+    const updatedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+    const frames = sseFrame(COPILOT_EVENTS.final, {
+      text: 'The refund window is 30 days [1].',
+      citations: [
+        {
+          type: 'article',
+          id: 'article_1',
+          title: 'Refund policy',
+          url: 'https://help.example.com/refunds',
+          updatedAt,
+        },
+      ],
+      internalSourced: false,
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(frames)))
+    renderPanel()
+    await ask('What is the refund window?')
+    await screen.findByText('1 relevant source')
+
+    // Both the citation-dot hovercard and the source-row hovercard carry it.
+    expect(screen.getAllByText(/8 days ago/).length).toBeGreaterThanOrEqual(1)
+    vi.unstubAllGlobals()
+  })
+
+  it('renders no freshness line when updatedAt is absent', async () => {
+    const frames = sseFrame(COPILOT_EVENTS.final, {
+      text: 'The refund window is 30 days [1].',
+      citations: [
+        {
+          type: 'article',
+          id: 'article_1',
+          title: 'Refund policy',
+          url: 'https://help.example.com/refunds',
+        },
+      ],
+      internalSourced: false,
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockStreamingResponse(frames)))
+    renderPanel()
+    await ask('What is the refund window?')
+    await screen.findByText('1 relevant source')
+
+    expect(screen.queryByText(/Updated/)).not.toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 })

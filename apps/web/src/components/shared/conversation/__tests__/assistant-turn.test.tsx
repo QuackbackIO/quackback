@@ -80,3 +80,39 @@ describe('<AssistantAnswer> citations', () => {
     expect(screen.queryByText('Internal')).not.toBeInTheDocument()
   })
 })
+
+describe('<AssistantAnswer> hovercard freshness line', () => {
+  const EIGHT_DAYS_AGO = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+
+  it('renders "Updated … ago" when the citation carries updatedAt', () => {
+    const cited: RenderableCitation = { ...publicCitation, updatedAt: EIGHT_DAYS_AGO }
+    const { container } = render(<AssistantAnswer text="Reset it here [1]." citations={[cited]} />)
+
+    expect(container.textContent).toMatch(/Updated 8 days ago/)
+  })
+
+  it('renders no freshness line when updatedAt is absent (exactly as before)', () => {
+    const { container } = render(
+      <AssistantAnswer text="Reset it here [1]." citations={[publicCitation]} />
+    )
+
+    expect(container.textContent).not.toMatch(/Updated/)
+  })
+
+  it('renders no freshness line for an unparseable updatedAt', () => {
+    const cited: RenderableCitation = { ...publicCitation, updatedAt: 'not-a-date' }
+    const { container } = render(<AssistantAnswer text="Reset it here [1]." citations={[cited]} />)
+
+    expect(container.textContent).not.toMatch(/Updated/)
+  })
+
+  it('still shows the freshness line alongside the Internal tag on an internal citation', () => {
+    const cited: RenderableCitation = { ...internalCitation, updatedAt: EIGHT_DAYS_AGO }
+    const { container } = render(
+      <AssistantAnswer text="Refunds go here [1]." citations={[cited]} />
+    )
+
+    expect(screen.getByText('Internal')).toBeInTheDocument()
+    expect(container.textContent).toMatch(/Updated 8 days ago/)
+  })
+})

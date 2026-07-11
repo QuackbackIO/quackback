@@ -158,16 +158,34 @@ export async function summarizeConversationOnClose(conversationId: ConversationI
     if (!input) return
     const { openai, model, conversationRow, transcript } = input
 
-    const { result: completion } = await withRetry(() =>
-      openai.chat.completions.create({
+    // Usage-logged under its own pipeline step, 'conversation_summary' —
+    // deliberately NOT 'copilot_summary', which analytics/copilot-usage.ts
+    // counts as on-demand Summarize-chip calls; this fire-and-forget path
+    // must meter against aiTokensPerMonth without inflating that report.
+    const completion = await withUsageLogging(
+      {
+        pipelineStep: 'conversation_summary',
+        callType: 'chat_completion',
         model,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: transcript },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-        max_completion_tokens: 400,
+        metadata: { conversationId },
+      },
+      () =>
+        withRetry(() =>
+          openai.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: transcript },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.2,
+            max_completion_tokens: 400,
+          })
+        ),
+      (r) => ({
+        inputTokens: r.usage?.prompt_tokens ?? 0,
+        outputTokens: r.usage?.completion_tokens,
+        totalTokens: r.usage?.total_tokens ?? 0,
       })
     )
 
@@ -240,9 +258,10 @@ export async function summarizeConversationOnClose(conversationId: ConversationI
  * or parse failures: this path is an explicit, interactive request, so a
  * failure should surface rather than silently no-op.
  *
- * Usage-logged under `pipelineStep: 'copilot_summary'` (unlike the on-close
- * path above, which predates usage logging and stays unlogged): this is the
- * one entry point analytics/copilot-usage.ts counts as a Copilot "summary".
+ * Usage-logged under `pipelineStep: 'copilot_summary'`, distinct from the
+ * on-close path's `'conversation_summary'`: this is the one entry point
+ * analytics/copilot-usage.ts counts as a Copilot "summary", while both meter
+ * against the AI token budget.
  */
 export async function generateConversationSummaryText(
   conversationId: ConversationId

@@ -34,6 +34,9 @@ export interface RetrievedSnippet {
   /** The snippet's own audience tier, for the copilot leak gate: anything but
    *  'public' is flagged internal by the source adapter below. */
   audience: ContentAudience
+  /** The row's last-update timestamp, for the copilot citation freshness line
+   *  (see RetrievedItem.updatedAt in retrieval-sources.ts). */
+  updatedAt: Date
 }
 
 export interface RetrieveSnippetsOptions {
@@ -74,6 +77,7 @@ interface SnippetRow {
   content: string
   score: number
   audience: ContentAudience
+  updatedAt: Date
 }
 
 /** Semantic path: cosine similarity over the stored embedding. */
@@ -93,6 +97,7 @@ async function hybridQuery(
       content: assistantSnippets.content,
       score: score.as('score'),
       audience: assistantSnippets.audience,
+      updatedAt: assistantSnippets.updatedAt,
     })
     .from(assistantSnippets)
     .where(
@@ -124,6 +129,7 @@ async function keywordQuery(
       content: assistantSnippets.content,
       score: score.as('score'),
       audience: assistantSnippets.audience,
+      updatedAt: assistantSnippets.updatedAt,
     })
     .from(assistantSnippets)
     .where(
@@ -164,6 +170,7 @@ export async function retrieveSnippets(
     content: r.content ?? '',
     score: Number(r.score),
     audience: r.audience,
+    updatedAt: r.updatedAt,
   }))
 }
 
@@ -185,6 +192,7 @@ export const snippetsKnowledgeSource: KnowledgeSource = {
         title: s.title,
         excerpt: s.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
         score: s.score,
+        updatedAt: s.updatedAt.toISOString(),
         citation: {
           type: 'snippet' as const,
           id: s.id,

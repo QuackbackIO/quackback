@@ -12,6 +12,7 @@
  */
 import { db, and, eq, isNull, desc, conversationMessages } from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
+import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import {
   appendAssistantReply,
@@ -238,13 +239,15 @@ export async function runAssistantTurnForConversation(
 
     // Answer or offer: persist Quinn's reply (its text carries any offer), then
     // record the cited sources + stamp the inactivity clock (+ the single
-    // escalation offer) in one involvement update. `internal` is a ledger-only
-    // flag for the copilot leak gate (see AssistantCitation): strip it before
-    // persisting so the stored citation shape never changes; a widget turn can
-    // legitimately carry it when the past-conversation-summaries source is on
-    // (that source is always internal, regardless of surface).
+    // escalation offer) in one involvement update. This is the ONE persistence
+    // point for citations, and the projection is an ALLOWLIST typed as the
+    // stored shape (ConversationMessageCitation): the persisted shape is
+    // structural, so a new ephemeral field on the in-flight AssistantCitation
+    // (today `internal`, the copilot leak gate, and `updatedAt`, the copilot
+    // freshness line) can never leak into storage — it simply isn't projected,
+    // no per-field strip to forget.
     const persistedCitations = result.citations.map(
-      ({ internal: _internal, ...citation }) => citation
+      (c): ConversationMessageCitation => ({ type: c.type, id: c.id, title: c.title, url: c.url })
     )
     await appendAssistantReply(conversationId, result.text, author, {
       waiting: false,

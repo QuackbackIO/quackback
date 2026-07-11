@@ -73,6 +73,7 @@ export const ID_PREFIXES = {
   assistant_action: 'assistant_action',
   assistant_tool_call: 'assistant_tool_call',
   assistant_snippet: 'assistant_snippet',
+  assistant_event: 'assistant_event',
 
   // Data connectors (assistant-callable external API definitions)
   data_connector: 'data_connector',

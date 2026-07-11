@@ -12,7 +12,7 @@
  * server functions.
  */
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -54,8 +54,17 @@ vi.mock('@/lib/server/functions/admin', () => ({
   getPortalUserFn: vi.fn().mockResolvedValue(null),
 }))
 vi.mock('@/components/admin/conversation/copilot-panel', () => ({
-  CopilotPanel: ({ item }: { item: { kind: string; id: string } }) => (
+  // Renders a bare textarea wired to `askInputRef` so the openCopilotToken
+  // focus tests can observe the host-driven focus move.
+  CopilotPanel: ({
+    item,
+    askInputRef,
+  }: {
+    item: { kind: string; id: string }
+    askInputRef?: React.Ref<HTMLTextAreaElement>
+  }) => (
     <div data-testid="copilot-panel-stub">
+      <textarea ref={askInputRef} data-testid="copilot-ask-stub" />
       copilot for {item.kind}:{item.id}
     </div>
   ),
@@ -108,9 +117,12 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
   }
 }
 
-function renderPanel(conversation: ConversationDTO = makeConversation()) {
+function renderPanel(
+  conversation: ConversationDTO = makeConversation(),
+  extra: { openCopilotToken?: number } = {}
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
+  const ui = (props: { openCopilotToken?: number }) => (
     <QueryClientProvider client={client}>
       <InboxDetailPanel
         item={{ kind: 'conversation', id: conversation.id }}
@@ -122,9 +134,15 @@ function renderPanel(conversation: ConversationDTO = makeConversation()) {
         onInsertFromCopilot={vi.fn()}
         getComposerText={() => ''}
         onReplaceComposerText={vi.fn()}
+        {...props}
       />
     </QueryClientProvider>
   )
+  const result = render(ui(extra))
+  return {
+    ...result,
+    rerenderWith: (props: { openCopilotToken?: number }) => result.rerender(ui(props)),
+  }
 }
 
 describe('<InboxDetailPanel> tab host', () => {
@@ -183,5 +201,84 @@ describe('<InboxDetailPanel> tab host', () => {
     // Both stay in the DOM (forceMount + CSS-hide) — Details content is still present.
     expect(screen.getByText('Properties')).toBeInTheDocument()
     expect(screen.getByTestId('copilot-panel-stub')).toBeInTheDocument()
+  })
+})
+
+describe('<InboxDetailPanel> openCopilotToken ping (the Ask Copilot shortcut)', () => {
+  function enableCopilot() {
+    routeContextState.settings = {
+      featureFlags: { assistantCopilot: true } as unknown as FeatureFlags,
+    }
+    routeContextState.principal = { role: 'admin' }
+  }
+
+  it('a token bump switches from Details to the Copilot tab and focuses the ask input', async () => {
+    enableCopilot()
+    const { rerenderWith } = renderPanel(makeConversation(), { openCopilotToken: 0 })
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+
+    rerenderWith({ openCopilotToken: 1 })
+
+    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-state', 'active')
+    // Focus lands after the rAF that waits for the tab content to un-hide.
+    await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
+  })
+
+  it('a zero token at mount (no pending bump) does not steal focus', () => {
+    enableCopilot()
+    renderPanel(makeConversation(), { openCopilotToken: 0 })
+
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+    expect(screen.getByTestId('copilot-ask-stub')).not.toHaveFocus()
+  })
+
+  it('a nonzero token at mount fires — the bump landed while the panel was still loading', async () => {
+    // The inbox route resets the token to 0 whenever the selected item
+    // changes, so a nonzero value at mount can only mean `q` was pressed for
+    // THIS item during its load window (the panel wasn't mounted yet to see
+    // the bump) — honor it on mount instead of swallowing it.
+    enableCopilot()
+    renderPanel(makeConversation(), { openCopilotToken: 5 })
+
+    expect(screen.getByRole('tab', { name: /copilot/i })).toHaveAttribute('data-state', 'active')
+    await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
+  })
+
+  it('the route-side reset back to 0 does not re-open Copilot', async () => {
+    enableCopilot()
+    const { rerenderWith } = renderPanel(makeConversation(), { openCopilotToken: 0 })
+    rerenderWith({ openCopilotToken: 1 })
+    await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
+
+    // Back to Details, then the route resets the token (selection changed).
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Details' }), { button: 0 })
+    rerenderWith({ openCopilotToken: 0 })
+
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+  })
+
+  it('tabs stay user-switchable after a token bump (controlled Tabs round-trip)', async () => {
+    enableCopilot()
+    const { rerenderWith } = renderPanel(makeConversation(), { openCopilotToken: 0 })
+    rerenderWith({ openCopilotToken: 1 })
+    await waitFor(() => expect(screen.getByTestId('copilot-ask-stub')).toHaveFocus())
+
+    // Radix TabsTrigger activates on mousedown, not click.
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Details' }), { button: 0 })
+
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('data-state', 'active')
+  })
+
+  it('a token bump is a clean no-op when the Copilot tab is unavailable (flag off)', () => {
+    routeContextState.settings = {
+      featureFlags: { assistantCopilot: false } as unknown as FeatureFlags,
+    }
+    routeContextState.principal = { role: 'admin' }
+    const { rerenderWith } = renderPanel(makeConversation(), { openCopilotToken: 0 })
+
+    rerenderWith({ openCopilotToken: 1 })
+
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    expect(screen.getByText('Properties')).toBeInTheDocument()
   })
 })

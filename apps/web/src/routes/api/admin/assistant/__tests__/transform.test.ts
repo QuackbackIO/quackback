@@ -14,6 +14,9 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
   policyActorFromAuth: (...args: unknown[]) => mockPolicyActorFromAuth(...args),
 }))
+// The gate's 403-vs-500 split discriminates on isAuthDenialError, which the
+// gate imports from the pure leaf module auth-errors.ts — left unmocked here
+// so the denial tests below run against the REAL vocabulary matcher.
 
 const mockIsAssistantConfigured = vi.fn()
 const mockRunCopilotTransform = vi.fn()
@@ -102,10 +105,24 @@ const validBody = {
 
 describe('POST /api/admin/assistant/transform', () => {
   it('403s when the caller lacks copilot.use', async () => {
-    mockRequireAuth.mockRejectedValue(new Error('forbidden'))
+    // A genuine denial, in requireAuth's own message vocabulary — the gate
+    // discriminates on it (see auth-helpers.ts's isAuthDenialError).
+    mockRequireAuth.mockRejectedValue(
+      new Error("Access denied: Requires permission 'copilot.use', role member lacks it")
+    )
     const res = await handleTransform({ request: makeRequest(validBody) })
     expect(res.status).toBe(403)
     expect(mockIsFeatureEnabled).not.toHaveBeenCalled()
+    expect(mockRunCopilotTransform).not.toHaveBeenCalled()
+  })
+
+  it('rethrows an infrastructure failure from the auth check instead of mapping it to 403', async () => {
+    // A transient session-store failure is a 500, never "Copilot access
+    // required" — the gate only maps requireAuth's denial vocabulary.
+    mockRequireAuth.mockRejectedValue(new Error('session store unavailable'))
+    await expect(handleTransform({ request: makeRequest(validBody) })).rejects.toThrow(
+      'session store unavailable'
+    )
     expect(mockRunCopilotTransform).not.toHaveBeenCalled()
   })
 

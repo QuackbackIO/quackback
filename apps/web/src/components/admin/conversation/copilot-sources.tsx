@@ -15,6 +15,7 @@ import {
   MapIcon,
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
+import { CitationFreshness } from '@/components/shared/conversation/assistant-turn'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import type { CopilotCitation } from '@/lib/shared/assistant/copilot-contract'
 
@@ -118,6 +119,7 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
           {meta.label}
           {isInternal ? ' · Internal' : ''}
         </span>
+        <CitationFreshness updatedAt={citation.updatedAt} className="mb-1" />
         {hasUrl ? (
           <span className="flex items-center justify-between gap-2">
             <span className="truncate text-[11px] text-muted-foreground">{citation.url}</span>

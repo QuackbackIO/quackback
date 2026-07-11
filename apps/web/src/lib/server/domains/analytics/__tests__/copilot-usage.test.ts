@@ -1,6 +1,9 @@
 /**
  * Real-DB coverage for the Copilot usage report: questions/transforms/
  * summaries counted off ai_usage_log (split by surface and transform kind),
+ * the insert/feedback outcomes off assistant_events (per-kind insert counts,
+ * the destination reply/note split, the rating split, reasons on down-votes,
+ * unknown-type exclusion),
  * the actions funnel off assistant_pending_actions (including the
  * approved-then-executed/failed fold-in and the expired bucket), the
  * per-teammate cap + display-name join, and date-window exclusion. Runs
@@ -16,7 +19,13 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 }))
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { aiUsageLog, assistantPendingActions, conversations, principal } from '@/lib/server/db'
+import {
+  aiUsageLog,
+  assistantEvents,
+  assistantPendingActions,
+  conversations,
+  principal,
+} from '@/lib/server/db'
 import {
   getCopilotUsageMetrics,
   summarizeCopilotUsage,
@@ -27,6 +36,7 @@ const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: aiUsageLog.id }).from(aiUsageLog).limit(0)
     await db.select({ id: assistantPendingActions.id }).from(assistantPendingActions).limit(0)
+    await db.select({ id: assistantEvents.id }).from(assistantEvents).limit(0)
   },
 })
 
@@ -89,8 +99,26 @@ async function seedPendingAction(
   })
 }
 
+async function seedAssistantEvent(
+  eventType: string,
+  metadata: Record<string, unknown> = {},
+  createdAt: Date = IN_RANGE
+) {
+  await testDb.insert(assistantEvents).values({ eventType, metadata, createdAt })
+}
+
 describe('summarizeCopilotUsage (pure)', () => {
   const emptyBucket = { total: 0, approved: 0, rejected: 0, expired: 0 }
+  const emptyEvents = {
+    answersInserted: 0,
+    transformsInserted: 0,
+    summariesInserted: 0,
+    insertedReplies: 0,
+    insertedNotes: 0,
+    feedbackUp: 0,
+    feedbackDown: 0,
+    feedbackDownWithReason: 0,
+  }
 
   it('sums totalTransforms from the per-kind breakdown', () => {
     const summary = summarizeCopilotUsage(
@@ -101,13 +129,14 @@ describe('summarizeCopilotUsage (pure)', () => {
       ],
       1,
       emptyBucket,
+      emptyEvents,
       []
     )
     expect(summary.totalTransforms).toBe(5)
   })
 
   it('is null (never NaN) approvalRate when nothing was proposed', () => {
-    const summary = summarizeCopilotUsage(0, [], 0, emptyBucket, [])
+    const summary = summarizeCopilotUsage(0, [], 0, emptyBucket, emptyEvents, [])
     expect(summary.approvalRate).toBeNull()
   })
 
@@ -117,6 +146,7 @@ describe('summarizeCopilotUsage (pure)', () => {
       [],
       0,
       { total: 4, approved: 3, rejected: 1, expired: 0 },
+      emptyEvents,
       []
     )
     expect(summary.approvalRate).toBe(75)
@@ -131,12 +161,74 @@ describe('summarizeCopilotUsage (pure)', () => {
       [],
       0,
       { total: 2, approved: 1, rejected: 0, expired: 1 },
+      emptyEvents,
       teammates
     )
     expect(summary.actionsProposed).toBe(2)
     expect(summary.actionsApproved).toBe(1)
     expect(summary.actionsExpired).toBe(1)
     expect(summary.perTeammate).toEqual(teammates)
+  })
+
+  it('passes the per-kind insert counts and destination split through untouched', () => {
+    const summary = summarizeCopilotUsage(
+      10,
+      [],
+      0,
+      emptyBucket,
+      {
+        ...emptyEvents,
+        answersInserted: 3,
+        transformsInserted: 2,
+        summariesInserted: 1,
+        insertedReplies: 4,
+        insertedNotes: 2,
+      },
+      []
+    )
+    expect(summary.answersInserted).toBe(3)
+    expect(summary.transformsInserted).toBe(2)
+    expect(summary.summariesInserted).toBe(1)
+    expect(summary.insertedReplies).toBe(4)
+    expect(summary.insertedNotes).toBe(2)
+  })
+
+  it('computes insertRate as all inserted events / totalQuestions, 0-100', () => {
+    const summary = summarizeCopilotUsage(
+      8,
+      [],
+      0,
+      emptyBucket,
+      { ...emptyEvents, answersInserted: 1, transformsInserted: 1 },
+      []
+    )
+    expect(summary.insertRate).toBe(25)
+  })
+
+  it('is null (never NaN) insertRate when nothing was asked', () => {
+    const summary = summarizeCopilotUsage(
+      0,
+      [],
+      0,
+      emptyBucket,
+      { ...emptyEvents, answersInserted: 2 },
+      []
+    )
+    expect(summary.insertRate).toBeNull()
+  })
+
+  it('passes the feedback split through untouched', () => {
+    const summary = summarizeCopilotUsage(
+      0,
+      [],
+      0,
+      emptyBucket,
+      { ...emptyEvents, feedbackUp: 4, feedbackDown: 2, feedbackDownWithReason: 1 },
+      []
+    )
+    expect(summary.feedbackUp).toBe(4)
+    expect(summary.feedbackDown).toBe(2)
+    expect(summary.feedbackDownWithReason).toBe(1)
   })
 })
 
@@ -246,6 +338,54 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
       const metrics = await getCopilotUsageMetrics(FROM, TO)
       expect(metrics.actionsProposed).toBe(0)
       expect(metrics.approvalRate).toBeNull()
+    })
+  })
+
+  describe('outcomes (assistant_events)', () => {
+    it('counts inserted events per kind and splits reply/note by metadata.destination', async () => {
+      await seedUsageLog('assistant', { surface: 'copilot' })
+      await seedUsageLog('assistant', { surface: 'copilot' })
+      await seedAssistantEvent('answer_inserted', {
+        destination: 'reply',
+        answerType: 'draft_reply',
+      })
+      await seedAssistantEvent('answer_inserted', { destination: 'note' })
+      await seedAssistantEvent('transform_inserted', { destination: 'reply' })
+      await seedAssistantEvent('summary_inserted', { destination: 'note' })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.answersInserted).toBe(2)
+      expect(metrics.transformsInserted).toBe(1)
+      expect(metrics.summariesInserted).toBe(1)
+      expect(metrics.insertedReplies).toBe(2)
+      expect(metrics.insertedNotes).toBe(2)
+      expect(metrics.insertRate).toBe(200) // 4 inserts over 2 questions (trend-level, can exceed 100)
+    })
+
+    it('splits feedback by rating and counts down-votes carrying a reason', async () => {
+      await seedAssistantEvent('feedback', { rating: 'up' })
+      await seedAssistantEvent('feedback', { rating: 'down' })
+      await seedAssistantEvent('feedback', { rating: 'down', reason: 'Wrong article cited' })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.feedbackUp).toBe(1)
+      expect(metrics.feedbackDown).toBe(2)
+      expect(metrics.feedbackDownWithReason).toBe(1)
+    })
+
+    it('ignores unknown event types and rows outside the date range', async () => {
+      await seedAssistantEvent('answer_copied')
+      // A legacy kind that left the vocabulary: not in COPILOT_EVENT_TYPES,
+      // so the derived query never counts it.
+      await seedAssistantEvent('note_inserted', { destination: 'note' })
+      await seedAssistantEvent('answer_inserted', { destination: 'reply' }, BEFORE_RANGE)
+      await seedAssistantEvent('feedback', { rating: 'up' }, BEFORE_RANGE)
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.answersInserted).toBe(0)
+      expect(metrics.insertedNotes).toBe(0)
+      expect(metrics.feedbackUp).toBe(0)
+      expect(metrics.insertRate).toBeNull()
     })
   })
 

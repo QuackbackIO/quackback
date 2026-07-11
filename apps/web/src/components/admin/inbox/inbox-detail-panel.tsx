@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useRouteContext } from '@tanstack/react-router'
 import {
@@ -31,8 +31,7 @@ import {
 import { getPortalUserFn } from '@/lib/server/functions/admin'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
-import { usePermission } from '@/lib/client/hooks/use-permission'
-import { PERMISSIONS } from '@/lib/shared/permissions'
+import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { formatSlaCountdown, dueCountdownTone } from '@/lib/shared/conversation/sla'
 import { PriorityControl } from '@/components/admin/conversation/priority-control'
@@ -128,6 +127,14 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
   )
 }
 
+/**
+ * The viewport at which this panel exists at all — bound to the `xl:` Tailwind
+ * breakpoint on the panel's own `hidden xl:flex` <aside> below. The inbox
+ * route derives `copilotAvailable` from the SAME query so the Ask Copilot
+ * affordances can never disagree with the panel actually rendering.
+ */
+export const DETAIL_PANEL_MEDIA_QUERY = '(min-width: 1280px)'
+
 export interface InboxDetailPanelProps {
   /** The open item, discriminated by kind. */
   item: InboxItemRef
@@ -152,6 +159,11 @@ export interface InboxDetailPanelProps {
   getComposerText: () => string
   /** Replace the reply composer's content with a Format transform's result. */
   onReplaceComposerText: (text: string) => void
+  /** Bumped by the route's Ask Copilot action (the `q` shortcut / command
+   *  bar) — a change switches to the Copilot tab and focuses its ask input.
+   *  Same bump-a-counter ping as the thread's `createTicketToken`. No-op when
+   *  the tab isn't available (flag/permission off). */
+  openCopilotToken?: number
 }
 
 /**
@@ -175,13 +187,41 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
   onInsertFromCopilot,
   getComposerText,
   onReplaceComposerText,
+  openCopilotToken,
 }: InboxDetailPanelProps) {
   const { settings } = useRouteContext({ from: '/admin' }) as {
     settings?: { featureFlags?: FeatureFlags } | null
   }
   const flags = settings?.featureFlags
-  const hasCopilotPermission = usePermission(PERMISSIONS.COPILOT_USE)
-  const showCopilotTab = !!flags?.assistantCopilot && hasCopilotPermission
+  // The flag + copilot.use gate, shared with the inbox route's
+  // `copilotAvailable` so the Ask Copilot affordances can never disagree
+  // with the tab actually existing.
+  const showCopilotTab = useCopilotTabGate()
+
+  // Details|Copilot tab state is controlled (rather than Radix-internal) so
+  // the route's Ask Copilot action can switch tabs from outside via
+  // `openCopilotToken`. A bump also moves focus into the ask input — the
+  // shortcut's promise is "ready to type", and the focus ring makes the move
+  // visible. Guarded on `showCopilotTab` so a stray bump with the tab
+  // unavailable is a clean no-op.
+  const [tab, setTab] = useState('details')
+  const askInputRef = useRef<HTMLTextAreaElement>(null)
+  // Baseline 0 (NOT the mount-time prop): the route resets the token to 0
+  // whenever the selected item changes, so a nonzero token at mount can only
+  // mean the bump targeted THIS item while the panel wasn't mounted yet (e.g.
+  // `q` pressed during the item's load window) — honor it. A stale token from
+  // a previous item can never reach here (the route-side reset guarantees it).
+  const openCopilotTokenRef = useRef(0)
+  useEffect(() => {
+    if (openCopilotToken === undefined || openCopilotToken === openCopilotTokenRef.current) return
+    openCopilotTokenRef.current = openCopilotToken
+    if (openCopilotToken === 0) return // the route-side reset, not a bump
+    if (!showCopilotTab) return
+    setTab('copilot')
+    // Focus once the (forceMount + CSS-hidden) Copilot content is un-hidden
+    // by the state commit above — rAF runs after React flushes it.
+    requestAnimationFrame(() => askInputRef.current?.focus())
+  }, [openCopilotToken, showCopilotTab])
 
   const isTicketItem = item.kind === 'ticket'
   // back_office/tracker tickets have no requester concept at all (§2.7) — the
@@ -204,7 +244,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
 
   // The panel is `hidden xl:flex`; only fetch its data when it's actually shown
   // so smaller viewports don't pay for an invisible sidebar.
-  const isVisible = useMediaQuery('(min-width: 1280px)')
+  const isVisible = useMediaQuery(DETAIL_PANEL_MEDIA_QUERY)
 
   const { data: detail } = useQuery({
     queryKey: conversationKeys.agentContactDetail(principalId),
@@ -629,7 +669,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
 
   return (
     <aside className="hidden w-72 shrink-0 flex-col xl:flex">
-      <Tabs defaultValue="details" variant="line" className="min-h-0 flex-1 gap-0">
+      <Tabs value={tab} onValueChange={setTab} variant="line" className="min-h-0 flex-1 gap-0">
         <TabsList className="m-3 mb-0 self-start">
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="copilot">
@@ -660,6 +700,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             onInsert={onInsertFromCopilot}
             getComposerText={getComposerText}
             onReplaceComposerText={onReplaceComposerText}
+            askInputRef={askInputRef}
           />
         </TabsContent>
       </Tabs>

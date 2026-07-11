@@ -57,6 +57,11 @@ export interface RetrievedConversationSummary {
   conversationId: string
   summary: string
   score: number
+  /** When the summary row was created (≈ when that conversation closed), for
+   *  the copilot citation freshness line (see RetrievedItem.updatedAt in
+   *  retrieval-sources.ts) — a summary has no meaningful edit history of its
+   *  own, so creation IS its natural timestamp. */
+  createdAt: Date
 }
 
 export interface RetrieveConversationSummariesOptions {
@@ -94,6 +99,7 @@ interface SummaryRow {
   conversationId: string
   summary: string
   score: number
+  createdAt: Date
 }
 
 /** Semantic path: cosine similarity over the stored embedding. */
@@ -112,6 +118,7 @@ async function hybridQuery(
       conversationId: conversationSummaries.conversationId,
       summary: conversationSummaries.summary,
       score: score.as('score'),
+      createdAt: conversationSummaries.createdAt,
     })
     .from(conversationSummaries)
     .where(
@@ -126,7 +133,11 @@ async function hybridQuery(
 }
 
 /** Keyword-only fallback when embedding generation is unavailable: a plain
- *  ILIKE over the summary text (no tsvector column on this table), newest first. */
+ *  ILIKE over the summary text (no tsvector column on this table), newest
+ *  first. An ILIKE hit carries no relevance signal, so its score is 0, never
+ *  a fabricated top-of-scale value: recency ordering is the ranking within
+ *  this source, and a no-signal row must sort behind genuinely scored items
+ *  from other sources when `retrieveKnowledge` breaks a rank tie. */
 async function keywordQuery(
   query: string,
   customerPrincipalId: PrincipalId,
@@ -139,7 +150,8 @@ async function keywordQuery(
     .select({
       conversationId: conversationSummaries.conversationId,
       summary: conversationSummaries.summary,
-      score: sql<number>`1`.as('score'),
+      score: sql<number>`0`.as('score'),
+      createdAt: conversationSummaries.createdAt,
     })
     .from(conversationSummaries)
     .where(
@@ -184,6 +196,7 @@ export async function retrieveConversationSummaries(
     conversationId: r.conversationId,
     summary: r.summary,
     score: Number(r.score),
+    createdAt: r.createdAt,
   }))
 }
 
@@ -211,6 +224,7 @@ export const conversationSummariesKnowledgeSource: KnowledgeSource = {
         title: PAST_CONVERSATION_TITLE,
         excerpt: r.summary.slice(0, KNOWLEDGE_SNIPPET_CHARS),
         score: r.score,
+        updatedAt: r.createdAt.toISOString(),
         citation: {
           type: 'summary' as const,
           id: r.conversationId,

@@ -1,27 +1,41 @@
 /**
- * Shared gate sequence for the two teammate-facing Copilot SSE routes
- * (copilot.ts, transform.ts): `copilot.use` permission -> body parse against
- * the caller's own zod schema -> `assertCopilotAvailable` (the
- * `assistantCopilot` flag, then the assistant being configured) -> the AI
- * token budget -> item-scoped viewability (`assertConversationViewable` or
- * `assertTicketVisible`, whichever the parsed request carries — unified
- * inbox §2.9), each already mapped onto the route's error envelope
- * (forbiddenResponse / errorResponse). Both routes ran this exact sequence
- * verbatim before this; only the request schema and the invalid-request
- * message differ between them, so this is generic over both.
+ * Shared gate sequences for every teammate-facing Copilot entry point, in two
+ * shapes for two error contracts:
+ *
+ * - `gateCopilotRequest`, for the two SSE routes (copilot.ts, transform.ts):
+ *   `copilot.use` permission -> body parse against the caller's own zod
+ *   schema -> `assertCopilotAvailable` (the `assistantCopilot` flag, then the
+ *   assistant being configured) -> the AI token budget -> item-scoped
+ *   viewability (`assertConversationViewable` or `assertTicketVisible`,
+ *   whichever the parsed request carries — unified inbox §2.9), each already
+ *   mapped onto the route's error envelope (forbiddenResponse /
+ *   errorResponse). Both routes ran this exact sequence verbatim before this;
+ *   only the request schema and the invalid-request message differ between
+ *   them, so this is generic over both.
+ * - `gateCopilotFn`, for the copilot server fns (copilot-events.ts,
+ *   copilot-summary.ts): the same order minus parse and budget, every failure
+ *   left as its original throw (see its doc). The Response shape can't just
+ *   wrap the throw shape: its parse and budget steps interleave the shared
+ *   steps, so the two share `assertCopilotAvailable` and
+ *   `resolveViewableItem` instead of one wrapping the other.
  *
  * sandbox.ts is deliberately NOT a caller: it has no conversation to assert
  * viewability against and gates on a different permission (`settings.manage`,
  * not `copilot.use`), so its shape genuinely differs rather than merely
- * duplicating this one.
+ * duplicating these.
  */
 import type { z } from 'zod'
 import type { ConversationId, TicketId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
 import {
   requireAuth,
   policyActorFromAuth,
   type AuthContext,
 } from '@/lib/server/functions/auth-helpers'
+// The leaf module, not auth-helpers' re-export: route tests mock auth-helpers
+// wholesale, and importing the matcher from the pure leaf keeps the REAL
+// denial vocabulary in play there instead of a restated copy.
+import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
 // The barrel, not a relative import to assistant.runtime.ts directly: every
@@ -40,8 +54,9 @@ import { errorResponse, forbiddenResponse } from '@/lib/server/domains/api/respo
 
 /**
  * Thrown by `assertCopilotAvailable` when either check fails; carries enough
- * to reproduce either call site's original error exactly (a mapped
- * `errorResponse` here, a thrown `Error` in `copilot-summary.ts`).
+ * to reproduce either gate shape's original error exactly (a mapped
+ * `errorResponse` in `gateCopilotRequest`, a propagated throw out of
+ * `gateCopilotFn`).
  */
 export class CopilotUnavailableError extends Error {
   constructor(
@@ -57,10 +72,9 @@ export class CopilotUnavailableError extends Error {
 /**
  * The `assistantCopilot` flag -> assistant-configured half of the Copilot
  * gate sequence, order load-bearing (the flag is checked first). Permission
- * and item viewability are call-site specific and stay out of this helper;
- * this covers only the two checks every Copilot entry point repeated
- * verbatim: `gateCopilotRequest` below, and both on-demand summary fns in
- * `copilot-summary.ts`.
+ * and item viewability differ per gate shape and stay out of this helper;
+ * this covers only the two checks both shapes (`gateCopilotRequest`,
+ * `gateCopilotFn`) run verbatim.
  */
 export async function assertCopilotAvailable(): Promise<void> {
   if (!(await isFeatureEnabled('assistantCopilot'))) {
@@ -74,6 +88,13 @@ export async function assertCopilotAvailable(): Promise<void> {
 export interface CopilotGateOk<T> {
   ok: true
   auth: AuthContext
+  /**
+   * The caller's resolved policy actor (the same one the item-viewability
+   * check ran against), so a route can bound further work by the teammate's
+   * own permission set — e.g. copilot.ts's `askerActor` ceiling — without
+   * re-resolving it.
+   */
+  actor: Actor
   parsed: T
   /** Set when the request is conversation-scoped; null for a ticket-scoped one. */
   conversationId: ConversationId | null
@@ -88,6 +109,58 @@ export interface CopilotGateFailed {
 }
 
 export type CopilotGateResult<T> = CopilotGateOk<T> | CopilotGateFailed
+
+/**
+ * Item-scoped viewability, the last step of both gate shapes: resolve which
+ * branch of the `{ conversationId } | { ticketId }` ref the request carries
+ * and assert THAT item is viewable by the actor. Throws the assert helpers'
+ * NotFoundError — `gateCopilotRequest` maps it onto its error envelope,
+ * `gateCopilotFn` lets it propagate.
+ */
+async function resolveViewableItem(
+  itemRef: { conversationId: string } | { ticketId: string },
+  actor: Actor
+): Promise<{ conversationId: ConversationId | null; ticketId: TicketId | null }> {
+  if ('conversationId' in itemRef) {
+    const conversationId = itemRef.conversationId as ConversationId
+    await assertConversationViewable(conversationId, actor)
+    return { conversationId, ticketId: null }
+  }
+  const ticketId = itemRef.ticketId as TicketId
+  await assertTicketVisible(ticketId, actor)
+  return { conversationId: null, ticketId }
+}
+
+/**
+ * Throw-shaped sibling of `gateCopilotRequest` for the copilot server fns
+ * (copilot-events.ts, copilot-summary.ts), which surface every failure as a
+ * thrown rejection rather than a mapped Response. Same gate order, minus the
+ * body parse (owned by each fn's validator) and the token budget — budget
+ * enforcement lives at the model-invocation seam, not this auth gate: an fn
+ * that invokes the model does so through a generator that enforces it itself
+ * (conversation-summary.service.ts calls `enforceAiTokenBudget` inside both
+ * its generators), and an fn that never invokes the model (copilot-events.ts)
+ * has nothing to budget. A future fn that calls the model directly must call
+ * `enforceAiTokenBudget` itself. The sequence here: `copilot.use` ->
+ * `assertCopilotAvailable` -> `policyActorFromAuth` -> item viewability.
+ * Failures propagate as their original throws (`requireAuth`'s vocabulary
+ * Errors, CopilotUnavailableError, NotFoundError), so each caller's error
+ * handling sees exactly what it saw running the sequence inline.
+ */
+export async function gateCopilotFn(
+  itemRef: { conversationId: string } | { ticketId: string }
+): Promise<{
+  auth: AuthContext
+  actor: Actor
+  conversationId: ConversationId | null
+  ticketId: TicketId | null
+}> {
+  const auth = await requireAuth({ permission: PERMISSIONS.COPILOT_USE })
+  await assertCopilotAvailable()
+  const actor = await policyActorFromAuth(auth)
+  const { conversationId, ticketId } = await resolveViewableItem(itemRef, actor)
+  return { auth, actor, conversationId, ticketId }
+}
 
 /**
  * Run the shared gate. `schema` is the caller's own request shape — either a
@@ -108,7 +181,13 @@ export async function gateCopilotRequest<
   let auth: AuthContext
   try {
     auth = await requireAuth({ permission: PERMISSIONS.COPILOT_USE })
-  } catch {
+  } catch (err) {
+    // Only a genuine denial maps to 403 (isAuthDenialError lives beside
+    // requireAuth's throws, so vocabulary and matcher change together).
+    // Anything else — a session-store or settings-read failure — is
+    // infrastructure and must surface as a 500, never be dressed up as
+    // "Copilot access required".
+    if (!isAuthDenialError(err)) throw err
     return { ok: false, response: forbiddenResponse('Copilot access required') }
   }
 
@@ -137,23 +216,14 @@ export async function gateCopilotRequest<
     throw err
   }
 
-  let conversationId: ConversationId | null = null
-  let ticketId: TicketId | null = null
+  const actor = await policyActorFromAuth(auth)
   try {
-    const actor = await policyActorFromAuth(auth)
-    if ('conversationId' in parsed) {
-      conversationId = parsed.conversationId as ConversationId
-      await assertConversationViewable(conversationId, actor)
-    } else {
-      ticketId = parsed.ticketId as TicketId
-      await assertTicketVisible(ticketId, actor)
-    }
+    const { conversationId, ticketId } = await resolveViewableItem(parsed, actor)
+    return { ok: true, auth, actor, parsed, conversationId, ticketId }
   } catch (err) {
     if (err instanceof NotFoundError) {
       return { ok: false, response: errorResponse(err.code, err.message, 404) }
     }
     throw err
   }
-
-  return { ok: true, auth, parsed, conversationId, ticketId }
 }

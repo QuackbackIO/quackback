@@ -31,94 +31,29 @@ describe('splitByTerms', () => {
   })
 })
 
-describe('parseMarkdownLite', () => {
-  it('splits paragraphs on blank lines', () => {
-    expect(parseMarkdownLite('First.\n\nSecond.')).toEqual([
-      { kind: 'paragraph', lines: [[{ text: 'First.', bold: false }]] },
-      { kind: 'paragraph', lines: [[{ text: 'Second.', bold: false }]] },
-    ])
-  })
-
-  it('parses bullet lists', () => {
-    expect(parseMarkdownLite('- one\n- two')).toEqual([
-      {
-        kind: 'list',
-        ordered: false,
-        items: [[{ text: 'one', bold: false }], [{ text: 'two', bold: false }]],
-      },
-    ])
-  })
-
-  it('parses numbered lists as ordered', () => {
-    expect(parseMarkdownLite('1. first\n2. second')).toEqual([
-      {
-        kind: 'list',
-        ordered: true,
-        items: [[{ text: 'first', bold: false }], [{ text: 'second', bold: false }]],
-      },
-    ])
-  })
-
-  it('parses bold spans inside text', () => {
-    expect(parseMarkdownLite('Use the **Invite member** button.')).toEqual([
-      {
-        kind: 'paragraph',
-        lines: [
-          [
-            { text: 'Use the ', bold: false },
-            { text: 'Invite member', bold: true },
-            { text: ' button.', bold: false },
-          ],
-        ],
-      },
-    ])
-  })
-
-  it('parses [n] citation markers into cite spans', () => {
-    expect(parseMarkdownLite('Open Settings [1] then Team [2].')).toEqual([
-      {
-        kind: 'paragraph',
-        lines: [
-          [
-            { text: 'Open Settings ', bold: false },
-            { text: '1', bold: false, cite: 1 },
-            { text: ' then Team ', bold: false },
-            { text: '2', bold: false, cite: 2 },
-            { text: '.', bold: false },
-          ],
-        ],
-      },
-    ])
-  })
-
-  it('handles a bold label and a citation in the same line', () => {
+// The grammar itself is pinned once in lib/shared/assistant/__tests__/
+// markdown-lite.test.ts; these pin this surface's binding of it.
+describe('parseMarkdownLite (Ask AI binding)', () => {
+  it('parses bold runs and [n] citation markers', () => {
     expect(parseMarkdownLite('Click **Invite** [3].')).toEqual([
       {
         kind: 'paragraph',
         lines: [
           [
-            { text: 'Click ', bold: false },
+            { text: 'Click ' },
             { text: 'Invite', bold: true },
-            { text: ' ', bold: false },
-            { text: '3', bold: false, cite: 3 },
-            { text: '.', bold: false },
+            { text: ' ' },
+            { text: '3', cite: 3 },
+            { text: '.' },
           ],
         ],
       },
     ])
   })
 
-  it('keeps single newlines as separate lines within a paragraph', () => {
-    expect(parseMarkdownLite('line one\nline two')).toEqual([
-      {
-        kind: 'paragraph',
-        lines: [[{ text: 'line one', bold: false }], [{ text: 'line two', bold: false }]],
-      },
+  it('leaves italic markers literal (this surface renders them as-is)', () => {
+    expect(parseMarkdownLite('A *subtle* hint.')).toEqual([
+      { kind: 'paragraph', lines: [[{ text: 'A *subtle* hint.' }]] },
     ])
-  })
-
-  it('treats asterisk bullets like dashes', () => {
-    const blocks = parseMarkdownLite('* alpha\n* beta')
-    expect(blocks[0].kind).toBe('list')
   })
 })

@@ -26,7 +26,7 @@
  */
 import { db, and, gte, lt, sql, conversations } from '@/lib/server/db'
 
-export interface AttributeValueCount {
+export interface AttributeValueBreakdownCount {
   /** The stored value's string form — an option id for select/multi_select,
    *  the stringified value for text/number/checkbox/date. */
   value: string
@@ -42,7 +42,7 @@ export interface AttributeBreakdown {
    *  values — this is "how many conversations touched this value", not a
    *  partition, so the counts across `values` need not sum to the window's
    *  total conversation count. */
-  values: AttributeValueCount[]
+  values: AttributeValueBreakdownCount[]
 }
 
 /** The envelope-unwrapped jsonb value at `custom_attributes -> key` — mirrors

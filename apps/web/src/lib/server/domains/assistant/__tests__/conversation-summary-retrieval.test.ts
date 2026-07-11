@@ -52,6 +52,7 @@ function row(conversationId: string, overrides: Partial<Record<string, unknown>>
     conversationId,
     summary: `Summary for ${conversationId}`,
     score: 0.8,
+    createdAt: new Date('2026-06-01T00:00:00.000Z'),
     ...overrides,
   }
 }
@@ -137,7 +138,12 @@ describe('retrieveConversationSummaries: ranking paths', () => {
     })
 
     expect(items).toEqual([
-      { conversationId: 'conversation_a', summary: 'Summary for conversation_a', score: 0.9 },
+      {
+        conversationId: 'conversation_a',
+        summary: 'Summary for conversation_a',
+        score: 0.9,
+        createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      },
     ])
   })
 
@@ -172,6 +178,9 @@ describe('conversationSummariesKnowledgeSource', () => {
         title: 'Past conversation',
         excerpt: 'Summary for conversation_past_1',
         score: 0.77,
+        // The summary row's createdAt (≈ when that conversation closed) is
+        // the freshness timestamp the copilot citation line renders.
+        updatedAt: '2026-06-01T00:00:00.000Z',
         citation: {
           type: 'summary',
           id: 'conversation_past_1',

@@ -16,6 +16,7 @@ export function makeKbArticle(
     categoryName: 'General',
     score: 0.9,
     isPublic: true,
+    updatedAt: new Date('2026-06-01T00:00:00.000Z'),
     ...overrides,
   }
 }

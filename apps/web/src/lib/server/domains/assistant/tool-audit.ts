@@ -117,21 +117,53 @@ export async function recordDeniedToolCall(
  *  (a refund issued, a conversation closed), not just spend/latency telemetry. */
 export const ASSISTANT_TOOL_CALLS_RETENTION_DAYS = 180
 
-/** Sweep assistant_tool_calls rows past retention. Registered alongside
- *  usage-log.ts's cleanupExpiredLogs on the same daily BullMQ job
- *  (feedback-ai-queue.ts's 'retention-cleanup' job type). */
-export async function cleanupExpiredToolCalls(exec: Executor = db): Promise<{ deleted: number }> {
+/** Same 180-day horizon as the tool-call audit rows: usage events are the
+ *  outcome half of the same Copilot report, so both halves of a range query
+ *  age out together rather than the outcomes going dark 90 days early. */
+export const ASSISTANT_EVENTS_RETENTION_DAYS = 180
+
+/** One sweep body for both exported cleanups below. `table` is a hardcoded
+ *  name from those two call sites only (it rides `sql.raw`), never input. */
+async function sweepExpired(
+  table: 'assistant_tool_calls' | 'assistant_events',
+  retentionDays: number,
+  label: string,
+  exec: Executor
+): Promise<{ deleted: number }> {
   const result = await exec.execute(
-    sql`DELETE FROM assistant_tool_calls WHERE created_at < now() - interval '${sql.raw(String(ASSISTANT_TOOL_CALLS_RETENTION_DAYS))} days'`
+    sql`DELETE FROM ${sql.raw(table)} WHERE created_at < now() - interval '${sql.raw(String(retentionDays))} days'`
   )
   const deleted = (result as { count: number }).count ?? 0
 
   if (deleted > 0) {
-    log.info(
-      { deleted, retention_days: ASSISTANT_TOOL_CALLS_RETENTION_DAYS },
-      'assistant tool call retention cleanup completed'
-    )
+    log.info({ deleted, retention_days: retentionDays }, `${label} retention cleanup completed`)
   }
 
   return { deleted }
+}
+
+/** Sweep assistant_tool_calls rows past retention. Registered alongside
+ *  usage-log.ts's cleanupExpiredLogs on the same daily BullMQ job
+ *  (feedback-ai-queue.ts's 'retention-cleanup' job type). */
+export async function cleanupExpiredToolCalls(exec: Executor = db): Promise<{ deleted: number }> {
+  return sweepExpired(
+    'assistant_tool_calls',
+    ASSISTANT_TOOL_CALLS_RETENTION_DAYS,
+    'assistant tool call',
+    exec
+  )
+}
+
+/** Sweep assistant_events rows past retention. Registered alongside
+ *  cleanupExpiredToolCalls above on the same daily BullMQ job
+ *  (feedback-ai-queue.ts's 'retention-cleanup' job type). */
+export async function cleanupExpiredAssistantEvents(
+  exec: Executor = db
+): Promise<{ deleted: number }> {
+  return sweepExpired(
+    'assistant_events',
+    ASSISTANT_EVENTS_RETENTION_DAYS,
+    'assistant usage event',
+    exec
+  )
 }

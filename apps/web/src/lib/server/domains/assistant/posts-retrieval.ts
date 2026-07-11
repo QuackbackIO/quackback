@@ -53,6 +53,9 @@ export interface RetrievedPost {
    *  time, exposed per row so a wider ('team'/'internal') query can tell a
    *  publicly-viewable post apart from one on a private board. */
   isPublic: boolean
+  /** The row's last-update timestamp, for the copilot citation freshness line
+   *  (see RetrievedItem.updatedAt in retrieval-sources.ts). */
+  updatedAt: Date
 }
 
 export interface RetrievePostsOptions {
@@ -113,6 +116,7 @@ interface PostRetrievalRow {
   boardSlug: string
   score: number
   isPublic: boolean
+  updatedAt: Date
 }
 
 /**
@@ -142,6 +146,7 @@ async function hybridQuery(
       boardSlug: boards.slug,
       score: combined.as('score'),
       isPublic: isPublicBoard().as('is_public_board'),
+      updatedAt: posts.updatedAt,
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -182,6 +187,7 @@ async function keywordQuery(
       boardSlug: boards.slug,
       score: rank.as('score'),
       isPublic: isPublicBoard().as('is_public_board'),
+      updatedAt: posts.updatedAt,
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -227,6 +233,7 @@ export async function retrievePosts(
     boardSlug: r.boardSlug,
     score: Number(r.score),
     isPublic: r.isPublic,
+    updatedAt: r.updatedAt,
   }))
 }
 
@@ -246,6 +253,7 @@ export const postsKnowledgeSource: KnowledgeSource = {
         title: p.title,
         excerpt: p.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
         score: p.score,
+        updatedAt: p.updatedAt.toISOString(),
         citation: {
           type: 'post' as const,
           id: p.id,

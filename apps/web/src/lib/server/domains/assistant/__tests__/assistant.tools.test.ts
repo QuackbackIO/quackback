@@ -81,6 +81,7 @@ vi.mock('@/lib/server/logger', () => ({
 import { assembleAssistantToolset, resolveEffectiveToolMode } from '../assistant.tools'
 import { makeToolTestContext, fakePendingActionRow } from './assistant-tool-fixtures'
 import { ASSISTANT_TOOL_SPECS } from '../assistant.toolspec'
+import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
 import type { AssistantToolContext, AssistantToolSpec } from '../assistant.toolspec'
 import type { AssistantToolControls } from '@/lib/server/domains/settings/settings.assistant'
 
@@ -95,6 +96,18 @@ async function assembleTools(
 }
 
 const ctx = makeToolTestContext
+
+/** The asking teammate's Actor for metadata-write ceiling tests: holds exactly
+ *  the given permissions (an explicit Set, so `can` never falls back to role). */
+function asker(...permissions: string[]): AssistantToolContext['askerActor'] {
+  return {
+    principalId: 'principal_teammate',
+    role: 'member',
+    principalType: 'user',
+    segmentIds: new Set(),
+    permissions: new Set(permissions),
+  } as never
+}
 
 function toolCtx(c: AssistantToolContext) {
   return { context: c, emitCustomEvent: () => {} }
@@ -199,6 +212,7 @@ describe('search_knowledge', () => {
       id: 'kb_article_1',
       title: 'Title kb_article_1',
       url: '/hc/articles/general/slug-kb_article_1',
+      updatedAt: '2026-06-01T00:00:00.000Z',
     })
   })
 
@@ -209,6 +223,37 @@ describe('search_knowledge', () => {
     const out = (await search.execute({ query: 'nope' }, toolCtx(c))) as { articles: unknown[] }
     expect(out.articles).toEqual([])
     expect(c.sources.size).toBe(0)
+  })
+
+  it('frames a non-empty result with the shared content-not-instructions note (retrieval is the fourth guard surface)', async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    const c = ctx()
+    const search = await findTool(c, 'search_knowledge')
+
+    const out = (await search.execute({ query: 'billing' }, toolCtx(c))) as { note?: string }
+
+    expect(out.note).toBe(RETRIEVED_CONTENT_NOTE)
+    expect(out.note).toContain('not instructions')
+  })
+
+  it('carries no framing note on an empty result (nothing untrusted to frame)', async () => {
+    mockRetrieve.mockResolvedValue([])
+    const c = ctx()
+    const search = await findTool(c, 'search_knowledge')
+
+    const out = (await search.execute({ query: 'nope' }, toolCtx(c))) as { note?: string }
+
+    expect(out).not.toHaveProperty('note')
+  })
+
+  it("records each surfaced source's updatedAt on the ledgered citation itself (stripped only at persistence)", async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    const c = ctx()
+    const search = await findTool(c, 'search_knowledge')
+
+    await search.execute({ query: 'billing' }, toolCtx(c))
+
+    expect(c.sources.get('kb_article_1')?.updatedAt).toBe('2026-06-01T00:00:00.000Z')
   })
 
   it('ends exploration past the per-turn search budget with an answer-now note', async () => {
@@ -802,14 +847,51 @@ describe('resolveEffectiveToolMode', () => {
     expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('approval')
   })
 
-  it('a metadataWrite tool is EXEMPT from propose-forcing and keeps its configured mode', () => {
+  it('a metadataWrite tool is EXEMPT from propose-forcing when the asker holds its permissions', () => {
     // Attribute classification is metadata, not an action: on the copilot
     // surface it must run under its configured mode like everywhere else,
-    // not be forced to a teammate-approval card. Mirrors set_attribute.
+    // not be forced to a teammate-approval card — provided the asking
+    // teammate could perform the write themselves. Mirrors set_attribute.
     const spec = makeFakeWriteSpec({ metadataWrite: true })
-    const c = ctx({ simulate: false, writeToolPolicy: 'propose' })
+    const c = ctx({
+      simulate: false,
+      writeToolPolicy: 'propose',
+      askerActor: asker(PERMISSIONS.CONVERSATION_SET_STATUS),
+    })
     expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('autonomous')
     expect(resolveEffectiveToolMode(spec, 'approval', c)).toBe('approval')
+  })
+
+  it('the metadataWrite exemption is bounded by the asking teammate: a missing permission proposes', () => {
+    // Tools execute under Quinn's actor, so the exemption alone would let a
+    // teammate holding only copilot.use trigger a write they could not
+    // perform themselves — the asker ceiling forces the proposal path, whose
+    // approval flow re-checks the approver's permissions.
+    const spec = makeFakeWriteSpec({ metadataWrite: true })
+    const c = ctx({ simulate: false, writeToolPolicy: 'propose', askerActor: asker() })
+    expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('approval')
+  })
+
+  it('the metadataWrite exemption fails closed when no asker actor is threaded at all', () => {
+    // No `askerActor` means no known teammate to bound the write by, which
+    // must read as "below the ceiling", never as "unlimited".
+    const spec = makeFakeWriteSpec({ metadataWrite: true })
+    const c = ctx({ simulate: false, writeToolPolicy: 'propose' })
+    expect(resolveEffectiveToolMode(spec, 'autonomous', c)).toBe('approval')
+  })
+
+  it('the asker ceiling checks the SPECIFIC permissions the tool declares', () => {
+    const spec = makeFakeWriteSpec({ metadataWrite: true })
+    const holdsIt = ctx({
+      writeToolPolicy: 'propose',
+      askerActor: asker(PERMISSIONS.CONVERSATION_SET_STATUS),
+    })
+    const holdsOther = ctx({
+      writeToolPolicy: 'propose',
+      askerActor: asker(PERMISSIONS.SETTINGS_MANAGE),
+    })
+    expect(resolveEffectiveToolMode(spec, 'autonomous', holdsIt)).toBe('autonomous')
+    expect(resolveEffectiveToolMode(spec, 'autonomous', holdsOther)).toBe('approval')
   })
 
   it('a metadataWrite tool still previews under the simulate default (sandbox path)', () => {
@@ -828,19 +910,26 @@ describe('resolveEffectiveToolMode', () => {
   })
 
   it('real catalogue: set_attribute is the metadata write; the action tools are not', () => {
-    // The behaviour change, pinned against the real specs: under the copilot
-    // surface's propose policy, recording an attribute runs autonomously while
-    // every genuine action still proposes for teammate approval.
-    const proposeCtx = ctx({ simulate: false, writeToolPolicy: 'propose' })
+    // Pinned against the real specs: under the copilot surface's propose
+    // policy, recording an attribute runs autonomously for a teammate who
+    // holds conversation.set_attributes themselves, proposes for one who
+    // does not, and every genuine action always proposes regardless.
+    const askerHoldsIt = ctx({
+      simulate: false,
+      writeToolPolicy: 'propose',
+      askerActor: asker(PERMISSIONS.CONVERSATION_SET_ATTRIBUTES),
+    })
+    const askerLacksIt = ctx({ simulate: false, writeToolPolicy: 'propose', askerActor: asker() })
 
     const setAttribute = ASSISTANT_TOOL_SPECS['set_attribute']
     expect(setAttribute.metadataWrite).toBe(true)
-    expect(resolveEffectiveToolMode(setAttribute, undefined, proposeCtx)).toBe('autonomous')
+    expect(resolveEffectiveToolMode(setAttribute, undefined, askerHoldsIt)).toBe('autonomous')
+    expect(resolveEffectiveToolMode(setAttribute, undefined, askerLacksIt)).toBe('approval')
 
     for (const name of ['end_conversation', 'create_ticket', 'capture_feedback']) {
       const action = ASSISTANT_TOOL_SPECS[name]
       expect(action.metadataWrite ?? false).toBe(false)
-      expect(resolveEffectiveToolMode(action, undefined, proposeCtx)).toBe('approval')
+      expect(resolveEffectiveToolMode(action, undefined, askerHoldsIt)).toBe('approval')
     }
   })
 

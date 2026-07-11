@@ -1,7 +1,8 @@
 /**
  * `summarizeConversationNowFn` (Quinn Copilot P2-C.3, manual half): the
  * Copilot panel's Summarize chip. Covers the gate order (copilot.use ->
- * assistantCopilot flag -> assistant configured -> conversation viewable)
+ * assistantCopilot flag -> assistant configured -> conversation viewable,
+ * via the shared `gateCopilotFn`)
  * and that it never persists: it only forwards
  * `generateConversationSummaryText`'s result. createServerFn is stubbed to a
  * directly-callable fn (mirrors assistant-snippets.test.ts) so the real zod
@@ -55,10 +56,11 @@ vi.mock('@/lib/server/domains/assistant', () => ({
 vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   assertConversationViewable: hoisted.assertConversationViewable,
 }))
-// `assertCopilotAvailable` (copilot-gate.ts) is exercised for real here, not
-// mocked as a whole module: it's the one piece of gate logic this suite
-// wants to assert against (flag -> configured, in order), composed from the
-// isFeatureEnabled/isAssistantConfigured mocks above.
+// `gateCopilotFn` (copilot-gate.ts) is exercised for real here, not mocked
+// as a whole module: the gate sequence is exactly what this suite wants to
+// assert against (permission -> flag -> configured -> viewable, in order),
+// composed from the requireAuth/isFeatureEnabled/isAssistantConfigured/
+// assert-viewability mocks above.
 vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
   assertTicketVisible: hoisted.assertTicketVisible,
 }))

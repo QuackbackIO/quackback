@@ -36,6 +36,7 @@ import {
 import { BulkActionBar, type BulkMenuId } from '@/components/admin/conversation/bulk-action-bar'
 import { InboxCommandBar } from '@/components/admin/conversation/inbox-command-bar'
 import { ShortcutHelpPanel } from '@/components/admin/conversation/shortcut-help-panel'
+import { DETAIL_PANEL_MEDIA_QUERY } from '@/components/admin/inbox/inbox-detail-panel'
 import { useInboxKeyboard } from '@/components/admin/conversation/use-inbox-keyboard'
 import {
   useBulkConversationUpdate,
@@ -95,6 +96,8 @@ import { useConversationStream } from '@/lib/client/hooks/use-conversation-strea
 import { useConversationTyping } from '@/lib/client/hooks/use-conversation-typing'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { useInboxListSource } from '@/lib/client/hooks/use-inbox-list-source'
+import { useMediaQuery } from '@/lib/client/hooks/use-media-query'
+import { useCopilotTabGate } from '@/lib/client/hooks/use-copilot-tab-gate'
 import { EmptyState } from '@/components/shared/empty-state'
 import {
   DropdownMenu,
@@ -618,6 +621,15 @@ function InboxPage() {
     enabled: showTickets,
   })
 
+  // Whether the detail panel's Copilot tab exists for this viewer right now —
+  // the SAME gate InboxDetailPanel renders the tab from (useCopilotTabGate:
+  // assistantCopilot flag + copilot.use) plus the ≥xl viewport that renders
+  // the panel at all. Gates the Ask Copilot command-bar row and makes the `q`
+  // shortcut a no-op when there is no panel to open.
+  const copilotTabGate = useCopilotTabGate()
+  const isDetailPanelViewport = useMediaQuery(DETAIL_PANEL_MEDIA_QUERY)
+  const copilotAvailable = copilotTabGate && isDetailPanelViewport
+
   // Keep the active scope's memory in sync with what's open, so it's current the
   // moment you switch away. Only remember an item that's actually IN this
   // scope's list — a cross-scope deep-link (`?i=X` paired with an unrelated
@@ -792,6 +804,22 @@ function InboxPage() {
   // target, see `isInboxActionEnabled`).
   const [createTicketToken, setCreateTicketToken] = useState(0)
   const [standaloneCreateTicketOpen, setStandaloneCreateTicketOpen] = useState(false)
+  // Ask Copilot ping (`q` / command bar): the open thread's detail panel
+  // switches to its Copilot tab and focuses the ask input on a bump — the
+  // same token idiom as `createTicketToken`, since only that subtree owns the
+  // tab state and the input node.
+  const [openCopilotToken, setOpenCopilotToken] = useState(0)
+  // A bump aimed at one item must never auto-open Copilot on the NEXT one, so
+  // the token resets to 0 whenever the selection changes. Reset during render
+  // (the adjust-state-while-rendering pattern), not in an effect: the detail
+  // subtree remounts under `key={selectedRef.id}` in this same commit, and its
+  // mount effects would otherwise observe the stale token before an effect
+  // here could clear it. The panel treats 0 as "no pending bump".
+  const copilotTokenItemRef = useRef(selectedId)
+  if (copilotTokenItemRef.current !== selectedId) {
+    copilotTokenItemRef.current = selectedId
+    if (openCopilotToken !== 0) setOpenCopilotToken(0)
+  }
   // Anchor for shift-click range selection.
   const selectAnchor = useRef<string | null>(null)
   // The thread wrapper, so the reply action can focus the open composer.
@@ -1204,6 +1232,12 @@ function InboxPage() {
           if (selectedRef?.kind === 'conversation') setCreateTicketToken((t) => t + 1)
           else if (!hasTicketTarget) setStandaloneCreateTicketOpen(true)
           break
+        case 'copilot':
+          // No-op unless the Copilot tab actually exists for this viewer and
+          // an item is open — never a broken state (mirrors the palette gate
+          // in isInboxActionEnabled).
+          if (copilotAvailable && selectedRef) setOpenCopilotToken((t) => t + 1)
+          break
       }
     },
     [
@@ -1217,6 +1251,7 @@ function InboxPage() {
       toggleSelect,
       applyClose,
       applyReopen,
+      copilotAvailable,
     ]
   )
 
@@ -1323,6 +1358,7 @@ function InboxPage() {
             onOpenPost={openPost}
             isVisitorTyping={false}
             isOtherAgentTyping={false}
+            openCopilotToken={openCopilotToken}
           />
         ) : selectedRef?.kind === 'conversation' ? (
           <AgentConversationThread
@@ -1336,6 +1372,7 @@ function InboxPage() {
             isVisitorTyping={visitorTyping}
             isOtherAgentTyping={otherAgentTyping}
             createTicketToken={createTicketToken}
+            openCopilotToken={openCopilotToken}
           />
         ) : (
           <div className="hidden h-full items-center justify-center md:flex">
@@ -1376,8 +1413,13 @@ function InboxPage() {
         hasSelection={hasSelection}
         hasActiveConversation={hasActiveConversation}
         hasTicketTarget={hasTicketTarget}
+        copilotAvailable={copilotAvailable}
       />
-      <ShortcutHelpPanel open={helpOpen} onOpenChange={setHelpOpen} />
+      <ShortcutHelpPanel
+        open={helpOpen}
+        onOpenChange={setHelpOpen}
+        copilotAvailable={copilotAvailable}
+      />
     </div>
   )
 }

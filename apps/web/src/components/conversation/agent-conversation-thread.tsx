@@ -156,6 +156,7 @@ import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { useCopilotInsert } from '@/lib/client/hooks/use-copilot-insert'
+import { answerToInsertContent } from './copilot-insert-content'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
 import { Avatar } from '@/components/ui/avatar'
@@ -214,20 +215,46 @@ function textToParagraphs(text: string): TiptapContent[] {
     )
 }
 
-/** Append plain text to a draft (used by the macro / Copilot / emoji seams).
- *  Existing rich content is preserved; an effectively-empty draft is replaced
- *  outright so an insert doesn't leave a leading blank paragraph. */
-function appendTextToDraft(prev: ComposerDraft, text: string): ComposerDraft {
+/** Append converted content (editor nodes + their matching markdown mirror)
+ *  to a draft — the one append shape every insert seam shares. Existing rich
+ *  content is preserved; an effectively-empty draft is replaced outright so
+ *  an insert doesn't leave a leading blank paragraph. */
+function appendToDraft(
+  prev: ComposerDraft,
+  nodes: TiptapContent[],
+  markdown: string
+): ComposerDraft {
   const empty = isEmptyTiptapDoc(prev.json ?? undefined)
   const baseContent = !empty && prev.json?.content ? prev.json.content : []
-  const json: TiptapContent = { type: 'doc', content: [...baseContent, ...textToParagraphs(text)] }
-  const markdown = !empty && prev.markdown.trim() ? `${prev.markdown.trim()}\n\n${text}` : text
-  return { json, markdown }
+  const json: TiptapContent = { type: 'doc', content: [...baseContent, ...nodes] }
+  const merged =
+    !empty && prev.markdown.trim() ? `${prev.markdown.trim()}\n\n${markdown}` : markdown
+  return { json, markdown: merged }
 }
 
-/** Replace a draft with plain text (used by the Copilot Format chip). */
-function textToDraft(text: string): ComposerDraft {
-  return { json: { type: 'doc', content: textToParagraphs(text) }, markdown: text }
+/** Append plain text to a draft (the macro / emoji seams): literal paragraph
+ *  nodes, the text itself as the markdown mirror. */
+function appendTextToDraft(prev: ComposerDraft, text: string): ComposerDraft {
+  return appendToDraft(prev, textToParagraphs(text), text)
+}
+
+/** Append a Copilot answer (or transform result) to a draft: markdown-lite
+ *  becomes real editor nodes (bold/italic marks, lists) and `[n]` citation
+ *  markers are stripped, instead of landing as literal text (the insert
+ *  fidelity fix — see copilot-insert-content.ts). One conversion pass yields
+ *  both the nodes and the matching marker-stripped markdown mirror. */
+function appendAnswerToDraft(prev: ComposerDraft, answer: string): ComposerDraft {
+  const { nodes, markdown } = answerToInsertContent(answer)
+  return appendToDraft(prev, nodes, markdown)
+}
+
+/** Replace a draft with a Copilot transform result (the Format chip): same
+ *  single-pass conversion as appendAnswerToDraft, EXCEPT citation markers
+ *  survive — the source here is the teammate's own draft, so a literal `[2]`
+ *  is their content, not a dangling citation to strip. */
+function answerToDraft(answer: string): ComposerDraft {
+  const { nodes, markdown } = answerToInsertContent(answer, { stripCitations: false })
+  return { json: { type: 'doc', content: nodes }, markdown }
 }
 
 export function AgentConversationThread({
@@ -240,6 +267,7 @@ export function AgentConversationThread({
   isVisitorTyping,
   isOtherAgentTyping,
   createTicketToken,
+  openCopilotToken,
 }: {
   /** The open item, discriminated by kind — drives both the data adapter and
    *  the derived `ThreadCapabilities`. */
@@ -264,6 +292,10 @@ export function AgentConversationThread({
    *  this thread's own create-ticket dialog (which needs the conversation
    *  data only this component has loaded). Ignored for a ticket item. */
   createTicketToken?: number
+  /** Bumped by the route's Ask Copilot action (keyboard/command bar) —
+   *  forwarded to the detail panel, which switches to its Copilot tab and
+   *  focuses the ask input. Both item kinds. */
+  openCopilotToken?: number
 }) {
   const queryClient = useQueryClient()
   const isTicket = item.kind === 'ticket'
@@ -1080,18 +1112,37 @@ export function AgentConversationThread({
     }
   }, [isTicket, ticketStatusList, resolveTicketMutation, closeConversationMutation])
 
-  // Seed a text insert into a mode's draft, then remount that editor so the new
+  // Seed an insert into a mode's draft, then remount that editor so the new
   // value is loaded and the cursor lands at its end. The unified RichTextEditor
   // exposes no imperative insert, so every "insert at cursor" affordance (macros,
   // Copilot, the emoji picker) routes through the controlled value + remount key.
-  const insertIntoReply = useCallback((text: string) => {
-    setReplyDraft((prev) => appendTextToDraft(prev, text))
-    setReplyKey((k) => k + 1)
-  }, [])
-  const insertIntoNote = useCallback((text: string) => {
-    setNoteDraft((prev) => appendTextToDraft(prev, text))
-    setNoteKey((k) => k + 1)
-  }, [])
+  // One seam per converter: plain text (macros/emoji — literal paragraphs) vs
+  // Copilot answer (markdown-lite → real editor nodes, citation markers
+  // stripped; see appendAnswerToDraft).
+  const insertIntoDraft = useCallback(
+    (mode: 'reply' | 'note', append: (prev: ComposerDraft) => ComposerDraft) => {
+      if (mode === 'note') {
+        setNoteDraft(append)
+        setNoteKey((k) => k + 1)
+      } else {
+        setReplyDraft(append)
+        setReplyKey((k) => k + 1)
+      }
+    },
+    []
+  )
+  const insertText = useCallback(
+    (mode: 'reply' | 'note', text: string) =>
+      insertIntoDraft(mode, (prev) => appendTextToDraft(prev, text)),
+    [insertIntoDraft]
+  )
+  const insertAnswer = useCallback(
+    (mode: 'reply' | 'note', text: string) =>
+      insertIntoDraft(mode, (prev) => appendAnswerToDraft(prev, text)),
+    [insertIntoDraft]
+  )
+  // Stable reply-mode text insert for the MacroPicker prop.
+  const insertMacroBody = useCallback((text: string) => insertText('reply', text), [insertText])
 
   // The Copilot "Add to composer" / "Add as note" seam (COPILOT-SIDEBAR-UX.md
   // B.4) targets either mode and may need to flip `noteMode` first — see
@@ -1102,8 +1153,8 @@ export function AgentConversationThread({
   // when the conversation detail panel's Copilot tab renders (conversation-only).
   const replyInsertRef = useRef<{ insertText: (text: string) => void } | null>(null)
   const noteInsertRef = useRef<{ insertText: (text: string) => void } | null>(null)
-  replyInsertRef.current = { insertText: insertIntoReply }
-  noteInsertRef.current = { insertText: insertIntoNote }
+  replyInsertRef.current = { insertText: (text: string) => insertAnswer('reply', text) }
+  noteInsertRef.current = { insertText: (text: string) => insertAnswer('note', text) }
   const insertFromCopilot = useCopilotInsert({
     noteMode,
     setNoteMode,
@@ -1121,9 +1172,11 @@ export function AgentConversationThread({
   const getComposerText = useCallback(() => replyDraftRef.current.markdown, [])
   const replaceComposerText = useCallback((text: string) => {
     const prev = replyDraftRef.current
-    setReplyDraft(textToDraft(text))
+    setReplyDraft(answerToDraft(text))
     setReplyKey((k) => k + 1)
-    toast.success('Draft updated. Undo with Ctrl+Z', {
+    // The remount resets the editor's own history, so the toast's Undo action
+    // is the only way back — never advertise Ctrl+Z here.
+    toast.success('Draft updated', {
       action: {
         label: 'Undo',
         onClick: () => {
@@ -1735,16 +1788,13 @@ export function AgentConversationThread({
               {capabilities.emojiPicker && (
                 <EmojiPicker
                   className="size-8"
-                  onSelect={(emoji) => {
-                    if (noteMode) insertIntoNote(emoji)
-                    else insertIntoReply(emoji)
-                  }}
+                  onSelect={(emoji) => insertText(noteMode ? 'note' : 'reply', emoji)}
                 />
               )}
               {capabilities.macros && !noteMode && conversationId && (
                 <MacroPicker
                   conversationId={conversationId}
-                  onInsert={insertIntoReply}
+                  onInsert={insertMacroBody}
                   onApplied={refreshThread}
                 />
               )}
@@ -1873,6 +1923,7 @@ export function AgentConversationThread({
           onInsertFromCopilot={insertFromCopilot}
           getComposerText={getComposerText}
           onReplaceComposerText={replaceComposerText}
+          openCopilotToken={openCopilotToken}
         />
       )}
     </div>

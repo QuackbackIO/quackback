@@ -785,6 +785,7 @@ describe('runAssistantTurn', () => {
           id: 'kb_article_1',
           title: 'Title kb_article_1',
           url: '/hc/articles/general/slug-kb_article_1',
+          updatedAt: '2026-06-01T00:00:00.000Z',
         },
       ],
       internalSourced: false,
@@ -887,6 +888,48 @@ describe('runAssistantTurn', () => {
 
     expect(result.status).toBe('answered')
     if (result.status === 'answered') expect(result.internalSourced).toBe(false)
+  })
+
+  it("carries the source's updatedAt on every surface's citations (freshness line; the orchestrator strips it at persistence)", async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    const turnWith = (surface?: 'copilot') => {
+      mockChat.mockImplementation(
+        (opts: {
+          tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
+          context: unknown
+        }) =>
+          (async function* () {
+            const search = opts.tools.find((t) => t.name === 'search_knowledge')!
+            await search.execute(
+              { query: 'policy' },
+              { context: opts.context, emitCustomEvent: () => {} }
+            )
+            yield* completeRun({
+              text: 'Here is the policy.',
+              citations: [{ type: 'article', id: 'kb_article_1' }],
+            })
+          })()
+      )
+      return runAssistantTurn({
+        ...baseInput,
+        messages: customerAsks('what is the policy?'),
+        ...(surface ? { surface } : {}),
+      })
+    }
+
+    const copilot = await turnWith('copilot')
+    expect(copilot.status).toBe('answered')
+    if (copilot.status === 'answered') {
+      expect(copilot.citations[0].updatedAt).toBe('2026-06-01T00:00:00.000Z')
+    }
+
+    // A widget turn's citations carry it too: the orchestrator's persistence
+    // strip (not any surface gate here) is what keeps it out of storage.
+    const widget = await turnWith()
+    expect(widget.status).toBe('answered')
+    if (widget.status === 'answered') {
+      expect(widget.citations[0].updatedAt).toBe('2026-06-01T00:00:00.000Z')
+    }
   })
 
   it('drops citations below the confidence floor (nothing retrieved)', async () => {

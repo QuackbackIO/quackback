@@ -50,6 +50,9 @@ export interface RetrievedKbArticle {
    * meaningful only on the wider 'team' query.
    */
   isPublic: boolean
+  /** The row's last-update timestamp, for the copilot citation freshness line
+   *  (see RetrievedItem.updatedAt in retrieval-sources.ts). */
+  updatedAt: Date
 }
 
 export interface RetrieveKbArticlesOptions {
@@ -115,6 +118,7 @@ export async function retrieveKbArticles(
     categoryName: r.categoryName,
     score: Number(r.score),
     isPublic: r.isPublic,
+    updatedAt: r.updatedAt,
   }))
 }
 
@@ -128,6 +132,7 @@ interface RetrievalRow {
   categoryName: string
   score: number
   isPublic: boolean
+  updatedAt: Date
 }
 
 /** The same three predicates the 'public' branch of {@link helpCenterVisibilityConditions}
@@ -170,6 +175,7 @@ async function hybridQuery(
       categoryName: helpCenterCategories.name,
       score: combined.as('score'),
       isPublic: isPublicRow().as('is_public_row'),
+      updatedAt: helpCenterArticles.updatedAt,
     })
     .from(helpCenterArticles)
     .innerJoin(
@@ -218,6 +224,7 @@ async function keywordQuery(
       categoryName: helpCenterCategories.name,
       score: rank.as('score'),
       isPublic: isPublicRow().as('is_public_row'),
+      updatedAt: helpCenterArticles.updatedAt,
     })
     .from(helpCenterArticles)
     .innerJoin(

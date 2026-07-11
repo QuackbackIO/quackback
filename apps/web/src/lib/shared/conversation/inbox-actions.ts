@@ -15,6 +15,7 @@
 
 export type InboxActionId =
   | 'reply'
+  | 'copilot'
   | 'assign'
   | 'assign_team'
   | 'snooze'
@@ -65,6 +66,9 @@ export const INBOX_ACTION_GROUP_ORDER: readonly InboxActionGroup[] = [
  */
 export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
   { id: 'reply', label: 'Reply', group: 'Reply', scope: 'active', shortcut: 'r' },
+  // q for Quinn. Additionally gated on `copilotAvailable` (flag + copilot.use
+  // + the ≥xl viewport that shows the detail panel) — see isInboxActionEnabled.
+  { id: 'copilot', label: 'Ask Copilot', group: 'Reply', scope: 'active', shortcut: 'q' },
   { id: 'assign', label: 'Assign to teammate', group: 'Assign', scope: 'both', shortcut: 'a' },
   { id: 'assign_team', label: 'Assign to team', group: 'Assign', scope: 'both', shortcut: 't' },
   { id: 'snooze', label: 'Snooze', group: 'Status', scope: 'both', shortcut: 's' },
@@ -101,6 +105,12 @@ export interface InboxActionContext {
    * site (conversation-only) is unaffected.
    */
   hasTicketTarget?: boolean
+  /**
+   * True when the detail panel's Copilot tab exists for this viewer right now
+   * (`assistantCopilot` flag + `copilot.use` + the ≥xl viewport that renders
+   * the panel). Optional; when absent the `copilot` action is disabled.
+   */
+  copilotAvailable?: boolean
 }
 
 /**
@@ -109,7 +119,10 @@ export interface InboxActionContext {
  * ticket-row equivalent — the status axis stands in for it); create_ticket is
  * the reverse, available with no target at all (a bare create) or a
  * conversation target, but disabled once the target IS a ticket (nothing to
- * create from). Pure; shared by the palette and unit-tested directly.
+ * create from). Copilot additionally requires the tab to actually exist for
+ * this viewer/viewport (`copilotAvailable`), so the palette row and the `q`
+ * key can never point at a panel that isn't rendered. Pure; shared by the
+ * palette and unit-tested directly.
  */
 export function isInboxActionEnabled(
   descriptor: InboxActionDescriptor,
@@ -117,6 +130,7 @@ export function isInboxActionEnabled(
 ): boolean {
   if (descriptor.id === 'snooze' && ctx.hasTicketTarget) return false
   if (descriptor.id === 'create_ticket') return !ctx.hasTicketTarget
+  if (descriptor.id === 'copilot' && !ctx.copilotAvailable) return false
   switch (descriptor.scope) {
     case 'active':
       return ctx.hasActiveConversation

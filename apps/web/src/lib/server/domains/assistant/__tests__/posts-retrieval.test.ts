@@ -68,6 +68,7 @@ function row(id: string, overrides: Partial<Record<string, unknown>> = {}) {
     boardSlug: 'general',
     score: 0.82,
     isPublic: true,
+    updatedAt: new Date('2026-06-01T00:00:00.000Z'),
     ...overrides,
   }
 }
@@ -128,6 +129,7 @@ describe('retrievePosts', () => {
         boardSlug: 'general',
         score: 0.82,
         isPublic: true,
+        updatedAt: new Date('2026-06-01T00:00:00.000Z'),
       },
     ])
   })

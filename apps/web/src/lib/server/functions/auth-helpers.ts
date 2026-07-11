@@ -144,6 +144,12 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
   }
 }
 
+// The denial-vocabulary matcher for the throws above lives in the pure leaf
+// module auth-errors.ts (so consumers and tests can reach the real matcher
+// without this module's auth-stack import graph); re-exported here so the
+// vocabulary and its matcher still travel together for existing importers.
+export { isAuthDenialError } from './auth-errors'
+
 /**
  * Assert a role holds a permission, throwing the same canonical message
  * `requireAuth({ permission })` uses. For the rare gate whose required

@@ -378,6 +378,8 @@ export {
   // Schema tables - assistant tool-call audit log
   assistantToolCalls,
   ASSISTANT_TOOL_CALL_STATUSES,
+  // Schema tables - assistant usage events (Copilot outcome loop)
+  assistantEvents,
   // Schema tables - data connectors
   dataConnectors,
   dataConnectorsRelations,

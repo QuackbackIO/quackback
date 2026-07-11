@@ -40,6 +40,10 @@ export interface CopilotCitation {
   title: string
   url: string
   internal?: boolean
+  /** ISO timestamp of the source's last update, when the retrieval layer knows
+   *  it — the hovercard's freshness line ("Updated 8 days ago"). Optional and
+   *  additive: an absent value simply renders no freshness line. */
+  updatedAt?: string
 }
 
 /**
@@ -54,6 +58,39 @@ export interface CopilotCitation {
  * lets the button precedence follow it automatically.
  */
 export type CopilotAnswerType = 'draft_reply' | 'analysis'
+
+/**
+ * The copilot usage-event vocabulary (the outcome half of the Copilot usage
+ * report — see analytics/copilot-usage.ts): which panel gesture an
+ * `assistant_events` row records. Shared by the server fn's zod schema
+ * (`z.enum(COPILOT_EVENT_TYPES)`, lib/server/functions/copilot-events.ts) and
+ * the panel's fire-and-forget client seam, so the two can never drift.
+ *
+ * An event type names WHAT was inserted (an answer, a transform result, a
+ * summary); WHERE it landed is the separate destination axis
+ * (`COPILOT_INSERT_DESTINATIONS`, required on every `*_inserted` event and
+ * carried in metadata), so the same answer inserted as a reply draft vs an
+ * internal note is one kind with two destinations, not two kinds. `feedback`
+ * is the only type that carries a rating, and the only one with no
+ * destination.
+ */
+export const COPILOT_EVENT_TYPES = [
+  'answer_inserted',
+  'transform_inserted',
+  'summary_inserted',
+  'feedback',
+] as const
+
+export type CopilotEventType = (typeof COPILOT_EVENT_TYPES)[number]
+
+/**
+ * Where an inserted event's text landed: the customer-facing reply composer
+ * or an internal note. Orthogonal to the event type by design — see
+ * `COPILOT_EVENT_TYPES`'s doc.
+ */
+export const COPILOT_INSERT_DESTINATIONS = ['reply', 'note'] as const
+
+export type CopilotInsertDestination = (typeof COPILOT_INSERT_DESTINATIONS)[number]
 
 /** copilot.v1.delta: one fragment of the streamed answer text. */
 export interface CopilotDeltaPayload {

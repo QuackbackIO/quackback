@@ -31,6 +31,9 @@ export interface InboxCommandBarProps {
   /** True when the target (selection, or the solo active item) includes a
    *  ticket — disables the Snooze row (UNIFIED-INBOX-SPEC.md §2.5). */
   hasTicketTarget?: boolean
+  /** True when the detail panel's Copilot tab exists for this viewer right
+   *  now (flag + copilot.use + ≥xl viewport) — gates the Ask Copilot row. */
+  copilotAvailable?: boolean
 }
 
 export function InboxCommandBar({
@@ -40,6 +43,7 @@ export function InboxCommandBar({
   hasSelection,
   hasActiveConversation,
   hasTicketTarget,
+  copilotAvailable,
 }: InboxCommandBarProps) {
   function run(id: InboxActionId) {
     onAction(id)
@@ -68,6 +72,7 @@ export function InboxCommandBar({
                       hasActiveConversation,
                       hasSelection,
                       hasTicketTarget,
+                      copilotAvailable,
                     })
                     return (
                       <CommandItem

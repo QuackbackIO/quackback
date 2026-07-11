@@ -78,6 +78,10 @@ describe('kbKnowledgeSource', () => {
       title: 'Title kb_article_1',
       excerpt: 'X'.repeat(KNOWLEDGE_SNIPPET_CHARS),
       score: 0.87,
+      // The row's own updated_at, ISO-encoded for the copilot freshness line —
+      // on the item here; the runtime copies it onto the ledgered citation for
+      // EVERY surface, and the orchestrator's persistence point strips it.
+      updatedAt: '2026-06-01T00:00:00.000Z',
       citation: {
         type: 'article',
         id: 'kb_article_1',
@@ -163,7 +167,7 @@ describe('retrieveKnowledge', () => {
     expect(mockPostsRetrieve).not.toHaveBeenCalled()
   })
 
-  it('merges sources in parallel, re-ranks by score desc, and trims to topK', async () => {
+  it('merges sources in parallel by rank tier (score breaking ties within a tier) and trims to topK', async () => {
     mockIsFeatureEnabled.mockImplementation(onlyFlag('assistantPostGrounding'))
     mockRetrieveKbArticles.mockResolvedValue([
       makeKbArticle('kb_low', { score: 0.5 }),
@@ -200,13 +204,96 @@ describe('retrieveKnowledge', () => {
 
     const items = await retrieveKnowledge('q', 'public', { topK: 3 })
 
-    // Both sources ran (parallel composition); result is trimmed to topK and
-    // ordered by score desc across sources, dropping the lowest overall score
+    // Both sources ran (parallel composition); the merge interleaves rank
+    // tiers (each source's #1 before any source's #2, raw score ordering
+    // within a tier) and trims to topK, dropping the last-tier loser
     // (kb_low, 0.5) even though it came from the always-on source.
     expect(mockRetrieveKbArticles).toHaveBeenCalledOnce()
     expect(mockPostsRetrieve).toHaveBeenCalledOnce()
     expect(items.map((i) => i.id)).toEqual(['post_top', 'kb_high', 'post_mid'])
     expect(items).toHaveLength(3)
+  })
+
+  it('a source scoring on a larger scale cannot crowd the others out of the budget (rank interleaving)', async () => {
+    // The embeddings-down failure this pins: the summaries keyword fallback
+    // used to hardcode score 1.0 while KB ts_rank sits well below 1, so a
+    // raw-score merge filled the whole topK with summaries and buried every
+    // KB article. Rank interleaving guarantees each source's best items a
+    // seat regardless of its scale.
+    mockIsFeatureEnabled.mockImplementation(onlyFlag('assistantConversationGrounding'))
+    mockRetrieveKbArticles.mockResolvedValue([
+      makeKbArticle('kb_best', { score: 0.08 }),
+      makeKbArticle('kb_second', { score: 0.05 }),
+      makeKbArticle('kb_third', { score: 0.03 }),
+    ])
+    const summary = (id: string, score: number) => ({
+      id,
+      sourceType: 'summary' as const,
+      title: 'Past conversation',
+      excerpt: 'x',
+      score,
+      citation: { type: 'summary' as const, id, title: 'Past conversation', url: '' },
+    })
+    mockConversationSummariesRetrieve.mockResolvedValue([
+      summary('conversation_a', 1),
+      summary('conversation_b', 1),
+      summary('conversation_c', 1),
+      summary('conversation_d', 1),
+      summary('conversation_e', 1),
+    ])
+
+    const items = await retrieveKnowledge('q', 'public', { topK: 5 })
+
+    // Tier by tier: each source's #1 first (summary wins its tier on raw
+    // score), then each #2, then each #3 — the KB survives into the budget
+    // instead of losing every slot to the flat 1.0 scale.
+    expect(items.map((i) => i.id)).toEqual([
+      'conversation_a',
+      'kb_best',
+      'conversation_b',
+      'kb_second',
+      'conversation_c',
+    ])
+  })
+
+  it('zero-score fallback rows seat after every scored row (embeddings-down: KB keyword hits fill topK first)', async () => {
+    // The embeddings-down shape after the summaries fallback stopped
+    // hardcoding 1.0: the summaries ILIKE fallback has no relevance signal
+    // (score 0), while the KB keyword path still produces real ts_rank
+    // scores. Zero-score rows must not compete in the rank tiers at all —
+    // every scored KB row seats first, then the zero-score summaries pad the
+    // remaining budget in their own per-source order.
+    mockIsFeatureEnabled.mockImplementation(onlyFlag('assistantConversationGrounding'))
+    mockRetrieveKbArticles.mockResolvedValue([
+      makeKbArticle('kb_best', { score: 0.08 }),
+      makeKbArticle('kb_second', { score: 0.05 }),
+      makeKbArticle('kb_third', { score: 0.03 }),
+    ])
+    const summary = (id: string, score: number) => ({
+      id,
+      sourceType: 'summary' as const,
+      title: 'Past conversation',
+      excerpt: 'x',
+      score,
+      citation: { type: 'summary' as const, id, title: 'Past conversation', url: '' },
+    })
+    mockConversationSummariesRetrieve.mockResolvedValue([
+      summary('conversation_a', 0),
+      summary('conversation_b', 0),
+      summary('conversation_c', 0),
+      summary('conversation_d', 0),
+      summary('conversation_e', 0),
+    ])
+
+    const items = await retrieveKnowledge('q', 'public', { topK: 5 })
+
+    expect(items.map((i) => i.id)).toEqual([
+      'kb_best',
+      'kb_second',
+      'kb_third',
+      'conversation_a',
+      'conversation_b',
+    ])
   })
 
   it('sourceTypes undefined consults every registered source (default, unchanged)', async () => {

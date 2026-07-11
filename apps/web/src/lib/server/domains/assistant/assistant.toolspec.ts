@@ -38,6 +38,7 @@ import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
 import { createPostFromConversation } from '@/lib/server/domains/conversation/conversation.convert'
 import { quinnActor } from './assistant.actor'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import { RETRIEVED_CONTENT_NOTE } from './injection-guard'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'assistant-toolspec' })
@@ -55,6 +56,16 @@ export interface AssistantCitation {
    * the orchestrator, which strips it before writing a conversation message).
    */
   internal?: boolean
+  /**
+   * ISO timestamp of the source's natural last update (article/post/snippet
+   * updated_at, summary created_at), for the copilot hovercard's freshness
+   * line. Ledger-only like `internal`: `executeSearchKnowledge` records it on
+   * the ledgered citation whenever the source knows it, every surface's
+   * answer carries it (clients render the freshness line only when present),
+   * and the orchestrator strips it — alongside `internal`, at the one
+   * persistence point — so the stored citation shape never changes.
+   */
+  updatedAt?: string
 }
 
 /**
@@ -163,6 +174,20 @@ export interface AssistantToolContext {
    * on-behalf-of-teammate actor without touching the pipeline or executors.
    */
   actor: Actor
+  /**
+   * The resolved Actor of the human whose question this turn answers — the
+   * asking teammate's permission ceiling. Copilot-only, and consulted in
+   * exactly one place — the metadataWrite exemption from propose-forcing
+   * (see `resolveEffectiveToolMode`): tools execute under Quinn's own actor
+   * (`actor` above), so without this ceiling a teammate holding only
+   * copilot.use could trigger a direct metadata write they could not perform
+   * themselves. Absent fails closed: with `writeToolPolicy: 'propose'` and
+   * no known asker, the exemption never applies and the tool proposes.
+   * Quinn's own autonomous surfaces never set this — nothing forces
+   * 'propose' there, so the exemption is not in play and the pipeline's
+   * `actor` permission check still bounds every execution.
+   */
+  askerActor?: Actor
 }
 
 /**
@@ -184,6 +209,7 @@ export function makeAssistantToolContext(init: {
   simulate?: boolean
   writeToolPolicy?: 'simulate' | 'controls' | 'propose'
   actor?: Actor
+  askerActor?: Actor
 }): AssistantToolContext {
   return {
     db: init.db,
@@ -201,6 +227,7 @@ export function makeAssistantToolContext(init: {
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
+    askerActor: init.askerActor,
   }
 }
 
@@ -282,11 +309,16 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
    * write can never overwrite a human/workflow/customer value (silent no-op) —
    * so they carry none of the consequence of a close/ticket/publish. This is
    * the one property the copilot surface's `writeToolPolicy: 'propose'` honours:
-   * a metadata write is NOT forced to approval there, so it runs under its
-   * configured mode like on every other surface (matching the deterministic
-   * attribute classifier, which never gates classification behind a teammate's
-   * approval). Absent/false ⇒ a genuine action, always proposed on the copilot
-   * surface. See `resolveEffectiveToolMode` (assistant.tools.ts).
+   * a metadata write is not forced to approval there PROVIDED the asking
+   * teammate's own permission set covers the tool's declared `permissions`
+   * (`ctx.askerActor` — see `resolveEffectiveToolMode`). Quinn's autonomous
+   * surfaces keep the exemption unconditionally (nothing forces 'propose'
+   * there); the copilot inherits the teammate's ceiling, because tools run
+   * under Quinn's actor and a teammate holding only copilot.use must not be
+   * able to trigger a write they could not perform themselves — a teammate
+   * below the ceiling gets a proposal, whose approval flow re-checks the
+   * approver's permissions. Absent/false ⇒ a genuine action, always proposed
+   * on the copilot surface. See `resolveEffectiveToolMode` (assistant.tools.ts).
    */
   metadataWrite?: boolean
   /** Checked via can(quinnActor, p) before execute (wiring lands in a later task). */
@@ -369,7 +401,13 @@ async function executeSearchKnowledge(
     sourceTypes: ctx.sourceTypes,
   })
   for (const item of items) {
-    ctx.sources.set(item.id, item.citation)
+    // `updatedAt` rides the ledgered citation itself (see its doc on
+    // AssistantCitation): the orchestrator's persistence strip is the one
+    // owner of "ephemeral vs persisted citation fields", same as `internal`.
+    ctx.sources.set(
+      item.id,
+      item.updatedAt ? { ...item.citation, updatedAt: item.updatedAt } : item.citation
+    )
   }
   return {
     articles: items.map((item) => ({
@@ -377,6 +415,11 @@ async function executeSearchKnowledge(
       title: item.title,
       snippet: item.excerpt,
     })),
+    // Retrieved excerpts are attacker-reachable text (visitor-authored posts,
+    // customer-derived summaries), so a non-empty result carries the shared
+    // content-not-instructions note — see RETRIEVED_CONTENT_NOTE
+    // (injection-guard.ts) for why it is a trailing note rather than a fence.
+    ...(items.length > 0 ? { note: RETRIEVED_CONTENT_NOTE } : {}),
   }
 }
 
@@ -741,9 +784,11 @@ const SPECS: readonly AssistantToolSpec[] = [
     // Recording an attribute is classification metadata, not an action on the
     // conversation, and the write path's AI-precedence rule stops it clobbering
     // a human value — so it is exempt from the copilot surface's propose-forcing
-    // and runs autonomously there too, matching the deterministic classifier and
-    // the widget surface. The genuine actions below (close/ticket/feedback) are
-    // not metadata writes and keep proposing on copilot.
+    // when the asking teammate holds conversation.set_attributes themselves
+    // (the exemption is ceiling-checked via ctx.askerActor; see the metadataWrite
+    // field's doc above), matching the deterministic classifier and the widget
+    // surface. The genuine actions below (close/ticket/feedback) are not
+    // metadata writes and always propose on copilot.
     metadataWrite: true,
     permissions: [PERMISSIONS.CONVERSATION_SET_ATTRIBUTES],
     definition: setAttributeTool,

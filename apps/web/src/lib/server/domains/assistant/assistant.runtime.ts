@@ -28,6 +28,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import type { AssistantHandoffReason } from '@/lib/server/db'
 import type { PrincipalId, ConversationId, TicketId, AssistantInvolvementId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
 import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
 import { resolveContentAudience, type ContentAudience } from './audience'
@@ -100,8 +101,11 @@ export type AssistantTurnResult =
       answerType: AssistantAnswerType
       citations: AssistantCitation[]
       /** Whether any surviving citation is internal (`citations.some(c => c.internal)`), the
-       *  server-derived flag the copilot leak gate reads; a customer-facing turn's citations
-       *  are never internal in practice (their retrieval ceiling excludes those sources). */
+       *  server-derived flag the copilot leak gate reads. A customer-facing turn CAN carry
+       *  it — the past-conversation-summaries source flags every citation internal
+       *  regardless of ceiling — which is why the orchestrator strips `internal` before
+       *  persisting a widget turn's citations (see assistant.orchestrator.ts); the flag
+       *  stays ledger-only on every surface. */
       internalSourced: boolean
       /**
        * Write-tool calls this turn turned into pending-approval rows (P2-C.4),
@@ -209,6 +213,15 @@ export interface AssistantTurnInput {
    * teammate), so the metadata carries no `principalId` key in that case.
    */
   actorPrincipalId?: PrincipalId | null
+  /**
+   * The asking teammate's resolved Actor — Copilot only, threaded straight
+   * onto the tool context's `askerActor` (see its doc on
+   * `AssistantToolContext`). Bounds the metadataWrite exemption from
+   * propose-forcing to writes the teammate could perform themselves; absent
+   * fails closed (the exemption never applies), so every other surface can
+   * keep omitting it.
+   */
+  askerActor?: Actor
   /** Tenant db handle for the tools; defaults to the app db. */
   db?: Executor
   /** Aborts the in-flight provider call. */
@@ -945,6 +958,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     latestCustomerMessageId: input.latestCustomerMessageId,
     simulate: input.simulate,
     writeToolPolicy: input.writeToolPolicy,
+    askerActor: input.askerActor,
   })
   // Config read: basics, surfaces, and tool controls all live in the same
   // settings row, so a single `getAssistantConfig()` read (in parallel with

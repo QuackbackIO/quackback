@@ -17,6 +17,7 @@ describe('INBOX_ACTIONS registry', () => {
     const ids = INBOX_ACTIONS.map((a) => a.id)
     for (const id of [
       'reply',
+      'copilot',
       'assign',
       'assign_team',
       'snooze',
@@ -39,7 +40,7 @@ describe('INBOX_ACTIONS registry', () => {
   })
 
   it('assigns the contract scopes', () => {
-    for (const id of ['reply', 'next', 'prev']) {
+    for (const id of ['reply', 'copilot', 'next', 'prev']) {
       expect(byId(id).scope).toBe('active')
     }
     for (const id of [
@@ -158,5 +159,41 @@ describe('isInboxActionEnabled', () => {
         hasTicketTarget: true,
       })
     ).toBe(false)
+  })
+
+  it('copilot needs copilotAvailable AND an active item', () => {
+    const copilot = byId('copilot')
+    expect(
+      isInboxActionEnabled(copilot, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        copilotAvailable: true,
+      })
+    ).toBe(true)
+    // Tab unavailable (flag off / no permission / <xl viewport): disabled even
+    // with an active item.
+    expect(
+      isInboxActionEnabled(copilot, { hasActiveConversation: true, hasSelection: false })
+    ).toBe(false)
+    // Available but nothing open: there is no item-scoped panel to ask about.
+    expect(
+      isInboxActionEnabled(copilot, {
+        hasActiveConversation: false,
+        hasSelection: true,
+        copilotAvailable: true,
+      })
+    ).toBe(false)
+  })
+
+  it('copilot works for a ticket target too (the panel is item-scoped, both kinds)', () => {
+    const copilot = byId('copilot')
+    expect(
+      isInboxActionEnabled(copilot, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        hasTicketTarget: true,
+        copilotAvailable: true,
+      })
+    ).toBe(true)
   })
 })

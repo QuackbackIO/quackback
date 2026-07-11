@@ -1,9 +1,16 @@
 /**
  * Pure text helpers for the Ask AI surfaces: query-term highlighting for
- * autocomplete results and a markdown-lite parser (paragraphs, bullets,
- * bold) for AI answers. Both return data structures rendered as React text
- * nodes, so there is no HTML injection surface.
+ * autocomplete results, plus the shared markdown-lite parser
+ * (lib/shared/assistant/markdown-lite.ts) bound to this surface's grammar
+ * (paragraphs, bullets, bold, `[n]` citation markers). Both return data
+ * structures rendered as React text nodes, so there is no HTML injection
+ * surface.
  */
+import {
+  parseMarkdownLite as parseMarkdownLiteWith,
+  type MarkdownLiteBlock,
+  type MarkdownLiteSpan,
+} from '@/lib/shared/assistant/markdown-lite'
 
 export interface TermSegment {
   text: string
@@ -35,71 +42,16 @@ export function splitByTerms(text: string, query: string): TermSegment[] {
   return segments.length > 0 ? segments : [{ text, match: false }]
 }
 
-export interface InlineSpan {
-  text: string
-  bold: boolean
-  /** 1-based citation number when this span is a `[n]` marker (Wikipedia-style). */
-  cite?: number
-}
-
-export type MarkdownLiteBlock =
-  | { kind: 'paragraph'; lines: InlineSpan[][] }
-  | { kind: 'list'; ordered: boolean; items: InlineSpan[][] }
-
-// A bold run (**...**) or a citation marker ([n]); everything else is literal.
-const INLINE_RE = /\*\*([^*]+)\*\*|\[(\d+)\]/g
-
-/** Parse `**bold**` runs and `[n]` citation markers within a single line. */
-function parseInline(line: string): InlineSpan[] {
-  const spans: InlineSpan[] = []
-  let last = 0
-  for (const m of line.matchAll(INLINE_RE)) {
-    const idx = m.index ?? 0
-    if (idx > last) spans.push({ text: line.slice(last, idx), bold: false })
-    if (m[1] !== undefined) {
-      spans.push({ text: m[1], bold: true })
-    } else if (m[2] !== undefined) {
-      spans.push({ text: m[2], bold: false, cite: Number(m[2]) })
-    }
-    last = idx + m[0].length
-  }
-  if (last < line.length) spans.push({ text: line.slice(last), bold: false })
-  return spans.length > 0 ? spans : [{ text: '', bold: false }]
-}
-
-const BULLET_RE = /^\s*[-*•]\s+/
-const ORDERED_RE = /^\s*\d+\.\s+/
+export type InlineSpan = MarkdownLiteSpan
+export type { MarkdownLiteBlock }
 
 /**
  * Parse answer text into paragraph and list blocks. Only the structures AI
- * answers are instructed to use (paragraphs, ordered/bullet lists, bold, and
- * `[n]` citation markers) are recognized; anything else stays literal text.
- * A block is a list only when every one of its lines shares one marker style.
+ * answers are instructed to use here (paragraphs, ordered/bullet lists, bold,
+ * and `[n]` citation markers) are recognized; anything else — including
+ * italic markers, which this surface's renderer doesn't style — stays
+ * literal text.
  */
 export function parseMarkdownLite(text: string): MarkdownLiteBlock[] {
-  const blocks: MarkdownLiteBlock[] = []
-  for (const raw of text.split(/\n{2,}/)) {
-    const blockText = raw.trim()
-    if (!blockText) continue
-    const lines = blockText.split('\n').filter((l) => l.trim().length > 0)
-
-    if (lines.length > 0 && lines.every((l) => ORDERED_RE.test(l))) {
-      blocks.push({
-        kind: 'list',
-        ordered: true,
-        items: lines.map((l) => parseInline(l.replace(ORDERED_RE, '').trim())),
-      })
-      continue
-    }
-    if (lines.length > 0 && lines.every((l) => BULLET_RE.test(l))) {
-      blocks.push({
-        kind: 'list',
-        ordered: false,
-        items: lines.map((l) => parseInline(l.replace(BULLET_RE, '').trim())),
-      })
-      continue
-    }
-    blocks.push({ kind: 'paragraph', lines: lines.map((l) => parseInline(l.trim())) })
-  }
-  return blocks
+  return parseMarkdownLiteWith(text, { citations: true })
 }

@@ -43,6 +43,13 @@ export interface RetrievedItem {
   excerpt: string
   score: number
   citation: AssistantCitation
+  /**
+   * ISO timestamp of the row's natural last update (article/post/snippet
+   * updated_at, summary created_at), for the copilot citation freshness line
+   * (CopilotCitation.updatedAt). Optional end-to-end: a source that doesn't
+   * know simply omits it and no freshness line renders.
+   */
+  updatedAt?: string
 }
 
 /**
@@ -104,6 +111,7 @@ export const kbKnowledgeSource: KnowledgeSource = {
       title: a.title,
       excerpt: a.content.slice(0, KNOWLEDGE_SNIPPET_CHARS),
       score: a.score,
+      updatedAt: a.updatedAt.toISOString(),
       citation: {
         type: 'article' as const,
         id: a.id,
@@ -154,10 +162,32 @@ export async function resolveKnowledgeSources(): Promise<KnowledgeSource[]> {
 }
 
 /**
- * Compose every registered source for one query: run them in parallel, merge,
- * re-rank by score desc, and trim to `topK`. This is the one thing
+ * Compose every registered source for one query: run them in parallel, merge
+ * by per-source rank, and trim to `topK`. This is the one thing
  * `search_knowledge` calls — it no longer knows the knowledge base is even a
  * source, let alone the only one.
+ *
+ * The merge is rank-based interleaving, NOT a sort on raw scores: score
+ * scales are incommensurable across sources by construction (KB ts_rank
+ * values sit well below 1 on the keyword fallback, cosine similarities span
+ * ~0.35-0.9, and the ILIKE fallbacks have no relevance signal at all), so a
+ * raw-score sort lets whichever source happens to use the largest scale crowd
+ * every other source out of the budget whenever scales diverge — e.g. with
+ * embeddings down, summaries used to bury KB articles entirely. A score IS
+ * self-consistent within its own source, so each source's items are ranked by
+ * their own score there; across sources, every source's #1 outranks any
+ * source's #2 (and so on), with raw score only breaking ties WITHIN a rank
+ * tier for a stable, continuity-preserving order. Rank interleaving is
+ * structural — no per-source scale calibration exists to drift when a
+ * source's scoring changes.
+ *
+ * A zero score is the one cross-source-comparable value: it means "no
+ * relevance signal at all" (an ILIKE fallback hit), not "this source's own
+ * scale of relevant". Zero-score rows therefore never compete in the rank
+ * tiers — every scored row from every source seats first, then zero-score
+ * rows append (in each source's own order) to fill whatever budget remains,
+ * so a source degraded to its fallback can pad the result but never displace
+ * another source's genuinely-scored items.
  *
  * `sourceTypes`, when given, is a per-request NARROWING filter applied after
  * `resolveKnowledgeSources()`: it can only drop sources the flags already
@@ -192,8 +222,26 @@ export async function retrieveKnowledge(
       })
     )
   )
-  return perSource
-    .flat()
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK)
+  // Rank within each source (its own scale is self-consistent), then
+  // interleave rank tiers across sources, raw score breaking ties within a
+  // tier — see the doc above for why raw scores never compete across sources.
+  // Zero-score rows (no relevance signal — a source's ILIKE fallback) are
+  // partitioned out of the tiers entirely and appended after every scored row,
+  // in per-source rank order, so a degraded source only pads leftover budget.
+  // A single registered source degenerates to its own ranking trimmed to
+  // topK, exactly the flags-off pass-through this module has always promised.
+  const ranked = perSource.map((items) => [...items].sort((a, b) => b.score - a.score))
+  const scored = ranked.map((items) => items.filter((item) => item.score > 0))
+  const unscored = ranked.flatMap((items) => items.filter((item) => item.score <= 0))
+  const merged: RetrievedItem[] = []
+  const deepestSource = Math.max(0, ...scored.map((items) => items.length))
+  for (let rank = 0; rank < deepestSource && merged.length < topK; rank++) {
+    const tier = scored
+      .map((items) => items[rank])
+      .filter((item): item is RetrievedItem => item !== undefined)
+      .sort((a, b) => b.score - a.score)
+    merged.push(...tier)
+  }
+  merged.push(...unscored)
+  return merged.slice(0, topK)
 }

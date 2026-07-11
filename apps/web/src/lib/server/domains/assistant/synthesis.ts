@@ -11,10 +11,10 @@
 
 import { z } from 'zod'
 import { config } from '@/lib/server/config'
-import { isAiClientConfigured, stripCodeFences } from '@/lib/server/domains/ai/config'
+import { isAiClientConfigured } from '@/lib/server/domains/ai/config'
 import { getChatModel } from '@/lib/server/domains/ai/models'
 import { logger } from '@/lib/server/logger'
-import { runSynthesis, safeJsonRepair } from './synthesis-core'
+import { runSynthesis, salvageJsonWithSchema } from './synthesis-core'
 import { ASK_AI_USER_MESSAGE_GUARD } from './injection-guard'
 import type { RetrievedKbArticle } from './retrieval'
 
@@ -144,7 +144,7 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
     tools: null,
     deltaField: 'answer',
     salvageMode: 'strict',
-    salvage: (raw) => salvageAnswer(raw),
+    salvage: (raw) => salvageJsonWithSchema(answerSchema, raw),
     onFailure: 'throw',
     signal: params.signal,
     onTextDelta: params.onAnswerDelta,
@@ -175,28 +175,6 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
     throw outcome.lastError ?? new Error('answer synthesis failed')
   }
   return validateAnswer(outcome.final, retrievedIds)
-}
-
-/**
- * Recover a well-formed answer object from raw model text when the stream
- * produced no validated structured object. Tries the text as-is and with a
- * jsonrepair pass, fenced or not; returns null if nothing shape-checks.
- */
-function salvageAnswer(raw: string | undefined): unknown | null {
-  const trimmed = raw?.trim()
-  if (!trimmed) return null
-  for (const candidate of [trimmed, stripCodeFences(trimmed)]) {
-    for (const text of [candidate, safeJsonRepair(candidate)]) {
-      if (!text) continue
-      try {
-        const parsed = answerSchema.safeParse(JSON.parse(text))
-        if (parsed.success) return parsed.data
-      } catch {
-        // Not valid JSON even after repair; fall through to the next candidate.
-      }
-    }
-  }
-  return null
 }
 
 /**

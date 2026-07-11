@@ -6,7 +6,9 @@ interface TimeAgoProps {
   className?: string
 }
 
-function getTimeAgo(date: Date | string | null | undefined): string {
+/** The relative-time label `<TimeAgo>` renders, for static (no-interval)
+ *  consumers like CitationFreshness; '' for a missing or invalid date. */
+export function getTimeAgo(date: Date | string | null | undefined): string {
   if (!date) return ''
   const d = typeof date === 'string' ? new Date(date) : date
   // Check for invalid date

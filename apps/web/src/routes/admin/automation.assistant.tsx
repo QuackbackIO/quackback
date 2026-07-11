@@ -62,9 +62,16 @@ function AssistantPage() {
       <QuinnPerformanceCard />
       <QuinnToolsCard />
 
+      {/* Copilot usage reports on the Copilot surface itself, so it follows the
+          assistantCopilot flag; only its actions-funnel section needs
+          assistantActions (the pending-actions funnel doesn't exist otherwise),
+          which the card gates internally via showActionsFunnel. */}
+      {flags?.assistantCopilot && (
+        <CopilotUsageCard showActionsFunnel={Boolean(flags?.assistantActions)} />
+      )}
+
       {flags?.assistantActions ? (
         <>
-          <CopilotUsageCard />
           <AssistantBasicsCard />
           <GuidanceRulesCard />
           <ToolControlsCard />

@@ -104,9 +104,22 @@ export function resolveEffectiveToolMode(
     // (P2-C.4), but a metadata write (recording a classification attribute) is
     // not an action: it is guarded by the write path's AI-precedence rule and
     // mirrors the deterministic classifier, so it is exempt from the forcing
-    // and falls through to its configured mode below (autonomous by default).
-    // See `metadataWrite` on AssistantToolSpec.
-    if (ctx.writeToolPolicy === 'propose' && !spec.metadataWrite) {
+    // and falls through to its configured mode below (autonomous by default) —
+    // PROVIDED the asking teammate's own permission set covers every
+    // permission the tool declares (`ctx.askerActor`). Tools execute under
+    // Quinn's actor, so the exemption alone would let a teammate holding only
+    // copilot.use trigger a write they could not perform themselves; the
+    // ceiling fails closed (no `askerActor`, or any missing permission ⇒ the
+    // tool proposes, and the approval flow re-checks the approver). Quinn's
+    // own autonomous surfaces never set 'propose', so the exemption — and
+    // this ceiling — are not in play there. See `metadataWrite` on
+    // AssistantToolSpec.
+    const asker = ctx.askerActor
+    const metadataWriteWithinAskerCeiling =
+      spec.metadataWrite === true &&
+      asker !== undefined &&
+      spec.permissions.every((permission) => can(asker, permission))
+    if (ctx.writeToolPolicy === 'propose' && !metadataWriteWithinAskerCeiling) {
       if (!spec.supportedModes.includes('approval')) {
         log.warn(
           { tool: spec.name, mode: 'approval' },

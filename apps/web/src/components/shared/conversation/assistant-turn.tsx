@@ -3,6 +3,7 @@ import { FormattedMessage } from 'react-intl'
 import { ChevronDownIcon, LockClosedIcon } from '@heroicons/react/24/solid'
 import { MagnifyingGlassIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
+import { getTimeAgo } from '@/components/ui/time-ago'
 import { parseMarkdownLite, type InlineSpan } from '@/components/help-center/ask-ai-text'
 import type {
   AssistantActivityStatus,
@@ -18,7 +19,38 @@ import type {
  * a caller hands it, persisted or not, so it widens to a superset rather than
  * importing from any of those contract modules.
  */
-export type RenderableCitation = ConversationMessageCitation & { internal?: boolean }
+export type RenderableCitation = ConversationMessageCitation & {
+  internal?: boolean
+  /** ISO timestamp of the source's last update (CopilotCitation.updatedAt):
+   *  drives the hovercard's "Updated 8 days ago" freshness line. Absent on
+   *  persisted citations, which then render exactly as before. */
+  updatedAt?: string
+}
+
+/**
+ * The citation hovercard's "Updated 8 days ago" freshness line, shared by the
+ * inline citation dots here and the Copilot source rows (copilot-sources.tsx).
+ * Rendered statically (getTimeAgo once per render, no interval): these
+ * hovercards are always mounted and CSS-hover revealed, so a live
+ * per-instance ticker would accrue dozens of invisible timers per session —
+ * and days-granularity freshness needs none. Renders nothing without a
+ * parseable `updatedAt` (never a dangling "Updated ").
+ */
+export function CitationFreshness({
+  updatedAt,
+  className,
+}: {
+  updatedAt?: string
+  className?: string
+}) {
+  const label = getTimeAgo(updatedAt)
+  if (!label) return null
+  return (
+    <span className={cn('block text-[11px] text-muted-foreground', className)}>
+      Updated {label}
+    </span>
+  )
+}
 
 function Spinner() {
   return (
@@ -145,6 +177,7 @@ function CitationDot({
             {source}
           </span>
         )}
+        <CitationFreshness updatedAt={citation.updatedAt} className="mt-1" />
       </span>
     </span>
   )

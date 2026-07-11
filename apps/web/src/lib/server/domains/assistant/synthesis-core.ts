@@ -21,7 +21,7 @@ import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { jsonrepair } from 'jsonrepair'
 import type { z } from 'zod'
 import { config } from '@/lib/server/config'
-import { structuredOutputProviderOptions } from '@/lib/server/domains/ai/config'
+import { stripCodeFences, structuredOutputProviderOptions } from '@/lib/server/domains/ai/config'
 import { withUsageLogging, type AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 
 /** Output budget default: constrained decoding on small models needs headroom. */
@@ -97,6 +97,35 @@ export function safeJsonRepair(text: string): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Recover a schema-shaped object from raw model text when the stream produced
+ * no validated structured object: the text as-is and fence-stripped, each
+ * tried raw then through a jsonrepair pass, first candidate that shape-checks
+ * wins; null when nothing does. The shared salvage chain for the strict-mode
+ * one-shot callers (Ask AI's synthesis.ts and the copilot transforms) —
+ * assistant.runtime.ts keeps its own, deliberately looser ladder on top
+ * (embedded-object extraction plus a partial text-only parse).
+ */
+export function salvageJsonWithSchema(
+  schema: z.ZodTypeAny,
+  raw: string | undefined
+): unknown | null {
+  const trimmed = raw?.trim()
+  if (!trimmed) return null
+  for (const candidate of [trimmed, stripCodeFences(trimmed)]) {
+    for (const text of [candidate, safeJsonRepair(candidate)]) {
+      if (!text) continue
+      try {
+        const parsed = schema.safeParse(JSON.parse(text))
+        if (parsed.success) return parsed.data
+      } catch {
+        // Not valid JSON even after repair: fall through to the next candidate.
+      }
+    }
+  }
+  return null
 }
 
 /** One model call: stream consumption, delta-diffing, tools (if any), and salvage. */

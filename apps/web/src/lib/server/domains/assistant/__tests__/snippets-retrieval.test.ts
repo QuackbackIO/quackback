@@ -59,6 +59,7 @@ function row(id: string, overrides: Partial<Record<string, unknown>> = {}) {
     content: 'snippet body',
     score: 0.8,
     audience: 'public',
+    updatedAt: new Date('2026-06-01T00:00:00.000Z'),
     ...overrides,
   }
 }
@@ -105,6 +106,7 @@ describe('retrieveSnippets', () => {
         content: 'snippet body',
         score: 0.8,
         audience: 'public',
+        updatedAt: new Date('2026-06-01T00:00:00.000Z'),
       },
     ])
   })
