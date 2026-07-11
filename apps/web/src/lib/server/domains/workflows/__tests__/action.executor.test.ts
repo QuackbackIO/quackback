@@ -144,11 +144,18 @@ const mockConnectorRuntimeRow = vi.hoisted(() => ({
   error: null as Error | null,
 }))
 const mockDbSelect = vi.hoisted(() => vi.fn())
+// The funnel's `block_sent` ledger write (action.executor.ts's
+// logBlockSentEvent) is the only insert this module does — mocked
+// separately from select so a test can spy on the exact row it inserts.
+const mockDbInsert = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/server/db')>()
   return {
     ...original,
-    db: { select: (...args: unknown[]) => mockDbSelect(...args) },
+    db: {
+      select: (...args: unknown[]) => mockDbSelect(...args),
+      insert: (...args: unknown[]) => mockDbInsert(...args),
+    },
   }
 })
 
@@ -408,6 +415,53 @@ describe('applyAction', () => {
           { conversationId, actor }
         )
       ).rejects.toThrow(/workflow run/)
+      // Never even attempts the funnel's block_sent ledger write when there's
+      // no run to log it against.
+      expect(mockDbInsert).not.toHaveBeenCalled()
+    })
+
+    describe('funnel: block_sent event', () => {
+      it('logs a block_sent event, keyed on the run row looked up by ctx.runId', async () => {
+        mockDbSelect.mockImplementationOnce(() =>
+          selectChainOnce([{ workflowId: 'workflow_abc', subjectPrincipalId: 'principal_x' }])
+        )
+        const valuesSpy = vi.fn().mockResolvedValue(undefined)
+        mockDbInsert.mockReturnValue({ values: valuesSpy })
+
+        await applyAction(
+          { type: 'send_block', nodeId: 'n1', block: { kind: 'message', body } },
+          ctx
+        )
+
+        expect(valuesSpy).toHaveBeenCalledWith({
+          runId: 'workflow_run_1',
+          workflowId: 'workflow_abc',
+          subjectPrincipalId: 'principal_x',
+          kind: 'block_sent',
+        })
+      })
+
+      it('is best-effort: a ledger write failure never fails the block send', async () => {
+        mockDbSelect.mockImplementationOnce(() =>
+          selectChainOnce([{ workflowId: 'workflow_abc', subjectPrincipalId: 'principal_x' }])
+        )
+        mockDbInsert.mockReturnValue({ values: vi.fn().mockRejectedValue(new Error('db down')) })
+
+        const result = await applyAction(
+          { type: 'send_block', nodeId: 'n1', block: { kind: 'message', body } },
+          ctx
+        )
+        expect(result).toMatchObject({ label: 'sent message block' })
+      })
+
+      it('is a no-op (not an insert) when the run row itself has vanished', async () => {
+        mockDbSelect.mockImplementationOnce(() => selectChainOnce([]))
+        await applyAction(
+          { type: 'send_block', nodeId: 'n1', block: { kind: 'message', body } },
+          ctx
+        )
+        expect(mockDbInsert).not.toHaveBeenCalled()
+      })
     })
 
     it('renders a buttons block honest fallback as a bracket list and marks it waiting', async () => {

@@ -11,17 +11,19 @@ const {
   dispatchWorkflowTrigger,
   interruptWaitingRuns,
   resumeWorkflowRun,
+  logRunEvent,
   findWaitingCustomerFacingRun,
   readMessageBlockReply,
 } = vi.hoisted(() => ({
   dispatchWorkflowTrigger: vi.fn(),
   interruptWaitingRuns: vi.fn(),
   resumeWorkflowRun: vi.fn(),
+  logRunEvent: vi.fn(),
   findWaitingCustomerFacingRun: vi.fn(),
   readMessageBlockReply: vi.fn(),
 }))
 vi.mock('../dispatcher', () => ({ dispatchWorkflowTrigger }))
-vi.mock('../workflow.engine', () => ({ interruptWaitingRuns, resumeWorkflowRun }))
+vi.mock('../workflow.engine', () => ({ interruptWaitingRuns, resumeWorkflowRun, logRunEvent }))
 // No waiting run by default: every pre-existing test in this file exercises a
 // message with no parked customer-facing run to match against, so the
 // resume-vs-interrupt check falls through to the interrupt path exactly as
@@ -228,7 +230,12 @@ describe('dispatchWorkflowsForEvent', () => {
         inReplyToMessageId: 'conversation_message_block1',
         buttonKey: 'yes',
       })
-      resumeWorkflowRun.mockResolvedValue({ id: 'workflow_run_1', state: 'done' })
+      resumeWorkflowRun.mockResolvedValue({
+        id: 'workflow_run_1',
+        workflowId: 'workflow_abc',
+        subjectPrincipalId: 'principal_visitor',
+        state: 'done',
+      })
 
       await dispatchWorkflowsForEvent({
         ...base,
@@ -260,6 +267,14 @@ describe('dispatchWorkflowsForEvent', () => {
       // trusting a stale "active" signal.
       expect(dispatchWorkflowTrigger).toHaveBeenCalledWith(
         expect.objectContaining({ conversationId: 'conversation_1' })
+      )
+      // Funnel: a successful claim logs `block_engaged`, off the resumed
+      // run's OWN post-resume row (not the narrow {id, cursor} lookup).
+      expect(logRunEvent).toHaveBeenCalledWith(
+        'workflow_run_1',
+        'workflow_abc',
+        'principal_visitor',
+        'block_engaged'
       )
     })
 
@@ -319,6 +334,9 @@ describe('dispatchWorkflowsForEvent', () => {
       expect(dispatchWorkflowTrigger).toHaveBeenCalledWith(
         expect.objectContaining({ conversationId: 'conversation_1' })
       )
+      // No claim, no funnel event: a raced/no-op resume must not count as
+      // "the customer engaged".
+      expect(logRunEvent).not.toHaveBeenCalled()
     })
 
     it('maps each blockReply kind to its BlockAnswer shape', async () => {
@@ -478,6 +496,9 @@ describe('dispatchWorkflowsForEvent', () => {
       expect(interruptWaitingRuns).toHaveBeenCalledWith('conversation_1', {
         excludeWaitKind: undefined,
       })
+      // A teammate takeover never resumes anything, so it never logs the
+      // funnel's block_engaged event either.
+      expect(logRunEvent).not.toHaveBeenCalled()
     })
   })
 
@@ -490,8 +511,14 @@ describe('dispatchWorkflowsForEvent', () => {
   describe('assistant-wait resume (let_assistant_answer)', () => {
     const assistantWaitingRun = { id: 'workflow_run_assistant', cursor: { waitKind: 'assistant' } }
 
-    it('assistant.handed_off resumes the parked assistant-wait down the escalated edge, without interrupting', async () => {
+    it('assistant.handed_off resumes the parked assistant-wait down the escalated edge, without interrupting, and logs the funnel block_engaged event', async () => {
       findWaitingCustomerFacingRun.mockResolvedValue(assistantWaitingRun)
+      resumeWorkflowRun.mockResolvedValue({
+        id: 'workflow_run_assistant',
+        workflowId: 'workflow_abc',
+        subjectPrincipalId: 'principal_visitor',
+        state: 'running',
+      })
       await dispatchWorkflowsForEvent({
         ...base,
         type: 'assistant.handed_off',
@@ -505,10 +532,26 @@ describe('dispatchWorkflowsForEvent', () => {
       })
       expect(interruptWaitingRuns).not.toHaveBeenCalled()
       expect(order).toEqual(['dispatch']) // the assistant.handed_off trigger itself still dispatches
+      // 'escalated' is a customer-driven engagement signal (Quinn escalating
+      // mid-conversation) — logged.
+      expect(logRunEvent).toHaveBeenCalledWith(
+        'workflow_run_assistant',
+        'workflow_abc',
+        'principal_visitor',
+        'block_engaged'
+      )
     })
 
-    it('a close resumes the parked assistant-wait down the default edge INSTEAD of interrupting it, but still interrupts every other waiting run', async () => {
+    it('a close resumes the parked assistant-wait down the default edge INSTEAD of interrupting it, but still interrupts every other waiting run, and does NOT log the funnel event', async () => {
       findWaitingCustomerFacingRun.mockResolvedValue(assistantWaitingRun)
+      // A close still claims/resumes the run (resumed is truthy) — the point
+      // of this test is that 'resolved' must not count as engagement even so.
+      resumeWorkflowRun.mockResolvedValue({
+        id: 'workflow_run_assistant',
+        workflowId: 'workflow_abc',
+        subjectPrincipalId: 'principal_visitor',
+        state: 'done',
+      })
       await dispatchWorkflowsForEvent({
         ...base,
         type: 'conversation.status_changed',
@@ -524,6 +567,9 @@ describe('dispatchWorkflowsForEvent', () => {
         excludeRunId: 'workflow_run_assistant',
       })
       expect(order).toEqual(['interrupt', 'dispatch'])
+      // 'resolved' is Quinn/an agent ending the conversation, not the
+      // customer answering anything — no funnel event.
+      expect(logRunEvent).not.toHaveBeenCalled()
     })
 
     it('a close with NO parked assistant-wait falls through to the ordinary blunt interrupt', async () => {

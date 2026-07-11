@@ -195,7 +195,14 @@ const STATUS_ACTION_LABEL: Record<StatusValue, string> = {
   draft: 'Mark as draft',
 }
 
-type EffectivenessMap = Map<string, { started: number; completed: number }>
+type EffectivenessMetrics = {
+  started: number
+  completed: number
+  /** Funnel (customer-facing workflows only — see WorkflowRow's render). */
+  sentRuns: number
+  engagedRuns: number
+}
+type EffectivenessMap = Map<string, EffectivenessMetrics>
 
 export function WorkflowsManager() {
   const navigate = useNavigate()
@@ -215,7 +222,12 @@ export function WorkflowsManager() {
   const metricsByWorkflow: EffectivenessMap = useMemo(() => {
     const map: EffectivenessMap = new Map()
     for (const row of effectiveness ?? []) {
-      map.set(row.workflowId, { started: row.started, completed: row.completed })
+      map.set(row.workflowId, {
+        started: row.started,
+        completed: row.completed,
+        sentRuns: row.sentRuns,
+        engagedRuns: row.engagedRuns,
+      })
     }
     return map
   }, [effectiveness])
@@ -448,7 +460,7 @@ function WorkflowRow({
   onViewRuns,
 }: {
   workflow: WorkflowDTO
-  metrics: { started: number; completed: number } | undefined
+  metrics: EffectivenessMetrics | undefined
   onNavigate: (id: string) => void
   onSetStatus: (id: string, status: StatusValue) => void
   onDelete: (workflow: WorkflowDTO) => void
@@ -460,6 +472,7 @@ function WorkflowRow({
   const status = STATUS_META[workflow.status as StatusValue] ?? STATUS_META.draft
   const started = metrics?.started ?? 0
   const completed = metrics?.completed ?? 0
+  const isCustomerFacing = workflow.class === 'customer_facing'
 
   return (
     <div
@@ -513,14 +526,26 @@ function WorkflowRow({
           onViewRuns(workflow)
         }}
         title="View run history"
-        className="rounded px-1 py-0.5 text-right text-xs font-medium tabular-nums hover:bg-muted hover:underline"
+        className="flex flex-col items-end gap-0.5 rounded px-1 py-0.5 text-right text-xs font-medium tabular-nums hover:bg-muted hover:underline"
       >
-        {started > 0 ? (
-          <>
-            {started.toLocaleString()} · {Math.round((completed / started) * 100)}%
-          </>
-        ) : (
-          '—'
+        <span>
+          {started > 0 ? (
+            <>
+              {started.toLocaleString()} · {Math.round((completed / started) * 100)}%
+            </>
+          ) : (
+            '—'
+          )}
+        </span>
+        {/* Funnel line (customer-facing only — a background workflow never
+            sends a block, so it never has anything to funnel). Numbers only,
+            muted, no new chrome — background workflows keep the display above
+            exactly as it was. */}
+        {isCustomerFacing && (
+          <span className="font-normal text-muted-foreground no-underline">
+            sent {(metrics?.sentRuns ?? 0).toLocaleString()} · engaged{' '}
+            {(metrics?.engagedRuns ?? 0).toLocaleString()} · done {completed.toLocaleString()}
+          </span>
         )}
       </button>
 

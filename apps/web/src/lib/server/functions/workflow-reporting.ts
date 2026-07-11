@@ -27,6 +27,10 @@ export interface WorkflowEffectivenessRow {
   workflowId: string
   started: number
   completed: number
+  /** Funnel (customer-facing workflows only, see workflows-manager.tsx):
+   *  distinct runs with >= 1 block_sent / block_engaged event, same 7d window. */
+  sentRuns: number
+  engagedRuns: number
 }
 
 /** Runs started/completed per workflow over the trailing 7 days. */
@@ -39,6 +43,8 @@ export const workflowEffectivenessFn = createServerFn({ method: 'GET' }).handler
       workflowId: row.workflowId as string,
       started: row.started,
       completed: row.completed,
+      sentRuns: row.sentRuns,
+      engagedRuns: row.engagedRuns,
     }))
   }
 )

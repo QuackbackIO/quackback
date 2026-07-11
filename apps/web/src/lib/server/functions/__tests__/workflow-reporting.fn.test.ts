@@ -87,6 +87,32 @@ describe('permission gates', () => {
   })
 })
 
+describe('workflowEffectivenessFn', () => {
+  it('threads the funnel counts (sentRuns/engagedRuns) through the trailing-7d DTO', async () => {
+    hoisted.workflowEffectiveness.mockResolvedValue([
+      {
+        workflowId: 'workflow_1',
+        started: 10,
+        completed: 6,
+        interrupted: 1,
+        waiting: 3,
+        sentRuns: 4,
+        engagedRuns: 2,
+      },
+    ])
+    const result = await workflowEffectivenessFn()
+    expect(result).toEqual([
+      {
+        workflowId: 'workflow_1',
+        started: 10,
+        completed: 6,
+        sentRuns: 4,
+        engagedRuns: 2,
+      },
+    ])
+  })
+})
+
 describe('workflowRunsFn', () => {
   it('passes the workflowId through and serializes Dates to ISO strings, nulls preserved', async () => {
     hoisted.listWorkflowRuns.mockResolvedValue([

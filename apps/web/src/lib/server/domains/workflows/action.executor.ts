@@ -79,6 +79,7 @@ import type {
   ConversationMessageId,
   DataConnectorId,
   TicketStatusId,
+  WorkflowRunId,
 } from '@quackback/ids'
 import type {
   ConversationPriority,
@@ -97,6 +98,8 @@ import {
   conversationMessages,
   principal,
   user,
+  workflowRuns,
+  workflowRunEvents,
   INTERACTIVE_BLOCK_KINDS,
   CSAT_FACES,
 } from '@/lib/server/db'
@@ -402,6 +405,46 @@ async function sendBlock(
 }
 
 /**
+ * Log the funnel's `block_sent` event (the per-workflow sent -> engaged ->
+ * completed rollup, workflow-reporting.ts) for a successful send_block
+ * action. Replicated here rather than imported from workflow.engine.ts's
+ * logRunEvent — this module is imported BY workflow.engine.ts (applyAction),
+ * so an import back the other way would cycle; the insert itself is a
+ * couple of lines, cheap to duplicate rather than restructure the module
+ * graph for.
+ *
+ * WorkflowContext only carries the run's own id (see its doc), not its
+ * workflowId/subjectPrincipalId — those live on the run row, and
+ * workflow_run_events.workflow_id is NOT NULL, so this reads them first, by
+ * the run's primary key (one indexed read, paid once per block send, not a
+ * new hot path). Best-effort, like maybeSendCsatRequestEmail below: a
+ * reporting-ledger write must never fail the block send that already
+ * succeeded, so every failure (including the run row having vanished) is
+ * caught and logged rather than propagated.
+ */
+async function logBlockSentEvent(runId: string): Promise<void> {
+  try {
+    const [run] = await db
+      .select({
+        workflowId: workflowRuns.workflowId,
+        subjectPrincipalId: workflowRuns.subjectPrincipalId,
+      })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, runId as WorkflowRunId))
+      .limit(1)
+    if (!run) return // the run row vanished (a conversation cascade-delete) mid-send
+    await db.insert(workflowRunEvents).values({
+      runId: runId as WorkflowRunId,
+      workflowId: run.workflowId,
+      subjectPrincipalId: run.subjectPrincipalId,
+      kind: 'block_sent',
+    })
+  } catch (err) {
+    log.warn({ err, runId }, 'block_sent funnel event logging failed')
+  }
+}
+
+/**
  * When a `request_csat` block posts on a conversation whose active channel is
  * EMAIL (`conversations.channel === 'email'` — set only for a cold-inbound
  * email conversation, conversation.email-cold-inbound.ts; the widget/messenger
@@ -543,6 +586,12 @@ export async function applyAction(
         action.block,
         ctx.resolvedBlockDeps
       )
+      // Funnel: one `block_sent` event per successful post — never suffixed
+      // with the block kind (keeps cardinality low; the funnel counts
+      // distinct runs, not kinds). Macros never reach this branch (ctx.runId
+      // is required above), so this is engine-only, exactly like send_block
+      // itself.
+      await logBlockSentEvent(ctx.runId)
       return { label: `sent ${action.block.kind} block`, blockMessageId: messageId }
     }
     case 'let_assistant_answer':

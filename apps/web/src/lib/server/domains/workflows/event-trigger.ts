@@ -59,7 +59,7 @@ import { db, eq, and, ticketConversations } from '@/lib/server/db'
 import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { BlockAnswer, AssistantOutcome } from './condition.evaluator'
 import { dispatchWorkflowTrigger, type WorkflowTrigger } from './dispatcher'
-import { interruptWaitingRuns, resumeWorkflowRun } from './workflow.engine'
+import { interruptWaitingRuns, resumeWorkflowRun, logRunEvent } from './workflow.engine'
 import { findWaitingCustomerFacingRun, readMessageBlockReply } from './dispatcher.guards'
 import { readCursor } from './workflow-wait-queue'
 
@@ -377,6 +377,16 @@ async function tryResumeInputWait(event: MessageCreatedEvent): Promise<ResumeAtt
   if (!blockReply || blockReply.inReplyToMessageId !== cursor.blockMessageId) return null
 
   const resumed = await resumeWorkflowRun(run.id, { blockAnswer: toBlockAnswer(blockReply) })
+  // Funnel (the per-workflow sent -> engaged -> completed rollup,
+  // workflow-reporting.ts): the customer answered a parked block — a
+  // `block_engaged` event, logged only on an actual claim (a raced/no-op
+  // resume, `resumed` null, logs nothing extra). `resumed` is
+  // resumeWorkflowRun's own return value — the run's FULL post-resume row,
+  // unlike the narrow `{id, cursor}` `run` above — so its workflowId/
+  // subjectPrincipalId are already in hand with no extra read.
+  if (resumed) {
+    await logRunEvent(resumed.id, resumed.workflowId, resumed.subjectPrincipalId, 'block_engaged')
+  }
   return { runId: run.id, resumed }
 }
 
@@ -404,6 +414,17 @@ async function tryResumeAssistantWait(
   if (cursor.waitKind !== 'assistant') return null
 
   const resumed = await resumeWorkflowRun(run.id, { assistantOutcome: outcome })
+  // Funnel: only 'escalated' (assistant.handed_off — Quinn escalating mid-
+  // conversation, driven by the customer's own turn) is a CUSTOMER-driven
+  // engagement signal. 'resolved' (a close — dispatchWorkflowsForEvent's
+  // isClose branch) ends the wait via Quinn or an agent resolving the
+  // conversation, not the customer answering anything, so it does not count
+  // toward the funnel. A teammate message never reaches this function at
+  // all (it interrupts instead, see isInterruptingEvent) so there is no
+  // separate teammate-interrupt case to exclude here.
+  if (resumed && outcome === 'escalated') {
+    await logRunEvent(resumed.id, resumed.workflowId, resumed.subjectPrincipalId, 'block_engaged')
+  }
   return { runId: run.id, resumed }
 }
 

@@ -58,6 +58,11 @@ const EVENT_KIND_LABELS: Record<string, string> = {
   swept_stale: 'Swept (stale)',
   swept_rescheduled: 'Swept (rescheduled)',
   swept_expired: 'Expired (customer never answered)',
+  // Funnel (action.executor.ts's send_block case / event-trigger.ts's
+  // tryResumeInputWait/tryResumeAssistantWait) — see workflow-reporting.ts's
+  // sentRuns/engagedRuns rollup for the aggregate this timeline backs.
+  block_sent: 'Block sent',
+  block_engaged: 'Customer engaged',
   // call_connector park-and-continue loop (workflow.engine.ts's
   // applyPlanAndSettle): logged once per connector hop, plus once if the
   // MAX_CONNECTOR_HOPS safety bound is hit.

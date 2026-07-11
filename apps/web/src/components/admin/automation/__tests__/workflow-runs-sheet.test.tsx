@@ -85,6 +85,8 @@ describe('humanizeRunEventKind', () => {
     expect(humanizeRunEventKind('swept_stale')).toBe('Swept (stale)')
     expect(humanizeRunEventKind('swept_rescheduled')).toBe('Swept (rescheduled)')
     expect(humanizeRunEventKind('swept_expired')).toBe('Expired (customer never answered)')
+    expect(humanizeRunEventKind('block_sent')).toBe('Block sent')
+    expect(humanizeRunEventKind('block_engaged')).toBe('Customer engaged')
   })
 
   it("humanizes an action_failed:<type> kind using the action's display label", () => {

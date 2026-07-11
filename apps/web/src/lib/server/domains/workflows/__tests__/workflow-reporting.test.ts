@@ -90,6 +90,8 @@ describe.skipIf(!fixture.available)('workflowEffectiveness (real DB, rolled back
       completed: 2,
       interrupted: 1,
       waiting: 1,
+      sentRuns: 0,
+      engagedRuns: 0,
     })
   })
 
@@ -100,6 +102,81 @@ describe.skipIf(!fixture.available)('workflowEffectiveness (real DB, rolled back
       new Date('2026-01-02T00:00:00Z')
     )
     expect(res).toEqual([])
+  })
+
+  it('counts DISTINCT runs for the funnel — a run with several block_sent events counts once', async () => {
+    const wf = await seedWorkflow()
+    const [run1] = await testDb
+      .insert(workflowRuns)
+      .values({ workflowId: wf.id, state: 'done', startedAt: new Date('2026-01-05T10:00:00Z') })
+      .returning()
+    const [run2] = await testDb
+      .insert(workflowRuns)
+      .values({ workflowId: wf.id, state: 'waiting', startedAt: new Date('2026-01-05T11:00:00Z') })
+      .returning()
+
+    await testDb.insert(workflowRunEvents).values([
+      // run1: sent three times, engaged once — still one distinct run each.
+      { runId: run1.id, workflowId: wf.id, kind: 'block_sent' },
+      { runId: run1.id, workflowId: wf.id, kind: 'block_sent' },
+      { runId: run1.id, workflowId: wf.id, kind: 'block_sent' },
+      { runId: run1.id, workflowId: wf.id, kind: 'block_engaged' },
+      // run2: sent only, never engaged.
+      { runId: run2.id, workflowId: wf.id, kind: 'block_sent' },
+      // An unrelated kind on run1 must not be counted as sent/engaged.
+      { runId: run1.id, workflowId: wf.id, kind: 'completed' },
+    ])
+
+    const res = await workflowEffectiveness(
+      new Date('2026-01-01T00:00:00Z'),
+      new Date('2026-02-01T00:00:00Z')
+    )
+    expect(res).toHaveLength(1)
+    expect(res[0]).toMatchObject({ workflowId: wf.id, sentRuns: 2, engagedRuns: 1 })
+  })
+
+  it("counts a funnel event against the run's own started_at window, not the event's own timestamp", async () => {
+    const wf = await seedWorkflow()
+    // The run started INSIDE the window; its block_sent event lands well
+    // after it (a customer can take hours to answer) but must still count,
+    // because the join is on the RUN's started_at, not the event's own `at`.
+    const [run] = await testDb
+      .insert(workflowRuns)
+      .values({ workflowId: wf.id, state: 'done', startedAt: new Date('2026-01-05T10:00:00Z') })
+      .returning()
+    await testDb.insert(workflowRunEvents).values({
+      runId: run.id,
+      workflowId: wf.id,
+      kind: 'block_sent',
+      at: new Date('2026-01-06T20:00:00Z'),
+    })
+
+    const res = await workflowEffectiveness(
+      new Date('2026-01-05T00:00:00Z'),
+      new Date('2026-01-06T00:00:00Z') // the event's own `at` falls OUTSIDE this range
+    )
+    expect(res).toHaveLength(1)
+    expect(res[0]).toMatchObject({ sentRuns: 1 })
+  })
+
+  it('excludes a funnel event whose run started OUTSIDE the range even if the event itself falls inside it', async () => {
+    const wf = await seedWorkflow()
+    const [run] = await testDb
+      .insert(workflowRuns)
+      .values({ workflowId: wf.id, state: 'done', startedAt: new Date('2025-12-01T00:00:00Z') })
+      .returning()
+    await testDb.insert(workflowRunEvents).values({
+      runId: run.id,
+      workflowId: wf.id,
+      kind: 'block_sent',
+      at: new Date('2026-01-05T10:00:00Z'), // inside the query range
+    })
+
+    const res = await workflowEffectiveness(
+      new Date('2026-01-01T00:00:00Z'),
+      new Date('2026-02-01T00:00:00Z')
+    )
+    expect(res).toEqual([]) // the run itself started before the range
   })
 })
 
