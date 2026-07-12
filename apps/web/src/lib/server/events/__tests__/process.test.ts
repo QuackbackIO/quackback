@@ -50,9 +50,10 @@ vi.mock('@/lib/server/config', () => ({
   config: { redisUrl: 'redis://localhost:6379' },
 }))
 
-const mockGetHookTargets = vi.fn()
-vi.mock('../targets', () => ({
-  getHookTargets: (...args: unknown[]) => mockGetHookTargets(...args),
+// EVENTING-V2: processEvent now writes to the outbox (the relay enqueues).
+const mockWriteEventToOutbox = vi.fn().mockResolvedValue(true)
+vi.mock('../outbox-dispatch', () => ({
+  writeEventToOutbox: (...args: unknown[]) => mockWriteEventToOutbox(...args),
 }))
 
 const mockGetHook = vi.fn()
@@ -114,7 +115,7 @@ function makeJob(overrides: Record<string, unknown> = {}) {
 // Import once to initialize the module. The first processEvent call with targets
 // triggers ensureQueue() which creates the Queue and Worker singletons.
 
-import { processEvent, closeQueue } from '../process'
+import { processEvent, closeQueue, enqueueHookJobsWithIds } from '../process'
 import { db } from '@/lib/server/db'
 
 // --- Tests ---
@@ -125,54 +126,25 @@ describe('Event Processing (BullMQ)', () => {
   })
 
   describe('processEvent', () => {
-    it('does nothing when there are no targets', async () => {
-      mockGetHookTargets.mockResolvedValue([])
-
-      await processEvent(makeEvent())
-
-      expect(mockQueueAddBulk).not.toHaveBeenCalled()
-    })
-
-    it('enqueues all targets in a single addBulk call', async () => {
+    // EVENTING-V2 (WO-18): processEvent writes to the durable outbox; the relay
+    // is the sole enqueuer, so processEvent never touches the queue directly.
+    // The relay's drain→enqueue is covered by relay.test.ts.
+    it('writes the event to the outbox and does not enqueue directly', async () => {
       const event = makeEvent()
-      mockGetHookTargets.mockResolvedValue([
-        { type: 'slack', target: { channelId: 'C1' }, config: { accessToken: 'tok' } },
-        { type: 'webhook', target: { url: 'https://a.com' }, config: { secret: 's' } },
-      ])
-
       await processEvent(event)
 
-      expect(mockQueueAddBulk).toHaveBeenCalledTimes(1)
-      expect(mockQueueAddBulk).toHaveBeenCalledWith([
-        {
-          name: 'post.created:slack',
-          data: {
-            hookType: 'slack',
-            event,
-            target: { channelId: 'C1' },
-            config: { accessToken: 'tok' },
-          },
-        },
-        {
-          name: 'post.created:webhook',
-          data: {
-            hookType: 'webhook',
-            event,
-            target: { url: 'https://a.com' },
-            config: { secret: 's' },
-          },
-        },
-      ])
+      expect(mockWriteEventToOutbox).toHaveBeenCalledWith(event)
+      expect(mockQueueAddBulk).not.toHaveBeenCalled()
     })
   })
 
   describe('Worker processor', () => {
-    // The processor is captured when initializeQueue runs (first processEvent with targets).
-    // We need to ensure it's initialized before these tests run.
+    // The processor is captured when initializeQueue runs (first enqueue).
+    // Trigger init via the relay's enqueue helper (processEvent no longer
+    // enqueues — it writes the outbox).
     async function ensureInitialized() {
       if (!capturedProcessor) {
-        mockGetHookTargets.mockResolvedValue([{ type: 'test', target: {}, config: {} }])
-        await processEvent(makeEvent())
+        await enqueueHookJobsWithIds([{ name: 'init', data: makeJob().data, jobId: 'init:1' }])
       }
     }
 
@@ -322,9 +294,8 @@ describe('Event Processing (BullMQ)', () => {
 
   describe('closeQueue', () => {
     it('closes worker and queue gracefully', async () => {
-      // Ensure queue is initialized first
-      mockGetHookTargets.mockResolvedValue([{ type: 'test', target: {}, config: {} }])
-      await processEvent(makeEvent())
+      // Ensure queue is initialized first (via the relay's enqueue helper).
+      await enqueueHookJobsWithIds([{ name: 'init', data: makeJob().data, jobId: 'init:close' }])
 
       await closeQueue()
 

@@ -9,8 +9,6 @@ import { Queue, Worker, UnrecoverableError, type JobsOptions } from 'bullmq'
 import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-config'
 import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { getHook } from './registry'
-import { getHookTargets } from './targets'
-import { isEventingV2Enabled } from './eventing-v2-flag'
 import { isRetryableError } from './hook-utils'
 import type { HookResult } from './hook-types'
 import type { EventData } from './types'
@@ -243,45 +241,11 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
  * Target resolution is awaited (~10-50ms). Hook execution runs in the background.
  */
 export async function processEvent(event: EventData): Promise<void> {
-  // Fire workflow triggers off the same event (§4.6) via the durable
-  // workflow-dispatch BullMQ queue, BEFORE the no-hook-targets early return so
-  // a workflow still runs when there are no webhook/notification subscribers.
-  // This used to be a fire-and-forget call straight into the workflow engine:
-  // a crash/deploy in the window before that call finished silently dropped
-  // the trigger, and a transient DB error inside it dropped every workflow
-  // for the event with no retry. Enqueuing here instead means the trigger
-  // survives once the queue durably has the job — the queue's worker (3
-  // attempts, exponential backoff) does the actual dispatch. The enqueue call
-  // itself is fire-and-forget (not awaited), same as the SLA/CSAT hooks
-  // below: a failure here is caught and logged, never retried, so awaiting it
-  // would only add a Redis round-trip of latency to every event that carries
-  // a workflow trigger, without buying any extra durability.
-  //
-  // Two gates, cheapest first: eventToWorkflowTrigger (pure, no DB) skips the
-  // large share of events that can never map to a workflow trigger type at
-  // all; hasAnyLiveWorkflow (cached ~30s, see workflow.service.ts) then skips
-  // the Redis round trip entirely for a workspace with zero live workflows,
-  // which otherwise paid an enqueue on every single message/status event for
-  // nothing. That second gate is workspace-global rather than scoped to this
-  // event's trigger type on purpose — see hasAnyLiveWorkflow's doc comment
-  // for why scoping it would wrongly skip interruptWaitingRuns. All three
-  // modules are lazily imported so the event core carries no static
-  // dependency on the workflow engine.
-  void import('@/lib/server/domains/workflows/event-trigger')
-    .then(async (eventTriggerModule) => {
-      // EVENTING-V2 WO-8e: when the outbox path is active, workflow triggers ride
-      // the relay → 'workflow' hook (workflowTriggerResolver) instead. Skip the
-      // legacy enqueue to avoid double-dispatch. Checked inside the async chain
-      // so the request path pays no extra latency.
-      if (await isEventingV2Enabled()) return
-      if (!eventTriggerModule.eventToWorkflowTrigger(event)) return
-      const { hasAnyLiveWorkflow } = await import('@/lib/server/domains/workflows/workflow.service')
-      if (!(await hasAnyLiveWorkflow())) return
-      const { enqueueWorkflowDispatch } =
-        await import('@/lib/server/domains/workflows/workflow-dispatch-queue')
-      await enqueueWorkflowDispatch(event)
-    })
-    .catch((err) => log.error({ err, event_type: event.type }, 'workflow dispatch enqueue failed'))
+  // EVENTING-V2 cutover: workflow triggers now ride the outbox → relay →
+  // 'workflow' hook (workflowTriggerResolver), so the legacy fire-and-forget
+  // enqueue-into-the-workflow-queue branch that used to live here is gone. The
+  // outbox makes the trigger durable up to the workflow engine's own dispatch
+  // queue — closing the crash window the old branch could drop a trigger in.
 
   // Settle SLA breach clocks off the same event (first-response / time-to-close).
   // Same fire-and-forget + lazy-import isolation as the workflow dispatch.
@@ -316,32 +280,13 @@ export async function processEvent(event: EventData): Promise<void> {
       )
   }
 
-  // EVENTING-V2 cutover (WO-4): when enabled, write the event to the durable
-  // outbox and let the leader relay resolve targets + enqueue. This closes the
-  // commit-vs-enqueue loss window and makes the relay the sole enqueuer. Default
-  // OFF, so the legacy path below is unchanged until Phase 5 flips the flag.
-  if (await isEventingV2Enabled()) {
-    const { writeEventToOutbox } = await import('./outbox-dispatch')
-    await writeEventToOutbox(event)
-    return
-  }
-
-  const targets = await getHookTargets(event)
-  if (targets.length === 0) return
-
-  log.debug(
-    { event_type: event.type, event_id: event.id, target_count: targets.length },
-    'processing event'
-  )
-
-  const queue = await ensureQueue()
-
-  await queue.addBulk(
-    targets.map(({ type, target, config: hookConfig }) => ({
-      name: `${event.type}:${type}`,
-      data: { hookType: type, event, target, config: hookConfig },
-    }))
-  )
+  // EVENTING-V2 (WO-18 cutover): the durable outbox is the ONLY path. The event
+  // is written transactionally (closing the commit-vs-enqueue loss window) and
+  // the leader relay resolves targets + enqueues onto {event-hooks} — the relay
+  // is the sole enqueuer. The legacy direct getHookTargets + addBulk path is
+  // deleted; there is no flag branch anymore.
+  const { writeEventToOutbox } = await import('./outbox-dispatch')
+  await writeEventToOutbox(event)
 }
 
 /**

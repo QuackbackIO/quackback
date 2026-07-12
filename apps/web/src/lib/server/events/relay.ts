@@ -22,7 +22,6 @@ import { enqueueHookJobsWithIds } from './process'
 import { resolveTargets } from './resolvers/registry'
 import { registerAllResolvers } from './resolvers'
 import { tryAcquireRelayLeadership, type RelayLeadership } from './relay-lock'
-import { isEventingV2Enabled } from './eventing-v2-flag'
 import type { DomainEvent, EventActorType } from './envelope'
 import type { HookTarget } from './hook-types'
 import { toLegacyEvent } from './to-legacy-event'
@@ -182,10 +181,8 @@ export async function startOutboxRelay(): Promise<void> {
     log.info('QUACKBACK_ROLE=web — outbox relay not started')
     return
   }
-  if (!(await isEventingV2Enabled())) {
-    log.info('EVENTING-V2 not enabled — outbox relay dormant')
-    return
-  }
+  // EVENTING-V2 (WO-18): the outbox is the sole delivery path, so the relay
+  // always runs on a worker-role process — there is no flag to gate it.
   // Ensure every sink resolver is registered before we drain anything.
   registerAllResolvers()
   running = true
