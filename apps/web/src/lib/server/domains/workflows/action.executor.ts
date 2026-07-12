@@ -235,6 +235,7 @@ export type WorkflowAction =
   // `src` overrides the actor-derived default provenance (see the module doc);
   // omitted for every pre-existing caller (macros, plain workflow actions).
   | { type: 'set_attribute'; key: string; value: unknown; src?: ConversationAttributeSource }
+  | { type: 'send_webhook'; url: string }
   // Phase C conversational block layer — engine-only (the graph walker is the
   // only producer of these three; macros never emit them).
   | { type: 'send_block'; nodeId: string; block: BlockSendSpec }
@@ -466,6 +467,24 @@ export async function applyAction(
         action.src ?? (actor.principalType === 'service' ? 'workflow' : 'teammate')
       )
       return label(`set ${action.key}`)
+    case 'send_webhook': {
+      // EVENTING-V2 WO-10: outbound webhook action. Delivered through safeFetch
+      // (SSRF chokepoint, no redirects, IP-pinned); dynamic import keeps the
+      // executor's static graph unchanged. A non-2xx / network error throws so
+      // the engine's retry handles it, same as any other failing action.
+      const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+      const res = await safeFetch(action.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Quackback-Event': 'workflow.send_webhook',
+        },
+        body: JSON.stringify({ conversationId, at: new Date().toISOString() }),
+        timeoutMs: 5000,
+      })
+      if (!res.ok) throw new Error(`send_webhook HTTP ${res.status}`)
+      return label('webhook sent')
+    }
     case 'send_block': {
       if (!ctx.runId) {
         // Structurally unreachable (only the engine, which always has a run,

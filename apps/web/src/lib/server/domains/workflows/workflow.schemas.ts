@@ -111,7 +111,7 @@ const snoozeActionSchema = z.union([
     .strict(),
 ])
 
-const actionSchema = z.union([
+export const actionSchema = z.union([
   z.object({ type: z.literal('assign_agent'), principalId: z.string().min(1) }),
   z.object({ type: z.literal('assign_team'), teamId: z.string().min(1) }),
   z.object({ type: z.literal('add_tag'), tagId: z.string().min(1) }),
@@ -128,6 +128,9 @@ const actionSchema = z.union([
   z.object({ type: z.literal('reopen') }),
   z.object({ type: z.literal('apply_sla'), policyId: z.string().min(1) }),
   z.object({ type: z.literal('set_attribute'), key: z.string().min(1), value: z.unknown() }),
+  // EVENTING-V2 WO-10: fire-and-forget outbound webhook alongside call_connector.
+  // Delivered through safeFetch (the SSRF chokepoint); the URL is validated here.
+  z.object({ type: z.literal('send_webhook'), url: z.string().url() }).strict(),
   // Plain-text v1 (no rich body / mentions yet — see action.executor.ts's
   // WorkflowAction doc): bounded to the same length the underlying note write
   // path (conversation.service.ts's addAgentNote -> validateContent) already
