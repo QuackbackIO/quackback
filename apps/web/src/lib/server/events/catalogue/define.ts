@@ -76,6 +76,16 @@ export function allEventDefinitions(): ReadonlyArray<EventDefinition<unknown>> {
   return [...registry.values()]
 }
 
+/** Event types exposed to the customer webhook surface (picker + OpenAPI). WO-9. */
+export function webhookEventTypes(): string[] {
+  return [...registry.values()].filter((d) => d.exposure.webhook).map((d) => d.type)
+}
+
+/** Event types that are workflow triggers. WO-10. */
+export function workflowEventTypes(): string[] {
+  return [...registry.values()].filter((d) => d.exposure.workflow).map((d) => d.type)
+}
+
 /** Test-only: clear the registry between suites that re-import catalogue files. */
 export function __resetCatalogueForTests(): void {
   registry.clear()
