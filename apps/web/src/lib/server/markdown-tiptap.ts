@@ -21,6 +21,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import type { TiptapContent } from '@/lib/server/db'
 import type { JSONContent } from '@tiptap/core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
+import { lookupEmoji } from '@/lib/shared/content-html'
 
 /**
  * Server-safe extensions for markdown conversion.
@@ -107,7 +108,11 @@ const RESERIALIZABLE_NODE_TYPES = new Set([
   'tableHeader',
   'image',
   'resizableImage',
+  'chatImage',
   'mention',
+  'emoji',
+  'youtube',
+  'quackbackEmbed',
 ])
 
 /**
@@ -138,6 +143,24 @@ export function contentJsonToMarkdown(
   try {
     const markdown = tiptapJsonToMarkdown(normalizeForMarkdown(contentJson))
     return markdown.trim() ? markdown : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/**
+ * Produce the stored markdown projection for a freshly written contentJson
+ * document. Unlike {@link contentJsonToMarkdown}, this always serializes the
+ * current tree, including image-free structured-only edits, so the denormalized
+ * `content` column cannot retain text from the previous version.
+ */
+export function projectContentJsonToMarkdown(
+  contentJson: TiptapContent | JSONContent | null | undefined,
+  fallback: string
+): string {
+  if (!contentJson || !isReserializable(contentJson)) return fallback
+  try {
+    return tiptapJsonToMarkdown(normalizeForMarkdown(contentJson)).trim()
   } catch {
     return fallback
   }
@@ -175,7 +198,31 @@ function normalizeForMarkdown(node: JSONContent): JSONContent {
     const label = (attrs.label as string) || (attrs.id as string) || 'mention'
     return { type: 'text', text: `@${label}` }
   }
-  const next = node.type === 'resizableImage' ? { ...node, type: 'image' } : node
+  if (node.type === 'emoji') {
+    const attrs = node.attrs ?? {}
+    const name = String(attrs.name ?? '')
+    const emoji = String(attrs.emoji ?? lookupEmoji(name)?.emoji ?? (name ? `:${name}:` : ''))
+    return { type: 'text', text: emoji }
+  }
+  if (node.type === 'youtube') {
+    const src = String(node.attrs?.src ?? '')
+    return {
+      type: 'paragraph',
+      content: src
+        ? [{ type: 'text', text: src, marks: [{ type: 'link', attrs: { href: src } }] }]
+        : [{ type: 'text', text: '[YouTube embed]' }],
+    }
+  }
+  if (node.type === 'quackbackEmbed') {
+    const kind = String(node.attrs?.kind ?? 'content')
+    const id = String(node.attrs?.id ?? '')
+    return {
+      type: 'paragraph',
+      content: [{ type: 'text', text: id ? `[Embedded ${kind}: ${id}]` : `[Embedded ${kind}]` }],
+    }
+  }
+  const next =
+    node.type === 'resizableImage' || node.type === 'chatImage' ? { ...node, type: 'image' } : node
   if (!Array.isArray(next.content)) return next
   return { ...next, content: next.content.map(normalizeForMarkdown) }
 }

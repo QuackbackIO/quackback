@@ -25,7 +25,7 @@ import {
 } from '@/lib/server/db'
 import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
-import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import {
   buildEventActor,
@@ -108,7 +108,7 @@ export async function createChangelog(
       title,
       // Store the markdown projection of the canonical contentJson so every
       // consumer of the `content` column (webhooks, notifications) sees images.
-      content: contentJsonToMarkdown(contentJson, content),
+      content: projectContentJsonToMarkdown(contentJson, content),
       contentJson,
       principalId: author.principalId,
       publishedAt,
@@ -198,11 +198,7 @@ export async function updateChangelog(
       principalId: existing.principalId ?? undefined,
     })
     updateData.contentJson = contentJson
-    // Every content edit carries `input.content` (the API accepts only markdown;
-    // the editor emits markdown alongside contentJson), so the fallback reflects
-    // the new doc. `existing.content` is only a defensive default for a
-    // contentJson-only edit, which no caller makes.
-    updateData.content = contentJsonToMarkdown(
+    updateData.content = projectContentJsonToMarkdown(
       contentJson,
       (input.content ?? existing.content).trim()
     )

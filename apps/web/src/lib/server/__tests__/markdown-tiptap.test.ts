@@ -3,6 +3,7 @@ import {
   markdownToTiptapJson,
   tiptapJsonToMarkdown,
   contentJsonToMarkdown,
+  projectContentJsonToMarkdown,
   commentMarkdownToTiptapJson,
   tiptapJsonToText,
   hasTextLeaf,
@@ -238,10 +239,7 @@ describe('contentJsonToMarkdown', () => {
     expect(result).toContain('![S](https://cdn.example.com/s.png)')
   })
 
-  test('keeps stored markdown when an image coexists with an unsupported node', () => {
-    // A youtube embed has no server renderer; re-serializing would drop it, so
-    // the whole document keeps its stored markdown (image not re-derived) rather
-    // than losing the embed.
+  test('keeps images when they coexist with a YouTube embed', () => {
     const doc = {
       type: 'doc' as const,
       content: [
@@ -249,8 +247,38 @@ describe('contentJsonToMarkdown', () => {
         { type: 'youtube', attrs: { src: 'https://youtu.be/abc' } },
       ],
     }
-    const stored = 'stored markdown with :::youtube::: and no image'
-    expect(contentJsonToMarkdown(doc, stored)).toBe(stored)
+    const result = contentJsonToMarkdown(doc, 'stale stored markdown')
+    expect(result).toContain('![S](https://cdn.example.com/s.png)')
+    expect(result).toContain('https://youtu.be/abc')
+  })
+
+  test('keeps images when they coexist with emoji and Quackback embeds', () => {
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Launch ' },
+            { type: 'emoji', attrs: { name: 'tada' } },
+          ],
+        },
+        { type: 'resizableImage', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S' } },
+        { type: 'quackbackEmbed', attrs: { kind: 'post', id: 'post_123' } },
+      ],
+    }
+    const result = contentJsonToMarkdown(doc, 'stale stored markdown')
+    expect(result).toContain('🎉')
+    expect(result).toContain('![S](https://cdn.example.com/s.png)')
+    expect(result).toContain('[Embedded post: post_123]')
+  })
+
+  test('projects current text for an image-free structured-only edit', () => {
+    const doc = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'New structured text' }] }],
+    }
+    expect(projectContentJsonToMarkdown(doc, 'stale text')).toContain('New structured text')
   })
 
   test('returns the stored markdown verbatim for image-free content', () => {

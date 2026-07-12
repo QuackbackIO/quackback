@@ -43,7 +43,7 @@ import {
 import { announcePublishedPost } from './post.announce'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { recordAuditEvent } from '@/lib/server/audit/log'
-import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { subscribeToPost } from '@/lib/server/domains/subscriptions/subscription.service'
 import type { CreatePostInput, UpdatePostInput, CreatePostResult } from './post.types'
@@ -219,7 +219,7 @@ export async function createPost(
         title,
         // Store the markdown projection of the canonical contentJson so every
         // consumer of the `content` column (webhooks, notifications) sees images.
-        content: contentJsonToMarkdown(contentJson, content),
+        content: projectContentJsonToMarkdown(contentJson, content),
         contentJson,
         statusId,
         principalId: author.principalId,
@@ -387,11 +387,7 @@ export async function updatePost(
       principalId: existingPost.principalId,
     })
     updateData.contentJson = contentJson
-    // Every content edit carries `input.content` (the API accepts only markdown;
-    // the editor emits markdown alongside contentJson), so the fallback reflects
-    // the new doc. `existingPost.content` is only a defensive default for a
-    // contentJson-only edit, which no caller makes.
-    updateData.content = contentJsonToMarkdown(
+    updateData.content = projectContentJsonToMarkdown(
       contentJson,
       (input.content ?? existingPost.content).trim()
     )
@@ -417,7 +413,7 @@ export async function updatePost(
   }
 
   // Regenerate embedding (and cascade to merge check) if title or content changed
-  if (input.title !== undefined || input.content !== undefined) {
+  if (input.title !== undefined || input.content !== undefined || input.contentJson !== undefined) {
     import('@/lib/server/domains/embeddings/embedding.service')
       .then(({ generatePostEmbedding }) =>
         generatePostEmbedding(id, updatedPost.title, updatedPost.content)
@@ -544,7 +540,10 @@ export async function updatePost(
   const changedFields: string[] = []
   if (input.title !== undefined && input.title.trim() !== existingPost.title)
     changedFields.push('title')
-  if (input.content !== undefined && input.content.trim() !== existingPost.content)
+  if (
+    (input.content !== undefined && input.content.trim() !== existingPost.content) ||
+    input.contentJson !== undefined
+  )
     changedFields.push('content')
   if (input.tagIds !== undefined) changedFields.push('tags')
   if (

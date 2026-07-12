@@ -99,6 +99,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 vi.mock('@/lib/server/markdown-tiptap', () => ({
   markdownToTiptapJson: vi.fn(() => ({ type: 'doc', content: [] })),
   contentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
+  projectContentJsonToMarkdown: (_json: unknown, fallback: string) => fallback,
 }))
 
 let getArticleById: typeof import('../help-center.article.service').getArticleById

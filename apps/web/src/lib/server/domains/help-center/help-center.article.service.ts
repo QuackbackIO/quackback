@@ -13,7 +13,7 @@ import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { isTeamMember } from '@/lib/shared/roles'
-import { markdownToTiptapJson, contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
+import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
 import { slugify } from '@/lib/shared/utils'
 import { uniqueHelpCenterSlug } from './help-center.slug'
@@ -179,7 +179,7 @@ export async function createArticle(
       title,
       // Store the markdown projection of the canonical contentJson so the
       // article list endpoint (which omits contentJson) still serves images.
-      content: contentJsonToMarkdown(contentJson, content),
+      content: projectContentJsonToMarkdown(contentJson, content),
       contentJson,
       slug,
       principalId: effectivePrincipalId,
@@ -211,14 +211,7 @@ export async function updateArticle(
       contentType: 'help-center',
     })
     updateData.contentJson = contentJson
-    if (input.content !== undefined) {
-      updateData.content = contentJsonToMarkdown(contentJson, input.content.trim())
-    } else {
-      // contentJson-only edit (no markdown source): refresh the stored column
-      // only when the tree carries images, else leave it as-is.
-      const regenerated = contentJsonToMarkdown(contentJson, '')
-      if (regenerated) updateData.content = regenerated
-    }
+    updateData.content = projectContentJsonToMarkdown(contentJson, input.content?.trim() ?? '')
   }
   if (input.categoryId !== undefined) updateData.categoryId = input.categoryId as KbCategoryId
   if (input.slug !== undefined)
@@ -268,7 +261,7 @@ export async function updateArticle(
   const resolved = await resolveArticleWithCategory(updated)
 
   // Fire-and-forget: re-generate embedding when title or content changed
-  if (input.title || input.content) {
+  if (input.title || input.content || input.contentJson !== undefined) {
     generateArticleEmbedding(id, resolved.title, resolved.content, resolved.category?.name).catch(
       (err) => log.error({ article_id: id, err }, 'article embedding generation failed')
     )
