@@ -52,7 +52,7 @@ export function SegmentPickerList({
               value={seg.name}
               disabled={disabled}
               onSelect={() => onSelect(seg.id)}
-              className="gap-2 text-xs"
+              className="gap-2"
             >
               <span
                 className="h-2 w-2 rounded-full shrink-0 ring-1 ring-inset ring-black/10"

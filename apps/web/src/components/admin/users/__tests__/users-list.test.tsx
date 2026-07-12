@@ -33,6 +33,9 @@ function makeUser(i: number): PortalUserListItemView {
     voteCount: 0,
     segments: [],
     metadata: null,
+    isLead: false,
+    contactEmail: null,
+    lastSeenAt: null,
   }
 }
 
