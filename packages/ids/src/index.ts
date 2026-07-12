@@ -164,6 +164,8 @@ export type {
   IdentityProviderId,
   ApiKeyId,
   WebhookId,
+  // Eventing
+  EvtId,
   // Utilities
   ExtractPrefix,
   EntityIdMap,

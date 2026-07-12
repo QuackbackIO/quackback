@@ -169,6 +169,12 @@ export const ID_PREFIXES = {
 
   api_key: 'api_key',
   webhook: 'webhook',
+
+  // ============================================
+  // Eventing (durable event spine)
+  // ============================================
+
+  event: 'evt',
 } as const
 
 /**

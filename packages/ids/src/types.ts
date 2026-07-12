@@ -344,6 +344,13 @@ export type ApiKeyId = TypeId<'api_key'>
 export type WebhookId = TypeId<'webhook'>
 
 // ============================================
+// Eventing Entity IDs (durable event spine)
+// ============================================
+
+/** Domain event ID (events outbox row) - e.g., evt_01h455vb4pex5vsknk084sn02q */
+export type EvtId = TypeId<'evt'>
+
+// ============================================
 // Type Utilities
 // ============================================
 
@@ -455,6 +462,7 @@ export interface EntityIdMap {
   identity_provider: IdentityProviderId
   api_key: ApiKeyId
   webhook: WebhookId
+  event: EvtId
   kb_category: KbCategoryId
   kb_article: KbArticleId
   kb_article_feedback: KbArticleFeedbackId
