@@ -39,16 +39,25 @@ vi.mock('@/lib/server/domains/ai/models', () => ({
   getChatModel: (...args: unknown[]) => mockGetChatModel(...args),
 }))
 
+const mockGetSettings = vi.fn()
+vi.mock('@/lib/server/functions/workspace', () => ({
+  getSettings: (...args: unknown[]) => mockGetSettings(...args),
+}))
+
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { handleKbAsk, KB_ASK_MAX_QUERY_CHARS, KB_ASK_RATE_LIMIT } from '../kb-ask'
 import { parseAskAiSseBlock } from '@/components/help-center/ask-ai'
 import { makeKbArticle } from '@/lib/server/domains/assistant/__tests__/kb-fixtures'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 
-function makeRequest(params: Record<string, string> = {}, ip = '203.0.113.9'): Request {
+function makeRequest(
+  params: Record<string, string> = {},
+  ip = '203.0.113.9',
+  extraHeaders: Record<string, string> = {}
+): Request {
   const url = new URL('http://localhost/api/widget/kb-ask')
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  return new Request(url, { headers: { 'x-forwarded-for': ip } })
+  return new Request(url, { headers: { 'x-forwarded-for': ip, ...extraHeaders } })
 }
 
 /** Parse an SSE body into [{event, data}] frames, via the client's parser. */
@@ -68,6 +77,7 @@ beforeEach(() => {
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
   mockLogAiUsage.mockResolvedValue(undefined)
   mockGetChatModel.mockReturnValue('gpt-test')
+  mockGetSettings.mockResolvedValue({ id: 'settings_1' })
   mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
   mockSynthesize.mockResolvedValue({
     kind: 'grounded',
@@ -127,6 +137,46 @@ describe('GET /api/widget/kb-ask', () => {
     expect(res.status).toBe(429)
     expect(res.headers.get('Retry-After')).toBe('42')
     expect(mockRetrieve).not.toHaveBeenCalled()
+  })
+
+  it('429s when a single anonymous session exceeds its own budget, even under the IP limit', async () => {
+    // Same IP, same bearer session, repeated requests: the session bucket
+    // trips even though the (shared) IP bucket alone would still allow it.
+    mockIncrementBucket.mockImplementation(async (spec: { key: string }) =>
+      spec.key.includes(':session:') ? { count: KB_ASK_RATE_LIMIT + 1 } : { count: 1 }
+    )
+    const res = await handleKbAsk({
+      request: makeRequest({ q: 'hello' }, '203.0.113.9', { Authorization: 'Bearer session-a' }),
+    })
+    expect(res.status).toBe(429)
+    expect(mockRetrieve).not.toHaveBeenCalled()
+  })
+
+  it('keys the session bucket off the bearer token, independent of other sessions on the same IP', async () => {
+    mockIncrementBucket.mockImplementation(async (spec: { key: string }) => ({
+      count: spec.key.includes('session-a') ? KB_ASK_RATE_LIMIT + 1 : 1,
+    }))
+    const res = await handleKbAsk({
+      request: makeRequest({ q: 'hello' }, '203.0.113.9', { Authorization: 'Bearer session-b' }),
+    })
+    // A different bearer session on the same IP is unaffected by session-a's limit.
+    expect(res.status).toBe(200)
+  })
+
+  it('503s when the workspace is unavailable', async () => {
+    mockGetSettings.mockResolvedValue(null)
+    const res = await handleKbAsk({ request: makeRequest({ q: 'hello' }) })
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error.code).toBe('WORKSPACE_UNAVAILABLE')
+    expect(mockRetrieve).not.toHaveBeenCalled()
+  })
+
+  it('keys the tenant bucket off the resolved workspace id, not a caller-supplied header', async () => {
+    mockGetSettings.mockResolvedValue({ id: 'settings_evade_test' })
+    await handleKbAsk({ request: makeRequest({ q: 'hello' }) })
+    const keys = mockIncrementBucket.mock.calls.map(([spec]) => spec.key)
+    expect(keys).toContain('kbask:tenant:settings_evade_test')
   })
 
   it('fails open when Redis is down', async () => {

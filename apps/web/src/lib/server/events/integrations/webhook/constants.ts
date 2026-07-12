@@ -268,6 +268,7 @@ export interface WebhookTarget {
 }
 
 export interface WebhookConfig {
-  secret: string
+  // The signing secret is not carried in the enqueued job payload; it is loaded
+  // and decrypted by webhook id at delivery time so it never rests in the queue.
   webhookId: WebhookId
 }

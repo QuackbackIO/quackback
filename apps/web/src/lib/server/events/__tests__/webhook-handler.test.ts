@@ -5,6 +5,8 @@
  * - HMAC signature generation
  * - SSRF protection (private IP blocking)
  * - Request timeout handling
+ * - Secret handling (never carried in the job config; fetched at delivery time)
+ * - Idempotency (duplicate-delivery skip, retryable-failure release)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -16,6 +18,8 @@ const h = vi.hoisted(() => ({
   release: vi.fn(async () => undefined),
   complete: vi.fn(async () => undefined),
   fail: vi.fn(async () => undefined),
+  findFirstWebhook: vi.fn(),
+  decryptWebhookSecret: vi.fn(),
 }))
 
 // Mock the db import before importing the handler
@@ -28,6 +32,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
         where: vi.fn(() => Promise.resolve()),
       })),
     })),
+    query: {
+      webhooks: {
+        findFirst: (...args: unknown[]) => h.findFirstWebhook(...args),
+      },
+    },
   },
   eq: vi.fn(),
   sql: vi.fn(),
@@ -44,6 +53,9 @@ vi.mock('../hook-idempotency', () => ({
   releaseHookDelivery: () => h.release(),
   completeHookDelivery: () => h.complete(),
   failHookDelivery: () => h.fail(),
+}))
+vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
+  decryptWebhookSecret: (...args: unknown[]) => h.decryptWebhookSecret(...args),
 }))
 
 import { webhookHook } from '../handlers/webhook'
@@ -106,13 +118,19 @@ describe('Webhook Handler', () => {
       data: { post: { id: 'post_1' } },
     } as never
     const target = { url: 'https://hooks.example.com/deliver' }
-    const config = { secret: 'whsec_test', webhookId: 'webhook_1' }
+    // The config a real job carries: only the identifier, never the secret
+    // (see the "Secret handling" suite below for the dedicated coverage).
+    const config = { webhookId: 'webhook_1' }
     const resp = (status: number): Response =>
       ({ ok: status >= 200 && status < 300, status }) as Response
 
     beforeEach(() => {
       vi.clearAllMocks()
       h.claim.mockResolvedValue(true)
+      h.findFirstWebhook.mockResolvedValue({ secret: 'encrypted:whsec_test' })
+      h.decryptWebhookSecret.mockImplementation((ciphertext: string) =>
+        ciphertext.replace(/^encrypted:/, '')
+      )
     })
 
     it('delivers through safeFetch (POST + signed headers), succeeding on 2xx', async () => {
@@ -125,6 +143,9 @@ describe('Webhook Handler', () => {
       expect(init.method).toBe('POST')
       expect(init.headers['X-Quackback-Event']).toBe('post.created')
       expect(init.headers['X-Quackback-Signature']).toMatch(/^sha256=/)
+      expect(h.complete).toHaveBeenCalledOnce()
+      expect(h.release).not.toHaveBeenCalled()
+      expect(h.fail).not.toHaveBeenCalled()
     })
 
     it('fails permanently (no retry) when safeFetch blocks an SSRF target', async () => {
@@ -133,6 +154,9 @@ describe('Webhook Handler', () => {
         success: false,
         shouldRetry: false,
       })
+      expect(h.fail).toHaveBeenCalledOnce()
+      expect(h.release).not.toHaveBeenCalled()
+      expect(h.complete).not.toHaveBeenCalled()
     })
 
     it('retries on a timeout', async () => {
@@ -141,13 +165,102 @@ describe('Webhook Handler', () => {
         success: false,
         shouldRetry: true,
       })
+      expect(h.release).toHaveBeenCalledOnce()
+      expect(h.fail).not.toHaveBeenCalled()
+      expect(h.complete).not.toHaveBeenCalled()
     })
 
     it('retries a 5xx but not a 4xx response', async () => {
       h.safeFetch.mockResolvedValue(resp(503))
       expect(await webhookHook.run!(event, target, config)).toMatchObject({ shouldRetry: true })
+      expect(h.release).toHaveBeenCalledOnce()
+      expect(h.fail).not.toHaveBeenCalled()
+
+      vi.clearAllMocks()
+      h.claim.mockResolvedValue(true)
+      h.findFirstWebhook.mockResolvedValue({ secret: 'encrypted:whsec_test' })
+      h.decryptWebhookSecret.mockImplementation((ciphertext: string) =>
+        ciphertext.replace(/^encrypted:/, '')
+      )
+
       h.safeFetch.mockResolvedValue(resp(400))
       expect(await webhookHook.run!(event, target, config)).toMatchObject({ shouldRetry: false })
+      expect(h.fail).toHaveBeenCalledOnce()
+      expect(h.release).not.toHaveBeenCalled()
+    })
+
+    it('skips delivery entirely when the claim is already held (duplicate re-run)', async () => {
+      h.claim.mockResolvedValue(false)
+      const res = await webhookHook.run!(event, target, config)
+      expect(res).toEqual({ success: true })
+      expect(h.safeFetch).not.toHaveBeenCalled()
+      expect(h.findFirstWebhook).not.toHaveBeenCalled()
+      expect(h.complete).not.toHaveBeenCalled()
+      expect(h.release).not.toHaveBeenCalled()
+      expect(h.fail).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Secret handling', () => {
+    const event = {
+      id: 'evt_1',
+      type: 'post.created',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user' },
+      data: { post: { id: 'post_1' } },
+    } as never
+    const target = { url: 'https://hooks.example.com/deliver' }
+    const config = { webhookId: 'webhook_1' }
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      h.claim.mockResolvedValue(true)
+    })
+
+    it('never reads a secret off the job config -- it is fetched and decrypted at delivery time', async () => {
+      expect(config).not.toHaveProperty('secret')
+
+      h.findFirstWebhook.mockResolvedValue({ secret: 'encrypted:whsec_live' })
+      h.decryptWebhookSecret.mockImplementation((ciphertext: string) =>
+        ciphertext.replace(/^encrypted:/, '')
+      )
+      h.safeFetch.mockResolvedValue({ ok: true, status: 200 } as Response)
+
+      const res = await webhookHook.run!(event, target, config)
+      expect(res.success).toBe(true)
+
+      // Looked up by the webhookId carried in the job, decrypted exactly once.
+      expect(h.findFirstWebhook).toHaveBeenCalledOnce()
+      expect(h.decryptWebhookSecret).toHaveBeenCalledWith('encrypted:whsec_live')
+
+      // The signature on the wire is derived from the fetched-and-decrypted
+      // secret, not anything present in the job's config.
+      const [, init] = h.safeFetch.mock.calls[0]
+      const body = init.body as string
+      const timestamp = init.headers['X-Quackback-Timestamp'] as string
+      const expectedSignature = crypto
+        .createHmac('sha256', 'whsec_live')
+        .update(`${timestamp}.${body}`)
+        .digest('hex')
+      expect(init.headers['X-Quackback-Signature']).toBe(`sha256=${expectedSignature}`)
+    })
+
+    it('fails permanently when the webhook row is gone (deleted after enqueue)', async () => {
+      h.findFirstWebhook.mockResolvedValue(undefined)
+      const res = await webhookHook.run!(event, target, config)
+      expect(res).toMatchObject({ success: false, shouldRetry: false })
+      expect(h.fail).toHaveBeenCalledOnce()
+      expect(h.release).not.toHaveBeenCalled()
+      expect(h.safeFetch).not.toHaveBeenCalled()
+    })
+
+    it('releases the claim and retries when the secret lookup throws', async () => {
+      h.findFirstWebhook.mockRejectedValue(new Error('connection reset'))
+      const res = await webhookHook.run!(event, target, config)
+      expect(res).toMatchObject({ success: false, shouldRetry: true })
+      expect(h.release).toHaveBeenCalledOnce()
+      expect(h.fail).not.toHaveBeenCalled()
+      expect(h.safeFetch).not.toHaveBeenCalled()
     })
   })
 

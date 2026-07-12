@@ -501,6 +501,90 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(events).toHaveLength(0)
     })
 
+    it('removes a settled failed job before rescheduling (frees the jobId reused by scheduleWorkflowResume)', async () => {
+      const callOrder: string[] = []
+      const removeJob = vi.fn(async () => {
+        callOrder.push('remove')
+      })
+      getWorkflowWaitJob.mockResolvedValue({
+        id: 'failed-job',
+        getState: async () => 'failed',
+        remove: removeJob,
+      } as never)
+      scheduleWorkflowResume.mockImplementationOnce(async () => {
+        callOrder.push('reschedule')
+      })
+      const conversationId = await seedConversation()
+      const wf = await seedWorkflow()
+      const cursor = {
+        resumeNodeId: 'a2',
+        waitSeconds: 60,
+        waitSeq: 1,
+        waitStartedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      }
+      const [run] = await testDb
+        .insert(workflowRuns)
+        .values({ workflowId: wf.id, conversationId, state: 'waiting', cursor })
+        .returning()
+
+      const count = await sweepOrphanedWaitingRuns(new Date())
+      expect(count).toBe(1)
+
+      expect(removeJob).toHaveBeenCalledTimes(1)
+      expect(scheduleWorkflowResume).toHaveBeenCalledTimes(1)
+      // A settled job (removeOnFail/removeOnComplete still holding the id)
+      // must be freed before scheduleWorkflowResume reuses the same
+      // waitSeq-keyed jobId — otherwise BullMQ's add-with-existing-id is a
+      // silent no-op and the run never actually gets a fresh timer.
+      expect(callOrder).toEqual(['remove', 'reschedule'])
+
+      const events = await testDb
+        .select()
+        .from(workflowRunEvents)
+        .where(eq(workflowRunEvents.runId, run.id))
+      expect(events.map((e) => e.kind)).toEqual(['swept_rescheduled'])
+    })
+
+    it('removes a settled completed job before rescheduling, same as the failed case', async () => {
+      const callOrder: string[] = []
+      const removeJob = vi.fn(async () => {
+        callOrder.push('remove')
+      })
+      getWorkflowWaitJob.mockResolvedValue({
+        id: 'completed-job',
+        getState: async () => 'completed',
+        remove: removeJob,
+      } as never)
+      scheduleWorkflowResume.mockImplementationOnce(async () => {
+        callOrder.push('reschedule')
+      })
+      const conversationId = await seedConversation()
+      const wf = await seedWorkflow()
+      const cursor = {
+        resumeNodeId: 'a2',
+        waitSeconds: 60,
+        waitSeq: 1,
+        waitStartedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      }
+      const [run] = await testDb
+        .insert(workflowRuns)
+        .values({ workflowId: wf.id, conversationId, state: 'waiting', cursor })
+        .returning()
+
+      const count = await sweepOrphanedWaitingRuns(new Date())
+      expect(count).toBe(1)
+
+      expect(removeJob).toHaveBeenCalledTimes(1)
+      expect(scheduleWorkflowResume).toHaveBeenCalledTimes(1)
+      expect(callOrder).toEqual(['remove', 'reschedule'])
+
+      const events = await testDb
+        .select()
+        .from(workflowRunEvents)
+        .where(eq(workflowRunEvents.runId, run.id))
+      expect(events.map((e) => e.kind)).toEqual(['swept_rescheduled'])
+    })
+
     it('does not examine a waiting run whose wait is not yet due', async () => {
       getWorkflowWaitJob.mockResolvedValue(undefined)
       const conversationId = await seedConversation()

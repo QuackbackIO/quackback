@@ -19,6 +19,8 @@ import {
   failHookDelivery,
   releaseHookDelivery,
 } from '../hook-idempotency'
+import { db, webhooks, eq } from '@/lib/server/db'
+import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import { logger } from '@/lib/server/logger'
 
 export type { WebhookTarget, WebhookConfig }
@@ -36,7 +38,7 @@ export const webhookHook: HookHandler = {
     ctx?: HookRunContext
   ): Promise<HookResult> {
     const { url } = target as WebhookTarget
-    const { secret, webhookId } = config as WebhookConfig
+    const { webhookId } = config as WebhookConfig
 
     // Idempotency: if BullMQ is re-running this job after a worker crash,
     // skip the delivery — the previous attempt already POSTed (and the
@@ -49,6 +51,31 @@ export const webhookHook: HookHandler = {
     }
 
     log.debug({ event_type: event.type, url }, 'processing webhook')
+
+    // The signing secret never travels in the job payload (it would otherwise
+    // sit in plaintext in Redis for the job's lifetime). Load and decrypt it
+    // here, right before it's needed, using only the webhookId that was
+    // enqueued.
+    let secret: string
+    try {
+      const row = await db.query.webhooks.findFirst({
+        where: eq(webhooks.id, webhookId),
+        columns: { secret: true },
+      })
+      if (!row) {
+        // Webhook was deleted (or its row is otherwise gone) after this
+        // delivery was enqueued — there's nothing to sign with and nothing
+        // a retry can fix.
+        log.warn({ webhook_id: webhookId }, 'webhook not found for delivery, skipping')
+        await failHookDelivery(ctx?.jobId)
+        return { success: false, error: 'Webhook not found', shouldRetry: false }
+      }
+      secret = decryptWebhookSecret(row.secret)
+    } catch (error) {
+      log.error({ err: error, webhook_id: webhookId }, 'failed to load webhook secret')
+      await releaseHookDelivery(ctx?.jobId)
+      return { success: false, error: 'Failed to load webhook secret', shouldRetry: true }
+    }
 
     // Build payload
     const payload = JSON.stringify({
@@ -129,7 +156,6 @@ export const webhookHook: HookHandler = {
  */
 async function updateWebhookSuccess(webhookId: WebhookId): Promise<void> {
   try {
-    const { db, webhooks, eq } = await import('@/lib/server/db')
     await db
       .update(webhooks)
       .set({

@@ -21,7 +21,6 @@ import {
 } from '@/lib/server/db'
 import { canViewPost, type Actor } from '@/lib/server/policy'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
-import { decryptWebhookSecret } from '@/lib/server/domains/webhooks/encryption'
 import {
   getSubscribersForEvent,
   batchGetNotificationPreferences,
@@ -1218,21 +1217,15 @@ async function getWebhookTargets(event: EventData): Promise<HookTarget[]> {
       'found matching webhooks for event'
     )
 
-    // Build targets - decrypt secrets for delivery
-    const targets: HookTarget[] = []
-    for (const webhook of matchingWebhooks) {
-      try {
-        const secret = decryptWebhookSecret(webhook.secret)
-        targets.push({
-          type: 'webhook',
-          target: { url: webhook.url },
-          config: { secret, webhookId: webhook.id as WebhookId },
-        })
-      } catch (error) {
-        log.error({ err: error, webhook_id: webhook.id }, 'failed to decrypt webhook secret')
-        // Skip this webhook rather than crash all
-      }
-    }
+    // Build targets. The signing secret is deliberately left out of the
+    // config — it would otherwise sit in plaintext inside the BullMQ job
+    // payload (Redis) for the life of the job. The delivery handler loads
+    // and decrypts it itself, right before signing, using the webhookId.
+    const targets: HookTarget[] = matchingWebhooks.map((webhook) => ({
+      type: 'webhook',
+      target: { url: webhook.url },
+      config: { webhookId: webhook.id as WebhookId },
+    }))
     return targets
   } catch (error) {
     log.error({ err: error }, 'failed to resolve webhook targets')

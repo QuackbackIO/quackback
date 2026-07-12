@@ -435,6 +435,58 @@ describe('extraction.service', () => {
     await expect(extractSignals(rawItemId)).rejects.toThrow('not configured')
   })
 
+  it('resets to ready_for_extraction and rethrows on a transient failure with attempts left', async () => {
+    // currentAttempt=1 of maxAttempts=3: not the final attempt and not an
+    // UnrecoverableError, so this must be treated as retryable — reset the
+    // state BullMQ's guard checks on the next attempt, not terminal 'failed'.
+    mockFindFirst.mockResolvedValueOnce(mockItem)
+    mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
+    mockOpenAI.chat.completions.create.mockRejectedValueOnce(new Error('transient API error'))
+
+    const { extractSignals } = await import('../extraction.service')
+    await expect(extractSignals(rawItemId, { currentAttempt: 1, maxAttempts: 3 })).rejects.toThrow(
+      'transient API error'
+    )
+
+    const lastSet = updateSetCalls[updateSetCalls.length - 1][0] as Record<string, unknown>
+    expect(lastSet.processingState).toBe('ready_for_extraction')
+    const states = updateSetCalls.map((c) => (c[0] as { processingState?: string }).processingState)
+    expect(states).not.toContain('failed')
+
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'extraction.failed',
+        detail: expect.objectContaining({ terminal: false }),
+      })
+    )
+  })
+
+  it('marks failed on the final retry attempt', async () => {
+    // currentAttempt=3 of maxAttempts=3: this is the last attempt, so the
+    // failure is terminal even though the error itself is a plain (non-
+    // UnrecoverableError) LLM error.
+    mockFindFirst.mockResolvedValueOnce(mockItem)
+    mockShouldExtract.mockResolvedValueOnce({ extract: true, tier: 2, reason: 'ok' })
+    mockOpenAI.chat.completions.create.mockRejectedValueOnce(new Error('final API error'))
+
+    const { extractSignals } = await import('../extraction.service')
+    await expect(extractSignals(rawItemId, { currentAttempt: 3, maxAttempts: 3 })).rejects.toThrow(
+      'final API error'
+    )
+
+    const lastSet = updateSetCalls[updateSetCalls.length - 1][0] as Record<string, unknown>
+    expect(lastSet.processingState).toBe('failed')
+
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'extraction.failed',
+        detail: expect.objectContaining({ terminal: true }),
+      })
+    )
+  })
+
   it('should throw UnrecoverableError when client is present but extraction model is null', async () => {
     // Client is non-null (default mock returns mockOpenAI) but the model is
     // disabled — e.g. AI_EXTRACTION_MODEL=off. Rejects before transitioning

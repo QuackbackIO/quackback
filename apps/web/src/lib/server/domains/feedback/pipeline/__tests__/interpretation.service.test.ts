@@ -348,4 +348,58 @@ describe('interpretation.service', () => {
     const { interpretSignal } = await import('../interpretation.service')
     await expect(interpretSignal(signalId)).rejects.toThrow('not found')
   })
+
+  it('resets to pending_interpretation and rethrows on a transient failure with attempts left', async () => {
+    // currentAttempt=1 of maxAttempts=3: not the final attempt and not an
+    // UnrecoverableError, so this is retryable — reset the state the entry
+    // guard checks on the next attempt, not terminal 'failed'. Also must not
+    // touch the raw item's completion state (checkRawItemCompletion is
+    // terminal-only).
+    mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
+    mockEmbedSignal.mockRejectedValueOnce(new Error('transient embed error'))
+
+    const { interpretSignal } = await import('../interpretation.service')
+    await expect(interpretSignal(signalId, { currentAttempt: 1, maxAttempts: 3 })).rejects.toThrow(
+      'transient embed error'
+    )
+
+    const lastSet = updateSetCalls[updateSetCalls.length - 1][0] as Record<string, unknown>
+    expect(lastSet.processingState).toBe('pending_interpretation')
+    const states = updateSetCalls.map((c) => (c[0] as { processingState?: string }).processingState)
+    expect(states).not.toContain('failed')
+    expect(mockSignalFindMany).not.toHaveBeenCalled()
+
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.failed',
+        detail: expect.objectContaining({ terminal: false }),
+      })
+    )
+  })
+
+  it('marks failed and checks raw item completion on the final retry attempt', async () => {
+    // currentAttempt=3 of maxAttempts=3: last attempt, so terminal even for a
+    // plain (non-UnrecoverableError) error.
+    mockSignalFindFirst.mockResolvedValueOnce(baseSignal)
+    mockEmbedSignal.mockRejectedValueOnce(new Error('final embed error'))
+    mockSignalFindMany.mockResolvedValueOnce([{ id: signalId, processingState: 'failed' }])
+
+    const { interpretSignal } = await import('../interpretation.service')
+    await expect(interpretSignal(signalId, { currentAttempt: 3, maxAttempts: 3 })).rejects.toThrow(
+      'final embed error'
+    )
+
+    const lastSet = updateSetCalls[updateSetCalls.length - 1][0] as Record<string, unknown>
+    expect(lastSet.processingState).toBe('failed')
+    expect(mockSignalFindMany).toHaveBeenCalledTimes(1)
+
+    const { logPipelineEvent } = await import('../pipeline-log')
+    expect(logPipelineEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'interpretation.failed',
+        detail: expect.objectContaining({ terminal: true }),
+      })
+    )
+  })
 })

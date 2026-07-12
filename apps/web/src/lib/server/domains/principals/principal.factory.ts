@@ -20,6 +20,7 @@ import {
   session,
   user,
   eq,
+  ne,
   and,
   sql,
   type Principal,
@@ -234,9 +235,13 @@ export async function setPrincipalRole(
           and(
             eq(principal.type, 'user'),
             eq(principal.role, 'admin'),
+            // Use ne() (not a raw sql fragment) so the id/userId column's
+            // TypeID-to-uuid driver mapping is applied; interpolating the
+            // branded id string directly makes Postgres reject it as an
+            // invalid uuid.
             'principalId' in ref
-              ? sql`${principal.id} <> ${ref.principalId}`
-              : sql`${principal.userId} <> ${ref.userId}`
+              ? ne(principal.id, ref.principalId)
+              : ne(principal.userId, ref.userId)
           )
         )
       if (Number(row?.count ?? 0) === 0) {

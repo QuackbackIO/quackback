@@ -1,0 +1,4 @@
+{
+  "_comment": "Reviewed exceptions for `bun audit` (see scripts/audit-check.ts). Each entry suppresses one advisory, keyed by its GHSA id, until `expires` (YYYY-MM-DD, UTC). CI fails on any high/critical production advisory that is not listed here with an unexpired entry, and on any listed entry that has expired while its advisory is still present. Keep this list as short as possible and prefer upgrading or overriding the dependency over adding an exception.",
+  "advisories": []
+}

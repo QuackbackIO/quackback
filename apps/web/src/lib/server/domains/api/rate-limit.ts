@@ -4,7 +4,8 @@
  * (INCR + EXPIRE NX) so this limiter shares plumbing with the sign-in
  * limiters rather than re-implementing bucket bookkeeping.
  *
- * Forwarding headers are ignored unless TRUSTED_PROXY_HOPS is configured.
+ * Forwarding headers are ignored unless TRUSTED_PROXY_HOPS is configured;
+ * see getClientIp() below for the two resolution modes.
  */
 import {
   bucketRetryAfter,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/server/utils/redis-rate-bucket'
 import { isIP } from 'node:net'
 import { config } from '@/lib/server/config'
+import { getRequestIP } from '@tanstack/react-start/server'
 
 // Configuration
 const WINDOW_SECONDS = 60 // 1 minute
@@ -66,11 +68,41 @@ export async function checkRateLimit(
 
 /**
  * Extract client IP from request headers.
- * Checks common proxy headers for the real client IP.
  *
  * Accepts a full `Request` or just `Headers` — server functions only
  * have `Headers` via `getRequestHeaders()`, so the Headers overload
- * lets them call this without forging a synthetic Request.
+ * lets them call this without forging a synthetic Request. The `source`
+ * parameter is unused when trustedHops === 0 (see below) but is kept so
+ * every call site has one signature regardless of mode.
+ *
+ * Two resolution modes, chosen by TRUSTED_PROXY_HOPS:
+ *
+ * - hops === 0 (default, direct exposure): headers are entirely untrusted,
+ *   since any client can set X-Forwarded-For/CF-Connecting-IP/X-Real-IP on
+ *   a request they send us directly, and honoring them would let a single
+ *   attacker spread requests across unlimited rate-limit buckets. Instead
+ *   this resolves the actual TCP peer address via TanStack Start's
+ *   getRequestIP(), which reads it from the platform connection rather
+ *   than from any header. On the Bun preset this is backed by Bun's
+ *   `server.requestIP()`, so distinct clients land in distinct buckets even
+ *   with zero configured proxies.
+ * - hops > 0 (behind N trusted reverse proxies): the client IP is the
+ *   (hops)-th entry from the right of X-Forwarded-For, the standard
+ *   trusted-hop model. Each trusted proxy appends the peer address it
+ *   observed, so counting from the right lands on what the outermost
+ *   trusted proxy actually saw regardless of how many untrusted entries a
+ *   client prepends further left. Single-value headers like
+ *   CF-Connecting-IP/X-Real-IP are intentionally not consulted: unlike
+ *   X-Forwarded-For's position-based trust, there is no way to tell
+ *   whether such a header was set by a trusted hop or relayed unmodified
+ *   from the client, so honoring them would reopen the same spoofing gap.
+ *
+ * Known limitation: getRequestIP() depends on the platform exposing the
+ * socket peer address. That is true for the built Nitro/Bun server this
+ * project ships (`bun run start`), but not guaranteed for every dev/test
+ * runtime (e.g. `bun run dev`'s Vite dev server). When unavailable, this
+ * falls back to the shared 'unknown' bucket, matching pre-existing
+ * fail-safe behavior instead of trusting a spoofable header.
  */
 export function getClientIp(source: Request | Headers): string {
   const headers = source instanceof Headers ? source : source.headers
@@ -84,10 +116,17 @@ export function getClientIp(source: Request | Headers): string {
       return 0
     }
   })()
-  if (trustedHops === 0) return 'unknown'
 
-  const cfIp = headers.get('cf-connecting-ip')
-  if (cfIp && isIP(cfIp.trim())) return cfIp.trim()
+  if (trustedHops === 0) {
+    try {
+      const peer = getRequestIP()
+      if (peer && isIP(peer)) return peer
+    } catch {
+      // Not inside a request context (e.g. some test/tooling setups), so
+      // fall through to 'unknown' rather than throwing.
+    }
+    return 'unknown'
+  }
 
   const forwarded = headers.get('x-forwarded-for')
   if (forwarded) {
@@ -99,9 +138,6 @@ export function getClientIp(source: Request | Headers): string {
     if (candidate && isIP(candidate)) return candidate
   }
 
-  const realIp = headers.get('x-real-ip')
-  if (realIp && isIP(realIp.trim())) return realIp.trim()
-
-  // Fallback to unknown
+  // No usable X-Forwarded-For entry at the trusted-hop position.
   return 'unknown'
 }

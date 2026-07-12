@@ -27,7 +27,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - name: Audit production dependencies
-        run: bun audit --production --audit-level=high
+        run: bun scripts/audit-check.ts
       - run: bun run lint
       # Build the widget bundle first — apps/web imports
       # packages/widget/dist/browser.js via Vite ?raw, so it must exist

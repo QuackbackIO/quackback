@@ -1,14 +1,16 @@
 /**
- * Verified-only contract on POST /api/widget/identify (GH issue #300).
+ * Staff/admin identity guard on POST /api/widget/identify (GH audit A7#3).
  *
  * Background: the route mints a normal Better Auth session token and returns
  * it as a Bearer. The `bearer()` plugin is registered globally, so that token
  * satisfies `auth.api.getSession()` everywhere — including the admin-only
- * `requireAuth({ roles: ['admin'] })` path. An unverified id+email path would
- * turn "knowing an admin's email" into full account takeover, so identify
- * accepts ONLY an ssoToken signed by the customer's backend with the widget
- * secret. These tests are the regression pin: an id+email body must never
- * mint a session, no matter whose email it names.
+ * `requireAuth({ roles: ['admin'] })` path. A signed ssoToken vouches for
+ * email/sub matching, but never for role: if a customer's signed identity
+ * collides with an existing teammate account, identify must refuse rather
+ * than hand an embedding origin a session that can authorize dashboard/admin
+ * APIs. Also covers: an id+email body must never mint a session regardless
+ * of whose email it names (GH issue #300), and the atomic (SQL, not
+ * JS-merge) metadata write.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -17,6 +19,8 @@ const mockPrincipalFindFirst = vi.fn()
 const mockSessionFindFirst = vi.fn()
 const mockInsert = vi.fn()
 const mockUpdate = vi.fn()
+const mockUpdateSet = vi.fn()
+const mockVerifyJWT = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: vi.fn(() => (opts: unknown) => ({ options: opts })),
@@ -47,7 +51,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     },
     update: (...args: unknown[]) => {
       mockUpdate(...args)
-      return { set: () => ({ where: async () => undefined }) }
+      return {
+        set: (s: unknown) => {
+          mockUpdateSet(s)
+          return { where: async () => undefined }
+        },
+      }
     },
   },
   eq: vi.fn(),
@@ -75,12 +84,11 @@ vi.mock('@/lib/server/auth/identify-merge', () => ({
 }))
 
 vi.mock('@/lib/server/widget/identity-token', () => ({
-  verifyHS256JWT: vi.fn(() => ({ sub: 'sso-user', email: 'sso@acme.com', name: 'SSO User' })),
+  verifyHS256JWT: (...args: unknown[]) => mockVerifyJWT(...args),
 }))
 
 vi.mock('@/lib/server/domains/users/user.attributes', () => ({
   validateAndCoerceAttributes: vi.fn(async () => ({ valid: {}, removals: [], errors: [] })),
-  mergeMetadata: vi.fn(() => null),
 }))
 
 vi.mock('@/lib/server/domains/segments/segment-membership.service', () => ({
@@ -120,6 +128,8 @@ beforeEach(() => {
   mockSessionFindFirst.mockResolvedValue(null)
   mockInsert.mockReset()
   mockUpdate.mockReset()
+  mockUpdateSet.mockReset()
+  mockVerifyJWT.mockReturnValue({ sub: 'sso-user', email: 'sso@acme.com', name: 'SSO User' })
 })
 
 describe('POST /api/widget/identify — rejects any body without a signed ssoToken', () => {
@@ -167,9 +177,8 @@ describe('POST /api/widget/identify — rejects any body without a signed ssoTok
   })
 })
 
-describe('POST /api/widget/identify — the verified (ssoToken) path', () => {
-  it('allows ssoToken identify even when the email backs an admin', async () => {
-    // verifyHS256JWT mock above returns sso@acme.com; we map an admin to it.
+describe('POST /api/widget/identify — staff/admin identity guard (A7#3)', () => {
+  it('refuses to mint a session when the ssoToken resolves to an admin principal', async () => {
     mockUserFindFirst.mockResolvedValue({
       id: 'user_admin_sso',
       email: 'sso@acme.com',
@@ -182,7 +191,97 @@ describe('POST /api/widget/identify — the verified (ssoToken) path', () => {
 
     const res = await postIdentify({ ssoToken: 'jwt.token.here' })
 
-    // HMAC vouches for this claim — the guard must NOT engage.
+    expect(res.status).toBe(403)
+    const body = (await res.json()) as { error?: { code?: string } }
+    expect(body.error?.code).toBe('IDENTITY_NOT_ALLOWED')
+    // No session row, and no mutation of the staff user's row either.
+    expect(mockInsert).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refuses to mint a session when the ssoToken resolves to a member (teammate) principal', async () => {
+    mockUserFindFirst.mockResolvedValue({
+      id: 'user_member_sso',
+      email: 'sso@acme.com',
+      name: 'SSO Member',
+      image: null,
+      imageKey: null,
+      metadata: null,
+    })
+    mockPrincipalFindFirst.mockResolvedValue({ role: 'member' })
+
+    const res = await postIdentify({ ssoToken: 'jwt.token.here' })
+
+    expect(res.status).toBe(403)
+    expect(mockInsert).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/widget/identify — the verified (ssoToken) path for a portal identity', () => {
+  it('succeeds and mints a session when the resolved principal is a plain portal user', async () => {
+    mockUserFindFirst.mockResolvedValue({
+      id: 'user_portal_sso',
+      email: 'sso@acme.com',
+      name: 'Portal User',
+      image: null,
+      imageKey: null,
+      metadata: null,
+    })
+    mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_portal_sso', role: 'user' })
+
+    const res = await postIdentify({ ssoToken: 'jwt.token.here' })
+
     expect(res.status).toBe(200)
+    const body = (await res.json()) as { sessionToken?: string }
+    expect(body.sessionToken).toBeTruthy()
+  })
+
+  it('succeeds for a brand-new identity (no existing user, no existing principal)', async () => {
+    mockUserFindFirst.mockResolvedValue(null)
+    mockPrincipalFindFirst.mockResolvedValue(null)
+
+    const res = await postIdentify({ ssoToken: 'jwt.token.here' })
+
+    expect(res.status).toBe(200)
+  })
+})
+
+describe('POST /api/widget/identify — atomic metadata write', () => {
+  it('merges custom attributes via an atomic SQL expression, not a JS read/merge/write', async () => {
+    mockVerifyJWT.mockReturnValue({
+      sub: 'sso-user',
+      email: 'sso@acme.com',
+      name: 'SSO User',
+      plan: 'enterprise',
+    })
+    const { validateAndCoerceAttributes } =
+      await import('@/lib/server/domains/users/user.attributes')
+    vi.mocked(validateAndCoerceAttributes).mockResolvedValueOnce({
+      valid: { plan: 'enterprise' },
+      removals: [],
+      errors: [],
+    })
+    mockUserFindFirst.mockResolvedValue({
+      id: 'user_attrs_sso',
+      email: 'sso@acme.com',
+      name: 'SSO User',
+      image: null,
+      imageKey: null,
+      metadata: '{"existing":"value"}',
+    })
+    mockPrincipalFindFirst.mockResolvedValue({ id: 'principal_attrs_sso', role: 'user' })
+
+    const res = await postIdentify({ ssoToken: 'jwt.token.here' })
+
+    expect(res.status).toBe(200)
+    expect(mockUpdateSet).toHaveBeenCalled()
+    const setArgs = mockUpdateSet.mock.calls.map((c) => c[0] as Record<string, unknown>)
+    const updateWithMetadata = setArgs.find((s) => 'metadata' in s)
+    expect(updateWithMetadata).toBeDefined()
+    // The mocked `sql` tag returns only the literal text preceding the first
+    // interpolation — a plain JSON string (what a JS mergeMetadata call would
+    // produce) would never match this, so this pins the write to the atomic
+    // coalesce/jsonb SQL expression instead of a read-then-write.
+    expect(updateWithMetadata?.metadata).toBe('((coalesce(nullif(')
   })
 })

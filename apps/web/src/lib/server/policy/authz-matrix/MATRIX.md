@@ -668,7 +668,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/integrations/zendesk/functions.ts`::getZendeskConnectUrl | integration.manage |
 | `lib/server/integrations/zendesk/functions.ts`::searchZendeskUserFn | integration.view |
 
-### Public REST API (`withApiKeyAuth`) — 100 surfaces
+### Public REST API (`withApiKeyAuth`) — 101 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -772,6 +772,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/webhooks/$webhookId.ts`::DELETE | webhook.manage |
 | `routes/api/v1/webhooks/index.ts`::GET | webhook.view |
 | `routes/api/v1/webhooks/index.ts`::POST | webhook.manage |
+| `routes/api/widget/identify.ts`::POST | TEAM-ONLY |
 
 ### SSE stream (inline gate) — 1 surface
 

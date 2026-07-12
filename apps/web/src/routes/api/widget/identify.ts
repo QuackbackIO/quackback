@@ -7,6 +7,7 @@ import {
   user,
   session,
   segments,
+  principal,
   widgetIdentifiedSession,
   eq,
   and,
@@ -16,6 +17,7 @@ import {
 } from '@/lib/server/db'
 import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principal.factory'
 import { isBlocked } from '@/lib/server/domains/principals/blocking'
+import { isTeamMember } from '@/lib/shared/roles'
 import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/settings.widget'
 import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
@@ -23,10 +25,7 @@ import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
 import { verifyHS256JWT } from '@/lib/server/widget/identity-token'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { checkWidgetIdentifyRateLimit } from '@/lib/server/auth/widget-rate-limit'
-import {
-  validateAndCoerceAttributes,
-  mergeMetadata,
-} from '@/lib/server/domains/users/user.attributes'
+import { validateAndCoerceAttributes } from '@/lib/server/domains/users/user.attributes'
 import { reconcileWidgetMemberships } from '@/lib/server/domains/segments/segment-membership.service'
 import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
 import { logger } from '@/lib/server/logger'
@@ -224,9 +223,9 @@ export const Route = createFileRoute('/api/widget/identify')({
         }
         const hasAttrs = Object.keys(validAttrs).length > 0
 
-        // Find or create user. Case-insensitive on email — the team-role
-        // guard below would otherwise be bypassable by varying the
-        // casing of an admin's email ("ADMIN@x.com" wouldn't match the
+        // Find or create user. Case-insensitive on email — the staff/admin
+        // identity guard below would otherwise be bypassable by varying the
+        // casing of a teammate's email ("ADMIN@x.com" wouldn't match the
         // stored "admin@x.com" and a fresh user row would be created
         // with role 'user' AND the same email address, breaking the
         // "one email per account" invariant. The fix mirrors the
@@ -249,12 +248,35 @@ export const Route = createFileRoute('/api/widget/identify')({
         const country = captureCountryFromHeaders(request.headers)
 
         if (userRecord) {
-          const updates: Record<string, string> = {}
+          // Staff/admin identity guard: a signed ssoToken only vouches for
+          // email/sub matching, never for role. If those claims resolve to an
+          // existing teammate account (principal role 'admin' or 'member'),
+          // refuse before touching that row any further — a widget embedded
+          // on a customer's site must never be able to mint or piggyback a
+          // session that can authorize dashboard/admin APIs.
+          const existingPrincipal = await db.query.principal.findFirst({
+            where: eq(principal.userId, userRecord.id),
+            columns: { role: true },
+          })
+          if (existingPrincipal && isTeamMember(existingPrincipal.role)) {
+            return jsonError(
+              'IDENTITY_NOT_ALLOWED',
+              'This identity cannot be used with the widget',
+              403
+            )
+          }
+
+          const updates: Record<string, unknown> = {}
           if (identified.name && identified.name !== userRecord.name) updates.name = identified.name
           if (identified.avatarURL && identified.avatarURL !== userRecord.image)
             updates.image = identified.avatarURL
           if (hasAttrs) {
-            updates.metadata = mergeMetadata(userRecord.metadata ?? null, validAttrs, [])
+            // Atomic JSONB merge in SQL (not a JS read/merge/write) so a
+            // concurrent writer landing between the load above and this
+            // update can never be clobbered. Mirrors user.identify.ts. The
+            // `metadata` column is text-typed, so round-trip through jsonb
+            // and back to text; there are no removals on this path.
+            updates.metadata = sql`((coalesce(nullif(${user.metadata}, ''), '{}')::jsonb - ${[]}::text[]) || ${JSON.stringify(validAttrs)}::jsonb)::text`
           }
           if (country && country !== userRecord.country) {
             updates.country = country

@@ -14,6 +14,17 @@ const mockDbExecute = vi.fn()
 const createActivity = vi.fn()
 const scheduleDispatch = vi.fn().mockResolvedValue(undefined)
 
+// The in-transaction re-checks (existingChild, freshCanonical) and the
+// claim UPDATE's `.returning()` result are both individually controllable
+// per test — the default sequence models the happy path (no existing
+// child, canonical not merged elsewhere, claim succeeds); the
+// concurrent-merge tests below override one or more of these to reproduce
+// the guard rejecting a would-be two-level chain or a lost claim race.
+const hoisted = vi.hoisted(() => ({
+  mockTxPostsFindFirst: vi.fn(),
+  claimedReturning: [{ id: 'post_test_id' }] as Array<{ id: string }>,
+}))
+
 function createUpdateChain() {
   const chain: Record<string, unknown> = {}
   chain.set = vi.fn(() => chain)
@@ -23,7 +34,7 @@ function createUpdateChain() {
   // round-3 add.
   chain.where = vi.fn(() => ({
     then: (onFulfilled: (v: void) => void) => Promise.resolve().then(onFulfilled),
-    returning: () => Promise.resolve([{ id: 'post_test_id' }]),
+    returning: () => Promise.resolve(hoisted.claimedReturning),
   }))
   return chain
 }
@@ -53,10 +64,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
         fn({
           query: {
             posts: {
-              findFirst: vi
-                .fn()
-                .mockResolvedValueOnce(undefined)
-                .mockResolvedValueOnce({ canonicalPostId: null }),
+              findFirst: (...args: unknown[]) => hoisted.mockTxPostsFindFirst(...args),
             },
           },
           update: (..._args: unknown[]) => {
@@ -139,6 +147,15 @@ describe('mergePost', () => {
     mockBoardsFindFirst.mockResolvedValue({ id: 'board_mock', slug: 'feedback' })
     // Default: vote count recalculation returns 5
     mockDbExecute.mockResolvedValue([{ unique_voters: 5 }])
+    // Default in-transaction re-check sequence: no existing child on the
+    // duplicate, canonical not merged elsewhere — i.e. the happy path.
+    // `clearAllMocks` clears call history but not a queued `Once` chain
+    // from a prior test, so reset explicitly before re-queuing.
+    hoisted.mockTxPostsFindFirst.mockReset()
+    hoisted.mockTxPostsFindFirst
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ canonicalPostId: null })
+    hoisted.claimedReturning = [{ id: 'post_test_id' }]
   })
 
   it('throws ValidationError on self-merge', async () => {
@@ -260,6 +277,63 @@ describe('mergePost', () => {
         boardSlug: 'board-b',
       })
     )
+  })
+
+  // In-transaction re-checks (post.merge.ts:~126-165): after acquiring the
+  // sorted advisory locks, mergePost re-verifies the duplicate isn't itself
+  // a canonical-with-children and the canonical wasn't merged elsewhere,
+  // then claims the duplicate with a conditional
+  // `UPDATE ... WHERE canonicalPostId IS NULL ... RETURNING`. These three
+  // guards only matter under a race — the pre-transaction findFirst checks
+  // above can't see a concurrent write that lands between the read and the
+  // lock. Simulated here by controlling what the second (in-tx) findFirst
+  // call and the claim UPDATE's `.returning()` report back.
+  describe('concurrent-merge re-checks inside the transaction', () => {
+    it('rejects when the duplicate is itself a canonical with existing children (would create a two-level chain)', async () => {
+      hoisted.mockTxPostsFindFirst.mockReset()
+      // existingChild query finds a row -> duplicatePostId already has a
+      // child merged into it, so merging it into another canonical would
+      // produce child -> duplicate -> canonical, a two-level chain.
+      hoisted.mockTxPostsFindFirst.mockResolvedValueOnce({ id: 'some_child_post_id' })
+
+      await expect(mergePost(POST_A, POST_B, ACTOR)).rejects.toThrow(/cannot itself be merged/)
+
+      // No claim was attempted, no chain was created, no activity/dispatch fired.
+      expect(mockDbUpdate).not.toHaveBeenCalled()
+      expect(createActivity).not.toHaveBeenCalled()
+    })
+
+    it('rejects when the canonical was merged elsewhere between the pre-check and the transaction', async () => {
+      hoisted.mockTxPostsFindFirst.mockReset()
+      hoisted.mockTxPostsFindFirst
+        .mockResolvedValueOnce(undefined) // no existing child on the duplicate
+        .mockResolvedValueOnce({ canonicalPostId: 'post_other' }) // canonical now merged elsewhere
+
+      await expect(mergePost(POST_A, POST_B, ACTOR)).rejects.toThrow(/merged elsewhere/)
+
+      expect(mockDbUpdate).not.toHaveBeenCalled()
+      expect(createActivity).not.toHaveBeenCalled()
+    })
+
+    it('rejects when a concurrent merge already claimed the duplicate (lost the UPDATE race)', async () => {
+      // Both pre-checks pass...
+      hoisted.mockTxPostsFindFirst.mockReset()
+      hoisted.mockTxPostsFindFirst
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ canonicalPostId: null })
+      // ...but the conditional UPDATE ... WHERE canonicalPostId IS NULL
+      // matched zero rows: another admin's merge already claimed this
+      // duplicate for a different canonical in between.
+      hoisted.claimedReturning = []
+
+      await expect(mergePost(POST_A, POST_B, ACTOR)).rejects.toThrow(/merged elsewhere/)
+
+      // The vote-count recalculation (and everything after it) never runs —
+      // only the two advisory-lock acquisitions happened, no third execute
+      // for recalculateCanonicalVoteCount, no activity, no second canonical.
+      expect(mockDbExecute).toHaveBeenCalledTimes(2)
+      expect(createActivity).not.toHaveBeenCalled()
+    })
   })
 })
 

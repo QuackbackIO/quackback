@@ -3,7 +3,10 @@
  * published help-center articles.
  *
  * Same public envelope as kb-search (feature gate + CORS *), plus the
- * helpCenterAiAnswers flag, a per-IP rate limit, and a query length cap.
+ * helpCenterAiAnswers flag, a per-IP/session/tenant rate limit, and a
+ * query length cap. The session and tenant buckets stop a single anonymous
+ * session (or a Host-header switcheroo) from burning unlimited AI budget
+ * even while staying under the per-IP cap.
  * The response is SSE with the versioned kb-ask.v1.* events; names and
  * payload shapes live in the shared contract module
  * (lib/shared/help-center/kb-ask-contract.ts), imported by this route and
@@ -30,11 +33,12 @@ import {
   type KbAskSourcesPayload,
 } from '@/lib/shared/help-center/kb-ask-contract'
 import {
-  enforcePerIpLimit,
+  enforceWidgetQuota,
   widgetCorsHeaders,
   widgetJsonError,
 } from '@/lib/server/widget/public-endpoint'
 import { resolveWidgetViewer } from '@/lib/server/widget/widget-viewer'
+import { getSettings } from '@/lib/server/functions/workspace'
 import type { Actor } from '@/lib/server/policy/types'
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
@@ -122,8 +126,14 @@ export async function handleKbAsk({ request }: { request: Request }): Promise<Re
     return widgetJsonError(503, 'AI_NOT_CONFIGURED', 'AI answers are not configured')
   }
 
-  const limited = await enforcePerIpLimit(request, {
+  // Tenant bucket is keyed on the resolved workspace, not caller-supplied
+  // headers, so it can't be evaded the way a Host-header key could.
+  const settings = await getSettings()
+  if (!settings) return widgetJsonError(503, 'WORKSPACE_UNAVAILABLE', 'Workspace unavailable')
+
+  const limited = await enforceWidgetQuota(request, {
     keyPrefix: 'kbask',
+    tenantId: settings.id,
     limit: KB_ASK_RATE_LIMIT,
     windowSeconds: RATE_WINDOW_SECONDS,
     message: 'Too many questions, slow down',

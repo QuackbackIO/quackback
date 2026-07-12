@@ -68,6 +68,45 @@ describe('segmentUserSync.handleIdentify', () => {
     expect(result).toBeInstanceOf(Response)
     expect((result as Response).status).toBe(200)
   })
+
+  it('rejects a tampered signature with 401 and never reaches the mutation path', async () => {
+    redisSet.mockClear()
+    const secret = 'segment-secret'
+    // Correct HMAC, but flip the last byte so it decodes to a same-length,
+    // wrong-content signature — must fail the timing-safe comparison.
+    const validSignature = createHmac('sha1', secret).update(body).digest('base64')
+    const tamperedSignature =
+      validSignature.slice(0, -1) + (validSignature.endsWith('A') ? 'B' : 'A')
+
+    const result = await segmentUserSync.handleIdentify?.(
+      new Request('https://example.test', { headers: { 'x-signature': tamperedSignature } }),
+      body,
+      {},
+      { incomingSecret: secret }
+    )
+
+    expect(result).toBeInstanceOf(Response)
+    expect((result as Response).status).toBe(401)
+    // The signature check must fail before the messageId dedup claim (the
+    // first write-adjacent side effect on the path to a mutation) is reached.
+    expect(redisSet).not.toHaveBeenCalled()
+  })
+
+  it('rejects a missing x-signature header with 401 and never reaches the mutation path', async () => {
+    redisSet.mockClear()
+    const secret = 'segment-secret'
+
+    const result = await segmentUserSync.handleIdentify?.(
+      new Request('https://example.test'),
+      body,
+      {},
+      { incomingSecret: secret }
+    )
+
+    expect(result).toBeInstanceOf(Response)
+    expect((result as Response).status).toBe(401)
+    expect(redisSet).not.toHaveBeenCalled()
+  })
 })
 
 describe('segmentUserSync.syncSegmentMembership', () => {

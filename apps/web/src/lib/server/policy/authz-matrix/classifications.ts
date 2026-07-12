@@ -308,6 +308,11 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     why: 'permission echo for portal UI affordances: non-team callers fail open to an empty permission list rather than an error',
   },
+  'routes/api/widget/identify.ts::POST::isTeamMember': {
+    intent: 'SECONDARY_GATE',
+    roleBar: 'team',
+    why: 'widget identify refuses to mint a widget-scoped session when the resolved identity is a staff/team member, so a dashboard-authorized session is never handed to an embedding origin',
+  },
   'lib/server/functions/onboarding.ts::setupWorkspaceFn::isAdmin': {
     intent: 'SECONDARY_GATE',
     roleBar: 'admin',

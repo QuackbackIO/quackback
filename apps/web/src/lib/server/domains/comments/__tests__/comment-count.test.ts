@@ -26,6 +26,13 @@ const returnedComment: { moderationState: string; isPrivate: boolean; deletedAt:
   deletedAt: null,
 }
 
+// Overrides the single-comment count derived from `returnedComment` above
+// with a fixed value, so a test can represent the recursive CTE's count
+// across a whole subtree (root + N countable replies) rather than the
+// single-row 0/1 the default derivation models. Reset to null (disabled)
+// between tests.
+let subtreeCountOverride: number | null = null
+
 // Chainable mock builder for Drizzle query builder
 function createChainMock() {
   const chain: Record<string, unknown> = {}
@@ -61,11 +68,13 @@ function createTx() {
     execute: vi.fn(async () => [
       {
         count:
-          returnedComment.deletedAt === null &&
-          !returnedComment.isPrivate &&
-          returnedComment.moderationState !== 'pending'
-            ? 1
-            : 0,
+          subtreeCountOverride !== null
+            ? subtreeCountOverride
+            : returnedComment.deletedAt === null &&
+                !returnedComment.isPrivate &&
+                returnedComment.moderationState !== 'pending'
+              ? 1
+              : 0,
       },
     ]),
     insert: vi.fn(() => createChainMock()),
@@ -147,6 +156,14 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 
   // Import real sql for tagged template literals
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
+  // Spy wrapper (not a plain re-export) so tests can inspect the raw
+  // interpolated values of a `sql\`...\`` call — e.g. the numeric
+  // decrement embedded in `GREATEST(0, commentCount - ${decrement})`, to
+  // prove the delete path forwards the CTE's subtree count verbatim
+  // rather than a hardcoded 1.
+  const sqlSpy = vi.fn((strings: TemplateStringsArray, ...values: unknown[]) =>
+    realSql(strings, ...values)
+  )
 
   return {
     // Spread the real db module so tables/operators stay current; override only what this suite drives.
@@ -156,7 +173,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     and: vi.fn(),
     asc: vi.fn(),
     isNull: vi.fn(),
-    sql: realSql,
+    sql: sqlSpy,
   }
 })
 
@@ -212,6 +229,7 @@ describe('Comment count maintenance', () => {
     returnedComment.moderationState = 'published'
     returnedComment.isPrivate = false
     returnedComment.deletedAt = null
+    subtreeCountOverride = null
     vi.clearAllMocks()
   })
 
@@ -498,6 +516,196 @@ describe('Comment count maintenance', () => {
       setCalls.length = 0
 
       await deleteComment('comment_mock' as PostCommentId, {
+        principalId: 'principal_mock' as PrincipalId,
+        role: 'admin',
+      })
+
+      const hasCommentCountUpdate = setCalls.some((args) => {
+        const setArg = (args as unknown[])[0] as Record<string, unknown>
+        return 'commentCount' in setArg
+      })
+      expect(hasCommentCountUpdate).toBe(false)
+    })
+
+    it('decrements by the full countable subtree (root + N countable replies), not a fixed 1', async () => {
+      // The recursive CTE counts the deleted root plus every still-public,
+      // published, non-deleted descendant. Model a root with 3 countable
+      // replies (a private reply and a pending reply are excluded by the
+      // CTE's own WHERE clause, which is DB-side logic this unit test can't
+      // exercise — see status.reconcile.test.ts's docblock for the same
+      // caveat pattern). What we CAN prove here is that the decrement
+      // applied to commentCount is exactly the CTE's returned count (4),
+      // not a hardcoded 1 — i.e. the wiring from query result to the
+      // GREATEST() update is correct for a multi-row subtree.
+      subtreeCountOverride = 4
+
+      const { deleteComment } = await import('../comment.service')
+      const { sql } = await import('@/lib/server/db')
+      setCalls.length = 0
+
+      await deleteComment('comment_mock' as PostCommentId, {
+        principalId: 'principal_mock' as PrincipalId,
+        role: 'admin',
+      })
+
+      const hasCommentCountUpdate = setCalls.some((args) => {
+        const setArg = (args as unknown[])[0] as Record<string, unknown>
+        return 'commentCount' in setArg
+      })
+      expect(hasCommentCountUpdate).toBe(true)
+
+      // Find the GREATEST(...) sql`` call and confirm it embedded the
+      // CTE's count (4) as the subtracted value, not 1.
+      const decrementCall = vi
+        .mocked(sql)
+        .mock.calls.find((call) => call[0].join('').includes('GREATEST'))
+      expect(decrementCall).toBeDefined()
+      expect(decrementCall).toContainEqual(4)
+    })
+
+    it('does not decrement at all when the CTE finds nothing countable (all descendants excluded)', async () => {
+      // Root itself is already excluded (e.g. concurrently moderated to
+      // private) and every reply is private/pending/deleted — the CTE
+      // legitimately returns 0, and GREATEST(0, count - 0) must be skipped
+      // entirely (matches the "no update at all" contract the pending/
+      // soft-deleted tests above already cover for the single-row case).
+      subtreeCountOverride = 0
+
+      const { deleteComment } = await import('../comment.service')
+      setCalls.length = 0
+
+      await deleteComment('comment_mock' as PostCommentId, {
+        principalId: 'principal_mock' as PrincipalId,
+        role: 'admin',
+      })
+
+      const hasCommentCountUpdate = setCalls.some((args) => {
+        const setArg = (args as unknown[])[0] as Record<string, unknown>
+        return 'commentCount' in setArg
+      })
+      expect(hasCommentCountUpdate).toBe(false)
+    })
+  })
+
+  describe('restoreComment (comment.pin.ts)', () => {
+    it('re-increments comment_count when restoring a public, published comment', async () => {
+      const { db } = await import('@/lib/server/db')
+      vi.mocked(db.query.postComments.findFirst).mockResolvedValueOnce({
+        id: 'comment_mock',
+        postId: 'post_mock',
+        content: 'test comment',
+        parentId: null,
+        principalId: 'principal_mock',
+        isTeamMember: false,
+        isPrivate: false,
+        moderationState: 'published',
+        createdAt: new Date(),
+        deletedAt: new Date('2026-01-01'),
+        post: {
+          id: 'post_mock',
+          title: 'Test Post',
+          boardId: 'board_mock',
+          statusId: 'post_status_mock',
+          pinnedCommentId: null,
+          board: { id: 'board_mock', slug: 'test' },
+        },
+      } as never)
+      returnedComment.isPrivate = false
+      returnedComment.moderationState = 'published'
+      returnedComment.deletedAt = null // the UPDATE's own returning row after restore
+
+      const { restoreComment } = await import('../comment.pin')
+      setCalls.length = 0
+
+      await restoreComment('comment_mock' as PostCommentId, {
+        principalId: 'principal_mock' as PrincipalId,
+        role: 'admin',
+      })
+
+      const hasCommentCountUpdate = setCalls.some((args) => {
+        const setArg = (args as unknown[])[0] as Record<string, unknown>
+        return 'commentCount' in setArg
+      })
+      expect(hasCommentCountUpdate).toBe(true)
+    })
+
+    it('does NOT change comment_count when restoring a pending (held) comment', async () => {
+      // A pending comment was never counted on insert (createComment skips
+      // the bump for held comments — see the createComment describe block
+      // above), so restoring it from soft-delete must not increment either;
+      // it only becomes visible/counted once approved.
+      const { db } = await import('@/lib/server/db')
+      vi.mocked(db.query.postComments.findFirst).mockResolvedValueOnce({
+        id: 'comment_mock',
+        postId: 'post_mock',
+        content: 'held comment',
+        parentId: null,
+        principalId: 'principal_mock',
+        isTeamMember: false,
+        isPrivate: false,
+        moderationState: 'pending',
+        createdAt: new Date(),
+        deletedAt: new Date('2026-01-01'),
+        post: {
+          id: 'post_mock',
+          title: 'Test Post',
+          boardId: 'board_mock',
+          statusId: 'post_status_mock',
+          pinnedCommentId: null,
+          board: { id: 'board_mock', slug: 'test' },
+        },
+      } as never)
+      // restoreComment reads moderationState off the UPDATE's own
+      // returning row (the just-restored row), not the pre-restore snapshot.
+      returnedComment.isPrivate = false
+      returnedComment.moderationState = 'pending'
+      returnedComment.deletedAt = null
+
+      const { restoreComment } = await import('../comment.pin')
+      setCalls.length = 0
+
+      await restoreComment('comment_mock' as PostCommentId, {
+        principalId: 'principal_mock' as PrincipalId,
+        role: 'admin',
+      })
+
+      const hasCommentCountUpdate = setCalls.some((args) => {
+        const setArg = (args as unknown[])[0] as Record<string, unknown>
+        return 'commentCount' in setArg
+      })
+      expect(hasCommentCountUpdate).toBe(false)
+    })
+
+    it('does NOT change comment_count when restoring a private comment', async () => {
+      const { db } = await import('@/lib/server/db')
+      vi.mocked(db.query.postComments.findFirst).mockResolvedValueOnce({
+        id: 'comment_mock',
+        postId: 'post_mock',
+        content: 'private comment',
+        parentId: null,
+        principalId: 'principal_mock',
+        isTeamMember: true,
+        isPrivate: true,
+        moderationState: 'published',
+        createdAt: new Date(),
+        deletedAt: new Date('2026-01-01'),
+        post: {
+          id: 'post_mock',
+          title: 'Test Post',
+          boardId: 'board_mock',
+          statusId: 'post_status_mock',
+          pinnedCommentId: null,
+          board: { id: 'board_mock', slug: 'test' },
+        },
+      } as never)
+      returnedComment.isPrivate = true
+      returnedComment.moderationState = 'published'
+      returnedComment.deletedAt = null
+
+      const { restoreComment } = await import('../comment.pin')
+      setCalls.length = 0
+
+      await restoreComment('comment_mock' as PostCommentId, {
         principalId: 'principal_mock' as PrincipalId,
         role: 'admin',
       })

@@ -83,6 +83,8 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
     deleted AS (
       DELETE FROM ${postVotes}
       WHERE id IN (SELECT id FROM existing)
+        AND EXISTS (SELECT 1 FROM post_check)
+        AND EXISTS (SELECT 1 FROM board_check)
       RETURNING id
     ),
     inserted AS (
@@ -265,18 +267,25 @@ export async function removeVote(
 
   const result = await db.execute<{
     post_exists: boolean
+    board_exists: boolean
     deleted: boolean
     vote_count: number
   }>(sql`
     WITH post_check AS (
-      SELECT id, vote_count FROM ${posts}
+      SELECT id, board_id, vote_count FROM ${posts}
       WHERE id = ${postUuid}::uuid AND deleted_at IS NULL
+    ),
+    board_check AS (
+      SELECT 1 FROM ${boards}
+      WHERE id = (SELECT board_id FROM post_check)
+        AND deleted_at IS NULL
     ),
     deleted AS (
       DELETE FROM ${postVotes}
       WHERE post_id = ${postUuid}::uuid
         AND principal_id = ${principalUuid}::uuid
         AND EXISTS (SELECT 1 FROM post_check)
+        AND EXISTS (SELECT 1 FROM board_check)
       RETURNING id
     ),
     updated_post AS (
@@ -288,12 +297,14 @@ export async function removeVote(
     )
     SELECT
       EXISTS(SELECT 1 FROM post_check) as post_exists,
+      EXISTS(SELECT 1 FROM board_check) as board_exists,
       EXISTS(SELECT 1 FROM deleted) as deleted,
       COALESCE((SELECT vote_count FROM updated_post), (SELECT vote_count FROM post_check), 0) as vote_count
   `)
 
   type RemoveVoteRow = {
     post_exists: boolean
+    board_exists: boolean
     deleted: boolean
     vote_count: number
   }
@@ -302,6 +313,10 @@ export async function removeVote(
 
   if (!row?.post_exists) {
     throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  if (!row?.board_exists) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board not found for post ${postId}`)
   }
 
   return { removed: row.deleted, voteCount: row.vote_count ?? 0 }
