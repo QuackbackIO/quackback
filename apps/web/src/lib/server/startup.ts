@@ -200,32 +200,47 @@ function startBackgroundProcessing(): void {
   Promise.all([
     import('@/lib/server/audit/log'),
     import('@/lib/server/audit/invite-sweep'),
+    import('./events/events-sweep'),
     import('@/lib/server/sweep-lock'),
   ])
-    .then(([{ pruneAuditLog }, { sweepExpiredPortalInvites }, { withSweepLock }]) => {
-      const runDailyAuditMaintenance = async () => {
-        // TTL = 1 hour — each sweeper takes < 1s. Extending generously
-        // so a slow DB or large table doesn't cause premature expiry.
-        const ONE_HOUR = 60 * 60 * 1000
-        await withSweepLock('audit_prune', ONE_HOUR, async () => {
-          await pruneAuditLog().catch((err) => log.error({ err }, 'audit-log prune failed'))
-        })
-        await withSweepLock('invite_sweep', ONE_HOUR, async () => {
-          await sweepExpiredPortalInvites().catch((err) =>
-            log.error({ err }, 'invite sweep failed')
-          )
-        })
-      }
-      setTimeout(() => {
-        void runDailyAuditMaintenance()
-      }, 30_000)
-      setInterval(
-        () => {
+    .then(
+      ([
+        { pruneAuditLog },
+        { sweepExpiredPortalInvites },
+        { pruneEventsOutbox },
+        { withSweepLock },
+      ]) => {
+        const runDailyAuditMaintenance = async () => {
+          // TTL = 1 hour — each sweeper takes < 1s. Extending generously
+          // so a slow DB or large table doesn't cause premature expiry.
+          const ONE_HOUR = 60 * 60 * 1000
+          await withSweepLock('audit_prune', ONE_HOUR, async () => {
+            await pruneAuditLog().catch((err) => log.error({ err }, 'audit-log prune failed'))
+          })
+          await withSweepLock('invite_sweep', ONE_HOUR, async () => {
+            await sweepExpiredPortalInvites().catch((err) =>
+              log.error({ err }, 'invite sweep failed')
+            )
+          })
+          // EVENTING-V2 outbox retention (WO-20): prune published rows past the
+          // window; unpublished rows are never touched.
+          await withSweepLock('events_prune', ONE_HOUR, async () => {
+            await pruneEventsOutbox().catch((err) =>
+              log.error({ err }, 'events outbox prune failed')
+            )
+          })
+        }
+        setTimeout(() => {
           void runDailyAuditMaintenance()
-        },
-        24 * 60 * 60 * 1000
-      )
-    })
+        }, 30_000)
+        setInterval(
+          () => {
+            void runDailyAuditMaintenance()
+          },
+          24 * 60 * 60 * 1000
+        )
+      }
+    )
     .catch((err) => log.error({ err }, 'failed to init audit-log maintenance'))
 
   // Start periodic summary sweep (refreshes stale/missing post summaries).
