@@ -28,6 +28,7 @@ import {
   type Subscriber,
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
+import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
 import type { HookTarget } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
@@ -412,10 +413,11 @@ async function buildEmailTargets(
   const principalIds = subscribers.map((s) => s.principalId)
   const prefsMap = await batchGetNotificationPreferences(principalIds)
 
-  // Filter by global email preferences
+  // Filter by per-type x per-channel notification preferences
+  const notificationType = EVENT_TO_NOTIFICATION_TYPE[event.type]
   const eligibleSubscribers = subscribers.filter((subscriber) => {
     const prefs = prefsMap.get(subscriber.principalId)
-    return prefs && shouldSendEmail(event.type, prefs)
+    return prefs && notificationType && shouldNotify(prefs, notificationType, 'email')
   })
   if (eligibleSubscribers.length === 0) return []
 
@@ -463,23 +465,15 @@ function isActorSubscriber(subscriber: Subscriber, actor: EventActor): boolean {
   return subscriber.userId === actor.userId || subscriber.email === actor.email
 }
 
-const EVENT_EMAIL_PREF_MAP: Record<string, 'emailStatusChange' | 'emailNewComment'> = {
-  'post.status_changed': 'emailStatusChange',
-  'comment.created': 'emailNewComment',
-}
-
 /**
- * Check if email should be sent based on global email preferences.
- * Note: Subscription level (notifyComments/notifyStatusChanges) is already filtered
- * by getSubscribersForEvent. This checks the global email preferences.
+ * Map system event types to notification preference-matrix type keys.
+ * `buildEmailTargets` only ever sees `post.status_changed` and
+ * `comment.created` (changelog/status/mention have their own paths below),
+ * but the map is kept generic for clarity.
  */
-function shouldSendEmail(
-  eventType: string,
-  prefs: { emailStatusChange: boolean; emailNewComment: boolean; emailMuted: boolean }
-): boolean {
-  if (prefs.emailMuted) return false
-  const prefKey = EVENT_EMAIL_PREF_MAP[eventType]
-  return prefKey ? prefs[prefKey] : false
+const EVENT_TO_NOTIFICATION_TYPE: Record<string, string> = {
+  'post.status_changed': 'post_status_changed',
+  'comment.created': 'comment_created',
 }
 
 /**
@@ -699,13 +693,14 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
   })
 
   if (row.email) {
-    // Honour the global emailMuted preference. Without this, a user who hit
+    // Honour the per-type x per-channel preference matrix (this subsumes the
+    // global emailMuted kill switch). Without this, a user who hit
     // unsubscribe-all (which sets emailMuted=true) would still get direct
     // mention emails because the mention path doesn't go through the
-    // subscriber filter that runs shouldSendEmail.
+    // subscriber filter that runs shouldNotify.
     const prefsMap = await batchGetNotificationPreferences([row.id as PrincipalId])
     const prefs = prefsMap.get(row.id as PrincipalId)
-    if (!prefs?.emailMuted) {
+    if (!prefs || shouldNotify(prefs, 'post_mentioned', 'email')) {
       const tokenMap = await batchGenerateUnsubscribeTokens([
         {
           principalId: row.id as PrincipalId,
@@ -848,7 +843,8 @@ async function getChangelogSubscriberTargets(
   // Build changelog URL
   const changelogUrl = `${context.portalBaseUrl}/changelog`
 
-  // Email targets — gated on the workspace's emailMuted preference and the
+  // Email targets — gated on the per-principal notification matrix
+  // (changelog_published/email, which subsumes emailMuted) and the
   // changelog.emailsDisabled kill switch (in-app notification targets below
   // are unaffected by emailsDisabled — that switch is email-specific).
   const { emailsDisabled } = await getChangelogSettings()
@@ -859,7 +855,7 @@ async function getChangelogSubscriberTargets(
         const prefsMap = await batchGetNotificationPreferences(principalIds)
         return nonActorSubscribers.filter((subscriber) => {
           const prefs = prefsMap.get(subscriber.principalId)
-          return prefs ? !prefs.emailMuted : true
+          return prefs ? shouldNotify(prefs, 'changelog_published', 'email') : true
         })
       })()
 
@@ -937,8 +933,9 @@ const STATUS_LIFECYCLE_LABELS: Record<string, string> = {
  * maintenance_scheduled). A subscriber is notified iff (a) they pass the
  * page-level audience gate AND (b) they can see at least one affected
  * component (Status Product Spec §4). Email is additionally gated on the
- * workspace `emailsDisabled` switch and the per-principal `emailMuted` pref;
- * the in-app notification ignores `emailsDisabled` (it's email-specific).
+ * workspace `emailsDisabled` switch and the per-principal notification
+ * matrix (`status_incident`/email, which subsumes `emailMuted`); the in-app
+ * notification ignores `emailsDisabled` (it's email-specific).
  */
 async function getStatusSubscriberTargets(
   event: EventData,
@@ -1066,7 +1063,7 @@ async function getStatusSubscriberTargets(
     },
   })
 
-  // Email targets — gated by emailsDisabled + per-principal emailMuted.
+  // Email targets — gated by emailsDisabled + per-principal notification matrix.
   if (!settings.emailsDisabled) {
     const withEmail = eligible.filter((p) => !!p.email)
     if (withEmail.length > 0) {
@@ -1075,7 +1072,7 @@ async function getStatusSubscriberTargets(
       )
       const emailable = withEmail.filter((p) => {
         const prefs = prefsMap.get(p.id as PrincipalId)
-        return prefs ? !prefs.emailMuted : true
+        return prefs ? shouldNotify(prefs, 'status_incident', 'email') : true
       })
       if (emailable.length > 0) {
         const tokenMap = await batchGenerateStatusUnsubscribeTokens(

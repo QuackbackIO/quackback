@@ -1,18 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { batchSpy } = vi.hoisted(() => ({
+const { batchSpy, prefsSpy } = vi.hoisted(() => ({
   batchSpy: vi.fn().mockResolvedValue(['notif-id-1']),
+  // No stored preferences for any principal in these tests — every
+  // notification type defaults to "on", matching pre-matrix behavior.
+  prefsSpy: vi.fn().mockResolvedValue(new Map()),
 }))
 
 vi.mock('@/lib/server/domains/notifications/notification.service', () => ({
   createNotificationsBatch: batchSpy,
 }))
 
+vi.mock('@/lib/server/domains/subscriptions/subscription.service', () => ({
+  batchGetNotificationPreferences: prefsSpy,
+}))
+
 import { notificationHook } from '../handlers/notification'
 import type { NotificationTarget } from '../handlers/notification'
 import type { EventData } from '../types'
 
-beforeEach(() => batchSpy.mockClear())
+beforeEach(() => {
+  batchSpy.mockClear()
+  prefsSpy.mockClear()
+})
 
 describe('notificationHook — post.mentioned', () => {
   it('creates an in-app notification with type post_mentioned', async () => {

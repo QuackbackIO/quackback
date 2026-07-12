@@ -13,6 +13,11 @@ import type { CreateNotificationInput, NotificationType } from '@/lib/server/dom
 import type { PrincipalId, PostId, PostCommentId } from '@quackback/ids'
 import { truncate, isRetryableError } from '../hook-utils'
 import { logger } from '@/lib/server/logger'
+import {
+  batchGetNotificationPreferences,
+  type NotificationPreferencesData,
+} from '@/lib/server/domains/subscriptions/subscription.service'
+import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
 
 const log = logger.child({ component: 'notification' })
 
@@ -60,7 +65,18 @@ export const notificationHook: HookHandler = {
         return { success: true }
       }
 
-      const ids = await createNotificationsBatch(notifications)
+      // Filter by the per-type x per-channel preference matrix. Batch-load
+      // prefs for the distinct principals in the built notifications (may be
+      // a subset of `principalIds` for events with duplicate targets).
+      const distinctPrincipalIds = [...new Set(notifications.map((n) => n.principalId))]
+      const prefsMap = await batchGetNotificationPreferences(distinctPrincipalIds)
+      const filtered = filterByInAppPreference(notifications, prefsMap)
+
+      if (filtered.length === 0) {
+        return { success: true }
+      }
+
+      const ids = await createNotificationsBatch(filtered)
 
       log.info({ event_type: event.type, count: ids.length }, 'notifications created')
       return {
@@ -183,4 +199,22 @@ function buildNotifications(
   }
 
   return []
+}
+
+/**
+ * Filter built notifications down to the ones each principal's in-app
+ * preference matrix allows. A principal with no entry in `prefsMap` keeps
+ * every notification (default-on, matches `shouldNotify`'s own default) —
+ * this is the no-regression path for every existing user until they touch
+ * the preference matrix.
+ */
+export function filterByInAppPreference(
+  notifications: CreateNotificationInput[],
+  prefsMap: Map<PrincipalId, NotificationPreferencesData>
+): CreateNotificationInput[] {
+  return notifications.filter((n) => {
+    const prefs = prefsMap.get(n.principalId)
+    if (!prefs) return true
+    return shouldNotify(prefs, n.type, 'inApp')
+  })
 }
