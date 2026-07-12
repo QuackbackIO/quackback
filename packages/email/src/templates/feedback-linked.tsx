@@ -8,6 +8,7 @@ interface FeedbackLinkedEmailProps {
   postUrl: string
   workspaceName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   attributedByName?: string
   logoUrl?: string
 }
@@ -18,6 +19,7 @@ export function FeedbackLinkedEmail({
   postUrl,
   workspaceName,
   unsubscribeUrl,
+  preferencesUrl,
   attributedByName,
   logoUrl,
 }: FeedbackLinkedEmailProps) {
@@ -64,6 +66,7 @@ export function FeedbackLinkedEmail({
       <NotificationFooter
         reason="You received this email because your feedback was attributed to this post."
         unsubscribeUrl={unsubscribeUrl}
+        preferencesUrl={preferencesUrl}
       />
     </EmailLayout>
   )

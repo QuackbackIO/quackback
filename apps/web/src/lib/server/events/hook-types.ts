@@ -125,4 +125,7 @@ export interface EmailConfig {
   commentPreview?: string
   isTeamMember?: boolean
   logoUrl?: string
+  /** Link to the portal's per-type x per-channel notification preferences
+   *  page. Not token-based — requires the recipient to be logged in. */
+  preferencesUrl?: string
 }

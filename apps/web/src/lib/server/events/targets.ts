@@ -482,6 +482,7 @@ async function buildEmailTargets(
     config: {
       workspaceName: context.workspaceName,
       logoUrl: context.logoUrl ?? undefined,
+      preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
       ...eventConfig,
     },
   }))
@@ -763,6 +764,7 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
           postUrl,
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
+          preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           eventType: 'post.mentioned',
         },
       })
@@ -1135,6 +1137,7 @@ async function getChangelogSubscriberTargets(
         config: {
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
+          preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           changelogTitle: event.data.changelog.title,
           changelogUrl,
           contentPreview: event.data.changelog.contentPreview,
@@ -1349,6 +1352,7 @@ async function getStatusSubscriberTargets(
               eventType: event.type,
               workspaceName: context.workspaceName,
               logoUrl: context.logoUrl ?? undefined,
+              preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
               incidentTitle: incident.title,
               incidentUrl,
               impact: incident.impact,

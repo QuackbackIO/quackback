@@ -21,6 +21,7 @@ interface StatusIncidentPublishedEmailProps {
   affectedComponents: AffectedComponent[]
   incidentUrl: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -47,6 +48,7 @@ export function StatusIncidentPublishedEmail({
   affectedComponents,
   incidentUrl,
   unsubscribeUrl,
+  preferencesUrl,
   logoUrl,
 }: StatusIncidentPublishedEmailProps) {
   const accentColor = impactColors[impact]
@@ -144,6 +146,7 @@ export function StatusIncidentPublishedEmail({
       <NotificationFooter
         reason="You received this email because you're subscribed to status updates."
         unsubscribeUrl={unsubscribeUrl}
+        preferencesUrl={preferencesUrl}
       />
     </EmailLayout>
   )

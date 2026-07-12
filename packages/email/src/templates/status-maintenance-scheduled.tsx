@@ -19,6 +19,7 @@ interface StatusMaintenanceScheduledEmailProps {
   affectedComponents: string[]
   incidentUrl: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -31,6 +32,7 @@ export function StatusMaintenanceScheduledEmail({
   affectedComponents,
   incidentUrl,
   unsubscribeUrl,
+  preferencesUrl,
   logoUrl,
 }: StatusMaintenanceScheduledEmailProps) {
   return (
@@ -115,6 +117,7 @@ export function StatusMaintenanceScheduledEmail({
       <NotificationFooter
         reason="You received this email because you're subscribed to status updates."
         unsubscribeUrl={unsubscribeUrl}
+        preferencesUrl={preferencesUrl}
       />
     </EmailLayout>
   )

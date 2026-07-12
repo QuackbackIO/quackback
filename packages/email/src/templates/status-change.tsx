@@ -9,6 +9,7 @@ interface StatusChangeEmailProps {
   newStatus: string
   organizationName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -38,6 +39,7 @@ export function StatusChangeEmail({
   newStatus,
   organizationName,
   unsubscribeUrl,
+  preferencesUrl,
   logoUrl,
 }: StatusChangeEmailProps) {
   const emoji = getStatusEmoji(newStatus)
@@ -90,6 +92,7 @@ export function StatusChangeEmail({
       <NotificationFooter
         reason="You received this email because you submitted or subscribed to this feedback."
         unsubscribeUrl={unsubscribeUrl}
+        preferencesUrl={preferencesUrl}
       />
     </EmailLayout>
   )

@@ -529,6 +529,7 @@ interface SendStatusChangeParams {
   newStatus: string
   workspaceName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -541,6 +542,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     newStatus,
     workspaceName,
     unsubscribeUrl,
+    preferencesUrl,
     logoUrl,
   } = params
 
@@ -564,6 +566,7 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       newStatus,
       organizationName: workspaceName,
       unsubscribeUrl,
+      preferencesUrl,
       logoUrl,
     }),
   })
@@ -582,6 +585,7 @@ interface SendNewCommentParams {
   isTeamMember: boolean
   workspaceName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -595,6 +599,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     isTeamMember,
     workspaceName,
     unsubscribeUrl,
+    preferencesUrl,
     logoUrl,
   } = params
 
@@ -617,6 +622,7 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       isTeamMember,
       organizationName: workspaceName,
       unsubscribeUrl,
+      preferencesUrl,
       logoUrl,
     }),
   })
@@ -750,12 +756,22 @@ export interface SendPostMentionEmailArgs {
   postUrl: string
   workspaceName: string
   unsubscribeUrl?: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
 export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Promise<EmailResult> {
-  const { to, mentionerName, postTitle, excerpt, postUrl, workspaceName, unsubscribeUrl, logoUrl } =
-    args
+  const {
+    to,
+    mentionerName,
+    postTitle,
+    excerpt,
+    postUrl,
+    workspaceName,
+    unsubscribeUrl,
+    preferencesUrl,
+    logoUrl,
+  } = args
 
   const displayName = mentionerName || 'Anonymous user'
   const subject = `${displayName} mentioned you in "${postTitle}"`
@@ -778,6 +794,7 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
       postUrl,
       workspaceName,
       unsubscribeUrl,
+      preferencesUrl,
       logoUrl,
     }),
   })
@@ -794,6 +811,7 @@ interface SendChangelogPublishedParams {
   contentPreview: string
   workspaceName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
   /** Send from the changelog module's sending address (§4.8) instead of the
    *  branded EMAIL_FROM. Absent = the workspace default. */
@@ -810,6 +828,7 @@ export async function sendChangelogPublishedEmail(
     contentPreview,
     workspaceName,
     unsubscribeUrl,
+    preferencesUrl,
     logoUrl,
     from,
   } = params
@@ -831,6 +850,7 @@ export async function sendChangelogPublishedEmail(
       contentPreview,
       organizationName: workspaceName,
       unsubscribeUrl,
+      preferencesUrl,
       logoUrl,
     }),
     from,
@@ -848,6 +868,7 @@ interface SendFeedbackLinkedParams {
   postUrl: string
   workspaceName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   attributedByName?: string
   logoUrl?: string
 }
@@ -862,6 +883,7 @@ export async function sendFeedbackLinkedEmail(
     postUrl,
     workspaceName,
     unsubscribeUrl,
+    preferencesUrl,
     attributedByName,
     logoUrl,
   } = params
@@ -883,6 +905,7 @@ export async function sendFeedbackLinkedEmail(
       postUrl,
       workspaceName,
       unsubscribeUrl,
+      preferencesUrl,
       attributedByName,
       logoUrl,
     }),
@@ -903,6 +926,7 @@ interface SendStatusIncidentPublishedParams {
   affectedComponents: Array<{ name: string; status: string }>
   incidentUrl: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -920,6 +944,7 @@ export async function sendStatusIncidentPublishedEmail(
     affectedComponents,
     incidentUrl,
     unsubscribeUrl,
+    preferencesUrl,
     logoUrl,
   } = params
 
@@ -943,6 +968,7 @@ export async function sendStatusIncidentPublishedEmail(
       affectedComponents,
       incidentUrl,
       unsubscribeUrl,
+      preferencesUrl,
       logoUrl,
     }),
   })
@@ -964,6 +990,7 @@ interface SendStatusMaintenanceScheduledParams {
   affectedComponents: string[]
   incidentUrl: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -981,6 +1008,7 @@ export async function sendStatusMaintenanceScheduledEmail(
     affectedComponents,
     incidentUrl,
     unsubscribeUrl,
+    preferencesUrl,
     logoUrl,
   } = params
 
@@ -1004,6 +1032,7 @@ export async function sendStatusMaintenanceScheduledEmail(
       affectedComponents,
       incidentUrl,
       unsubscribeUrl,
+      preferencesUrl,
       logoUrl,
     }),
   })

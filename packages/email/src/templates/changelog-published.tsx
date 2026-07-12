@@ -8,6 +8,7 @@ interface ChangelogPublishedEmailProps {
   contentPreview: string
   organizationName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -17,6 +18,7 @@ export function ChangelogPublishedEmail({
   contentPreview,
   organizationName,
   unsubscribeUrl,
+  preferencesUrl,
   logoUrl,
 }: ChangelogPublishedEmailProps) {
   return (
@@ -59,6 +61,7 @@ export function ChangelogPublishedEmail({
       <NotificationFooter
         reason="You received this email because you're subscribed to changelog updates."
         unsubscribeUrl={unsubscribeUrl}
+        preferencesUrl={preferencesUrl}
       />
     </EmailLayout>
   )

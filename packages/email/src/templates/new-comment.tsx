@@ -10,6 +10,7 @@ interface NewCommentEmailProps {
   isTeamMember: boolean
   organizationName: string
   unsubscribeUrl: string
+  preferencesUrl?: string
   logoUrl?: string
 }
 
@@ -21,6 +22,7 @@ export function NewCommentEmail({
   isTeamMember,
   organizationName,
   unsubscribeUrl,
+  preferencesUrl,
   logoUrl,
 }: NewCommentEmailProps) {
   return (
@@ -88,6 +90,7 @@ export function NewCommentEmail({
       <NotificationFooter
         reason="You received this email because you submitted or subscribed to this feedback."
         unsubscribeUrl={unsubscribeUrl}
+        preferencesUrl={preferencesUrl}
       />
     </EmailLayout>
   )

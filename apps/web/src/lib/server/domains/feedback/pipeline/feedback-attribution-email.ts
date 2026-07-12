@@ -84,6 +84,7 @@ export async function sendFeedbackAttributionEmail(
       postUrl,
       workspaceName,
       unsubscribeUrl,
+      preferencesUrl: `${baseUrl}/settings/preferences`,
       attributedByName,
       logoUrl: getEmailSafeUrl(workspace?.logoKey) ?? undefined,
     })

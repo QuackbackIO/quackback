@@ -38,6 +38,7 @@ export const emailHook: HookHandler = {
           newStatus: cfg.newStatus!,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
+          preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
         })
       } else if (event.type === 'comment.created') {
@@ -50,6 +51,7 @@ export const emailHook: HookHandler = {
           isTeamMember: cfg.isTeamMember ?? false,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
+          preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
         })
       } else if (event.type === 'post.mentioned') {
@@ -62,6 +64,7 @@ export const emailHook: HookHandler = {
           postUrl: data.postUrl,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
+          preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
         })
       } else if (event.type === 'changelog.published') {
@@ -73,6 +76,7 @@ export const emailHook: HookHandler = {
           contentPreview: (changelogCfg.contentPreview as string) ?? '',
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
+          preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
           from: changelogCfg.from as string | undefined,
         })
@@ -89,6 +93,7 @@ export const emailHook: HookHandler = {
           incidentUrl: c.incidentUrl as string,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl: unsubscribeUrl ?? '',
+          preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
         })
       } else if (event.type === 'status.maintenance_scheduled') {
@@ -105,6 +110,7 @@ export const emailHook: HookHandler = {
           incidentUrl: c.incidentUrl as string,
           workspaceName: cfg.workspaceName,
           unsubscribeUrl: unsubscribeUrl ?? '',
+          preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
         })
       } else {
