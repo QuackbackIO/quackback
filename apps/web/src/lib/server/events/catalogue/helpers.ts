@@ -6,8 +6,9 @@
  */
 import { z } from 'zod'
 import { defineEvent, type EventExposure, type EventDefinition } from './define'
+import { P } from './payloads'
 
-/** Permissive payload for the WO-2 skeleton; hardened per type in WO-5. */
+/** Fallback payload for any type without a precise schema yet. */
 export const skeletonPayload = z.record(z.string(), z.unknown())
 
 export function decl(
@@ -17,10 +18,13 @@ export function decl(
   requiredScope: string,
   emits: 'always' | 'never' = 'always'
 ): EventDefinition<Record<string, unknown>> {
+  // WO-5: resolve the precise payload schema by type; skeleton is the fallback
+  // for any type not yet hardened (keeps the catalogue coverage gate green).
+  const payload = (P as Record<string, z.ZodType>)[type] ?? skeletonPayload
   return defineEvent(type, {
     entity,
     version: 1,
-    payload: skeletonPayload,
+    payload: payload as z.ZodType<Record<string, unknown>>,
     exposure: {
       webhook: false,
       workflow: false,
