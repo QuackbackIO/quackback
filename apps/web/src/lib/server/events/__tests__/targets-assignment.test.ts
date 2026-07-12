@@ -61,6 +61,8 @@ describe('getConversationAssignedTargets', () => {
         conversation: conversationRef,
         assignedAgentPrincipalId: 'principal_agent',
         previousAgentPrincipalId: null,
+        assignedTeamId: null,
+        previousTeamId: null,
       },
     } as EventData
 
@@ -118,6 +120,85 @@ describe('getConversationAssignedTargets', () => {
     } as EventData
 
     expect(await getConversationAssignedTargets(event)).toBeNull()
+  })
+
+  // WO-3 slice 2 (ported characterization): replaces the deleted
+  // notifyTeamAssigned direct write (conversation.notify.ts). The type
+  // deliberately changes from the old 'chat_message' to 'conversation_assigned'
+  // — see notification-handler.test.ts's conversation.assigned describe block
+  // for the title/type assertions once a target exists.
+  it('unions the direct assignee with the newly-assigned team, excluding the actor, deduped', async () => {
+    listTeamMemberPrincipalIds.mockResolvedValue([
+      'principal_agent',
+      'principal_teammate',
+      'principal_actor',
+    ])
+    const event = {
+      id: 'evt-4b',
+      type: 'conversation.assigned',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        conversation: conversationRef,
+        assignedAgentPrincipalId: 'principal_agent',
+        previousAgentPrincipalId: null,
+        assignedTeamId: 'team_1',
+        previousTeamId: null,
+      },
+    } as EventData
+
+    const target = await getConversationAssignedTargets(event)
+    expect(listTeamMemberPrincipalIds).toHaveBeenCalledWith('team_1')
+    // principal_agent appears once (deduped between direct assignee + team
+    // member), principal_actor is excluded.
+    expect(target?.target).toEqual({ principalIds: ['principal_agent', 'principal_teammate'] })
+    expect(target?.config).toEqual({
+      conversationId: 'conversation_1',
+      assignedAgentPrincipalId: 'principal_agent',
+    })
+  })
+
+  it('targets only the team when the agent is unchanged but the team is newly assigned', async () => {
+    listTeamMemberPrincipalIds.mockResolvedValue(['principal_teammate', 'principal_actor'])
+    const event = {
+      id: 'evt-4c',
+      type: 'conversation.assigned',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        conversation: conversationRef,
+        assignedAgentPrincipalId: 'principal_agent',
+        previousAgentPrincipalId: 'principal_agent',
+        assignedTeamId: 'team_1',
+        previousTeamId: null,
+      },
+    } as EventData
+
+    const target = await getConversationAssignedTargets(event)
+    expect(target).toEqual({
+      type: 'notification',
+      target: { principalIds: ['principal_teammate'] },
+      config: { conversationId: 'conversation_1', assignedAgentPrincipalId: null },
+    })
+  })
+
+  it('is a no-op when the team is unchanged and the agent is unchanged', async () => {
+    const event = {
+      id: 'evt-4d',
+      type: 'conversation.assigned',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        conversation: conversationRef,
+        assignedAgentPrincipalId: 'principal_agent',
+        previousAgentPrincipalId: 'principal_agent',
+        assignedTeamId: 'team_1',
+        previousTeamId: 'team_1',
+      },
+    } as EventData
+
+    expect(await getConversationAssignedTargets(event)).toBeNull()
+    expect(listTeamMemberPrincipalIds).not.toHaveBeenCalled()
   })
 })
 

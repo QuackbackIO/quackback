@@ -6,6 +6,7 @@ vi.mock('../process', () => ({ processEvent: (...a: unknown[]) => processEvent(.
 import {
   dispatchConversationCreated,
   dispatchConversationStatusChanged,
+  dispatchConversationAssigned,
   dispatchMessageCreated,
   dispatchMessageNoteCreated,
   dispatchConversationCsatSubmitted,
@@ -67,6 +68,19 @@ describe('conversation/message dispatch', () => {
       conversation: convRef,
       previousStatus: 'open',
       newStatus: 'closed',
+    })
+  })
+
+  it('dispatchConversationAssigned carries agent and team current + previous (WO-3 slice 2)', async () => {
+    await dispatchConversationAssigned(actor, convRef, 'principal_agent', null, 'team_1', null)
+    const event = processEvent.mock.calls[0][0]
+    expect(event.type).toBe('conversation.assigned')
+    expect(event.data).toEqual({
+      conversation: convRef,
+      assignedAgentPrincipalId: 'principal_agent',
+      previousAgentPrincipalId: null,
+      assignedTeamId: 'team_1',
+      previousTeamId: null,
     })
   })
 

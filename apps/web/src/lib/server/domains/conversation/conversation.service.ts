@@ -83,7 +83,6 @@ import {
   notifyVisitorMessage,
   notifyAgentReply,
   notifyConversationStarted,
-  notifyTeamAssigned,
 } from './conversation.notify'
 import { resolveReplyRecipient } from './conversation.recipient'
 import { resolveMessageParent } from './message-parent'
@@ -760,7 +759,15 @@ export async function sendAgentMessage(
     txResult.previousAgentPrincipalId === null &&
     txResult.conversation.assignedAgentPrincipalId !== null
   ) {
-    void emitConversationAssigned(actor, txResult.conversation, txResult.previousAgentPrincipalId)
+    void emitConversationAssigned(
+      actor,
+      txResult.conversation,
+      txResult.previousAgentPrincipalId,
+      // The team is never touched by an agent claiming a reply — "previous"
+      // is just the still-current value, so the team side of the event
+      // reports no change.
+      txResult.conversation.assignedTeamId ?? null
+    )
   }
 
   return { conversation: conversationDTO, message: agentMessageDTO }
@@ -1120,7 +1127,9 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
   if (!assigned) return null
   await emitAssignmentSystemMessage(assigned.id, assignedPrincipalId)
   publishConversationUpdate(assigned.id, await conversationToDTO(assigned, 'agent'))
-  void emitConversationAssigned(systemActor(), assigned, null)
+  // Auto-routing only ever touches the agent column — the team side reports
+  // no change (still-current value as its own "previous").
+  void emitConversationAssigned(systemActor(), assigned, null, assigned.assignedTeamId ?? null)
   return assignedPrincipalId
 }
 
@@ -1165,7 +1174,14 @@ export async function assignConversation(
     await emitAssignmentSystemMessage(conversationId, agentPrincipalId)
   }
   if (updated.assignedAgentPrincipalId !== existing.assignedAgentPrincipalId) {
-    void emitConversationAssigned(actor, updated, existing.assignedAgentPrincipalId)
+    // This action never touches the team column — "previous" is the
+    // still-current value, so the team side of the event reports no change.
+    void emitConversationAssigned(
+      actor,
+      updated,
+      existing.assignedAgentPrincipalId,
+      existing.assignedTeamId ?? null
+    )
   }
   if (wake) void emitConversationStatusChanged(actor, updated, existing.status)
   return updated
@@ -1226,16 +1242,19 @@ export async function assignTeam(
     await emitAssignmentSystemMessage(conversationId, distributedAgentId)
   }
 
-  // Ping the team's members (in-app bell), excluding the actor.
-  if (teamId && teamId !== existing.assignedTeamId) {
-    void notifyTeamAssigned({ conversation: updated, teamId, actorPrincipalId: actor.principalId })
-  }
-
   if (
     updated.assignedTeamId !== existing.assignedTeamId ||
     updated.assignedAgentPrincipalId !== existing.assignedAgentPrincipalId
   ) {
-    void emitConversationAssigned(actor, updated, existing.assignedAgentPrincipalId)
+    // The team's members (in-app bell, excluding the actor) now ride this
+    // same event — see getConversationAssignedTargets in events/targets.ts,
+    // which replaced the direct notifyTeamAssigned call.
+    void emitConversationAssigned(
+      actor,
+      updated,
+      existing.assignedAgentPrincipalId,
+      existing.assignedTeamId ?? null
+    )
   }
   if (wake) void emitConversationStatusChanged(actor, updated, existing.status)
   return updated

@@ -43,7 +43,6 @@ vi.mock('../conversation.notify', () => ({
   notifyVisitorMessage: vi.fn(),
   notifyAgentReply: vi.fn(),
   notifyConversationStarted: vi.fn(),
-  notifyTeamAssigned: vi.fn(),
 }))
 
 vi.mock('../conversation.query', () => ({

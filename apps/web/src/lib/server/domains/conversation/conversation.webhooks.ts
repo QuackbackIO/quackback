@@ -172,14 +172,17 @@ export async function emitConversationStatusChanged(
 export async function emitConversationAssigned(
   actor: Actor,
   conversation: Conversation,
-  previousAgentPrincipalId: string | null
+  previousAgentPrincipalId: string | null,
+  previousTeamId: string | null
 ): Promise<void> {
   await safe('conversation.assigned', () =>
     dispatchConversationAssigned(
       toEventActor(actor),
       conversationRef(conversation),
       conversation.assignedAgentPrincipalId ?? null,
-      previousAgentPrincipalId
+      previousAgentPrincipalId,
+      conversation.assignedTeamId ?? null,
+      previousTeamId
     )
   )
 }

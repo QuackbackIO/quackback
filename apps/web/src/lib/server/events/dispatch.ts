@@ -343,12 +343,20 @@ export async function dispatchConversationAssigned(
   actor: EventActor,
   conversation: EventConversationRef,
   assignedAgentPrincipalId: string | null,
-  previousAgentPrincipalId: string | null
+  previousAgentPrincipalId: string | null,
+  assignedTeamId: string | null,
+  previousTeamId: string | null
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'conversation.assigned',
-    data: { conversation, assignedAgentPrincipalId, previousAgentPrincipalId },
+    data: {
+      conversation,
+      assignedAgentPrincipalId,
+      previousAgentPrincipalId,
+      assignedTeamId,
+      previousTeamId,
+    },
   })
 }
 

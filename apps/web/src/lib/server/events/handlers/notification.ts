@@ -185,13 +185,19 @@ function buildNotifications(
   }
 
   if (event.type === 'conversation.assigned') {
-    const { conversationId } = config
-    return principalIds.map((principalId) => ({
-      principalId,
-      type: 'conversation_assigned' as NotificationType,
-      title: 'You were assigned a conversation',
-      metadata: { conversationId },
-    }))
+    const { conversationId, assignedAgentPrincipalId } = config
+    return principalIds.map((principalId) => {
+      const isDirectAssignee =
+        !!assignedAgentPrincipalId && principalId === assignedAgentPrincipalId
+      return {
+        principalId,
+        type: 'conversation_assigned' as NotificationType,
+        title: isDirectAssignee
+          ? 'You were assigned a conversation'
+          : 'A conversation was assigned to your team',
+        metadata: { conversationId },
+      }
+    })
   }
 
   if (event.type === 'ticket.assigned') {

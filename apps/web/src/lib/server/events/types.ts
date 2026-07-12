@@ -266,10 +266,18 @@ export interface ConversationStatusChangedPayload {
   previousStatus: string
   newStatus: string
 }
+/**
+ * Symmetric with TicketAssignedPayload: an assignment can change the agent
+ * and/or the team independently (conversation.service's assignTeam can move
+ * the team while leaving the agent untouched, and vice versa), so both sides
+ * carry their own current + previous value.
+ */
 export interface ConversationAssignedPayload {
   conversation: EventConversationRef
   assignedAgentPrincipalId: string | null
   previousAgentPrincipalId: string | null
+  assignedTeamId: string | null
+  previousTeamId: string | null
 }
 export interface ConversationPriorityChangedPayload {
   conversation: EventConversationRef

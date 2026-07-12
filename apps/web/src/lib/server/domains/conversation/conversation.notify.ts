@@ -8,10 +8,10 @@
  *    identified (anonymous visitors have no deliverable address; the widget's
  *    unread badge covers the online case).
  */
-import { db, eq, inArray, principal, user, teamMembers, conversations } from '@/lib/server/db'
+import { db, eq, inArray, principal, user, conversations } from '@/lib/server/db'
 import { resolveSendingAddress } from '@/lib/server/domains/channel-accounts/channel-account.service'
 import type { Conversation } from '@/lib/server/db'
-import type { PrincipalId, ConversationId, TeamId } from '@quackback/ids'
+import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/core'
 import { config } from '@/lib/server/config'
 import { generateContentHTML } from '@/lib/shared/content-html'
@@ -208,41 +208,6 @@ export async function notifyVisitorMessage(opts: {
     }
   } catch (err) {
     log.warn({ err }, 'notify visitor message failed')
-  }
-}
-
-/**
- * In-app bell for a team assignment (§4.12): ping every member of the assigned
- * team except the actor who made the assignment. Fire-and-forget; the smallest
- * sensible fan-out (no email, no presence gate — a team inbox is checked async).
- */
-export async function notifyTeamAssigned(opts: {
-  conversation: Conversation
-  teamId: TeamId
-  actorPrincipalId: PrincipalId | null
-}): Promise<void> {
-  try {
-    const members = await db
-      .select({ principalId: teamMembers.principalId })
-      .from(teamMembers)
-      .where(eq(teamMembers.teamId, opts.teamId))
-    const recipients = members
-      .map((m) => m.principalId)
-      .filter((id) => id !== opts.actorPrincipalId)
-    if (recipients.length === 0) return
-
-    const preview = opts.conversation.subject ?? opts.conversation.lastMessagePreview
-    await createNotificationsBatch(
-      recipients.map((principalId) => ({
-        principalId,
-        type: 'chat_message' as const,
-        title: 'A conversation was assigned to your team',
-        body: preview ? previewOf(preview) : undefined,
-        metadata: { conversationId: opts.conversation.id },
-      }))
-    )
-  } catch (err) {
-    log.warn({ err }, 'notify team assigned failed')
   }
 }
 

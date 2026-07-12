@@ -201,16 +201,19 @@ describe('conversation.webhooks emit helpers', () => {
     expect(newStatus).toBe('closed')
   })
 
-  it('emitConversationAssigned passes new assignee then previous', async () => {
+  it('emitConversationAssigned passes new assignee/team then previous assignee/team', async () => {
     const assigned = {
       ...baseConversation,
       assignedAgentPrincipalId: 'principal_a',
+      assignedTeamId: 'team_1',
     } as unknown as Conversation
-    await emitConversationAssigned(visitorActor, assigned, null)
-    const [, , assignedAgentPrincipalId, previousAgentPrincipalId] =
+    await emitConversationAssigned(visitorActor, assigned, null, null)
+    const [, , assignedAgentPrincipalId, previousAgentPrincipalId, assignedTeamId, previousTeamId] =
       dispatch.dispatchConversationAssigned.mock.calls[0]
     expect(assignedAgentPrincipalId).toBe('principal_a')
     expect(previousAgentPrincipalId).toBeNull()
+    expect(assignedTeamId).toBe('team_1')
+    expect(previousTeamId).toBeNull()
   })
 
   it('emitConversationPriorityChanged passes previous then new priority', async () => {

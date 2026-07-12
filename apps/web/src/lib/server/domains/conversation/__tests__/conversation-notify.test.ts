@@ -232,6 +232,15 @@ describe('notifyVisitorMessage', () => {
   })
 })
 
+// notifyTeamAssigned was removed in WO-3 slice 2: the team-assignment bell now
+// rides the `conversation.assigned` event through the event/hook pipeline
+// instead of a direct createNotificationsBatch call here. The characterization
+// this block used to pin (team members minus the actor; type 'chat_message',
+// deliberately now 'conversation_assigned'; title 'A conversation was assigned
+// to your team') is ported to
+// events/__tests__/targets-assignment.test.ts (recipient resolution) and
+// events/__tests__/notification-handler.test.ts (title/type/metadata).
+
 describe('notifyAgentReply', () => {
   const visitorPrincipalId = 'principal_visitor' as PrincipalId
 

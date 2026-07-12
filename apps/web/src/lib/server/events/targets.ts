@@ -758,27 +758,54 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
 // ============================================================================
 
 /**
- * Notification target for `conversation.assigned`: the newly-assigned agent.
- * Exported (like `webhookSubscriptionMatches`) so it's unit-testable without
- * driving the whole getHookTargets pipeline.
- *
- * Fires only when the AGENT side of the assignment actually changed — the
- * event also fires for a team-only reassignment (conversation.service's
- * assignTeam can touch `assignedTeamId` while leaving the agent untouched),
- * which must never re-ping an already-assigned agent — and the new assignee
- * isn't the actor who made the assignment (never self-notify).
+ * Notification target for `conversation.assigned`: the newly-assigned agent
+ * AND, when the conversation's team assignment changed, that team's members
+ * — one combined target (never split recipients across multiple notification
+ * targets; idempotency depends on a single target per event), mirroring
+ * `getTicketAssignedTargets` below. An assignment can move the agent and/or
+ * the team independently (conversation.service's assignTeam can touch
+ * `assignedTeamId` while leaving the agent untouched, and vice versa), so
+ * each side only contributes recipients when IT actually changed.
+ * `buildNotifications` (events/handlers/notification.ts) tells the two
+ * recipient kinds apart by comparing each principal against
+ * `assignedAgentPrincipalId` in config, so the direct assignee gets "you were
+ * assigned" while their teammates get the team-assignment copy. Exported
+ * (like `webhookSubscriptionMatches`) so it's unit-testable without driving
+ * the whole getHookTargets pipeline.
  */
 export async function getConversationAssignedTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'conversation.assigned') return null
-  const { conversation, assignedAgentPrincipalId, previousAgentPrincipalId } = event.data
-  if (!assignedAgentPrincipalId) return null
-  if (assignedAgentPrincipalId === previousAgentPrincipalId) return null
-  if (assignedAgentPrincipalId === event.actor.principalId) return null
+  const {
+    conversation,
+    assignedAgentPrincipalId,
+    previousAgentPrincipalId,
+    assignedTeamId,
+    previousTeamId,
+  } = event.data
 
+  const directAssignee: PrincipalId | null =
+    assignedAgentPrincipalId &&
+    assignedAgentPrincipalId !== previousAgentPrincipalId &&
+    assignedAgentPrincipalId !== event.actor.principalId
+      ? (assignedAgentPrincipalId as PrincipalId)
+      : null
+
+  const recipients = new Set<PrincipalId>()
+  if (directAssignee) recipients.add(directAssignee)
+
+  if (assignedTeamId && assignedTeamId !== previousTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    const memberIds = await listTeamMemberPrincipalIds(assignedTeamId as TeamId)
+    for (const id of memberIds) {
+      if (id !== event.actor.principalId) recipients.add(id)
+    }
+  }
+
+  if (recipients.size === 0) return null
   return {
     type: 'notification',
-    target: { principalIds: [assignedAgentPrincipalId as PrincipalId] },
-    config: { conversationId: conversation.id, assignedAgentPrincipalId },
+    target: { principalIds: [...recipients] },
+    config: { conversationId: conversation.id, assignedAgentPrincipalId: directAssignee },
   }
 }
 
