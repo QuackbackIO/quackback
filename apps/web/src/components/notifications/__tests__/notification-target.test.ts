@@ -106,7 +106,7 @@ describe('getNotificationTarget', () => {
     })
   })
 
-  it('routes ticket_status_changed with a ticketId to the ticket thread', () => {
+  it('routes ticket_status_changed (requester) with a ticketId to the portal ticket thread', () => {
     const notification = buildNotification({
       type: 'ticket_status_changed',
       ticketId: 'ticket_1',
@@ -114,6 +114,39 @@ describe('getNotificationTarget', () => {
     expect(getNotificationTarget(notification)).toEqual({
       to: '/support/ticket/$ticketId',
       params: { ticketId: 'ticket_1' },
+    })
+  })
+
+  it('routes ticket_assigned (team member) to the admin inbox, NOT the requester-only portal thread', () => {
+    const notification = buildNotification({
+      type: 'ticket_assigned',
+      ticketId: 'ticket_7',
+    })
+    expect(getNotificationTarget(notification)).toEqual({
+      to: '/admin/inbox',
+      search: { i: 'ticket_7' },
+    })
+  })
+
+  it('routes conversation_assigned with a conversationId to the inbox', () => {
+    const notification = buildNotification({
+      type: 'conversation_assigned',
+      conversationId: 'conversation_5',
+    })
+    expect(getNotificationTarget(notification)).toEqual({
+      to: '/admin/inbox',
+      search: { i: 'conversation_5' },
+    })
+  })
+
+  it('routes assistant_handed_off with a conversationId to the inbox', () => {
+    const notification = buildNotification({
+      type: 'assistant_handed_off',
+      conversationId: 'conversation_6',
+    })
+    expect(getNotificationTarget(notification)).toEqual({
+      to: '/admin/inbox',
+      search: { i: 'conversation_6' },
     })
   })
 

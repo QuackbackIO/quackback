@@ -50,19 +50,22 @@ export function getNotificationTarget(
     return { to: '/admin/inbox', search: { i: notification.conversationId } }
   }
 
+  // A ticket ASSIGNMENT notifies a team member, so it deep-links into the admin
+  // unified inbox (which accepts a ticket id via `?i=`, per the `?t=`→`?i=` alias
+  // in routes/admin/tickets.tsx). Routing it to the portal thread would 404: that
+  // view is requester-only (getMyTicketFn gates on requesterPrincipalId === actor),
+  // and an assignee is never the requester.
+  if (notification.type === 'ticket_assigned' && notification.ticketId) {
+    return { to: '/admin/inbox', search: { i: notification.ticketId } }
+  }
+
   // A ticket-stage change notifies the requester (portal); deep-link to the thread.
   // Deliberately NOT `/admin/inbox?i=` (UNIFIED-INBOX-SPEC.md §4 suggests this):
   // `existing.requesterPrincipalId` (ticket.service.ts) is only ever set from
   // `PortalUserPicker`, so every recipient of this notification is a portal
   // customer without admin access — routing them into `/admin/inbox` would
   // strand them outside the workspace they can reach.
-  //
-  // A ticket assignment notifies a team member instead, but the same thread is the
-  // correct destination either way, so it shares this branch.
-  if (
-    (notification.type === 'ticket_status_changed' || notification.type === 'ticket_assigned') &&
-    notification.ticketId
-  ) {
+  if (notification.type === 'ticket_status_changed' && notification.ticketId) {
     return { to: '/support/ticket/$ticketId', params: { ticketId: notification.ticketId } }
   }
 
