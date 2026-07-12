@@ -202,6 +202,112 @@ describe('notificationHook — comment.created', () => {
   })
 })
 
+// WO-3 slice 1: conversation/ticket assignment and assistant hand-off bells,
+// routed through the same buildNotifications switch as every other event
+// type. Target resolution (who ends up in principalIds) is covered by
+// targets-assignment.test.ts; these assert the notification content the
+// hook builds once a target already exists.
+describe('notificationHook — conversation.assigned', () => {
+  it('creates a "you were assigned" bell for the new assignee', async () => {
+    const event = {
+      id: 'evt-conv-assigned-1',
+      type: 'conversation.assigned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor', displayName: 'Jordan' },
+      data: {
+        conversation: {
+          id: 'conversation_1',
+          status: 'open',
+          channel: 'messenger',
+          priority: 'none',
+        },
+        assignedAgentPrincipalId: 'principal_agent',
+        previousAgentPrincipalId: null,
+      },
+    } as EventData
+
+    const target: NotificationTarget = { principalIds: ['principal_agent' as never] }
+    const config = { conversationId: 'conversation_1', assignedAgentPrincipalId: 'principal_agent' }
+
+    const result = await notificationHook.run(event, target, config)
+    expect(result.success).toBe(true)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_agent',
+        type: 'conversation_assigned',
+        title: 'You were assigned a conversation',
+        metadata: { conversationId: 'conversation_1' },
+      }),
+    ])
+  })
+})
+
+describe('notificationHook — ticket.assigned', () => {
+  it('titles the direct assignee "you were assigned" and everyone else "your team"', async () => {
+    const event = {
+      id: 'evt-ticket-assigned-1',
+      type: 'ticket.assigned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        assignedPrincipalId: 'principal_agent',
+        previousPrincipalId: null,
+        assignedTeamId: 'team_1',
+        previousTeamId: null,
+      },
+    } as EventData
+
+    const target: NotificationTarget = {
+      principalIds: ['principal_agent' as never, 'principal_teammate' as never],
+    }
+    const config = { ticketId: 'ticket_1', assignedPrincipalId: 'principal_agent' }
+
+    await notificationHook.run(event, target, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch).toEqual([
+      expect.objectContaining({
+        principalId: 'principal_agent',
+        type: 'ticket_assigned',
+        title: 'You were assigned a ticket',
+        metadata: { ticketId: 'ticket_1' },
+      }),
+      expect.objectContaining({
+        principalId: 'principal_teammate',
+        type: 'ticket_assigned',
+        title: 'A ticket was assigned to your team',
+        metadata: { ticketId: 'ticket_1' },
+      }),
+    ])
+  })
+})
+
+describe('notificationHook — assistant.handed_off', () => {
+  it('creates a hand-off bell with the truncated reason as the body', async () => {
+    const event = {
+      id: 'evt-handoff-1',
+      type: 'assistant.handed_off',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'service', principalId: 'principal_quinn', displayName: 'Quinn' },
+      data: { conversationId: 'conversation_1', reason: 'Customer asked for a human' },
+    } as EventData
+
+    const target: NotificationTarget = { principalIds: ['principal_agent' as never] }
+    const config = { conversationId: 'conversation_1', reason: 'Customer asked for a human' }
+
+    await notificationHook.run(event, target, config)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_agent',
+        type: 'assistant_handed_off',
+        title: 'Quinn handed off a conversation',
+        body: 'Customer asked for a human',
+        metadata: { conversationId: 'conversation_1' },
+      }),
+    ])
+  })
+})
+
 describe('notificationHook — changelog.published', () => {
   it('includes changelogId in the notification metadata', async () => {
     const event = {

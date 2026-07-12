@@ -3,7 +3,15 @@
  * Queries database to determine all targets for an event.
  */
 
-import type { PostId, PrincipalId, SegmentId, UserId, WebhookId } from '@quackback/ids'
+import type {
+  ConversationId,
+  PostId,
+  PrincipalId,
+  SegmentId,
+  TeamId,
+  UserId,
+  WebhookId,
+} from '@quackback/ids'
 import {
   db,
   integrations,
@@ -18,6 +26,7 @@ import {
   posts,
   boards,
   userSegments,
+  conversations,
 } from '@/lib/server/db'
 import { canViewPost, type Actor } from '@/lib/server/policy'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
@@ -193,6 +202,21 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
     if (MENTION_EVENT_TYPES.includes(event.type as (typeof MENTION_EVENT_TYPES)[number])) {
       const mentionTargets = await getMentionTargets(event, context)
       targets.push(...mentionTargets)
+    }
+
+    // Support-inbox bells (WO-3 slice 1): conversation/ticket assignment and
+    // assistant hand-off each resolve to at most one notification target.
+    if (event.type === 'conversation.assigned') {
+      const assignedTarget = await getConversationAssignedTargets(event)
+      if (assignedTarget) targets.push(assignedTarget)
+    }
+    if (event.type === 'ticket.assigned') {
+      const ticketAssignedTarget = await getTicketAssignedTargets(event)
+      if (ticketAssignedTarget) targets.push(ticketAssignedTarget)
+    }
+    if (event.type === 'assistant.handed_off') {
+      const handoffTarget = await getAssistantHandedOffTargets(event)
+      if (handoffTarget) targets.push(handoffTarget)
     }
 
     // AI targets (sentiment, embeddings) - only when AI is configured
@@ -727,6 +751,111 @@ async function getMentionTargets(event: EventData, context: HookContext): Promis
   }
 
   return targets
+}
+
+// ============================================================================
+// Support-Inbox Assignment + Hand-off Targets (WO-3 slice 1)
+// ============================================================================
+
+/**
+ * Notification target for `conversation.assigned`: the newly-assigned agent.
+ * Exported (like `webhookSubscriptionMatches`) so it's unit-testable without
+ * driving the whole getHookTargets pipeline.
+ *
+ * Fires only when the AGENT side of the assignment actually changed — the
+ * event also fires for a team-only reassignment (conversation.service's
+ * assignTeam can touch `assignedTeamId` while leaving the agent untouched),
+ * which must never re-ping an already-assigned agent — and the new assignee
+ * isn't the actor who made the assignment (never self-notify).
+ */
+export async function getConversationAssignedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'conversation.assigned') return null
+  const { conversation, assignedAgentPrincipalId, previousAgentPrincipalId } = event.data
+  if (!assignedAgentPrincipalId) return null
+  if (assignedAgentPrincipalId === previousAgentPrincipalId) return null
+  if (assignedAgentPrincipalId === event.actor.principalId) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: [assignedAgentPrincipalId as PrincipalId] },
+    config: { conversationId: conversation.id, assignedAgentPrincipalId },
+  }
+}
+
+/**
+ * Notification target for `ticket.assigned`: the newly-assigned teammate AND,
+ * when the ticket's team assignment changed, that team's members — one
+ * combined target (never split recipients across multiple notification
+ * targets; idempotency depends on a single target per event).
+ * `buildNotifications` (events/handlers/notification.ts) tells the two
+ * recipient kinds apart by comparing each principal against
+ * `assignedPrincipalId` in config, so the direct assignee gets "you were
+ * assigned" while their teammates get the team-assignment copy.
+ */
+export async function getTicketAssignedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.assigned') return null
+  const { ticket, assignedPrincipalId, previousPrincipalId, assignedTeamId, previousTeamId } =
+    event.data
+
+  const directAssignee: PrincipalId | null =
+    assignedPrincipalId &&
+    assignedPrincipalId !== previousPrincipalId &&
+    assignedPrincipalId !== event.actor.principalId
+      ? (assignedPrincipalId as PrincipalId)
+      : null
+
+  const recipients = new Set<PrincipalId>()
+  if (directAssignee) recipients.add(directAssignee)
+
+  if (assignedTeamId && assignedTeamId !== previousTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    const memberIds = await listTeamMemberPrincipalIds(assignedTeamId as TeamId)
+    for (const id of memberIds) {
+      if (id !== event.actor.principalId) recipients.add(id)
+    }
+  }
+
+  if (recipients.size === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: [...recipients] },
+    config: { ticketId: ticket.id, assignedPrincipalId: directAssignee },
+  }
+}
+
+/**
+ * Notification target for `assistant.handed_off`. The payload carries only
+ * `{ conversationId, reason }`, so this re-reads the conversation for its
+ * current team assignment — the assigned team's members when one is set,
+ * else every admin/member principal (the whole agent team). The actor
+ * (Quinn's service principal) is always excluded.
+ */
+export async function getAssistantHandedOffTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'assistant.handed_off') return null
+  const { conversationId, reason } = event.data
+
+  const [conv] = await db
+    .select({ assignedTeamId: conversations.assignedTeamId })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId as ConversationId))
+    .limit(1)
+
+  let recipientIds: PrincipalId[]
+  if (conv?.assignedTeamId) {
+    const { listTeamMemberPrincipalIds } = await import('@/lib/server/domains/teams')
+    recipientIds = await listTeamMemberPrincipalIds(conv.assignedTeamId as TeamId)
+  } else {
+    const { listAssignableTeammates } = await import('@/lib/server/domains/teams')
+    recipientIds = (await listAssignableTeammates()).map((t) => t.principalId as PrincipalId)
+  }
+
+  const filtered = recipientIds.filter((id) => id !== event.actor.principalId)
+  if (filtered.length === 0) return null
+  return {
+    type: 'notification',
+    target: { principalIds: filtered },
+    config: { conversationId, reason },
+  }
 }
 
 // ============================================================================

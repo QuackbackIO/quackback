@@ -42,6 +42,15 @@ export interface NotificationConfig {
   commenterName?: string
   commentPreview?: string
   isTeamMember?: boolean
+  // conversation.assigned (WO-3 slice 1)
+  conversationId?: string
+  assignedAgentPrincipalId?: string | null
+  // ticket.assigned (WO-3 slice 1) — assignedPrincipalId is the direct
+  // assignee; any other recipient in the target is a team member.
+  ticketId?: string
+  assignedPrincipalId?: string | null
+  // assistant.handed_off (WO-3 slice 1)
+  reason?: string
 }
 
 export const notificationHook: HookHandler = {
@@ -172,6 +181,42 @@ function buildNotifications(
       body: truncate(data.postTitle, 150),
       postId: data.postId as PostId,
       metadata: { postUrl: data.postUrl, excerpt: data.excerpt, actorName },
+    }))
+  }
+
+  if (event.type === 'conversation.assigned') {
+    const { conversationId } = config
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'conversation_assigned' as NotificationType,
+      title: 'You were assigned a conversation',
+      metadata: { conversationId },
+    }))
+  }
+
+  if (event.type === 'ticket.assigned') {
+    const { ticketId, assignedPrincipalId } = config
+    return principalIds.map((principalId) => {
+      const isDirectAssignee = !!assignedPrincipalId && principalId === assignedPrincipalId
+      return {
+        principalId,
+        type: 'ticket_assigned' as NotificationType,
+        title: isDirectAssignee
+          ? 'You were assigned a ticket'
+          : 'A ticket was assigned to your team',
+        metadata: { ticketId },
+      }
+    })
+  }
+
+  if (event.type === 'assistant.handed_off') {
+    const { conversationId, reason } = config
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'assistant_handed_off' as NotificationType,
+      title: 'Quinn handed off a conversation',
+      body: truncate(reason ?? '', 150),
+      metadata: { conversationId },
     }))
   }
 
