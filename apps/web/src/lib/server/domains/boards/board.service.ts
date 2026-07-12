@@ -23,6 +23,8 @@ import {
   asc,
 } from '@/lib/server/db'
 import type { BoardId, PostId } from '@quackback/ids'
+import { emitBestEffort } from '@/lib/server/events/emit'
+import { boardCreated, boardDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import type { CreateBoardInput, UpdateBoardInput, BoardWithDetails } from './board.types'
 import { slugify } from '@/lib/shared/utils'
@@ -157,6 +159,14 @@ export async function createBoard(input: CreateBoardInput): Promise<Board> {
 
   const [board] = await db.insert(boards).values(insertValues).returning()
 
+  // WO-6b: audit-relevant board creation event (best-effort, post-mutation).
+  void emitBestEffort(boardCreated, {
+    payload: { boardId: board.id, name: board.name, slug: board.slug },
+    actor: { type: 'service' },
+    entityId: board.id,
+    context: { source: 'admin' },
+  })
+
   return board
 }
 
@@ -256,6 +266,14 @@ export async function deleteBoard(id: BoardId): Promise<void> {
   if (result.length === 0) {
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${id} not found`)
   }
+
+  // WO-6b: audit-relevant board deletion event.
+  void emitBestEffort(boardDeleted, {
+    payload: { boardId: id },
+    actor: { type: 'service' },
+    entityId: id,
+    context: { source: 'admin' },
+  })
 
   // Clean up webhook board_ids references (fire-and-forget)
   // Removes deleted board ID from any webhook filters

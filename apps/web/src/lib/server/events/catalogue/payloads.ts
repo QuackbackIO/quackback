@@ -238,6 +238,15 @@ export const P = {
   'apikey.created': z.looseObject({ apiKeyId: id, name: z.string(), scopes: z.array(z.string()) }),
   'apikey.deleted': z.looseObject({ apiKeyId: id }),
   'settings.updated': z.looseObject({ changedKeys: z.array(z.string()) }),
+  // --- WO-6b: content / taxonomy plane (new, catalogue-only) ---
+  'board.created': z.looseObject({ boardId: id, name: z.string(), slug: z.string() }),
+  'board.updated': z.looseObject({ boardId: id, changedKeys: z.array(z.string()) }),
+  'board.deleted': z.looseObject({ boardId: id }),
+  'tag.created': z.looseObject({ tagId: id, name: z.string() }),
+  'tag.deleted': z.looseObject({ tagId: id }),
+  'article.published': z.looseObject({ articleId: id, title: z.string() }),
+  'article.updated': z.looseObject({ articleId: id, changedKeys: z.array(z.string()) }),
+  'article.deleted': z.looseObject({ articleId: id }),
 } as const
 
 export type PayloadFor<T extends keyof typeof P> = z.infer<(typeof P)[T]>

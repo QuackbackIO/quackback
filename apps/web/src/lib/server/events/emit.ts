@@ -9,10 +9,13 @@
  * fires the commit-time doorbell (`pg_notify 'outbox_wake'`) so the relay wakes
  * immediately. It NEVER enqueues BullMQ — the relay is the sole enqueuer.
  */
-import { events, auditLog, sql, type Database, type Transaction } from '@/lib/server/db'
+import { db, events, auditLog, sql, type Database, type Transaction } from '@/lib/server/db'
 import { createId, type EvtId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
 import type { EventDefinition } from './catalogue/define'
 import type { DomainEvent, EventActorType, EventContext } from './envelope'
+
+const log = logger.child({ component: 'emit' })
 
 /** A drizzle handle that can carry the emission: the caller's tx (normal) or db. */
 export type DbOrTx = Database | Transaction
@@ -80,6 +83,23 @@ export async function emit<P>(
   await tx.execute(sql`select pg_notify('outbox_wake', '')`)
 
   return eventId
+}
+
+/**
+ * Emit in a fresh short transaction, best-effort — for WO-6 emission from
+ * services that have no surrounding transaction. Never throws: a failed audit/
+ * outbox write must not fail the domain mutation that already committed. Prefer
+ * the in-tx `emit()` when the caller already owns a transaction.
+ */
+export async function emitBestEffort<P>(
+  def: EventDefinition<P>,
+  input: EmitInput<P>
+): Promise<void> {
+  try {
+    await db.transaction((tx) => emit(tx, def, input))
+  } catch (error) {
+    log.warn({ err: error, type: def.type }, 'best-effort emit failed')
+  }
 }
 
 /**
