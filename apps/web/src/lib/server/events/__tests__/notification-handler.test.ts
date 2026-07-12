@@ -337,6 +337,71 @@ describe('notificationHook — ticket.assigned', () => {
   })
 })
 
+// WO-3 slice 4 (ported characterization): replaces the deleted inline
+// createNotification block in ticket.service.ts's setTicketStatus. Title/body
+// copy is preserved BYTE-FOR-BYTE from the old direct write — see
+// domains/tickets/__tests__/ticket.service.test.ts's now-adjacent comment —
+// the resolver (events/__tests__/targets-ticket-status.test.ts) is what
+// changed: it now resolves stage labels itself rather than the service
+// passing them in already-formatted.
+describe('notificationHook — ticket.status_changed', () => {
+  function makeEvent(): EventData {
+    return {
+      id: 'evt-ticket-status-1',
+      type: 'ticket.status_changed',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        previousStatus: 'open',
+        newStatus: 'closed',
+        stage: 'resolved',
+        previousStage: 'received',
+        requesterPrincipalId: 'principal_requester',
+        title: 'Cannot log in',
+      },
+    } as EventData
+  }
+
+  it('titles + bodies a from/to crossing exactly like the old direct write', async () => {
+    const target: NotificationTarget = { principalIds: ['principal_requester' as never] }
+    const config = {
+      ticketId: 'ticket_1',
+      title: 'Cannot log in',
+      stageLabel: 'Resolved',
+      previousStageLabel: 'Received',
+    }
+
+    await notificationHook.run(makeEvent(), target, config)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_requester',
+        type: 'ticket_status_changed',
+        title: 'Cannot log in is now Resolved',
+        body: 'Moved from Received to Resolved',
+        metadata: { ticketId: 'ticket_1' },
+      }),
+    ])
+  })
+
+  it('falls back to a generic body when there was no prior stage', async () => {
+    const target: NotificationTarget = { principalIds: ['principal_requester' as never] }
+    const config = {
+      ticketId: 'ticket_1',
+      title: 'Cannot log in',
+      stageLabel: 'Resolved',
+      previousStageLabel: null,
+    }
+
+    await notificationHook.run(makeEvent(), target, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch[0]).toMatchObject({
+      title: 'Cannot log in is now Resolved',
+      body: 'Open the ticket to see the latest update.',
+    })
+  })
+})
+
 describe('notificationHook — assistant.handed_off', () => {
   it('creates a hand-off bell with the truncated reason as the body', async () => {
     const event = {

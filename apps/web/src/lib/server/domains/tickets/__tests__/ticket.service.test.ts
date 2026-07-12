@@ -24,7 +24,6 @@ import {
   principal,
   user,
   settings,
-  inAppNotifications,
   conversationMessages,
   conversations,
   ticketConversations,
@@ -401,7 +400,18 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     ).toBeUndefined()
   })
 
-  it('a public_stage crossing notifies the requester bell with a from/to body', async () => {
+  // WO-3 slice 4: the requester bell itself (previously a direct
+  // createNotification call here, asserted against inAppNotifications) now
+  // rides the ticket.status_changed event/hook pipeline — see
+  // events/__tests__/targets-ticket-status.test.ts (gating: null-stage
+  // silent, same-stage silent, no-requester silent, tracker has no requester)
+  // and events/__tests__/notification-handler.test.ts (title/body copy,
+  // ported byte-for-byte from this file's old assertions: 'Moved from
+  // Received to Resolved' / 'Open the ticket to see the latest update.').
+  // What's left to characterize HERE is the service's own job: correctly
+  // enrich the hook call with previousStage (unrecoverable after the UPDATE
+  // commits) and the requester, on a real public_stage crossing.
+  it('a public_stage crossing enriches the hook with previousStage + requester', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()
     const actor = adminActor()
@@ -410,18 +420,17 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       { type: 'customer', title: 'Notify me', requesterPrincipalId: requester },
       actor
     )
+    webhooks.emitTicketStatusChanged.mockClear() // ignore create-time noise
     await setTicketStatus(created.id, closed.id, actor) // received -> resolved
-    const notifs = await testDb
-      .select()
-      .from(inAppNotifications)
-      .where(eq(inAppNotifications.principalId, requester))
-    const ticketNotif = notifs.find((n) => n.type === 'ticket_status_changed')
-    expect(ticketNotif).toBeDefined()
-    expect((ticketNotif?.metadata as { ticketId?: string } | null)?.ticketId).toBe(created.id)
-    expect(ticketNotif?.body).toBe('Moved from Received to Resolved')
+    expect(webhooks.emitTicketStatusChanged).toHaveBeenCalledTimes(1)
+    const [, , , , stage, previousStage, requesterPrincipalId] =
+      webhooks.emitTicketStatusChanged.mock.calls[0]
+    expect(stage).toBe('resolved')
+    expect(previousStage).toBe('received')
+    expect(requesterPrincipalId).toBe(requester)
   })
 
-  it('a public_stage crossing with no prior stage falls back to a generic body', async () => {
+  it('a status change with no prior stage enriches the hook with a null previousStage', async () => {
     await seedSettings()
     // Neutralize any committed default so our seeded default is the only one.
     await testDb
@@ -457,14 +466,24 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
       actor
     )
     expect(created.status.id).toBe(internal.id) // starts on the publicStage-less default
+    webhooks.emitTicketStatusChanged.mockClear()
     await setTicketStatus(created.id, resolved.id, actor) // null -> resolved
-    const notifs = await testDb
-      .select()
-      .from(inAppNotifications)
-      .where(eq(inAppNotifications.principalId, requester))
-    const ticketNotif = notifs.find((n) => n.type === 'ticket_status_changed')
-    expect(ticketNotif).toBeDefined()
-    expect(ticketNotif?.body).toBe('Open the ticket to see the latest update.')
+    const [, , , , stage, previousStage, requesterPrincipalId] =
+      webhooks.emitTicketStatusChanged.mock.calls[0]
+    expect(stage).toBe('resolved')
+    expect(previousStage).toBeNull()
+    expect(requesterPrincipalId).toBe(requester)
+  })
+
+  it('a status change with no requester enriches the hook with a null requesterPrincipalId', async () => {
+    await seedSettings()
+    const { closed } = await seedStatuses()
+    const actor = adminActor()
+    const created = await createTicket({ type: 'back_office', title: 'No requester' }, actor)
+    webhooks.emitTicketStatusChanged.mockClear()
+    await setTicketStatus(created.id, closed.id, actor)
+    const [, , , , , , requesterPrincipalId] = webhooks.emitTicketStatusChanged.mock.calls[0]
+    expect(requesterPrincipalId).toBeNull()
   })
 
   it('closing stamps resolvedAt + firstResponseAt; reopening clears resolvedAt and counts the reopen', async () => {

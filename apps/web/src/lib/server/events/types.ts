@@ -388,6 +388,20 @@ export interface TicketStatusChangedPayload {
   newStatus: string
   /** The new public stage projection (null when hidden). */
   stage: string | null
+  /**
+   * The public stage projection BEFORE this move — unrecoverable once the
+   * status UPDATE commits (the previous status row's own publicStage isn't
+   * carried anywhere else), so the emit site captures it before the write and
+   * threads it through here for the requester-bell resolver's crossing check.
+   */
+  previousStage: string | null
+  /** The ticket's requester, or null for a back-office/tracker ticket with
+   *  none — needed by the requester-bell resolver, which has no other way to
+   *  look up "who owns this ticket" from the ref alone. */
+  requesterPrincipalId: string | null
+  /** The ticket's title — `EventTicketRef` carries no title, but the
+   *  requester-bell notification copy needs it. */
+  title: string
 }
 export interface TicketAssignedPayload {
   ticket: EventTicketRef

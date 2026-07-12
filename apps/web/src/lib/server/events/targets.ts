@@ -224,6 +224,12 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
       const noteMentionTarget = getConversationNoteMentionedTargets(event)
       if (noteMentionTarget) targets.push(noteMentionTarget)
     }
+    // Ticket requester bell (WO-3 slice 4): fires only on a real public_stage
+    // crossing to a requester who exists.
+    if (event.type === 'ticket.status_changed') {
+      const statusChangedTarget = await getTicketStatusChangedTargets(event)
+      if (statusChangedTarget) targets.push(statusChangedTarget)
+    }
 
     // AI targets (sentiment, embeddings) - only when AI is configured
     if (getOpenAI() && AI_EVENT_TYPES.includes(event.type as (typeof AI_EVENT_TYPES)[number])) {
@@ -907,6 +913,37 @@ export function getConversationNoteMentionedTargets(event: EventData): HookTarge
     type: 'notification',
     target: { principalIds: mentionedPrincipalIds as PrincipalId[] },
     config: { conversationId, conversationMessageId, authorName, preview },
+  }
+}
+
+/**
+ * Notification target for `ticket.status_changed` (WO-3 slice 4): the
+ * requester's bell, reproducing ticket.service.ts's deleted inline block
+ * EXACTLY — fires only when the new stage is non-null, differs from the
+ * previous stage (a same-stage or null-stage move stays silent, mirroring the
+ * thread-event gate right above it in the service), AND a requester exists
+ * (a back-office ticket or a tracker — which carries no requester of its
+ * own — never self-bells). Stage labels are resolved HERE, not carried in the
+ * payload, so a later workspace label edit doesn't retroactively change
+ * historical event data.
+ */
+export async function getTicketStatusChangedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.status_changed') return null
+  const { ticket, stage, previousStage, requesterPrincipalId, title } = event.data
+  if (!stage || stage === previousStage) return null
+  if (!requesterPrincipalId) return null
+
+  const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
+  const stageLabels = await getStageLabels()
+  const stageLabel = stageLabels[stage as keyof typeof stageLabels] ?? stage
+  const previousStageLabel = previousStage
+    ? (stageLabels[previousStage as keyof typeof stageLabels] ?? previousStage)
+    : null
+
+  return {
+    type: 'notification',
+    target: { principalIds: [requesterPrincipalId as PrincipalId] },
+    config: { ticketId: ticket.id, title, stageLabel, previousStageLabel },
   }
 }
 

@@ -55,7 +55,6 @@ import {
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { getStageLabels } from '../settings/settings.tickets'
-import { createNotification } from '../notifications/notification.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { emitTicketCreated, emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
@@ -520,6 +519,14 @@ export async function setTicketStatus(
   // pattern. Computed once and reused for the function's return value.
   const dto = await publishTicketUpdated(updated)
 
+  // previousStage is unrecoverable once the UPDATE above commits (the prior
+  // status row's own publicStage isn't carried anywhere else), so it's
+  // captured here — off `current`, read before the write — and threaded
+  // through the hook alongside the requester, for the requester-bell
+  // resolver's crossing check (events/targets.ts's
+  // getTicketStatusChangedTargets, WO-3 slice 4).
+  const previousStage = current ? resolveStage(current) : null
+
   // Agent/integration-facing signal: every internal status move fires a hook
   // (mirrors conversation.status_changed), reporting the category axis.
   void emitTicketStatusChanged(
@@ -527,39 +534,26 @@ export async function setTicketStatus(
     updated,
     current?.category ?? 'open',
     target.category,
-    resolveStage(target)
+    resolveStage(target),
+    previousStage,
+    existing.requesterPrincipalId ?? null
   )
 
   // A public_stage crossing to a visible stage is the single customer-facing
   // signal (§4.2): post a status event into the ticket thread. Null-stage and
   // same-stage churn stay silent (customers hear stage progress, not internal
-  // churn). The requester bell/email + conversation echo ride this same crossing
-  // in a later slice.
+  // churn). The requester bell now rides the ticket.status_changed event/hook
+  // pipeline above (WO-3 slice 4) — the system-1 email (§4.8) and the
+  // conversation echo ride the same crossing later.
   const newStage = resolveStage(target)
-  const oldStage = current ? resolveStage(current) : null
-  if (newStage && newStage !== oldStage) {
+  if (newStage && newStage !== previousStage) {
     const stageLabels = await getStageLabels()
-    const stageLabel = stageLabels[newStage]
-    await postTicketStatusEvent(id, stageLabel)
-    // Notify the requester's bell that their ticket progressed. The system-1
-    // email (§4.8) and the conversation echo ride this same crossing later.
-    if (existing.requesterPrincipalId) {
-      const body = oldStage
-        ? `Moved from ${stageLabels[oldStage]} to ${stageLabel}`
-        : 'Open the ticket to see the latest update.'
-      await createNotification({
-        principalId: existing.requesterPrincipalId,
-        type: 'ticket_status_changed',
-        title: `${updated.title} is now ${stageLabel}`,
-        body,
-        metadata: { ticketId: id },
-      })
-    }
+    await postTicketStatusEvent(id, stageLabels[newStage])
 
     // A tracker fans its stage progress onto the customer tickets it tracks
     // (§4.9): each linked ticket takes the tracker's status and runs its own
     // crossing (its requester's bell + thread event). Trackers carry no
-    // requester of their own, so the bell above never fires for them.
+    // requester of their own, so the bell never fires for them.
     if (existing.type === 'tracker') {
       await cascadeTrackerStatus(id, statusId, actor)
     }

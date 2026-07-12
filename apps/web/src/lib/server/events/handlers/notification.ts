@@ -55,6 +55,12 @@ export interface NotificationConfig {
   conversationMessageId?: string
   authorName?: string
   preview?: string
+  // ticket.status_changed (WO-3 slice 4) — labels resolved by the target
+  // resolver (getTicketStatusChangedTargets), never carried on the event
+  // payload itself.
+  title?: string
+  stageLabel?: string
+  previousStageLabel?: string | null
 }
 
 export const notificationHook: HookHandler = {
@@ -252,6 +258,20 @@ function buildNotifications(
       title: `${authorName} mentioned you in a conversation`,
       body: preview,
       metadata: { conversationId, actorName: authorName },
+    }))
+  }
+
+  if (event.type === 'ticket.status_changed') {
+    const { ticketId, title, stageLabel, previousStageLabel } = config
+    const body = previousStageLabel
+      ? `Moved from ${previousStageLabel} to ${stageLabel}`
+      : 'Open the ticket to see the latest update.'
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'ticket_status_changed' as NotificationType,
+      title: `${title} is now ${stageLabel}`,
+      body,
+      metadata: { ticketId },
     }))
   }
 

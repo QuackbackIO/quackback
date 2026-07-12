@@ -106,7 +106,11 @@ export async function emitTicketStatusChanged(
   ticket: Ticket,
   previousStatus: 'open' | 'pending' | 'closed',
   newStatus: 'open' | 'pending' | 'closed',
-  stage: string | null
+  stage: string | null,
+  // Unrecoverable after the UPDATE commits — the caller must capture it off
+  // the pre-write status row and pass it through (see setTicketStatus).
+  previousStage: string | null,
+  requesterPrincipalId: string | null
 ): Promise<void> {
   await safe('ticket.status_changed', () =>
     dispatchTicketStatusChanged(
@@ -114,7 +118,10 @@ export async function emitTicketStatusChanged(
       ticketRef(ticket),
       previousStatus,
       newStatus,
-      stage
+      stage,
+      previousStage,
+      requesterPrincipalId,
+      ticket.title
     )
   )
 }

@@ -98,10 +98,18 @@ describe('ticket.webhooks emit helpers', () => {
     expect(dataArg.stage).toBeNull()
   })
 
-  it('emitTicketStatusChanged passes previous then new category + the new stage', async () => {
-    await emitTicketStatusChanged(agentActor, baseTicket, 'open', 'closed', 'resolved')
+  it('emitTicketStatusChanged passes previous/new category, both stages, requester, and title', async () => {
+    await emitTicketStatusChanged(
+      agentActor,
+      baseTicket,
+      'open',
+      'closed',
+      'resolved',
+      'received',
+      'principal_r'
+    )
     expect(dispatch.dispatchTicketStatusChanged).toHaveBeenCalledTimes(1)
-    const [, ref, previousStatus, newStatus, stage] =
+    const [, ref, previousStatus, newStatus, stage, previousStage, requesterPrincipalId, title] =
       dispatch.dispatchTicketStatusChanged.mock.calls[0]
     expect(ref).toEqual({
       id: 'ticket_1',
@@ -114,6 +122,9 @@ describe('ticket.webhooks emit helpers', () => {
     expect(previousStatus).toBe('open')
     expect(newStatus).toBe('closed')
     expect(stage).toBe('resolved')
+    expect(previousStage).toBe('received')
+    expect(requesterPrincipalId).toBe('principal_r')
+    expect(title).toBe('Cannot log in')
   })
 
   it('emitTicketAssigned reports the ticket assignee as new and passes the previous', async () => {
