@@ -2,7 +2,7 @@
  * Resolves a notification to the in-app route it should deep-link to.
  *
  * `NotificationTarget` is a plain descriptor rather than a route-typed
- * `LinkProps` value: the seven notification types fan out to routes with
+ * `LinkProps` value: the notification types fan out to routes with
  * different `params`/`search` shapes, and threading each one through the
  * router's generic `Link` typing here would fight the type system for no
  * safety gain (the shapes are validated by each destination route already).
@@ -26,19 +26,25 @@ export function getNotificationTarget(
       params: { slug: notification.post.boardSlug, postId: notification.postId },
     }
     // Anchor a comment notification to the comment itself rather than just the post.
-    if (notification.type === 'comment_created' && notification.commentId) {
+    if (
+      (notification.type === 'comment_created' || notification.type === 'comment_mentioned') &&
+      notification.commentId
+    ) {
       target.hash = `comment-${notification.commentId}`
     }
     return target
   }
 
-  // Conversation mentions and messages deep-link into the inbox conversation.
-  // Recipients of both types are always team members (visitor-side
-  // conversation updates go through the widget and email, never the bell),
+  // Conversation mentions, messages, assignments, and assistant handoffs all deep-link
+  // into the inbox conversation. Recipients of these types are always team members
+  // (visitor-side conversation updates go through the widget and email, never the bell),
   // so /admin/inbox is the correct target in both the dropdown and the full
   // notifications page.
   if (
-    (notification.type === 'chat_mention' || notification.type === 'chat_message') &&
+    (notification.type === 'chat_mention' ||
+      notification.type === 'chat_message' ||
+      notification.type === 'conversation_assigned' ||
+      notification.type === 'assistant_handed_off') &&
     notification.conversationId
   ) {
     return { to: '/admin/inbox', search: { i: notification.conversationId } }
@@ -50,7 +56,13 @@ export function getNotificationTarget(
   // `PortalUserPicker`, so every recipient of this notification is a portal
   // customer without admin access — routing them into `/admin/inbox` would
   // strand them outside the workspace they can reach.
-  if (notification.type === 'ticket_status_changed' && notification.ticketId) {
+  //
+  // A ticket assignment notifies a team member instead, but the same thread is the
+  // correct destination either way, so it shares this branch.
+  if (
+    (notification.type === 'ticket_status_changed' || notification.type === 'ticket_assigned') &&
+    notification.ticketId
+  ) {
     return { to: '/support/ticket/$ticketId', params: { ticketId: notification.ticketId } }
   }
 

@@ -18,6 +18,10 @@ export type NotificationType =
   | 'chat_message'
   | 'chat_mention'
   | 'ticket_status_changed'
+  | 'conversation_assigned'
+  | 'ticket_assigned'
+  | 'comment_mentioned'
+  | 'assistant_handed_off'
 
 /**
  * Input for creating a single notification

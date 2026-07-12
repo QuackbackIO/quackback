@@ -7,6 +7,8 @@ import {
   TicketIcon,
   AtSymbolIcon,
   SignalIcon,
+  InboxArrowDownIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import type { NotificationType } from '@/lib/shared/types'
 
@@ -16,8 +18,10 @@ export interface NotificationTypeConfig {
   bgClass: string
 }
 
-// Color-coding strategy: @ symbol marks mention types (amber for posts, rose for conversations);
-// teal for support conversation; indigo separates ticket stage changes from blue post status changes.
+// Color-coding strategy: @ symbol marks mention types (amber for posts, rose for chat,
+// fuchsia for comments); teal for support conversation, cyan for conversation assignment;
+// indigo separates ticket stage changes from violet ticket assignment and blue post status
+// changes; yellow marks AI-assistant handoffs as high-signal.
 export const notificationTypeConfigs: Record<NotificationType, NotificationTypeConfig> = {
   post_status_changed: {
     icon: CheckCircleIcon,
@@ -58,6 +62,26 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     icon: SignalIcon,
     iconClass: 'text-orange-500',
     bgClass: 'bg-orange-500/10',
+  },
+  conversation_assigned: {
+    icon: InboxArrowDownIcon,
+    iconClass: 'text-cyan-500',
+    bgClass: 'bg-cyan-500/10',
+  },
+  ticket_assigned: {
+    icon: TicketIcon,
+    iconClass: 'text-violet-500',
+    bgClass: 'bg-violet-500/10',
+  },
+  comment_mentioned: {
+    icon: AtSymbolIcon,
+    iconClass: 'text-fuchsia-500',
+    bgClass: 'bg-fuchsia-500/10',
+  },
+  assistant_handed_off: {
+    icon: SparklesIcon,
+    iconClass: 'text-yellow-500',
+    bgClass: 'bg-yellow-500/10',
   },
 }
 
