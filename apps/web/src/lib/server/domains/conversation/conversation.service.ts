@@ -1478,7 +1478,11 @@ export async function recordCsat(
   // conversation.csat_submitted.
   const { updated, isFirstSubmission, commentJustAdded } = await db.transaction(async (tx) => {
     const [prev] = await tx
-      .select({ csatRating: conversations.csatRating, csatComment: conversations.csatComment })
+      .select({
+        csatRating: conversations.csatRating,
+        csatComment: conversations.csatComment,
+        csatSubmittedAt: conversations.csatSubmittedAt,
+      })
       .from(conversations)
       .where(eq(conversations.id, conversationId))
       .for('update')
