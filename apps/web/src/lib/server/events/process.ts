@@ -269,6 +269,11 @@ export async function processEvent(event: EventData): Promise<void> {
   // dependency on the workflow engine.
   void import('@/lib/server/domains/workflows/event-trigger')
     .then(async (eventTriggerModule) => {
+      // EVENTING-V2 WO-8e: when the outbox path is active, workflow triggers ride
+      // the relay → 'workflow' hook (workflowTriggerResolver) instead. Skip the
+      // legacy enqueue to avoid double-dispatch. Checked inside the async chain
+      // so the request path pays no extra latency.
+      if (await isEventingV2Enabled()) return
       if (!eventTriggerModule.eventToWorkflowTrigger(event)) return
       const { hasAnyLiveWorkflow } = await import('@/lib/server/domains/workflows/workflow.service')
       if (!(await hasAnyLiveWorkflow())) return

@@ -32,6 +32,8 @@ const lazyHooks: Record<string, () => Promise<HookHandler>> = {
   feedback_pipeline: () =>
     import('./handlers/feedback-pipeline').then((m) => m.feedbackPipelineHook),
   summary: () => import('./handlers/summary').then((m) => m.summaryHook),
+  // EVENTING-V2 WO-8e: workflow triggers ride the outbox → relay → this hook.
+  workflow: () => import('./handlers/workflow').then((m) => m.workflowHook),
 }
 
 /**
