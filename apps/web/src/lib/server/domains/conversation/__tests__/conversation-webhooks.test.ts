@@ -141,7 +141,7 @@ describe('conversation.webhooks emit helpers', () => {
     expect(msgArg.authorEmail).toBe('agent@acme.com')
   })
 
-  it('emitConversationCsatSubmitted reads rating/comment/submittedAt from the row', async () => {
+  it('emitConversationCsatSubmitted carries only rating and submittedAt', async () => {
     const rated = {
       ...baseConversation,
       csatRating: 4,
@@ -153,7 +153,7 @@ describe('conversation.webhooks emit helpers', () => {
       dispatch.dispatchConversationCsatSubmitted.mock.calls[0]
     expect(convRefArg.id).toBe('conversation_1')
     expect(rating).toBe(4)
-    expect(comment).toBe('ok')
+    expect(comment).toBeNull()
     expect(submittedAt).toBe('2026-06-05T02:00:00.000Z')
   })
 

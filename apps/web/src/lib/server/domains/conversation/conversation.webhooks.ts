@@ -211,7 +211,9 @@ export async function emitConversationCsatSubmitted(
       toEventActor(actor),
       conversationRef(conversation),
       csatRating,
-      conversation.csatComment ?? null,
+      // Comments have their own once-only event. Keeping this null prevents a
+      // comment-first request from delivering the same text on both topics.
+      null,
       csatSubmittedAt.toISOString()
     )
   )

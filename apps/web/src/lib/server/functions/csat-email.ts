@@ -16,7 +16,7 @@
  * is the read-only check the route's loader runs (safe against mail-scanner
  * link prefetch — corporate email security products crawl every link in an
  * email, and a loader that wrote the rating would let a scanner silently
- * submit and latest-wins-overwrite CSAT scores). `recordCsatViaTokenFn` only
+ * submit a CSAT score). `recordCsatViaTokenFn` only
  * ever runs from an explicit click on the rendered page.
  */
 import { z } from 'zod'
@@ -62,8 +62,7 @@ const recordCsatViaTokenSchema = z.object({
   rating: z.number().int().min(1).max(5),
   /** Present only on the thanks view's optional follow-up comment submit —
    *  the initial face click never carries one. recordCsat's own contract
-   *  (latest-wins) makes re-submitting the same rating alongside a comment a
-   *  safe, idempotent no-op on the rating itself. */
+   *  keeps the first score immutable, making the comment follow-up idempotent. */
   comment: z.string().max(2000).optional(),
 })
 
@@ -73,7 +72,7 @@ const recordCsatViaTokenSchema = z.object({
  * the thanks view's optional comment box is submitted. Never called from a
  * loader (see the module doc's scanner rationale). Idempotent: recordCsat's
  * latest-wins contract means re-clicking a face, or commenting after the
- * fact, simply re-records.
+ * fact, leaves the first score in place while still accepting the comment.
  */
 export const recordCsatViaTokenFn = createServerFn({ method: 'POST' })
   .validator(recordCsatViaTokenSchema)

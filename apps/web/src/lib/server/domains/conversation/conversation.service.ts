@@ -1485,9 +1485,12 @@ export async function recordCsat(
     const [row] = await tx
       .update(conversations)
       .set({
-        csatRating: rating,
+        // A survey's score and submission time are established by the first
+        // successful call. Follow-up/retried calls may add the optional comment
+        // but cannot make reporting diverge from the once-only submitted event.
+        csatRating: prev?.csatRating ?? rating,
         ...(trimmedComment !== undefined ? { csatComment: trimmedComment } : {}),
-        csatSubmittedAt: new Date(),
+        csatSubmittedAt: prev?.csatSubmittedAt ?? new Date(),
         updatedAt: new Date(),
       })
       .where(eq(conversations.id, conversationId))
@@ -1517,7 +1520,7 @@ export async function recordCsat(
   // assistant subscriber in events/process.ts confirms the involvement off the
   // first submission, keeping cross-domain outcome logic on the bus.
   void import('@/lib/server/domains/assistant/assistant.orchestrator')
-    .then((m) => m.attributeCsatIfLastHandler(conversationId, rating))
+    .then((m) => m.attributeCsatIfLastHandler(conversationId, updated.csatRating ?? rating))
     .catch((err) => log.warn({ err }, 'attribute csat to assistant involvement failed'))
 }
 

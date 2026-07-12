@@ -34,7 +34,9 @@ export function getRedis(): Redis {
 export const CACHE_KEYS = {
   TENANT_SETTINGS: 'settings:tenant',
   INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
-  ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
+  // v2 invalidates rows cached before migration 0123 added the
+  // conversation.csat_comment_added subscription.
+  ACTIVE_WEBHOOKS: 'hooks:webhooks-active:v2',
   SLACK_CHANNELS: 'slack:channels',
   // Hot dependency of getTenantSettings; invalidated by save/delete in
   // platform-credential.service.ts.

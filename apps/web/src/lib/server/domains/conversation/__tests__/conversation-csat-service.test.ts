@@ -12,6 +12,7 @@ import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 
 const publishConversationUpdate = vi.fn()
+let lastUpdate: Record<string, unknown> = {}
 
 const emit = vi.hoisted(() => ({
   emitConversationCreated: vi.fn(),
@@ -54,7 +55,10 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   function chain(): Record<string, unknown> {
     const c: Record<string, unknown> = {}
     c.from = () => c
-    c.set = () => c
+    c.set = (values: Record<string, unknown>) => {
+      lastUpdate = values
+      return c
+    }
     c.where = () => c
     // loadConversationOr404 -> select().from().where().limit()
     c.limit = async () => [conversationRow]
@@ -62,7 +66,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     c.for = async () => [conversationRow]
     // recordCsat -> update().set().where().returning(): echo the current row so
     // conversationToDTO/emit receive a plausible post-update conversation.
-    c.returning = async () => [{ ...conversationRow }]
+    c.returning = async () => [{ ...conversationRow, ...lastUpdate }]
     return c
   }
   const tx = { select: () => chain(), update: () => chain() }
@@ -95,6 +99,7 @@ beforeEach(() => {
   conversationRow.csatRating = null
   conversationRow.csatComment = null
   conversationRow.csatSubmittedAt = null
+  lastUpdate = {}
 })
 
 describe('recordCsat webhook emission', () => {
@@ -131,5 +136,19 @@ describe('recordCsat webhook emission', () => {
 
     expect(emit.emitConversationCsatSubmitted).toHaveBeenCalledTimes(1)
     expect(emit.emitConversationCsatCommentAdded).not.toHaveBeenCalled()
+  })
+
+  it('keeps the first score and timestamp when a later call adds a comment', async () => {
+    const firstSubmittedAt = new Date('2026-06-05T02:00:00.000Z')
+    conversationRow.csatRating = 5
+    conversationRow.csatSubmittedAt = firstSubmittedAt
+
+    await recordCsat(convId, 1, 'adding context', visitorActor)
+
+    expect(lastUpdate.csatRating).toBe(5)
+    expect(lastUpdate.csatSubmittedAt).toBe(firstSubmittedAt)
+    expect(lastUpdate.csatComment).toBe('adding context')
+    expect(emit.emitConversationCsatSubmitted).not.toHaveBeenCalled()
+    expect(emit.emitConversationCsatCommentAdded).toHaveBeenCalledTimes(1)
   })
 })
