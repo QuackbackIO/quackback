@@ -281,6 +281,8 @@ export {
   webhooksRelations,
   // Schema tables - hook delivery idempotency
   hookDeliveries,
+  // Schema tables - durable event outbox (EVENTING-V2 spine)
+  events,
   // Schema tables - audit log
   auditLog,
   // Schema tables - sso recovery codes
