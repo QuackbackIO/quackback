@@ -37,7 +37,6 @@ export const webhookHook: HookHandler = {
     config: unknown,
     ctx?: HookRunContext
   ): Promise<HookResult> {
-    const { url } = target as WebhookTarget
     const { webhookId } = config as WebhookConfig
 
     // Idempotency: if BullMQ is re-running this job after a worker crash,
@@ -46,36 +45,40 @@ export const webhookHook: HookHandler = {
     // deliveries on every rolling restart that interrupts a worker.
     const claimed = await claimHookDelivery(ctx?.jobId, 'webhook')
     if (!claimed) {
-      log.debug({ job_id: ctx?.jobId, url }, 'skipping duplicate delivery')
+      log.debug({ job_id: ctx?.jobId, webhook_id: webhookId }, 'skipping duplicate delivery')
       return { success: true }
     }
 
-    log.debug({ event_type: event.type, url }, 'processing webhook')
-
-    // The signing secret never travels in the job payload (it would otherwise
-    // sit in plaintext in Redis for the job's lifetime). Load and decrypt it
-    // here, right before it's needed, using only the webhookId that was
-    // enqueued.
+    // Delivery-time re-validation (mirrors the app-webhook hook): the
+    // enqueue-time snapshot — including the queued target URL — is superseded
+    // by the live row, so a webhook disabled, soft-deleted, or re-pointed
+    // between enqueue and delivery (or during BullMQ retries) is honored.
+    // The signing secret also never travels in the job payload (it would
+    // otherwise sit in plaintext in Redis for the job's lifetime) — it's
+    // loaded and decrypted here, right before it's needed.
     let secret: string
+    let url: string
     try {
       const row = await db.query.webhooks.findFirst({
         where: eq(webhooks.id, webhookId),
-        columns: { secret: true },
+        columns: { secret: true, url: true, status: true, deletedAt: true },
       })
-      if (!row) {
-        // Webhook was deleted (or its row is otherwise gone) after this
-        // delivery was enqueued — there's nothing to sign with and nothing
-        // a retry can fix.
-        log.warn({ webhook_id: webhookId }, 'webhook not found for delivery, skipping')
+      if (!row || row.status !== 'active' || row.deletedAt !== null) {
+        // Deleted or disabled after this delivery was enqueued — a retry
+        // can't make it deliverable again.
+        log.warn({ webhook_id: webhookId }, 'webhook no longer deliverable, skipping')
         await failHookDelivery(ctx?.jobId)
-        return { success: false, error: 'Webhook not found', shouldRetry: false }
+        return { success: false, error: 'Webhook not deliverable', shouldRetry: false }
       }
       secret = decryptWebhookSecret(row.secret)
+      url = row.url
     } catch (error) {
       log.error({ err: error, webhook_id: webhookId }, 'failed to load webhook secret')
       await releaseHookDelivery(ctx?.jobId)
       return { success: false, error: 'Failed to load webhook secret', shouldRetry: true }
     }
+
+    log.debug({ event_type: event.type, url }, 'processing webhook')
 
     // Build payload
     const payload = JSON.stringify({

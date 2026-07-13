@@ -974,11 +974,6 @@ export interface FeatureFlags {
   /** Status page: public/private/segment-scoped service status with incidents,
    *  maintenance windows, uptime history, and subscriber notifications. */
   statusPage: boolean
-  /** EVENTING-V2 cutover: route domain events through the durable outbox +
-   *  relay instead of the legacy fire-and-forget dispatch. Internal migration
-   *  control — enable in staging for the shadow-diff soak, then in prod. Off by
-   *  default; the env override EVENTING_V2_RELAY=true forces it on for ops/tests. */
-  eventingV2: boolean
 }
 
 /**
@@ -1049,8 +1044,6 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   assistantProactiveSuggestions: false,
   assistantKnowledge: false,
   assistantTools: false,
-  // Internal infrastructure migration — off until cutover
-  eventingV2: false,
 }
 
 /**
@@ -1118,11 +1111,6 @@ export const FEATURE_FLAG_REGISTRY: Record<
     description:
       'Publish a status page on your portal with live component status, incidents, scheduled maintenance, uptime history, and subscriber notifications.',
   },
-  eventingV2: {
-    label: 'Durable event delivery (v2)',
-    description:
-      'Route notifications, webhooks, and integrations through a durable event outbox so nothing is lost if the server restarts mid-delivery. Internal migration control — leave off unless directed.',
-  },
 }
 
 /**
@@ -1171,11 +1159,5 @@ export const LAB_SECTIONS: Array<{
     description:
       'Analytics about who visits your portal and widget. Review your privacy policy before enabling.',
     flags: [{ key: 'visitorAnalytics', subFlags: ['visitorDeviceTracking'] }],
-  },
-  {
-    title: 'Advanced',
-    description:
-      'Internal infrastructure controls. Leave at their defaults unless a maintainer directs otherwise.',
-    flags: [{ key: 'eventingV2' }],
   },
 ]

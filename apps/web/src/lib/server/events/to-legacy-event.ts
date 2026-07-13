@@ -8,9 +8,8 @@
  *
  * Actor fidelity caveat: the envelope stores actorType + actorId (the principal
  * id) but not the actor's email/displayName. Consumers that key off those (e.g.
- * the "don't notify yourself" filter) should compare by principalId; the
- * WO-15 shadow-diff surfaces any residual difference, and WO-6's in-service
- * emission carries the full actor context.
+ * the "don't notify yourself" filter) should compare by principalId; WO-6's
+ * in-service emission carries the full actor context.
  */
 import type { DomainEvent } from './envelope'
 import type { EventData, EventActor } from './types'

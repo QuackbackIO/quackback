@@ -61,6 +61,17 @@ vi.mock('@/lib/server/domains/webhooks/encryption', () => ({
 import { webhookHook } from '../handlers/webhook'
 import { SsrfError, TimeoutError } from '@/lib/server/content/ssrf-guard'
 
+/** The live-row shape the handler re-validates at delivery time. */
+function deliverableRow(secret: string, overrides: Record<string, unknown> = {}) {
+  return {
+    secret,
+    url: 'https://hooks.example.com/deliver',
+    status: 'active',
+    deletedAt: null,
+    ...overrides,
+  }
+}
+
 describe('Webhook Handler', () => {
   describe('HMAC Signature Generation', () => {
     it('generates correct HMAC-SHA256 signature', () => {
@@ -127,7 +138,7 @@ describe('Webhook Handler', () => {
     beforeEach(() => {
       vi.clearAllMocks()
       h.claim.mockResolvedValue(true)
-      h.findFirstWebhook.mockResolvedValue({ secret: 'encrypted:whsec_test' })
+      h.findFirstWebhook.mockResolvedValue(deliverableRow('encrypted:whsec_test'))
       h.decryptWebhookSecret.mockImplementation((ciphertext: string) =>
         ciphertext.replace(/^encrypted:/, '')
       )
@@ -178,7 +189,7 @@ describe('Webhook Handler', () => {
 
       vi.clearAllMocks()
       h.claim.mockResolvedValue(true)
-      h.findFirstWebhook.mockResolvedValue({ secret: 'encrypted:whsec_test' })
+      h.findFirstWebhook.mockResolvedValue(deliverableRow('encrypted:whsec_test'))
       h.decryptWebhookSecret.mockImplementation((ciphertext: string) =>
         ciphertext.replace(/^encrypted:/, '')
       )
@@ -198,6 +209,33 @@ describe('Webhook Handler', () => {
       expect(h.complete).not.toHaveBeenCalled()
       expect(h.release).not.toHaveBeenCalled()
       expect(h.fail).not.toHaveBeenCalled()
+    })
+
+    // Delivery-time re-validation: a webhook disabled or soft-deleted between
+    // enqueue and delivery (or during BullMQ retries) must NOT fire.
+    it.each([
+      ['disabled', { status: 'disabled' }],
+      ['soft-deleted', { deletedAt: new Date() }],
+    ])(
+      'fails permanently without POSTing when the webhook is %s at delivery time',
+      async (_, ov) => {
+        h.findFirstWebhook.mockResolvedValue(deliverableRow('encrypted:whsec_test', ov))
+        expect(await webhookHook.run!(event, target, config)).toMatchObject({
+          success: false,
+          shouldRetry: false,
+        })
+        expect(h.safeFetch).not.toHaveBeenCalled()
+        expect(h.fail).toHaveBeenCalledOnce()
+      }
+    )
+
+    it('delivers to the CURRENT row url, superseding the queued target url', async () => {
+      h.findFirstWebhook.mockResolvedValue(
+        deliverableRow('encrypted:whsec_test', { url: 'https://moved.example.com/hook' })
+      )
+      h.safeFetch.mockResolvedValue(resp(200))
+      await webhookHook.run!(event, target, config)
+      expect(h.safeFetch.mock.calls[0][0]).toBe('https://moved.example.com/hook')
     })
   })
 
@@ -220,7 +258,7 @@ describe('Webhook Handler', () => {
     it('never reads a secret off the job config -- it is fetched and decrypted at delivery time', async () => {
       expect(config).not.toHaveProperty('secret')
 
-      h.findFirstWebhook.mockResolvedValue({ secret: 'encrypted:whsec_live' })
+      h.findFirstWebhook.mockResolvedValue(deliverableRow('encrypted:whsec_live'))
       h.decryptWebhookSecret.mockImplementation((ciphertext: string) =>
         ciphertext.replace(/^encrypted:/, '')
       )
