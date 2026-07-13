@@ -13,7 +13,11 @@ export interface NtfyPayload {
   tags?: string[]
 }
 
-export function buildNtfyPayload(event: EventData, topic: string, rootUrl: string): NtfyPayload | null {
+export function buildNtfyPayload(
+  event: EventData,
+  topic: string,
+  rootUrl: string
+): NtfyPayload | null {
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data

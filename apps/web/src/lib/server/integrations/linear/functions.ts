@@ -3,6 +3,7 @@
  */
 import { createServerFn } from '@tanstack/react-start'
 import type { PrincipalId } from '@quackback/ids'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface LinearOAuthState {
   type: 'linear_oauth'
@@ -29,7 +30,7 @@ export const getLinearConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { randomBytes } = await import('crypto')
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { signOAuthState } = await import('@/lib/server/auth/oauth-state')
-    const { config } = await import('@/lib/server/config')
+    const { getOAuthReturnDomain } = await import('@/lib/server/integrations/oauth')
 
     const auth = await requireAuth({ roles: ['admin'] })
     const { hasPlatformCredentials } =
@@ -39,7 +40,7 @@ export const getLinearConnectUrl = createServerFn({ method: 'GET' }).handler(
         'Linear platform credentials not configured. Configure them in integration settings first.'
       )
     }
-    const returnDomain = new URL(config.baseUrl).host
+    const returnDomain = getOAuthReturnDomain()
 
     const state = signOAuthState({
       type: 'linear_oauth',
@@ -92,7 +93,7 @@ export const fetchLinearTeamsFn = createServerFn({ method: 'GET' }).handler(
         const refreshed = await refreshLinearToken(secrets.refreshToken, credentials ?? undefined)
         accessToken = refreshed.accessToken
 
-        const newExpiry = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
+        const newExpiry = toIsoString(new Date(Date.now() + refreshed.expiresIn * 1000))
         await db
           .update(integrations)
           .set({

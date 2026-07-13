@@ -219,7 +219,9 @@ function schedulePostMergeRecheck(canonicalPostId: PostId): void {
     handler: '__post_merge_recheck__',
     delayMs: 3000,
     payload: { postId: canonicalPostId },
-  }).catch((err) => log.error({ err, post_id: canonicalPostId }, 'failed to schedule merge recheck'))
+  }).catch((err) =>
+    log.error({ err, post_id: canonicalPostId }, 'failed to schedule merge recheck')
+  )
 }
 
 /**
