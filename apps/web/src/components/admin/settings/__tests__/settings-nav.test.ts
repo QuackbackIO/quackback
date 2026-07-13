@@ -91,10 +91,12 @@ describe('buildNavSections', () => {
     expect(labels).not.toContain('Portal')
   })
 
-  it('has no separate Security section (rolled into Administration)', () => {
+  it('keeps a Security section for roles and permissions', () => {
     const sections = buildNavSections({ helpCenter: true })
-    const labels = sections.map((s) => s.label)
-    expect(labels).not.toContain('Security')
+    const security = sections.find((s) => s.label === 'Security')
+    expect(security).toBeDefined()
+    expect(security!.items.map((i) => i.label)).toEqual(['Roles & permissions'])
+    expect(security!.items[0].to).toBe('/admin/settings/roles')
   })
 
   it('has no separate General section (replaced by Administration)', () => {
@@ -112,13 +114,30 @@ describe('buildNavSections', () => {
   it('has the expected section order with helpCenter and chat on', () => {
     const sections = buildNavSections({ helpCenter: true, supportInbox: true })
     const labels = sections.map((s) => s.label)
-    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Support', 'Customers'])
+    expect(labels).toEqual([
+      'Administration',
+      'Workspace',
+      'SLA',
+      'Security',
+      'Customization',
+      'Feedback',
+      'Support',
+      'Customers',
+    ])
   })
 
   it('has the expected section order without helpCenter', () => {
     const sections = buildNavSections()
     const labels = sections.map((s) => s.label)
-    expect(labels).toEqual(['Administration', 'Customization', 'Feedback', 'Customers'])
+    expect(labels).toEqual([
+      'Administration',
+      'Workspace',
+      'SLA',
+      'Security',
+      'Customization',
+      'Feedback',
+      'Customers',
+    ])
   })
 
   it('Administration contains Members, Integrations, Security, Audit log, Developers, Labs in that order', () => {
@@ -138,7 +157,13 @@ describe('buildNavSections', () => {
     const sections = buildNavSections()
     const administration = sections.find((s) => s.label === 'Administration')!
     const auditLog = administration.items.find((i) => i.label === 'Audit log')!
-    expect(auditLog.to).toBe('/admin/settings/security/audit-log')
+    expect(auditLog.to).toBe('/admin/settings/audit')
+  })
+
+  it('does not duplicate Audit log under Security', () => {
+    const sections = buildNavSections()
+    const security = sections.find((s) => s.label === 'Security')!
+    expect(security.items.map((i) => i.label)).toEqual(['Roles & permissions'])
   })
 
   it('Members points at the existing team URL', () => {

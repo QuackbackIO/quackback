@@ -25,6 +25,7 @@ export function useCreateChangelog() {
     onSuccess: () => {
       // Invalidate all changelog lists to refetch with new entry
       queryClient.invalidateQueries({ queryKey: changelogKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: changelogKeys.taxonomy() })
       // Also invalidate public lists in case it was published
       queryClient.invalidateQueries({ queryKey: changelogKeys.public() })
     },
@@ -45,6 +46,7 @@ export function useUpdateChangelog() {
       queryClient.setQueryData(changelogKeys.detail(id), data)
       // Invalidate lists in case status or title changed
       queryClient.invalidateQueries({ queryKey: changelogKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: changelogKeys.taxonomy() })
       // Also invalidate public lists in case publish state changed
       queryClient.invalidateQueries({ queryKey: changelogKeys.public() })
     },

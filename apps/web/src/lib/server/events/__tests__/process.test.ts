@@ -6,13 +6,23 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { PostCreatedEvent } from '../types'
+import type { EventData, PostCreatedEvent } from '../types'
 
 // --- Mocks ---
 
 const mockQueueAddBulk = vi.fn().mockResolvedValue(undefined)
 const mockQueueClose = vi.fn().mockResolvedValue(undefined)
 const mockWorkerClose = vi.fn().mockResolvedValue(undefined)
+const insertMocks = vi.hoisted(() => {
+  const onConflictDoNothing = vi.fn().mockResolvedValue(undefined)
+  const values = vi.fn(() => ({
+    onConflictDoNothing,
+  }))
+  const dbInsert = vi.fn(() => ({
+    values,
+  }))
+  return { dbInsert, values, onConflictDoNothing }
+})
 
 // Captured once when the Worker is constructed (module-level singleton)
 let capturedProcessor: ((job: unknown) => Promise<void>) | null = null
@@ -63,12 +73,15 @@ vi.mock('../registry', () => ({
 // db mock: inline to avoid hoisting issues. Access via import for assertions.
 vi.mock('@/lib/server/db', () => ({
   db: {
+    insert: insertMocks.dbInsert,
     update: vi.fn(() => ({
       set: vi.fn(() => ({
         where: vi.fn().mockResolvedValue(undefined),
       })),
     })),
   },
+  ticketExternalLinks: { _name: 'ticketExternalLinks' },
+  postExternalLinks: { _name: 'postExternalLinks' },
   webhooks: {
     id: 'id',
     failureCount: 'failureCount',
@@ -113,6 +126,21 @@ function makeJob(overrides: Record<string, unknown> = {}) {
     opts: { attempts: 3 },
     ...overrides,
   }
+}
+
+function makeTicketCreatedEvent(): EventData {
+  return {
+    id: 'evt-ticket-created',
+    type: 'ticket.created',
+    timestamp: '2026-06-16T00:00:00.000Z',
+    actor: { type: 'user', principalId: 'principal_1' },
+    data: {
+      ticket: {
+        id: 'ticket_1',
+        subject: 'Billing question',
+      },
+    },
+  } as EventData
 }
 
 // --- Bootstrap ---
@@ -188,6 +216,99 @@ describe('Event Processing (BullMQ)', () => {
 
       await expect(capturedProcessor!(makeJob())).resolves.toBeUndefined()
       expect(mockHook.run).toHaveBeenCalled()
+    })
+
+    it('persists ticket external links for successful ticket.created hook results', async () => {
+      await ensureInitialized()
+      const mockHook = {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          externalId: 'EXT-123',
+          externalDisplayId: 'SUP-123',
+          externalUrl: 'https://github.example/issues/123',
+        }),
+      }
+      mockGetHook.mockReturnValue(mockHook)
+
+      await capturedProcessor!(
+        makeJob({
+          data: {
+            hookType: 'github',
+            event: makeTicketCreatedEvent(),
+            target: {},
+            config: { integrationId: 'integration_1' },
+          },
+        })
+      )
+
+      expect(insertMocks.dbInsert).toHaveBeenCalledWith({ _name: 'ticketExternalLinks' })
+      expect(insertMocks.values).toHaveBeenCalledWith({
+        ticketId: 'ticket_1',
+        integrationId: 'integration_1',
+        integrationType: 'github',
+        externalId: 'EXT-123',
+        externalDisplayId: 'SUP-123',
+        externalUrl: 'https://github.example/issues/123',
+        syncDirection: 'outbound',
+      })
+      expect(insertMocks.onConflictDoNothing).toHaveBeenCalled()
+    })
+
+    it('persists post external links for successful post.created hook results', async () => {
+      await ensureInitialized()
+      const mockHook = {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          externalId: 'LIN-123',
+        }),
+      }
+      mockGetHook.mockReturnValue(mockHook)
+
+      await capturedProcessor!(
+        makeJob({
+          data: {
+            hookType: 'linear',
+            event: makeEvent(),
+            target: {},
+            config: { integrationId: 'integration_linear' },
+          },
+        })
+      )
+
+      expect(insertMocks.dbInsert).toHaveBeenCalledWith({ _name: 'postExternalLinks' })
+      expect(insertMocks.values).toHaveBeenCalledWith({
+        postId: 'post_1',
+        integrationId: 'integration_linear',
+        integrationType: 'linear',
+        externalId: 'LIN-123',
+        externalDisplayId: null,
+        externalUrl: null,
+      })
+      expect(insertMocks.onConflictDoNothing).toHaveBeenCalled()
+    })
+
+    it('does not persist external links when integrationId is missing', async () => {
+      await ensureInitialized()
+      const mockHook = {
+        run: vi.fn().mockResolvedValue({
+          success: true,
+          externalId: 'EXT-123',
+        }),
+      }
+      mockGetHook.mockReturnValue(mockHook)
+
+      await capturedProcessor!(
+        makeJob({
+          data: {
+            hookType: 'github',
+            event: makeTicketCreatedEvent(),
+            target: {},
+            config: {},
+          },
+        })
+      )
+
+      expect(insertMocks.dbInsert).not.toHaveBeenCalled()
     })
 
     it('throws UnrecoverableError for unknown hook type', async () => {

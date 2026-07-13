@@ -26,6 +26,9 @@ export interface HelpCenterCategory {
   description: string | null
   icon: string | null
   isPublic: boolean
+  visibility: 'public' | 'targeted'
+  allowedSegmentIds: string[]
+  allowedPrincipalIds: string[]
   position: number
   createdAt: Date
   updatedAt: Date
