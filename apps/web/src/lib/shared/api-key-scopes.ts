@@ -83,6 +83,17 @@ const CATEGORY_BY_KEY = new Map<PermissionKey, PermissionCategory>(
 const READ_VERBS = new Set(['view', 'view_private', 'view_all', 'view_draft', 'export'])
 
 /** The scope an API key must hold for a catalogue permission to apply. */
+/**
+ * The read scope for a permission category — the capability an app/API key needs
+ * to RECEIVE data in that category (an event subscription is a read). Events
+ * declare a PermissionCategory and derive their required scope through here, so
+ * events, permissions, and API-key scopes all resolve through the same
+ * CATEGORY_SCOPES source of truth rather than a parallel vocabulary.
+ */
+export function readScopeForCategory(category: PermissionCategory): ApiKeyScope {
+  return CATEGORY_SCOPES[category].read
+}
+
 export function scopeForPermission(permission: PermissionKey): ApiKeyScope {
   // Every catalogue key has a category; fall back to the base write scope so an
   // unmapped permission fails toward requiring MORE authority, never less.

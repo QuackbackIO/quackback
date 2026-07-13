@@ -35,7 +35,7 @@ describe('app backfill (WO-14)', () => {
     // posts:read is the requiredScope for post.created; conversations:read is not held.
     const app = {
       subscribedEventTypes: ['post.created', 'conversation.created'],
-      grantedScopes: ['posts:read'],
+      grantedScopes: ['read:feedback'],
     }
     expect(deliverableTypes(app)).toEqual(['post.created'])
   })
@@ -47,7 +47,7 @@ describe('app backfill (WO-14)', () => {
       id: appId,
       oauthClientId: createId('app'),
       name: 'Backfill App',
-      grantedScopes: ['posts:read'],
+      grantedScopes: ['read:feedback'],
       subscribedEventTypes: ['post.created'],
       webhookEndpoint: 'https://app.example/hook',
       status: 'active',
@@ -67,7 +67,7 @@ describe('app backfill (WO-14)', () => {
       id: appId,
       oauthClientId: createId('app'),
       name: 'Replay App',
-      grantedScopes: ['posts:read'],
+      grantedScopes: ['read:feedback'],
       subscribedEventTypes: ['post.created'],
       webhookEndpoint: 'https://app.example/hook',
       status: 'active',
@@ -91,7 +91,7 @@ describe('app backfill (WO-14)', () => {
       id: appId,
       oauthClientId: createId('app'),
       name: 'Unscoped App',
-      grantedScopes: ['conversations:read'],
+      grantedScopes: ['read:chat'],
       subscribedEventTypes: ['post.created'],
       webhookEndpoint: 'https://app.example/hook',
       status: 'active',

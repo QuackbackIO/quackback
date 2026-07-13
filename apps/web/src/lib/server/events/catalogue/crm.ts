@@ -6,7 +6,7 @@
  */
 import { decl } from './helpers'
 
-const C = 'companies:read'
+const C = 'company'
 
 export const companyCreated = decl('company.created', 'company', { audit: true }, C)
 export const companyDeleted = decl('company.deleted', 'company', { audit: true }, C)

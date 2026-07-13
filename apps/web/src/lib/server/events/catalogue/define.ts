@@ -11,6 +11,8 @@
  * depends only on the interface here — not on any particular catalogue entry.
  */
 import type { z } from 'zod'
+import type { PermissionCategory } from '@/lib/shared/permissions'
+import type { ApiKeyScope } from '@/lib/shared/api-key-scopes'
 
 /**
  * Everywhere an event kind is exposed. Declared once, consumed by every
@@ -32,13 +34,20 @@ export interface EventExposure {
 export interface EventDefinition<P> {
   /** '<entity>.<verb>'. */
   type: string
+  /** The subject aggregate — must be a @quackback/ids entity key (see CONTRACT.md). */
   entity: string
   version: number
   /** Zod schema for the payload; validated at emit time. */
   payload: z.ZodType<P>
   exposure: EventExposure
-  /** Shared scope vocabulary; gates app subscriptions to this event. */
-  requiredScope: string
+  /**
+   * The permission category this event belongs to — the SAME mid-tier vocabulary
+   * permissions use. `requiredScope` is DERIVED from it via CATEGORY_SCOPES, so
+   * there is one authorization spine across REST/MCP/OAuth/event-subscriptions.
+   */
+  category: PermissionCategory
+  /** Derived from `category` (readScopeForCategory); gates app subscriptions. */
+  requiredScope: ApiKeyScope
   /**
    * 'always' = a call site is expected (CI coverage enforces it).
    * 'never'  = intentionally silent (hot paths: votes, reactions, view counters).

@@ -5,7 +5,7 @@
  */
 import { decl } from './helpers'
 
-const S = 'status:read'
+const S = 'status_page'
 
 export const statusIncidentCreated = decl(
   'status.incident_created',

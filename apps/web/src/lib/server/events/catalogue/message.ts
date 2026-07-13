@@ -1,7 +1,7 @@
 /** Message-family event declarations (WO-2). created/note_created are workflow triggers. */
 import { decl } from './helpers'
 
-const S = 'conversations:read'
+const S = 'conversation'
 
 export const messageCreated = decl(
   'message.created',

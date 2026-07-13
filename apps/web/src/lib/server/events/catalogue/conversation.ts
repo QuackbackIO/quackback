@@ -5,7 +5,7 @@
  */
 import { decl } from './helpers'
 
-const S = 'conversations:read'
+const S = 'conversation'
 const wf = { webhook: true, workflow: true } as const
 
 export const conversationCreated = decl('conversation.created', 'conversation', wf, S)

@@ -1,7 +1,7 @@
 /** Assistant + SLA event declarations (WO-2). All are workflow triggers. */
 import { decl } from './helpers'
 
-const S = 'conversations:read'
+const S = 'conversation'
 const wf = { webhook: true, workflow: true } as const
 
 export const assistantHandedOff = decl('assistant.handed_off', 'conversation', wf, S)

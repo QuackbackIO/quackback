@@ -225,8 +225,7 @@ describe('Event Processing (BullMQ)', () => {
   describe('worker.on("failed")', () => {
     async function ensureInitialized() {
       if (!capturedFailedHandler) {
-        mockGetHookTargets.mockResolvedValue([{ type: 'test', target: {}, config: {} }])
-        await processEvent(makeEvent())
+        await enqueueHookJobsWithIds([{ name: 'init', data: makeJob().data, jobId: 'init:failed' }])
       }
     }
 

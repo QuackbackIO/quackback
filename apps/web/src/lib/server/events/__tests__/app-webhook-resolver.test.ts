@@ -11,30 +11,34 @@ const app = (over: Partial<Parameters<typeof appMatches>[0]> = {}) => ({
   status: 'active',
   webhookEndpoint: 'https://app.example/hook',
   subscribedEventTypes: ['post.created'],
-  grantedScopes: ['posts:read'],
+  grantedScopes: ['read:feedback'],
   ...over,
 })
 
 describe('appMatches (WO-13 scope gate)', () => {
   it('matches an active, subscribed, sufficiently-scoped app', () => {
-    expect(appMatches(app(), 'post.created', 'posts:read')).toBe(true)
+    expect(appMatches(app(), 'post.created', 'read:feedback')).toBe(true)
   })
 
   it('denies when the app lacks the required scope', () => {
-    expect(
-      appMatches(app({ grantedScopes: ['conversations:read'] }), 'post.created', 'posts:read')
-    ).toBe(false)
+    expect(appMatches(app({ grantedScopes: ['read:chat'] }), 'post.created', 'read:feedback')).toBe(
+      false
+    )
   })
 
   it('denies when not subscribed to the event type', () => {
     expect(
-      appMatches(app({ subscribedEventTypes: ['comment.created'] }), 'post.created', 'posts:read')
+      appMatches(
+        app({ subscribedEventTypes: ['comment.created'] }),
+        'post.created',
+        'read:feedback'
+      )
     ).toBe(false)
   })
 
   it('denies a disabled app or one with no endpoint', () => {
-    expect(appMatches(app({ status: 'disabled' }), 'post.created', 'posts:read')).toBe(false)
-    expect(appMatches(app({ webhookEndpoint: null }), 'post.created', 'posts:read')).toBe(false)
+    expect(appMatches(app({ status: 'disabled' }), 'post.created', 'read:feedback')).toBe(false)
+    expect(appMatches(app({ webhookEndpoint: null }), 'post.created', 'read:feedback')).toBe(false)
   })
 
   it('denies when the event has no required scope (fail closed)', () => {

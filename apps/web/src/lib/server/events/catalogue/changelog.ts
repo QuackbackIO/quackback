@@ -5,5 +5,5 @@ export const changelogPublished = decl(
   'changelog.published',
   'changelog',
   { webhook: true, notification: 'status_change' },
-  'changelog:read'
+  'changelog'
 )

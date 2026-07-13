@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { ID_PREFIXES } from '@quackback/ids'
+import { PERMISSION_CATEGORIES } from '@/lib/shared/permissions'
+import { API_KEY_SCOPES } from '@/lib/shared/api-key-scopes'
 import { EVENT_TYPES } from '../types'
 import { allEventDefinitions, getEventDefinition } from '../catalogue'
 
@@ -48,5 +51,81 @@ describe('event catalogue coverage', () => {
   it('getEventDefinition resolves a known type and misses an unknown one', () => {
     expect(getEventDefinition('post.status_changed')?.entity).toBe('post')
     expect(getEventDefinition('nope.not_real')).toBeUndefined()
+  })
+
+  // ── events/CONTRACT.md enforcement ─────────────────────────────────────────
+
+  /** Entities without a 1:1 TypeID (singletons / virtual aggregates). */
+  const VIRTUAL_ENTITIES = new Set(['settings'])
+
+  /** The fixed verb vocabulary. Generic lifecycle verbs + the curated semantic
+   *  set. A new event with a novel verb must add it here on purpose — that is
+   *  the guard against ad-hoc naming drift. */
+  const VERBS = new Set<string>([
+    // generic lifecycle
+    'created',
+    'updated',
+    'deleted',
+    'restored',
+    'archived',
+    // semantic (curated)
+    'status_changed',
+    'priority_changed',
+    'assigned',
+    'attribute_changed',
+    'merged',
+    'unmerged',
+    'mentioned',
+    'note_mentioned',
+    'note_created',
+    'note_added',
+    'published',
+    'replied',
+    'handed_off',
+    'csat_submitted',
+    'csat_comment_added',
+    'customer_unresponsive',
+    'teammate_unresponsive',
+    'approaching_breach',
+    'breached',
+    // status-page legacy compound verbs (entity is status_incident/status_component)
+    'incident_created',
+    'incident_updated',
+    'maintenance_scheduled',
+    'maintenance_started',
+    'maintenance_completed',
+    'component_changed',
+  ])
+
+  it('every entity is a @quackback/ids key (or an allowlisted virtual entity)', () => {
+    const idKeys = new Set(Object.keys(ID_PREFIXES))
+    const bad = allEventDefinitions()
+      .map((d) => d.entity)
+      .filter((e) => !idKeys.has(e) && !VIRTUAL_ENTITIES.has(e))
+    expect(bad, `entity must match a TypeID key: ${[...new Set(bad)].join(', ')}`).toEqual([])
+  })
+
+  it('every category is a real PermissionCategory (shared auth spine)', () => {
+    const cats = new Set<string>(PERMISSION_CATEGORIES)
+    const bad = allEventDefinitions()
+      .filter((d) => !cats.has(d.category))
+      .map((d) => `${d.type}:${d.category}`)
+    expect(bad).toEqual([])
+  })
+
+  it('every requiredScope is a real ApiKeyScope, derived from the category', () => {
+    const scopes = new Set<string>(API_KEY_SCOPES)
+    const bad = allEventDefinitions()
+      .filter((d) => !scopes.has(d.requiredScope))
+      .map((d) => `${d.type}:${d.requiredScope}`)
+    expect(bad).toEqual([])
+  })
+
+  it('every event verb is in the fixed verb vocabulary', () => {
+    const bad = catalogueTypes.filter((t) => !VERBS.has(t.split('.').slice(1).join('.')))
+    expect(
+      bad,
+      `unknown verb — add to CONTRACT.md's verb list if intentional: ${bad.join(', ')}`
+    ).toEqual([])
   })
 })

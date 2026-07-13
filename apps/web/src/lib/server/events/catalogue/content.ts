@@ -7,8 +7,8 @@
  */
 import { decl } from './helpers'
 
-const B = 'boards:read'
-const K = 'help_center:read'
+const B = 'feedback'
+const K = 'help_center'
 
 export const boardCreated = decl('board.created', 'board', { audit: true }, B)
 export const boardUpdated = decl('board.updated', 'board', { audit: true }, B)

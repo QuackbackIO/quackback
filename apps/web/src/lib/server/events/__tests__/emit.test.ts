@@ -35,7 +35,8 @@ const auditedDef: EventDefinition<{ postId: string; note: string }> = {
   version: 1,
   payload: z.object({ postId: z.string(), note: z.string() }),
   exposure: { webhook: false, workflow: false, notification: null, activity: null, audit: true },
-  requiredScope: 'posts:read',
+  category: 'feedback',
+  requiredScope: 'read:feedback',
   emits: 'always',
 }
 
@@ -45,7 +46,8 @@ const plainDef: EventDefinition<{ postId: string }> = {
   version: 2,
   payload: z.object({ postId: z.string() }),
   exposure: { webhook: true, workflow: false, notification: null, activity: null, audit: false },
-  requiredScope: 'posts:read',
+  category: 'feedback',
+  requiredScope: 'read:feedback',
   emits: 'always',
 }
 

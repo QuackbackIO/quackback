@@ -2,7 +2,7 @@
 import { decl } from './helpers'
 
 const A = 'post_activity'
-const S = 'posts:read'
+const S = 'feedback'
 
 export const postCreated = decl('post.created', 'post', { webhook: true, activity: A }, S)
 export const postStatusChanged = decl(

@@ -7,6 +7,8 @@
 import { z } from 'zod'
 import { defineEvent, type EventExposure, type EventDefinition } from './define'
 import { P } from './payloads'
+import type { PermissionCategory } from '@/lib/shared/permissions'
+import { readScopeForCategory } from '@/lib/shared/api-key-scopes'
 
 /** Fallback payload for any type without a precise schema yet. */
 export const skeletonPayload = z.record(z.string(), z.unknown())
@@ -15,7 +17,7 @@ export function decl(
   type: string,
   entity: string,
   exposure: Partial<EventExposure>,
-  requiredScope: string,
+  category: PermissionCategory,
   emits: 'always' | 'never' = 'always'
 ): EventDefinition<Record<string, unknown>> {
   // WO-5: resolve the precise payload schema by type; skeleton is the fallback
@@ -33,7 +35,9 @@ export function decl(
       audit: false,
       ...exposure,
     },
-    requiredScope,
+    category,
+    // Derived from the category via the SAME map permissions use — one spine.
+    requiredScope: readScopeForCategory(category),
     emits,
   })
 }

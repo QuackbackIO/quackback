@@ -11,8 +11,8 @@
  */
 import { decl } from './helpers'
 
-const S = 'admin:read'
+const S = 'workspace'
 
-export const apiKeyCreated = decl('apikey.created', 'apikey', { audit: true }, S)
-export const apiKeyDeleted = decl('apikey.deleted', 'apikey', { audit: true }, S)
+export const apiKeyCreated = decl('apikey.created', 'api_key', { audit: true }, S)
+export const apiKeyDeleted = decl('apikey.deleted', 'api_key', { audit: true }, S)
 export const settingsUpdated = decl('settings.updated', 'settings', { audit: true }, S)
