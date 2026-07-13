@@ -4,6 +4,9 @@ import type { HelpCenterArticleId } from '@quackback/ids'
 const mockArticleFindFirst = vi.fn()
 const mockArticleFindMany = vi.fn()
 const mockCategoryFindMany = vi.fn()
+// listPublicArticlesForCategory now loads the category first (audience gate),
+// so the mocked db.query.helpCenterCategories needs a findFirst the test controls.
+const mockCategoryFindFirst = vi.fn()
 
 vi.mock('@/lib/server/db', () => ({
   db: {
@@ -13,6 +16,7 @@ vi.mock('@/lib/server/db', () => ({
         findMany: (...args: unknown[]) => mockArticleFindMany(...args),
       },
       helpCenterCategories: {
+        findFirst: (...args: unknown[]) => mockCategoryFindFirst(...args),
         findMany: (...args: unknown[]) => mockCategoryFindMany(...args),
       },
       principal: {
@@ -75,6 +79,16 @@ let listPublicArticlesForCategory: typeof import('../help-center.article.query')
 
 beforeEach(async () => {
   vi.clearAllMocks()
+
+  // Default: the looked-up category is public so the audience gate (null actor)
+  // passes and listPublicArticlesForCategory proceeds to the article query.
+  mockCategoryFindFirst.mockResolvedValue({
+    id: 'category_1',
+    isPublic: true,
+    visibility: 'public',
+    allowedSegmentIds: null,
+    allowedPrincipalIds: null,
+  })
 
   const mod = await import('../help-center.article.query')
   listArticles = mod.listArticles

@@ -12,8 +12,9 @@ import {
 // Nav model: Chat is folded into the Help (support) surface, so the bottom bar
 // is at most home | feedback | changelog | help. A "content surface" is
 // feedback, changelog, or support (help OR chat). The aggregated Home appears
-// only when 2+ content surfaces are enabled; otherwise the widget lands
-// directly on the single surface and the bar is hidden.
+// when 2+ content surfaces are enabled, or when no content surfaces are enabled
+// and Home is the configured landing surface. With exactly one content surface,
+// the widget lands directly on that surface and the bar is hidden.
 
 describe('supportEnabled', () => {
   it('is true when help or chat is on', () => {
@@ -49,9 +50,11 @@ describe('contentSurfaceCount', () => {
 })
 
 describe('homeEnabled', () => {
-  it('is true only with 2+ content surfaces', () => {
+  it('is true with 2+ content surfaces or a Home-only config', () => {
     expect(homeEnabled({ feedback: true })).toBe(false)
     expect(homeEnabled({ help: true, chat: true })).toBe(false)
+    expect(homeEnabled({ home: true })).toBe(true)
+    expect(homeEnabled({})).toBe(true)
     expect(homeEnabled({ feedback: true, changelog: true })).toBe(true)
     expect(homeEnabled({ feedback: true, chat: true })).toBe(true)
   })
@@ -69,6 +72,7 @@ describe('homeEnabled', () => {
 
 describe('visibleTabs', () => {
   it('prepends Home only when enabled and never exceeds four tabs', () => {
+    expect(visibleTabs({ home: true })).toEqual(['home'])
     expect(visibleTabs({ feedback: true })).toEqual(['feedback'])
     expect(visibleTabs({ feedback: true, changelog: true })).toEqual([
       'home',
@@ -95,7 +99,8 @@ describe('visibleTabs', () => {
 })
 
 describe('resolveInitialTab', () => {
-  it('lands on Home when 2+ content surfaces', () => {
+  it('lands on Home when 2+ content surfaces or Home is the only surface', () => {
+    expect(resolveInitialTab({ home: true })).toBe('home')
     expect(resolveInitialTab({ feedback: true, changelog: true })).toBe('home')
     expect(resolveInitialTab({ feedback: true, help: true, chat: true })).toBe('home')
   })
@@ -112,6 +117,7 @@ describe('resolveInitialTab', () => {
 
 describe('resolveInitialView', () => {
   it('lands on overview when Home is enabled', () => {
+    expect(resolveInitialView({ home: true })).toBe('overview')
     expect(resolveInitialView({ feedback: true, changelog: true })).toBe('overview')
     expect(resolveInitialView({ feedback: true, help: true, chat: true })).toBe('overview')
   })

@@ -1,46 +1,45 @@
 /**
- * CSV export for the audit-log table.
- *
- * The 0070_audit_log_observability migration added request_id (indexed
- * for cross-event forensics), actor_type, and auth_method. These must
- * appear in the CSV export — the export is the operator's primary
- * offline-forensics tool, so leaving the new columns out keeps them
- * effectively invisible.
+ * CSV export for the unified audit-log table.
  */
 import { describe, it, expect } from 'vitest'
-import { rowsToCsv } from '../audit-log-page'
-import type { AuditEventRow } from '@/lib/server/functions/audit-log'
+import { rowsToCsv } from '../../audit/audit-csv'
+import type { UnifiedAuditEventRow } from '@/lib/server/domains/audit/audit.unified'
 
-function row(overrides: Partial<AuditEventRow> = {}): AuditEventRow {
+function row(overrides: Partial<UnifiedAuditEventRow> = {}): UnifiedAuditEventRow {
   return {
     id: 'audit_1',
-    occurredAt: '2026-05-20T10:30:00.000Z',
+    origin: 'security',
+    occurredAt: new Date('2026-05-20T10:30:00.000Z'),
+    principalId: null,
     actorUserId: null,
     actorEmail: 'demo@example.com',
+    actorDisplayName: null,
     actorRole: 'admin',
-    actorIp: '127.0.0.1',
-    actorUserAgent: 'Mozilla/5.0',
-    eventType: 'auth.signin.succeeded',
-    eventOutcome: 'success',
-    targetType: null,
-    targetId: null,
-    beforeValue: null,
-    afterValue: null,
-    metadata: null,
-    requestId: null,
     actorType: null,
     authMethod: null,
+    action: 'auth.signin.succeeded',
+    outcome: 'success',
+    source: null,
+    ipAddress: '127.0.0.1',
+    userAgent: 'Mozilla/5.0',
+    targetType: null,
+    targetId: null,
+    requestId: null,
+    diff: {},
+    metadata: null,
     ...overrides,
   }
 }
 
-describe('rowsToCsv — audit-log observability columns', () => {
+describe('rowsToCsv — unified audit observability columns', () => {
   it('includes request_id, actor_type, auth_method in the header row', () => {
     const csv = rowsToCsv([row()])
     const [header] = csv.split('\n')
     expect(header).toContain('request_id')
     expect(header).toContain('actor_type')
     expect(header).toContain('auth_method')
+    expect(header).toContain('origin')
+    expect(header).toContain('source')
   })
 
   it('emits the values in each data row', () => {
@@ -49,6 +48,35 @@ describe('rowsToCsv — audit-log observability columns', () => {
     expect(dataRow).toContain('req_abc123')
     expect(dataRow).toContain('user')
     expect(dataRow).toContain('sso')
+  })
+
+  it('exports workspace and security rows together', () => {
+    const csv = rowsToCsv([
+      row({
+        origin: 'workspace',
+        principalId: 'principal_1',
+        actorEmail: 'owner@example.com',
+        actorDisplayName: 'Owner',
+        action: 'ticket.created',
+        outcome: null,
+        source: 'web',
+        targetType: 'ticket',
+        targetId: 'ticket_1',
+        diff: { after: { status: 'open' } },
+      }),
+      row({
+        origin: 'security',
+        action: 'auth.signin.success',
+        requestId: 'req_abc123',
+        actorType: 'user',
+        authMethod: 'sso',
+      }),
+    ])
+
+    expect(csv).toContain('workspace')
+    expect(csv).toContain('ticket.created')
+    expect(csv).toContain('security')
+    expect(csv).toContain('auth.signin.success')
   })
 
   it('emits empty cells (not "null") when the observability fields are null', () => {

@@ -8,16 +8,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 type Handler = (args: { data: Record<string, unknown> }) => Promise<unknown>
+type Chain = {
+  validator(): Chain
+  handler(fn: Handler): Chain
+  /** The handler fn, exposed so tests can resolve a server fn by export name. */
+  __handler?: Handler
+}
 const hoisted = vi.hoisted(() => ({ handlers: [] as Handler[] }))
 
 vi.mock('@tanstack/react-start', () => ({
+  // Each createServerFn() returns a fresh chain object, so the value exported
+  // as `updateModerationDefaultFn` IS its own chain. We stash the registered
+  // handler on that chain (`__handler`) so the test can look it up by export
+  // NAME instead of by registration position — the positional `handlers[last]`
+  // approach silently broke the moment the branch appended more server fns
+  // after updateModerationDefaultFn in settings.ts.
   createServerFn: () => {
-    const chain = {
+    const chain: Chain = {
       validator() {
         return chain
       },
       handler(fn: Handler) {
         hoisted.handlers.push(fn)
+        chain.__handler = fn
         return chain
       },
     }
@@ -117,10 +130,12 @@ import * as settingsModule from '../settings'
 
 function getUpdateModerationDefaultFn(): Handler {
   expect(settingsModule).toHaveProperty('updateModerationDefaultFn')
-  // The handler registered for updateModerationDefaultFn is the last one
-  // captured during module import (settings.ts appends it after all
-  // prior createServerFn calls).
-  return hoisted.handlers[hoisted.handlers.length - 1]
+  // Resolve the handler by export NAME (via the __handler stashed on the
+  // mocked createServerFn chain) rather than by registration position, so
+  // adding more server fns to settings.ts can never silently retarget this.
+  const fn = (settingsModule.updateModerationDefaultFn as unknown as Chain).__handler
+  expect(fn, 'updateModerationDefaultFn handler not captured').toBeTypeOf('function')
+  return fn as Handler
 }
 
 const AUTH_ADMIN = {
