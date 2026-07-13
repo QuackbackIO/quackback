@@ -8,8 +8,11 @@
  * The layer beneath — `HookTarget`, `HookHandler` / `registerHook` / `getHook`,
  * `hook_deliveries`, `safeFetch` — is reused verbatim.
  */
+import { logger } from '@/lib/server/logger'
 import type { HookTarget } from '../hook-types'
 import type { DomainEvent } from '../envelope'
+
+const log = logger.child({ component: 'resolver-registry' })
 
 export interface SinkResolver {
   /** 'webhook' | 'notification' | 'integration' | 'workflow' | 'ai' | 'summary' | 'feedback_pipeline' | ... */
@@ -28,18 +31,46 @@ export function registerResolver(r: SinkResolver): void {
 
 /**
  * Resolve every target for an event by fanning it across the interested
- * resolvers concurrently and concatenating their `HookTarget[]`. A resolver
- * that throws is isolated (logged, treated as zero targets) so one broken sink
- * can't starve the others — mirrors `getHookTargets()`'s graceful degradation.
+ * resolvers concurrently and concatenating their `HookTarget[]`.
+ *
+ * Default mode is all-or-retry: if any interested sink cannot determine its
+ * targets, reject so the relay leaves the event unpublished and retries it —
+ * treating a failure as an empty target set would permanently acknowledge an
+ * undelivered event. `bestEffort` inverts that for the relay's bounded-retry
+ * fallback: a failing resolver is logged and contributes zero targets so the
+ * healthy sinks still deliver (used only after the strict path has exhausted
+ * its retry budget — see relay.ts).
  */
-export async function resolveTargets(event: DomainEvent): Promise<HookTarget[]> {
+export async function resolveTargets(
+  event: DomainEvent,
+  opts: { bestEffort?: boolean } = {}
+): Promise<HookTarget[]> {
   const interested = resolvers.filter((r) => r.interestedIn(event.type))
-  const settled = await Promise.allSettled(interested.map((r) => r.resolve(event)))
-  const targets: HookTarget[] = []
-  for (const s of settled) {
-    if (s.status === 'fulfilled') targets.push(...s.value)
+  if (opts.bestEffort) {
+    const settled = await Promise.allSettled(interested.map((r) => r.resolve(event)))
+    const targets: HookTarget[] = []
+    settled.forEach((s, i) => {
+      if (s.status === 'fulfilled') {
+        targets.push(...s.value)
+      } else {
+        log.error(
+          { err: s.reason, sink: interested[i].sink, type: event.type },
+          'resolver failed in best-effort fan-out — its targets are dropped for this event'
+        )
+      }
+    })
+    return targets
   }
-  return targets
+  const resolved = await Promise.all(
+    interested.map(async (resolver) => {
+      try {
+        return await resolver.resolve(event)
+      } catch (cause) {
+        throw new Error(`Failed to resolve ${resolver.sink} targets`, { cause })
+      }
+    })
+  )
+  return resolved.flat()
 }
 
 /** Introspection for tests + the "did it fire?" surface. */

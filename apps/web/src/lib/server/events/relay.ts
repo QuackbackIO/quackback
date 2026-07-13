@@ -54,10 +54,10 @@ export function hydrateEvent(row: EventRow): DomainEvent {
 /** Stable per-target key so the same target always maps to the same job id. */
 function targetKey(target: HookTarget): string {
   return crypto
-    .createHash('sha1')
-    .update(JSON.stringify(target.target ?? null))
+    .createHash('sha256')
+    .update(target.deliveryKey ?? JSON.stringify(target.target ?? null))
     .digest('hex')
-    .slice(0, 16)
+    .slice(0, 24)
 }
 
 async function markPublished(id: bigint, executor: Transaction | typeof db = db): Promise<void> {
@@ -68,23 +68,45 @@ export interface DrainResult {
   drained: number
   enqueued: number
   skipped: number
+  /** Rows left unpublished this pass because resolve/enqueue threw (retried next tick). */
+  failed: number
 }
+
+/**
+ * Strict-resolution retry budget per outbox row. Resolution is all-or-retry
+ * (see resolveTargets): a failing sink leaves the row unpublished so nothing is
+ * silently dropped. But an event that fails resolution DETERMINISTICALLY would
+ * retry forever, so after this many failed passes the relay degrades to
+ * best-effort resolution — healthy sinks deliver, the failing sink's targets
+ * are dropped with a loud error — and the row is published. Kept in memory:
+ * the relay is a leader-elected singleton, and a leader change merely restarts
+ * a row's count (more strict retries, never fewer).
+ */
+export const MAX_STRICT_RESOLVE_ATTEMPTS = 10
+const strictAttempts = new Map<bigint, number>()
 
 /**
  * Drain one batch of unpublished events. Pure enough to unit-test: the enqueue
  * and resolve steps are injectable so the ordering/idempotency/depth-guard logic
  * can be verified against a live DB without standing up Redis.
+ *
+ * Per-row isolation: a row whose resolve/enqueue throws is left unpublished and
+ * retried on a later pass, but it never blocks the rows behind it — one poison
+ * event must not stall the whole pipeline.
  */
 export async function drainOnce(
   opts: {
     batchSize?: number
     enqueue?: typeof enqueueHookJobsWithIds
     resolve?: (event: DomainEvent) => Promise<HookTarget[]>
+    /** Override the strict-resolution retry budget (tests). */
+    maxStrictResolveAttempts?: number
   } = {}
 ): Promise<DrainResult> {
   const batchSize = opts.batchSize ?? 100
   const enqueue = opts.enqueue ?? enqueueHookJobsWithIds
   const resolve = opts.resolve ?? resolveTargets
+  const maxAttempts = opts.maxStrictResolveAttempts ?? MAX_STRICT_RESOLVE_ATTEMPTS
 
   const rows = await db
     .select()
@@ -95,6 +117,7 @@ export async function drainOnce(
 
   let enqueued = 0
   let skipped = 0
+  let failed = 0
 
   for (const row of rows) {
     const event = hydrateEvent(row)
@@ -114,23 +137,50 @@ export async function drainOnce(
       continue
     }
 
-    const targets = await resolve(event)
-    if (targets.length > 0) {
-      const legacy = toLegacyEvent(event)
-      const jobs = targets.map((t) => ({
-        name: `${event.type}:${t.type}`,
-        data: { hookType: t.type, event: legacy, target: t.target, config: t.config },
-        // Deterministic: re-draining the same row re-enqueues the same id.
-        jobId: `${event.eventId}:${t.type}:${targetKey(t)}`,
-      }))
-      // Enqueue BEFORE the publish stamp — at-least-once.
-      await enqueue(jobs)
-      enqueued += jobs.length
+    try {
+      const attempts = strictAttempts.get(row.id) ?? 0
+      const degraded = attempts >= maxAttempts
+      // Past the strict budget the failure is deterministic, not transient:
+      // fall back to best-effort so healthy sinks still deliver instead of the
+      // row wedging in place. (Injected resolvers don't carry the bestEffort
+      // mode — tests drive the strict path explicitly.)
+      const targets =
+        degraded && opts.resolve === undefined
+          ? await resolveTargets(event, { bestEffort: true })
+          : await resolve(event)
+      if (targets.length > 0) {
+        const legacy = toLegacyEvent(event)
+        const jobs = targets.map((t) => ({
+          name: `${event.type}:${t.type}`,
+          data: { hookType: t.type, event: legacy, target: t.target, config: t.config },
+          // Deterministic: re-draining the same row re-enqueues the same id.
+          jobId: `${event.eventId}:${t.type}:${targetKey(t)}`,
+        }))
+        // Enqueue BEFORE the publish stamp — at-least-once.
+        await enqueue(jobs)
+        enqueued += jobs.length
+      }
+      await markPublished(row.id)
+      strictAttempts.delete(row.id)
+      if (degraded) {
+        log.error(
+          { event_id: event.eventId, type: event.type, attempts },
+          'event published via best-effort resolution after strict retries exhausted — a failing sink was skipped'
+        )
+      }
+    } catch (err) {
+      const attempts = (strictAttempts.get(row.id) ?? 0) + 1
+      strictAttempts.set(row.id, attempts)
+      failed++
+      log.error(
+        { err, event_id: event.eventId, type: event.type, attempts },
+        'outbox row failed to resolve/enqueue — left unpublished for retry'
+      )
+      // continue: the rows behind this one still drain (no head-of-line block).
     }
-    await markPublished(row.id)
   }
 
-  return { drained: rows.length, enqueued, skipped }
+  return { drained: rows.length, enqueued, skipped, failed }
 }
 
 /** Age (seconds) of the oldest unpublished event — the "did it fire?" gauge. */
@@ -162,7 +212,10 @@ async function drainLoop(): Promise<void> {
     let res: DrainResult
     do {
       res = await drainOnce()
-    } while (running && res.drained > 0)
+      // Keep going only while a pass makes progress. If every remaining row
+      // failed (res.failed === res.drained), stop and let the 1s poll retry —
+      // otherwise a persistently failing row would hot-spin this loop.
+    } while (running && res.drained > 0 && res.failed < res.drained)
   } catch (err) {
     log.error({ err }, 'outbox drain tick failed')
   } finally {
@@ -183,8 +236,6 @@ export async function startOutboxRelay(): Promise<void> {
     log.info('QUACKBACK_ROLE=web — outbox relay not started')
     return
   }
-  // EVENTING-V2 (WO-18): the outbox is the sole delivery path, so the relay
-  // always runs on a worker-role process — there is no flag to gate it.
   // Ensure every sink resolver is registered before we drain anything.
   registerAllResolvers()
   running = true

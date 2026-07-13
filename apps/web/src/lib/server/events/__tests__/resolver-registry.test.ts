@@ -47,7 +47,7 @@ describe('resolver registry', () => {
     expect(targets).toEqual([])
   })
 
-  it('isolates a throwing resolver so it cannot starve the others', async () => {
+  it('rejects when any interested resolver fails so the relay can retry', async () => {
     registerResolver({
       sink: 'boom',
       interestedIn: () => true,
@@ -60,7 +60,8 @@ describe('resolver registry', () => {
       interestedIn: () => true,
       resolve: async () => [{ type: 'ok', target: {}, config: {} }],
     })
-    const targets = await resolveTargets(evt('post.created'))
-    expect(targets.map((t) => t.type)).toEqual(['ok'])
+    await expect(resolveTargets(evt('post.created'))).rejects.toThrow(
+      'Failed to resolve boom targets'
+    )
   })
 })

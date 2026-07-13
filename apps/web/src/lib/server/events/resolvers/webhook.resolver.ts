@@ -8,14 +8,11 @@
  */
 import { db, webhooks, and, eq, isNull } from '@/lib/server/db'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
-import { logger } from '@/lib/server/logger'
 import { getEventDefinition } from '../catalogue'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
 import type { HookTarget } from '../hook-types'
 import type { WebhookId } from '@quackback/ids'
-
-const log = logger.child({ component: 'webhook-resolver' })
 
 type WebhookRow = typeof webhooks.$inferSelect
 
@@ -92,20 +89,16 @@ export const webhookResolver: SinkResolver = {
   },
   async resolve(event: DomainEvent): Promise<HookTarget[]> {
     if (isPrivateComment(event)) return []
-    try {
-      const active = await loadActiveWebhooks()
-      if (active.length === 0) return []
-      const boardIds = boardIdsFromEvent(event)
-      return active
-        .filter((w) => webhookMatches(w, event.type, boardIds))
-        .map((w) => ({
-          type: 'webhook',
-          target: { url: w.url },
-          config: { webhookId: w.id as WebhookId },
-        }))
-    } catch (error) {
-      log.error({ err: error, type: event.type }, 'failed to resolve webhook targets')
-      return []
-    }
+    const active = await loadActiveWebhooks()
+    if (active.length === 0) return []
+    const boardIds = boardIdsFromEvent(event)
+    return active
+      .filter((w) => webhookMatches(w, event.type, boardIds))
+      .map((w) => ({
+        type: 'webhook',
+        target: { url: w.url },
+        config: { webhookId: w.id as WebhookId },
+        deliveryKey: w.id,
+      }))
   },
 }

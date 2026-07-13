@@ -100,6 +100,8 @@ export interface HookTarget {
   target: unknown
   /** Hook-specific config (access token, workspace name, etc.) */
   config: Record<string, unknown>
+  /** Stable sink-owned identity used to derive an idempotent delivery job id. */
+  deliveryKey?: string
 }
 
 // ============================================================================

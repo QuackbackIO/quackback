@@ -131,22 +131,17 @@ export const integrationResolver: SinkResolver = {
   },
   async resolve(event: DomainEvent): Promise<HookTarget[]> {
     if (isPrivateComment(event)) return []
-    try {
-      const mappings = await loadMappings()
-      const relevant = mappings.filter((m) => m.eventType === event.type)
-      if (relevant.length === 0) return []
-      const context = await buildHookContext()
-      if (!context) return []
-      return buildIntegrationTargets(
-        relevant,
-        event.type,
-        boardIdsFromEvent(event),
-        context.portalBaseUrl,
-        (blob) => decryptSecrets<{ accessToken?: string }>(blob)
-      )
-    } catch (error) {
-      log.error({ err: error, type: event.type }, 'failed to resolve integration targets')
-      return []
-    }
+    const mappings = await loadMappings()
+    const relevant = mappings.filter((m) => m.eventType === event.type)
+    if (relevant.length === 0) return []
+    const context = await buildHookContext()
+    if (!context) throw new Error('Failed to build integration hook context')
+    return buildIntegrationTargets(
+      relevant,
+      event.type,
+      boardIdsFromEvent(event),
+      context.portalBaseUrl,
+      (blob) => decryptSecrets<{ accessToken?: string }>(blob)
+    )
   },
 }

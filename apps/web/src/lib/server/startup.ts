@@ -42,6 +42,10 @@ function wireGracefulShutdown(): void {
 
     void (async () => {
       try {
+        // Stop the relay before closing BullMQ/Redis so a final poll cannot
+        // enqueue into a queue that is already draining.
+        await import('./events/relay').then(({ stopOutboxRelay }) => stopOutboxRelay())
+
         // Drain every registered queue/worker. One list drives boot and
         // shutdown, so nothing can be booted but left undrained.
         await closeAllWorkers()

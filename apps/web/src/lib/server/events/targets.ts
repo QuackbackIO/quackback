@@ -187,7 +187,12 @@ export async function getHookTargets(event: EventData): Promise<HookTarget[]> {
     // "move bell onto message.created / ticket.status_changed" work
     // (getMessageCreatedTargets / getTicketStatusChangedTargets) is wired into
     // the notification resolver's BELL routing, so it lands here too.
-    const targets = await resolveTargets(domainEvent)
+    //
+    // bestEffort: this adapter's documented contract is graceful degradation (a
+    // broken sink yields zero targets, never a throw). The relay is the caller
+    // that wants strict all-or-retry semantics, and it calls resolveTargets
+    // directly.
+    const targets = await resolveTargets(domainEvent, { bestEffort: true })
     return targets.filter((t) => t.type !== 'workflow')
   } catch (error) {
     log.error({ err: error, event_type: event.type }, 'failed to resolve targets')

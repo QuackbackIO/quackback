@@ -6,9 +6,9 @@
  *
  * This is the trickiest sink, so the transitional implementation DELEGATES to
  * the already-tested builders in targets.ts (via the reconstructed EventData +
- * hook context) rather than re-porting ~700 lines and risking a parity gap. The
- * WO-15 shadow-diff validates equivalence; Phase 5 folds the builders in and
- * deletes targets.ts. See to-legacy-event.ts for the actor-fidelity caveat.
+ * hook context) rather than re-porting ~700 lines and risking a parity gap.
+ * A later phase folds the builders in and retires the legacy module. See
+ * to-legacy-event.ts for the actor-fidelity caveat.
  */
 import { buildHookContext } from '../hook-context'
 import { toLegacyEvent } from '../to-legacy-event'
@@ -26,13 +26,10 @@ import {
   getTicketStatusChangedTargets,
   getMessageCreatedTargets,
 } from '../targets'
-import { logger } from '@/lib/server/logger'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
 import type { EventData } from '../types'
 import type { HookTarget } from '../hook-types'
-
-const log = logger.child({ component: 'notification-resolver' })
 
 const SUBSCRIBER_SET = new Set<string>(SUBSCRIBER_EVENT_TYPES)
 const MENTION_SET = new Set<string>(MENTION_EVENT_TYPES)
@@ -70,47 +67,41 @@ export const notificationResolver: SinkResolver = {
     )
   },
   async resolve(event: DomainEvent): Promise<HookTarget[]> {
-    try {
-      const legacy = toLegacyEvent(event)
-      const out: HookTarget[] = []
+    const legacy = toLegacyEvent(event)
+    const out: HookTarget[] = []
 
-      // Subscriber/mention/status fan-outs need the hook context; the bells
-      // resolve a single recipient from the payload/DB and don't.
-      if (
-        SUBSCRIBER_SET.has(event.type) ||
-        MENTION_SET.has(event.type) ||
-        STATUS_NOTIFY_SET.has(event.type)
-      ) {
-        const context = await buildHookContext()
-        if (context) {
-          if (SUBSCRIBER_SET.has(event.type)) {
-            out.push(
-              ...(event.type === 'changelog.published'
-                ? await getChangelogSubscriberTargets(legacy, context)
-                : await getSubscriberTargets(legacy, context))
-            )
-          }
-          if (MENTION_SET.has(event.type)) {
-            out.push(...(await getMentionTargets(legacy, context)))
-          }
-          if (STATUS_NOTIFY_SET.has(event.type)) {
-            out.push(...(await getStatusSubscriberTargets(legacy, context)))
-          }
-        }
+    // Subscriber/mention/status fan-outs need the hook context; the bells
+    // resolve a single recipient from the payload/DB and don't.
+    if (
+      SUBSCRIBER_SET.has(event.type) ||
+      MENTION_SET.has(event.type) ||
+      STATUS_NOTIFY_SET.has(event.type)
+    ) {
+      const context = await buildHookContext()
+      if (!context) throw new Error('Failed to build notification hook context')
+      if (SUBSCRIBER_SET.has(event.type)) {
+        out.push(
+          ...(event.type === 'changelog.published'
+            ? await getChangelogSubscriberTargets(legacy, context)
+            : await getSubscriberTargets(legacy, context))
+        )
       }
-
-      // Support-inbox bell (at most one target). `await` normalizes the one
-      // synchronous builder (note-mention) alongside the async ones.
-      const bell = BELL_BUILDERS[event.type]
-      if (bell) {
-        const t = await bell(legacy)
-        if (t) out.push(t)
+      if (MENTION_SET.has(event.type)) {
+        out.push(...(await getMentionTargets(legacy, context)))
       }
-
-      return out
-    } catch (error) {
-      log.error({ err: error, type: event.type }, 'failed to resolve notification targets')
-      return []
+      if (STATUS_NOTIFY_SET.has(event.type)) {
+        out.push(...(await getStatusSubscriberTargets(legacy, context)))
+      }
     }
+
+    // Support-inbox bell (at most one target). `await` normalizes the one
+    // synchronous builder (note-mention) alongside the async ones.
+    const bell = BELL_BUILDERS[event.type]
+    if (bell) {
+      const t = await bell(legacy)
+      if (t) out.push(t)
+    }
+
+    return out
   },
 }

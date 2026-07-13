@@ -14,6 +14,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 import { db, events, eq, isNull } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import { drainOnce } from '../relay'
+import { registerResolver, __resetResolversForTests } from '../resolvers/registry'
 import type { HookTarget } from '../hook-types'
 import type { DomainEvent } from '../envelope'
 
@@ -38,7 +39,12 @@ async function seedEvent(entityId: string, depth = 0): Promise<void> {
 }
 
 const oneTarget = async (): Promise<HookTarget[]> => [
-  { type: 'webhook', target: { url: 'https://example.test/hook' }, config: { webhookId: 'wh_1' } },
+  {
+    type: 'webhook',
+    target: { url: 'https://example.test/hook' },
+    config: { webhookId: 'wh_1' },
+    deliveryKey: 'wh_1',
+  },
 ]
 
 describe('outbox relay drainOnce', () => {
@@ -67,7 +73,7 @@ describe('outbox relay drainOnce', () => {
 
     // Every job id is deterministic: `${eventId}:${sink}:${targetKey}`.
     for (const j of enqueued) {
-      expect(j.jobId).toMatch(/^evt_[0-9a-z]{26}:webhook:[0-9a-f]{16}$/)
+      expect(j.jobId).toMatch(/^evt_[0-9a-z]{26}:webhook:[0-9a-f]{24}$/)
     }
 
     const remaining = await db.select().from(events).where(eq(events.entityId, marker))
@@ -114,5 +120,100 @@ describe('outbox relay drainOnce', () => {
     await drainOnce({ resolve: async () => [], enqueue: async () => {} })
     const unpublished = await db.select().from(events).where(isNull(events.publishedAt))
     expect(unpublished.some((r) => r.entityId === marker)).toBe(false)
+  })
+
+  it('keeps separate subscriptions to the same URL as separate jobs', async () => {
+    await seedEvent(marker)
+    const enqueued: Array<{ jobId: string }> = []
+    await drainOnce({
+      resolve: async () => [
+        {
+          type: 'webhook',
+          target: { url: 'https://shared.example/hook' },
+          config: { webhookId: 'wh_a' },
+          deliveryKey: 'wh_a',
+        },
+        {
+          type: 'webhook',
+          target: { url: 'https://shared.example/hook' },
+          config: { webhookId: 'wh_b' },
+          deliveryKey: 'wh_b',
+        },
+      ],
+      enqueue: async (jobs) => {
+        enqueued.push(...jobs)
+      },
+    })
+    const webhookJobs = enqueued.filter((job) => job.jobId.includes(':webhook:'))
+    expect(webhookJobs).toHaveLength(2)
+    expect(new Set(webhookJobs.map((job) => job.jobId)).size).toBe(2)
+  })
+
+  it('leaves a failing event unpublished (retried later) without blocking the rows behind it', async () => {
+    // Row A fails resolution; row B (later id) must still publish this pass —
+    // per-row isolation, no head-of-line blocking.
+    const failingEntity = marker
+    const healthyEntity = createId('post')
+    await seedEvent(failingEntity)
+    await seedEvent(healthyEntity)
+
+    const enqueued: Array<{ jobId: string }> = []
+    const res = await drainOnce({
+      resolve: async (event) => {
+        if (event.entityId === failingEntity) throw new Error('database unavailable')
+        return oneTarget()
+      },
+      enqueue: async (jobs) => {
+        enqueued.push(...jobs)
+      },
+    })
+
+    expect(res.failed).toBe(1)
+    expect(enqueued).toHaveLength(1)
+
+    const failing = await db.select().from(events).where(eq(events.entityId, failingEntity))
+    expect(failing[0].publishedAt).toBeNull() // retried on a later pass
+    const healthy = await db.select().from(events).where(eq(events.entityId, healthyEntity))
+    expect(healthy[0].publishedAt).not.toBeNull() // delivered despite the poison row
+  })
+
+  it('degrades to best-effort resolution after the strict retry budget: healthy sinks deliver', async () => {
+    // A DETERMINISTICALLY failing resolver must not wedge the row forever:
+    // past the budget the relay resolves best-effort (failing sink dropped,
+    // healthy sinks enqueued) and publishes the row. Uses the real registry —
+    // the injected-resolve path never degrades by design.
+    __resetResolversForTests()
+    registerResolver({
+      sink: 'boom',
+      interestedIn: () => true,
+      resolve: async () => {
+        throw new Error('permanently broken sink')
+      },
+    })
+    registerResolver({
+      sink: 'ok',
+      interestedIn: () => true,
+      resolve: async () => oneTarget(),
+    })
+    try {
+      // Sweep leftovers first (earlier tests deliberately leave unpublished
+      // rows) so this drain sees exactly one row — ours.
+      await db.update(events).set({ publishedAt: new Date() }).where(isNull(events.publishedAt))
+      await seedEvent(marker)
+      const enqueued: Array<{ jobId: string }> = []
+      const res = await drainOnce({
+        enqueue: async (jobs) => {
+          enqueued.push(...jobs)
+        },
+        maxStrictResolveAttempts: 0, // budget already exhausted → degrade now
+      })
+
+      expect(res.failed).toBe(0)
+      expect(enqueued).toHaveLength(1) // the healthy sink's target
+      const rows = await db.select().from(events).where(eq(events.entityId, marker))
+      expect(rows[0].publishedAt).not.toBeNull() // published, not wedged
+    } finally {
+      __resetResolversForTests()
+    }
   })
 })
