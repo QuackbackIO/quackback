@@ -37,6 +37,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/shared/utils'
+import { useReadinessAction } from '@/lib/client/hooks/use-readiness-action'
+import { FormattedMessage, useIntl } from 'react-intl'
 
 const TRIAGE_FACETS: readonly InboxTriageFacet[] = ['open', 'waiting', 'closed']
 
@@ -228,7 +230,9 @@ export function ConversationListColumn({
   onToggleSelectAll,
   selectionActive,
 }: ConversationListColumnProps) {
+  const intl = useIntl()
   const { userRole } = useRouteContext({ from: '__root__' })
+  const readinessAction = useReadinessAction()
   const [composeOpen, setComposeOpen] = useState(false)
   const allSelected = items.length > 0 && items.every((it) => selectedIds.has(itemId(it)))
   const someSelected = items.some((it) => selectedIds.has(itemId(it)))
@@ -385,14 +389,47 @@ export function ConversationListColumn({
           </div>
         ) : items.length === 0 ? (
           (() => {
-            const emptyMsg = emptyStateMessage(nav, facet, scopeLabel)
-            // First-run CTA on the main conversation queues (not tickets/labels).
-            const showMessengerCta =
+            const isMainConversationQueue =
               nav.kind === 'view' &&
               (nav.view === 'mine' || nav.view === 'unassigned' || nav.view === 'all')
+            const isFiltered =
+              searchInput.trim().length > 0 ||
+              priorityFilter !== 'all' ||
+              (facet !== 'all' && facet !== 'open')
+            const isAllClear =
+              isMainConversationQueue && facet === 'open' && !isFiltered && !readinessAction
+            const emptyMsg = isFiltered
+              ? intl.formatMessage({
+                  id: 'inbox.empty.filtered.title',
+                  defaultMessage: 'No conversations match these filters',
+                })
+              : isAllClear
+                ? intl.formatMessage({
+                    id: 'inbox.empty.allClear.title',
+                    defaultMessage: 'You’re all caught up',
+                  })
+                : emptyStateMessage(nav, facet, scopeLabel)
+            // First-run CTA on the unfiltered main queues (not tickets/labels).
+            const showMessengerCta = isMainConversationQueue && !isFiltered && !isAllClear
             return (
               <div className="px-4 py-10 text-center space-y-3">
                 <p className="text-sm font-medium text-foreground">{emptyMsg}</p>
+                {isFiltered && (
+                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+                    <FormattedMessage
+                      id="inbox.empty.filtered.description"
+                      defaultMessage="Try changing your search or filters."
+                    />
+                  </p>
+                )}
+                {isAllClear && (
+                  <p className="mx-auto max-w-[16rem] text-xs text-muted-foreground">
+                    <FormattedMessage
+                      id="inbox.empty.allClear.description"
+                      defaultMessage="No open conversations need your attention."
+                    />
+                  </p>
+                )}
                 {showMessengerCta && (
                   <>
                     <p className="text-xs text-muted-foreground max-w-[16rem] mx-auto">
@@ -400,9 +437,9 @@ export function ConversationListColumn({
                     </p>
                     {/* Widget settings are admin-only; members get the message
                         without a button they can't use. */}
-                    {userRole === 'admin' && (
-                      <Button size="sm" variant="outline" asChild>
-                        <Link to="/admin/settings/widget">Let customers message you</Link>
+                    {userRole === 'admin' && readinessAction && (
+                      <Button size="sm" variant="outline" className="h-11 sm:h-9" asChild>
+                        <Link to={readinessAction.href}>{readinessAction.label}</Link>
                       </Button>
                     )}
                   </>

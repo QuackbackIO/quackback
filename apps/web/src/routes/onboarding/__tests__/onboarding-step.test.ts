@@ -1,12 +1,23 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { pickOnboardingStep } from '../-onboarding-step'
+import type { SetupState } from '@/lib/shared/db-types'
 
-describe('pickOnboardingStep', () => {
-  it('routes unauthenticated visitors to /onboarding/account', () => {
+function state(overrides: Partial<SetupState> = {}): SetupState {
+  return {
+    version: 2,
+    steps: { core: true, workspace: false, startingPoint: null },
+    ...overrides,
+  }
+}
+
+const principalRecord = { id: 'p1', role: 'admin' }
+
+describe('pickOnboardingStep V2', () => {
+  it('routes unauthenticated visitors to account creation', () => {
     expect(pickOnboardingStep({ session: null, state: null })).toBe('/onboarding/account')
   })
 
-  it('routes invitees to /auth/login', () => {
+  it('routes invitees to sign in', () => {
     expect(
       pickOnboardingStep({
         session: { userId: 'u1' },
@@ -15,65 +26,61 @@ describe('pickOnboardingStep', () => {
     ).toBe('/auth/login')
   })
 
-  it('routes mid-wizard users to /onboarding/boards when useCase + workspace are both done', () => {
+  it('combines a missing workspace or goal into one step', () => {
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u1' },
+        state: { setupState: state(), principalRecord },
+      })
+    ).toBe('/onboarding/workspace')
+  })
+
+  it('routes configured workspace and goal to the starting point', () => {
     expect(
       pickOnboardingStep({
         session: { userId: 'u1' },
         state: {
-          setupState: {
-            version: 1,
-            useCase: 'saas',
-            steps: { core: false, workspace: true, boards: false },
-          },
-          principalRecord: { id: 'p1', role: 'admin' },
+          setupState: state({
+            useCase: 'product_feedback',
+            steps: { core: true, workspace: true, startingPoint: null },
+          }),
+          principalRecord,
         },
       })
     ).toBe('/onboarding/boards')
   })
 
-  it('routes users with a useCase but no workspace to /onboarding/workspace', () => {
+  it('shows the bridge until it is acknowledged', () => {
+    const completedAt = '2026-07-13T10:00:00.000Z'
+    const setupState = state({
+      useCase: 'customer_support',
+      steps: {
+        core: true,
+        workspace: true,
+        startingPoint: {
+          outcome: 'customer_support',
+          resourceType: 'messenger',
+          source: 'wizard',
+          resolution: 'configured',
+          completedAt,
+        },
+      },
+      completedAt,
+    })
+    expect(
+      pickOnboardingStep({
+        session: { userId: 'u1' },
+        state: { setupState, principalRecord },
+      })
+    ).toBe('/onboarding/complete')
     expect(
       pickOnboardingStep({
         session: { userId: 'u1' },
         state: {
-          setupState: {
-            version: 1,
-            useCase: 'saas',
-            steps: { core: false, workspace: false, boards: false },
-          },
-          principalRecord: { id: 'p1', role: 'admin' },
+          setupState: { ...setupState, activationHandoffSeenAt: completedAt },
+          principalRecord,
         },
       })
-    ).toBe('/onboarding/workspace')
-  })
-
-  it('routes pre-seeded workspace WITHOUT useCase back to /onboarding/usecase', () => {
-    // Regression: when /api/v1/admin/setup pre-seeds
-    // setupState.steps.workspace without a useCase, the wizard's
-    // dynamic stepper still shows Use case as a remaining step.
-    // pickOnboardingStep used to drop the user straight on
-    // /onboarding/boards — silently checking off Use case. First-
-    // incomplete ordering keeps stepper + router agreed.
-    expect(
-      pickOnboardingStep({
-        session: { userId: 'u1' },
-        state: {
-          setupState: {
-            version: 1,
-            steps: { core: true, workspace: true, boards: false },
-          },
-          principalRecord: { id: 'p1', role: 'admin' },
-        },
-      })
-    ).toBe('/onboarding/usecase')
-  })
-
-  it('falls back to /onboarding/usecase when nothing has been chosen', () => {
-    expect(
-      pickOnboardingStep({
-        session: { userId: 'u1' },
-        state: { setupState: null, principalRecord: null },
-      })
-    ).toBe('/onboarding/usecase')
+    ).toBe('/admin')
   })
 })

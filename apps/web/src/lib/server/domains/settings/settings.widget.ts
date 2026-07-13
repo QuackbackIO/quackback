@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import { db, eq, settings } from '@/lib/server/db'
+import { db, and, eq, lte, or, isNull, sql, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { deleteObject, getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import type {
@@ -13,6 +13,75 @@ import type {
 import { DEFAULT_WIDGET_CONFIG, DEFAULT_MESSENGER_CONFIG } from './settings.types'
 
 const log = logger.child({ component: 'settings-widget' })
+export const WIDGET_OBSERVATION_THROTTLE_MS = 15 * 60 * 1000
+
+/**
+ * Return a normalized external Origin hostname, or null for requests that must
+ * not count as installation evidence. Origin is a browser-controlled header;
+ * malformed, opaque, originless, same-host, and same-origin preview requests
+ * are ignored.
+ */
+export function externalWidgetOriginHostname(request: Request): string | null {
+  const originHeader = request.headers.get('origin')
+  if (!originHeader || originHeader === 'null' || originHeader.includes(',')) return null
+  if (request.headers.get('sec-fetch-site') === 'same-origin') return null
+
+  try {
+    const origin = new URL(originHeader)
+    const endpoint = new URL(request.url)
+    if (
+      (origin.protocol !== 'http:' && origin.protocol !== 'https:') ||
+      origin.username ||
+      origin.password ||
+      origin.pathname !== '/' ||
+      origin.search ||
+      origin.hash
+    )
+      return null
+    const hostname = origin.hostname.toLowerCase().replace(/\.$/, '')
+    if (!hostname || hostname.length > 253) return null
+    if (hostname === endpoint.hostname.toLowerCase().replace(/\.$/, '')) return null
+    return hostname
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Record external widget installation evidence without touching the tenant
+ * settings cache. The conditional update makes first/last-seen behavior and
+ * the 15-minute throttle atomic under concurrent public requests.
+ */
+export async function observeExternalWidgetRequest(
+  request: Request,
+  now = new Date()
+): Promise<boolean> {
+  const hostname = externalWidgetOriginHostname(request)
+  if (!hostname) return false
+  const org = await db.query.settings.findFirst({ columns: { id: true } })
+  if (!org) return false
+
+  const staleBefore = new Date(now.getTime() - WIDGET_OBSERVATION_THROTTLE_MS)
+  const updated = await db
+    .update(settings)
+    .set({
+      widgetInstalledFirstSeenAt: sql`coalesce(${settings.widgetInstalledFirstSeenAt}, ${now})`,
+      widgetInstalledLastSeenAt: now,
+      widgetInstalledOriginHost: hostname,
+    })
+    .where(
+      and(
+        eq(settings.id, org.id),
+        or(
+          isNull(settings.widgetInstalledFirstSeenAt),
+          isNull(settings.widgetInstalledLastSeenAt),
+          lte(settings.widgetInstalledLastSeenAt, staleBefore)
+        )
+      )
+    )
+    .returning({ id: settings.id })
+  return updated.length > 0
+}
 
 /**
  * Client-safe projection of the Home config: the stored S3 key is swapped for

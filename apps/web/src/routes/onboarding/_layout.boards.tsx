@@ -1,342 +1,300 @@
 import { useState } from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
-import { ArrowPathIcon, CheckIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { createBoardsBatchFn } from '@/lib/server/functions/boards'
-import { checkOnboardingState } from '@/lib/server/functions/admin'
-import { listBoardsForOnboarding } from '@/lib/server/functions/onboarding'
 import {
-  getBoardsForUseCase,
-  getBoardOptionsForUseCase,
-  getBoardsStepCopy,
-} from '@/components/onboarding/default-boards'
+  ArrowLeftIcon,
+  ArrowPathIcon,
+  BookOpenIcon,
+  ChatBubbleLeftRightIcon,
+  LinkIcon,
+  LockClosedIcon,
+} from '@heroicons/react/24/outline'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { Button } from '@/components/ui/button'
+import { checkOnboardingState } from '@/lib/server/functions/admin'
+import {
+  completeStartingPointFn,
+  getStartingPointContextFn,
+} from '@/lib/server/functions/activation'
 import { pickOnboardingStep } from './-onboarding-step'
 import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
+import type { OnboardingOutcome } from '@/lib/shared/db-types'
+
+const OUTCOME_COPY: Record<
+  OnboardingOutcome,
+  { title: string; description: string; action: string; artifact: string }
+> = {
+  product_feedback: {
+    title: 'Create a home for customer feedback',
+    description: 'Start with a public board where customers can share ideas and vote.',
+    action: 'Create feedback board',
+    artifact: 'Product feedback',
+  },
+  customer_support: {
+    title: 'Set up Messenger',
+    description:
+      'Choose how customers can contact you. We’ll confirm installation once Messenger appears on your website.',
+    action: 'Set up Messenger',
+    artifact: 'Customer support',
+  },
+  help_center: {
+    title: 'Write your first help article',
+    description: 'We’ll prepare a Getting started draft for you to shape into a useful answer.',
+    action: 'Create article draft',
+    artifact: 'Help Center',
+  },
+  internal: {
+    title: 'Create a private space for team ideas',
+    description: 'Give your team one place to share, discuss, and prioritize internal feedback.',
+    action: 'Create private board',
+    artifact: 'Internal feedback',
+  },
+}
 
 export const Route = createFileRoute('/onboarding/_layout/boards')({
   loader: async ({ context }) => {
     const { session } = context
-
-    if (!session?.user) {
-      throw redirect({ to: '/onboarding/account' })
-    }
-
+    if (!session?.user) throw redirect({ to: '/onboarding/account' })
     const state = await checkOnboardingState()
-
-    if (state.needsInvitation) {
-      throw redirect(buildSigninRedirect('/admin'))
-    }
-
-    // Delegate when boards step doesn't apply yet (earlier step missing).
-    // pickOnboardingStep returns /onboarding/boards itself when the user
-    // belongs here, so we won't bounce-loop.
-    if (!state.setupState?.useCase || !state.setupState?.steps?.workspace) {
-      throw redirect({
-        to: pickOnboardingStep({
-          session: { userId: session.user.id },
-          state: {
-            needsInvitation: state.needsInvitation,
-            setupState: state.setupState,
-            principalRecord: state.principalRecord,
-          },
-        }),
-      })
-    }
-
-    const { boards: existingBoards, maxBoards } = await listBoardsForOnboarding()
-
+    if (state.needsInvitation) throw redirect(buildSigninRedirect('/admin'))
+    const target = pickOnboardingStep({
+      session: { userId: session.user.id },
+      state: {
+        needsInvitation: state.needsInvitation,
+        setupState: state.setupState,
+        principalRecord: state.principalRecord,
+      },
+    })
+    if (target !== '/onboarding/boards') throw redirect({ to: target })
+    const startingPoint = await getStartingPointContextFn()
     return {
-      existingBoards,
-      maxBoards,
-      useCase: state.setupState?.useCase,
+      ...startingPoint,
+      workspaceName: context.settings?.name ?? context.settings?.settings?.name ?? 'Your workspace',
+      workspaceSlug: context.settings?.slug ?? context.settings?.settings?.slug ?? '',
     }
   },
-  component: BoardsStep,
+  component: StartingPointStep,
 })
 
-function BoardsStep() {
+function StartingPointStep() {
+  const intl = useIntl()
   const navigate = useNavigate()
-  const { existingBoards, maxBoards, useCase } = Route.useLoaderData()
-
-  // When the tier allows exactly one board, the selector is single-select
-  // (radio-style) so users can't pre-pick a list that won't fit. Tier
-  // enforcement still happens server-side (createBoardsBatchFn partitions
-  // input against maxBoards) — this is a UX preventive measure.
-  const singleSelect = maxBoards === 1
-
-  // Get board options filtered by use case
-  const boardOptions = getBoardOptionsForUseCase(useCase)
-  const existingBoardNames = new Set(
-    existingBoards.map((b: { name: string }) => b.name.toLowerCase())
-  )
-
-  // Initialize selection. With a 1-board tier the user can only have one
-  // selection at a time — pick just the first default for their use case
-  // (or the first existing board if any).
-  const initialSelection: Set<string> = (() => {
-    if (existingBoards.length > 0) {
-      return new Set(
-        boardOptions.filter((b) => existingBoardNames.has(b.name.toLowerCase())).map((b) => b.id)
-      )
-    }
-    const defaults = getBoardsForUseCase(useCase)
-    if (singleSelect) {
-      const first = [...defaults][0]
-      return new Set(first ? [first] : [])
-    }
-    return defaults
-  })()
-
-  const [selectedBoards, setSelectedBoards] = useState<Set<string>>(initialSelection)
-  const [customBoards, setCustomBoards] = useState<Array<{ name: string; description: string }>>([])
-  const [newCustomBoard, setNewCustomBoard] = useState({ name: '', description: '' })
-  const [showCustomForm, setShowCustomForm] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const data = Route.useLoaderData()
+  const copy = OUTCOME_COPY[data.outcome]
+  const [pendingAction, setPendingAction] = useState<'complete' | 'defer' | null>(null)
   const [error, setError] = useState('')
 
-  function toggleBoard(boardId: string) {
-    setSelectedBoards((prev) => {
-      // Radio-style: clicking a non-selected option replaces the selection;
-      // clicking the currently-selected one deselects it. (Empty selection
-      // is allowed — Skip button handles the no-board case.)
-      if (singleSelect) {
-        if (prev.has(boardId)) return new Set()
-        return new Set([boardId])
-      }
-      const next = new Set(prev)
-      if (next.has(boardId)) {
-        next.delete(boardId)
-      } else {
-        next.add(boardId)
-      }
-      return next
-    })
-  }
-
-  function addCustomBoard() {
-    const name = newCustomBoard.name.trim()
-    if (name) {
-      setCustomBoards((prev) => [...prev, { name, description: newCustomBoard.description.trim() }])
-      setNewCustomBoard({ name: '', description: '' })
-      setShowCustomForm(false)
-    }
-  }
-
-  async function handleSkip() {
-    setIsLoading(true)
+  async function submit(action: 'complete' | 'defer') {
+    setPendingAction(action)
     setError('')
-
     try {
-      // Call with empty array to mark onboarding as complete without creating boards
-      await createBoardsBatchFn({ data: { boards: [] } })
-      navigate({ to: '/onboarding/complete' })
+      await completeStartingPointFn({ data: { action } })
+      await navigate({ to: '/onboarding/complete' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  async function handleContinue() {
-    setIsLoading(true)
-    setError('')
-
-    try {
-      const defaultBoardsToCreate = boardOptions
-        .filter((b) => selectedBoards.has(b.id) && !existingBoardNames.has(b.name.toLowerCase()))
-        .map((b) => ({ name: b.name, description: b.description }))
-
-      const customBoardsToCreate = customBoards.filter(
-        (b) => !existingBoardNames.has(b.name.toLowerCase())
+      setError(
+        err instanceof Error
+          ? err.message
+          : intl.formatMessage({
+              id: 'onboarding.error.generic',
+              defaultMessage: 'Something went wrong. Try again.',
+            })
       )
-
-      const boardsToCreate = [...defaultBoardsToCreate, ...customBoardsToCreate]
-
-      // Always call to mark onboarding complete (handles empty array)
-      await createBoardsBatchFn({ data: { boards: boardsToCreate } })
-
-      navigate({ to: '/onboarding/complete' })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
-      setIsLoading(false)
+      setPendingAction(null)
     }
   }
-
-  const newBoardsCount =
-    boardOptions.filter(
-      (b) => selectedBoards.has(b.id) && !existingBoardNames.has(b.name.toLowerCase())
-    ).length + customBoards.filter((b) => !existingBoardNames.has(b.name.toLowerCase())).length
-
-  const boardsCopy = getBoardsStepCopy(useCase)
 
   return (
-    <div className="w-full max-w-xl mx-auto">
-      {/* Header — outcome-aware so support/help ICPs aren't forced through a feedback wizard */}
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold mb-2">{boardsCopy.title}</h1>
-        <p className="text-muted-foreground">{boardsCopy.description}</p>
-      </div>
+    <div className="mx-auto w-full max-w-3xl space-y-8">
+      <header className="text-center">
+        <p className="text-sm font-medium text-primary">
+          <FormattedMessage
+            id={`onboarding.startingPoint.${data.outcome}.artifact`}
+            defaultMessage={copy.artifact}
+          />
+        </p>
+        <h1 className="mt-2 text-2xl font-bold">
+          <FormattedMessage
+            id={`onboarding.startingPoint.${data.outcome}.title`}
+            defaultMessage={copy.title}
+          />
+        </h1>
+        <p className="mx-auto mt-2 max-w-2xl text-sm text-muted-foreground">
+          <FormattedMessage
+            id={`onboarding.startingPoint.${data.outcome}.description`}
+            defaultMessage={copy.description}
+          />
+        </p>
+      </header>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive text-center">
-          {error}
+      <ArtifactPreview
+        outcome={data.outcome}
+        workspaceName={data.workspaceName}
+        workspaceSlug={data.workspaceSlug}
+        available={data.available}
+        existingBoardName={data.existingBoardName}
+      />
+
+      {!data.available && (
+        <div role="status" className="rounded-xl border bg-muted/40 px-5 py-4">
+          <p className="font-medium">
+            <FormattedMessage
+              id="onboarding.startingPoint.unavailable"
+              defaultMessage="We can’t create this yet"
+            />
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            <FormattedMessage
+              id={`onboarding.startingPoint.${data.outcome}.blocked`}
+              defaultMessage={data.blockedReason ?? ''}
+            />
+          </p>
+          {data.goalManaged && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <FormattedMessage
+                id="onboarding.startingPoint.managedUnavailable"
+                defaultMessage="This goal is managed for your workspace. We’ll keep your selection and show you what needs attention next."
+              />
+            </p>
+          )}
         </div>
       )}
 
-      {/* Board options */}
-      <div className="space-y-2 mb-6">
-        {boardOptions.map((board) => {
-          const isSelected = selectedBoards.has(board.id)
-          const alreadyExists = existingBoardNames.has(board.name.toLowerCase())
-
-          return (
-            <button
-              key={board.id}
-              type="button"
-              onClick={() => !alreadyExists && toggleBoard(board.id)}
-              disabled={isLoading || alreadyExists}
-              className={`
-                w-full flex items-center gap-3 p-4 rounded-xl border text-left transition-all duration-200
-                disabled:cursor-not-allowed
-                ${alreadyExists ? 'opacity-50' : ''}
-                ${
-                  isSelected && !alreadyExists
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border/50 bg-card/50 hover:border-border hover:bg-card/80'
-                }
-              `}
-            >
-              <div
-                className={`
-                  h-5 w-5 ${singleSelect ? 'rounded-full' : 'rounded'} border-2 flex items-center justify-center shrink-0 transition-colors
-                  ${isSelected || alreadyExists ? 'bg-primary border-primary' : 'border-muted-foreground/40'}
-                `}
-              >
-                {(isSelected || alreadyExists) &&
-                  (singleSelect ? (
-                    <div className="h-2 w-2 rounded-full bg-primary-foreground" />
-                  ) : (
-                    <CheckIcon className="h-3 w-3 text-primary-foreground" />
-                  ))}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm">{board.name}</div>
-                <div className="text-xs text-muted-foreground">{board.description}</div>
-              </div>
-            </button>
-          )
-        })}
-
-        {/* Custom boards */}
-        {customBoards.map((board, index) => (
-          <div
-            key={`custom-${index}`}
-            className="w-full flex items-center gap-3 p-4 rounded-xl border border-primary bg-primary/5"
+      <div aria-live="polite" aria-atomic="true">
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           >
-            <div className="h-5 w-5 rounded border-2 bg-primary border-primary flex items-center justify-center shrink-0">
-              <CheckIcon className="h-3 w-3 text-primary-foreground" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-medium text-sm">{board.name}</div>
-              {board.description && (
-                <div className="text-xs text-muted-foreground">{board.description}</div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setCustomBoards((prev) => prev.filter((_, i) => i !== index))}
-              disabled={isLoading}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <XMarkIcon className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-
-        {/* Add custom board — hidden when the tier only allows one
-            board, since adding a custom would conflict with the
-            already-selected default and the partition would silently
-            drop one. Single-select tiers stick to the curated list. */}
-        {!singleSelect &&
-          (showCustomForm ? (
-            <div className="p-4 rounded-xl border border-dashed border-border space-y-3">
-              <Input
-                type="text"
-                value={newCustomBoard.name}
-                onChange={(e) => setNewCustomBoard((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Board name"
-                autoFocus
-                disabled={isLoading}
-                className="h-10"
-              />
-              <Input
-                type="text"
-                value={newCustomBoard.description}
-                onChange={(e) =>
-                  setNewCustomBoard((prev) => ({ ...prev, description: e.target.value }))
-                }
-                placeholder="Description (optional)"
-                disabled={isLoading}
-                className="h-10"
-              />
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowCustomForm(false)
-                    setNewCustomBoard({ name: '', description: '' })
-                  }}
-                  disabled={isLoading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={addCustomBoard}
-                  disabled={isLoading || !newCustomBoard.name.trim()}
-                >
-                  Add
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowCustomForm(true)}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-all disabled:opacity-50"
-            >
-              <PlusIcon className="h-4 w-4" />
-              <span className="text-sm">Add custom board</span>
-            </button>
-          ))}
+            {error}
+          </p>
+        )}
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-3 max-w-sm mx-auto">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button
           type="button"
           variant="ghost"
-          onClick={handleSkip}
-          disabled={isLoading}
-          className="flex-1 h-11"
+          className="h-11"
+          onClick={() => navigate({ to: '/onboarding/workspace' })}
+          disabled={pendingAction !== null}
         >
-          {boardsCopy.skipHint ?? 'Skip'}
+          <ArrowLeftIcon className="h-4 w-4" />
+          <FormattedMessage id="onboarding.back" defaultMessage="Back" />
         </Button>
-        <Button type="button" onClick={handleContinue} disabled={isLoading} className="flex-1 h-11">
-          {isLoading ? (
-            <ArrowPathIcon className="h-4 w-4 animate-spin" />
-          ) : newBoardsCount === 0 ? (
-            'Continue'
-          ) : (
-            `Create ${newBoardsCount} board${newBoardsCount !== 1 ? 's' : ''}`
-          )}
-        </Button>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-11"
+            onClick={() => submit('defer')}
+            disabled={pendingAction !== null}
+          >
+            {pendingAction === 'defer' && (
+              <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+            )}
+            <FormattedMessage id="onboarding.startingPoint.later" defaultMessage="Do this later" />
+          </Button>
+          <Button
+            type="button"
+            className="h-11"
+            onClick={() => submit('complete')}
+            disabled={pendingAction !== null}
+          >
+            {pendingAction === 'complete' && (
+              <ArrowPathIcon className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+            )}
+            {data.available ? (
+              <FormattedMessage
+                id={
+                  data.existingBoardName
+                    ? `onboarding.startingPoint.${data.outcome}.existingAction`
+                    : `onboarding.startingPoint.${data.outcome}.action`
+                }
+                defaultMessage={data.existingBoardName ? 'Use existing board' : copy.action}
+              />
+            ) : (
+              <FormattedMessage
+                id="onboarding.startingPoint.continueUnavailable"
+                defaultMessage="View next steps"
+              />
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ArtifactPreview({
+  outcome,
+  workspaceName,
+  workspaceSlug,
+  available,
+  existingBoardName,
+}: {
+  outcome: OnboardingOutcome
+  workspaceName: string
+  workspaceSlug: string
+  available: boolean
+  existingBoardName: string | null
+}) {
+  const Icon =
+    outcome === 'customer_support'
+      ? ChatBubbleLeftRightIcon
+      : outcome === 'help_center'
+        ? BookOpenIcon
+        : outcome === 'internal'
+          ? LockClosedIcon
+          : LinkIcon
+  return (
+    <div className="mx-auto max-w-xl rounded-2xl border bg-card p-6 sm:p-8">
+      <div className="flex items-start gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="font-semibold">
+            {existingBoardName ? (
+              existingBoardName
+            ) : (
+              <FormattedMessage
+                id={`onboarding.startingPoint.${outcome}.previewTitle`}
+                defaultMessage={
+                  outcome === 'help_center'
+                    ? 'Getting started'
+                    : outcome === 'customer_support'
+                      ? '{workspaceName} Support'
+                      : outcome === 'internal'
+                        ? 'Team feedback'
+                        : 'Product feedback'
+                }
+                values={{ workspaceName }}
+              />
+            )}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {available ? (
+              <FormattedMessage
+                id={`onboarding.startingPoint.${outcome}.previewDetail`}
+                defaultMessage={
+                  outcome === 'customer_support'
+                    ? 'Messenger for your website'
+                    : outcome === 'help_center'
+                      ? 'Draft article'
+                      : outcome === 'internal'
+                        ? 'Private to your team'
+                        : '/{workspaceSlug}/feedback'
+                }
+                values={{ workspaceSlug: workspaceSlug || 'workspace' }}
+              />
+            ) : (
+              <FormattedMessage
+                id="onboarding.startingPoint.previewUnavailable"
+                defaultMessage="Not available yet"
+              />
+            )}
+          </p>
+        </div>
       </div>
     </div>
   )

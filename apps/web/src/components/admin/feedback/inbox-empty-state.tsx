@@ -3,11 +3,13 @@ import {
   MagnifyingGlassIcon,
   DocumentIcon,
   SparklesIcon,
-  CodeBracketIcon,
   GlobeAltIcon,
+  ArrowRightIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/shared/empty-state'
+import { useReadinessAction } from '@/lib/client/hooks/use-readiness-action'
+import { FormattedMessage } from 'react-intl'
 
 interface InboxEmptyStateProps {
   type: 'no-posts' | 'no-results' | 'no-selection'
@@ -16,7 +18,8 @@ interface InboxEmptyStateProps {
 
 export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) {
   const { userRole } = useRouteContext({ from: '__root__' })
-  // Widget setup and the launch checklist live behind admin-only settings;
+  const readinessAction = useReadinessAction()
+  // Widget setup and the launch plan live behind admin-only settings;
   // members get the share path only.
   const isAdmin = userRole === 'admin'
 
@@ -45,23 +48,33 @@ export function InboxEmptyState({ type, onClearFilters }: InboxEmptyStateProps) 
         description="Hear from customers on your site or share a public board."
         action={
           <div className="flex flex-wrap items-center justify-center gap-2">
-            {isAdmin && (
-              <Button size="sm" asChild>
-                <Link to="/admin/settings/widget">
-                  <CodeBracketIcon className="h-3.5 w-3.5" />
-                  Add to your site
+            {isAdmin && readinessAction && (
+              <Button size="sm" className="h-11 sm:h-9" asChild>
+                <Link to={readinessAction.href}>
+                  <ArrowRightIcon className="h-3.5 w-3.5" />
+                  {readinessAction.label}
                 </Link>
               </Button>
             )}
-            <Button size="sm" variant={isAdmin ? 'outline' : 'default'} asChild>
+            <Button
+              size="sm"
+              variant={isAdmin && readinessAction ? 'outline' : 'default'}
+              className="h-11 sm:h-9"
+              asChild
+            >
               <Link to="/">
                 <GlobeAltIcon className="h-3.5 w-3.5" />
                 Share board
               </Link>
             </Button>
             {isAdmin && (
-              <Button size="sm" variant="ghost" asChild>
-                <Link to="/admin/getting-started">Launch checklist</Link>
+              <Button size="sm" variant="ghost" className="h-11 sm:h-9" asChild>
+                <Link to="/admin/getting-started">
+                  <FormattedMessage
+                    id="activation.action.viewPlan"
+                    defaultMessage="View launch plan"
+                  />
+                </Link>
               </Button>
             )}
           </div>

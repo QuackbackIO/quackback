@@ -11,7 +11,9 @@
  */
 
 import {
-  ONBOARDING_OUTCOMES,
+  getSetupState as getSetupStateFromDb,
+  isOnboardingComplete as isOnboardingCompleteFromDb,
+  normalizeOnboardingOutcome as normalizeOnboardingOutcomeFromDb,
   type SetupState,
   type UseCaseType,
   type OnboardingOutcome,
@@ -75,17 +77,11 @@ export const REACTION_EMOJIS = ['👍', '❤️', '🎉', '😄', '🤔', '👀'
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number]
 
 export function getSetupState(setupStateJson: string | null): SetupState | null {
-  if (!setupStateJson) return null
-  try {
-    return JSON.parse(setupStateJson) as SetupState
-  } catch {
-    return null
-  }
+  return getSetupStateFromDb(setupStateJson)
 }
 
 export function isOnboardingComplete(setupState: SetupState | null): boolean {
-  if (!setupState) return false
-  return setupState.steps.core && setupState.steps.workspace && setupState.steps.boards
+  return isOnboardingCompleteFromDb(setupState)
 }
 
 /**
@@ -98,16 +94,5 @@ export function isOnboardingComplete(setupState: SetupState | null): boolean {
 export function normalizeOnboardingOutcome(
   useCase?: UseCaseType | null
 ): OnboardingOutcome | undefined {
-  if (!useCase) return undefined
-  if ((ONBOARDING_OUTCOMES as readonly string[]).includes(useCase)) {
-    return useCase as OnboardingOutcome
-  }
-  switch (useCase) {
-    case 'saas':
-    case 'consumer':
-    case 'marketplace':
-      return 'product_feedback'
-    default:
-      return undefined
-  }
+  return normalizeOnboardingOutcomeFromDb(useCase)
 }

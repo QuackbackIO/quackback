@@ -398,11 +398,15 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch onboarding status')
   try {
-    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-    const { helpCenterArticles, statusComponents, isNull } = await import('@/lib/server/db')
+    const { boards, helpCenterArticles, statusComponents, isNull, isNotNull, lte } =
+      await import('@/lib/server/db')
     const { getSetupState } = await import('@/lib/shared/db-types')
+    const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
+    const { resolveFeatureFlags } = await import('@/lib/server/domains/settings/settings.types')
+    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
 
     const [
       orgBoards,
@@ -411,10 +415,13 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       widgetConfig,
       connectedIntegration,
       helpArticle,
+      publishedHelpArticle,
       statusComponent,
+      tierLimits,
     ] = await Promise.all([
       db.query.boards.findMany({
-        columns: { id: true },
+        columns: { id: true, access: true },
+        where: isNull(boards.deletedAt),
       }),
       // Teammates only (admin/member) — portal role=user must not complete "invite"
       db
@@ -431,13 +438,25 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
         columns: { id: true },
         where: isNull(helpCenterArticles.deletedAt),
       }),
+      db.query.helpCenterArticles.findFirst({
+        columns: { id: true },
+        where: and(
+          isNull(helpCenterArticles.deletedAt),
+          isNotNull(helpCenterArticles.publishedAt),
+          lte(helpCenterArticles.publishedAt, new Date())
+        ),
+      }),
       db.query.statusComponents.findFirst({
         columns: { id: true },
         where: isNull(statusComponents.deletedAt),
       }),
+      getTierLimits(),
     ])
 
     const setupState = getSetupState(orgSettings?.setupState ?? null)
+    const firstWin = await (await import('@/lib/server/activation-wins')).detectFirstWin(setupState)
+    const flags = resolveFeatureFlags(orgSettings?.featureFlags)
+    const permissions = permissionsForLegacyRole(auth.principal.role)
     const hasBranding = Boolean(orgSettings?.logoKey)
     const hasWidgetEnabled = widgetConfig.enabled === true
     // Messenger is "live" when the messenger surface is on and the widget is enabled
@@ -446,6 +465,8 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
       (widgetConfig.messenger?.enabled ?? false) &&
       (widgetConfig.tabs?.messenger ?? false)
     const hasIntegration = Boolean(connectedIntegration)
+    const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
+    const hasPublicBoard = orgBoards.some((board) => board.access.view !== 'team')
 
     log.debug(
       {
@@ -462,15 +483,45 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
     )
     return {
       hasBoards: orgBoards.length > 0,
+      hasPublicBoard,
+      hasInternalBoard,
       memberCount: humanMembers.length,
       hasBranding,
       hasWidgetEnabled,
+      hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
+      widgetLastSeenAt: orgSettings?.widgetInstalledLastSeenAt?.toISOString() ?? null,
+      widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
       hasMessengerEnabled,
       hasHelpArticle: Boolean(helpArticle),
+      hasPublishedHelpArticle: Boolean(publishedHelpArticle),
       hasStatusComponent: Boolean(statusComponent),
       hasIntegration,
+      hasFirstWin: firstWin.reached,
+      firstWinAt: firstWin.reachedAt,
       useCase: setupState?.useCase ?? null,
-      skippedLaunchTasks: setupState?.skippedLaunchTasks ?? [],
+      taskResolutions: setupState?.taskResolutions ?? {},
+      boardCount: orgBoards.length,
+      maxBoards: tierLimits.maxBoards,
+      goalManaged: Boolean(
+        orgSettings &&
+        (orgSettings.managedFieldPaths as string[]).some(
+          (path) => path === 'workspace.useCase' || path === 'workspace'
+        )
+      ),
+      permissions: {
+        settingsManage: permissions.has(PERMISSIONS.SETTINGS_MANAGE),
+        boardManage: permissions.has(PERMISSIONS.BOARD_MANAGE),
+        memberManage: permissions.has(PERMISSIONS.MEMBER_MANAGE),
+        brandingManage: permissions.has(PERMISSIONS.SETTINGS_BRANDING),
+        integrationManage: permissions.has(PERMISSIONS.INTEGRATION_MANAGE),
+        helpCenterManage: permissions.has(PERMISSIONS.HELP_CENTER_MANAGE),
+      },
+      features: {
+        supportInbox: flags.supportInbox,
+        helpCenter: flags.helpCenter,
+        statusPage: flags.statusPage,
+        integrations: tierLimits.features.integrations,
+      },
     }
   } catch (error) {
     log.error({ err: error }, 'fetch onboarding status failed')
@@ -478,53 +529,67 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
   }
 })
 
-/**
- * Explicitly skip (or unskip) a launch-checklist task. Distinct from the
- * onboarding wizard's own setupState.steps — this only affects the
- * post-onboarding Getting Started checklist, so an admin who doesn't want a
- * status page (say) can dismiss it without the task nagging forever.
- */
-export const toggleLaunchTaskSkipFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ taskId: z.string(), skipped: z.boolean() }))
+/** Save or clear a launch-plan task preference. Required steps can be moved
+ * later; only optional customisation can be hidden. */
+const taskResolutionSchema = z.object({
+  outcome: z.enum(['product_feedback', 'customer_support', 'help_center', 'internal']),
+  taskId: z.string().min(1),
+  resolution: z.enum(['deferred', 'dismissed']).nullable(),
+})
+
+export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
+  .validator(taskResolutionSchema)
   .handler(async ({ data }) => {
-    log.debug({ task_id: data.taskId, skipped: data.skipped }, 'toggle launch task skip')
+    log.debug({ task_id: data.taskId, resolution: data.resolution }, 'set launch task resolution')
     try {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-
-      const { getSetupState } = await import('@/lib/shared/db-types')
-      const { invalidateSettingsCache } =
-        await import('@/lib/server/domains/settings/settings.helpers')
-      const { settings } = await import('@/lib/server/db')
-
-      const existingSettings = await getSettings()
-      if (!existingSettings) {
-        throw new Error('Workspace is not set up yet')
+      const { buildLaunchTasks } = await import('@/lib/shared/launch-checklist')
+      const status = await fetchOnboardingStatus()
+      const task = buildLaunchTasks(status, data.outcome).find(
+        (candidate) => candidate.id === data.taskId
+      )
+      if (!task) throw new Error('Unknown launch task')
+      if (data.resolution === 'deferred' && task.classification !== 'prerequisite') {
+        throw new Error('Only setup steps can be moved later')
       }
-
-      const setupState = getSetupState(existingSettings.setupState) ?? {
-        version: 1,
-        steps: { core: true, workspace: true, boards: true },
+      if (data.resolution === 'dismissed' && task.classification !== 'polish') {
+        throw new Error('Only optional customization can be skipped')
       }
+      if (task.isCompleted && data.resolution)
+        throw new Error('Completed tasks cannot be deferred or dismissed')
 
-      const current = new Set(setupState.skippedLaunchTasks ?? [])
-      if (data.skipped) {
-        current.add(data.taskId)
-      } else {
-        current.delete(data.taskId)
-      }
-      const skippedLaunchTasks = [...current]
+      const { mutateSetupStateAtomic } = await import('@/lib/server/setup-state')
+      const { state } = await mutateSetupStateAtomic((current) => {
+        if (current.useCase !== data.outcome)
+          throw new Error('Task outcome does not match the workspace goal')
+        const taskResolutions = { ...(current.taskResolutions ?? {}) }
+        const outcomeTasks = { ...(taskResolutions[data.outcome] ?? {}) }
+        if (data.resolution) {
+          outcomeTasks[data.taskId] = {
+            resolution: data.resolution,
+            resolvedAt: new Date().toISOString(),
+          }
+        } else {
+          delete outcomeTasks[data.taskId]
+        }
+        if (Object.keys(outcomeTasks).length > 0) taskResolutions[data.outcome] = outcomeTasks
+        else delete taskResolutions[data.outcome]
+        return {
+          state: {
+            ...current,
+            taskResolutions: Object.keys(taskResolutions).length > 0 ? taskResolutions : undefined,
+          },
+          value: undefined,
+        }
+      })
 
-      await db
-        .update(settings)
-        .set({ setupState: JSON.stringify({ ...setupState, skippedLaunchTasks }) })
-        .where(eq(settings.id, existingSettings.id))
-
-      await invalidateSettingsCache()
-
-      log.info({ task_id: data.taskId, skipped: data.skipped }, 'toggle launch task skip: saved')
-      return { skippedLaunchTasks }
+      log.info(
+        { task_id: data.taskId, resolution: data.resolution },
+        'launch task resolution saved'
+      )
+      return { taskResolutions: state.taskResolutions ?? {} }
     } catch (error) {
-      log.error({ err: error }, 'toggle launch task skip failed')
+      log.error({ err: error }, 'set launch task resolution failed')
       throw error
     }
   })

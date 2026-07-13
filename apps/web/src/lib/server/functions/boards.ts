@@ -5,10 +5,9 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { BoardId } from '@quackback/ids'
-import type { BoardSettings, SetupState } from '@/lib/server/db'
+import type { BoardSettings } from '@/lib/server/db'
 import { requireAuth } from './auth-helpers'
-import { getSettings } from './workspace'
-import { db, settings, boards, eq } from '@/lib/server/db'
+import { db, boards, eq } from '@/lib/server/db'
 import {
   listBoards,
   getBoardById,
@@ -16,7 +15,6 @@ import {
   updateBoard,
   deleteBoard,
 } from '@/lib/server/domains/boards/board.service'
-import { invalidateSettingsCache } from '@/lib/server/domains/settings/settings.helpers'
 import { boardAccessSchema, boardPresetSchema, accessForPreset } from '@/lib/shared/schemas/boards'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
@@ -71,20 +69,6 @@ const deleteBoardSchema = z.object({
   id: z.string(),
 })
 
-const createBoardsBatchSchema = z.object({
-  boards: z
-    .array(
-      z.object({
-        name: z
-          .string()
-          .min(1, 'Board name is required')
-          .max(100, 'Board name must be 100 characters or less'),
-        description: z.string().max(500).optional(),
-      })
-    )
-    .max(10, 'Maximum 10 boards can be created at once'),
-})
-
 // ============================================
 // Type Exports
 // ============================================
@@ -93,7 +77,6 @@ export type CreateBoardInput = z.infer<typeof createBoardSchema>
 export type GetBoardInput = z.infer<typeof getBoardSchema>
 export type UpdateBoardInput = z.infer<typeof updateBoardSchema>
 export type DeleteBoardInput = z.infer<typeof deleteBoardSchema>
-export type CreateBoardsBatchInput = z.infer<typeof createBoardsBatchSchema>
 
 // ============================================
 // Read Operations
@@ -196,93 +179,6 @@ export const deleteBoardFn = createServerFn({ method: 'POST' })
     await deleteBoard(data.id as BoardId)
     log.info({ board_id: data.id }, 'board deleted')
     return { id: data.id }
-  })
-
-/**
- * Create multiple boards at once (for onboarding).
- * Allows empty array for skip functionality.
- * Updates setupState to mark boards step as complete.
- *
- * Tier-limit handling: if the request would exceed the tenant's
- * `maxBoards`, the call creates as many as fit (in input order) and
- * returns a `limited` flag — rather than throwing partway through and
- * leaving orphan boards behind. The wizard's boards step is treated
- * as "done" once the user has clicked Continue, regardless of how many
- * we ended up creating; otherwise a tenant on a 1-board plan who tries
- * to seed two would get stuck on /onboarding/boards forever.
- */
-export const createBoardsBatchFn = createServerFn({ method: 'POST' })
-  .validator(createBoardsBatchSchema)
-  .handler(async ({ data }) => {
-    log.debug({ count: data.boards.length }, 'create boards batch')
-    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
-
-    // Pre-flight against the tier limit so we never call createBoard
-    // (which throws on overage) past capacity. This means the loop is
-    // exception-free under the maxBoards gate, and any boards the user
-    // selected beyond the cap are silently dropped — the UI already
-    // surfaces the limit warning above the list, so a partial create is
-    // the expected outcome.
-    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-    const { listBoards } = await import('@/lib/server/domains/boards/board.service')
-    const [limits, existingBoards] = await Promise.all([getTierLimits(), listBoards()])
-    const remainingCapacity =
-      limits.maxBoards == null ? Infinity : Math.max(0, limits.maxBoards - existingBoards.length)
-    const toCreate = data.boards.slice(0, remainingCapacity)
-    const limited = toCreate.length < data.boards.length
-
-    const createdBoards = []
-    for (const boardInput of toCreate) {
-      const board = await createBoard({
-        name: boardInput.name,
-        description: boardInput.description,
-        // Onboarding-batch boards default to the Public preset
-        // (view=anonymous, vote/comment/submit=authenticated). Admins can
-        // lock them down later via updateBoardAccessFn. Without this the
-        // column default (all 'anonymous') would apply, which is more
-        // permissive than the create-modal's Public tile.
-        access: accessForPreset('public'),
-      })
-      createdBoards.push(serializeBoard(board))
-    }
-
-    if (data.boards.length === 0) {
-      log.debug({}, 'boards batch skipped')
-    } else if (limited) {
-      log.info(
-        { count: createdBoards.length, requested: data.boards.length },
-        'boards batch created (tier limit)'
-      )
-    } else {
-      log.info({ count: createdBoards.length }, 'boards batch created')
-    }
-
-    // Update setupState to mark boards step as complete (and onboarding as finished).
-    // Always runs after the create loop — partial creates are still a successful
-    // pass through the boards step from the wizard's perspective.
-    const currentSettings = await getSettings()
-    if (currentSettings?.setupState) {
-      const setupState: SetupState = JSON.parse(currentSettings.setupState)
-
-      if (!setupState.steps.boards) {
-        const updatedState: SetupState = {
-          ...setupState,
-          steps: {
-            ...setupState.steps,
-            boards: true,
-          },
-          completedAt: new Date().toISOString(),
-        }
-        await db
-          .update(settings)
-          .set({ setupState: JSON.stringify(updatedState) })
-          .where(eq(settings.id, currentSettings.id))
-        await invalidateSettingsCache()
-        log.info({}, 'onboarding complete')
-      }
-    }
-
-    return { boards: createdBoards, limited }
   })
 
 // ============================================

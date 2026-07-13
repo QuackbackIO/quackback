@@ -281,13 +281,22 @@ async function seed() {
     const settingsId: WorkspaceId = generateId('workspace')
     // Mark onboarding as complete so dev environment skips the onboarding flow
     const setupState = {
-      version: 1,
+      version: 2,
       steps: {
         core: true,
         workspace: true,
-        boards: true,
+        startingPoint: {
+          outcome: 'product_feedback',
+          resourceType: 'board',
+          source: 'existing',
+          resolution: 'configured',
+          completedAt: new Date().toISOString(),
+        },
       },
       completedAt: new Date().toISOString(),
+      completionSource: 'managed',
+      activationHandoffSeenAt: new Date().toISOString(),
+      useCase: 'product_feedback',
     }
     await db.insert(settings).values({
       id: settingsId,

@@ -296,6 +296,12 @@ export const settings = pgTable('settings', {
    * Format: 'wgt_' + 64 hex chars
    */
   widgetSecret: text('widget_secret'),
+  /** First externally embedded widget configuration observation. */
+  widgetInstalledFirstSeenAt: timestamp('widget_installed_first_seen_at', { withTimezone: true }),
+  /** Most recent external observation, write-throttled by the public endpoint. */
+  widgetInstalledLastSeenAt: timestamp('widget_installed_last_seen_at', { withTimezone: true }),
+  /** Normalized external Origin hostname only (no path, query, port, or scheme). */
+  widgetInstalledOriginHost: text('widget_installed_origin_host'),
   /** Feature flags for experimental features (JSON) */
   featureFlags: text('feature_flags'),
   /**

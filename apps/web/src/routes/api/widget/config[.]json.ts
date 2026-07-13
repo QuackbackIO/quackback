@@ -81,15 +81,19 @@ async function extractThemeFromCss(css: string): Promise<ServerTheme> {
 export const Route = createFileRoute('/api/widget/config.json')({
   server: {
     handlers: {
-      GET: async () => {
-        const { getPublicWidgetConfig } =
+      GET: async ({ request }) => {
+        const { getPublicWidgetConfig, observeExternalWidgetRequest } =
           await import('@/lib/server/domains/settings/settings.widget')
         const { getBrandingConfig, getCustomCss } =
           await import('@/lib/server/domains/settings/settings.media')
 
         // Public projection: tabs are already flag-gated (e.g. messenger behind
         // the experimental `supportInbox` flag), so this endpoint just forwards them.
-        const widgetConfig = await getPublicWidgetConfig()
+        const [widgetConfig] = await Promise.all([
+          getPublicWidgetConfig(),
+          // Best-effort telemetry must never make the public config unavailable.
+          observeExternalWidgetRequest(request).catch(() => false),
+        ])
 
         if (!widgetConfig.enabled) {
           return jsonResponse({ enabled: false }, 60)

@@ -38,6 +38,7 @@ import type { SettingsBrandingData } from '@/lib/server/domains/settings/setting
 import { setAgentAvailabilityFn } from '@/lib/server/functions/conversation'
 import { adminQueries } from '@/lib/client/queries/admin'
 import { launchChecklistSummary, type LaunchStatus } from '@/lib/shared/launch-checklist'
+import { useIntl } from 'react-intl'
 
 /** Availability toggle for the account menu (conversation routing). The label shows the
  *  state you'll switch to; the avatar dot shows the current one. */
@@ -137,13 +138,14 @@ function NavItem({
 }
 
 export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarProps) {
+  const intl = useIntl()
   const router = useRouter()
   const { session, settings, userRole } = useRouteContext({ from: '__root__' })
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // The settings area is admin-only (every tab gates on requireAuth(['admin'])).
   // Members would only ever land on the access-denied page, so hide the cog.
   const isAdmin = userRole === 'admin'
-  // Launch checklist progress for the shell badge (admins only). Once the
+  // Launch-plan progress for the shell badge (admins only). Once the
   // checklist is complete there's nothing left to watch for, so the query
   // stops refetching — read the last-known result straight from the cache
   // (rather than from `onboardingQuery.data`, which isn't declared yet) to
@@ -155,16 +157,31 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
     onboardingQueryOptions.queryKey
   )
   const cachedAllComplete = cachedOnboardingStatus
-    ? launchChecklistSummary(cachedOnboardingStatus).allComplete
+    ? launchChecklistSummary(cachedOnboardingStatus).resolved
     : false
   const onboardingQuery = useQuery({
     ...onboardingQueryOptions,
     enabled: isAdmin && !cachedAllComplete,
   })
   const launchSummary = onboardingQuery.data ? launchChecklistSummary(onboardingQuery.data) : null
-  const showLaunchNav = isAdmin && (!launchSummary || !launchSummary.allComplete)
+  const showLaunchNav = isAdmin && (!launchSummary || !launchSummary.resolved)
   const launchRemaining =
-    launchSummary && !launchSummary.allComplete ? launchSummary.remaining : null
+    launchSummary && !launchSummary.resolved && launchSummary.remaining > 0
+      ? launchSummary.remaining
+      : null
+  const launchPlanLabel =
+    launchRemaining != null
+      ? intl.formatMessage(
+          {
+            id: 'activation.nav.remaining',
+            defaultMessage: 'Launch plan · {count} left',
+          },
+          { count: launchRemaining }
+        )
+      : intl.formatMessage({
+          id: 'activation.nav.label',
+          defaultMessage: 'Launch plan',
+        })
 
   const flags = settings?.featureFlags as
     | {
@@ -258,16 +275,12 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
 
             {/* Bottom Section */}
             <div className="flex flex-col items-center gap-3">
-              {/* Launch checklist — first-run path; hide when all tasks done */}
+              {/* Launch plan — first-run path; hide when all tasks are resolved. */}
               {showLaunchNav && (
                 <NavItem
                   href="/admin/getting-started"
                   icon={RocketLaunchIcon}
-                  label={
-                    launchRemaining != null
-                      ? `Launch checklist · ${launchRemaining} left`
-                      : 'Launch checklist'
-                  }
+                  label={launchPlanLabel}
                   isActive={isNavActive(pathname, '/admin/getting-started')}
                   badge={launchRemaining}
                 />
@@ -465,9 +478,7 @@ export function AdminSidebar({ initialUserData, latestVersion }: AdminSidebarPro
                   )}
                 >
                   <RocketLaunchIcon className="h-5 w-5" />
-                  {launchRemaining != null
-                    ? `Launch checklist · ${launchRemaining} left`
-                    : 'Launch checklist'}
+                  {launchPlanLabel}
                 </Link>
               )}
               {isAdmin && (

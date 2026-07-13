@@ -101,12 +101,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 562 surfaces
+### Server functions (`requireAuth`) — 566 surfaces
 
 | Surface | Enforces |
 | --- | --- |
 | `lib/server/domains/assistant/copilot-gate.ts`::gateCopilotFn | copilot.use |
 | `lib/server/domains/assistant/copilot-gate.ts`::gateCopilotRequest | copilot.use |
+| `lib/server/functions/activation.ts`::getStartingPointContextFn | settings.manage |
+| `lib/server/functions/activation.ts`::getActivationBridgeContextFn | settings.manage |
+| `lib/server/functions/activation.ts`::setActivationGoalFn | settings.manage |
+| `lib/server/functions/activation.ts`::completeStartingPointFn | settings.manage |
+| `lib/server/functions/activation.ts`::acknowledgeActivationHandoffFn | settings.manage |
 | `lib/server/functions/activity.ts`::fetchActivityForPost | post.view_private |
 | `lib/server/functions/admin-reset-two-factor.ts`::adminResetTwoFactorFn | auth.manage |
 | `lib/server/functions/admin.ts`::fetchInboxPosts | post.view_private |
@@ -119,7 +124,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::forceSignOutUserFn | auth.manage |
 | `lib/server/functions/admin.ts`::removeTeamMemberFn | member.manage |
 | `lib/server/functions/admin.ts`::fetchOnboardingStatus | member.view |
-| `lib/server/functions/admin.ts`::toggleLaunchTaskSkipFn | settings.manage |
+| `lib/server/functions/admin.ts`::setLaunchTaskResolutionFn | settings.manage |
 | `lib/server/functions/admin.ts`::fetchBoardsForSettings | board.manage |
 | `lib/server/functions/admin.ts`::fetchIntegrationsList | integration.view |
 | `lib/server/functions/admin.ts`::fetchIntegrationByType | integration.manage |
@@ -188,7 +193,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/boards.ts`::createBoardFn | board.manage |
 | `lib/server/functions/boards.ts`::updateBoardFn | board.manage |
 | `lib/server/functions/boards.ts`::deleteBoardFn | board.manage |
-| `lib/server/functions/boards.ts`::createBoardsBatchFn | board.manage |
 | `lib/server/functions/boards.ts`::updateBoardAccessFn | board.manage |
 | `lib/server/functions/changelog-categories.ts`::createChangelogCategoryFn | changelog.manage |
 | `lib/server/functions/changelog-categories.ts`::updateChangelogCategoryFn | changelog.manage |
@@ -388,7 +392,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/notifications.ts`::markAllNotificationsAsReadFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveNotificationFn | END_USER (any authenticated) |
 | `lib/server/functions/notifications.ts`::archiveAllReadNotificationsFn | END_USER (any authenticated) |
-| `lib/server/functions/onboarding.ts`::setupWorkspaceFn | ADMIN-ONLY |
+| `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | ADMIN-ONLY |
 | `lib/server/functions/plan-notice.ts`::getPlanNotice | member.view |
 | `lib/server/functions/platform-credentials.ts`::savePlatformCredentialsFn | integration.manage |
 | `lib/server/functions/platform-credentials.ts`::deletePlatformCredentialsFn | integration.manage |
@@ -845,7 +849,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-173 of 827 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+171 of 829 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -888,10 +892,8 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/invitations.ts`::getInviteBrandingFn | server-fn |
 | `lib/server/functions/invitations.ts`::setPasswordFn | server-fn |
 | `lib/server/functions/locale.ts`::getPortalLocaleFn | server-fn |
-| `lib/server/functions/onboarding.ts`::listBoardsForOnboarding | server-fn |
-| `lib/server/functions/onboarding.ts`::saveUseCaseFn | server-fn |
 | `lib/server/functions/onboarding.ts`::saveUserNameFn | server-fn |
-| `lib/server/functions/onboarding.ts`::setupWorkspaceFn | server-fn |
+| `lib/server/functions/onboarding.ts`::saveWorkspaceAndGoalFn | server-fn |
 | `lib/server/functions/portal-access.ts`::evaluateMyPortalAccessFn | server-fn |
 | `lib/server/functions/portal-access.ts`::recordPortalAccessDeniedFn | server-fn |
 | `lib/server/functions/portal-invites.ts`::acceptPortalInviteFn | server-fn |

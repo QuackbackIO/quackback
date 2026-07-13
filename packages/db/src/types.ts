@@ -246,44 +246,242 @@ export const ONBOARDING_OUTCOMES = [
 ] as const
 export type OnboardingOutcome = (typeof ONBOARDING_OUTCOMES)[number]
 
-// Setup state for tracking onboarding/provisioning (stored in settings.setup_state)
+// Setup state for tracking onboarding/provisioning (stored in settings.setup_state).
+// V2 deliberately separates completing the short setup wizard from reaching an
+// activation win. A deferred starting point completes setup, but never counts as
+// a completed launch task.
+export const STARTING_POINT_RESOURCE_TYPES = ['board', 'messenger', 'article', 'none'] as const
+export type StartingPointResourceType = (typeof STARTING_POINT_RESOURCE_TYPES)[number]
+
+export const STARTING_POINT_SOURCES = ['wizard', 'managed', 'existing'] as const
+export type StartingPointSource = (typeof STARTING_POINT_SOURCES)[number]
+
+export const STARTING_POINT_RESOLUTIONS = [
+  'created',
+  'configured',
+  'deferred',
+  'unavailable',
+] as const
+export type StartingPointResolution = (typeof STARTING_POINT_RESOLUTIONS)[number]
+
+export interface StartingPointState {
+  outcome: OnboardingOutcome
+  resourceType: StartingPointResourceType
+  resourceId?: string
+  source: StartingPointSource
+  resolution: StartingPointResolution
+  completedAt: string
+}
+
+export type LaunchTaskResolutionKind = 'deferred' | 'dismissed'
+export interface LaunchTaskResolution {
+  resolution: LaunchTaskResolutionKind
+  resolvedAt: string
+}
+export type OutcomeTaskResolutions = Partial<
+  Record<OnboardingOutcome, Record<string, LaunchTaskResolution>>
+>
+
+export type SetupCompletionSource = 'wizard' | 'managed' | 'legacy'
+
 export interface SetupState {
-  version: number // Schema version for future migrations
+  version: 2
   steps: {
-    core: boolean // Core schema setup complete (settings created)
-    workspace: boolean // Workspace name/slug configured
-    boards: boolean // At least one board created or explicitly skipped
+    core: boolean
+    workspace: boolean
+    startingPoint: StartingPointState | null
   }
-  completedAt?: string // ISO timestamp when onboarding was fully completed
-  /** ICP outcome (or legacy value) for board / activation personalization */
-  useCase?: UseCaseType
-  /** Launch-checklist task ids the admin explicitly dismissed (post-onboarding, not part of the wizard) */
-  skippedLaunchTasks?: string[]
+  completedAt?: string
+  /** ICP outcome for setup and activation personalization. */
+  useCase?: OnboardingOutcome
+  completionSource?: SetupCompletionSource
+  /** Set only after the one-time setup-to-activation bridge has been acknowledged. */
+  activationHandoffSeenAt?: string
+  /** Required tasks may be deferred; optional polish alone may be dismissed. */
+  taskResolutions?: OutcomeTaskResolutions
 }
 
 export const DEFAULT_SETUP_STATE: SetupState = {
-  version: 1,
+  version: 2,
   steps: {
     core: true,
     workspace: false,
-    boards: false,
+    startingPoint: null,
   },
 }
 
-// Helper to parse setup state from settings
+const LEGACY_POLISH_TASK_IDS = new Set([
+  'customize-branding',
+  'status-component',
+  'connect-integration',
+])
+const LEGACY_HANDOFF_TIME = '1970-01-01T00:00:00.000Z'
+
+/** Collapse a stored legacy use-case onto the four V2 outcomes. */
+export function normalizeOnboardingOutcome(
+  useCase?: UseCaseType | string | null
+): OnboardingOutcome | undefined {
+  if (!useCase) return undefined
+  if ((ONBOARDING_OUTCOMES as readonly string[]).includes(useCase)) {
+    return useCase as OnboardingOutcome
+  }
+  if (useCase === 'saas' || useCase === 'consumer' || useCase === 'marketplace') {
+    return 'product_feedback'
+  }
+  return undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function asIsoString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  return Number.isNaN(Date.parse(value)) ? undefined : value
+}
+
+function normalizeStartingPoint(value: unknown): StartingPointState | null {
+  if (!isRecord(value)) return null
+  const outcome = normalizeOnboardingOutcome(
+    typeof value.outcome === 'string' ? value.outcome : undefined
+  )
+  if (!outcome) return null
+  if (!(STARTING_POINT_RESOURCE_TYPES as readonly unknown[]).includes(value.resourceType))
+    return null
+  if (!(STARTING_POINT_SOURCES as readonly unknown[]).includes(value.source)) return null
+  if (!(STARTING_POINT_RESOLUTIONS as readonly unknown[]).includes(value.resolution)) return null
+  const completedAt = asIsoString(value.completedAt)
+  if (!completedAt) return null
+  return {
+    outcome,
+    resourceType: value.resourceType as StartingPointResourceType,
+    ...(typeof value.resourceId === 'string' && value.resourceId
+      ? { resourceId: value.resourceId }
+      : {}),
+    source: value.source as StartingPointSource,
+    resolution: value.resolution as StartingPointResolution,
+    completedAt,
+  }
+}
+
+function normalizeTaskResolutions(value: unknown): OutcomeTaskResolutions | undefined {
+  if (!isRecord(value)) return undefined
+  const result: OutcomeTaskResolutions = {}
+  for (const outcome of ONBOARDING_OUTCOMES) {
+    const stored = value[outcome]
+    if (!isRecord(stored)) continue
+    const tasks: Record<string, LaunchTaskResolution> = {}
+    for (const [taskId, resolution] of Object.entries(stored)) {
+      if (!isRecord(resolution)) continue
+      if (resolution.resolution !== 'deferred' && resolution.resolution !== 'dismissed') continue
+      const resolvedAt = asIsoString(resolution.resolvedAt)
+      if (!resolvedAt) continue
+      tasks[taskId] = { resolution: resolution.resolution, resolvedAt }
+    }
+    if (Object.keys(tasks).length > 0) result[outcome] = tasks
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
+/**
+ * Pure, deterministic V1-to-V2 normalizer. Reads never write; the normalized
+ * representation is persisted by the next setup-state mutation.
+ *
+ * Completed V1 tenants are marked as already having seen the handoff so an
+ * upgrade cannot unexpectedly redirect an established workspace back into
+ * onboarding. The epoch fallback is intentionally stable for rows that lack a
+ * completion timestamp.
+ */
+export function normalizeSetupStateV2(value: unknown): SetupState | null {
+  if (!isRecord(value)) return null
+  const steps = isRecord(value.steps) ? value.steps : {}
+  const useCase = normalizeOnboardingOutcome(
+    typeof value.useCase === 'string' ? value.useCase : undefined
+  )
+
+  if (value.version === 2) {
+    const startingPoint = normalizeStartingPoint(steps.startingPoint)
+    const taskResolutions = normalizeTaskResolutions(value.taskResolutions)
+    const completionSource =
+      value.completionSource === 'wizard' ||
+      value.completionSource === 'managed' ||
+      value.completionSource === 'legacy'
+        ? value.completionSource
+        : undefined
+    return {
+      version: 2,
+      steps: {
+        core: steps.core === true,
+        workspace: steps.workspace === true,
+        startingPoint,
+      },
+      ...(asIsoString(value.completedAt) ? { completedAt: value.completedAt as string } : {}),
+      ...(useCase ? { useCase } : {}),
+      ...(completionSource ? { completionSource } : {}),
+      ...(asIsoString(value.activationHandoffSeenAt)
+        ? { activationHandoffSeenAt: value.activationHandoffSeenAt as string }
+        : {}),
+      ...(taskResolutions ? { taskResolutions } : {}),
+    }
+  }
+
+  const legacyComplete = steps.core === true && steps.workspace === true && steps.boards === true
+  const completedAt = asIsoString(value.completedAt)
+  const migrationTime = completedAt ?? LEGACY_HANDOFF_TIME
+  const outcome = useCase ?? 'product_feedback'
+  const knownCompletionSource =
+    value.completionSource === 'wizard' || value.completionSource === 'managed'
+      ? value.completionSource
+      : 'legacy'
+  const skipped = Array.isArray(value.skippedLaunchTasks)
+    ? value.skippedLaunchTasks.filter((task): task is string => typeof task === 'string')
+    : []
+  const migratedTasks: Record<string, LaunchTaskResolution> = {}
+  for (const taskId of skipped) {
+    migratedTasks[taskId] = {
+      resolution: LEGACY_POLISH_TASK_IDS.has(taskId) ? 'dismissed' : 'deferred',
+      resolvedAt: migrationTime,
+    }
+  }
+
+  return {
+    version: 2,
+    steps: {
+      core: steps.core === true,
+      workspace: steps.workspace === true,
+      startingPoint: legacyComplete
+        ? {
+            outcome,
+            resourceType: 'none',
+            source: 'existing',
+            resolution: 'deferred',
+            completedAt: migrationTime,
+          }
+        : null,
+    },
+    ...(completedAt ? { completedAt } : {}),
+    ...(useCase ? { useCase } : {}),
+    ...(legacyComplete ? { completionSource: knownCompletionSource } : {}),
+    ...(legacyComplete ? { activationHandoffSeenAt: migrationTime } : {}),
+    ...(Object.keys(migratedTasks).length > 0
+      ? { taskResolutions: { [outcome]: migratedTasks } }
+      : {}),
+  }
+}
+
 export function getSetupState(setupStateJson: string | null): SetupState | null {
   if (!setupStateJson) return null
   try {
-    return JSON.parse(setupStateJson) as SetupState
+    return normalizeSetupStateV2(JSON.parse(setupStateJson))
   } catch {
     return null
   }
 }
 
-// Helper to check if onboarding is complete
 export function isOnboardingComplete(setupState: SetupState | null): boolean {
-  if (!setupState) return false
-  return setupState.steps.core && setupState.steps.workspace && setupState.steps.boards
+  return Boolean(
+    setupState?.steps.core && setupState.steps.workspace && setupState.steps.startingPoint
+  )
 }
 
 // Helper to get typed board settings

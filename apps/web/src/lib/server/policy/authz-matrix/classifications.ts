@@ -313,7 +313,7 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     roleBar: 'team',
     why: 'widget identify refuses to mint a widget-scoped session when the resolved identity is a staff/team member, so a dashboard-authorized session is never handed to an embedding origin',
   },
-  'lib/server/functions/onboarding.ts::setupWorkspaceFn::isAdmin': {
+  'lib/server/functions/onboarding.ts::saveWorkspaceAndGoalFn::isAdmin': {
     intent: 'SECONDARY_GATE',
     roleBar: 'admin',
     why: 'onboarding bootstrap: the first authenticated user provisions as admin; once the workspace step is done, completing setup requires an existing admin',

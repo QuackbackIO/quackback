@@ -1,24 +1,11 @@
-/**
- * Bootstrap-only admin promotion in the onboarding server fns.
- *
- * ensureAdminPrincipal used to promote ANY authenticated caller to admin
- * while setupState.steps.workspace was pending. These tests pin the
- * hardened behavior: promotion only happens while no human admin exists,
- * and a rejected caller must not write setupState.useCase on the way out.
- *
- * Uses the same createServerFn capture pattern as other suites in this
- * directory, except handler() returns a callable so the exported fn can
- * be driven directly.
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain: Record<string, unknown> = {}
     chain.validator = () => chain
-    chain.handler = (fn: (args: { data?: unknown }) => Promise<unknown>) =>
-      Object.assign((args?: { data?: unknown }) => fn(args ?? {}), chain)
+    chain.handler = (handler: (args: { data?: unknown }) => Promise<unknown>) =>
+      Object.assign((args?: { data?: unknown }) => handler(args ?? {}), chain)
     return chain
   },
 }))
@@ -30,9 +17,8 @@ const hoisted = vi.hoisted(() => ({
   postStatusesFindFirst: vi.fn(),
   ensurePrincipalForUser: vi.fn(),
   setPrincipalRole: vi.fn(),
-  dbUpdate: vi.fn(),
-  dbInsert: vi.fn(),
-  dbExecute: vi.fn(),
+  settingsInsert: vi.fn(),
+  invalidateSettingsCache: vi.fn(),
 }))
 
 vi.mock('@/lib/server/auth/session', () => ({ getSession: hoisted.getSession }))
@@ -44,143 +30,201 @@ vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
   ensurePrincipalForUser: hoisted.ensurePrincipalForUser,
   setPrincipalRole: hoisted.setPrincipalRole,
 }))
-vi.mock('@/lib/server/domains/boards/board.service', () => ({ listBoards: vi.fn() }))
 vi.mock('@/lib/server/domains/settings/settings.helpers', () => ({
-  invalidateSettingsCache: vi.fn(),
+  invalidateSettingsCache: hoisted.invalidateSettingsCache,
 }))
 vi.mock('@/lib/server/domains/settings', () => ({
   DEFAULT_AUTH_CONFIG: { openSignup: false },
   DEFAULT_PORTAL_CONFIG: {},
 }))
-vi.mock('@/lib/server/config-file/managed-guard', () => ({
-  assertNotManaged: vi.fn().mockResolvedValue(undefined),
-}))
 vi.mock('@/lib/server/config-file/managed-paths', () => ({
-  isPathManaged: vi.fn(() => false),
+  isPathManaged: vi.fn((path: string, paths: string[] | null | undefined) =>
+    (paths ?? []).includes(path)
+  ),
 }))
-vi.mock('@quackback/ids', () => ({ generateId: vi.fn(() => 'workspace_test') }))
+vi.mock('@quackback/ids', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@quackback/ids')>()),
+  generateId: vi.fn((type: string) => `${type}_test`),
+}))
 vi.mock('@/lib/server/logger', () => ({
   logger: { child: () => ({ debug: vi.fn(), info: vi.fn(), error: vi.fn() }) },
 }))
-vi.mock('@/lib/server/db', () => ({
-  db: {
-    query: {
-      principal: { findFirst: hoisted.principalFindFirst },
-      postStatuses: { findFirst: hoisted.postStatusesFindFirst },
-    },
-    update: hoisted.dbUpdate,
-    insert: hoisted.dbInsert,
-    execute: hoisted.dbExecute,
-    transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({
-        query: { principal: { findFirst: hoisted.principalFindFirst } },
-        execute: hoisted.dbExecute,
-      })
-    ),
-  },
-  settings: {},
-  principal: { userId: 'userId', role: 'role', type: 'type' },
-  user: {},
-  postStatuses: {},
-  eq: vi.fn((column, value) => ({ column, value })),
-  sql: vi.fn(() => ({})),
-  and: vi.fn((...conditions) => conditions),
-  USE_CASE_TYPES: [
-    'product_feedback',
-    'customer_support',
-    'help_center',
-    'internal',
-    'saas',
-    'consumer',
-    'marketplace',
-  ],
-  DEFAULT_STATUSES: [],
+
+vi.mock('@/lib/server/setup-state', () => ({
+  mutateSetupStateAtomic: vi.fn(
+    async (
+      mutate: (
+        current: Record<string, unknown>,
+        row: Record<string, unknown>,
+        tx: Record<string, unknown>
+      ) => Promise<{ state: Record<string, unknown>; value: unknown }>
+    ) => {
+      const row = await hoisted.getSettings()
+      const tx = {
+        update: vi.fn(() => ({
+          set: vi.fn((values: Record<string, unknown>) => ({
+            where: vi.fn(() => ({
+              returning: vi.fn(async () => [{ ...row, ...values }]),
+            })),
+          })),
+        })),
+      }
+      return mutate(JSON.parse(row.setupState), row, tx)
+    }
+  ),
 }))
 
-import { saveUseCaseFn } from '../onboarding'
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/server/db')>()
+  const tx = {
+    execute: vi.fn(),
+    query: { principal: { findFirst: hoisted.principalFindFirst } },
+  }
+  return {
+    ...actual,
+    db: {
+      transaction: vi.fn(async (callback: (executor: typeof tx) => Promise<unknown>) =>
+        callback(tx)
+      ),
+      query: {
+        principal: { findFirst: hoisted.principalFindFirst },
+        postStatuses: { findFirst: hoisted.postStatusesFindFirst },
+      },
+      insert: vi.fn((table: unknown) => ({
+        values: vi.fn((values: Record<string, unknown>) => {
+          if (table === actual.settings) {
+            hoisted.settingsInsert(values)
+            return {
+              returning: vi.fn(async () => [
+                {
+                  id: 'workspace_test',
+                  name: values.name,
+                  slug: values.slug,
+                },
+              ]),
+            }
+          }
+          return Promise.resolve()
+        }),
+      })),
+    },
+  }
+})
 
-/** Settings row mid-onboarding: useCase step reachable, workspace pending. */
-const pendingWorkspaceSettings = {
-  id: 'workspace_1',
-  setupState: JSON.stringify({
-    version: 1,
-    steps: { core: true, workspace: false, boards: false },
-  }),
-}
+const { saveWorkspaceAndGoalFn } = await import('../onboarding')
 
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.getSession.mockResolvedValue({ user: { id: 'user_caller' } })
-  hoisted.dbUpdate.mockReturnValue({
-    set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
-  })
-  hoisted.dbInsert.mockReturnValue({ values: vi.fn().mockResolvedValue(undefined) })
+  hoisted.postStatusesFindFirst.mockResolvedValue({ id: 'status_existing' })
 })
 
-describe('saveUseCaseFn admin promotion gate', () => {
-  it('rejects a non-admin caller once a human admin exists, without writing useCase', async () => {
-    hoisted.getSettings.mockResolvedValue(pendingWorkspaceSettings)
-    hoisted.principalFindFirst
-      .mockResolvedValueOnce({ id: 'p_caller', role: 'user' }) // caller's principal
-      .mockResolvedValueOnce({ id: 'p_admin', role: 'admin', type: 'user' }) // existing admin
+describe('saveWorkspaceAndGoalFn bootstrap authorization', () => {
+  it('rejects a non-admin once workspace setup is owned', async () => {
+    hoisted.getSettings.mockResolvedValue({
+      id: 'workspace_1',
+      name: 'Acme',
+      slug: 'acme',
+      managedFieldPaths: [],
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        useCase: 'product_feedback',
+      }),
+    })
+    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'member' })
 
-    await expect(saveUseCaseFn({ data: { useCase: 'product_feedback' } })).rejects.toThrow(
-      /already claimed by an admin/
-    )
-
-    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
-    expect(hoisted.setPrincipalRole).not.toHaveBeenCalled()
-    expect(hoisted.dbUpdate).not.toHaveBeenCalled()
-    expect(hoisted.dbInsert).not.toHaveBeenCalled()
+    await expect(
+      saveWorkspaceAndGoalFn({
+        data: { workspaceName: 'Acme', useCase: 'product_feedback' },
+      })
+    ).rejects.toThrow(/only admin/i)
+    expect(hoisted.settingsInsert).not.toHaveBeenCalled()
   })
 
-  it('bootstraps the first user as admin on a fresh install', async () => {
+  it('promotes the first user and creates one combined V2 workspace record', async () => {
     hoisted.getSettings.mockResolvedValue(undefined)
-    hoisted.principalFindFirst
-      .mockResolvedValueOnce(undefined) // caller has no principal yet
-      .mockResolvedValueOnce(undefined) // no human admin exists
+    hoisted.principalFindFirst.mockResolvedValue(undefined)
     hoisted.ensurePrincipalForUser.mockResolvedValue({
       created: true,
-      principal: { role: 'admin' },
+      principal: { id: 'principal_1', role: 'admin' },
     })
 
-    await expect(saveUseCaseFn({ data: { useCase: 'product_feedback' } })).resolves.toBeUndefined()
+    const result = await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme Inc', useCase: 'customer_support' },
+    })
 
     expect(hoisted.ensurePrincipalForUser).toHaveBeenCalledWith(
       { userId: 'user_caller', role: 'admin' },
       expect.any(Object)
     )
-    expect(hoisted.dbInsert).toHaveBeenCalled()
+    expect(hoisted.settingsInsert).toHaveBeenCalledOnce()
+    const inserted = hoisted.settingsInsert.mock.calls[0]![0]
+    expect(JSON.parse(inserted.setupState as string)).toEqual(
+      expect.objectContaining({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        useCase: 'customer_support',
+      })
+    )
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'workspace_test',
+        name: 'Acme Inc',
+        slug: 'acme-inc',
+        useCase: 'customer_support',
+      })
+    )
   })
 
-  it('promotes an existing non-admin principal while no human admin exists', async () => {
-    hoisted.getSettings.mockResolvedValue(pendingWorkspaceSettings)
-    hoisted.principalFindFirst
-      .mockResolvedValueOnce({ id: 'p_caller', role: 'user' })
-      .mockResolvedValueOnce(undefined) // no human admin exists
-    hoisted.ensurePrincipalForUser.mockResolvedValue({
-      created: false,
-      principal: { role: 'user' },
+  it('keeps a managed slug fixed while allowing the workspace name to change', async () => {
+    hoisted.getSettings.mockResolvedValue({
+      id: 'workspace_1',
+      name: 'Acme',
+      slug: 'fixed-portal',
+      managedFieldPaths: ['workspace.slug'],
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        useCase: 'product_feedback',
+      }),
+    })
+    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
+
+    const result = await saveWorkspaceAndGoalFn({
+      data: { workspaceName: 'Acme Labs', useCase: 'product_feedback' },
     })
 
-    await expect(saveUseCaseFn({ data: { useCase: 'internal' } })).resolves.toBeUndefined()
-
-    expect(hoisted.setPrincipalRole).toHaveBeenCalledWith(
-      { userId: 'user_caller' },
-      'admin',
-      expect.objectContaining({ executor: expect.any(Object), knownUserId: 'user_caller' })
-    )
-    expect(hoisted.dbUpdate).toHaveBeenCalled()
+    expect(result.name).toBe('Acme Labs')
+    expect(result.slug).toBe('fixed-portal')
+    expect(result.managed).toEqual({ name: false, slug: true, useCase: false })
   })
 
-  it('lets an existing admin through without touching promotion machinery', async () => {
-    hoisted.getSettings.mockResolvedValue(pendingWorkspaceSettings)
-    hoisted.principalFindFirst.mockResolvedValueOnce({ id: 'p_caller', role: 'admin' })
+  it.each([
+    {
+      managedFieldPaths: ['workspace.name'],
+      data: { workspaceName: 'Different name', useCase: 'product_feedback' as const },
+      message: /workspace name is managed/i,
+    },
+    {
+      managedFieldPaths: ['workspace.useCase'],
+      data: { workspaceName: 'Acme', useCase: 'internal' as const },
+      message: /workspace goal is managed/i,
+    },
+  ])('enforces each managed field independently: $managedFieldPaths', async (example) => {
+    hoisted.getSettings.mockResolvedValue({
+      id: 'workspace_1',
+      name: 'Acme',
+      slug: 'acme',
+      managedFieldPaths: example.managedFieldPaths,
+      setupState: JSON.stringify({
+        version: 2,
+        steps: { core: true, workspace: true, startingPoint: null },
+        useCase: 'product_feedback',
+      }),
+    })
+    hoisted.principalFindFirst.mockResolvedValue({ id: 'principal_1', role: 'admin' })
 
-    await expect(saveUseCaseFn({ data: { useCase: 'help_center' } })).resolves.toBeUndefined()
-
-    expect(hoisted.ensurePrincipalForUser).not.toHaveBeenCalled()
-    expect(hoisted.principalFindFirst).toHaveBeenCalledTimes(1)
-    expect(hoisted.dbUpdate).toHaveBeenCalled()
+    await expect(saveWorkspaceAndGoalFn({ data: example.data })).rejects.toThrow(example.message)
   })
 })
