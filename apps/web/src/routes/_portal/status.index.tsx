@@ -1,15 +1,11 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute, notFound, Link } from '@tanstack/react-router'
-import { useSuspenseQuery, useQuery, useInfiniteQuery } from '@tanstack/react-query'
+import { useSuspenseQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/shared/page-header'
-import {
-  publicStatusPageQueries,
-  publicStatusUptimeQueries,
-  publicStatusHistoryQueries,
-} from '@/lib/client/queries/status'
+import { publicStatusPageQueries, publicStatusHistoryQueries } from '@/lib/client/queries/status'
 import {
   StatusHero,
   StatusComponentsList,
@@ -97,24 +93,15 @@ function formatMaintenanceWindow(startIso: string | null, endIso: string | null)
 function StatusPage() {
   const intl = useIntl()
   const { data } = useSuspenseQuery(publicStatusPageQueries.get())
-  const { snapshot, settings } = data
+  const { snapshot, settings, uptime } = data
 
-  const allComponents = useMemo(
-    () => [...snapshot.ungroupedComponents, ...snapshot.groups.flatMap((g) => g.components)],
-    [snapshot]
-  )
-  const uptimeComponentIds = useMemo(
-    () => allComponents.filter((c) => c.showUptime).map((c) => c.id),
-    [allComponents]
-  )
-  const { data: uptimeSeries } = useQuery(publicStatusUptimeQueries.list(uptimeComponentIds))
   const uptimeByComponentId = useMemo(() => {
     const map = new Map<string, StatusUptimeDay[]>()
-    for (const series of uptimeSeries ?? []) {
+    for (const series of uptime ?? []) {
       map.set(series.componentId, series.days)
     }
     return map
-  }, [uptimeSeries])
+  }, [uptime])
 
   const lastUpdatedAt = useMemo(() => {
     const timestamps = [...snapshot.activeIncidents, ...snapshot.upcomingMaintenance].flatMap(

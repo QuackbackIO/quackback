@@ -731,12 +731,26 @@ export const getStatusPageFn = createServerFn({ method: 'GET' }).handler(async (
 
     const snapshot = await getStatusPageSnapshot(gate.actor, gate.settings)
 
+    // Uptime bars ship in the page payload (not a separate client fetch): the
+    // series is small (90 days × visible components), so folding it in here
+    // SSRs the bars with no request waterfall and no client-side flash.
+    const uptimeComponentIds = [
+      ...snapshot.ungroupedComponents,
+      ...snapshot.groups.flatMap((g) => g.components),
+    ]
+      .filter((c) => c.showUptime)
+      .map((c) => c.id)
+    const uptime = uptimeComponentIds.length
+      ? await getUptimeSeries(gate.actor, uptimeComponentIds)
+      : []
+
     return {
       snapshot: serializeSnapshot(snapshot),
       settings: {
         pageDescription: gate.settings.pageDescription,
         audience: gate.settings.audience,
       },
+      uptime,
     }
   } catch (error) {
     log.error({ err: error }, 'get status page failed')

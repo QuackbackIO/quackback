@@ -25,10 +25,11 @@ function formatDayTitle(dateStr: string): string {
 
 /**
  * 90-day (or however many days the caller passes) uptime history for a single
- * component — a row of colored ticks, one per day, worst-status-colored, with
- * a native hover tooltip ("Jul 3 — Partial outage, 99.2%"). Hidden below the
- * `md` breakpoint (mirrors the approved mockup, which drops the bar and
- * summary row on narrow viewports in favor of just the current-status pill).
+ * component — a full-width row of colored bars that stretch to fill the
+ * container, one per day, worst-status-colored, with a native hover tooltip
+ * ("Jul 3 — Partial outage, 99.2%"). The classic status-page bar chart: bars
+ * flex to share the width, never scroll or clip, and stay readable down to a
+ * 2px floor on the narrowest viewports.
  */
 export function StatusUptimeBar({ days, className }: StatusUptimeBarProps) {
   const intl = useIntl()
@@ -38,8 +39,8 @@ export function StatusUptimeBar({ days, className }: StatusUptimeBarProps) {
   const avgUptimePct = days.reduce((sum, day) => sum + day.uptimePct, 0) / days.length
 
   return (
-    <div className={cn('hidden min-w-0 max-w-[460px] flex-1 flex-col gap-1 md:flex', className)}>
-      <div className="flex items-center gap-[2px] overflow-hidden">
+    <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
+      <div className="flex h-8 items-stretch gap-px">
         {days.map((day) => {
           const style = COMPONENT_STATUS_STYLE[day.worstStatus]
           const label = intl.formatMessage(COMPONENT_STATUS_LABEL[day.worstStatus])
@@ -53,19 +54,22 @@ export function StatusUptimeBar({ days, className }: StatusUptimeBarProps) {
                 },
                 { day: formatDayTitle(day.date), label, pct: day.uptimePct }
               )}
-              className={cn('h-[26px] w-[3px] shrink-0 rounded-sm', style.dot)}
+              className={cn(
+                'h-full min-w-[2px] flex-1 rounded-xs transition-opacity hover:opacity-60',
+                style.dot
+              )}
             />
           )
         })}
       </div>
-      <div className="flex justify-between text-[10.5px] text-muted-foreground/70">
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground/70">
         <span>
           {intl.formatMessage(
             { id: 'portal.status.uptime.daysAgo', defaultMessage: '{days} days ago' },
             { days: days.length }
           )}
         </span>
-        <span>
+        <span className="font-medium text-muted-foreground">
           {intl.formatMessage(
             { id: 'portal.status.uptime.pct', defaultMessage: '{pct}% uptime' },
             { pct: avgUptimePct.toFixed(2) }

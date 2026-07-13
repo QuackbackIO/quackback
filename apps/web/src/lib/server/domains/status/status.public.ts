@@ -16,8 +16,8 @@ import {
   desc,
   asc,
   lt,
+  lte,
   gte,
-  sql,
   statusComponentGroups,
   statusComponents,
   statusComponentEvents,
@@ -325,7 +325,7 @@ export async function getUptimeSeries(
   const events = await db.query.statusComponentEvents.findMany({
     where: and(
       inArray(statusComponentEvents.componentId, visibleIds),
-      sql`${statusComponentEvents.createdAt} <= ${now}`
+      lte(statusComponentEvents.createdAt, now)
     ),
     orderBy: [asc(statusComponentEvents.createdAt)],
   })

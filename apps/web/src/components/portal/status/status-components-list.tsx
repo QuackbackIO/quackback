@@ -49,43 +49,36 @@ function ComponentRow({
   const intl = useIntl()
   const style = COMPONENT_STATUS_STYLE[component.status]
   const label = intl.formatMessage(COMPONENT_STATUS_LABEL[component.status])
+  const showBar = component.showUptime && uptimeDays && uptimeDays.length > 0
 
   return (
-    <div
-      className={cn(
-        'flex items-center gap-3.5 px-4 py-3 sm:gap-4 sm:px-[18px]',
-        indent && 'sm:pl-9'
-      )}
-    >
-      <span className="flex min-w-[110px] shrink-0 items-center gap-1.5 text-sm font-medium sm:min-w-[150px]">
-        <span className="truncate">{component.name}</span>
-        {component.description && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground"
-              >
-                <InformationCircleIcon className="h-3.5 w-3.5" />
-                <span className="sr-only">{component.description}</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{component.description}</TooltipContent>
-          </Tooltip>
-        )}
-      </span>
-      {component.showUptime && uptimeDays && uptimeDays.length > 0 && (
-        <StatusUptimeBar days={uptimeDays} />
-      )}
-      <span
-        className={cn(
-          'ml-auto flex shrink-0 items-center gap-1.5 text-[12.5px] font-medium',
-          style.text
-        )}
-      >
-        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', style.dot)} />
-        {label}
-      </span>
+    <div className={cn('flex flex-col gap-2.5 px-4 py-3.5 sm:px-[18px]', indent && 'sm:pl-9')}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+          <span className="truncate">{component.name}</span>
+          {component.description && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground"
+                >
+                  <InformationCircleIcon className="h-3.5 w-3.5" />
+                  <span className="sr-only">{component.description}</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{component.description}</TooltipContent>
+            </Tooltip>
+          )}
+        </span>
+        <span
+          className={cn('flex shrink-0 items-center gap-1.5 text-[12.5px] font-medium', style.text)}
+        >
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', style.dot)} />
+          {label}
+        </span>
+      </div>
+      {showBar && <StatusUptimeBar days={uptimeDays} />}
     </div>
   )
 }
