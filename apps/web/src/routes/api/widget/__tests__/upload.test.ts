@@ -131,7 +131,7 @@ describe('POST /api/widget/upload', () => {
     await handleWidgetUpload({
       request: makeRequest(undefined, 'valid-token', { Host: 'attacker-controlled.example' }),
     })
-    const keys = mockIncrementBucket.mock.calls.map(([spec]: [{ key: string }]) => spec.key)
+    const keys = mockIncrementBucket.mock.calls.map((call) => (call[0] as { key: string }).key)
     expect(keys).toContain('widget-upload:tenant:settings_fixed')
     expect(keys.some((k: string) => k.includes('attacker-controlled.example'))).toBe(false)
   })
