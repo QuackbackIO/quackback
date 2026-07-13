@@ -9,6 +9,7 @@
  * is a scope check against the vocabulary already shared by REST/MCP/OAuth.
  */
 import { pgTable, text, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core'
+import { oauthClient } from './auth'
 
 export const apps = pgTable(
   'apps',
@@ -16,7 +17,9 @@ export const apps = pgTable(
     /** TypeID 'app_...'. */
     id: text('id').primaryKey(),
     /** FK to the better-auth oauth client this app authenticates as. */
-    oauthClientId: text('oauth_client_id').notNull(),
+    oauthClientId: text('oauth_client_id')
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     /** Capability scopes the app was granted (shared api-key-scopes vocabulary). */
     grantedScopes: text('granted_scopes').array().notNull().default([]),

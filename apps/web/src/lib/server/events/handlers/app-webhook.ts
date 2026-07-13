@@ -17,9 +17,10 @@ import {
   failHookDelivery,
   releaseHookDelivery,
 } from '../hook-idempotency'
-import { db, apps, eq } from '@/lib/server/db'
+import { db, apps, oauthClient, and, eq } from '@/lib/server/db'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
 import { logger } from '@/lib/server/logger'
+import { getEventDefinition } from '../catalogue'
 
 const log = logger.child({ component: 'app-webhook' })
 const TIMEOUT_MS = 5_000
@@ -39,23 +40,47 @@ export const appWebhookHook: HookHandler = {
     config: unknown,
     ctx?: HookRunContext
   ): Promise<HookResult> {
-    const { url } = target as AppWebhookTarget
+    const { url: queuedUrl } = target as AppWebhookTarget
     const { appId } = config as AppWebhookConfig
 
     const claimed = await claimHookDelivery(ctx?.jobId, 'app_webhook')
     if (!claimed) return { success: true }
 
     let secret: string
+    let url: string
     try {
-      const row = await db.query.apps.findFirst({
-        where: eq(apps.id, appId),
-        columns: { webhookSecretEnc: true, status: true },
-      })
-      if (!row || row.status !== 'active' || !row.webhookSecretEnc) {
+      const [row] = await db
+        .select({
+          webhookSecretEnc: apps.webhookSecretEnc,
+          webhookEndpoint: apps.webhookEndpoint,
+          subscribedEventTypes: apps.subscribedEventTypes,
+          grantedScopes: apps.grantedScopes,
+          appStatus: apps.status,
+          clientDisabled: oauthClient.disabled,
+        })
+        .from(apps)
+        .innerJoin(oauthClient, eq(apps.oauthClientId, oauthClient.clientId))
+        .where(and(eq(apps.id, appId), eq(oauthClient.disabled, false)))
+        .limit(1)
+      const requiredScope = getEventDefinition(event.type)?.requiredScope
+      if (
+        !row ||
+        row.appStatus !== 'active' ||
+        row.clientDisabled ||
+        !row.webhookSecretEnc ||
+        !row.webhookEndpoint ||
+        !requiredScope ||
+        !row.subscribedEventTypes.includes(event.type) ||
+        !row.grantedScopes.includes(requiredScope)
+      ) {
         await failHookDelivery(ctx?.jobId)
         return { success: false, error: 'App not deliverable', shouldRetry: false }
       }
       secret = decryptSecrets<{ secret: string }>(row.webhookSecretEnc).secret
+      url = row.webhookEndpoint
+      if (url !== queuedUrl) {
+        log.info({ app_id: appId }, 'using current app webhook endpoint for queued delivery')
+      }
     } catch (error) {
       log.error({ err: error, app_id: appId }, 'failed to load app webhook secret')
       await releaseHookDelivery(ctx?.jobId)

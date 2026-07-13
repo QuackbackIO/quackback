@@ -10,7 +10,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
   }
 })
 
-import { db, apps, events } from '@/lib/server/db'
+import { db, apps, events, oauthClient, eq } from '@/lib/server/db'
 import { createId } from '@quackback/ids'
 import { backfillAppSubscription, deliverableTypes } from '../app-backfill'
 
@@ -30,6 +30,15 @@ async function seedPublishedEvent(type: string, entityId: string): Promise<void>
   })
 }
 
+async function seedOAuthClient(clientId: string): Promise<void> {
+  await db.insert(oauthClient).values({
+    id: createId('app'),
+    clientId,
+    redirectUris: [],
+    disabled: false,
+  })
+}
+
 describe('app backfill (WO-14)', () => {
   it('deliverableTypes = subscribed ∩ scoped', () => {
     // posts:read is the requiredScope for post.created; conversations:read is not held.
@@ -42,10 +51,12 @@ describe('app backfill (WO-14)', () => {
 
   it('dry-run counts matched published events without enqueuing', async () => {
     const appId = createId('app')
+    const oauthClientId = createId('app')
+    await seedOAuthClient(oauthClientId)
     const marker = createId('post')
     await db.insert(apps).values({
       id: appId,
-      oauthClientId: createId('app'),
+      oauthClientId,
       name: 'Backfill App',
       grantedScopes: ['read:feedback'],
       subscribedEventTypes: ['post.created'],
@@ -63,9 +74,11 @@ describe('app backfill (WO-14)', () => {
 
   it('replay enqueues one deterministic job per matched event', async () => {
     const appId = createId('app')
+    const oauthClientId = createId('app')
+    await seedOAuthClient(oauthClientId)
     await db.insert(apps).values({
       id: appId,
-      oauthClientId: createId('app'),
+      oauthClientId,
       name: 'Replay App',
       grantedScopes: ['read:feedback'],
       subscribedEventTypes: ['post.created'],
@@ -87,15 +100,41 @@ describe('app backfill (WO-14)', () => {
 
   it('an app with no scope for its subscribed types backfills nothing', async () => {
     const appId = createId('app')
+    const oauthClientId = createId('app')
+    await seedOAuthClient(oauthClientId)
     await db.insert(apps).values({
       id: appId,
-      oauthClientId: createId('app'),
+      oauthClientId,
       name: 'Unscoped App',
       grantedScopes: ['read:chat'],
       subscribedEventTypes: ['post.created'],
       webhookEndpoint: 'https://app.example/hook',
       status: 'active',
     })
+    expect(await backfillAppSubscription(appId, { dryRun: true })).toEqual({
+      matched: 0,
+      enqueued: 0,
+    })
+  })
+
+  it('a disabled OAuth client cannot backfill its app subscription', async () => {
+    const appId = createId('app')
+    const oauthClientId = createId('app')
+    await seedOAuthClient(oauthClientId)
+    await db.insert(apps).values({
+      id: appId,
+      oauthClientId,
+      name: 'Revoked App',
+      grantedScopes: ['read:feedback'],
+      subscribedEventTypes: ['post.created'],
+      webhookEndpoint: 'https://app.example/hook',
+      status: 'active',
+    })
+    await db
+      .update(oauthClient)
+      .set({ disabled: true })
+      .where(eq(oauthClient.clientId, oauthClientId))
+
     expect(await backfillAppSubscription(appId, { dryRun: true })).toEqual({
       matched: 0,
       enqueued: 0,

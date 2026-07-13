@@ -8,7 +8,7 @@
  * Only event types the app is BOTH subscribed to AND scoped for are eligible —
  * the same scope gate the live app-webhook resolver applies.
  */
-import { db, apps, events, eq, and, inArray, asc, isNotNull } from '@/lib/server/db'
+import { db, apps, events, oauthClient, eq, and, inArray, asc, isNotNull } from '@/lib/server/db'
 import { getEventDefinition } from './catalogue'
 import { enqueueHookJobsWithIds } from './process'
 import type { EventData, EventActor } from './types'
@@ -57,7 +57,13 @@ export async function backfillAppSubscription(
   appId: string,
   opts: { dryRun: boolean; enqueue?: typeof enqueueHookJobsWithIds }
 ): Promise<BackfillResult> {
-  const app = await db.query.apps.findFirst({ where: eq(apps.id, appId) })
+  const [joined] = await db
+    .select({ app: apps })
+    .from(apps)
+    .innerJoin(oauthClient, eq(apps.oauthClientId, oauthClient.clientId))
+    .where(and(eq(apps.id, appId), eq(oauthClient.disabled, false)))
+    .limit(1)
+  const app = joined?.app
   if (!app || app.status !== 'active' || !app.webhookEndpoint) return { matched: 0, enqueued: 0 }
 
   const types = deliverableTypes(app)

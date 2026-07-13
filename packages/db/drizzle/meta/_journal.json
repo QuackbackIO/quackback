@@ -1240,6 +1240,13 @@
       "when": 1784772360000,
       "tag": "0193_apps",
       "breakpoints": true
+    },
+    {
+      "idx": 194,
+      "version": "7",
+      "when": 1784772420000,
+      "tag": "0194_apps_oauth_fk",
+      "breakpoints": true
     }
   ]
 }

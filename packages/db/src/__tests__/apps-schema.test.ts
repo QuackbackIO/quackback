@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { getTableName, getTableColumns } from 'drizzle-orm'
+import { getTableConfig } from 'drizzle-orm/pg-core'
 import { apps } from '../schema/apps'
 
 /** WO-12 — the third-party app platform table shape. */
@@ -41,5 +42,15 @@ describe('apps schema', () => {
     // webhook endpoint + secret are nullable (an app may not use webhooks).
     expect(cols.webhookEndpoint.notNull).toBe(false)
     expect(cols.webhookSecretEnc.notNull).toBe(false)
+  })
+
+  it('cascades app deletion from its OAuth client', () => {
+    const config = getTableConfig(apps)
+    const oauthClientFk = config.foreignKeys.find((foreignKey) => {
+      const reference = foreignKey.reference()
+      return getTableName(reference.foreignTable) === 'oauth_client'
+    })
+    expect(oauthClientFk).toBeDefined()
+    expect(oauthClientFk?.onDelete).toBe('cascade')
   })
 })
