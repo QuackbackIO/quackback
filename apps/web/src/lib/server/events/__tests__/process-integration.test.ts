@@ -105,9 +105,10 @@ function makeEvent(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent 
 
 // Post-WO-18 the outbox is the sole delivery path: processEvent only writes the
 // durable outbox, and the RELAY is what enqueues into BullMQ. This integration
-// test still exercises the real queue → worker → hook pipeline, so it enqueues
-// via the relay's own helper with the same job shape the relay builds from
-// resolved targets (see relay.ts drainOnce).
+// test covers the real queue → worker → hook pipeline, so it enqueues via the
+// relay's own helper. The jobId here is a simple positional key — the relay's
+// deterministic content-hash jobId + at-least-once re-drain idempotency are the
+// relay's own concern and are covered in relay.test.ts, not here.
 function enqueueViaRelay(
   event: PostCreatedEvent,
   targets: Array<{ type: string; target: unknown; config: Record<string, unknown> }>

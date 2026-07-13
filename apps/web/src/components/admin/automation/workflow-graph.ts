@@ -1348,6 +1348,9 @@ const isLikelyUrl = (v: unknown): v is string => {
   }
 }
 
+/** Shared send_webhook "needs a URL" phrase (used by validateAction + actionIssue). */
+const WEBHOOK_URL_HINT = 'a valid webhook URL (https://…)'
+
 // Mirrors z.string().datetime(): UTC, seconds required, optional fraction.
 const isUtcTimestamp = (v: unknown): v is string =>
   typeof v === 'string' &&
@@ -1426,7 +1429,7 @@ function validateAction(v: unknown, where: string): string | null {
     case 'convert_to_ticket':
       return null
     case 'send_webhook':
-      return isLikelyUrl(v.url) ? null : `${where}: enter a valid webhook URL (https://…)`
+      return isLikelyUrl(v.url) ? null : `${where}: enter ${WEBHOOK_URL_HINT}`
   }
 }
 
@@ -2949,7 +2952,7 @@ export function actionIssue(action: GraphAction): string | null {
     case 'set_ticket_status':
       return isSetRef(action.statusId) ? null : 'Choose a ticket status'
     case 'send_webhook':
-      return isLikelyUrl(action.url) ? null : 'Enter a valid webhook URL (https://…)'
+      return isLikelyUrl(action.url) ? null : `Enter ${WEBHOOK_URL_HINT}`
     case 'set_priority':
     case 'close':
     case 'reopen':

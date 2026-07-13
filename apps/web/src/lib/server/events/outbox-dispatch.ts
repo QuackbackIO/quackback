@@ -11,9 +11,10 @@
  */
 import { db } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { isUniqueViolation } from '@/lib/server/utils'
 import { emit } from './emit'
 import { getEventDefinition } from './catalogue'
-import type { EventData } from './types'
+import { TIMER_DRIVEN_EVENT_TYPES, type EventData } from './types'
 import type { EventActorType } from './envelope'
 
 const log = logger.child({ component: 'outbox-dispatch' })
@@ -30,29 +31,7 @@ const log = logger.child({ component: 'outbox-dispatch' })
  * (keeping the partial index lean) and gain it only when they move to native
  * `emit()` with their own idempotency needs.
  */
-const TIMER_DEDUPED_TYPES = new Set<EventData['type']>([
-  'conversation.customer_unresponsive',
-  'conversation.teammate_unresponsive',
-  'sla.approaching_breach',
-  'sla.breached',
-])
-
-/** Postgres unique-violation SQLSTATE. */
-const PG_UNIQUE_VIOLATION = '23505'
-
-/**
- * True when an error is (or wraps) a Postgres unique-key violation. Drizzle can
- * surface the driver error through `.cause`, so walk the chain rather than
- * reading `.code` off the top-level throw only.
- */
-function isUniqueViolation(error: unknown): boolean {
-  let cursor: unknown = error
-  for (let i = 0; cursor && i < 5; i++) {
-    if ((cursor as { code?: string }).code === PG_UNIQUE_VIOLATION) return true
-    cursor = (cursor as { cause?: unknown }).cause
-  }
-  return false
-}
+const TIMER_DEDUPED_TYPES = new Set<EventData['type']>(TIMER_DRIVEN_EVENT_TYPES)
 
 /** Map the legacy actor union onto the outbox actor {type,id}. */
 function mapActor(actor: EventData['actor']): { type: EventActorType; id?: string } {

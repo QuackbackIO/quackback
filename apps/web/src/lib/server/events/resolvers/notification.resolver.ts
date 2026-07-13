@@ -29,6 +29,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
+import type { EventData } from '../types'
 import type { HookTarget } from '../hook-types'
 
 const log = logger.child({ component: 'notification-resolver' })
@@ -40,17 +41,23 @@ const STATUS_NOTIFY_SET = new Set<string>([
   'status.incident_created',
   'status.maintenance_scheduled',
 ])
-/** Support-inbox "bell" events, each resolving to at most one notification target.
- *  ticket.status_changed (requester bell) and message.created (new-message team
- *  bell) were relocated onto these events on `next`; they route here too. */
-const BELL_SET = new Set<string>([
-  'conversation.assigned',
-  'ticket.assigned',
-  'assistant.handed_off',
-  'conversation.note_mentioned',
-  'ticket.status_changed',
-  'message.created',
-])
+
+/**
+ * Support-inbox "bell" events: each resolves to at most one notification target
+ * from the payload/DB (no hook context needed). One table, so `interestedIn` and
+ * the resolve loop share a single source of truth — adding a bell is one entry,
+ * not a Set line plus a branch that must stay aligned. (ticket.status_changed and
+ * message.created were relocated onto these events on `next`.)
+ */
+type BellBuilder = (event: EventData) => Promise<HookTarget | null> | HookTarget | null
+const BELL_BUILDERS: Record<string, BellBuilder> = {
+  'conversation.assigned': getConversationAssignedTargets,
+  'ticket.assigned': getTicketAssignedTargets,
+  'assistant.handed_off': getAssistantHandedOffTargets,
+  'conversation.note_mentioned': getConversationNoteMentionedTargets,
+  'ticket.status_changed': getTicketStatusChangedTargets,
+  'message.created': getMessageCreatedTargets,
+}
 
 export const notificationResolver: SinkResolver = {
   sink: 'notification',
@@ -59,7 +66,7 @@ export const notificationResolver: SinkResolver = {
       SUBSCRIBER_SET.has(type) ||
       MENTION_SET.has(type) ||
       STATUS_NOTIFY_SET.has(type) ||
-      BELL_SET.has(type)
+      type in BELL_BUILDERS
     )
   },
   async resolve(event: DomainEvent): Promise<HookTarget[]> {
@@ -92,28 +99,11 @@ export const notificationResolver: SinkResolver = {
         }
       }
 
-      // Support-inbox bells (conversation/ticket assignment, assistant hand-off,
-      // internal-note @-mention). Each returns at most one target or null.
-      if (event.type === 'conversation.assigned') {
-        const t = await getConversationAssignedTargets(legacy)
-        if (t) out.push(t)
-      } else if (event.type === 'ticket.assigned') {
-        const t = await getTicketAssignedTargets(legacy)
-        if (t) out.push(t)
-      } else if (event.type === 'assistant.handed_off') {
-        const t = await getAssistantHandedOffTargets(legacy)
-        if (t) out.push(t)
-      } else if (event.type === 'conversation.note_mentioned') {
-        const t = getConversationNoteMentionedTargets(legacy)
-        if (t) out.push(t)
-      } else if (event.type === 'ticket.status_changed') {
-        // Requester bell — fires only on a real public_stage crossing.
-        const t = await getTicketStatusChangedTargets(legacy)
-        if (t) out.push(t)
-      } else if (event.type === 'message.created') {
-        // New-message team bell — visitor messages only; the anti-spam presence
-        // gate runs in the notification hook's worker, not here.
-        const t = await getMessageCreatedTargets(legacy)
+      // Support-inbox bell (at most one target). `await` normalizes the one
+      // synchronous builder (note-mention) alongside the async ones.
+      const bell = BELL_BUILDERS[event.type]
+      if (bell) {
+        const t = await bell(legacy)
         if (t) out.push(t)
       }
 

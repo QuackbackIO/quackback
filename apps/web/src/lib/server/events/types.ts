@@ -6,6 +6,26 @@ import type { JsonValue } from '@/lib/shared/json'
 import type { ConversationAttributeSource } from '@/lib/shared/conversation/attribute-values'
 
 /**
+ * Timer-driven workflow triggers (support platform §4.6): synthetic events
+ * emitted by workflow-sweep.ts's 5-minute tick (the unresponsive pair) or the
+ * SLA domain's deadline scan (the SLA pair) — never raised by a real
+ * user/system action. See lib/server/domains/workflows/dispatcher.ts's
+ * dispatchWorkflowTrigger `targetWorkflowId` for why the unresponsive pair
+ * dispatches differently from every other event type.
+ *
+ * These four alone are dispatched with a caller-supplied DETERMINISTIC id
+ * (dispatch.ts `timerEventEnvelope`), so the outbox bridge keys their dedupe on
+ * that id — see outbox-dispatch.ts. Kept as one exported constant so the two
+ * lists can't drift (adding a timer event here also makes it deduped there).
+ */
+export const TIMER_DRIVEN_EVENT_TYPES = [
+  'conversation.customer_unresponsive',
+  'conversation.teammate_unresponsive',
+  'sla.approaching_breach',
+  'sla.breached',
+] as const
+
+/**
  * Supported event types — single source of truth.
  * All UI components, webhook validators, and integration configs should reference this.
  */
@@ -49,16 +69,8 @@ export const EVENT_TYPES = [
   'ticket.replied',
   'ticket.note_added',
   'assistant.handed_off',
-  // Timer-driven workflow triggers (support platform §4.6): synthetic events
-  // emitted by workflow-sweep.ts's 5-minute tick (the unresponsive pair) or
-  // the SLA domain's deadline scan (the SLA pair) — never raised by a real
-  // user/system action. See lib/server/domains/workflows/dispatcher.ts's
-  // dispatchWorkflowTrigger `targetWorkflowId` for why the unresponsive pair
-  // dispatches differently from every other event type.
-  'conversation.customer_unresponsive',
-  'conversation.teammate_unresponsive',
-  'sla.approaching_breach',
-  'sla.breached',
+  // Timer-driven triggers (see TIMER_DRIVEN_EVENT_TYPES above for the rationale).
+  ...TIMER_DRIVEN_EVENT_TYPES,
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]
