@@ -8,11 +8,7 @@ const PORTAL_LAYOUT_ROUTE_ID = '/_portal'
 // from their first paint. Everything NOT in this set and NOT under the portal
 // layout renders hard-coded English: the admin app, onboarding, and the auth
 // utility pages like /auth/two-factor and /admin/login.
-const LOCALIZED_ROUTE_IDS = new Set([
-  '/auth/recovery',
-  '/auth/reset-password',
-  '/widget',
-])
+const LOCALIZED_ROUTE_IDS = new Set(['/auth/recovery', '/auth/reset-password', '/widget'])
 
 /**
  * The locale the SSR document's `<html lang>`/`dir` should advertise, decided

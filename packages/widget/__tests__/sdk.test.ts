@@ -250,6 +250,24 @@ describe('sdk', () => {
     expect(btn.style.opacity).toBe('1')
   })
 
+  it('destroys the launcher and iframe when server config is disabled', async () => {
+    stubIframe()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ enabled: false }) }))
+    )
+    const sdk = createSDK()
+    sdk.dispatch('init', {
+      instanceUrl: ORIGIN,
+      applicationKey: 'lex-app',
+      environment: 'production',
+    })
+    expect(document.querySelector('button[aria-label="Open feedback widget"]')).not.toBeNull()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(document.querySelector('button[aria-label="Open feedback widget"]')).toBeNull()
+    expect(document.querySelector('iframe[title="Feedback Widget"]')).toBeNull()
+  })
+
   it('launcher reveals via fallback timer if config fetch never resolves', async () => {
     vi.useFakeTimers()
     stubIframe()

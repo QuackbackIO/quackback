@@ -9,6 +9,7 @@ vi.mock('@tanstack/react-start/server', () => ({
 // Mock db
 const mockSessionFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
+const mockContactLinkFindFirst = vi.fn()
 const mockInsert = vi.fn()
 const mockReturning = vi.fn()
 const mockValues = vi.fn(() => ({ returning: mockReturning }))
@@ -18,6 +19,9 @@ vi.mock('@/lib/server/db', () => ({
     query: {
       session: { findFirst: (...args: unknown[]) => mockSessionFindFirst(...args) },
       principal: { findFirst: (...args: unknown[]) => mockPrincipalFindFirst(...args) },
+      contactUserLinks: {
+        findFirst: (...args: unknown[]) => mockContactLinkFindFirst(...args),
+      },
     },
     insert: (...args: unknown[]) => {
       mockInsert(...args)
@@ -26,6 +30,7 @@ vi.mock('@/lib/server/db', () => ({
   },
   session: { token: 'token', expiresAt: 'expiresAt', userId: 'userId' },
   principal: { userId: 'userId' },
+  contactUserLinks: { userId: 'userId' },
   eq: vi.fn(),
   and: vi.fn(),
   gt: vi.fn(),
@@ -49,6 +54,8 @@ import { getWidgetSession } from '../widget-auth'
 describe('getWidgetSession', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: no contact link present. Individual tests can override.
+    mockContactLinkFindFirst.mockResolvedValue(null)
   })
 
   it('should return null when no Authorization header', async () => {
@@ -106,6 +113,7 @@ describe('getWidgetSession', () => {
       settings: { id: 'ws_123', slug: 'acme', name: 'Acme Inc' },
       user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: 'https://avatar.url' },
       principal: { id: 'principal_1', role: 'user', type: 'user' },
+      contactId: null,
     })
   })
 
@@ -134,6 +142,7 @@ describe('getWidgetSession', () => {
       settings: { id: 'ws_123', slug: 'acme', name: 'Acme Inc' },
       user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: null },
       principal: { id: 'principal_mock123', role: 'user', type: 'user' },
+      contactId: null,
     })
   })
 
@@ -154,5 +163,45 @@ describe('getWidgetSession', () => {
     expect(result?.user.image).toBeNull()
     expect(result?.principal.role).toBe('member')
     expect(result?.principal.type).toBe('user')
+  })
+
+  it('returns contactId=null when no contact_user_links row exists for the user', async () => {
+    mockGet.mockReturnValue('Bearer valid-token-123')
+    mockSessionFindFirst.mockResolvedValue({
+      userId: 'user_1',
+      user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: null },
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      role: 'user',
+      type: 'user',
+    })
+    mockContactLinkFindFirst.mockResolvedValue(null)
+
+    const result = await getWidgetSession()
+
+    expect(result?.contactId).toBeNull()
+  })
+
+  it('resolves contactId from contact_user_links when a row exists', async () => {
+    mockGet.mockReturnValue('Bearer valid-token-123')
+    mockSessionFindFirst.mockResolvedValue({
+      userId: 'user_1',
+      user: { id: 'user_1', email: 'jane@acme.com', name: 'Jane', image: null },
+    })
+    mockPrincipalFindFirst.mockResolvedValue({
+      id: 'principal_1',
+      role: 'user',
+      type: 'user',
+    })
+    mockContactLinkFindFirst.mockResolvedValue({
+      id: 'cu_link_1',
+      contactId: 'contact_42',
+      userId: 'user_1',
+    })
+
+    const result = await getWidgetSession()
+
+    expect(result?.contactId).toBe('contact_42')
   })
 })

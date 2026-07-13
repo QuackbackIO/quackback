@@ -236,6 +236,48 @@ describe('evaluator — principal_type attribute', () => {
   })
 })
 
+describe('evaluator — linked CRM attributes', () => {
+  it('organization_domain matches through contact_user_links and active organizations', async () => {
+    mockSegment = makeSegment([
+      { attribute: 'organization_domain', operator: 'eq', value: 'ACME.COM' },
+    ])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('FROM principal p')
+    expect(capturedSql).toContain('INNER JOIN "user" u ON u.id = p.user_id')
+    expect(capturedSql).toContain('contact_user_links cul')
+    expect(capturedSql).toContain('cul.user_id = u.id')
+    expect(capturedSql).toContain('organizations o')
+    expect(capturedSql).toContain('o.archived_at IS NULL')
+    expect(capturedSql).toContain('LOWER(o.domain)')
+    expect(capturedSql).toContain('acme.com')
+  })
+
+  it('contact_title presence requires a linked contact', async () => {
+    mockSegment = makeSegment([{ attribute: 'contact_title', operator: 'is_set' }])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('contact_user_links cul')
+    expect(capturedSql).toContain('contacts c')
+    expect(capturedSql).toContain('c.archived_at IS NULL')
+    expect(capturedSql).toContain('c.title IS NOT NULL')
+  })
+
+  it('contact metadata predicates use the selected metadata key on linked contacts', async () => {
+    mockSegment = makeSegment([
+      {
+        attribute: 'contact_metadata_key',
+        operator: 'contains',
+        value: 'enterprise',
+        metadataKey: 'tier',
+      },
+    ])
+    await evaluateDynamicSegment('segment_test' as never)
+    expect(capturedSql).toContain('contact_user_links cul')
+    expect(capturedSql).toContain('c.metadata::jsonb->>tier')
+    expect(capturedSql).toContain('ILIKE')
+    expect(capturedSql).toContain('%enterprise%')
+  })
+})
+
 describe('evaluator — locale attribute (nullable string from OIDC)', () => {
   it('eq operator produces u.locale = value', async () => {
     mockSegment = makeSegment([{ attribute: 'locale', operator: 'eq', value: 'en-US' }])
