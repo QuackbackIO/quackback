@@ -368,7 +368,7 @@ export function PortalAuthTab({ portalConfig }: PortalAuthTabProps) {
 
           <SettingsCard
             title="Allowed segments"
-            description="Members of these segments can view the portal. Segments are defined on the People page."
+            description="Members of these segments can view the portal. Segments are managed in Customers."
           >
             {segmentsQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Loading segments…</p>
@@ -378,7 +378,7 @@ export function PortalAuthTab({ portalConfig }: PortalAuthTabProps) {
               </p>
             ) : (segmentsQuery.data ?? []).length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                No segments defined yet. Create segments on the People page.
+                No segments defined yet. Create segments in Customers.
               </p>
             ) : (
               <div className="space-y-3">

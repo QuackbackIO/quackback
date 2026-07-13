@@ -86,7 +86,12 @@ describe('buildNtfyPayload', () => {
       timestamp: '2025-01-01T00:00:00Z',
       actor: { type: 'user' as const },
       data: {
-        post: { id: 'post_1', title: 'Dark mode support', boardId: 'board_1', boardSlug: 'features' },
+        post: {
+          id: 'post_1',
+          title: 'Dark mode support',
+          boardId: 'board_1',
+          boardSlug: 'features',
+        },
       },
     }
     const payload = buildNtfyPayload(event as any, TOPIC, ROOT)
