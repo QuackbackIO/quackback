@@ -75,10 +75,7 @@ export async function subscribeToPost(
   reason: SubscriptionReason,
   options?: SubscribeOptions
 ): Promise<void> {
-  log.debug(
-    { post_id: postId, principal_id: principalId, reason },
-    'subscribe to post'
-  )
+  log.debug({ post_id: postId, principal_id: principalId, reason }, 'subscribe to post')
   const executor = options?.tx ?? db
   const level = options?.level ?? 'all'
 
@@ -101,10 +98,7 @@ export async function subscribeToPost(
  * Unsubscribe a member from a post
  */
 export async function unsubscribeFromPost(principalId: PrincipalId, postId: PostId): Promise<void> {
-  log.debug(
-    { post_id: postId, principal_id: principalId },
-    'unsubscribe from post'
-  )
+  log.debug({ post_id: postId, principal_id: principalId }, 'unsubscribe from post')
   await db
     .delete(postSubscriptions)
     .where(
@@ -120,10 +114,7 @@ export async function updateSubscriptionLevel(
   postId: PostId,
   level: SubscriptionLevel
 ): Promise<void> {
-  log.debug(
-    { post_id: postId, principal_id: principalId, level },
-    'update subscription level'
-  )
+  log.debug({ post_id: postId, principal_id: principalId, level }, 'update subscription level')
   if (level === 'none') {
     await unsubscribeFromPost(principalId, postId)
     return
@@ -157,10 +148,7 @@ export async function getSubscriptionStatus(
   reason: SubscriptionReason | null
   level: SubscriptionLevel
 }> {
-  log.debug(
-    { post_id: postId, principal_id: principalId },
-    'get subscription status'
-  )
+  log.debug({ post_id: postId, principal_id: principalId }, 'get subscription status')
   const subscription = await db.query.postSubscriptions.findFirst({
     where: and(
       eq(postSubscriptions.principalId, principalId),
@@ -200,10 +188,7 @@ export async function getSubscribersForEvent(
   postId: PostId,
   eventType: NotificationEventType
 ): Promise<Subscriber[]> {
-  log.debug(
-    { post_id: postId, event_type: eventType },
-    'get subscribers for event'
-  )
+  log.debug({ post_id: postId, event_type: eventType }, 'get subscribers for event')
   // Determine which column to filter by
   const notifyColumn =
     eventType === 'comment'
@@ -288,6 +273,13 @@ export async function getNotificationPreferences(
       emailStatusChange: prefs.emailStatusChange,
       emailNewComment: prefs.emailNewComment,
       emailMuted: prefs.emailMuted,
+      emailTicketThreads: prefs.emailTicketThreads,
+      emailTicketProperties: prefs.emailTicketProperties,
+      emailTicketStatus: prefs.emailTicketStatus,
+      emailTicketAssignment: prefs.emailTicketAssignment,
+      emailTicketParticipants: prefs.emailTicketParticipants,
+      emailTicketShares: prefs.emailTicketShares,
+      emailTicketSla: prefs.emailTicketSla,
     }
   }
 
@@ -296,6 +288,13 @@ export async function getNotificationPreferences(
     emailStatusChange: true,
     emailNewComment: true,
     emailMuted: false,
+    emailTicketThreads: true,
+    emailTicketProperties: true,
+    emailTicketStatus: true,
+    emailTicketAssignment: true,
+    emailTicketParticipants: false,
+    emailTicketShares: false,
+    emailTicketSla: true,
   }
 }
 
@@ -303,6 +302,13 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesData = {
   emailStatusChange: true,
   emailNewComment: true,
   emailMuted: false,
+  emailTicketThreads: true,
+  emailTicketProperties: true,
+  emailTicketStatus: true,
+  emailTicketAssignment: true,
+  emailTicketParticipants: false,
+  emailTicketShares: false,
+  emailTicketSla: true,
 }
 
 /**
@@ -312,10 +318,7 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesData = {
 export async function batchGetNotificationPreferences(
   principalIds: PrincipalId[]
 ): Promise<Map<PrincipalId, NotificationPreferencesData>> {
-  log.debug(
-    { count: principalIds.length },
-    'batch get notification preferences'
-  )
+  log.debug({ count: principalIds.length }, 'batch get notification preferences')
   if (principalIds.length === 0) return new Map()
 
   const rows = await db
@@ -324,6 +327,13 @@ export async function batchGetNotificationPreferences(
       emailStatusChange: notificationPreferences.emailStatusChange,
       emailNewComment: notificationPreferences.emailNewComment,
       emailMuted: notificationPreferences.emailMuted,
+      emailTicketThreads: notificationPreferences.emailTicketThreads,
+      emailTicketProperties: notificationPreferences.emailTicketProperties,
+      emailTicketStatus: notificationPreferences.emailTicketStatus,
+      emailTicketAssignment: notificationPreferences.emailTicketAssignment,
+      emailTicketParticipants: notificationPreferences.emailTicketParticipants,
+      emailTicketShares: notificationPreferences.emailTicketShares,
+      emailTicketSla: notificationPreferences.emailTicketSla,
     })
     .from(notificationPreferences)
     .where(inArray(notificationPreferences.principalId, principalIds))
@@ -336,6 +346,13 @@ export async function batchGetNotificationPreferences(
         emailStatusChange: row.emailStatusChange,
         emailNewComment: row.emailNewComment,
         emailMuted: row.emailMuted,
+        emailTicketThreads: row.emailTicketThreads,
+        emailTicketProperties: row.emailTicketProperties,
+        emailTicketStatus: row.emailTicketStatus,
+        emailTicketAssignment: row.emailTicketAssignment,
+        emailTicketParticipants: row.emailTicketParticipants,
+        emailTicketShares: row.emailTicketShares,
+        emailTicketSla: row.emailTicketSla,
       },
     ])
   )
@@ -375,6 +392,13 @@ export async function updateNotificationPreferences(
       emailStatusChange: updated.emailStatusChange,
       emailNewComment: updated.emailNewComment,
       emailMuted: updated.emailMuted,
+      emailTicketThreads: updated.emailTicketThreads,
+      emailTicketProperties: updated.emailTicketProperties,
+      emailTicketStatus: updated.emailTicketStatus,
+      emailTicketAssignment: updated.emailTicketAssignment,
+      emailTicketParticipants: updated.emailTicketParticipants,
+      emailTicketShares: updated.emailTicketShares,
+      emailTicketSla: updated.emailTicketSla,
     }
   } else {
     const [created] = await db
@@ -384,6 +408,13 @@ export async function updateNotificationPreferences(
         emailStatusChange: preferences.emailStatusChange ?? true,
         emailNewComment: preferences.emailNewComment ?? true,
         emailMuted: preferences.emailMuted ?? false,
+        emailTicketThreads: preferences.emailTicketThreads ?? true,
+        emailTicketProperties: preferences.emailTicketProperties ?? true,
+        emailTicketStatus: preferences.emailTicketStatus ?? true,
+        emailTicketAssignment: preferences.emailTicketAssignment ?? true,
+        emailTicketParticipants: preferences.emailTicketParticipants ?? false,
+        emailTicketShares: preferences.emailTicketShares ?? false,
+        emailTicketSla: preferences.emailTicketSla ?? true,
       })
       .returning()
 
@@ -391,6 +422,13 @@ export async function updateNotificationPreferences(
       emailStatusChange: created.emailStatusChange,
       emailNewComment: created.emailNewComment,
       emailMuted: created.emailMuted,
+      emailTicketThreads: created.emailTicketThreads,
+      emailTicketProperties: created.emailTicketProperties,
+      emailTicketStatus: created.emailTicketStatus,
+      emailTicketAssignment: created.emailTicketAssignment,
+      emailTicketParticipants: created.emailTicketParticipants,
+      emailTicketShares: created.emailTicketShares,
+      emailTicketSla: created.emailTicketSla,
     }
   }
 }
@@ -403,10 +441,7 @@ export async function generateUnsubscribeToken(
   postId: PostId | null,
   action: 'unsubscribe_post' | 'unsubscribe_all'
 ): Promise<string> {
-  log.debug(
-    { principal_id: principalId, post_id: postId, action },
-    'generate unsubscribe token'
-  )
+  log.debug({ principal_id: principalId, post_id: postId, action }, 'generate unsubscribe token')
   const token = randomUUID()
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
 

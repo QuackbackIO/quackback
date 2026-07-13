@@ -813,6 +813,8 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
         position: widgetConfig.position,
         tabs: widgetConfig.tabs,
         hmacRequired: widgetConfig.identifyVerification ?? false,
+        imageUploadsInWidget: widgetConfig.imageUploadsInWidget ?? true,
+        ticketing: { enabled: widgetConfig.ticketing?.enabled ?? false },
         // Client-safe chat config — the widget gates its chat tab on chat.enabled,
         // so this must be projected here (cannedReplies stay agent-only).
         chat: publicLiveChatConfig(widgetConfig.chat ?? DEFAULT_LIVE_CHAT_CONFIG),

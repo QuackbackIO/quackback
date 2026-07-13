@@ -15,6 +15,7 @@ import { useIntl } from 'react-intl'
 
 vi.mock('@/lib/client/widget-auth', () => ({
   setWidgetToken: vi.fn(),
+  setWidgetContextToken: vi.fn(),
   clearWidgetToken: vi.fn(),
   getWidgetToken: vi.fn(() => null),
   persistAnonymousToken: vi.fn(),
@@ -25,7 +26,6 @@ vi.mock('@/lib/client/widget-bridge', () => ({ sendToHost: vi.fn() }))
 vi.mock('@/lib/client/auth-client', () => ({
   authClient: { signIn: { anonymous: vi.fn().mockResolvedValue({ data: null, error: null }) } },
 }))
-vi.mock('@/lib/server/functions/widget', () => ({ createWidgetIdentifyTokenFn: vi.fn() }))
 vi.mock('@/lib/shared/i18n', async (orig) => ({
   ...(await orig<typeof import('@/lib/shared/i18n')>()),
   loadMessages: vi.fn().mockResolvedValue({}),
