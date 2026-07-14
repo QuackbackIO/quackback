@@ -31,7 +31,9 @@ export interface AssistantTestRequest {
 }
 
 export interface AssistantTestCitation {
-  type: 'article' | 'post' | 'snippet' | 'summary'
+  // Mirrors ASSISTANT_CITATION_TYPES (citation-types.ts); a client-safe copy so
+  // this shared contract never imports the server domain leaf.
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog'
   id: string
   title: string
   url: string

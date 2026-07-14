@@ -86,6 +86,20 @@ vi.mock('../conversation-summary-retrieval', () => ({
     retrieve: (...args: unknown[]) => mockConversationSummariesRetrieve(...args),
   },
 }))
+const mockTicketsRetrieve = vi.fn()
+vi.mock('../tickets-retrieval', () => ({
+  ticketsKnowledgeSource: {
+    sourceType: 'ticket',
+    retrieve: (...args: unknown[]) => mockTicketsRetrieve(...args),
+  },
+}))
+const mockChangelogRetrieve = vi.fn()
+vi.mock('../changelog-retrieval', () => ({
+  changelogKnowledgeSource: {
+    sourceType: 'changelog',
+    retrieve: (...args: unknown[]) => mockChangelogRetrieve(...args),
+  },
+}))
 
 // `listMessages` backs get_conversation_context (never triggered here);
 // `listConversationMessagesForGrounding` (all: true) backs the conversation
@@ -271,6 +285,8 @@ beforeEach(() => {
   mockPostsRetrieve.mockResolvedValue([])
   mockSnippetsRetrieve.mockResolvedValue([])
   mockConversationSummariesRetrieve.mockResolvedValue([])
+  mockTicketsRetrieve.mockResolvedValue([])
+  mockChangelogRetrieve.mockResolvedValue([])
   mockGetAssistantRuntimeConfig.mockResolvedValue(structuredClone(DEFAULT_RUNTIME_CONFIG))
   mockListEnabledGuidanceCandidates.mockResolvedValue([])
   mockSelectApplicableGuidance.mockResolvedValue([])

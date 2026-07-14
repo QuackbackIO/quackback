@@ -7,12 +7,24 @@ import {
   uniqueIndex,
   jsonb,
   foreignKey,
+  customType,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { principal } from './auth'
 import { posts } from './posts'
 import type { TiptapContent } from '../types'
+
+/** pgvector column, 1536 dims (OpenAI text-embedding-3-small). Local to this
+ *  file, mirroring the per-schema-file `vector` customType convention (see
+ *  conversation-summary.ts / posts.ts / kb.ts). Populated on publish/edit by
+ *  `changelog-embedding.service.ts` (Quinn Phase 4: changelog grounding);
+ *  drafts stay null until they are next published. */
+const vector = customType<{ data: number[] }>({
+  dataType() {
+    return 'vector(1536)'
+  },
+})
 
 export const changelogEntries = pgTable(
   'changelog_entries',
@@ -36,11 +48,20 @@ export const changelogEntries = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     // View count for analytics (incremented on public/widget page load)
     viewCount: integer('view_count').default(0).notNull(),
+    // Semantic embedding for Quinn grounding (Quinn Phase 4). Embedded on
+    // publish/edit; drafts stay null. Track the model version so a re-embed
+    // can find rows without losing data (mirrors posts.embedding_model).
+    embedding: vector('embedding'),
+    embeddingModel: text('embedding_model'),
+    embeddingUpdatedAt: timestamp('embedding_updated_at', { withTimezone: true }),
   },
   (table) => [
     index('changelog_published_at_idx').on(table.publishedAt),
     index('changelog_principal_id_idx').on(table.principalId),
     index('changelog_deleted_at_idx').on(table.deletedAt),
+    index('changelog_embedding_hnsw_idx')
+      .using('hnsw', sql`${table.embedding} vector_cosine_ops`)
+      .where(sql`${table.embedding} IS NOT NULL`),
   ]
 )
 

@@ -248,6 +248,9 @@ export {
   // Schema tables - past-conversation summaries (Quinn grounding, P2-A.4)
   conversationSummaries,
   conversationSummariesRelations,
+  // Schema tables - closed-ticket resolution summaries (Quinn grounding, Phase 4)
+  ticketSummaries,
+  ticketSummariesRelations,
   // Schema tables - custom saved inbox views + per-user pins
   conversationViews,
   conversationViewPins,

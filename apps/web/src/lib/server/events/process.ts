@@ -12,7 +12,7 @@ import { getHook } from './registry'
 import { isRetryableError } from './hook-utils'
 import type { HookResult } from './hook-types'
 import type { EventData } from './types'
-import type { ConversationId, WebhookId } from '@quackback/ids'
+import type { ConversationId, TicketId, WebhookId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'event-process' })
@@ -277,6 +277,19 @@ export async function processEvent(event: EventData): Promise<void> {
       .then((m) => m.summarizeConversationOnClose(event.data.conversation.id as ConversationId))
       .catch((err) =>
         log.error({ err, event_type: event.type }, 'conversation summary hook failed to load')
+      )
+  }
+
+  // Ticket sibling of the conversation-close summary above (Quinn Phase 4:
+  // ticket grounding). Same fire-and-forget + lazy-import isolation; the
+  // service is itself best-effort (see ticket-summary.service.ts), so this
+  // never throws. Ticket status is a three-value category ('open' | 'pending'
+  // | 'closed'); 'closed' is the resolution moment worth summarizing.
+  if (event.type === 'ticket.status_changed' && event.data.newStatus === 'closed') {
+    void import('@/lib/server/domains/assistant/ticket-summary.service')
+      .then((m) => m.summarizeTicketOnClose(event.data.ticket.id as TicketId))
+      .catch((err) =>
+        log.error({ err, event_type: event.type }, 'ticket summary hook failed to load')
       )
   }
 

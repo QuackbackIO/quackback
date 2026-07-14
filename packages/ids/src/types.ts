@@ -208,6 +208,9 @@ export type TicketStatusId = TypeId<'ticket_status'>
 /** Ticket activity log ID - e.g., ticket_activity_01h455vb4pex5vsknk084sn02q */
 export type TicketActivityId = TypeId<'ticket_activity'>
 
+/** Ticket summary ID (Quinn ticket-resolution grounding) - e.g., ticket_summary_01h455vb4pex5vsknk084sn02q */
+export type TicketSummaryId = TypeId<'ticket_summary'>
+
 /** Channel account ID (§4.8) - e.g., channel_account_01h455vb4pex5vsknk084sn02q */
 export type ChannelAccountId = TypeId<'channel_account'>
 
@@ -399,6 +402,7 @@ export interface EntityIdMap {
   ticket: TicketId
   ticket_status: TicketStatusId
   ticket_activity: TicketActivityId
+  ticket_summary: TicketSummaryId
   channel_account: ChannelAccountId
   sending_domain: SendingDomainId
   office_hours: OfficeHoursId

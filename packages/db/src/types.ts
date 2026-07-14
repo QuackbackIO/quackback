@@ -627,8 +627,10 @@ export interface ConversationAttachment {
 
 // A source the AI assistant grounded a message in (conversation_messages.citations).
 // The message text carries inline [n] markers that index into this ordered list.
+// `type` mirrors ASSISTANT_CITATION_TYPES (apps/web citation-types.ts); a
+// standalone copy here so the db package owns no dependency on the app.
 export interface ConversationMessageCitation {
-  type: 'article' | 'post' | 'snippet' | 'summary'
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog'
   id: string
   title: string
   url: string

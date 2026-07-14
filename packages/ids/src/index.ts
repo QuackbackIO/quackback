@@ -126,6 +126,7 @@ export type {
   TicketId,
   TicketStatusId,
   TicketActivityId,
+  TicketSummaryId,
   ChannelAccountId,
   SendingDomainId,
   OfficeHoursId,

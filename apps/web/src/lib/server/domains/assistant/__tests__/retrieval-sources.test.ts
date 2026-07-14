@@ -39,6 +39,24 @@ vi.mock('../conversation-summary-retrieval', () => ({
   },
 }))
 
+// Same idea for the closed-tickets source (team-only), behind the same flag.
+const mockTicketsRetrieve = vi.fn()
+vi.mock('../tickets-retrieval', () => ({
+  ticketsKnowledgeSource: {
+    sourceType: 'ticket',
+    retrieve: (...args: unknown[]) => mockTicketsRetrieve(...args),
+  },
+}))
+
+// Same idea for the changelog source, behind the same flag.
+const mockChangelogRetrieve = vi.fn()
+vi.mock('../changelog-retrieval', () => ({
+  changelogKnowledgeSource: {
+    sourceType: 'changelog',
+    retrieve: (...args: unknown[]) => mockChangelogRetrieve(...args),
+  },
+}))
+
 /** Flag-aware stand-in for isFeatureEnabled, so enabling one flag in a test
  *  doesn't accidentally also enable another. */
 function onlyFlag(enabledFlag: string) {
@@ -55,6 +73,11 @@ import {
 beforeEach(() => {
   vi.clearAllMocks()
   mockIsFeatureEnabled.mockResolvedValue(false)
+  // The team-only tickets source and the changelog source default to empty so
+  // existing merge/forwarding assertions (which don't seed them) stay valid;
+  // a test that cares seeds its own rows.
+  mockTicketsRetrieve.mockResolvedValue([])
+  mockChangelogRetrieve.mockResolvedValue([])
 })
 
 describe('kbKnowledgeSource', () => {
@@ -125,10 +148,17 @@ describe('resolveKnowledgeSources', () => {
     expect(mockIsFeatureEnabled).toHaveBeenCalledWith('assistantKnowledge')
   })
 
-  it('adds the posts, snippets, and past-conversation-summaries sources when assistantKnowledge is on', async () => {
+  it('adds the posts, snippets, summaries, tickets, and changelog sources when assistantKnowledge is on', async () => {
     mockIsFeatureEnabled.mockImplementation(onlyFlag('assistantKnowledge'))
     const sources = await resolveKnowledgeSources()
-    expect(sources.map((s) => s.sourceType)).toEqual(['article', 'post', 'snippet', 'summary'])
+    expect(sources.map((s) => s.sourceType)).toEqual([
+      'article',
+      'post',
+      'snippet',
+      'summary',
+      'ticket',
+      'changelog',
+    ])
   })
 })
 
@@ -292,6 +322,8 @@ describe('retrieveKnowledge', () => {
     expect(mockPostsRetrieve).toHaveBeenCalled()
     expect(mockSnippetsRetrieve).toHaveBeenCalled()
     expect(mockConversationSummariesRetrieve).toHaveBeenCalled()
+    expect(mockTicketsRetrieve).toHaveBeenCalled()
+    expect(mockChangelogRetrieve).toHaveBeenCalled()
   })
 
   it('sourceTypes narrows to the given subset, skipping every other registered source', async () => {

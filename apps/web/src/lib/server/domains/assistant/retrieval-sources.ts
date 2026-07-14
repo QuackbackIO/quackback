@@ -136,10 +136,11 @@ const STATIC_SOURCES: readonly KnowledgeSource[] = [kbKnowledgeSource]
 /**
  * Resolve the active source list: the knowledge-base source plus, behind the
  * `assistantKnowledge` flag, the feedback-posts source, the admin-curated
- * snippets source, and the past-conversation-summaries source. Each optional
- * source's domain is imported dynamically so this module (and everything
- * that statically imports it, including assistant.toolspec.ts) never pulls
- * in that source's schema at load time when the flag is off.
+ * snippets source, the past-conversation-summaries source, the closed-tickets
+ * source (team-only), and the changelog source. Each optional source's domain
+ * is imported dynamically so this module (and everything that statically
+ * imports it, including assistant.toolspec.ts) never pulls in that source's
+ * schema at load time when the flag is off.
  */
 export async function resolveKnowledgeSources(
   knowledgeEnabled?: boolean
@@ -148,15 +149,25 @@ export async function resolveKnowledgeSources(
   const includeAdditionalSources =
     knowledgeEnabled ?? (await isFeatureEnabled('assistantKnowledge'))
   if (includeAdditionalSources) {
-    const [{ postsKnowledgeSource }, { snippetsKnowledgeSource }, summaries] = await Promise.all([
+    const [
+      { postsKnowledgeSource },
+      { snippetsKnowledgeSource },
+      summaries,
+      { ticketsKnowledgeSource },
+      { changelogKnowledgeSource },
+    ] = await Promise.all([
       import('./posts-retrieval'),
       import('./snippets-retrieval'),
       import('./conversation-summary-retrieval'),
+      import('./tickets-retrieval'),
+      import('./changelog-retrieval'),
     ])
     sources.push(
       postsKnowledgeSource,
       snippetsKnowledgeSource,
-      summaries.conversationSummariesKnowledgeSource
+      summaries.conversationSummariesKnowledgeSource,
+      ticketsKnowledgeSource,
+      changelogKnowledgeSource
     )
   }
   return sources

@@ -1303,6 +1303,13 @@
       "when": 1784772900000,
       "tag": "0202_assistant_drop_tool_controls",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1784772960000,
+      "tag": "0203_assistant_ticket_changelog_knowledge",
+      "breakpoints": true
     }
   ]
 }

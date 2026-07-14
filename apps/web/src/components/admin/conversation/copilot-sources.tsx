@@ -11,8 +11,10 @@ import {
   BookOpenIcon,
   ChatBubbleLeftRightIcon,
   DocumentTextIcon,
+  LifebuoyIcon,
   LockClosedIcon,
   MapIcon,
+  MegaphoneIcon,
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { CitationFreshness } from '@/components/shared/conversation/assistant-turn'
@@ -62,6 +64,21 @@ export const SOURCE_OPTIONS: SourceOption[] = [
     rowLabel: 'Past conversation',
     subtitle: "This customer's closed conversations",
     icon: ChatBubbleLeftRightIcon,
+    flagKey: 'assistantKnowledge',
+  },
+  {
+    type: 'ticket',
+    label: 'Tickets',
+    rowLabel: 'Ticket',
+    subtitle: 'Closed-ticket resolution summaries',
+    icon: LifebuoyIcon,
+    flagKey: 'assistantKnowledge',
+  },
+  {
+    type: 'changelog',
+    label: 'Changelog',
+    rowLabel: 'Changelog entry',
+    icon: MegaphoneIcon,
     flagKey: 'assistantKnowledge',
   },
 ]

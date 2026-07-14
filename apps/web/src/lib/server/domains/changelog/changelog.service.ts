@@ -34,6 +34,7 @@ import {
 } from '@/lib/server/events/dispatch'
 import { scheduleDispatch, cancelScheduledDispatch } from '@/lib/server/events/scheduler'
 import { setEntryCategories, getCategoriesForEntries } from './changelog-category.service'
+import { embedChangelogEntryOnPublish } from './changelog-embedding.service'
 import { logger } from '@/lib/server/logger'
 
 import { isSameDay } from 'date-fns'
@@ -271,6 +272,17 @@ export async function updateChangelog(
     }
   }
 
+  // Re-embed on a content/title edit (Quinn Phase 4). The publish-transition
+  // paths above already re-embed via `notifyChangelogPublished`; this covers an
+  // edit to an ALREADY-published entry whose `publishState` didn't change (that
+  // helper isn't called then). The embed service no-ops for drafts/scheduled
+  // entries, so an unpublished edit stays unembedded. Fire-and-forget.
+  const contentChanged =
+    input.contentJson !== undefined || input.content !== undefined || input.title !== undefined
+  if (contentChanged && input.publishState === undefined) {
+    void embedChangelogEntryOnPublish(id)
+  }
+
   return getChangelogById(id)
 }
 
@@ -448,6 +460,14 @@ export async function notifyChangelogPublished(
     .returning()
 
   if (!claimed) return false
+
+  // Embed the just-published entry for Quinn grounding (Quinn Phase 4).
+  // Fire-and-forget + best-effort (the service swallows its own errors), off
+  // the exact publish moment: this helper is the single funnel every publish
+  // path (create, update-to-published, scheduled job, reconciler) reaches, so
+  // one call here covers them all. Independent of `notify` — the entry is now
+  // public knowledge whether or not subscribers were emailed.
+  void embedChangelogEntryOnPublish(id)
 
   if (!notify) return true
 
