@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { SignalIcon } from '@heroicons/react/24/solid'
@@ -10,6 +10,7 @@ import { StatusNotificationsCard } from '@/components/admin/settings/status/stat
 import { StatusDangerCard } from '@/components/admin/settings/status/status-danger-card'
 import { updateStatusSettingsFn } from '@/lib/server/functions/status'
 import { statusSettingsQueries } from '@/lib/client/queries/status'
+import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { DEFAULT_STATUS_SETTINGS, type StatusSettings } from '@/lib/shared/status-settings'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
@@ -36,39 +37,23 @@ function StatusSettingsPage() {
   // Text fields save debounced (a save per keystroke hammers the server);
   // switches/radios save immediately. Pending text is preserved across a
   // save response so an in-flight result can't clobber newer keystrokes.
-  const pendingText = useRef<Partial<StatusSettings> | null>(null)
-  const textTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const mutation = useMutation({
     mutationFn: (patch: Partial<StatusSettings>) => updateStatusSettingsFn({ data: patch }),
     onSuccess: (saved) => {
       setSettings((prev) =>
-        pendingText.current ? { ...saved, pageDescription: prev.pageDescription } : saved
+        textSave.hasPending() ? { ...saved, pageDescription: prev.pageDescription } : saved
       )
       queryClient.setQueryData(statusSettingsQueries.get().queryKey, saved)
     },
   })
 
   const { mutate } = mutation
-  const flushText = useCallback(() => {
-    if (textTimer.current) {
-      clearTimeout(textTimer.current)
-      textTimer.current = null
-    }
-    const patch = pendingText.current
-    pendingText.current = null
-    if (patch) mutate(patch)
-  }, [mutate])
-
-  // Flush on unmount so navigating away never drops typed text.
-  useEffect(() => flushText, [flushText])
+  const textSave = useDebouncedSave<Partial<StatusSettings>>(mutate, 600)
 
   function onChange(patch: Partial<StatusSettings>) {
     setSettings((prev) => ({ ...prev, ...patch }))
     if ('pageDescription' in patch) {
-      pendingText.current = { ...pendingText.current, ...patch }
-      if (textTimer.current) clearTimeout(textTimer.current)
-      textTimer.current = setTimeout(flushText, 600)
+      textSave.queue(patch)
     } else {
       mutation.mutate(patch)
     }
@@ -88,7 +73,7 @@ function StatusSettingsPage() {
       <StatusGeneralCard
         settings={settings}
         onChange={onChange}
-        onFlushText={flushText}
+        onFlushText={textSave.flush}
         disabled={mutation.isPending}
       />
       <StatusVisibilityCard settings={settings} onChange={onChange} disabled={mutation.isPending} />

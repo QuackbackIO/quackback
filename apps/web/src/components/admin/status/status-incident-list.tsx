@@ -22,14 +22,10 @@ import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { Route } from '@/routes/admin/status'
 import { statusIncidentQueries, type StatusIncidentAdmin } from '@/lib/client/queries/status'
 import { useDeleteStatusIncident } from '@/lib/client/mutations/status'
+import { LifecycleBadge } from './status-incident-fields'
 import { ReportIncidentDialog } from './status-report-incident-dialog'
 import { ScheduleMaintenanceDialog } from './status-schedule-maintenance-dialog'
-import {
-  IMPACT_COLORS,
-  IMPACT_LABELS,
-  LIFECYCLE_COLORS,
-  LIFECYCLE_LABELS,
-} from './status-admin-colors'
+import { IMPACT_COLORS, IMPACT_LABELS, LIFECYCLE_LABELS } from './status-admin-colors'
 
 type SortMode = 'newest' | 'impact'
 
@@ -208,12 +204,7 @@ function StatusIncidentRow({
         {preview && <p className="text-sm text-muted-foreground/60 line-clamp-1 mt-1">{preview}</p>}
 
         <div className="flex items-center flex-wrap gap-2 text-xs text-muted-foreground mt-2.5">
-          <span
-            className="font-semibold uppercase tracking-wide text-[11px]"
-            style={{ color: LIFECYCLE_COLORS[lifecycle] }}
-          >
-            {LIFECYCLE_LABELS[lifecycle]}
-          </span>
+          <LifecycleBadge status={lifecycle} />
           <span>·</span>
           <Badge variant="outline" className="h-5">
             {IMPACT_LABELS[incident.impact]}

@@ -162,14 +162,45 @@ export async function getStatusSubscriptionCounts(): Promise<StatusSubscriptionC
 
 /** Still-active subscriptions created since `date` (the overview's weekly delta). */
 export async function countStatusSubscriptionsSince(date: Date): Promise<number> {
-  const rows = await db.query.statusSubscriptions.findMany({
-    where: and(
-      gte(statusSubscriptions.createdAt, date),
-      isNull(statusSubscriptions.unsubscribedAt)
-    ),
-    columns: { id: true },
-  })
-  return rows.length
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(statusSubscriptions)
+    .where(
+      and(gte(statusSubscriptions.createdAt, date), isNull(statusSubscriptions.unsubscribedAt))
+    )
+  return row?.count ?? 0
+}
+
+/** Count-only variant of `getActiveSubscribersForComponents` — same pool,
+ *  without materializing every principal id (the editor's "emailed ~N"
+ *  marker only needs the number). */
+export async function countActiveSubscribersForComponents(
+  affectedComponentIds: StatusComponentId[]
+): Promise<number> {
+  const scopeFilter =
+    affectedComponentIds.length === 0
+      ? eq(statusSubscriptions.scope, 'page')
+      : or(
+          eq(statusSubscriptions.scope, 'page'),
+          and(
+            eq(statusSubscriptions.scope, 'components'),
+            sql`
+              EXISTS (
+                SELECT 1 FROM jsonb_array_elements_text(${statusSubscriptions.componentIds}) cid
+                WHERE cid = ANY(ARRAY[${sql.join(
+                  affectedComponentIds.map((id) => sql`${id}`),
+                  sql`, `
+                )}]::text[])
+              )
+            `
+          )
+        )
+
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(statusSubscriptions)
+    .where(and(isNull(statusSubscriptions.unsubscribedAt), scopeFilter))
+  return row?.count ?? 0
 }
 
 /** Principals actively subscribed to the whole page or to at least one of

@@ -16,10 +16,13 @@ import {
 } from '@/lib/client/queries/status'
 import {
   COMPONENT_STATUS_OPTIONS,
+  LIFECYCLE_COLORS,
+  LIFECYCLE_LABELS,
   defaultAffectedStatus,
   type StatusComponentStatus,
   type StatusIncidentImpact,
   type StatusIncidentKind,
+  type StatusIncidentLifecycle,
 } from './status-admin-colors'
 
 export interface AffectedRow {
@@ -156,4 +159,29 @@ export function TemplatePickerButton({
       </PopoverContent>
     </Popover>
   )
+}
+
+/** The uppercase colored lifecycle label used by list rows, overview cards,
+ *  and the editor timeline header. */
+export function LifecycleBadge({ status }: { status: StatusIncidentLifecycle }) {
+  return (
+    <span
+      className="font-semibold uppercase tracking-wide text-[11px]"
+      style={{ color: LIFECYCLE_COLORS[status] }}
+    >
+      {LIFECYCLE_LABELS[status]}
+    </span>
+  )
+}
+
+/** Map a template's component ids onto affected rows with the kind's
+ *  default status — shared by both create dialogs. */
+export function templateToAffectedRows(
+  componentIds: string[],
+  kind: StatusIncidentKind
+): AffectedRow[] {
+  return componentIds.map((id) => ({
+    componentId: id,
+    componentStatus: defaultAffectedStatus(kind),
+  }))
 }

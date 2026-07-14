@@ -145,30 +145,3 @@ export function lifecycleOptionsForKind(kind: StatusIncidentKind) {
 export function defaultAffectedStatus(kind: StatusIncidentKind): StatusComponentStatus {
   return kind === 'maintenance' ? 'under_maintenance' : 'degraded_performance'
 }
-
-/** Client mirror of the server's deriveImpact (status.calc.ts) for the
- *  report dialog's live "Impact: X, derived" note. Parity is pinned by
- *  __tests__/derive-impact-parity.test.ts — change both together. */
-const DERIVED_IMPACT_RANK: Record<StatusComponentStatus, number> = {
-  operational: 0,
-  under_maintenance: 0,
-  degraded_performance: 1,
-  partial_outage: 2,
-  major_outage: 3,
-}
-
-const DERIVED_IMPACT_BY_RANK: readonly StatusIncidentImpact[] = [
-  'none',
-  'minor',
-  'major',
-  'critical',
-]
-
-export function deriveImpactFromStatuses(statuses: StatusComponentStatus[]): StatusIncidentImpact {
-  let worst = 0
-  for (const status of statuses) {
-    const rank = DERIVED_IMPACT_RANK[status]
-    if (rank > worst) worst = rank
-  }
-  return DERIVED_IMPACT_BY_RANK[worst]
-}

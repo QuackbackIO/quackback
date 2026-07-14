@@ -27,6 +27,7 @@ import { ModalFooter } from '@/components/shared/modal-footer'
 import { UrlModalShell } from '@/components/shared/url-modal-shell'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
+import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { SidebarContainer, StatusSelect } from '@/components/shared/sidebar-primitives'
 import { Route } from '@/routes/admin/status'
 import { statusIncidentQueries, type StatusIncidentAdminDetail } from '@/lib/client/queries/status'
@@ -119,8 +120,6 @@ function StatusIncidentEditorContent({
   // ── Sidebar details: initialized once, then autosaved (debounced) ──
   const [details, setDetails] = useState<DetailsState | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const queuedRef = useRef<DetailsState | null>(null)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
 
   // ── Composer ──
@@ -137,7 +136,6 @@ function StatusIncidentEditorContent({
 
   const { mutateAsync: saveDetailsAsync } = updateMutation
   async function flushSave(next: DetailsState, kind: 'incident' | 'maintenance') {
-    queuedRef.current = null
     if (next.title.trim().length === 0 || next.affected.length === 0) return
     setSaveState('saving')
     try {
@@ -164,27 +162,24 @@ function StatusIncidentEditorContent({
     }
   }
 
+  const kindRef = useRef<'incident' | 'maintenance'>('incident')
+  if (incident) kindRef.current = incident.kind
+  // Debounced autosave with flush-on-unmount (shared hook; same mechanism
+  // as the status settings page's text fields).
+  const detailsSave = useDebouncedSave<DetailsState>(
+    (next) => void flushSave(next, kindRef.current),
+    800
+  )
+
   function patchDetails(patch: Partial<DetailsState>) {
     if (!incident) return
-    const kind = incident.kind
     setDetails((prev) => {
       if (!prev) return prev
       const next = { ...prev, ...patch }
-      queuedRef.current = next
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => void flushSave(next, kind), 800)
+      detailsSave.queue(next)
       return next
     })
   }
-
-  // Flush a pending save on unmount so closing the modal never drops edits.
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      const queued = queuedRef.current
-      if (queued && incident) void flushSave(queued, incident.kind)
-    }
-  }, [])
 
   // ── Post update ──
   const currentStatus = incident?.status as StatusIncidentLifecycle | undefined

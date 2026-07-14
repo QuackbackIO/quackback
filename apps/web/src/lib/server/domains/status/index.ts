@@ -122,4 +122,5 @@ export {
   getStatusSubscriptionCounts,
   countStatusSubscriptionsSince,
   getActiveSubscribersForComponents,
+  countActiveSubscribersForComponents,
 } from './status.subscription'

@@ -15,6 +15,7 @@ import {
   ilike,
   lt,
   or,
+  sql,
   statusIncidents,
   statusIncidentUpdates,
   statusIncidentComponents,
@@ -492,15 +493,17 @@ export async function listStatusIncidents(
 /** Incidents (not maintenance) whose clock started since `date` — the
  *  overview's "incidents in the last 30 days" tile. */
 export async function countStatusIncidentsSince(date: Date): Promise<number> {
-  const rows = await db.query.statusIncidents.findMany({
-    where: and(
-      eq(statusIncidents.kind, 'incident'),
-      isNull(statusIncidents.deletedAt),
-      gte(statusIncidents.startedAt, date)
-    ),
-    columns: { id: true },
-  })
-  return rows.length
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(statusIncidents)
+    .where(
+      and(
+        eq(statusIncidents.kind, 'incident'),
+        isNull(statusIncidents.deletedAt),
+        gte(statusIncidents.startedAt, date)
+      )
+    )
+  return row?.count ?? 0
 }
 
 // ============================================================================

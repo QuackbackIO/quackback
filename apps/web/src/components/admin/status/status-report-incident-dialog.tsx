@@ -34,13 +34,11 @@ import { useCreateStatusIncident } from '@/lib/client/mutations/status'
 import {
   AffectedComponentsField,
   TemplatePickerButton,
+  templateToAffectedRows,
   type AffectedRow,
 } from './status-incident-fields'
-import {
-  IMPACT_LABELS,
-  deriveImpactFromStatuses,
-  defaultAffectedStatus,
-} from './status-admin-colors'
+import { deriveImpact } from '@/lib/shared/status-calc'
+import { IMPACT_LABELS } from './status-admin-colors'
 
 export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'default' | 'outline' }) {
   const [open, setOpen] = useState(false)
@@ -67,7 +65,7 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
     createMutation.reset()
   }
 
-  const derivedImpact = deriveImpactFromStatuses(affected.map((a) => a.componentStatus))
+  const derivedImpact = deriveImpact(affected.map((a) => a.componentStatus))
   const canSubmit =
     title.trim().length > 0 &&
     body.trim().length > 0 &&
@@ -135,12 +133,7 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
                 onApply={(t) => {
                   setTitle(t.title)
                   setBody(t.body)
-                  setAffected(
-                    t.componentIds.map((id) => ({
-                      componentId: id,
-                      componentStatus: defaultAffectedStatus('incident'),
-                    }))
-                  )
+                  setAffected(templateToAffectedRows(t.componentIds, 'incident'))
                 }}
               />
             </div>

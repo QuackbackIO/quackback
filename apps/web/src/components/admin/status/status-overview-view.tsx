@@ -18,6 +18,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Route } from '@/routes/admin/status'
 import { statusOverviewQueries, type StatusOverview } from '@/lib/client/queries/status'
 import { useStartStatusMaintenanceNow } from '@/lib/client/mutations/status'
+import { LifecycleBadge } from './status-incident-fields'
 import { ReportIncidentDialog } from './status-report-incident-dialog'
 import { ScheduleMaintenanceDialog } from './status-schedule-maintenance-dialog'
 import {
@@ -25,8 +26,6 @@ import {
   COMPONENT_STATUS_LABELS,
   IMPACT_COLORS,
   IMPACT_LABELS,
-  LIFECYCLE_COLORS,
-  LIFECYCLE_LABELS,
   TOP_LEVEL_HEADLINES,
   type StatusComponentStatus,
   type StatusIncidentLifecycle,
@@ -187,9 +186,14 @@ function ViewAllLink({
   )
 }
 
-function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
+function useGoToIncident() {
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
+  return (id: string) => void navigate({ to: '/admin/status', search: { ...search, incident: id } })
+}
+
+function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
+  const goToIncident = useGoToIncident()
 
   if (incidents.length === 0) {
     return (
@@ -219,22 +223,12 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
                   <button
                     type="button"
                     className="font-semibold text-sm text-left hover:underline underline-offset-2 line-clamp-1"
-                    onClick={() =>
-                      void navigate({
-                        to: '/admin/status',
-                        search: { ...search, incident: incident.id },
-                      })
-                    }
+                    onClick={() => goToIncident(incident.id)}
                   >
                     {incident.title}
                   </button>
                   <div className="flex items-center flex-wrap gap-2 text-[11px] text-muted-foreground mt-1">
-                    <span
-                      className="font-semibold uppercase tracking-wide"
-                      style={{ color: LIFECYCLE_COLORS[lifecycle] }}
-                    >
-                      {LIFECYCLE_LABELS[lifecycle]}
-                    </span>
+                    <LifecycleBadge status={lifecycle} />
                     <Badge variant="outline" size="sm">
                       {IMPACT_LABELS[incident.impact]}
                     </Badge>
@@ -247,15 +241,7 @@ function ActiveIncidentsCard({ incidents }: { incidents: OverviewIncident[] }) {
                     </span>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    void navigate({
-                      to: '/admin/status',
-                      search: { ...search, incident: incident.id },
-                    })
-                  }
-                >
+                <Button size="sm" onClick={() => goToIncident(incident.id)}>
                   Post update
                 </Button>
               </div>
@@ -288,8 +274,7 @@ function formatWindow(startIso: string | null, endIso: string | null): string {
 }
 
 function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
-  const navigate = useNavigate({ from: Route.fullPath })
-  const search = Route.useSearch()
+  const goToIncident = useGoToIncident()
   const startMutation = useStartStatusMaintenanceNow()
   const [startTarget, setStartTarget] = useState<OverviewIncident | null>(null)
 
@@ -316,19 +301,12 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
                   <button
                     type="button"
                     className="font-semibold text-sm text-left hover:underline underline-offset-2 line-clamp-1"
-                    onClick={() =>
-                      void navigate({ to: '/admin/status', search: { ...search, incident: w.id } })
-                    }
+                    onClick={() => goToIncident(w.id)}
                   >
                     {w.title}
                   </button>
                   <div className="flex items-center flex-wrap gap-2 text-[11px] text-muted-foreground mt-1">
-                    <span
-                      className="font-semibold uppercase tracking-wide"
-                      style={{ color: LIFECYCLE_COLORS[lifecycle] }}
-                    >
-                      {LIFECYCLE_LABELS[lifecycle]}
-                    </span>
+                    <LifecycleBadge status={lifecycle} />
                     <span>{formatWindow(w.scheduledStartAt, w.scheduledEndAt)}</span>
                     {w.autoStart && (
                       <Badge variant="outline" size="sm">
@@ -356,9 +334,7 @@ function UpcomingMaintenanceCard({ windows }: { windows: OverviewIncident[] }) {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  onClick={() =>
-                    void navigate({ to: '/admin/status', search: { ...search, incident: w.id } })
-                  }
+                  onClick={() => goToIncident(w.id)}
                 >
                   <PencilIcon className="h-3.5 w-3.5" />
                 </Button>

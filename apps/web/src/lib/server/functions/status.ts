@@ -48,7 +48,7 @@ import {
   deleteStatusIncidentTemplate,
   listStatusSubscriptions,
   getStatusSubscriptionCounts,
-  getActiveSubscribersForComponents,
+  countActiveSubscribersForComponents,
   isStatusAudienceGranted,
   getStatusPageSnapshot,
   getPublicStatusIncident,
@@ -500,10 +500,9 @@ export const getStatusIncidentAdminFn = createServerFn({ method: 'GET' })
       // affected components — the editor copy hedges accordingly ("~N").
       let notifiedSubscriberCount: number | null = null
       if (incident.notifiedAt && !incident.backfilled) {
-        const pool = await getActiveSubscribersForComponents(
+        notifiedSubscriberCount = await countActiveSubscribersForComponents(
           incident.affectedComponents.map((c) => c.componentId)
         )
-        notifiedSubscriberCount = pool.length
       }
 
       return { ...serializeIncident(incident), notifiedSubscriberCount }
@@ -558,7 +557,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
  */
 export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handler(async () => {
   try {
-    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
     const now = new Date()
 
     const [
@@ -590,7 +589,7 @@ export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handle
 
     // Uptime via a policy actor for the authed admin (team actors bypass
     // segment gates, so this sees every component).
-    const actor = await policyActorFromAuth(await getOptionalAuth())
+    const actor = await policyActorFromAuth(auth)
     const uptime =
       allComponents.length > 0
         ? await getUptimeSeries(

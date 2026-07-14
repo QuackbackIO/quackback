@@ -30,6 +30,15 @@ import {
 import { statusKeys } from '@/lib/client/queries/status'
 import type { UpdateStatusSettingsInput } from '@/lib/shared/status-settings'
 
+/** Merge a mutation response into the incident-detail cache. Merge, don't
+ *  replace: the detail read carries fields (e.g. notifiedSubscriberCount)
+ *  the mutation responses don't return. */
+function mergeIncidentDetail(queryClient: ReturnType<typeof useQueryClient>, data: { id: string }) {
+  queryClient.setQueryData(statusKeys.incidentDetail(data.id), (prev: object | undefined) =>
+    prev ? { ...prev, ...data } : data
+  )
+}
+
 // ─── Components / Groups ──────────────────────────────────────────────
 
 export function useCreateStatusComponent() {
@@ -147,12 +156,9 @@ export function useUpdateStatusIncident() {
     mutationFn: (input: Parameters<typeof updateStatusIncidentFn>[0]['data']) =>
       updateStatusIncidentFn({ data: input }),
     onSuccess: (data) => {
-      // Merge, don't replace: the detail query carries extra fields (e.g.
-      // notifiedSubscriberCount) the mutation response doesn't return.
-      queryClient.setQueryData(statusKeys.incidentDetail(data.id), (prev: object | undefined) =>
-        prev ? { ...prev, ...data } : data
-      )
+      mergeIncidentDetail(queryClient, data)
       queryClient.invalidateQueries({ queryKey: statusKeys.incidents() })
+      queryClient.invalidateQueries({ queryKey: statusKeys.overview() })
     },
   })
 }
@@ -163,9 +169,7 @@ export function usePostStatusIncidentUpdate() {
     mutationFn: (input: Parameters<typeof postStatusIncidentUpdateFn>[0]['data']) =>
       postStatusIncidentUpdateFn({ data: input }),
     onSuccess: (data) => {
-      queryClient.setQueryData(statusKeys.incidentDetail(data.id), (prev: object | undefined) =>
-        prev ? { ...prev, ...data } : data
-      )
+      mergeIncidentDetail(queryClient, data)
       queryClient.invalidateQueries({ queryKey: statusKeys.incidents() })
       queryClient.invalidateQueries({ queryKey: statusKeys.components() })
       queryClient.invalidateQueries({ queryKey: statusKeys.overview() })

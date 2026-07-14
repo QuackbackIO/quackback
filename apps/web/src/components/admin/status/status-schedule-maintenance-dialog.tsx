@@ -27,9 +27,9 @@ import { useCreateStatusIncident } from '@/lib/client/mutations/status'
 import {
   AffectedComponentsField,
   TemplatePickerButton,
+  templateToAffectedRows,
   type AffectedRow,
 } from './status-incident-fields'
-import { defaultAffectedStatus } from './status-admin-colors'
 
 export function ScheduleMaintenanceDialog({
   variant = 'outline',
@@ -121,12 +121,7 @@ export function ScheduleMaintenanceDialog({
                 onApply={(t) => {
                   setTitle(t.title)
                   setBody(t.body)
-                  setAffected(
-                    t.componentIds.map((id) => ({
-                      componentId: id,
-                      componentStatus: defaultAffectedStatus('maintenance'),
-                    }))
-                  )
+                  setAffected(templateToAffectedRows(t.componentIds, 'maintenance'))
                 }}
               />
             </div>
