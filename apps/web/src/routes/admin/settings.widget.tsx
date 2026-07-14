@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter, useRouteContext, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState, useTransition, useMemo, useEffect } from 'react'
+import { useTheme } from 'next-themes'
 import {
   ChatBubbleLeftRightIcon,
   ArrowPathIcon,
@@ -97,7 +98,20 @@ function WidgetSettingsPage() {
     (config.position as 'bottom-right' | 'bottom-left') ?? 'bottom-right'
   )
   const [homeDraft, setHomeDraft] = useState<WidgetHomeConfig>(config.home ?? {})
-  const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light')
+
+  // The preview theme follows the admin's own theme until the toggle overrides
+  // it. resolvedTheme must not affect render output before the mount effect:
+  // SSR renders it as undefined but the client hydrates with the real value,
+  // and React doesn't patch attribute mismatches during hydration, so the
+  // toggle would keep its stale server-rendered active state forever. Gating
+  // on mounted keeps hydration consistent (and holds the iframe back one tick
+  // instead of flashing a light widget at dark users and reloading).
+  const { resolvedTheme } = useTheme()
+  const [previewThemeOverride, setPreviewThemeOverride] = useState<'light' | 'dark' | null>(null)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const previewTheme =
+    previewThemeOverride ?? (mounted && resolvedTheme === 'dark' ? 'dark' : 'light')
 
   // The preview iframe shows the persisted config; remount it whenever a save
   // lands. Keyed on content (not dataUpdatedAt) so refetches that return
@@ -148,7 +162,7 @@ function WidgetSettingsPage() {
             <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
               <button
                 type="button"
-                onClick={() => setPreviewTheme('light')}
+                onClick={() => setPreviewThemeOverride('light')}
                 className={cn(
                   'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
                   previewTheme === 'light'
@@ -161,7 +175,7 @@ function WidgetSettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setPreviewTheme('dark')}
+                onClick={() => setPreviewThemeOverride('dark')}
                 className={cn(
                   'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
                   previewTheme === 'dark'
@@ -175,11 +189,13 @@ function WidgetSettingsPage() {
             </div>
           </div>
           <div className="flex-1 min-h-0">
-            <WidgetPreview
-              position={position}
-              theme={previewTheme}
-              refreshKey={previewRefreshKey}
-            />
+            {mounted && (
+              <WidgetPreview
+                position={position}
+                theme={previewTheme}
+                refreshKey={previewRefreshKey}
+              />
+            )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             This is your live widget. It shows real content, and actions in it are real.

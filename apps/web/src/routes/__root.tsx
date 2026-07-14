@@ -296,6 +296,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           enableSystem={!forcedTheme}
           forcedTheme={forcedTheme}
           disableTransitionOnChange
+          syncCookie={!routeIds.includes('/widget')}
         >
           {children}
           <Toaster />
