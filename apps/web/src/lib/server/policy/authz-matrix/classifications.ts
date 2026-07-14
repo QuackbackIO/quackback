@@ -293,8 +293,13 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // page snapshot, component list, and incident/maintenance history). Writes
   // to these resources require STATUS_PAGE_MANAGE / STATUS_PAGE_PUBLISH.
   'routes/api/v1/status/summary.ts::GET': PUBLIC_DATA('public status page summary'),
-  'routes/api/v1/status/components/index.ts::GET': PUBLIC_DATA('public status component list'),
-  'routes/api/v1/status/components/$componentId.ts::GET': PUBLIC_DATA('public status component'),
+  // Shared handlers behind both /status/components (deprecated) and the
+  // /status/services aliases — one gate each, two route surfaces.
+  'routes/api/v1/status/-service-handlers.ts::listStatusComponentsHandler': PUBLIC_DATA(
+    'public status service list'
+  ),
+  'routes/api/v1/status/-service-handlers.ts::getStatusComponentHandler':
+    PUBLIC_DATA('public status service'),
   'routes/api/v1/status/incidents/index.ts::GET': PUBLIC_DATA('public status incident list'),
   'routes/api/v1/status/incidents/$incidentId.ts::GET': PUBLIC_DATA('public status incident'),
   'routes/api/v1/help-center/articles/$articleId.feedback.ts::POST':
