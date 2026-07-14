@@ -69,7 +69,14 @@ const JUDGE_SYSTEM =
 /** Judge a single turn's output against a rubric (groundedness, writing style). */
 export async function judgeSingle(
   ref: RubricRef,
-  input: { prompt: string; reply: string; citations?: string[] }
+  input: {
+    prompt: string
+    reply: string
+    citations?: string[]
+    /** The knowledge the reply could ground on (title + excerpt), so a
+     *  groundedness judge verifies support instead of penalizing unseen facts. */
+    sources?: { title: string; excerpt: string }[]
+  }
 ): Promise<JudgeVerdict> {
   const rubric = loadRubric(ref)
   const user = [
@@ -82,6 +89,10 @@ export async function judgeSingle(
     input.citations && input.citations.length
       ? `\nCITATIONS: ${input.citations.join(', ')}`
       : '\nCITATIONS: (none)',
+    input.sources && input.sources.length
+      ? `\nRETRIEVED KNOWLEDGE (the sources the reply was allowed to cite):\n` +
+        input.sources.map((s) => `- ${s.title}: ${s.excerpt}`).join('\n')
+      : '\nRETRIEVED KNOWLEDGE: (none seeded)',
   ].join('\n')
   return callJudge(JUDGE_SYSTEM, user)
 }

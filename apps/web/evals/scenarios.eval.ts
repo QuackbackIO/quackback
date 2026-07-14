@@ -27,6 +27,8 @@ import {
   assistantGuidanceRules,
   conversationAttributeDefinitions,
   assistantInvolvements,
+  ticketSummaries,
+  changelogEntries,
 } from '@/lib/server/db'
 import { assertEvalEnv } from './harness/env'
 import { runScenario } from './harness/run'
@@ -45,6 +47,8 @@ const fixture = await createDbTestFixture({
       .from(conversationAttributeDefinitions)
       .limit(0)
     await db.select({ id: assistantInvolvements.id }).from(assistantInvolvements).limit(0)
+    await db.select({ id: ticketSummaries.id }).from(ticketSummaries).limit(0)
+    await db.select({ id: changelogEntries.id }).from(changelogEntries).limit(0)
   },
 })
 

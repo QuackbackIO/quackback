@@ -14,6 +14,7 @@ import type {
   AssistantResponseLength,
 } from '@/lib/shared/assistant/config'
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
+import type { AssistantCitationType } from '@/lib/server/domains/assistant/citation-types'
 
 export type { AssistantRole }
 
@@ -29,6 +30,27 @@ export interface SeedKbArticle {
   content: string
   /** Public (Agent-visible) vs team-only (Copilot-only). Default: true. */
   isPublic?: boolean
+}
+
+/**
+ * A closed-ticket resolution summary seeded (with a real embedding) for the
+ * team-only ticket-grounding source (Quinn Phase 4). Backed by a throwaway
+ * ticket + status the seeder creates to satisfy the FK.
+ */
+export interface SeedTicketSummary {
+  summary: string
+}
+
+/**
+ * A changelog entry seeded (with a real embedding) for the changelog-grounding
+ * source (Quinn Phase 4). Published entries are customer-visible; a draft
+ * (`published: false`) is team-only and trips the copilot leak gate.
+ */
+export interface SeedChangelogEntry {
+  title: string
+  content: string
+  /** Published (customer-visible) vs draft (team-only). Default: true. */
+  published?: boolean
 }
 
 /** A situational-guidance rule. `appliesWhen: null` = always-on. */
@@ -62,6 +84,10 @@ export interface ScenarioConfig {
 
 export interface Fixtures {
   kbArticles?: SeedKbArticle[]
+  /** Closed-ticket resolution summaries (team-only source; Phase 4). */
+  ticketSummaries?: SeedTicketSummary[]
+  /** Changelog entries, published or draft (Phase 4). */
+  changelogEntries?: SeedChangelogEntry[]
   guidance?: SeedGuidance[]
   attributes?: SeedAttribute[]
   /**
@@ -85,10 +111,14 @@ export type Structural =
   | { type: 'minCitations'; n: number }
   | { type: 'noCitations' }
   | { type: 'citationsSubsetOfLedger' }
+  /** At least one citation of this source type; when `internal` is given, at
+   *  least one citation of that type must carry the matching internal flag. */
+  | { type: 'citesType'; citationType: AssistantCitationType; internal?: boolean }
+  /** No citation of this source type (a boundary/leak-gate assertion). */
+  | { type: 'excludesCitationType'; citationType: AssistantCitationType }
   | { type: 'handoff'; reasonOneOf?: string[] }
   | { type: 'inability'; reasonOneOf?: string[] }
   | { type: 'internalSourced'; value: boolean }
-  | { type: 'replyLanguage'; lang: 'fr' | 'en' }
   | { type: 'noWrites' }
   | { type: 'noProposals' }
   | { type: 'executedTool'; name: string }

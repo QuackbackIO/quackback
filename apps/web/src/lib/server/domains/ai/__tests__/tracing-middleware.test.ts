@@ -170,6 +170,26 @@ describe('createAssistantTracingMiddleware', () => {
     expect(tool.ended).toBe(true)
   })
 
+  it('accumulates token usage across agent-loop iterations (one onUsage each)', () => {
+    const { tracer, spans } = makeTestTracer()
+    const mw = createAssistantTracingMiddleware(ATTRS, tracer)
+    const c = ctx()
+
+    mw.onStart!(c)
+    // onUsage fires once per agent-loop iteration; the running totals must sum,
+    // not overwrite (the old bug undercounted a multi-iteration turn to just
+    // the last slice).
+    mw.onUsage!(c, { promptTokens: 100, completionTokens: 20, totalTokens: 120 } as UsageInfo)
+    mw.onUsage!(c, { promptTokens: 40, completionTokens: 10, totalTokens: 50 } as UsageInfo)
+    mw.onUsage!(c, { promptTokens: 30, completionTokens: 5, totalTokens: 35 } as UsageInfo)
+    mw.onFinish!(c, { finishReason: 'stop', duration: 30, content: '' } as FinishInfo)
+
+    const root = spans.find((s) => s.name === 'assistant.turn')!
+    expect(root.attributes['gen_ai.usage.input_tokens']).toBe(170)
+    expect(root.attributes['gen_ai.usage.output_tokens']).toBe(35)
+    expect(root.attributes['gen_ai.usage.total_tokens']).toBe(205)
+  })
+
   it('never puts tool args, tool results, or customer text on any span', () => {
     const { tracer, spans } = makeTestTracer()
     const mw = createAssistantTracingMiddleware(ATTRS, tracer)

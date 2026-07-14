@@ -6,6 +6,7 @@
  * Toolset scenarios assert on the assembled tool set with no model call.
  * Contrast scenarios run the same prompt under two configs and judge the pair.
  */
+import type { PrincipalId } from '@quackback/ids'
 import { testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   runAssistantTurn,
@@ -43,16 +44,31 @@ function threadFor(scenario: TurnScenario): ThreadMessage[] {
   return []
 }
 
+/** Excerpt cap for a seeded source handed to the groundedness judge. */
+const JUDGE_SOURCE_EXCERPT_CHARS = 600
+
+/**
+ * The knowledge the reply was allowed to ground on, for a groundedness judge:
+ * each seeded KB article as title + a trimmed excerpt. Empty for scenarios that
+ * seed no articles (the judge then grades on prompt + reply alone, as before).
+ */
+function sourcesForJudge(scenario: TurnScenario): { title: string; excerpt: string }[] {
+  return (scenario.fixtures?.kbArticles ?? []).map((a) => ({
+    title: a.title,
+    excerpt: a.content.slice(0, JUDGE_SOURCE_EXCERPT_CHARS),
+  }))
+}
+
 function buildTurnInput(
   scenario: TurnScenario,
   role: AssistantRole,
-  assistantPrincipalId: string,
+  assistantPrincipalId: PrincipalId,
   conversation: SeededConversation | undefined
 ): AssistantTurnInput {
   const surface = surfaceForRole(scenario, role)
   const messages = threadFor(scenario)
   const common = {
-    assistantPrincipalId: assistantPrincipalId as never,
+    assistantPrincipalId,
     db: testDb,
     conversationId: conversation?.conversationId ?? null,
     involvementId: conversation?.involvementId ?? null,
@@ -145,6 +161,11 @@ async function runTurnOnce(scenario: TurnScenario, role: AssistantRole): Promise
           .join('\n'),
         reply: capture.text,
         citations: capture.citations.map((c) => `${c.type}:${c.id}`),
+        // A groundedness judge can only check the reply against the knowledge it
+        // was allowed to cite; hand it the seeded source snippets (title +
+        // excerpt) so it verifies support rather than penalizing facts it cannot
+        // see. Non-grounding rubrics simply ignore these.
+        sources: sourcesForJudge(scenario),
       })
       detail.judge = verdict
       if (!verdict.pass) failures.push(`judge(${scenario.rubric.dimension}): ${verdict.reasoning}`)
@@ -212,7 +233,7 @@ export async function runToolsetScenario(
 
   const ctx = makeAssistantToolContext({
     db: testDb,
-    assistantPrincipalId: seeded.assistantPrincipalId as never,
+    assistantPrincipalId: seeded.assistantPrincipalId,
     role,
     audience,
     conversationId,

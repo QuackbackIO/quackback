@@ -1158,6 +1158,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     messages: modelMessages,
     outputSchema: assistantOutputSchema,
     middleware: [tracingMiddleware],
+    // The user-interactive agentic turn re-dials a pristine transport RUN_ERROR
+    // (nothing streamed, no tool ran) up to twice; a committed failure never
+    // re-dials. Inline callers (evaluator/guidance) keep the default 0.
+    transportRetries: 2,
     tools: {
       specs: tools,
       context: toolContext,

@@ -7,6 +7,7 @@
 import { mkdirSync, writeFileSync, appendFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { slugify } from '@/lib/shared/utils'
 
 export const resultsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.results')
 
@@ -27,17 +28,10 @@ export interface Transcript {
   detail: Record<string, unknown>
 }
 
-function slug(s: string): string {
-  return s
-    .replace(/[^a-z0-9]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase()
-}
-
 /** Write one failing scenario's full trace to disk; returns the file path. */
 export function writeTranscript(t: Transcript): string {
   ensureDir()
-  const file = path.join(resultsDir, `${slug(t.id)}-${slug(t.role)}.json`)
+  const file = path.join(resultsDir, `${slugify(t.id)}-${slugify(t.role)}.json`)
   writeFileSync(file, JSON.stringify(t, null, 2))
   return file
 }

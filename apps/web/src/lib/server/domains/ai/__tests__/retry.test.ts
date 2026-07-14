@@ -72,6 +72,48 @@ describe('retry', () => {
 
       expect(fn).toHaveBeenCalledTimes(2) // initial + 1 retry
     })
+
+    it('aborting during backoff rejects promptly and does not re-dial', async () => {
+      const controller = new AbortController()
+      // Every attempt is retryable, so without the abort this would re-dial up
+      // to maxRetries times. The signal fires while the first backoff sleep is
+      // pending: the sleep must reject and no second call may happen.
+      const fn = vi.fn().mockImplementation(() => {
+        // Abort as soon as the first attempt has failed and we are about to
+        // sleep. Scheduling on a microtask keeps this after the throw.
+        queueMicrotask(() => controller.abort())
+        return Promise.reject(new Error('429 rate limit'))
+      })
+
+      let caught: (Error & { retryCount?: number }) | undefined
+      try {
+        await withRetry(fn, {
+          maxRetries: 3,
+          baseDelayMs: 10_000,
+          maxDelayMs: 10_000,
+          signal: controller.signal,
+        })
+      } catch (e) {
+        caught = e as Error & { retryCount?: number }
+      }
+
+      expect(caught).toBeDefined()
+      // Only the first dial ran; the backoff was aborted before a re-dial.
+      expect(fn).toHaveBeenCalledTimes(1)
+      // The accumulated retry count rides the escaping error for the usage log.
+      expect(caught!.retryCount).toBe(1)
+    })
+
+    it('rejects immediately when the signal is already aborted at backoff time', async () => {
+      const controller = new AbortController()
+      controller.abort()
+      const fn = vi.fn().mockRejectedValue(new Error('503 service unavailable'))
+
+      await expect(
+        withRetry(fn, { maxRetries: 3, baseDelayMs: 1, signal: controller.signal })
+      ).rejects.toThrow()
+      expect(fn).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('isRetryableError', () => {

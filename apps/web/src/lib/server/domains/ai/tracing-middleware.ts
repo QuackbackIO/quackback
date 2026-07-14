@@ -55,6 +55,13 @@ interface TurnSpanState {
   /** Child span per in-flight tool call, keyed by toolCallId. */
   toolSpans: Map<string, Span>
   toolCallCount: number
+  /**
+   * Running token totals summed across every onUsage the turn fires — one per
+   * agent-loop iteration. The attributes carry the accumulated sum, not just
+   * the last iteration's slice (which used to overwrite and undercount a
+   * multi-iteration turn).
+   */
+  usage: { input: number; output: number; total: number }
 }
 
 /**
@@ -100,7 +107,12 @@ export function createAssistantTracingMiddleware(
           'quackback.assistant.config_revision': attributes.configRevision,
         },
       })
-      turns.set(ctx.requestId, { root, toolSpans: new Map(), toolCallCount: 0 })
+      turns.set(ctx.requestId, {
+        root,
+        toolSpans: new Map(),
+        toolCallCount: 0,
+        usage: { input: 0, output: 0, total: 0 },
+      })
     },
 
     onBeforeToolCall(ctx: ChatMiddlewareContext, hookCtx: ToolCallHookContext) {
@@ -134,16 +146,20 @@ export function createAssistantTracingMiddleware(
     },
 
     onUsage(ctx: ChatMiddlewareContext, usage: UsageInfo) {
-      const root = turns.get(ctx.requestId)?.root
-      if (!root) return
+      const state = turns.get(ctx.requestId)
+      // Cheap short-circuit: with no exporter registered the span is a non-
+      // recording no-op, so skip the bookkeeping entirely.
+      if (!state || !state.root.isRecording()) return
+      // onUsage fires once per agent-loop iteration; accumulate so the final
+      // attributes reflect the whole turn, not just the last iteration's slice.
       // OTel gen_ai names input/output; TanStack's TokenUsage names
       // prompt/completion. Map, guarding each in case a provider omits it.
-      if (typeof usage.promptTokens === 'number')
-        root.setAttribute('gen_ai.usage.input_tokens', usage.promptTokens)
-      if (typeof usage.completionTokens === 'number')
-        root.setAttribute('gen_ai.usage.output_tokens', usage.completionTokens)
-      if (typeof usage.totalTokens === 'number')
-        root.setAttribute('gen_ai.usage.total_tokens', usage.totalTokens)
+      if (typeof usage.promptTokens === 'number') state.usage.input += usage.promptTokens
+      if (typeof usage.completionTokens === 'number') state.usage.output += usage.completionTokens
+      if (typeof usage.totalTokens === 'number') state.usage.total += usage.totalTokens
+      state.root.setAttribute('gen_ai.usage.input_tokens', state.usage.input)
+      state.root.setAttribute('gen_ai.usage.output_tokens', state.usage.output)
+      state.root.setAttribute('gen_ai.usage.total_tokens', state.usage.total)
     },
 
     onFinish(ctx: ChatMiddlewareContext, info: FinishInfo) {

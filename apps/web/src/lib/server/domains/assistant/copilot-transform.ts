@@ -184,6 +184,8 @@ export async function runCopilotTransform(
     ],
     outputSchema: transformOutputSchema,
     tools: null,
+    // A teammate can just re-run a transform; no transport re-dial (default 0).
+    transportRetries: 0,
     deltaField: 'text',
     salvageMode: 'strict',
     salvage: (raw) => salvageJsonWithSchema(transformOutputSchema, raw),

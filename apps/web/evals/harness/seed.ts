@@ -27,6 +27,10 @@ import {
   helpCenterCategories,
   assistantGuidanceRules,
   conversationAttributeDefinitions,
+  tickets,
+  ticketStatuses,
+  ticketSummaries,
+  changelogEntries,
 } from '@/lib/server/db'
 import { testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
@@ -36,8 +40,16 @@ import {
   generateKbEmbedding,
   formatArticleText,
 } from '@/lib/server/domains/help-center/help-center-embedding.service'
+import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
-import type { Fixtures, ScenarioConfig, SeedGuidance, SeedKbArticle } from '../types'
+import type {
+  Fixtures,
+  ScenarioConfig,
+  SeedChangelogEntry,
+  SeedGuidance,
+  SeedKbArticle,
+  SeedTicketSummary,
+} from '../types'
 
 function suffix(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -135,6 +147,87 @@ export async function seedKbArticle(
   return articleId
 }
 
+/**
+ * Embed `text` with the configured model (the same path retrieval embeds
+ * queries through), failing loudly if the endpoint returns nothing — a
+ * grounding scenario cannot retrieve without a vector. Returns a pgvector
+ * literal ready for a `::vector` cast.
+ */
+async function embedOrThrow(text: string, what: string): Promise<string> {
+  const embedding = await generateEmbedding(text, { pipelineStep: 'eval_seed' })
+  if (!embedding) {
+    throw new Error(
+      `[evals] Embedding generation returned null while seeding a ${what}. ` +
+        'Check OPENAI_API_KEY/OPENAI_BASE_URL and AI_EMBEDDING_MODEL.'
+    )
+  }
+  return `[${embedding.join(',')}]`
+}
+
+/** Find-or-create a ticket status so a seeded ticket has a valid FK target. */
+async function ensureTicketStatusId() {
+  const [existing] = await testDb.select({ id: ticketStatuses.id }).from(ticketStatuses).limit(1)
+  if (existing) return existing.id
+  const id = createId('ticket_status')
+  await testDb.insert(ticketStatuses).values({
+    id,
+    name: 'Closed',
+    slug: `eval-closed-${suffix()}`,
+    category: 'closed',
+    position: 0,
+  })
+  return id
+}
+
+/**
+ * Seed a closed-ticket resolution summary with a real embedding, backed by a
+ * throwaway ticket (+ status) to satisfy the FK. Team-only knowledge: only the
+ * copilot ever retrieves it (see `tickets-retrieval.ts`).
+ */
+export async function seedTicketSummary(ticket: SeedTicketSummary): Promise<string> {
+  const statusId = await ensureTicketStatusId()
+  const ticketId = createId('ticket')
+  await testDb.insert(tickets).values({
+    id: ticketId,
+    type: 'customer',
+    title: 'Eval resolved ticket',
+    statusId,
+  })
+  const vectorLiteral = await embedOrThrow(ticket.summary, 'ticket summary')
+  await testDb.insert(ticketSummaries).values({
+    id: createId('ticket_summary'),
+    ticketId,
+    summary: ticket.summary,
+    embedding: sql`${vectorLiteral}::vector`,
+    embeddingModel: getEmbeddingModel() ?? 'unknown',
+    embeddingUpdatedAt: new Date(),
+  })
+  return ticketId
+}
+
+/**
+ * Seed a changelog entry with a real embedding. A published entry is
+ * customer-visible (public `/changelog/<id>` citation); a draft
+ * (`published: false`) is team-only and trips the copilot leak gate.
+ */
+export async function seedChangelogEntry(entry: SeedChangelogEntry): Promise<string> {
+  const isPublished = entry.published ?? true
+  const entryId = createId('changelog')
+  const vectorLiteral = await embedOrThrow(`${entry.title}\n\n${entry.content}`, 'changelog entry')
+  await testDb.insert(changelogEntries).values({
+    id: entryId,
+    title: entry.title,
+    content: entry.content,
+    // Published a beat in the past so the `published_at <= now()` filter passes;
+    // a draft leaves it null (never retrievable at a public ceiling).
+    publishedAt: isPublished ? new Date(Date.now() - 60_000) : null,
+    embedding: sql`${vectorLiteral}::vector`,
+    embeddingModel: getEmbeddingModel() ?? 'unknown',
+    embeddingUpdatedAt: new Date(),
+  })
+  return entryId
+}
+
 export async function seedGuidanceRule(rule: SeedGuidance): Promise<void> {
   await testDb.insert(assistantGuidanceRules).values({
     id: createId('assistant_guidance'),
@@ -220,6 +313,12 @@ export async function seedFixtures(
 
   for (const article of fixtures?.kbArticles ?? []) {
     await seedKbArticle(assistantPrincipalId, article)
+  }
+  for (const ticket of fixtures?.ticketSummaries ?? []) {
+    await seedTicketSummary(ticket)
+  }
+  for (const entry of fixtures?.changelogEntries ?? []) {
+    await seedChangelogEntry(entry)
   }
   for (const rule of fixtures?.guidance ?? []) {
     await seedGuidanceRule(rule)

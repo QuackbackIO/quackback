@@ -142,6 +142,10 @@ export async function synthesizeAnswer(params: SynthesizeAnswerParams): Promise<
     messages: [{ role: 'user', content: params.query }],
     outputSchema: answerSchema,
     tools: null,
+    // User-facing single-shot Ask AI: one transport re-dial on a pristine
+    // RUN_ERROR (nothing streamed) is worth the small added latency to turn a
+    // transient 429/5xx into an answer; a committed failure never re-dials.
+    transportRetries: 1,
     deltaField: 'answer',
     salvageMode: 'strict',
     salvage: (raw) => salvageJsonWithSchema(answerSchema, raw),

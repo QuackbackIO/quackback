@@ -43,7 +43,7 @@ export const groundingScenarios: Scenario[] = [
       { type: 'citationsSubsetOfLedger' },
       { type: 'searchCallsAtMost', n: 3 },
     ],
-    rubric: { file: 'groundedness.v1.md', dimension: 'groundedness' },
+    rubric: { file: 'groundedness.v2.md', dimension: 'groundedness' },
   },
   {
     id: '02',
@@ -85,7 +85,7 @@ export const groundingScenarios: Scenario[] = [
       { type: 'minCitations', n: 1 },
       { type: 'searchCallsAtMost', n: 3 },
     ],
-    rubric: { file: 'groundedness.v1.md', dimension: 'groundedness' },
+    rubric: { file: 'groundedness.v2.md', dimension: 'groundedness' },
   },
   {
     id: '05',
@@ -105,6 +105,6 @@ export const groundingScenarios: Scenario[] = [
       { type: 'status', oneOf: ['answered'] },
       { type: 'searchCallsAtMost', n: 3 },
     ],
-    rubric: { file: 'groundedness.v1.md', dimension: 'groundedness' },
+    rubric: { file: 'groundedness.v2.md', dimension: 'groundedness' },
   },
 ]

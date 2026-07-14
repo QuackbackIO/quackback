@@ -19,10 +19,11 @@ export const languageScenarios: Scenario[] = [
     surface: 'widget',
     fixtures: { kbArticles: [HOURS_ARTICLE] },
     prompt: 'Bonjour, quels sont vos horaires de support pendant la semaine ?',
-    structural: [
-      { type: 'status', oneOf: ['answered'] },
-      { type: 'replyLanguage', lang: 'fr' },
-    ],
+    structural: [{ type: 'status', oneOf: ['answered'] }],
+    // Language is judged, not heuristically sniffed: a marker-count heuristic
+    // over-rejected fluent French replies that happened to use few of its
+    // function words. A single cheap judge call reads far more reliably.
+    rubric: { file: 'language.v1.md', dimension: 'language' },
   },
   {
     id: '25',

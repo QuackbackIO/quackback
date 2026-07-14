@@ -31,29 +31,6 @@ export interface ToolsetCapture {
 
 export type Capture = TurnCapture | ToolsetCapture
 
-/** French detection: accented chars + high-frequency function words. */
-export function detectFrench(text: string): boolean {
-  const lower = text.toLowerCase()
-  const markers = [
-    ' vous ',
-    ' votre ',
-    ' nous ',
-    ' est ',
-    ' pour ',
-    ' avec ',
-    ' bonjour',
-    ' merci',
-    ' pouvez',
-    'ê',
-    ' à ',
-    'ç',
-    'é',
-    'è',
-  ]
-  const hits = markers.filter((m) => lower.includes(m)).length
-  return hits >= 2
-}
-
 function searchCallCount(outcomes: AssistantToolOutcome[]): number {
   return outcomes.filter((o) => o.name === 'search_knowledge').length
 }
@@ -98,6 +75,22 @@ function gradeOne(a: Structural, cap: Capture): string | null {
       return citations.length >= a.n ? null : `expected ≥${a.n} citations, got ${citations.length}`
     case 'noCitations':
       return citations.length === 0 ? null : `expected 0 citations, got ${citations.length}`
+    case 'citesType': {
+      const ofType = citations.filter((c) => c.type === a.citationType)
+      if (ofType.length === 0) {
+        return `expected a "${a.citationType}" citation, got [${citations.map((c) => c.type).join(', ') || 'none'}]`
+      }
+      if (a.internal !== undefined && !ofType.some((c) => (c.internal ?? false) === a.internal)) {
+        return `expected a "${a.citationType}" citation with internal=${a.internal}, got internal flags [${ofType.map((c) => String(c.internal ?? false)).join(', ')}]`
+      }
+      return null
+    }
+    case 'excludesCitationType': {
+      const ofType = citations.filter((c) => c.type === a.citationType)
+      return ofType.length === 0
+        ? null
+        : `expected no "${a.citationType}" citations, got ${ofType.length}`
+    }
     case 'citationsSubsetOfLedger': {
       // The runtime drops any cited id not in the run ledger (assembleCitations)
       // and throws `fabricated_citation` if the model insists — so a returned
@@ -129,11 +122,6 @@ function gradeOne(a: Structural, cap: Capture): string | null {
       return cap.internalSourced === a.value
         ? null
         : `expected internalSourced=${a.value}, got ${cap.internalSourced}`
-    case 'replyLanguage': {
-      const isFr = detectFrench(text)
-      if (a.lang === 'fr') return isFr ? null : `expected a French reply, detected non-French`
-      return isFr ? `expected a non-French reply, detected French` : null
-    }
     case 'noWrites': {
       const writes = toolOutcomes.filter(
         (o) => o.outcome === 'executed' || o.outcome === 'proposed'
