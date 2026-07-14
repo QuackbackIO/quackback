@@ -25,6 +25,8 @@ import {
   createStatusIncidentTemplateFn,
   updateStatusIncidentTemplateFn,
   deleteStatusIncidentTemplateFn,
+  addStatusSubscriberFn,
+  importStatusSubscribersFn,
   updateStatusSettingsFn,
 } from '@/lib/server/functions/status'
 import { statusKeys } from '@/lib/client/queries/status'
@@ -227,6 +229,28 @@ export function useDeleteStatusIncidentTemplate() {
   return useMutation({
     mutationFn: (id: string) => deleteStatusIncidentTemplateFn({ data: { id } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: statusKeys.templates() }),
+  })
+}
+
+// ─── Subscribers ─────────────────────────────────────────────────────────
+
+/** Manually subscribe a single existing account by email. Invalidates the
+ *  subscriber list + counts on success. */
+export function useAddStatusSubscriber() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (email: string) => addStatusSubscriberFn({ data: { email } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: statusKeys.subscribers() }),
+  })
+}
+
+/** Admin CSV bulk import. Invalidates the subscriber list + counts on success;
+ *  the caller surfaces the imported/skipped tallies from the response. */
+export function useImportStatusSubscribers() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (emails: string[]) => importStatusSubscribersFn({ data: { emails } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: statusKeys.subscribers() }),
   })
 }
 

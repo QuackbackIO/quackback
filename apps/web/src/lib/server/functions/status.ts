@@ -48,6 +48,9 @@ import {
   deleteStatusIncidentTemplate,
   listStatusSubscriptions,
   getStatusSubscriptionCounts,
+  addStatusSubscriberByEmail,
+  importStatusSubscribersFromEmails,
+  listAllStatusSubscribersForExport,
   countActiveSubscribersForComponents,
   isStatusAudienceGranted,
   getStatusPageSnapshot,
@@ -359,6 +362,7 @@ const createStatusIncidentSchema = z.object({
   autoComplete: z.boolean().optional(),
   backfill: z.object({ startedAt: z.coerce.date(), resolvedAt: z.coerce.date() }).optional(),
   notifySubscribers: z.boolean().optional(),
+  templateId: z.string().optional(),
 })
 
 export const createStatusIncidentFn = createServerFn({ method: 'POST' })
@@ -385,6 +389,7 @@ export const createStatusIncidentFn = createServerFn({ method: 'POST' })
           autoComplete: data.autoComplete,
           backfill: data.backfill,
           notifySubscribers: data.notifySubscribers,
+          templateId: data.templateId as StatusIncidentTemplateId | undefined,
         },
         { principalId: auth.principal.id }
       )
@@ -438,6 +443,7 @@ const postStatusIncidentUpdateSchema = z.object({
   status: incidentOrMaintenanceStatusEnum,
   body: z.string().min(1),
   skipRestore: z.boolean().optional(),
+  templateId: z.string().optional(),
 })
 
 export const postStatusIncidentUpdateFn = createServerFn({ method: 'POST' })
@@ -448,7 +454,12 @@ export const postStatusIncidentUpdateFn = createServerFn({ method: 'POST' })
       const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
       const incident = await postIncidentUpdate(
         data.id as StatusIncidentId,
-        { status: data.status, body: data.body, skipRestore: data.skipRestore },
+        {
+          status: data.status,
+          body: data.body,
+          skipRestore: data.skipRestore,
+          templateId: data.templateId as StatusIncidentTemplateId | undefined,
+        },
         { principalId: auth.principal.id }
       )
       return serializeIncident(incident)
@@ -536,6 +547,27 @@ export const listStatusIncidentsAdminFn = createServerFn({ method: 'GET' })
       return { ...result, items: result.items.map(serializeIncident) }
     } catch (error) {
       log.error({ err: error }, 'list status incidents admin failed')
+      throw error
+    }
+  })
+
+const getStatusUptimeAdminSchema = z.object({
+  componentIds: z.array(z.string()).min(1),
+  windowDays: z.number().int().positive().max(365).optional(),
+})
+
+/** Uptime series for the Services manager's inline strips. Not the
+ *  viewer-gated public fn (it returns [] when the page is disabled, and
+ *  admins need this precisely while configuring a disabled page). */
+export const getStatusUptimeAdminFn = createServerFn({ method: 'GET' })
+  .validator(getStatusUptimeAdminSchema)
+  .handler(async ({ data }) => {
+    try {
+      const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+      const actor = await policyActorFromAuth(auth)
+      return await getUptimeSeries(actor, data.componentIds as StatusComponentId[], data.windowDays)
+    } catch (error) {
+      log.error({ err: error }, 'get status uptime admin failed')
       throw error
     }
   })
@@ -738,6 +770,7 @@ export const deleteStatusIncidentTemplateFn = createServerFn({ method: 'POST' })
 const listStatusSubscriptionsSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().positive().max(100).optional(),
+  search: z.string().trim().max(200).optional(),
 })
 
 export const listStatusSubscriptionsAdminFn = createServerFn({ method: 'GET' })
@@ -746,7 +779,11 @@ export const listStatusSubscriptionsAdminFn = createServerFn({ method: 'GET' })
     log.debug({ cursor: data.cursor, limit: data.limit }, 'list status subscriptions admin')
     try {
       await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      const result = await listStatusSubscriptions({ cursor: data.cursor, limit: data.limit })
+      const result = await listStatusSubscriptions({
+        cursor: data.cursor,
+        limit: data.limit,
+        search: data.search,
+      })
       return {
         ...result,
         items: result.items.map((item) => ({
@@ -770,6 +807,63 @@ export const getStatusSubscriptionCountsFn = createServerFn({ method: 'GET' }).h
     throw error
   }
 })
+
+const addStatusSubscriberSchema = z.object({ email: z.string().trim().email() })
+
+/** Manually subscribe an existing account by email (admin add flow). 404s a
+ *  clear message when no account matches; never creates a portal account. */
+export const addStatusSubscriberFn = createServerFn({ method: 'POST' })
+  .validator(addStatusSubscriberSchema)
+  .handler(async ({ data }) => {
+    log.debug({ email: data.email }, 'add status subscriber')
+    try {
+      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+      await addStatusSubscriberByEmail(data.email)
+      return { success: true }
+    } catch (error) {
+      log.error({ err: error }, 'add status subscriber failed')
+      throw error
+    }
+  })
+
+const importStatusSubscribersSchema = z.object({
+  emails: z.array(z.string()).max(5000),
+})
+
+/** Admin CSV bulk import of subscriber emails. Matches EXISTING accounts only;
+ *  unmatched emails are reported as skipped (the consent copy is shown in the
+ *  UI before this runs — the manage gate bounds who can reach it). */
+export const importStatusSubscribersFn = createServerFn({ method: 'POST' })
+  .validator(importStatusSubscribersSchema)
+  .handler(async ({ data }) => {
+    log.info({ count: data.emails.length }, 'import status subscribers from CSV')
+    try {
+      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+      return await importStatusSubscribersFromEmails(data.emails)
+    } catch (error) {
+      log.error({ err: error }, 'import status subscribers failed')
+      throw error
+    }
+  })
+
+/** Full unpaginated subscriber set for the client-side CSV export. The
+ *  paginated list fn caps at 100/page, so exporting needs a dedicated read. */
+export const exportStatusSubscribersAdminFn = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    try {
+      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+      const rows = await listAllStatusSubscribersForExport()
+      return rows.map((r) => ({
+        ...r,
+        createdAt: toIsoString(r.createdAt),
+        unsubscribedAt: toIsoStringOrNull(r.unsubscribedAt),
+      }))
+    } catch (error) {
+      log.error({ err: error }, 'export status subscribers admin failed')
+      throw error
+    }
+  }
+)
 
 // ============================================================================
 // Admin: Settings (gate: STATUS_PAGE_MANAGE)

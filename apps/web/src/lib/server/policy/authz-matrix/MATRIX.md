@@ -521,6 +521,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/status.ts`::clearStatusHistoryFn | status_page.manage |
 | `lib/server/functions/status.ts`::getStatusIncidentAdminFn | status_page.publish |
 | `lib/server/functions/status.ts`::listStatusIncidentsAdminFn | status_page.publish |
+| `lib/server/functions/status.ts`::getStatusUptimeAdminFn | status_page.manage |
 | `lib/server/functions/status.ts`::getStatusOverviewAdminFn | status_page.publish |
 | `lib/server/functions/status.ts`::startStatusMaintenanceNowFn | status_page.publish |
 | `lib/server/functions/status.ts`::listStatusIncidentTemplatesFn | status_page.publish |
@@ -529,6 +530,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/status.ts`::deleteStatusIncidentTemplateFn | status_page.manage |
 | `lib/server/functions/status.ts`::listStatusSubscriptionsAdminFn | status_page.manage |
 | `lib/server/functions/status.ts`::getStatusSubscriptionCountsFn | status_page.manage |
+| `lib/server/functions/status.ts`::addStatusSubscriberFn | status_page.manage |
+| `lib/server/functions/status.ts`::importStatusSubscribersFn | status_page.manage |
+| `lib/server/functions/status.ts`::exportStatusSubscribersAdminFn | status_page.manage |
 | `lib/server/functions/status.ts`::getStatusSettingsFn | status_page.manage |
 | `lib/server/functions/status.ts`::updateStatusSettingsFn | status_page.manage |
 | `lib/server/functions/statuses.ts`::fetchStatusesFn | status.view |

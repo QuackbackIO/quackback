@@ -110,6 +110,7 @@ export function AffectedComponentsField({
 }
 
 export interface TemplateApplyPayload {
+  id: string
   title: string
   body: string
   impact: StatusIncidentImpact

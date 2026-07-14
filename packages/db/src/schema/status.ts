@@ -146,6 +146,12 @@ export const statusIncidentUpdates = pgTable(
     createdBy: typeIdColumnNullable('principal')('created_by').references(() => principal.id, {
       onDelete: 'set null',
     }),
+    // Provenance: the template this update was inserted from, if any. Nulled on
+    // template delete so the row survives; usage counts derive from count(*).
+    templateId: typeIdColumnNullable('status_tmpl')('template_id').references(
+      () => statusIncidentTemplates.id,
+      { onDelete: 'set null' }
+    ),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [index('status_incident_updates_incident_idx').on(table.incidentId, table.createdAt)]

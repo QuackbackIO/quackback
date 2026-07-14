@@ -54,6 +54,9 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
   // otherwise the template's pre-classified severity would be silently
   // dropped in favor of the derived value.
   const [templateImpact, setTemplateImpact] = useState<StatusIncidentImpact | null>(null)
+  // Provenance: which template seeded this report, if any. Survives later edits
+  // to the text — applying a template then rewriting still counts as a use.
+  const [templateId, setTemplateId] = useState<string | null>(null)
   const [notify, setNotify] = useState(true)
   const [backfillStart, setBackfillStart] = useState<Date | undefined>(undefined)
   const [backfillEnd, setBackfillEnd] = useState<Date | undefined>(undefined)
@@ -64,6 +67,7 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
     setBody('')
     setAffected([])
     setTemplateImpact(null)
+    setTemplateId(null)
     setNotify(true)
     setBackfillStart(undefined)
     setBackfillEnd(undefined)
@@ -87,6 +91,7 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
         title: title.trim(),
         status: backfill ? 'resolved' : 'investigating',
         ...(templateImpact ? { impact: templateImpact, impactOverride: true } : {}),
+        ...(templateId ? { templateId } : {}),
         affectedComponents: affected,
         body: body.trim(),
         ...(backfill && backfillStart && backfillEnd
@@ -141,6 +146,7 @@ export function ReportIncidentDialog({ variant = 'default' }: { variant?: 'defau
                   setTitle(t.title)
                   setBody(t.body)
                   setAffected(templateToAffectedRows(t.componentIds, 'incident'))
+                  setTemplateId(t.id)
                   setTemplateImpact(
                     t.impact === 'minor' || t.impact === 'major' || t.impact === 'critical'
                       ? t.impact

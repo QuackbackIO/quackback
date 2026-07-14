@@ -26,6 +26,7 @@ import {
   UsersIcon,
 } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -65,7 +66,12 @@ import {
   useSetStatusComponentStatus,
   useUpdateStatusComponent,
 } from '@/lib/client/mutations/status'
-import { COMPONENT_STATUS_OPTIONS, type StatusComponentStatus } from './status-admin-colors'
+import {
+  COMPONENT_STATUS_COLORS,
+  COMPONENT_STATUS_OPTIONS,
+  type StatusComponentStatus,
+} from './status-admin-colors'
+import type { StatusUptimeDay } from '@/lib/client/queries/status'
 
 interface ComponentFormValues {
   name: string
@@ -87,6 +93,28 @@ export function StatusComponentsView() {
   const { data, isLoading } = useQuery(statusComponentQueries.list())
   const [groups, setGroups] = useState<StatusComponentGroupAdmin[]>([])
   const [ungrouped, setUngrouped] = useState<StatusComponentAdmin[]>([])
+  const [search, setSearch] = useState('')
+
+  // One uptime fetch for every service with a bar; rows look their series
+  // up by id. 90 days to match the public page's window.
+  const uptimeIds = [...ungrouped, ...groups.flatMap((g) => g.components)]
+    .filter((c) => c.showUptime)
+    .map((c) => c.id)
+  const uptimeQuery = useQuery(statusComponentQueries.uptimeAdmin(uptimeIds))
+  const uptimeById = new Map((uptimeQuery.data ?? []).map((s) => [s.componentId, s.days]))
+
+  const term = search.trim().toLowerCase()
+  const matches = (c: StatusComponentAdmin) =>
+    term === '' ||
+    c.name.toLowerCase().includes(term) ||
+    (c.description ?? '').toLowerCase().includes(term)
+  const visibleUngrouped = ungrouped.filter(matches)
+  const visibleGroups = groups
+    .map((g) => ({ ...g, components: g.components.filter(matches) }))
+    .filter((g) => term === '' || g.components.length > 0 || g.name.toLowerCase().includes(term))
+  // Reordering a filtered subset would rewrite positions for only the
+  // visible ids, so drag is disabled while searching.
+  const dragDisabled = term !== ''
 
   useEffect(() => {
     if (data) {
@@ -115,6 +143,7 @@ export function StatusComponentsView() {
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
+    if (dragDisabled) return
     if (!over || active.id === over.id) return
 
     // Groups themselves can be reordered when the dragged id matches a group.
@@ -143,7 +172,7 @@ export function StatusComponentsView() {
       try {
         await reorderComponents.mutateAsync(reordered.map((c) => c.id))
       } catch {
-        toast.error('Failed to reorder components')
+        toast.error('Failed to reorder services')
         if (data) setUngrouped(data.ungrouped)
       }
       return
@@ -161,7 +190,7 @@ export function StatusComponentsView() {
       try {
         await reorderComponents.mutateAsync(reorderedComponents.map((c) => c.id))
       } catch {
-        toast.error('Failed to reorder components')
+        toast.error('Failed to reorder services')
         if (data) setGroups(data.groups)
       }
       return
@@ -180,7 +209,7 @@ export function StatusComponentsView() {
     try {
       await updateComponentMutation.mutateAsync({ id: component.id, showUptime: checked })
     } catch {
-      toast.error('Failed to update component')
+      toast.error('Failed to update service')
     }
   }
 
@@ -189,7 +218,7 @@ export function StatusComponentsView() {
     try {
       await deleteComponentMutation.mutateAsync(deleteComponent.id)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete component')
+      toast.error(error instanceof Error ? error.message : 'Failed to delete service')
     } finally {
       setDeleteComponent(null)
     }
@@ -206,128 +235,160 @@ export function StatusComponentsView() {
     }
   }
 
-  if (isLoading) {
-    return <p className="p-6 text-sm text-muted-foreground">Loading components…</p>
-  }
-
   return (
-    <div className="max-w-4xl mx-auto w-full p-4 space-y-4">
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => setCreateGroupDialogOpen(true)}>
-          <PlusIcon className="h-4 w-4 mr-1.5" />
-          New group
-        </Button>
-        <Button size="sm" onClick={() => setCreateGroupId(null)}>
-          <PlusIcon className="h-4 w-4 mr-1.5" />
-          New component
-        </Button>
-      </div>
-
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="rounded-xl overflow-hidden border border-border/50 bg-card divide-y divide-border/50">
-          <SortableContext
-            items={ungrouped.map((c) => c.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            {ungrouped.map((component) => (
-              <SortableComponentRow
-                key={component.id}
-                component={component}
-                onStatusChange={handleStatusChange}
-                onUptimeToggle={handleUptimeToggle}
-                onEdit={() => setEditingComponent(component)}
-                onDelete={() => setDeleteComponent(component)}
-              />
-            ))}
-          </SortableContext>
-
-          <SortableContext items={groups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
-            {groups.map((group) => (
-              <div key={group.id}>
-                <SortableGroupHeader
-                  group={group}
-                  onDelete={() => setDeleteGroup(group)}
-                  onAddComponent={() => setCreateGroupId(group.id)}
-                />
-                <SortableContext
-                  items={group.components.map((c) => c.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {group.components.map((component) => (
-                    <SortableComponentRow
-                      key={component.id}
-                      component={component}
-                      indent
-                      onStatusChange={handleStatusChange}
-                      onUptimeToggle={handleUptimeToggle}
-                      onEdit={() => setEditingComponent(component)}
-                      onDelete={() => setDeleteComponent(component)}
-                    />
-                  ))}
-                </SortableContext>
-              </div>
-            ))}
-          </SortableContext>
-        </div>
-      </DndContext>
-
-      {groups.length === 0 && ungrouped.length === 0 && (
-        <div className="text-center py-10 space-y-3">
-          <p className="text-sm font-medium text-foreground">Add a status component</p>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Track a service so you can publish incidents, maintenance, and uptime.
-          </p>
+    <div className="max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5 flex items-center gap-2 border-b border-border/40">
+        <h2 className="text-sm font-semibold px-1">Services</h2>
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search services…"
+          className="h-8 w-48 text-sm bg-muted/30 border-border/50"
+        />
+        <div className="flex items-center gap-2 ml-auto">
+          <Button variant="outline" size="sm" onClick={() => setCreateGroupDialogOpen(true)}>
+            <PlusIcon className="h-4 w-4 mr-1.5" />
+            New group
+          </Button>
           <Button size="sm" onClick={() => setCreateGroupId(null)}>
-            Add component
+            <PlusIcon className="h-4 w-4 mr-1.5" />
+            New service
           </Button>
         </div>
+      </div>
+
+      {isLoading ? (
+        <div className="p-3 space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-3"
+            >
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-24 ml-auto" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="p-3 space-y-4">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm divide-y divide-border/50">
+              <SortableContext
+                items={visibleUngrouped.map((c) => c.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {visibleUngrouped.map((component) => (
+                  <SortableComponentRow
+                    key={component.id}
+                    component={component}
+                    uptimeDays={uptimeById.get(component.id)}
+                    dragDisabled={dragDisabled}
+                    onStatusChange={handleStatusChange}
+                    onUptimeToggle={handleUptimeToggle}
+                    onEdit={() => setEditingComponent(component)}
+                    onDelete={() => setDeleteComponent(component)}
+                  />
+                ))}
+              </SortableContext>
+
+              <SortableContext
+                items={visibleGroups.map((g) => g.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {visibleGroups.map((group) => (
+                  <div key={group.id}>
+                    <SortableGroupHeader
+                      group={group}
+                      onDelete={() => setDeleteGroup(group)}
+                      onAddComponent={() => setCreateGroupId(group.id)}
+                    />
+                    <SortableContext
+                      items={group.components.map((c) => c.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {group.components.map((component) => (
+                        <SortableComponentRow
+                          key={component.id}
+                          component={component}
+                          indent
+                          uptimeDays={uptimeById.get(component.id)}
+                          dragDisabled={dragDisabled}
+                          onStatusChange={handleStatusChange}
+                          onUptimeToggle={handleUptimeToggle}
+                          onEdit={() => setEditingComponent(component)}
+                          onDelete={() => setDeleteComponent(component)}
+                        />
+                      ))}
+                    </SortableContext>
+                  </div>
+                ))}
+              </SortableContext>
+            </div>
+          </DndContext>
+
+          {groups.length === 0 && ungrouped.length === 0 && (
+            <div className="text-center py-10 space-y-3">
+              <p className="text-sm font-medium text-foreground">Add a service</p>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                Track a service so you can publish incidents, maintenance, and uptime.
+              </p>
+              <Button size="sm" onClick={() => setCreateGroupId(null)}>
+                Add service
+              </Button>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground max-w-2xl">
+            Changing a service&apos;s status here updates the public page and uptime history. It
+            never emails subscribers; only publishing a new incident or scheduling maintenance does.
+          </p>
+
+          <ComponentFormDialog
+            open={createGroupId !== undefined}
+            onOpenChange={(o) => !o && setCreateGroupId(undefined)}
+            mode="create"
+            groups={groups}
+            defaultGroupId={createGroupId ?? null}
+          />
+
+          <ComponentFormDialog
+            open={!!editingComponent}
+            onOpenChange={(o) => !o && setEditingComponent(null)}
+            mode="edit"
+            groups={groups}
+            component={editingComponent}
+          />
+
+          <CreateGroupDialog open={createGroupDialogOpen} onOpenChange={setCreateGroupDialogOpen} />
+
+          <ConfirmDialog
+            open={!!deleteComponent}
+            onOpenChange={(o) => !o && setDeleteComponent(null)}
+            title="Delete service?"
+            description={`Are you sure you want to delete "${deleteComponent?.name}"? This cannot be undone.`}
+            confirmLabel="Delete"
+            variant="destructive"
+            isPending={deleteComponentMutation.isPending}
+            onConfirm={confirmDeleteComponent}
+          />
+
+          <ConfirmDialog
+            open={!!deleteGroup}
+            onOpenChange={(o) => !o && setDeleteGroup(null)}
+            title="Delete group?"
+            description={`Are you sure you want to delete "${deleteGroup?.name}"? Components in this group will become ungrouped.`}
+            confirmLabel="Delete"
+            variant="destructive"
+            isPending={deleteGroupMutation.isPending}
+            onConfirm={confirmDeleteGroup}
+          />
+        </div>
       )}
-
-      <p className="text-xs text-muted-foreground max-w-2xl">
-        Changing a component&apos;s status here logs a status event (source: manual) and updates
-        uptime history. It never emails subscribers — only publishing a new incident or scheduling
-        maintenance does.
-      </p>
-
-      <ComponentFormDialog
-        open={createGroupId !== undefined}
-        onOpenChange={(o) => !o && setCreateGroupId(undefined)}
-        mode="create"
-        groups={groups}
-        defaultGroupId={createGroupId ?? null}
-      />
-
-      <ComponentFormDialog
-        open={!!editingComponent}
-        onOpenChange={(o) => !o && setEditingComponent(null)}
-        mode="edit"
-        groups={groups}
-        component={editingComponent}
-      />
-
-      <CreateGroupDialog open={createGroupDialogOpen} onOpenChange={setCreateGroupDialogOpen} />
-
-      <ConfirmDialog
-        open={!!deleteComponent}
-        onOpenChange={(o) => !o && setDeleteComponent(null)}
-        title="Delete component?"
-        description={`Are you sure you want to delete "${deleteComponent?.name}"? This cannot be undone.`}
-        confirmLabel="Delete"
-        variant="destructive"
-        isPending={deleteComponentMutation.isPending}
-        onConfirm={confirmDeleteComponent}
-      />
-
-      <ConfirmDialog
-        open={!!deleteGroup}
-        onOpenChange={(o) => !o && setDeleteGroup(null)}
-        title="Delete group?"
-        description={`Are you sure you want to delete "${deleteGroup?.name}"? Components in this group will become ungrouped.`}
-        confirmLabel="Delete"
-        variant="destructive"
-        isPending={deleteGroupMutation.isPending}
-        onConfirm={confirmDeleteGroup}
-      />
     </div>
   )
 }
@@ -373,7 +434,7 @@ function SortableGroupHeader({
           size="icon"
           className="h-7 w-7"
           onClick={onAddComponent}
-          title="Add component"
+          title="Add service"
         >
           <PlusIcon className="h-3.5 w-3.5" />
         </Button>
@@ -391,9 +452,35 @@ function SortableGroupHeader({
   )
 }
 
+/** Compact 90-day uptime readout: the same data the public page renders,
+ *  trimmed to the last 45 day-bars plus the window average. */
+function UptimeStrip({ days }: { days: StatusUptimeDay[] }) {
+  const shown = days.slice(-45)
+  const avg = days.length > 0 ? days.reduce((sum, d) => sum + d.uptimePct, 0) / days.length : 100
+  return (
+    <div
+      className="hidden md:flex items-center gap-1.5 shrink-0"
+      title={`${avg.toFixed(2)}% uptime over ${days.length} days`}
+    >
+      <div className="flex items-end gap-px h-3.5">
+        {shown.map((d) => (
+          <span
+            key={d.date}
+            className="w-[3px] rounded-[1px] h-full"
+            style={{ backgroundColor: COMPONENT_STATUS_COLORS[d.worstStatus] }}
+          />
+        ))}
+      </div>
+      <span className="text-[11px] text-muted-foreground tabular-nums">{avg.toFixed(2)}%</span>
+    </div>
+  )
+}
+
 function SortableComponentRow({
   component,
   indent,
+  uptimeDays,
+  dragDisabled,
   onStatusChange,
   onUptimeToggle,
   onEdit,
@@ -401,6 +488,8 @@ function SortableComponentRow({
 }: {
   component: StatusComponentAdmin
   indent?: boolean
+  uptimeDays?: StatusUptimeDay[]
+  dragDisabled?: boolean
   onStatusChange: (id: string, status: StatusComponentStatus) => void
   onUptimeToggle: (component: StatusComponentAdmin, checked: boolean) => void
   onEdit: () => void
@@ -424,7 +513,8 @@ function SortableComponentRow({
       <button
         {...attributes}
         {...listeners}
-        className="touch-none cursor-grab active:cursor-grabbing"
+        disabled={dragDisabled}
+        className="touch-none cursor-grab active:cursor-grabbing disabled:invisible"
       >
         <Bars3Icon className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100" />
       </button>
@@ -443,6 +533,10 @@ function SortableComponentRow({
           <p className="text-xs text-muted-foreground truncate">{component.description}</p>
         )}
       </div>
+
+      {component.showUptime && uptimeDays && uptimeDays.length > 0 && (
+        <UptimeStrip days={uptimeDays} />
+      )}
 
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
         <Switch
@@ -464,7 +558,7 @@ function SortableComponentRow({
           size="icon"
           className="h-7 w-7"
           onClick={onEdit}
-          title="Edit component"
+          title="Edit service"
         >
           <PencilSquareIcon className="h-3.5 w-3.5" />
         </Button>
@@ -473,7 +567,7 @@ function SortableComponentRow({
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-destructive"
           onClick={onDelete}
-          title="Delete component"
+          title="Delete service"
         >
           <TrashIcon className="h-3.5 w-3.5" />
         </Button>
@@ -513,7 +607,7 @@ function CreateGroupDialog({
         <DialogHeader>
           <DialogTitle>New group</DialogTitle>
           <DialogDescription>
-            Groups organize related components on the status page.
+            Groups organize related services on the status page.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -602,7 +696,7 @@ function ComponentFormDialog({
       }
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save component')
+      toast.error(error instanceof Error ? error.message : 'Failed to save service')
     }
   }
 
@@ -610,7 +704,7 @@ function ComponentFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{mode === 'edit' ? 'Edit component' : 'New component'}</DialogTitle>
+          <DialogTitle>{mode === 'edit' ? 'Edit service' : 'New service'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -668,7 +762,7 @@ function ComponentFormDialog({
           <div className="space-y-2">
             <Label>Restrict to segments</Label>
             <p className="text-xs text-muted-foreground">
-              Leave empty to show this component to everyone who can view the status page.
+              Leave empty to show this service to everyone who can view the status page.
             </p>
             {segmentsQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Loading segments…</p>
@@ -686,7 +780,7 @@ function ComponentFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!values.name.trim() || isPending}>
-              {isPending ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create component'}
+              {isPending ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create service'}
             </Button>
           </DialogFooter>
         </form>

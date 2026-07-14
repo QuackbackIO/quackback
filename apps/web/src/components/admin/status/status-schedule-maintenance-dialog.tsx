@@ -44,6 +44,8 @@ export function ScheduleMaintenanceDialog({
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [affected, setAffected] = useState<AffectedRow[]>([])
+  // Provenance: which template seeded this window, if any (survives later edits).
+  const [templateId, setTemplateId] = useState<string | null>(null)
   const [scheduledStart, setScheduledStart] = useState<Date | undefined>(undefined)
   const [scheduledEnd, setScheduledEnd] = useState<Date | undefined>(undefined)
   const [autoStart, setAutoStart] = useState(true)
@@ -54,6 +56,7 @@ export function ScheduleMaintenanceDialog({
     setTitle('')
     setBody('')
     setAffected([])
+    setTemplateId(null)
     setScheduledStart(undefined)
     setScheduledEnd(undefined)
     setAutoStart(true)
@@ -80,6 +83,7 @@ export function ScheduleMaintenanceDialog({
         kind: 'maintenance',
         title: title.trim(),
         status: 'scheduled',
+        ...(templateId ? { templateId } : {}),
         affectedComponents: affected,
         body: body.trim(),
         scheduledStartAt: scheduledStart ?? null,
@@ -130,6 +134,7 @@ export function ScheduleMaintenanceDialog({
                   setTitle(t.title)
                   setBody(t.body)
                   setAffected(templateToAffectedRows(t.componentIds, 'maintenance'))
+                  setTemplateId(t.id)
                 }}
               />
             </div>

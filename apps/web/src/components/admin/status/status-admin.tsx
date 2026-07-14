@@ -123,7 +123,7 @@ function StatusFilterNav({ view }: { view: StatusAdminView }) {
             onClick={() => go('components')}
             count={componentCount}
           >
-            Components
+            Services
           </SideItem>
           <SideItem active={view === 'templates'} onClick={() => go('templates')}>
             Templates
@@ -177,7 +177,7 @@ export function StatusAdmin() {
           <StatusIncidentList
             kind="incident"
             state="active"
-            emptyMessage="No open incidents — all clear."
+            emptyMessage="No open incidents. All clear."
           />
         )}
         {view === 'maintenance' && (

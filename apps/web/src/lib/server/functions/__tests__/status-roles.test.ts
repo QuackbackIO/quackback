@@ -55,3 +55,13 @@ describe('status incident permissions', () => {
     expect(fnPermissionFor('clearStatusHistoryFn')).toBe('STATUS_PAGE_MANAGE')
   })
 })
+
+describe('status subscriber permissions', () => {
+  it.each([
+    ['addStatusSubscriberFn'],
+    ['importStatusSubscribersFn'],
+    ['exportStatusSubscribersAdminFn'],
+  ])('%s gates on status_page.manage (reshaping the page, not posting)', (fnName) => {
+    expect(fnPermissionFor(fnName)).toBe('STATUS_PAGE_MANAGE')
+  })
+})

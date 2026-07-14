@@ -12,6 +12,7 @@ import {
   listStatusIncidentsAdminFn,
   getStatusIncidentAdminFn,
   getStatusOverviewAdminFn,
+  getStatusUptimeAdminFn,
   listStatusIncidentTemplatesFn,
   listStatusSubscriptionsAdminFn,
   getStatusSubscriptionCountsFn,
@@ -64,7 +65,7 @@ export const statusKeys = {
   incidentDetail: (id: string) => [...statusKeys.incidents(), 'detail', id] as const,
   templates: () => [...statusKeys.all, 'templates'] as const,
   subscribers: () => [...statusKeys.all, 'subscribers'] as const,
-  subscriberList: () => [...statusKeys.subscribers(), 'list'] as const,
+  subscriberList: (search?: string) => [...statusKeys.subscribers(), 'list', search] as const,
   subscriberCounts: () => [...statusKeys.subscribers(), 'counts'] as const,
   settings: () => [...statusKeys.all, 'settings'] as const,
   // Public (portal-facing) reads — namespaced under 'public' so they never
@@ -78,12 +79,25 @@ export const statusKeys = {
   mySubscription: () => [...statusKeys.public(), 'my-subscription'] as const,
 }
 
+export type StatusUptimeSeriesAdmin = Awaited<ReturnType<typeof getStatusUptimeAdminFn>>[number]
+export type StatusUptimeDay = StatusUptimeSeriesAdmin['days'][number]
+
 export const statusComponentQueries = {
   list: () =>
     queryOptions({
       queryKey: statusKeys.components(),
       queryFn: () => listStatusComponentsAdminFn(),
       staleTime: STALE_TIME_SHORT,
+    }),
+
+  /** Inline uptime strips in the Services manager. Keyed on the sorted id
+   *  set; disabled while empty. */
+  uptimeAdmin: (componentIds: string[]) =>
+    queryOptions({
+      queryKey: [...statusKeys.components(), 'uptime-admin', [...componentIds].sort()] as const,
+      queryFn: () => getStatusUptimeAdminFn({ data: { componentIds } }),
+      enabled: componentIds.length > 0,
+      staleTime: STALE_TIME_MEDIUM,
     }),
 }
 
@@ -138,11 +152,11 @@ export const statusTemplateQueries = {
 }
 
 export const statusSubscriberQueries = {
-  list: () =>
+  list: (search?: string) =>
     infiniteQueryOptions({
-      queryKey: statusKeys.subscriberList(),
+      queryKey: statusKeys.subscriberList(search),
       queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-        listStatusSubscriptionsAdminFn({ data: { cursor: pageParam, limit: 30 } }),
+        listStatusSubscriptionsAdminFn({ data: { cursor: pageParam, limit: 30, search } }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
       staleTime: STALE_TIME_MEDIUM,

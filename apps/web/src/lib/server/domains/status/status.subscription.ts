@@ -13,12 +13,14 @@ import {
   desc,
   lt,
   or,
+  ilike,
   sql,
   statusSubscriptions,
   principal,
   user,
 } from '@/lib/server/db'
 import type { PrincipalId, StatusComponentId, StatusSubscriptionId } from '@quackback/ids'
+import { NotFoundError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import type {
   StatusSubscriptionScope,
@@ -27,6 +29,8 @@ import type {
   StatusSubscriptionAdminRow,
   StatusSubscriptionListResult,
   StatusSubscriptionCounts,
+  StatusSubscriptionCsvImportResult,
+  StatusSubscriptionExportRow,
 } from './status.types'
 
 const log = logger.child({ component: 'status-subscriptions' })
@@ -98,8 +102,9 @@ export async function getMySubscription(
 export async function listStatusSubscriptions(params: {
   cursor?: string
   limit?: number
+  search?: string
 }): Promise<StatusSubscriptionListResult> {
-  const { cursor, limit = 20 } = params
+  const { cursor, limit = 20, search } = params
   const conditions = []
 
   if (cursor) {
@@ -110,6 +115,12 @@ export async function listStatusSubscriptions(params: {
     if (cursorRow) {
       conditions.push(lt(statusSubscriptions.createdAt, cursorRow.createdAt))
     }
+  }
+
+  const term = search?.trim()
+  if (term) {
+    const pattern = `%${term}%`
+    conditions.push(or(ilike(user.email, pattern), ilike(principal.displayName, pattern)))
   }
 
   const rows = await db
@@ -158,6 +169,89 @@ export async function getStatusSubscriptionCounts(): Promise<StatusSubscriptionC
   const total = rows.length
   const active = rows.filter((r) => r.unsubscribedAt === null).length
   return { total, active, unsubscribed: total - active }
+}
+
+/** Admin "add a subscriber" by a single email. Matches an EXISTING account
+ *  (case-insensitive) and subscribes the principal page-wide; never creates a
+ *  portal account. 404s a clear message when no account matches the email. */
+export async function addStatusSubscriberByEmail(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase()
+  const matched = await db
+    .select({ principalId: principal.id })
+    .from(user)
+    .innerJoin(principal, eq(principal.userId, user.id))
+    .where(sql`lower(${user.email}) = ${normalized}`)
+    .limit(1)
+
+  const row = matched[0]
+  if (!row) {
+    throw new NotFoundError('STATUS_SUBSCRIBER_NOT_FOUND', 'No matching user for that email')
+  }
+
+  await subscribe(row.principalId, 'page', [], 'admin')
+}
+
+/**
+ * Admin CSV bulk import of subscriber emails. Mirrors
+ * `importChangelogSubscribersFromEmails`: normalize + dedupe, match EXISTING
+ * accounts by lower(email), skip (never create) unmatched, and upsert each
+ * match page-wide with the `csv_import` source. Returns the imported/skipped
+ * tallies so the UI can surface the skipped count.
+ */
+export async function importStatusSubscribersFromEmails(
+  emails: string[]
+): Promise<StatusSubscriptionCsvImportResult> {
+  const normalized = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))]
+  if (normalized.length === 0) {
+    return { imported: 0, skipped: 0, total: 0 }
+  }
+
+  let imported = 0
+  for (const email of normalized) {
+    const matched = await db
+      .select({ principalId: principal.id })
+      .from(user)
+      .innerJoin(principal, eq(principal.userId, user.id))
+      .where(sql`lower(${user.email}) = ${email}`)
+      .limit(1)
+
+    const row = matched[0]
+    if (!row) continue
+
+    await subscribe(row.principalId, 'page', [], 'csv_import')
+    imported++
+  }
+
+  return { imported, skipped: normalized.length - imported, total: normalized.length }
+}
+
+/** Full unpaginated subscriber set for the admin CSV export — the same
+ *  principal + user join the list read uses, minus the cursor/limit window. */
+export async function listAllStatusSubscribersForExport(): Promise<StatusSubscriptionExportRow[]> {
+  const rows = await db
+    .select({
+      scope: statusSubscriptions.scope,
+      componentIds: statusSubscriptions.componentIds,
+      source: statusSubscriptions.source,
+      unsubscribedAt: statusSubscriptions.unsubscribedAt,
+      createdAt: statusSubscriptions.createdAt,
+      displayName: principal.displayName,
+      email: user.email,
+    })
+    .from(statusSubscriptions)
+    .innerJoin(principal, eq(statusSubscriptions.principalId, principal.id))
+    .leftJoin(user, eq(principal.userId, user.id))
+    .orderBy(desc(statusSubscriptions.createdAt))
+
+  return rows.map((r) => ({
+    displayName: r.displayName,
+    email: r.email,
+    scope: r.scope,
+    componentCount: (r.componentIds as StatusComponentId[]).length,
+    source: r.source,
+    createdAt: r.createdAt,
+    unsubscribedAt: r.unsubscribedAt,
+  }))
 }
 
 /** Still-active subscriptions created since `date` (the overview's weekly delta). */

@@ -4,10 +4,12 @@ import { toast } from 'sonner'
 import { PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -65,59 +67,88 @@ export function StatusTemplatesView() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto w-full p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Templates</h2>
-        <Button size="sm" onClick={() => setCreating(true)}>
+    <div className="max-w-3xl mx-auto w-full flex flex-col flex-1 min-h-0">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5 flex items-center gap-2 border-b border-border/40">
+        <h2 className="text-sm font-semibold px-1">Templates</h2>
+        <Button size="sm" className="ml-auto" onClick={() => setCreating(true)}>
           <PlusIcon className="h-4 w-4 mr-1.5" />
           New template
         </Button>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading templates…</p>
-      ) : !templates || templates.length === 0 ? (
-        <EmptyState
-          icon={DocumentDuplicateIcon}
-          title="No templates yet"
-          description="Templates prefill an incident's title, body, impact, and affected components."
-          action={
-            <Button size="sm" onClick={() => setCreating(true)}>
-              <PlusIcon className="h-4 w-4 mr-1.5" />
-              New template
-            </Button>
-          }
-          className="h-48"
-        />
-      ) : (
-        <div className="rounded-xl overflow-hidden border border-border/50 bg-card divide-y divide-border/50">
-          {templates.map((t) => (
-            <div key={t.id} className="group flex items-center gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{t.name}</div>
-                <div className="text-xs text-muted-foreground truncate">{t.title}</div>
+        <div className="p-3 space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-3"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-56" />
               </div>
-              <span className="text-xs text-muted-foreground">{IMPACT_LABELS[t.impact]}</span>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setEditing(t)}
-                >
-                  <PencilSquareIcon className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={() => setDeleteTarget(t)}
-                >
-                  <TrashIcon className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-5 w-20" />
             </div>
           ))}
+        </div>
+      ) : !templates || templates.length === 0 ? (
+        <div className="p-3">
+          <EmptyState
+            icon={DocumentDuplicateIcon}
+            title="No templates yet"
+            description="Templates prefill an incident's title, body, impact, and affected components."
+            action={
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <PlusIcon className="h-4 w-4 mr-1.5" />
+                New template
+              </Button>
+            }
+            className="h-48"
+          />
+        </div>
+      ) : (
+        <div className="p-3 space-y-3">
+          <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm divide-y divide-border/50">
+            {templates.map((t) => (
+              <div key={t.id} className="group flex items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">{t.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{t.title}</div>
+                </div>
+                <span className="text-xs text-muted-foreground">{IMPACT_LABELS[t.impact]}</span>
+                {t.usageCount > 0 ? (
+                  <Badge variant="outline" size="sm">
+                    {t.usageCount === 1 ? 'Used once' : `Used ${t.usageCount} times`}
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Unused</span>
+                )}
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setEditing(t)}
+                  >
+                    <PencilSquareIcon className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => setDeleteTarget(t)}
+                  >
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground px-1">
+            Templates pre-fill the incident report and can be inserted into any update from the
+            composer.
+          </p>
         </div>
       )}
 

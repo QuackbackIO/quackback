@@ -1289,6 +1289,13 @@
       "when": 1784772780000,
       "tag": "0200_assistant_drop_channels_ai_label",
       "breakpoints": true
+    },
+    {
+      "idx": 201,
+      "version": "7",
+      "when": 1784772840000,
+      "tag": "0201_status_template_usage",
+      "breakpoints": true
     }
   ]
 }

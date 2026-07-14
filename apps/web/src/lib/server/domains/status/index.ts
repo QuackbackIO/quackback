@@ -42,6 +42,8 @@ export type {
   StatusSubscriptionAdminRow,
   StatusSubscriptionListResult,
   StatusSubscriptionCounts,
+  StatusSubscriptionCsvImportResult,
+  StatusSubscriptionExportRow,
   PublicStatusComponent,
   PublicStatusComponentGroup,
   PublicStatusIncidentUpdate,
@@ -123,4 +125,7 @@ export {
   countStatusSubscriptionsSince,
   getActiveSubscribersForComponents,
   countActiveSubscribersForComponents,
+  addStatusSubscriberByEmail,
+  importStatusSubscribersFromEmails,
+  listAllStatusSubscribersForExport,
 } from './status.subscription'

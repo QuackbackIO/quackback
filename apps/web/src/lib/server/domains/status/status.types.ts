@@ -121,6 +121,8 @@ export interface CreateStatusIncidentInput {
   backfill?: StatusIncidentBackfillInput
   /** Whether the publish claim actually dispatches the subscriber email. Defaults true. */
   notifySubscribers?: boolean
+  /** Provenance: the template the first update was inserted from, if any. */
+  templateId?: StatusIncidentTemplateId | null
 }
 
 export interface UpdateStatusIncidentInput {
@@ -140,6 +142,8 @@ export interface PostIncidentUpdateInput {
   /** When the new status is terminal (resolved/completed), skip restoring
    *  affected components to 'operational' (partial-recovery checkbox). */
   skipRestore?: boolean
+  /** Provenance: the template this update was inserted from, if any. */
+  templateId?: StatusIncidentTemplateId | null
 }
 
 export interface StatusIncidentUpdateRow {
@@ -222,6 +226,8 @@ export interface StatusIncidentTemplateRow {
   body: string
   impact: StatusIncidentImpact
   componentIds: StatusComponentId[]
+  /** Times this template has been used (count of update rows referencing it). */
+  usageCount: number
 }
 
 // ============================================================================
@@ -259,6 +265,24 @@ export interface StatusSubscriptionCounts {
   total: number
   active: number
   unsubscribed: number
+}
+
+export interface StatusSubscriptionCsvImportResult {
+  imported: number
+  /** Emails that didn't match an existing user account. */
+  skipped: number
+  total: number
+}
+
+/** Full unpaginated subscriber row for the admin CSV export. */
+export interface StatusSubscriptionExportRow {
+  displayName: string | null
+  email: string | null
+  scope: StatusSubscriptionScope
+  componentCount: number
+  source: StatusSubscriptionSource
+  createdAt: Date
+  unsubscribedAt: Date | null
 }
 
 // ============================================================================

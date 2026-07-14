@@ -126,6 +126,9 @@ function StatusIncidentEditorContent({
   const [target, setTarget] = useState<StatusIncidentLifecycle | null>(null)
   const [body, setBody] = useState('')
   const [restore, setRestore] = useState(true)
+  // Provenance: the template the composer inserted, if any. Rides along with
+  // the posted update even if the operator rewrites the inserted text.
+  const [templateId, setTemplateId] = useState<string | null>(null)
 
   useEffect(() => {
     if (incident && details === null) {
@@ -194,9 +197,11 @@ function StatusIncidentEditorContent({
         status: effectiveTarget,
         body: body.trim(),
         skipRestore: terminal ? !restore : undefined,
+        ...(templateId ? { templateId } : {}),
       })
       setBody('')
       setRestore(true)
+      setTemplateId(null)
       setTarget(nextStage(incident.kind, effectiveTarget))
       toast.success('Update posted')
     } catch (error) {
@@ -278,7 +283,10 @@ function StatusIncidentEditorContent({
               <div className="flex items-center gap-2 px-3 py-2 border-t border-border/40 bg-muted/30">
                 <TemplatePickerButton
                   label="Insert template"
-                  onApply={(t) => setBody((b) => (b ? `${b}\n\n${t.body}` : t.body))}
+                  onApply={(t) => {
+                    setBody((b) => (b ? `${b}\n\n${t.body}` : t.body))
+                    setTemplateId(t.id)
+                  }}
                 />
                 <div className="ml-auto">
                   {terminal && (

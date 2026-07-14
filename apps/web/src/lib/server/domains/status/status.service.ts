@@ -138,6 +138,7 @@ export async function createIncident(
     status: input.status,
     body,
     createdBy: author.principalId,
+    templateId: input.templateId ?? null,
   })
 
   if (appliesComponentStatusNow({ kind: incident.kind, status: incident.status, backfilled })) {
@@ -277,6 +278,7 @@ export async function postIncidentUpdate(
     status: input.status,
     body,
     createdBy: author.principalId,
+    templateId: input.templateId ?? null,
   })
 
   const becomesTerminal = input.status === TERMINAL_STATUS[existing.kind]
@@ -626,7 +628,8 @@ export async function reconcileStatusNotifications(): Promise<number> {
 // ============================================================================
 
 function toTemplateRow(
-  row: typeof statusIncidentTemplates.$inferSelect
+  row: typeof statusIncidentTemplates.$inferSelect,
+  usageCount = 0
 ): StatusIncidentTemplateRow {
   return {
     id: row.id,
@@ -635,6 +638,7 @@ function toTemplateRow(
     body: row.body,
     impact: row.impact,
     componentIds: row.componentIds as StatusComponentId[],
+    usageCount,
   }
 }
 
@@ -642,7 +646,20 @@ export async function listStatusIncidentTemplates(): Promise<StatusIncidentTempl
   const rows = await db.query.statusIncidentTemplates.findMany({
     orderBy: [asc(statusIncidentTemplates.name)],
   })
-  return rows.map(toTemplateRow)
+
+  // Derived usage: one update row per use, provenance survives edits and is
+  // nulled on template delete, so counts can never drift.
+  const usageRows = await db
+    .select({
+      templateId: statusIncidentUpdates.templateId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(statusIncidentUpdates)
+    .where(isNotNull(statusIncidentUpdates.templateId))
+    .groupBy(statusIncidentUpdates.templateId)
+  const usageByTemplate = new Map(usageRows.map((r) => [r.templateId, r.count]))
+
+  return rows.map((row) => toTemplateRow(row, usageByTemplate.get(row.id) ?? 0))
 }
 
 export async function createStatusIncidentTemplate(
