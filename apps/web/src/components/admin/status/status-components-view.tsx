@@ -24,6 +24,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   Bars3Icon,
+  EllipsisHorizontalIcon,
   PencilSquareIcon,
   PlusIcon,
   TrashIcon,
@@ -51,6 +52,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { StatusSelect } from '@/components/shared/sidebar-primitives'
 import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
@@ -721,39 +730,40 @@ function SortableComponentRow({
         <UptimeStrip days={uptimeDays} />
       )}
 
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-        <Switch
-          checked={component.showUptime}
-          onCheckedChange={(c) => onUptimeToggle(component, c)}
-        />
-        <span>Uptime bar</span>
-      </div>
-
       <StatusSelect
         value={component.status}
         options={COMPONENT_STATUS_OPTIONS}
         onChange={(v) => onStatusChange(component.id, v as StatusComponentStatus)}
       />
 
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={onEdit}
-          title="Edit service"
-        >
-          <PencilSquareIcon className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-          title="Delete service"
-        >
-          <TrashIcon className="h-3.5 w-3.5" />
-        </Button>
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Service actions">
+              <EllipsisHorizontalIcon className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onEdit}>
+              <PencilSquareIcon className="mr-2 h-4 w-4" />
+              Edit service
+            </DropdownMenuItem>
+            <DropdownMenuCheckboxItem
+              checked={component.showUptime}
+              onCheckedChange={(c) => onUptimeToggle(component, c === true)}
+            >
+              Show uptime bar
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={onDelete}
+              className="text-destructive focus:text-destructive"
+            >
+              <TrashIcon className="mr-2 h-4 w-4" />
+              Delete service
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
