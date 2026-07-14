@@ -1,19 +1,20 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { listStatusComponentsHandler, createStatusComponentHandler } from '../-service-handlers'
 
-// Legacy path — kept byte-identical for existing consumers. The current
-// public name is "service"; see `../services/index.ts` and OpenAPI's
-// `deprecated: true` on `/status/components*` (status.ts).
-export const Route = createFileRoute('/api/v1/status/components/')({
+// Current public path (see STATUS-ADMIN-REDESIGN-SPEC.md §4 Phase 6): the
+// workspace's public wording is "service", aliasing the legacy
+// `/status/components` path. Delegates to the same handlers so the two
+// families stay byte-identical.
+export const Route = createFileRoute('/api/v1/status/services/')({
   server: {
     handlers: {
       /**
-       * GET /api/v1/status/components
+       * GET /api/v1/status/services
        */
       GET: async ({ request }) => listStatusComponentsHandler({ request }),
 
       /**
-       * POST /api/v1/status/components
+       * POST /api/v1/status/services
        */
       POST: async ({ request }) => createStatusComponentHandler({ request }),
     },

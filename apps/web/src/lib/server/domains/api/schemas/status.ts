@@ -219,142 +219,163 @@ registerPath('/status/summary', {
   },
 })
 
-// Register GET /status/components
-registerPath('/status/components', {
-  get: {
-    tags: ['Status'],
-    summary: 'List status components',
-    description: 'Returns all status components (grouped and ungrouped), flattened',
-    responses: {
-      200: {
-        description: 'List of status components',
-        content: {
-          'application/json': {
-            schema: createPaginatedResponseSchema(
-              StatusComponentSchema,
-              'List of status components'
-            ),
-          },
-        },
-      },
-      401: {
-        description: 'Unauthorized',
-        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
-      },
-    },
-  },
-})
+// Component/service shared response + param building blocks. `/status/services*`
+// is the current public naming (D4: the workspace's public wording is
+// "service"); `/status/components*` is the deprecated original path. Both
+// register the exact same schemas — only summaries/descriptions/param names
+// differ — so the shapes live once here instead of twice below.
 
-// Register POST /status/components
-registerPath('/status/components', {
-  post: {
-    tags: ['Status'],
-    summary: 'Create a status component',
-    description: 'Create a new status component. Subject to the plan’s maxStatusComponents limit.',
-    requestBody: {
+const componentUnauthorizedResponse = {
+  description: 'Unauthorized',
+  content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+} as const
+
+const componentValidationErrorResponse = {
+  description: 'Validation error',
+  content: { 'application/json': { schema: ValidationErrorSchema } },
+} as const
+
+function componentNotFoundResponse(label: string) {
+  return {
+    description: `Status ${label} not found`,
+    content: { 'application/json': { schema: NotFoundErrorSchema } },
+  }
+}
+
+function componentIdParam(paramName: string, label: string) {
+  return [
+    {
+      name: paramName,
+      in: 'path' as const,
       required: true,
-      content: { 'application/json': { schema: asSchema(CreateStatusComponentSchema) } },
+      schema: { type: 'string' as const },
+      description: `Status ${label} ID`,
     },
-    responses: {
-      201: {
-        description: 'Status component created',
-        content: {
-          'application/json': {
-            schema: createItemResponseSchema(StatusComponentSchema, 'Created status component'),
-          },
-        },
-      },
-      400: {
-        description: 'Validation error',
-        content: { 'application/json': { schema: ValidationErrorSchema } },
-      },
-      401: {
-        description: 'Unauthorized',
-        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
-      },
-    },
-  },
-})
+  ]
+}
 
-// Register GET /status/components/{componentId}
-registerPath('/status/components/{componentId}', {
-  get: {
-    tags: ['Status'],
-    summary: 'Get a status component',
-    parameters: [
-      {
-        name: 'componentId',
-        in: 'path',
-        required: true,
-        schema: { type: 'string' },
-        description: 'Status component ID',
-      },
-    ],
-    responses: {
-      200: {
-        description: 'Status component details',
-        content: {
-          'application/json': {
-            schema: createItemResponseSchema(StatusComponentSchema, 'Status component details'),
+/** `label` is 'component' or 'service'; `deprecatedNote` is set only for the legacy path. */
+function componentCollectionPath(label: string, deprecatedNote?: string) {
+  const deprecated = deprecatedNote ? ({ deprecated: true } as const) : {}
+  return {
+    get: {
+      tags: ['Status'],
+      summary: `List status ${label}s`,
+      description: `Returns all status ${label}s (grouped and ungrouped), flattened.${deprecatedNote ?? ''}`,
+      ...deprecated,
+      responses: {
+        200: {
+          description: `List of status ${label}s`,
+          content: {
+            'application/json': {
+              schema: createPaginatedResponseSchema(
+                StatusComponentSchema,
+                `List of status ${label}s`
+              ),
+            },
           },
         },
-      },
-      401: {
-        description: 'Unauthorized',
-        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
-      },
-      404: {
-        description: 'Status component not found',
-        content: { 'application/json': { schema: NotFoundErrorSchema } },
+        401: componentUnauthorizedResponse,
       },
     },
-  },
-})
+    post: {
+      tags: ['Status'],
+      summary: `Create a status ${label}`,
+      description: `Create a new status ${label}. Subject to the plan’s maxStatusComponents limit.${deprecatedNote ?? ''}`,
+      ...deprecated,
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: asSchema(CreateStatusComponentSchema) } },
+      },
+      responses: {
+        201: {
+          description: `Status ${label} created`,
+          content: {
+            'application/json': {
+              schema: createItemResponseSchema(StatusComponentSchema, `Created status ${label}`),
+            },
+          },
+        },
+        400: componentValidationErrorResponse,
+        401: componentUnauthorizedResponse,
+      },
+    },
+  }
+}
 
-// Register PATCH /status/components/{componentId}
-registerPath('/status/components/{componentId}', {
-  patch: {
-    tags: ['Status'],
-    summary: 'Update a status component',
-    description:
-      'Updates metadata and/or the live status. A `{ status }`-only body is the monitoring-tool automation hook (e.g. a Datadog/Pingdom webhook).',
-    parameters: [
-      {
-        name: 'componentId',
-        in: 'path',
-        required: true,
-        schema: { type: 'string' },
-        description: 'Status component ID',
-      },
-    ],
-    requestBody: {
-      required: true,
-      content: { 'application/json': { schema: asSchema(UpdateStatusComponentSchema) } },
-    },
-    responses: {
-      200: {
-        description: 'Status component updated',
-        content: {
-          'application/json': {
-            schema: createItemResponseSchema(StatusComponentSchema, 'Updated status component'),
+function componentDetailPath(label: string, paramName: string, deprecatedNote?: string) {
+  const deprecated = deprecatedNote ? ({ deprecated: true } as const) : {}
+  return {
+    get: {
+      tags: ['Status'],
+      summary: `Get a status ${label}`,
+      description: deprecatedNote || undefined,
+      ...deprecated,
+      parameters: componentIdParam(paramName, label),
+      responses: {
+        200: {
+          description: `Status ${label} details`,
+          content: {
+            'application/json': {
+              schema: createItemResponseSchema(StatusComponentSchema, `Status ${label} details`),
+            },
           },
         },
-      },
-      400: {
-        description: 'Validation error',
-        content: { 'application/json': { schema: ValidationErrorSchema } },
-      },
-      401: {
-        description: 'Unauthorized',
-        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
-      },
-      404: {
-        description: 'Status component not found',
-        content: { 'application/json': { schema: NotFoundErrorSchema } },
+        401: componentUnauthorizedResponse,
+        404: componentNotFoundResponse(label),
       },
     },
-  },
-})
+    patch: {
+      tags: ['Status'],
+      summary: `Update a status ${label}`,
+      description: `Updates metadata and/or the live status. A \`{ status }\`-only body is the monitoring-tool automation hook (e.g. a Datadog/Pingdom webhook).${deprecatedNote ?? ''}`,
+      ...deprecated,
+      parameters: componentIdParam(paramName, label),
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: asSchema(UpdateStatusComponentSchema) } },
+      },
+      responses: {
+        200: {
+          description: `Status ${label} updated`,
+          content: {
+            'application/json': {
+              schema: createItemResponseSchema(StatusComponentSchema, `Updated status ${label}`),
+            },
+          },
+        },
+        400: componentValidationErrorResponse,
+        401: componentUnauthorizedResponse,
+        404: componentNotFoundResponse(label),
+      },
+    },
+  }
+}
+
+// Register GET+POST /status/components (deprecated — see /status/services)
+registerPath(
+  '/status/components',
+  componentCollectionPath(
+    'component',
+    ' Deprecated: use the `/status/services` path — the workspace-facing name for a component is "service". This path keeps working unchanged.'
+  )
+)
+
+// Register GET+PATCH /status/components/{componentId} (deprecated — see /status/services/{serviceId})
+registerPath(
+  '/status/components/{componentId}',
+  componentDetailPath(
+    'component',
+    'componentId',
+    ' Deprecated: use the `/status/services/{serviceId}` path — the workspace-facing name for a component is "service". This path keeps working unchanged.'
+  )
+)
+
+// Register GET+POST /status/services
+registerPath('/status/services', componentCollectionPath('service'))
+
+// Register GET+PATCH /status/services/{serviceId}
+registerPath('/status/services/{serviceId}', componentDetailPath('service', 'serviceId'))
 
 // Register GET /status/incidents
 registerPath('/status/incidents', {
