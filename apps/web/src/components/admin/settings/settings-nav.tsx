@@ -24,6 +24,7 @@ import {
   ChevronDownIcon,
   SignalIcon,
   BellIcon,
+  BuildingOfficeIcon,
 } from '@heroicons/react/24/solid'
 import { cn } from '@/lib/shared/utils'
 import { NAV_ICON_CLASS, NAV_ITEM_CLASS, NAV_SECTION_CLASS } from '@/components/shared/nav-tokens'
@@ -155,6 +156,7 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
       label: 'Data',
       items: [
         { label: 'People', to: '/admin/settings/people', icon: UserGroupIcon },
+        { label: 'Companies', to: '/admin/settings/companies', icon: BuildingOfficeIcon },
         ...(flags?.supportInbox
           ? [
               {
