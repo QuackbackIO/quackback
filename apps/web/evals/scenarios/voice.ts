@@ -17,7 +17,7 @@ const REFUND_GUIDANCE: SeedGuidance = {
   appliesWhen: 'The customer is asking about refunds, cancellations, or getting their money back.',
   instruction:
     'Whenever the topic is refunds or billing disputes, clearly mention our 30-day money-back guarantee.',
-  roles: ['customer_support'],
+  agent: 'agent',
 }
 
 export const voiceScenarios: Scenario[] = [

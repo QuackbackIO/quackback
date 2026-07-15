@@ -56,10 +56,11 @@ function suffix(): string {
 }
 
 /**
- * Write the scenario's config onto the singleton settings row (v2 schema in
- * code today — Phase 1's v3 reshape is not built yet). Directly mutates the
- * jsonb/flags columns rather than going through the revision-locked write
- * funnel, because a scenario is a fresh transaction, not a concurrent admin.
+ * Write the scenario's config onto the singleton settings row (v3 schema:
+ * shared identity + per-agent sub-objects). Directly mutates the jsonb/flags
+ * columns rather than going through the revision-locked write funnel, because a
+ * scenario is a fresh transaction, not a concurrent admin. Scenario tone/length
+ * map onto the Agent's voice (the customer-facing config).
  */
 export async function applyScenarioSettings(config: ScenarioConfig = {}): Promise<void> {
   const [row] = await testDb.select({ id: settings.id }).from(settings).limit(1)
@@ -71,10 +72,17 @@ export async function applyScenarioSettings(config: ScenarioConfig = {}): Promis
   }
   const assistantConfig = {
     ...DEFAULT_ASSISTANT_CONFIG,
-    voice: {
-      tone: config.tone ?? DEFAULT_ASSISTANT_CONFIG.voice.tone,
-      responseLength: config.responseLength ?? DEFAULT_ASSISTANT_CONFIG.voice.responseLength,
-      additionalInstructions: config.additionalInstructions ?? '',
+    agents: {
+      ...DEFAULT_ASSISTANT_CONFIG.agents,
+      agent: {
+        ...DEFAULT_ASSISTANT_CONFIG.agents.agent,
+        voice: {
+          tone: config.tone ?? DEFAULT_ASSISTANT_CONFIG.agents.agent.voice.tone,
+          responseLength:
+            config.responseLength ?? DEFAULT_ASSISTANT_CONFIG.agents.agent.voice.responseLength,
+          additionalInstructions: config.additionalInstructions ?? '',
+        },
+      },
     },
   }
   const featureFlags = JSON.stringify({
@@ -234,7 +242,7 @@ export async function seedGuidanceRule(rule: SeedGuidance): Promise<void> {
     name: rule.name,
     instruction: rule.instruction,
     appliesWhen: rule.appliesWhen ?? null,
-    roles: rule.roles ?? ['customer_support', 'copilot_qa', 'suggested_reply'],
+    agent: rule.agent ?? 'agent',
     enabled: rule.enabled ?? true,
     priority: rule.priority ?? 0,
   })

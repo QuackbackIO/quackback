@@ -101,14 +101,14 @@ describe('V2 guidance boundary', () => {
     expect(hoisted.listGuidanceRules).toHaveBeenCalledWith({ enabledOnly: false })
   })
 
-  it('normalizes and passes a complete V2 create input with the caller as creator', async () => {
+  it('normalizes and passes a complete V3 create input with the caller as creator', async () => {
     hoisted.createGuidanceRule.mockResolvedValue({ id: 'assistant_guidance_1' })
     await createGuidanceRuleFn({
       data: {
         name: ' Refunds\u0000 ',
         appliesWhen: ' When a customer asks for a refund ',
         instruction: ' Explain the policy. ',
-        roles: ['customer_support'],
+        agent: 'agent',
       },
     })
 
@@ -116,7 +116,7 @@ describe('V2 guidance boundary', () => {
       name: 'Refunds',
       appliesWhen: 'When a customer asks for a refund',
       instruction: 'Explain the policy.',
-      roles: ['customer_support'],
+      agent: 'agent',
       enabled: true,
       priority: 0,
       createdById: 'principal_admin',
@@ -137,20 +137,20 @@ describe('V2 guidance boundary', () => {
     { name: 'x'.repeat(81), instruction: 'Fine.' },
     { name: 'Fine', appliesWhen: 'x'.repeat(501), instruction: 'Fine.' },
     { name: 'Fine', instruction: 'x'.repeat(1_001) },
-    { name: 'Fine', instruction: 'Fine.', roles: ['unknown'] },
+    { name: 'Fine', instruction: 'Fine.', agent: 'unknown' },
   ])('rejects invalid create input %#', async (data) => {
     await expect(createGuidanceRuleFn({ data: data as never })).rejects.toThrow()
     expect(hoisted.createGuidanceRule).not.toHaveBeenCalled()
   })
 
-  it('passes a V2 partial update without injecting defaults', async () => {
+  it('passes a V3 partial update without injecting defaults', async () => {
     hoisted.updateGuidanceRule.mockResolvedValue({ id: 'assistant_guidance_1', enabled: false })
     await updateGuidanceRuleFn({ data: { id: 'assistant_guidance_1', enabled: false } })
     expect(hoisted.updateGuidanceRule).toHaveBeenCalledWith('assistant_guidance_1', {
       name: undefined,
       appliesWhen: undefined,
       instruction: undefined,
-      roles: undefined,
+      agent: undefined,
       enabled: false,
       priority: undefined,
     })
@@ -179,19 +179,19 @@ describe('privacy-safe audit logging', () => {
     name: 'Refund policy',
     appliesWhen: 'When a customer requests a refund',
     instruction: 'Private instruction body',
-    roles: ['customer_support'],
+    agent: 'agent',
     enabled: true,
     priority: 2,
   }
 
-  it('records V2 create metadata without the instruction body', async () => {
+  it('records V3 create metadata without the instruction body', async () => {
     hoisted.createGuidanceRule.mockResolvedValue(persistedRule)
     await createGuidanceRuleFn({
       data: {
         name: persistedRule.name,
         appliesWhen: persistedRule.appliesWhen,
         instruction: persistedRule.instruction,
-        roles: ['customer_support'],
+        agent: 'agent',
         priority: 2,
       },
     })
@@ -204,7 +204,7 @@ describe('privacy-safe audit logging', () => {
         name: persistedRule.name,
         alwaysOn: false,
         enabled: true,
-        roles: ['customer_support'],
+        agent: 'agent',
         priority: 2,
       },
     })

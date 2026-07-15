@@ -1,15 +1,15 @@
 /** Situational-guidance persistence and deterministic role prefiltering. */
-import { db, eq, and, inArray, asc, sql, assistantGuidanceRules } from '@/lib/server/db'
+import { db, eq, and, inArray, asc, assistantGuidanceRules } from '@/lib/server/db'
 import type { AssistantGuidanceRuleId, PrincipalId } from '@quackback/ids'
 import { positionCaseSql } from '@/lib/server/utils'
 import { ValidationError } from '@/lib/shared/errors'
 import {
   ASSISTANT_GUIDANCE_CHAR_BUDGET,
   ASSISTANT_GUIDANCE_MAX_ENABLED_CANDIDATES,
-  assistantGuidanceRoleSchema,
+  assistantGuidanceAgentSchema,
   assistantGuidanceRuleInputSchema,
   assistantGuidanceRulePatchSchema,
-  type AssistantGuidanceRole,
+  type AssistantGuidanceAgent,
   type AssistantGuidanceRuleInput,
   type AssistantGuidanceRulePatch,
 } from '@/lib/shared/assistant/guidance'
@@ -55,21 +55,18 @@ export async function listGuidanceRules(
     .orderBy(asc(assistantGuidanceRules.priority), asc(assistantGuidanceRules.createdAt))
 }
 
-/** Enabled candidates eligible for one resolved role, in application priority order. */
+/** Enabled candidates owned by one resolved agent, in application priority order. */
 export async function listEnabledGuidanceCandidates(opts: {
-  role: AssistantGuidanceRole
+  agent: AssistantGuidanceAgent
 }): Promise<AssistantGuidanceRule[]> {
-  const role = assistantGuidanceRoleSchema.safeParse(opts.role)
-  if (!role.success) validationError(role.error)
+  const agent = assistantGuidanceAgentSchema.safeParse(opts.agent)
+  if (!agent.success) validationError(agent.error)
 
   return db
     .select()
     .from(assistantGuidanceRules)
     .where(
-      and(
-        eq(assistantGuidanceRules.enabled, true),
-        sql`${role.data} = ANY(${assistantGuidanceRules.roles})`
-      )
+      and(eq(assistantGuidanceRules.enabled, true), eq(assistantGuidanceRules.agent, agent.data))
     )
     .orderBy(asc(assistantGuidanceRules.priority), asc(assistantGuidanceRules.createdAt))
     .limit(ASSISTANT_GUIDANCE_MAX_ENABLED_CANDIDATES)
@@ -85,7 +82,7 @@ export async function updateGuidanceRule(
   if (parsed.data.name !== undefined) values.name = parsed.data.name
   if (parsed.data.appliesWhen !== undefined) values.appliesWhen = parsed.data.appliesWhen
   if (parsed.data.instruction !== undefined) values.instruction = parsed.data.instruction
-  if (parsed.data.roles !== undefined) values.roles = parsed.data.roles
+  if (parsed.data.agent !== undefined) values.agent = parsed.data.agent
   if (parsed.data.enabled !== undefined) values.enabled = parsed.data.enabled
   if (parsed.data.priority !== undefined) values.priority = parsed.data.priority
   const [row] = await db

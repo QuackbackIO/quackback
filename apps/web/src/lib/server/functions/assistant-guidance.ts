@@ -54,7 +54,7 @@ export const createGuidanceRuleFn = createServerFn({ method: 'POST' })
         name: data.name,
         appliesWhen: data.appliesWhen,
         instruction: data.instruction,
-        roles: data.roles,
+        agent: data.agent,
         enabled: data.enabled,
         priority: data.priority,
         createdById: ctx.principal.id,
@@ -68,7 +68,7 @@ export const createGuidanceRuleFn = createServerFn({ method: 'POST' })
           name: rule.name,
           alwaysOn: rule.appliesWhen === null,
           enabled: rule.enabled,
-          roles: rule.roles,
+          agent: rule.agent,
           priority: rule.priority,
         },
       })
@@ -90,7 +90,7 @@ export const updateGuidanceRuleFn = createServerFn({ method: 'POST' })
         name: data.name,
         appliesWhen: data.appliesWhen,
         instruction: data.instruction,
-        roles: data.roles,
+        agent: data.agent,
         enabled: data.enabled,
         priority: data.priority,
       })
@@ -104,7 +104,7 @@ export const updateGuidanceRuleFn = createServerFn({ method: 'POST' })
               name: rule.name,
               alwaysOn: rule.appliesWhen === null,
               enabled: rule.enabled,
-              roles: rule.roles,
+              agent: rule.agent,
               priority: rule.priority,
             }
           : null,

@@ -66,25 +66,44 @@ import {
 } from '../assistant-settings'
 
 const CONFIG: AssistantConfig = {
-  version: 2,
+  version: 3,
   identity: { name: 'Quinn', avatarUrl: null },
-  voice: {
-    tone: 'balanced',
-    responseLength: 'balanced',
-    additionalInstructions: '',
+  agents: {
+    agent: {
+      voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
+      knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+    },
+    copilot: {
+      capabilities: { qa: true, suggestedReplies: true },
+      knowledge: {
+        helpCenter: true,
+        posts: true,
+        pastConversations: true,
+        internalNotes: true,
+        tickets: false,
+        changelog: false,
+        status: true,
+      },
+    },
   },
 }
 
 const SETTINGS_RESULT = {
   config: CONFIG,
   revision: 41,
-  managedFieldPaths: ['assistant.voice.tone'],
+  managedFieldPaths: ['assistant.agents.agent.voice.tone'],
 }
 
 const CONFIG_RESULT = {
   config: {
     ...CONFIG,
-    voice: { ...CONFIG.voice, tone: 'professional' as const },
+    agents: {
+      ...CONFIG.agents,
+      agent: {
+        ...CONFIG.agents.agent,
+        voice: { ...CONFIG.agents.agent.voice, tone: 'professional' as const },
+      },
+    },
   },
   revision: 42,
 }
@@ -123,7 +142,7 @@ describe('assistant settings permission gates', () => {
     await updateAssistantVoiceFn({
       data: {
         expectedRevision: 41,
-        voice: CONFIG.voice,
+        voice: CONFIG.agents.agent.voice,
       },
     })
     await updateWidgetAssistantDeploymentFn({ data: { enabled: true, respond: true } })
@@ -139,7 +158,7 @@ describe('assistant settings permission gates', () => {
 
     await expect(
       updateAssistantVoiceFn({
-        data: { expectedRevision: 41, voice: CONFIG.voice },
+        data: { expectedRevision: 41, voice: CONFIG.agents.agent.voice },
       })
     ).rejects.toThrow('Access denied')
     expect(hoisted.updateAssistantVoice).not.toHaveBeenCalled()

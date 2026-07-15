@@ -74,7 +74,10 @@ import {
 } from '@/lib/server/domains/assistant'
 import { gateCopilotRequest, streamAssistantSse } from '@/lib/server/domains/assistant/copilot-gate'
 import { withAssistantItemRef } from '@/lib/server/domains/assistant/item-ref.schema'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import {
+  isFeatureEnabled,
+  isCopilotCapabilityEnabled,
+} from '@/lib/server/domains/settings/settings.service'
 import { errorResponse, conflictResponse } from '@/lib/server/domains/api/responses'
 import { logger } from '@/lib/server/logger'
 import {
@@ -115,6 +118,13 @@ export async function handleSuggest({ request }: { request: Request }): Promise<
   // Q&A without proactive suggestions ever turning on.
   if (!(await isFeatureEnabled('assistantProactiveSuggestions'))) {
     return errorResponse('NOT_FOUND', 'Proactive suggestions are not available', 404)
+  }
+
+  // Copilot suggested-drafts capability gate (v3 config): a workspace can run
+  // proactive suggestions off independently of the flag, and vice-versa. Same
+  // 404 NOT_FOUND shape as the flag check above.
+  if (!(await isCopilotCapabilityEnabled('suggestedReplies'))) {
+    return errorResponse('NOT_FOUND', 'Suggested replies are not available', 404)
   }
 
   // One targeted read covers both pre-spend gates (see this file's doc

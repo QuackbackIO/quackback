@@ -43,6 +43,8 @@ import {
 } from '@/lib/server/domains/assistant'
 import { gateCopilotRequest, streamAssistantSse } from '@/lib/server/domains/assistant/copilot-gate'
 import { withAssistantItemRef } from '@/lib/server/domains/assistant/item-ref.schema'
+import { isCopilotCapabilityEnabled } from '@/lib/server/domains/settings/settings.service'
+import { errorResponse } from '@/lib/server/domains/api/responses'
 import { logger } from '@/lib/server/logger'
 import {
   COPILOT_EVENTS,
@@ -100,6 +102,14 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
   )
   if (!gate.ok) return gate.response
   const { auth, parsed, conversationId, ticketId } = gate
+
+  // Copilot Q&A capability gate (v3 config). Layered past inboxAi the same way
+  // suggest.ts layers assistantProactiveSuggestions: the same 404 NOT_FOUND
+  // shape, one config knob up. A workspace can keep Copilot's identity while
+  // turning its Q&A off.
+  if (!(await isCopilotCapabilityEnabled('qa'))) {
+    return errorResponse('NOT_FOUND', 'Copilot Q&A is not available', 404)
+  }
 
   // Provisioning Quinn's identity is idempotent and, like the sandbox, not a
   // conversation write of its own.

@@ -24,13 +24,45 @@ import { apiKeys } from './api-keys'
 import { integrations } from './integrations'
 import { companies } from './companies'
 
-interface StoredAssistantConfig {
+export interface StoredAssistantVoice {
+  tone: string
+  responseLength: string
+  additionalInstructions: string
+}
+
+/**
+ * Structural twin of `AssistantConfig` (z.infer of `assistantConfigSchema` in
+ * apps/web `lib/shared/assistant/config.ts`). packages/db can't import apps/web,
+ * so this hand-written interface mirrors that schema's shape with widened
+ * primitives (string/number instead of the enum/literal types). A drift tripwire
+ * in apps/web (`lib/shared/assistant/__tests__/config.test.ts`) asserts the two
+ * stay structurally identical — edit both sides together.
+ */
+export interface StoredAssistantConfig {
   version: number
   identity: { name: string; avatarUrl: string | null }
-  voice: {
-    tone: string
-    responseLength: string
-    additionalInstructions: string
+  agents: {
+    agent: {
+      voice: StoredAssistantVoice
+      knowledge: {
+        helpCenter: boolean
+        posts: boolean
+        changelog: boolean
+        status: boolean
+      }
+    }
+    copilot: {
+      capabilities: { qa: boolean; suggestedReplies: boolean }
+      knowledge: {
+        helpCenter: boolean
+        posts: boolean
+        pastConversations: boolean
+        internalNotes: boolean
+        tickets: boolean
+        changelog: boolean
+        status: boolean
+      }
+    }
   }
 }
 
@@ -298,15 +330,32 @@ export const settings = pgTable('settings', {
   setupState: text('setup_state'),
   /**
    * Versioned AI-agent identity and behavior configuration. The application
-   * validates this JSONB value with the client-safe V2 schema before use.
+   * validates this JSONB value with the client-safe V3 schema before use.
    */
   assistantConfig: jsonb('assistant_config')
     .$type<StoredAssistantConfig>()
     .notNull()
     .default({
-      version: 2,
+      version: 3,
       identity: { name: 'Quinn', avatarUrl: null },
-      voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
+      agents: {
+        agent: {
+          voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
+          knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+        },
+        copilot: {
+          capabilities: { qa: true, suggestedReplies: true },
+          knowledge: {
+            helpCenter: true,
+            posts: true,
+            pastConversations: true,
+            internalNotes: true,
+            tickets: false,
+            changelog: false,
+            status: true,
+          },
+        },
+      },
     }),
   /** Optimistic-concurrency token incremented with every assistant config write. */
   assistantConfigRevision: integer('assistant_config_revision').notNull().default(1),

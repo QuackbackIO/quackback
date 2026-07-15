@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { assistantRoleSchema, type AssistantRole } from './config'
+import { assistantAgentSchema, type AssistantAgentKind } from './config'
 
 export const ASSISTANT_GUIDANCE_NAME_MAX_LENGTH = 80
 export const ASSISTANT_GUIDANCE_APPLIES_WHEN_MAX_LENGTH = 500
@@ -8,10 +8,8 @@ export const ASSISTANT_GUIDANCE_MAX_ENABLED_CANDIDATES = 25
 export const ASSISTANT_GUIDANCE_MAX_SELECTED_CONDITIONAL = 5
 export const ASSISTANT_GUIDANCE_CHAR_BUDGET = 4_000
 
-export const DEFAULT_ASSISTANT_GUIDANCE_ROLES = [
-  'customer_support',
-  'suggested_reply',
-] as const satisfies readonly AssistantRole[]
+/** A rule created from the Agent page (the only page in Phase 1) targets the Agent. */
+export const DEFAULT_ASSISTANT_GUIDANCE_AGENT = 'agent' as const satisfies AssistantAgentKind
 
 /** Removes unsafe ASCII controls while preserving intentional tabs, newlines, and Unicode. */
 export function normalizeGuidanceText(value: string): string {
@@ -62,23 +60,14 @@ export const assistantGuidanceAppliesWhenSchema = normalizedGuidanceAppliesWhenS
   .optional()
   .transform((value) => value ?? null)
 
-export const assistantGuidanceRoleSchema = assistantRoleSchema
-
-function hasUniqueValues(values: readonly string[]): boolean {
-  return new Set(values).size === values.length
-}
-
-export const assistantGuidanceRolesSchema = z
-  .array(assistantGuidanceRoleSchema)
-  .min(1, 'Select at least one role')
-  .max(3)
-  .refine(hasUniqueValues, 'Roles must be unique')
+/** A guidance rule belongs to exactly one agent (D4) — no "both" state. */
+export const assistantGuidanceAgentSchema = assistantAgentSchema
 
 export const assistantGuidanceRuleInputSchema = z.object({
   name: assistantGuidanceNameSchema,
   appliesWhen: assistantGuidanceAppliesWhenSchema,
   instruction: assistantGuidanceInstructionSchema,
-  roles: assistantGuidanceRolesSchema.default(() => [...DEFAULT_ASSISTANT_GUIDANCE_ROLES]),
+  agent: assistantGuidanceAgentSchema.default(DEFAULT_ASSISTANT_GUIDANCE_AGENT),
   enabled: z.boolean().default(true),
   priority: z.number().int().default(0),
 })
@@ -87,18 +76,18 @@ export const assistantGuidanceRulePatchSchema = z.object({
   name: assistantGuidanceNameSchema.optional(),
   appliesWhen: normalizedGuidanceAppliesWhenSchema.optional(),
   instruction: assistantGuidanceInstructionSchema.optional(),
-  roles: assistantGuidanceRolesSchema.optional(),
+  agent: assistantGuidanceAgentSchema.optional(),
   enabled: z.boolean().optional(),
   priority: z.number().int().optional(),
 })
 
-/** Client-safe representation of the persisted V2 rule. */
+/** Client-safe representation of the persisted V3 rule. */
 export const assistantGuidanceRuleSchema = z.object({
   id: z.string(),
   name: assistantGuidanceNameSchema,
   appliesWhen: normalizedGuidanceAppliesWhenSchema,
   instruction: assistantGuidanceInstructionSchema,
-  roles: assistantGuidanceRolesSchema,
+  agent: assistantGuidanceAgentSchema,
   enabled: z.boolean(),
   priority: z.number().int(),
   createdById: z.string().nullable(),
@@ -109,7 +98,7 @@ export const assistantGuidanceRuleSchema = z.object({
 export type AssistantGuidanceRuleInput = z.input<typeof assistantGuidanceRuleInputSchema>
 export type NormalizedAssistantGuidanceRuleInput = z.output<typeof assistantGuidanceRuleInputSchema>
 export type AssistantGuidanceRulePatch = z.input<typeof assistantGuidanceRulePatchSchema>
-export type AssistantGuidanceRole = AssistantRole
+export type AssistantGuidanceAgent = AssistantAgentKind
 
 export interface GuidanceInstruction {
   instruction: string

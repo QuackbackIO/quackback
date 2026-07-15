@@ -27,6 +27,8 @@ export const ASSISTANT_CONFIG_EVENT_LABELS: Record<
   'assistant.identity.changed': 'Identity changed',
   'assistant.voice.changed': 'Response style changed',
   'assistant.instructions.changed': 'Writing guidelines changed',
+  'assistant.knowledge.changed': 'Knowledge sources changed',
+  'assistant.capabilities.changed': 'Copilot capabilities changed',
   'assistant.channels.changed': 'Channel guidance changed',
   'assistant.deployment.changed': 'Automatic replies changed',
 }

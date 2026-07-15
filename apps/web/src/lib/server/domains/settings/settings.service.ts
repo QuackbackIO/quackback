@@ -10,7 +10,11 @@ import type { IdentityProviderId } from '@quackback/ids'
 import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
 import { ValidationError, NotFoundError } from '@/lib/shared/errors'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
-import { assistantConfigSchema, DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
+import {
+  assistantConfigSchema,
+  DEFAULT_ASSISTANT_CONFIG,
+  type AssistantCopilotCapabilities,
+} from '@/lib/shared/assistant/config'
 import { assertNotManaged } from '@/lib/server/config-file/managed-guard'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
@@ -977,6 +981,26 @@ export async function getFeatureFlags(): Promise<FeatureFlags> {
 export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolean> {
   const flags = await getFeatureFlags()
   return flags[flag] ?? false
+}
+
+/**
+ * Whether a given Copilot capability (Q&A, suggested drafts) is enabled in the
+ * v3 assistant config. Reads the cached tenant settings (`getTenantSettings`) —
+ * the same single-Redis-GET path `isFeatureEnabled` uses — so gating the two
+ * teammate-facing routes on the copilot/suggest hot paths costs no extra DB
+ * round-trip; every config mutation calls `invalidateSettingsCache()`. Fails
+ * OPEN to the v3 default (both on): a missing/invalid/unreadable config must not
+ * silently disable a working default, mirroring how the routes already degrade.
+ */
+export async function isCopilotCapabilityEnabled(
+  capability: keyof AssistantCopilotCapabilities
+): Promise<boolean> {
+  const tenant = await getTenantSettings()
+  const parsed = assistantConfigSchema.safeParse(tenant?.settings.assistantConfig)
+  const capabilities = parsed.success
+    ? parsed.data.agents.copilot.capabilities
+    : DEFAULT_ASSISTANT_CONFIG.agents.copilot.capabilities
+  return capabilities[capability]
 }
 
 /**

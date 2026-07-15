@@ -1,7 +1,7 @@
 /** Revision-aware AI agent configuration and guidance mutations. */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { AssistantGuidanceRuleId } from '@quackback/ids'
-import type { AssistantRole } from '@/lib/shared/assistant/config'
+import type { AssistantAgentKind } from '@/lib/shared/assistant/config'
 import {
   createGuidanceRuleFn,
   updateGuidanceRuleFn,
@@ -12,6 +12,9 @@ import {
   getAssistantSettingsFn,
   updateAssistantIdentityFn,
   updateAssistantVoiceFn,
+  updateAssistantAgentKnowledgeFn,
+  updateAssistantCopilotKnowledgeFn,
+  updateAssistantCopilotCapabilitiesFn,
   updateWidgetAssistantDeploymentFn,
 } from '@/lib/server/functions/assistant-settings'
 import { assistantKeys } from '@/lib/client/queries/assistant'
@@ -21,7 +24,7 @@ export interface GuidanceRuleInput {
   name: string
   appliesWhen: string | null
   instruction: string
-  roles: AssistantRole[]
+  agent: AssistantAgentKind
   enabled: boolean
   priority: number
 }
@@ -98,6 +101,33 @@ export function useUpdateAssistantVoice() {
   return useMutation({
     mutationFn: (data: Parameters<typeof updateAssistantVoiceFn>[0]['data']) =>
       updateAssistantVoiceFn({ data }),
+    onSuccess: (result) => setAssistantConfig(queryClient, result),
+  })
+}
+
+export function useUpdateAssistantAgentKnowledge() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateAssistantAgentKnowledgeFn>[0]['data']) =>
+      updateAssistantAgentKnowledgeFn({ data }),
+    onSuccess: (result) => setAssistantConfig(queryClient, result),
+  })
+}
+
+export function useUpdateAssistantCopilotKnowledge() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateAssistantCopilotKnowledgeFn>[0]['data']) =>
+      updateAssistantCopilotKnowledgeFn({ data }),
+    onSuccess: (result) => setAssistantConfig(queryClient, result),
+  })
+}
+
+export function useUpdateAssistantCopilotCapabilities() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateAssistantCopilotCapabilitiesFn>[0]['data']) =>
+      updateAssistantCopilotCapabilitiesFn({ data }),
     onSuccess: (result) => setAssistantConfig(queryClient, result),
   })
 }

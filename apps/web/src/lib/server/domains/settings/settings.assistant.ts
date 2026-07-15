@@ -5,11 +5,17 @@ import { isPathManaged } from '@/lib/server/config-file/managed-paths'
 import { logger } from '@/lib/server/logger'
 import {
   assistantConfigSchema,
+  assistantCopilotCapabilitiesSchema,
+  assistantAgentKnowledgeSchema,
+  assistantCopilotKnowledgeSchema,
   assistantIdentitySchema,
   assistantVoiceSchema,
   DEFAULT_ASSISTANT_CONFIG,
   normalizeAssistantConfig,
+  type AssistantAgentKnowledge,
   type AssistantConfig,
+  type AssistantCopilotCapabilities,
+  type AssistantCopilotKnowledge,
   type AssistantIdentity,
   type AssistantVoice,
 } from '@/lib/shared/assistant/config'
@@ -28,6 +34,21 @@ export const assistantIdentityUpdateSchema = z.object({
 export const assistantVoiceUpdateSchema = z.object({
   expectedRevision: z.number().int().positive(),
   voice: assistantVoiceSchema,
+})
+
+export const assistantAgentKnowledgeUpdateSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  knowledge: assistantAgentKnowledgeSchema,
+})
+
+export const assistantCopilotKnowledgeUpdateSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  knowledge: assistantCopilotKnowledgeSchema,
+})
+
+export const assistantCopilotCapabilitiesUpdateSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  capabilities: assistantCopilotCapabilitiesSchema,
 })
 
 export interface AssistantConfigState {
@@ -122,13 +143,22 @@ function changedLeafPaths(before: unknown, after: unknown, prefix = ''): string[
 function auditEventForPaths(paths: string[]): AuditEventType {
   const root = paths[0]?.split('.')[0]
   if (root === 'identity') return 'assistant.identity.changed'
-  if (paths.every((path) => path === 'voice.additionalInstructions')) {
+  if (paths.every((path) => path.startsWith('agents.copilot.capabilities'))) {
+    return 'assistant.capabilities.changed'
+  }
+  if (paths.every((path) => path.endsWith('.knowledge') || path.includes('.knowledge.'))) {
+    return 'assistant.knowledge.changed'
+  }
+  if (paths.every((path) => path === 'agents.agent.voice.additionalInstructions')) {
     return 'assistant.instructions.changed'
   }
   return 'assistant.voice.changed'
 }
 
-const SAFE_TRANSITION_PATHS = new Set(['voice.tone', 'voice.responseLength'])
+const SAFE_TRANSITION_PATHS = new Set([
+  'agents.agent.voice.tone',
+  'agents.agent.voice.responseLength',
+])
 
 function valueAtPath(config: AssistantConfig, path: string): unknown {
   return path
@@ -257,5 +287,73 @@ export function updateAssistantVoice(
   voice: AssistantVoice,
   actor: AssistantConfigAuditActor
 ): Promise<AssistantConfigState> {
-  return updateAssistantConfig(expectedRevision, (current) => ({ ...current, voice }), actor)
+  return updateAssistantConfig(
+    expectedRevision,
+    (current) => ({
+      ...current,
+      agents: { ...current.agents, agent: { ...current.agents.agent, voice } },
+    }),
+    actor
+  )
+}
+
+/**
+ * A knowledge-map write, discriminated by owning agent (C3): the `agent` tag
+ * narrows `knowledge` to the correct per-agent shape, so a single writer serves
+ * both the Agent's four-source map and the Copilot's seven-source map with no
+ * casts. `normalizeAssistantConfig` re-validates against the per-agent schema at
+ * the write boundary.
+ */
+export type AssistantKnowledgeUpdate =
+  | { agent: 'agent'; knowledge: AssistantAgentKnowledge }
+  | { agent: 'copilot'; knowledge: AssistantCopilotKnowledge }
+
+export function updateAssistantAgentKnowledge(
+  expectedRevision: number,
+  update: AssistantKnowledgeUpdate,
+  actor: AssistantConfigAuditActor
+): Promise<AssistantConfigState> {
+  return updateAssistantConfig(
+    expectedRevision,
+    (current) => {
+      switch (update.agent) {
+        case 'agent':
+          return {
+            ...current,
+            agents: {
+              ...current.agents,
+              agent: { ...current.agents.agent, knowledge: update.knowledge },
+            },
+          }
+        case 'copilot':
+          return {
+            ...current,
+            agents: {
+              ...current.agents,
+              copilot: { ...current.agents.copilot, knowledge: update.knowledge },
+            },
+          }
+        default: {
+          const exhaustive: never = update
+          throw new Error(`updateAssistantAgentKnowledge: unhandled agent "${exhaustive}"`)
+        }
+      }
+    },
+    actor
+  )
+}
+
+export function updateAssistantCopilotCapabilities(
+  expectedRevision: number,
+  capabilities: AssistantCopilotCapabilities,
+  actor: AssistantConfigAuditActor
+): Promise<AssistantConfigState> {
+  return updateAssistantConfig(
+    expectedRevision,
+    (current) => ({
+      ...current,
+      agents: { ...current.agents, copilot: { ...current.agents.copilot, capabilities } },
+    }),
+    actor
+  )
 }

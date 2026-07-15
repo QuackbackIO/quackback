@@ -5,12 +5,29 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
 const config = {
-  version: 2 as const,
+  version: 3 as const,
   identity: { name: 'Quinn', avatarUrl: null },
-  voice: {
-    tone: 'balanced' as const,
-    responseLength: 'balanced' as const,
-    additionalInstructions: 'Use UK English.',
+  agents: {
+    agent: {
+      voice: {
+        tone: 'balanced' as const,
+        responseLength: 'balanced' as const,
+        additionalInstructions: 'Use UK English.',
+      },
+      knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+    },
+    copilot: {
+      capabilities: { qa: true, suggestedReplies: true },
+      knowledge: {
+        helpCenter: true,
+        posts: true,
+        pastConversations: true,
+        internalNotes: true,
+        tickets: false,
+        changelog: false,
+        status: true,
+      },
+    },
   },
 }
 

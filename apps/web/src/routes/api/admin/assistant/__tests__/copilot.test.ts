@@ -33,8 +33,10 @@ vi.mock('@/lib/server/domains/assistant', () => ({
 }))
 
 const mockIsFeatureEnabled = vi.fn()
+const mockIsCopilotCapabilityEnabled = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...args),
+  isCopilotCapabilityEnabled: (...args: unknown[]) => mockIsCopilotCapabilityEnabled(...args),
 }))
 
 const mockAssertConversationViewable = vi.fn()
@@ -100,6 +102,7 @@ beforeEach(() => {
   mockRequireAuth.mockResolvedValue({ principal: { id: 'principal_1' } })
   mockPolicyActorFromAuth.mockResolvedValue({ principalId: 'principal_1' })
   mockIsFeatureEnabled.mockResolvedValue(true)
+  mockIsCopilotCapabilityEnabled.mockResolvedValue(true)
   mockIsAssistantConfigured.mockReturnValue(true)
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
   mockAssertConversationViewable.mockResolvedValue({ id: CONVERSATION_ID })
@@ -162,6 +165,13 @@ describe('POST /api/admin/assistant/copilot', () => {
     const res = await handleCopilot({ request: makeRequest(validBody) })
     expect(res.status).toBe(404)
     expect(mockIsAssistantConfigured).not.toHaveBeenCalled()
+    expect(mockRunAssistantTurn).not.toHaveBeenCalled()
+  })
+
+  it('404s when the qa capability is off (v3 config gate)', async () => {
+    mockIsCopilotCapabilityEnabled.mockResolvedValue(false)
+    const res = await handleCopilot({ request: makeRequest(validBody) })
+    expect(res.status).toBe(404)
     expect(mockRunAssistantTurn).not.toHaveBeenCalled()
   })
 

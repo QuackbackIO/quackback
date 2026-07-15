@@ -10,6 +10,7 @@
  */
 import type {
   AssistantRole,
+  AssistantAgentKind,
   AssistantTone,
   AssistantResponseLength,
 } from '@/lib/shared/assistant/config'
@@ -58,7 +59,8 @@ export interface SeedGuidance {
   name: string
   instruction: string
   appliesWhen?: string | null
-  roles?: AssistantRole[]
+  /** The single agent this rule targets (D4). Defaults to 'agent'. */
+  agent?: AssistantAgentKind
   enabled?: boolean
   priority?: number
 }

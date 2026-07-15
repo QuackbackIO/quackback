@@ -30,7 +30,7 @@ export function AdditionalInstructionsCard() {
 
   useEffect(() => {
     if (!settingsQuery.data || dirty) return
-    const instructions = settingsQuery.data.config.voice.additionalInstructions
+    const instructions = settingsQuery.data.config.agents.agent.voice.additionalInstructions
     setDraft(instructions)
     setSaved(instructions)
   }, [settingsQuery.data, dirty])
@@ -78,14 +78,14 @@ export function AdditionalInstructionsCard() {
 
   const managed = isAssistantFieldManaged(
     settingsQuery.data.managedFieldPaths,
-    'voice.additionalInstructions'
+    'agents.agent.voice.additionalInstructions'
   )
   const tooLong = draft.length > MAX_INSTRUCTIONS
 
   async function reloadLatest() {
     const result = await settingsQuery.refetch()
     if (!result.data) return
-    const instructions = result.data.config.voice.additionalInstructions
+    const instructions = result.data.config.agents.agent.voice.additionalInstructions
     setDraft(instructions)
     setSaved(instructions)
     setSaveState('idle')
@@ -100,11 +100,11 @@ export function AdditionalInstructionsCard() {
       const result = await updateVoice.mutateAsync({
         expectedRevision: settingsQuery.data.revision,
         voice: {
-          ...settingsQuery.data.config.voice,
+          ...settingsQuery.data.config.agents.agent.voice,
           additionalInstructions: instructions.trim(),
         },
       })
-      const savedInstructions = result.config.voice.additionalInstructions
+      const savedInstructions = result.config.agents.agent.voice.additionalInstructions
       setDraft(savedInstructions)
       setSaved(savedInstructions)
       setSaveState('saved')

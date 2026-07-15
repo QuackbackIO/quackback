@@ -35,8 +35,10 @@ vi.mock('@/lib/server/domains/assistant', () => ({
 // gateCopilotRequest) and assistantProactiveSuggestions (this route's own
 // extra layer). Both default on; individual tests flip one at a time.
 const mockIsFeatureEnabled = vi.fn()
+const mockIsCopilotCapabilityEnabled = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   isFeatureEnabled: (...args: unknown[]) => mockIsFeatureEnabled(...args),
+  isCopilotCapabilityEnabled: (...args: unknown[]) => mockIsCopilotCapabilityEnabled(...args),
 }))
 
 const mockAssertConversationViewable = vi.fn()
@@ -103,6 +105,7 @@ beforeEach(() => {
   mockRequireAuth.mockResolvedValue({ principal: { id: 'principal_1' } })
   mockPolicyActorFromAuth.mockResolvedValue({ principalId: 'principal_1' })
   mockIsFeatureEnabled.mockResolvedValue(true)
+  mockIsCopilotCapabilityEnabled.mockResolvedValue(true)
   mockIsAssistantConfigured.mockReturnValue(true)
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
   mockAssertConversationViewable.mockResolvedValue({ id: CONVERSATION_ID })
@@ -157,6 +160,14 @@ describe('POST /api/admin/assistant/suggest', () => {
 
   it('404s when inboxAi is on but assistantProactiveSuggestions is off (the extra gate layer)', async () => {
     mockIsFeatureEnabled.mockImplementation(async (flag: string) => flag === 'inboxAi')
+    const res = await handleSuggest({ request: makeRequest(validBody) })
+    expect(res.status).toBe(404)
+    expect(mockLoadAssistantItemState).not.toHaveBeenCalled()
+    expect(mockRunAssistantTurn).not.toHaveBeenCalled()
+  })
+
+  it('404s when the suggestedReplies capability is off (v3 config gate)', async () => {
+    mockIsCopilotCapabilityEnabled.mockResolvedValue(false)
     const res = await handleSuggest({ request: makeRequest(validBody) })
     expect(res.status).toBe(404)
     expect(mockLoadAssistantItemState).not.toHaveBeenCalled()

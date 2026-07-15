@@ -5,10 +5,11 @@
  * context, guidance, and the actual tool set, then passes one immutable turn
  * snapshot here for ordered composition.
  */
-/* eslint-disable max-lines -- normative policy and all role variants intentionally have one owner */
 import {
   ASSISTANT_RESPONSE_LENGTH_DIRECTIVES,
   ASSISTANT_TONE_DIRECTIVES,
+  roleToAgent,
+  type AssistantAgentKind,
   type AssistantResponseLength,
   type AssistantRole,
   type AssistantTone,
@@ -41,8 +42,12 @@ export interface AssistantPromptTool {
 
 export interface AssistantPromptGuidance {
   instruction: string
-  /** Omitted means the V2 default: customer support and suggested replies. */
-  roles?: readonly AssistantPromptRole[]
+  /**
+   * Omitted means "applies to the resolved agent": the runtime already selects
+   * candidates by agent (guidance.service.ts), so a bare instruction is
+   * included. A set value is re-checked against the turn's agent here.
+   */
+  agent?: AssistantAgentKind
 }
 
 export interface AssistantAttributeOption {
@@ -375,19 +380,15 @@ ${escapeElementContent(trimmed)}
 </${elementName}>`
 }
 
-const DEFAULT_GUIDANCE_ROLES: readonly AssistantPromptRole[] = [
-  'customer_support',
-  'suggested_reply',
-]
-
 function buildGuidanceMessage(
   guidance: readonly (AssistantPromptGuidance | string)[],
-  role: AssistantPromptRole
+  agent: AssistantAgentKind
 ): string | null {
   const applicable = guidance.flatMap((entry) => {
     const rule: AssistantPromptGuidance = typeof entry === 'string' ? { instruction: entry } : entry
-    const roles = rule.roles ?? DEFAULT_GUIDANCE_ROLES
-    if (!roles.includes(role)) return []
+    // A bare instruction (or one with no agent) was already filtered by the
+    // runtime for this agent; a set agent is re-checked here.
+    if (rule.agent !== undefined && rule.agent !== agent) return []
     const instruction = rule.instruction.trim()
     return instruction ? [instruction] : []
   })
@@ -452,7 +453,7 @@ function composeAssistantSystemMessages(
     if (workspaceInstructions) messages.push(workspaceInstructions)
   }
 
-  const guidance = buildGuidanceMessage(input.guidance ?? [], input.role)
+  const guidance = buildGuidanceMessage(input.guidance ?? [], roleToAgent(input.role))
   if (guidance) messages.push(guidance)
 
   const workflowInstructions = buildAdminInstructionMessage(

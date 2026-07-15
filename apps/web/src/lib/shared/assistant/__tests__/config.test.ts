@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { StoredAssistantConfig } from '@/lib/shared/db-types'
 import {
   ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH,
   ASSISTANT_AVATAR_URL_MAX_LENGTH,
@@ -11,11 +12,13 @@ import {
   ASSISTANT_TONE_CATALOGUE,
   ASSISTANT_TONE_DIRECTIVES,
   ASSISTANT_TONES,
+  ASSISTANT_AGENTS,
   DEFAULT_ASSISTANT_CONFIG,
   assistantConfigSchema,
   assistantRoleSchema,
   normalizeAssistantConfig,
   normalizeAssistantText,
+  roleToAgent,
   type AssistantConfig,
 } from '../config'
 
@@ -23,20 +26,76 @@ function validConfig(): AssistantConfig {
   return structuredClone(DEFAULT_ASSISTANT_CONFIG)
 }
 
+// ── Drift tripwire ─────────────────────────────────────────────────────────
+// `StoredAssistantConfig` (packages/db `schema/auth.ts`) is a hand-written
+// structural twin of `AssistantConfig` because packages/db can't import this
+// schema. It intentionally widens the schema's enum/literal types to plain
+// string/number, so plain `Equal<AssistantConfig, StoredAssistantConfig>` would
+// (correctly) fail. We normalize that deliberate widening with `DeepWiden` and
+// then assert exact structural equality: any added/removed/renamed/re-nested
+// field on either side breaks typecheck until both twins are updated together.
+type DeepWiden<T> = T extends null
+  ? null
+  : T extends boolean
+    ? boolean
+    : T extends string
+      ? string
+      : T extends number
+        ? number
+        : { [K in keyof T]: DeepWiden<T[K]> }
+
+type Equal<X, Y> =
+  (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
+type Expect<T extends true> = T
+
+// If this line errors, the two twins have drifted — reconcile config.ts and
+// packages/db `schema/auth.ts`.
+type _AssistantConfigTwinsAgree = Expect<Equal<DeepWiden<AssistantConfig>, StoredAssistantConfig>>
+// Reference the alias so it isn't flagged as unused; the assertion is the type
+// above, this just keeps it live.
+const _assistantConfigTwinsAgree: _AssistantConfigTwinsAgree = true
+
 describe('assistantConfigSchema', () => {
-  it('accepts and preserves the V2 default', () => {
+  it('accepts and preserves the V3 default', () => {
     expect(assistantConfigSchema.parse(DEFAULT_ASSISTANT_CONFIG)).toEqual({
-      version: 2,
+      version: 3,
       identity: {
         name: 'Quinn',
         avatarUrl: null,
       },
-      voice: {
-        tone: 'balanced',
-        responseLength: 'balanced',
-        additionalInstructions: '',
+      agents: {
+        agent: {
+          voice: {
+            tone: 'balanced',
+            responseLength: 'balanced',
+            additionalInstructions: '',
+          },
+          knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+        },
+        copilot: {
+          capabilities: { qa: true, suggestedReplies: true },
+          knowledge: {
+            helpCenter: true,
+            posts: true,
+            pastConversations: true,
+            internalNotes: true,
+            tickets: false,
+            changelog: false,
+            status: true,
+          },
+        },
       },
     })
+  })
+
+  it('rejects a V2-shaped config (strict reader accepts only v3)', () => {
+    expect(
+      assistantConfigSchema.safeParse({
+        version: 2,
+        identity: { name: 'Quinn', avatarUrl: null },
+        voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
+      }).success
+    ).toBe(false)
   })
 
   it('enforces the assistant name boundaries after trimming', () => {
@@ -59,11 +118,13 @@ describe('assistantConfigSchema', () => {
 
   it('enforces the global instruction maximum', () => {
     const maximum = validConfig()
-    maximum.voice.additionalInstructions = 'a'.repeat(ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH)
+    maximum.agents.agent.voice.additionalInstructions = 'a'.repeat(
+      ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH
+    )
     expect(assistantConfigSchema.safeParse(maximum).success).toBe(true)
 
     const globalOver = validConfig()
-    globalOver.voice.additionalInstructions = 'a'.repeat(
+    globalOver.agents.agent.voice.additionalInstructions = 'a'.repeat(
       ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH + 1
     )
     expect(assistantConfigSchema.safeParse(globalOver).success).toBe(false)
@@ -72,31 +133,27 @@ describe('assistantConfigSchema', () => {
   it('accepts every tone and response length value', () => {
     for (const tone of ASSISTANT_TONES) {
       const config = validConfig()
-      config.voice.tone = tone
+      config.agents.agent.voice.tone = tone
       expect(assistantConfigSchema.safeParse(config).success).toBe(true)
     }
 
     for (const responseLength of ASSISTANT_RESPONSE_LENGTHS) {
       const config = validConfig()
-      config.voice.responseLength = responseLength
+      config.agents.agent.voice.responseLength = responseLength
       expect(assistantConfigSchema.safeParse(config).success).toBe(true)
     }
   })
 
   it('rejects unknown versions and presets', () => {
     expect(assistantConfigSchema.safeParse({ ...validConfig(), version: 1 }).success).toBe(false)
-    expect(
-      assistantConfigSchema.safeParse({
-        ...validConfig(),
-        voice: { ...validConfig().voice, tone: 'casual' },
-      }).success
-    ).toBe(false)
-    expect(
-      assistantConfigSchema.safeParse({
-        ...validConfig(),
-        voice: { ...validConfig().voice, responseLength: 'unlimited' },
-      }).success
-    ).toBe(false)
+
+    const badTone = validConfig()
+    ;(badTone.agents.agent.voice as { tone: string }).tone = 'casual'
+    expect(assistantConfigSchema.safeParse(badTone).success).toBe(false)
+
+    const badLength = validConfig()
+    ;(badLength.agents.agent.voice as { responseLength: string }).responseLength = 'unlimited'
+    expect(assistantConfigSchema.safeParse(badLength).success).toBe(false)
   })
 })
 
@@ -165,13 +222,17 @@ describe('assistant configuration normalization', () => {
   it('normalizes names and instructions while preserving internal newlines, Unicode, and RTL text', () => {
     const input = validConfig()
     input.identity.name = ' \u0000Quinn وكيل\u007f '
-    input.voice.additionalInstructions =
+    input.agents.agent.voice.additionalInstructions =
       ' \u0001Use café ☕.\r\nاكتب بالعربية.\nכתוב בעברית.\u001f '
 
     expect(normalizeAssistantConfig(input)).toMatchObject({
       identity: { name: 'Quinn وكيل' },
-      voice: {
-        additionalInstructions: 'Use café ☕.\nاكتب بالعربية.\nכתוב בעברית.',
+      agents: {
+        agent: {
+          voice: {
+            additionalInstructions: 'Use café ☕.\nاكتب بالعربية.\nכתוב בעברית.',
+          },
+        },
       },
     })
   })
@@ -179,7 +240,7 @@ describe('assistant configuration normalization', () => {
   it('is pure and also trims an avatar URL', () => {
     const input = validConfig()
     input.identity.avatarUrl = ' https://example.com/avatar.png '
-    input.voice.additionalInstructions = '  Keep this concise.  '
+    input.agents.agent.voice.additionalInstructions = '  Keep this concise.  '
     const before = structuredClone(input)
 
     const normalized = normalizeAssistantConfig(input)
@@ -187,7 +248,7 @@ describe('assistant configuration normalization', () => {
     expect(input).toEqual(before)
     expect(normalized).not.toBe(input)
     expect(normalized.identity.avatarUrl).toBe('https://example.com/avatar.png')
-    expect(normalized.voice.additionalInstructions).toBe('Keep this concise.')
+    expect(normalized.agents.agent.voice.additionalInstructions).toBe('Keep this concise.')
   })
 
   it('rejects normalized values over every limit rather than truncating them', () => {
@@ -210,7 +271,7 @@ describe('assistant configuration normalization', () => {
       [
         'global instructions',
         (config) => {
-          config.voice.additionalInstructions = 'g'.repeat(
+          config.agents.agent.voice.additionalInstructions = 'g'.repeat(
             ASSISTANT_ADDITIONAL_INSTRUCTIONS_MAX_LENGTH + 1
           )
         },
@@ -286,5 +347,53 @@ describe('assistant role catalogue', () => {
       expect(ASSISTANT_ROLE_CATALOGUE[role].labelMessageId).toContain('assistant.role.')
       expect(ASSISTANT_ROLE_CATALOGUE[role].descriptionMessageId).toContain('assistant.role.')
     }
+  })
+})
+
+describe('roleToAgent', () => {
+  it('maps customer-facing roles to the Agent and copilot_qa to the Copilot (D9)', () => {
+    expect(roleToAgent('customer_support')).toBe('agent')
+    expect(roleToAgent('suggested_reply')).toBe('agent')
+    expect(roleToAgent('copilot_qa')).toBe('copilot')
+  })
+
+  it('resolves every role to a known agent kind', () => {
+    for (const role of ASSISTANT_ROLES) {
+      expect(ASSISTANT_AGENTS).toContain(roleToAgent(role))
+    }
+  })
+})
+
+describe('v3 per-agent sub-config', () => {
+  it("defaults the Agent's knowledge to help-center only and Copilot to the wider team set", () => {
+    expect(DEFAULT_ASSISTANT_CONFIG.agents.agent.knowledge).toEqual({
+      helpCenter: true,
+      posts: false,
+      changelog: false,
+      status: false,
+    })
+    expect(DEFAULT_ASSISTANT_CONFIG.agents.copilot.knowledge).toEqual({
+      helpCenter: true,
+      posts: true,
+      pastConversations: true,
+      internalNotes: true,
+      tickets: false,
+      changelog: false,
+      status: true,
+    })
+    expect(DEFAULT_ASSISTANT_CONFIG.agents.copilot.capabilities).toEqual({
+      qa: true,
+      suggestedReplies: true,
+    })
+  })
+
+  it('rejects a config missing a knowledge source key or capability', () => {
+    const missingKnowledge = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    delete (missingKnowledge.agents.agent.knowledge as { helpCenter?: boolean }).helpCenter
+    expect(assistantConfigSchema.safeParse(missingKnowledge).success).toBe(false)
+
+    const missingCapability = structuredClone(DEFAULT_ASSISTANT_CONFIG)
+    delete (missingCapability.agents.copilot.capabilities as { qa?: boolean }).qa
+    expect(assistantConfigSchema.safeParse(missingCapability).success).toBe(false)
   })
 })

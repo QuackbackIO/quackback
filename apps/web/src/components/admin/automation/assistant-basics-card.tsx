@@ -67,7 +67,7 @@ export function AssistantVoiceCard() {
 
   useEffect(() => {
     if (!settingsQuery.data || dirty) return
-    const voice = settingsQuery.data.config.voice
+    const voice = settingsQuery.data.config.agents.agent.voice
     setTone(voice.tone)
     setResponseLength(voice.responseLength)
     setSavedTone(voice.tone)
@@ -116,13 +116,13 @@ export function AssistantVoiceCard() {
   }
 
   const managedPaths = settingsQuery.data.managedFieldPaths
-  const toneManaged = isAssistantFieldManaged(managedPaths, 'voice.tone')
-  const lengthManaged = isAssistantFieldManaged(managedPaths, 'voice.responseLength')
+  const toneManaged = isAssistantFieldManaged(managedPaths, 'agents.agent.voice.tone')
+  const lengthManaged = isAssistantFieldManaged(managedPaths, 'agents.agent.voice.responseLength')
 
   async function reloadLatest() {
     const result = await settingsQuery.refetch()
     if (!result.data) return
-    const voice = result.data.config.voice
+    const voice = result.data.config.agents.agent.voice
     setTone(voice.tone)
     setResponseLength(voice.responseLength)
     setSavedTone(voice.tone)
@@ -140,15 +140,15 @@ export function AssistantVoiceCard() {
       const result = await updateVoice.mutateAsync({
         expectedRevision: settingsQuery.data.revision,
         voice: {
-          ...settingsQuery.data.config.voice,
+          ...settingsQuery.data.config.agents.agent.voice,
           tone: selectedTone,
           responseLength: selectedLength,
         },
       })
-      setTone(result.config.voice.tone)
-      setResponseLength(result.config.voice.responseLength)
-      setSavedTone(result.config.voice.tone)
-      setSavedLength(result.config.voice.responseLength)
+      setTone(result.config.agents.agent.voice.tone)
+      setResponseLength(result.config.agents.agent.voice.responseLength)
+      setSavedTone(result.config.agents.agent.voice.tone)
+      setSavedLength(result.config.agents.agent.voice.responseLength)
       setSaveState('saved')
     } catch (error) {
       setSaveState(isAssistantRevisionConflict(error) ? 'conflict' : 'error')

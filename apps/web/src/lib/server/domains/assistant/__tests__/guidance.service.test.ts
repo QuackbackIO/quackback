@@ -38,18 +38,18 @@ describe('guidance shared contract', () => {
       name: 'Refunds',
       appliesWhen: null,
       instruction: 'مرحبا\nExplain it.',
-      roles: ['customer_support', 'suggested_reply'],
+      agent: 'agent',
       enabled: true,
       priority: 0,
     })
   })
 
-  it('validates role values', () => {
+  it('validates agent values', () => {
     expect(() =>
       assistantGuidanceRuleInputSchema.parse({
-        name: 'Bad role',
+        name: 'Bad agent',
         instruction: 'Do something.',
-        roles: ['administrator'],
+        agent: 'administrator',
       })
     ).toThrow()
   })
@@ -71,7 +71,7 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  it('creates normalized V2 guidance with defaults and lists by priority', async () => {
+  it('creates normalized V3 guidance with defaults and lists by priority', async () => {
     const lower = await createGuidanceRule({
       name: '  Refund policy\u0000 ',
       appliesWhen: '   ',
@@ -89,41 +89,39 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
       name: 'Refund policy',
       appliesWhen: null,
       instruction: 'Always mention it.',
-      roles: ['customer_support', 'suggested_reply'],
+      agent: 'agent',
       enabled: true,
       priority: 2,
     })
     expect((await listGuidanceRules()).map((rule) => rule.id)).toEqual([higher.id, lower.id])
   })
 
-  it('prefilters enabled candidates by resolved role', async () => {
+  it('prefilters enabled candidates by resolved agent', async () => {
     const everywhere = await createGuidanceRule({
       name: 'Everywhere',
       instruction: 'Always applies.',
-      roles: ['customer_support'],
+      agent: 'agent',
       priority: 1,
     })
     const alsoScoped = await createGuidanceRule({
       name: 'Also scoped',
       instruction: 'Also applies.',
-      roles: ['customer_support'],
+      agent: 'agent',
       priority: 2,
     })
     await createGuidanceRule({
-      name: 'Copilot role',
+      name: 'Copilot rule',
       instruction: 'Copilot only.',
-      roles: ['copilot_qa'],
+      agent: 'copilot',
     })
     await createGuidanceRule({
       name: 'Disabled',
       instruction: 'Disabled.',
-      roles: ['customer_support'],
+      agent: 'agent',
       enabled: false,
     })
 
-    const candidates = await listEnabledGuidanceCandidates({
-      role: 'customer_support',
-    })
+    const candidates = await listEnabledGuidanceCandidates({ agent: 'agent' })
     expect(candidates.map((rule) => rule.id)).toEqual([everywhere.id, alsoScoped.id])
   })
 
@@ -132,28 +130,26 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
       Array.from({ length: 27 }, (_, index) => ({
         name: `Rule ${index}`,
         instruction: `Instruction ${index}`,
-        roles: ['customer_support'],
+        agent: 'agent',
         priority: 0,
         createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)),
       }))
     )
 
-    const candidates = await listEnabledGuidanceCandidates({
-      role: 'customer_support',
-    })
+    const candidates = await listEnabledGuidanceCandidates({ agent: 'agent' })
     expect(candidates).toHaveLength(25)
     expect(candidates.map((rule) => rule.name)).toEqual(
       Array.from({ length: 25 }, (_, index) => `Rule ${index}`)
     )
   })
 
-  it('updates every V2 field and normalizes an empty condition to always-on', async () => {
+  it('updates every V3 field and normalizes an empty condition to always-on', async () => {
     const rule = await createGuidanceRule({ name: 'Original', instruction: 'Original instruction' })
     const updated = await updateGuidanceRule(rule.id, {
       name: ' Updated ',
       appliesWhen: '\u0000 ',
       instruction: ' Updated instruction ',
-      roles: ['copilot_qa'],
+      agent: 'copilot',
       enabled: false,
       priority: 7,
     })
@@ -162,7 +158,7 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
       name: 'Updated',
       appliesWhen: null,
       instruction: 'Updated instruction',
-      roles: ['copilot_qa'],
+      agent: 'copilot',
       enabled: false,
       priority: 7,
     })
@@ -180,7 +176,7 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
     expect((await listGuidanceRules()).map((rule) => rule.id)).not.toContain(a.id)
   })
 
-  it('rejects invalid and over-limit V2 fields at the service layer', async () => {
+  it('rejects invalid and over-limit V3 fields at the service layer', async () => {
     await expect(
       createGuidanceRule({ name: 'x'.repeat(81), instruction: 'Fine.' })
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
@@ -194,7 +190,7 @@ describe.skipIf(!fixture.available)('guidance.service (real DB, rolled back)', (
       createGuidanceRule({
         name: 'Fine',
         instruction: 'Fine.',
-        roles: ['unknown'] as never,
+        agent: 'unknown' as never,
       })
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
   })

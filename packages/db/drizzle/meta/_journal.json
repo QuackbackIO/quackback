@@ -1310,6 +1310,13 @@
       "when": 1784772960000,
       "tag": "0203_assistant_ticket_changelog_knowledge",
       "breakpoints": true
+    },
+    {
+      "idx": 204,
+      "version": "7",
+      "when": 1784773020000,
+      "tag": "0204_assistant_config_v3",
+      "breakpoints": true
     }
   ]
 }

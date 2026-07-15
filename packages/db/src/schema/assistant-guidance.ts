@@ -1,4 +1,4 @@
-/** Situational guidance selected for an eligible assistant role and channel. */
+/** Situational guidance owned by exactly one Quinn agent (D4). */
 import { pgTable, text, boolean, integer, timestamp, index, check } from 'drizzle-orm/pg-core'
 import { relations, sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumnNullable } from '@quackback/ids/drizzle'
@@ -11,7 +11,8 @@ export const assistantGuidanceRules = pgTable(
     name: text('name').notNull(),
     appliesWhen: text('applies_when'),
     instruction: text('instruction').notNull(),
-    roles: text('roles').array().notNull().default(['customer_support', 'suggested_reply']),
+    /** The single agent this rule targets: 'agent' (customer-facing) or 'copilot'. */
+    agent: text('agent').notNull(),
     enabled: boolean('enabled').notNull().default(true),
     // Lower values run first. This preserves the V1 position ordering.
     priority: integer('priority').notNull().default(0),
@@ -36,10 +37,7 @@ export const assistantGuidanceRules = pgTable(
       'assistant_guidance_rules_instruction_length_check',
       sql`char_length(${table.instruction}) BETWEEN 1 AND 1000`
     ),
-    check(
-      'assistant_guidance_rules_roles_length_check',
-      sql`cardinality(${table.roles}) BETWEEN 1 AND 3`
-    ),
+    check('assistant_guidance_rules_agent_check', sql`${table.agent} IN ('agent', 'copilot')`),
   ]
 )
 

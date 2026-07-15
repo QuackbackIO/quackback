@@ -27,6 +27,7 @@ import type { PrincipalId, ConversationId, TicketId, AssistantInvolvementId } fr
 import type { AssistantSurface } from '@/lib/shared/assistant/surfaces'
 import {
   DEFAULT_ASSISTANT_CONFIG,
+  roleToAgent,
   type AssistantConfig,
   type AssistantIdentity,
   type AssistantRole,
@@ -912,6 +913,13 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     }
   }
 
+  // Customer voice always resolves from the Agent's sub-config: customer-facing
+  // roles (support + the suggested-reply draft path, D9) map to `agent`, and
+  // `rolePolicy.customerVoice` gates every read below so a copilot turn (no
+  // voice, D11) never consults it. This is the one v3 resolution the runtime
+  // owns; the pure prompt module still takes a flat `{ identity, voice }`.
+  const agentVoice = runtimeConfig.config.agents.agent.voice
+
   // The current conversation's customer, for customer-scoped retrieval
   // (past-conversation summaries — see conversation-summary-retrieval.ts).
   // Resolved here because this is the one place a turn has both a
@@ -1024,7 +1032,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const guidanceChannel = role === 'suggested_reply' ? promptChannel : surface
   let guidanceCandidates: AssistantGuidanceRule[] = []
   try {
-    guidanceCandidates = await listEnabledGuidanceCandidates({ role })
+    guidanceCandidates = await listEnabledGuidanceCandidates({ agent: roleToAgent(role) })
   } catch (error) {
     log.warn({ err: error }, 'guidance candidate loading failed; continuing without guidance')
   }
@@ -1046,8 +1054,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     configFallbackReason: runtimeConfig.configFallbackReason,
     ...(rolePolicy.customerVoice
       ? {
-          tone: runtimeConfig.config.voice.tone,
-          responseLength: runtimeConfig.config.voice.responseLength,
+          tone: agentVoice.tone,
+          responseLength: agentVoice.responseLength,
         }
       : {}),
     signal: input.signal,
@@ -1121,7 +1129,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const appliedGuidance = selectedGuidance.map((rule) => ({ id: rule.id, name: rule.name }))
   const systemPrompts = buildAssistantSystemMessages({
     role,
-    config: runtimeConfig.config,
+    // The pure prompt module takes a flat `{ identity, voice }`; voice always
+    // resolves from the Agent sub-config (customer-voice roles only — copilot
+    // turns set customerVoice:false and never read it).
+    config: { identity: runtimeConfig.config.identity, voice: agentVoice },
     workspaceName: runtimeConfig.workspaceName,
     tools: activeSpecs,
     trustedRuntimeContext: trustedContextParts.join('\n') || null,
@@ -1200,8 +1211,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
         configRevision: runtimeConfig.revision,
         ...(rolePolicy.customerVoice
           ? {
-              tone: runtimeConfig.config.voice.tone,
-              responseLength: runtimeConfig.config.voice.responseLength,
+              tone: agentVoice.tone,
+              responseLength: agentVoice.responseLength,
             }
           : {}),
         ...(guidanceCandidateIds.length > 0 ? { guidanceCandidateIds } : {}),
@@ -1269,8 +1280,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
           promptVersion: ASSISTANT_PROMPT_VERSION,
           configRevision: runtimeConfig.revision,
           role,
-          tone: runtimeConfig.config.voice.tone,
-          responseLength: runtimeConfig.config.voice.responseLength,
+          tone: agentVoice.tone,
+          responseLength: agentVoice.responseLength,
           configFallbackReason: runtimeConfig.configFallbackReason,
           signal: input.signal,
         })
@@ -1328,8 +1339,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     role,
     ...(rolePolicy.customerVoice
       ? {
-          tone: runtimeConfig.config.voice.tone,
-          responseLength: runtimeConfig.config.voice.responseLength,
+          tone: agentVoice.tone,
+          responseLength: agentVoice.responseLength,
         }
       : {}),
     appliedGuidance,

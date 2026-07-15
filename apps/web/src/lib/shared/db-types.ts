@@ -71,6 +71,9 @@ export type {
   MacroPriority,
   MacroSnoozePreset,
   MacroAction,
+  // Structural twin of the assistant config schema; a drift tripwire in
+  // lib/shared/assistant/__tests__/config.test.ts asserts the two agree.
+  StoredAssistantConfig,
 } from '@quackback/db/schema'
 
 // Runtime exports used in client components.

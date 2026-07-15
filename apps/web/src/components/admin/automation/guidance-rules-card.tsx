@@ -14,7 +14,6 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { SearchInput } from '@/components/shared/search-input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckboxGroup } from '@/components/ui/checkbox-group'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { assistantQueries } from '@/lib/client/queries/assistant'
@@ -35,12 +41,12 @@ import {
   useReorderGuidanceRules,
   useUpdateGuidanceRule,
 } from '@/lib/client/mutations/assistant'
-import { ASSISTANT_ROLES, type AssistantRole } from '@/lib/shared/assistant/config'
+import { type AssistantAgentKind } from '@/lib/shared/assistant/config'
 import {
   ASSISTANT_GUIDANCE_APPLIES_WHEN_MAX_LENGTH,
   ASSISTANT_GUIDANCE_INSTRUCTION_MAX_LENGTH,
   ASSISTANT_GUIDANCE_NAME_MAX_LENGTH,
-  DEFAULT_ASSISTANT_GUIDANCE_ROLES,
+  DEFAULT_ASSISTANT_GUIDANCE_AGENT,
 } from '@/lib/shared/assistant/guidance'
 import type { AssistantGuidanceRule } from '@/lib/server/domains/assistant/guidance.service'
 import { useUnsavedChanges } from './assistant-form'
@@ -62,7 +68,7 @@ function ruleInput(rule: AssistantGuidanceRule): GuidanceRuleInput {
     name: rule.name,
     appliesWhen: rule.appliesWhen,
     instruction: rule.instruction,
-    roles: rule.roles as AssistantRole[],
+    agent: rule.agent as AssistantAgentKind,
     enabled: rule.enabled,
     priority: rule.priority,
   }
@@ -134,16 +140,16 @@ export function GuidanceRulesCard() {
     .filter((rule) => rule.enabled)
     .reduce((sum, rule) => sum + rule.instruction.length, 0)
 
-  const roleLabel = (role: AssistantRole) =>
-    intl.formatMessage({
-      id: `automation.agent.guidance.role.${role}`,
-      defaultMessage:
-        role === 'customer_support'
-          ? 'Customer conversations'
-          : role === 'suggested_reply'
-            ? 'Suggested replies'
-            : 'Copilot answers',
-    })
+  const agentLabel = (agent: AssistantAgentKind) =>
+    agent === 'copilot'
+      ? intl.formatMessage({
+          id: 'automation.agent.guidance.agent.copilot',
+          defaultMessage: 'Copilot',
+        })
+      : intl.formatMessage({
+          id: 'automation.agent.guidance.agent.agent',
+          defaultMessage: 'Agent',
+        })
 
   async function toggleEnabled(rule: AssistantGuidanceRule) {
     const next = { ...ruleInput(rule), enabled: !rule.enabled }
@@ -353,10 +359,10 @@ export function GuidanceRulesCard() {
                             })}
                         </p>
                         <p className="mt-2 line-clamp-2 text-sm">{rule.instruction}</p>
-                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span>
-                            {rule.roles.map((role) => roleLabel(role as AssistantRole)).join(', ')}
-                          </span>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <Badge variant="outline" size="sm">
+                            {agentLabel(rule.agent as AssistantAgentKind)}
+                          </Badge>
                           <span>
                             {intl.formatMessage(
                               {
@@ -576,7 +582,12 @@ function GuidanceRuleDialog({
   const [conditionMode, setConditionMode] = useState<'always' | 'conditional'>('always')
   const [appliesWhen, setAppliesWhen] = useState('')
   const [instruction, setInstruction] = useState('')
-  const [roles, setRoles] = useState<AssistantRole[]>([...DEFAULT_ASSISTANT_GUIDANCE_ROLES])
+  // The "Applies to" picker below owns which peer agent a rule targets. New rules
+  // default to the Agent; editing initializes to (and can change) the rule's own
+  // agent — this card lists both agents' rules, so keeping the picker editable on
+  // edit lets a rule be reassigned rather than stranding it. (Chosen over a
+  // disabled-on-edit picker; Phase 2's Copilot page will add a per-agent surface.)
+  const [agent, setAgent] = useState<AssistantAgentKind>(DEFAULT_ASSISTANT_GUIDANCE_AGENT)
   const [enabled, setEnabled] = useState(true)
   const [priority, setPriority] = useState(0)
   const [error, setError] = useState('')
@@ -589,20 +600,20 @@ function GuidanceRuleDialog({
     setConditionMode(rule?.appliesWhen ? 'conditional' : 'always')
     setAppliesWhen(rule?.appliesWhen ?? '')
     setInstruction(rule?.instruction ?? '')
-    setRoles((rule?.roles as AssistantRole[] | undefined) ?? [...DEFAULT_ASSISTANT_GUIDANCE_ROLES])
+    setAgent((rule?.agent as AssistantAgentKind | undefined) ?? DEFAULT_ASSISTANT_GUIDANCE_AGENT)
     setEnabled(rule?.enabled ?? true)
     setPriority(rule?.priority ?? defaultPriority)
     setError('')
     setErrors({})
   }, [open, rule, defaultPriority])
 
-  const initial = rule
+  const initial: GuidanceRuleInput = rule
     ? ruleInput(rule)
     : {
         name: '',
         appliesWhen: null,
         instruction: '',
-        roles: [...DEFAULT_ASSISTANT_GUIDANCE_ROLES],
+        agent: DEFAULT_ASSISTANT_GUIDANCE_AGENT,
         enabled: true,
         priority: defaultPriority,
       }
@@ -610,7 +621,7 @@ function GuidanceRuleDialog({
     name,
     appliesWhen: conditionMode === 'conditional' ? appliesWhen : null,
     instruction,
-    roles,
+    agent,
     enabled,
     priority,
   }
@@ -655,12 +666,6 @@ function GuidanceRuleDialog({
         defaultMessage: 'Use 1,000 characters or fewer.',
       })
     }
-    if (roles.length === 0) {
-      nextErrors.roles = intl.formatMessage({
-        id: 'automation.agent.guidance.rolesRequired',
-        defaultMessage: 'Select at least one place for this guidance.',
-      })
-    }
     if (liveTotal > charBudget) {
       nextErrors.budget = intl.formatMessage({
         id: 'automation.agent.guidance.budgetExceeded',
@@ -695,18 +700,6 @@ function GuidanceRuleDialog({
     }
   }
 
-  const roleItems = ASSISTANT_ROLES.map((role) => ({
-    value: role,
-    label: intl.formatMessage({
-      id: `automation.agent.guidance.role.${role}`,
-      defaultMessage:
-        role === 'customer_support'
-          ? 'Customer conversations'
-          : role === 'suggested_reply'
-            ? 'Suggested replies'
-            : 'Copilot answers',
-    }),
-  }))
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
@@ -758,6 +751,34 @@ function GuidanceRuleDialog({
                 {errors.name}
               </p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="guidance-agent">
+              {intl.formatMessage({
+                id: 'automation.agent.guidance.appliesToLabel',
+                defaultMessage: 'Applies to',
+              })}
+            </Label>
+            <Select value={agent} onValueChange={(value) => setAgent(value as AssistantAgentKind)}>
+              <SelectTrigger id="guidance-agent" size="sm" className="w-full sm:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="agent">
+                  {intl.formatMessage({
+                    id: 'automation.agent.guidance.agent.agent',
+                    defaultMessage: 'Agent',
+                  })}
+                </SelectItem>
+                <SelectItem value="copilot">
+                  {intl.formatMessage({
+                    id: 'automation.agent.guidance.agent.copilot',
+                    defaultMessage: 'Copilot',
+                  })}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <fieldset className="space-y-3">
@@ -879,29 +900,6 @@ function GuidanceRuleDialog({
                 {errors.budget}
               </p>
             )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>
-              {intl.formatMessage({
-                id: 'automation.agent.guidance.rolesLabel',
-                defaultMessage: 'Where should this guidance apply?',
-              })}
-            </Label>
-            <CheckboxGroup
-              items={roleItems}
-              selected={roles}
-              onToggle={(value) => {
-                const role = value as AssistantRole
-                setRoles((currentRoles) =>
-                  currentRoles.includes(role)
-                    ? currentRoles.filter((candidate) => candidate !== role)
-                    : [...currentRoles, role]
-                )
-              }}
-              className="space-y-2"
-            />
-            {errors.roles && <p className="text-xs text-destructive">{errors.roles}</p>}
           </div>
 
           <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border p-3">

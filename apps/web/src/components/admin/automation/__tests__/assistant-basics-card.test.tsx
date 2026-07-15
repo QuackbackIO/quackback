@@ -6,12 +6,29 @@ import { IntlProvider } from 'react-intl'
 
 const updateVoice = vi.fn()
 const config = {
-  version: 2 as const,
+  version: 3 as const,
   identity: { name: 'Quinn', avatarUrl: null },
-  voice: {
-    tone: 'warm' as const,
-    responseLength: 'brief' as const,
-    additionalInstructions: 'Use UK English.',
+  agents: {
+    agent: {
+      voice: {
+        tone: 'warm' as const,
+        responseLength: 'brief' as const,
+        additionalInstructions: 'Use UK English.',
+      },
+      knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+    },
+    copilot: {
+      capabilities: { qa: true, suggestedReplies: true },
+      knowledge: {
+        helpCenter: true,
+        posts: true,
+        pastConversations: true,
+        internalNotes: true,
+        tickets: false,
+        changelog: false,
+        status: true,
+      },
+    },
   },
 }
 
@@ -38,7 +55,7 @@ function renderCard() {
 }
 
 describe('AssistantVoiceCard', () => {
-  it('renders described semantic radio groups from persisted V2 values', async () => {
+  it('renders described semantic radio groups from persisted V3 values', async () => {
     renderCard()
     expect(await screen.findByRole('heading', { name: 'Response style' })).toBeInTheDocument()
     expect(await screen.findByRole('radio', { name: /Warm/ })).toBeChecked()
@@ -48,7 +65,16 @@ describe('AssistantVoiceCard', () => {
 
   it('does not save until Save changes is pressed', async () => {
     updateVoice.mockResolvedValue({
-      config: { ...config, voice: { ...config.voice, tone: 'professional' } },
+      config: {
+        ...config,
+        agents: {
+          ...config.agents,
+          agent: {
+            ...config.agents.agent,
+            voice: { ...config.agents.agent.voice, tone: 'professional' },
+          },
+        },
+      },
       revision: 3,
     })
     renderCard()

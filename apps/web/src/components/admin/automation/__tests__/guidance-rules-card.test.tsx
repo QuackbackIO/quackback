@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -40,6 +41,29 @@ vi.mock('@/lib/server/functions/assistant-guidance', () => ({
   deleteGuidanceRuleFn: vi.fn(),
   reorderGuidanceRulesFn: vi.fn(),
   listAssistantToolsFn: vi.fn(),
+}))
+// Radix Select relies on pointer/layout APIs happy-dom lacks; render it as a
+// native <select> so the "Applies to" picker is drivable with fireEvent.change.
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value: string
+    onValueChange: (v: string) => void
+    children: ReactNode
+  }) => (
+    <select aria-label="Applies to" value={value} onChange={(e) => onValueChange(e.target.value)}>
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
 }))
 vi.mock('@/lib/server/functions/assistant-guidance-stats', () => ({
   getGuidanceRuleStatsFn: vi.fn(async () => ({
@@ -101,6 +125,40 @@ describe('GuidanceRulesCard', () => {
     })
     expect(screen.getByText('Always be clear')).toBeInTheDocument()
     expect(screen.queryByText('Refund policy')).not.toBeInTheDocument()
+  })
+
+  it('defaults new guidance to the Agent and lets "Applies to" target the Copilot', async () => {
+    createGuidanceRule.mockResolvedValue({
+      id: 'assistant_guidance_new',
+      name: 'Escalations',
+      appliesWhen: null,
+      instruction: 'Loop in a human.',
+      agent: 'copilot',
+      enabled: true,
+      priority: 2,
+      createdById: null,
+      createdAt: new Date('2026-07-14'),
+      updatedAt: new Date('2026-07-14'),
+    })
+    renderCard()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add guidance' }))
+
+    // Defaults to Agent before any change.
+    const appliesTo = screen.getByRole('combobox', { name: 'Applies to' })
+    expect(appliesTo).toHaveValue('agent')
+
+    fireEvent.change(screen.getByLabelText('Name this guidance'), {
+      target: { value: 'Escalations' },
+    })
+    fireEvent.change(screen.getByLabelText('What should the AI agent do?'), {
+      target: { value: 'Loop in a human.' },
+    })
+    fireEvent.change(appliesTo, { target: { value: 'copilot' } })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add guidance' }).at(-1)!)
+
+    await vi.waitFor(() => expect(createGuidanceRule).toHaveBeenCalledTimes(1))
+    expect(createGuidanceRule.mock.calls[0][0].data.agent).toBe('copilot')
   })
 
   it('uses list ordering and prevents enabled guidance from exceeding the budget', async () => {

@@ -64,19 +64,46 @@ import {
   getAssistantSettings,
   updateAssistantIdentity,
   updateAssistantVoice,
+  updateAssistantAgentKnowledge,
+  updateAssistantCopilotCapabilities,
 } from '../settings.assistant'
 
 const CONFIG: AssistantConfig = {
-  version: 2,
+  version: 3,
   identity: {
     name: 'Avery',
     avatarUrl: 'https://cdn.example.test/avery.png',
   },
-  voice: {
-    tone: 'balanced',
-    responseLength: 'balanced',
-    additionalInstructions: 'Use short replies.',
+  agents: {
+    agent: {
+      voice: {
+        tone: 'balanced',
+        responseLength: 'balanced',
+        additionalInstructions: 'Use short replies.',
+      },
+      knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+    },
+    copilot: {
+      capabilities: { qa: true, suggestedReplies: true },
+      knowledge: {
+        helpCenter: true,
+        posts: true,
+        pastConversations: true,
+        internalNotes: true,
+        tickets: false,
+        changelog: false,
+        status: true,
+      },
+    },
   },
+}
+
+/** The Agent's voice, the section updateAssistantVoice writes. */
+const VOICE = CONFIG.agents.agent.voice
+
+/** Build the full config with a replaced Agent voice, for expected-config assertions. */
+function withVoice(voice: AssistantConfig['agents']['agent']['voice']): AssistantConfig {
+  return { ...CONFIG, agents: { ...CONFIG.agents, agent: { ...CONFIG.agents.agent, voice } } }
 }
 
 const REQUEST_HEADERS = new Headers({
@@ -201,7 +228,7 @@ describe('V2 assistant configuration reads', () => {
       settingsRow({
         assistantConfig: persisted,
         assistantConfigRevision: 19,
-        managedFieldPaths: ['assistant.voice.tone'],
+        managedFieldPaths: ['assistant.agents.agent.voice.tone'],
       })
     )
 
@@ -212,7 +239,7 @@ describe('V2 assistant configuration reads', () => {
     await expect(getAssistantSettings()).resolves.toEqual({
       config: persisted,
       revision: 19,
-      managedFieldPaths: ['assistant.voice.tone'],
+      managedFieldPaths: ['assistant.agents.agent.voice.tone'],
     })
   })
 
@@ -285,14 +312,11 @@ describe('V2 assistant configuration writes', () => {
       ACTOR
     )
 
-    const expectedConfig: AssistantConfig = {
-      ...CONFIG,
-      voice: {
-        tone: 'warm',
-        responseLength: 'brief',
-        additionalInstructions: 'Keep\ncalm.',
-      },
-    }
+    const expectedConfig: AssistantConfig = withVoice({
+      tone: 'warm',
+      responseLength: 'brief',
+      additionalInstructions: 'Keep\ncalm.',
+    })
     expect(hoisted.txForUpdate).toHaveBeenCalledOnce()
     expect(hoisted.txForUpdate).toHaveBeenCalledWith('update')
     expect(committedSettingsWrites()).toEqual([
@@ -317,11 +341,7 @@ describe('V2 assistant configuration writes', () => {
   })
 
   it('preserves a prior section update when a later revision updates another section', async () => {
-    const voiceResult = await updateAssistantVoice(
-      7,
-      { ...CONFIG.voice, tone: 'professional' },
-      ACTOR
-    )
+    const voiceResult = await updateAssistantVoice(7, { ...VOICE, tone: 'professional' }, ACTOR)
     const identityResult = await updateAssistantIdentity(
       voiceResult.revision,
       { name: 'Robin', avatarUrl: null },
@@ -330,8 +350,7 @@ describe('V2 assistant configuration writes', () => {
 
     expect(identityResult).toEqual({
       config: {
-        ...CONFIG,
-        voice: { ...CONFIG.voice, tone: 'professional' },
+        ...withVoice({ ...VOICE, tone: 'professional' }),
         identity: { name: 'Robin', avatarUrl: null },
       },
       revision: 9,
@@ -343,7 +362,7 @@ describe('V2 assistant configuration writes', () => {
     hoisted.txRow = transactionRow({ assistantConfigRevision: 8 })
 
     await expect(
-      updateAssistantVoice(7, { ...CONFIG.voice, tone: 'professional' }, ACTOR)
+      updateAssistantVoice(7, { ...VOICE, tone: 'professional' }, ACTOR)
     ).rejects.toMatchObject({
       code: 'ASSISTANT_CONFIG_REVISION_CONFLICT',
       statusCode: 409,
@@ -357,10 +376,10 @@ describe('V2 assistant configuration writes', () => {
   })
 
   it('rejects changes to a managed path before writing', async () => {
-    hoisted.txRow = transactionRow({ managedFieldPaths: ['assistant.voice'] })
+    hoisted.txRow = transactionRow({ managedFieldPaths: ['assistant.agents.agent.voice'] })
 
     await expect(
-      updateAssistantVoice(7, { ...CONFIG.voice, tone: 'professional' }, ACTOR)
+      updateAssistantVoice(7, { ...VOICE, tone: 'professional' }, ACTOR)
     ).rejects.toMatchObject({ code: 'MANAGED_SETTING', statusCode: 403 })
 
     expect(hoisted.txSet).not.toHaveBeenCalled()
@@ -370,11 +389,7 @@ describe('V2 assistant configuration writes', () => {
 
   it('audits instruction changes by path and revision without storing instruction bodies', async () => {
     const nextInstructions = 'Never quote internal guidance.'
-    await updateAssistantVoice(
-      7,
-      { ...CONFIG.voice, additionalInstructions: nextInstructions },
-      ACTOR
-    )
+    await updateAssistantVoice(7, { ...VOICE, additionalInstructions: nextInstructions }, ACTOR)
 
     expect(hoisted.recordAuditEventInTransaction).toHaveBeenCalledWith(expect.anything(), {
       event: 'assistant.instructions.changed',
@@ -382,14 +397,14 @@ describe('V2 assistant configuration writes', () => {
       headers: REQUEST_HEADERS,
       target: { type: 'settings', id: 'settings_1' },
       metadata: {
-        changedPaths: ['voice.additionalInstructions'],
+        changedPaths: ['agents.agent.voice.additionalInstructions'],
         previousRevision: 7,
         revision: 8,
         transitions: [],
       },
     })
     const auditPayload = hoisted.recordAuditEventInTransaction.mock.calls[0]?.[1]
-    expect(JSON.stringify(auditPayload)).not.toContain(CONFIG.voice.additionalInstructions)
+    expect(JSON.stringify(auditPayload)).not.toContain(VOICE.additionalInstructions)
     expect(JSON.stringify(auditPayload)).not.toContain(nextInstructions)
   })
 
@@ -427,7 +442,7 @@ describe('V2 assistant configuration writes', () => {
     })
 
     await expect(
-      updateAssistantVoice(7, { ...CONFIG.voice, tone: 'professional' }, ACTOR)
+      updateAssistantVoice(7, { ...VOICE, tone: 'professional' }, ACTOR)
     ).rejects.toThrow('audit insert failed')
 
     expect(hoisted.txSet).toHaveBeenCalled()
@@ -438,7 +453,7 @@ describe('V2 assistant configuration writes', () => {
   })
 
   it('does not write, audit, increment, or invalidate for a normalized no-op', async () => {
-    await expect(updateAssistantVoice(7, structuredClone(CONFIG.voice), ACTOR)).resolves.toEqual({
+    await expect(updateAssistantVoice(7, structuredClone(VOICE), ACTOR)).resolves.toEqual({
       config: CONFIG,
       revision: 7,
     })
@@ -447,5 +462,39 @@ describe('V2 assistant configuration writes', () => {
     expect(hoisted.recordAuditEventInTransaction).not.toHaveBeenCalled()
     expect(hoisted.invalidateSettingsCache).not.toHaveBeenCalled()
     expect(hoisted.events).toEqual(['begin', 'lock:update', 'commit'])
+  })
+
+  it('writes an Agent knowledge change under the knowledge audit event', async () => {
+    const result = await updateAssistantAgentKnowledge(
+      7,
+      { agent: 'agent', knowledge: { ...CONFIG.agents.agent.knowledge, posts: true } },
+      ACTOR
+    )
+
+    expect(result.config.agents.agent.knowledge.posts).toBe(true)
+    const auditPayload = hoisted.recordAuditEventInTransaction.mock.calls[0]?.[1] as {
+      event: string
+      metadata: { changedPaths: string[] }
+    }
+    expect(auditPayload.event).toBe('assistant.knowledge.changed')
+    expect(auditPayload.metadata.changedPaths).toEqual(['agents.agent.knowledge.posts'])
+  })
+
+  it('writes a Copilot capability change under the capabilities audit event', async () => {
+    const result = await updateAssistantCopilotCapabilities(
+      7,
+      { ...CONFIG.agents.copilot.capabilities, suggestedReplies: false },
+      ACTOR
+    )
+
+    expect(result.config.agents.copilot.capabilities.suggestedReplies).toBe(false)
+    const auditPayload = hoisted.recordAuditEventInTransaction.mock.calls[0]?.[1] as {
+      event: string
+      metadata: { changedPaths: string[] }
+    }
+    expect(auditPayload.event).toBe('assistant.capabilities.changed')
+    expect(auditPayload.metadata.changedPaths).toEqual([
+      'agents.copilot.capabilities.suggestedReplies',
+    ])
   })
 })

@@ -143,12 +143,29 @@ vi.mock('@/lib/server/domains/conversation-attributes/conversation-attribute.ser
 
 const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
   config: {
-    version: 2 as const,
+    version: 3 as const,
     identity: { name: 'Quinn', avatarUrl: null },
-    voice: {
-      tone: 'balanced' as const,
-      responseLength: 'balanced' as const,
-      additionalInstructions: '',
+    agents: {
+      agent: {
+        voice: {
+          tone: 'balanced' as const,
+          responseLength: 'balanced' as const,
+          additionalInstructions: '',
+        },
+        knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+      },
+      copilot: {
+        capabilities: { qa: true, suggestedReplies: true },
+        knowledge: {
+          helpCenter: true,
+          posts: true,
+          pastConversations: true,
+          internalNotes: true,
+          tickets: false,
+          changelog: false,
+          status: true,
+        },
+      },
     },
   },
   revision: 1,
@@ -164,15 +181,31 @@ vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
 
 function mockRuntimeConfig(
   overrides: Omit<Partial<AssistantRuntimeConfig>, 'config'> & {
-    config?: Partial<AssistantRuntimeConfig['config']>
+    // `voice` is a convenience that maps onto the Agent's sub-config (v3), so
+    // existing call sites keep passing a flat voice override.
+    config?: Partial<Omit<AssistantRuntimeConfig['config'], 'agents'>> & {
+      voice?: AssistantRuntimeConfig['config']['agents']['agent']['voice']
+      agents?: Partial<AssistantRuntimeConfig['config']['agents']>
+    }
   }
 ) {
+  const { voice, agents, ...configRest } = overrides.config ?? {}
+  const base = structuredClone(DEFAULT_RUNTIME_CONFIG.config)
   mockGetAssistantRuntimeConfig.mockResolvedValue({
     ...structuredClone(DEFAULT_RUNTIME_CONFIG),
     ...overrides,
     config: {
-      ...structuredClone(DEFAULT_RUNTIME_CONFIG.config),
-      ...overrides.config,
+      ...base,
+      ...configRest,
+      agents: {
+        ...base.agents,
+        ...agents,
+        // Deep-merge the Agent sub-config: base <- caller's agents.agent override
+        // <- the `voice` shorthand (which wins where passed). Without folding in
+        // `agents?.agent`, this key would clobber a caller-supplied agent override
+        // with the base. The copilot override is carried by the `...agents` spread.
+        agent: { ...base.agents.agent, ...agents?.agent, ...(voice ? { voice } : {}) },
+      },
     },
   })
 }
@@ -313,6 +346,28 @@ beforeEach(() => {
       return result
     }
   )
+})
+
+describe('mockRuntimeConfig helper', () => {
+  it('applies an agents.agent override instead of clobbering it with the base', async () => {
+    mockRuntimeConfig({
+      config: {
+        agents: {
+          agent: {
+            voice: DEFAULT_RUNTIME_CONFIG.config.agents.agent.voice,
+            knowledge: { helpCenter: false, posts: true, changelog: true, status: true },
+          },
+        },
+      },
+    })
+    const resolved = (await mockGetAssistantRuntimeConfig()) as AssistantRuntimeConfig
+    expect(resolved.config.agents.agent.knowledge).toEqual({
+      helpCenter: false,
+      posts: true,
+      changelog: true,
+      status: true,
+    })
+  })
 })
 
 describe('respondEligible (silence rule)', () => {
@@ -1448,7 +1503,7 @@ describe('runAssistantTurn', () => {
     })
 
     expect(mockListEnabledGuidanceCandidates).toHaveBeenCalledWith({
-      role: 'customer_support',
+      agent: 'agent',
     })
     expect(mockSelectApplicableGuidance).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2328,17 +2383,17 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
     expect(lastLoggedMetadata?.configFallbackReason).toBe('database_read_failed')
   })
 
-  it('scopes V2 guidance candidates by resolved role', async () => {
+  it('scopes guidance candidates by the resolved agent', async () => {
     mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
     expect(mockListEnabledGuidanceCandidates).toHaveBeenLastCalledWith({
-      role: 'customer_support',
+      agent: 'agent',
     })
 
     await runAssistantTurn({ ...baseInput, messages: customerAsks('hi'), surface: 'email' })
     expect(mockListEnabledGuidanceCandidates).toHaveBeenLastCalledWith({
-      role: 'customer_support',
+      agent: 'agent',
     })
   })
 })
