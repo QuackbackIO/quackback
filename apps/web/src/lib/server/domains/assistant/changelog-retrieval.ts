@@ -15,7 +15,7 @@
  * `/changelog/<id>` URL and never flagged internal. A `team`/`internal`
  * ceiling (the copilot) ALSO sees drafts and scheduled entries, flagged
  * `internal: true` (the copilot leak gate) and linked to the admin editor.
- * Registered behind the `assistantKnowledge` flag (see
+ * Registered per the agent's config-v3 knowledge toggles (see
  * `resolveKnowledgeSources`); per-agent toggles arrive in Phase 3.
  */
 import { db, changelogEntries, and, isNull, sql } from '@/lib/server/db'

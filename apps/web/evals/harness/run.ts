@@ -18,7 +18,9 @@ import { makeAssistantToolContext } from '@/lib/server/domains/assistant/assista
 import { assembleAssistantToolset } from '@/lib/server/domains/assistant/assistant.tools'
 import { resolveAssistantRolePolicy } from '@/lib/server/domains/assistant/assistant.system-prompt'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
-import { seedFixtures, type SeededConversation } from './seed'
+import { resolveAssistantKnowledgeSnapshot } from '@/lib/server/domains/assistant/retrieval-sources'
+import { roleToAgent } from '@/lib/shared/assistant/config'
+import { seedFixtures, buildScenarioAssistantConfig, type SeededConversation } from './seed'
 import { gradeStructural, type TurnCapture } from './grade'
 import { judgeSingle, judgeContrast } from './judge'
 import {
@@ -237,7 +239,13 @@ export async function runToolsetScenario(
     role,
     audience,
     conversationId,
-    knowledgeEnabled: scenario.config?.assistantKnowledge === true,
+    // Mirror the runtime: compile the resolved agent's knowledge map into the
+    // turn's enabled retrieval sources + status flag.
+    knowledge: resolveAssistantKnowledgeSnapshot(
+      roleToAgent(role),
+      buildScenarioAssistantConfig(scenario.config ?? {}),
+      audience
+    ),
     // Mirror the runtime's own selection: simulate forces 'simulate', else the
     // role policy's write policy governs which write tools survive assembly.
     simulate: conversationId === null,

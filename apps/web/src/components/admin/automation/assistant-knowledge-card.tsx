@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { InformationCircleIcon } from '@heroicons/react/24/outline'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,12 +20,12 @@ import {
 import { isAssistantFieldManaged, ManagedSettingHint } from './assistant-form'
 
 /**
- * Every knowledge source's admin label, help text, and rollout readiness live
- * in one map (C2-style single vocabulary site). `readiness` is honest about the
- * runtime: 'ready' sources are retrieval-indexed today; 'live' is the status
- * source, which is a real-time lookup that arrives with the `get_status` tool
- * rather than an index. Feedback posts carry a per-agent description because the
- * Agent only ever sees public boards (D8), cited as customer feedback.
+ * Every knowledge source's admin label, help text, and readiness live in one
+ * map (C2-style single vocabulary site). `readiness` distinguishes how a source
+ * grounds: 'ready' sources are retrieval-indexed; 'live' is the status source,
+ * a real-time `get_status` lookup rather than an index. Feedback posts carry a
+ * per-agent description because the Agent only ever sees public boards (D8),
+ * cited as customer feedback.
  */
 const SOURCE_META = {
   helpCenter: {
@@ -108,7 +107,7 @@ function ReadinessChip({ readiness }: { readiness: 'ready' | 'live' }) {
       <Badge size="sm" variant="outline" shape="pill">
         {intl.formatMessage({
           id: 'automation.knowledge.readiness.live',
-          defaultMessage: 'Live lookup, arrives with get_status',
+          defaultMessage: 'Live lookup',
         })}
       </Badge>
     )
@@ -181,17 +180,6 @@ function KnowledgeCard({
               </div>
             )
           })}
-        </div>
-
-        <div className="flex items-start gap-2.5 rounded-lg bg-muted/50 px-3 py-2.5 text-[13px] text-muted-foreground">
-          <InformationCircleIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-          <p>
-            {intl.formatMessage({
-              id: 'automation.knowledge.rolloutHint',
-              defaultMessage:
-                'Your selections are saved now and take effect when Quinn’s knowledge tools roll out.',
-            })}
-          </p>
         </div>
       </div>
     </SettingsCard>

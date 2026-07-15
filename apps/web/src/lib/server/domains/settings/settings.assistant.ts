@@ -61,7 +61,6 @@ export type AssistantConfigFallbackReason = 'invalid_assistant_config'
 export interface AssistantRuntimeConfigState extends AssistantConfigState {
   workspaceName: string
   actionsEnabled: boolean
-  knowledgeEnabled: boolean
   configFallbackReason?: AssistantConfigFallbackReason
 }
 
@@ -105,7 +104,6 @@ export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfi
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
     actionsEnabled: flags.assistantTools,
-    knowledgeEnabled: flags.assistantKnowledge,
   }
   if (parsed.success) return { config: parsed.data, ...runtimeFields }
 

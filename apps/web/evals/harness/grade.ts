@@ -145,6 +145,10 @@ function gradeOne(a: Structural, cap: Capture): string | null {
       return proposedActions.some((p) => p.toolName === a.name)
         ? null
         : `expected "${a.name}" proposed; proposals: [${proposedActions.map((p) => p.toolName).join(', ')}]`
+    case 'calledTool':
+      return toolOutcomes.some((o) => o.name === a.name)
+        ? null
+        : `expected "${a.name}" to be called; outcomes: [${toolOutcomes.map((o) => `${o.name}:${o.outcome}`).join(', ')}]`
     case 'textIncludesAny': {
       const lower = text.toLowerCase()
       return a.values.some((v) => lower.includes(v.toLowerCase()))

@@ -47,7 +47,7 @@ import type {
   AssistantToolContext,
   AssistantToolOutcome,
 } from './assistant.toolspec'
-import type { RetrievedItem } from './retrieval-sources'
+import { resolveAssistantKnowledgeSnapshot, type RetrievedItem } from './retrieval-sources'
 import { listEnabledGuidanceCandidates, type AssistantGuidanceRule } from './guidance.service'
 import { selectApplicableGuidance, splitGuidanceCandidates } from './guidance-selector'
 import {
@@ -109,7 +109,6 @@ export interface AssistantRuntimeConfig {
   revision: number
   workspaceName: string
   actionsEnabled: boolean
-  knowledgeEnabled: boolean
   configFallbackReason?: string
 }
 
@@ -392,12 +391,18 @@ export function validateAssistantCompletion(
   ) {
     throw new AssistantCompletionError('empty_search_without_resolution_tool')
   }
+  // get_status legitimately resolves an EMPTY search (live state, no
+  // retrieval), but it must not excuse paraphrasing retrieved sources
+  // without citing them — only a write/control tool result can do that.
+  const hasNonReadResolutionTool = trace.toolCalls.some(
+    (name) => name !== 'search_knowledge' && name !== 'get_status'
+  )
   if (
     trace.searchCalls > 0 &&
     trace.sources.size > 0 &&
     groundedCitations.length === 0 &&
     !trace.handoffRequested &&
-    !hasAlternativeToolResult
+    !hasNonReadResolutionTool
   ) {
     throw new AssistantCompletionError('uncited_retrieved_answer')
   }
@@ -908,10 +913,20 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       revision: 1,
       workspaceName: 'this workspace',
       actionsEnabled: false,
-      knowledgeEnabled: false,
       configFallbackReason: 'database_read_failed',
     }
   }
+
+  // Compile the resolved agent's per-agent knowledge map (config v3) into this
+  // turn's enabled retrieval sources + status flag. This is the single seam
+  // that turns admin toggles into the assembled toolset: search_knowledge
+  // registers iff ≥1 source is enabled, get_status iff `status` is on, and the
+  // enabled set both scopes retrieval and drives the tool's source enumeration.
+  const knowledgeSnapshot = resolveAssistantKnowledgeSnapshot(
+    roleToAgent(role),
+    runtimeConfig.config,
+    audience
+  )
 
   // Customer voice always resolves from the Agent's sub-config: customer-facing
   // roles (support + the suggested-reply draft path, D9) map to `agent`, and
@@ -974,8 +989,12 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // failed (see `loadTicketGroundingContext`'s own doc).
   // Suggested replies are customer-ready drafts. They keep the team knowledge
   // ceiling but only receive customer-visible thread messages; Copilot Q&A may
-  // inspect internal notes and carries that provenance into its result.
-  const includeInternalGrounding = role === 'copilot_qa'
+  // inspect internal notes and carries that provenance into its result — but
+  // only when the Copilot's `internalNotes` knowledge toggle is on (config v3).
+  // Drafts (suggested_reply → agent) never resolve to copilot_qa, so they stay
+  // notes-free unconditionally.
+  const includeInternalGrounding =
+    role === 'copilot_qa' && runtimeConfig.config.agents.copilot.knowledge.internalNotes
   const ticketGrounding = ticketId
     ? await loadTicketGroundingContext(ticketId, includeInternalGrounding)
     : null
@@ -1013,7 +1032,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     ticketId,
     customerPrincipalId,
     sourceTypes: input.sourceTypes,
-    knowledgeEnabled: runtimeConfig.knowledgeEnabled,
+    knowledge: knowledgeSnapshot,
     involvementId: input.involvementId,
     latestCustomerMessageId: input.latestCustomerMessageId,
     simulate: input.simulate,

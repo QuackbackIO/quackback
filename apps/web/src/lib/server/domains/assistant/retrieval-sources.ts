@@ -8,10 +8,13 @@
  * past-conversation summaries each behind their own flag — composed by
  * `retrieveKnowledge` into one ranked, budgeted result.
  *
- * The knowledge-base source is always registered; a source gated behind a
- * flag is registered only when that flag is on, via a lazy import so this
- * module never eagerly pulls in that source's domain.
- * With only the knowledge-base source registered (the flag-off default),
+ * Which sources are registered for a turn is decided by the resolved agent's
+ * per-agent `knowledge` map (config v3), compiled to a set of enabled source
+ * types (`AssistantKnowledgeSnapshot`) by `resolveAssistantKnowledgeSnapshot`.
+ * A source whose type is not in that set is not registered — it does not exist
+ * to the agent this turn (D7). Each optional source's domain is pulled via a
+ * lazy import so this module never eagerly loads a disabled source's schema.
+ * With only the knowledge-base source registered (the KB-only default),
  * `retrieveKnowledge` is a byte-identical pass-through of
  * `retrieveKbArticles`'s own ranking — merging and re-ranking a single
  * source's already-sorted output changes nothing.
@@ -20,9 +23,9 @@ import type { PrincipalId, ConversationId } from '@quackback/ids'
 import type { ContentAudience } from './audience'
 import { toHelpCenterAudience } from './audience'
 import { retrieveKbArticles } from './retrieval'
-import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import type { AssistantConfig, AssistantAgentKind } from '@/lib/shared/assistant/config'
 import type { AssistantCitation } from './assistant.toolspec'
-import type { AssistantCitationType } from './citation-types'
+import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from './citation-types'
 
 /** Per-item snippet budget handed to the model (full content stays server-side). */
 export const KNOWLEDGE_SNIPPET_CHARS = 1200
@@ -131,44 +134,131 @@ export const kbKnowledgeSource: KnowledgeSource = {
   },
 }
 
-const STATIC_SOURCES: readonly KnowledgeSource[] = [kbKnowledgeSource]
+/**
+ * The retrieval sources a turn can ground on, plus the status flag, compiled
+ * from the resolved agent's per-agent `knowledge` map (config v3). `sources`
+ * drives both `search_knowledge`'s registration (registered iff ≥1 source is
+ * enabled) and its dynamic source enumeration; `status` drives `get_status`.
+ * Internal-notes grounding is NOT a retrieval source (it rides the copilot
+ * grounding block), so it lives on the runtime, not here.
+ */
+export interface AssistantKnowledgeSnapshot {
+  /** Enabled retrieval source types for this turn (subset of the citation vocabulary). */
+  sources: ReadonlySet<AssistantCitationType>
+  /** Whether the real-time `get_status` tool is registered this turn. */
+  status: boolean
+}
 
 /**
- * Resolve the active source list: the knowledge-base source plus, behind the
- * `assistantKnowledge` flag, the feedback-posts source, the admin-curated
- * snippets source, the past-conversation-summaries source, the closed-tickets
- * source (team-only), and the changelog source. Each optional source's domain
- * is imported dynamically so this module (and everything that statically
- * imports it, including assistant.toolspec.ts) never pulls in that source's
- * schema at load time when the flag is off.
+ * The sole mint point (C3) that compiles an agent's per-agent `knowledge` map
+ * into the turn's enabled retrieval-source set + status flag. Discriminated on
+ * the agent kind because the two maps are different shapes (the Agent's is a
+ * strict subset — no tickets/pastConversations/internalNotes, D8).
+ *
+ * `helpCenter → article`, `posts → post`, `pastConversations → summary`
+ * (copilot only), `tickets → ticket` (copilot only), `changelog → changelog`.
+ * Snippets have no per-agent toggle — they are curated assistant content, so
+ * the snippets source is registered whenever the ceiling is team (Copilot) and
+ * never on the public Agent turn.
+ */
+export function resolveAssistantKnowledgeSnapshot(
+  agent: AssistantAgentKind,
+  config: AssistantConfig,
+  audience: ContentAudience
+): AssistantKnowledgeSnapshot {
+  const sources = new Set<AssistantCitationType>()
+  // Snippets: no per-agent toggle. Curated internal assistant content, so they
+  // are available at the team ceiling always and never on a public turn.
+  if (audience !== 'public') sources.add('snippet')
+  switch (agent) {
+    case 'agent': {
+      const k = config.agents.agent.knowledge
+      if (k.helpCenter) sources.add('article')
+      if (k.posts) sources.add('post')
+      if (k.changelog) sources.add('changelog')
+      return { sources, status: k.status }
+    }
+    case 'copilot': {
+      const k = config.agents.copilot.knowledge
+      if (k.helpCenter) sources.add('article')
+      if (k.posts) sources.add('post')
+      if (k.pastConversations) sources.add('summary')
+      if (k.tickets) sources.add('ticket')
+      if (k.changelog) sources.add('changelog')
+      return { sources, status: k.status }
+    }
+    default: {
+      const exhaustive: never = agent
+      throw new Error(`resolveAssistantKnowledgeSnapshot: unhandled agent "${exhaustive}"`)
+    }
+  }
+}
+
+/** Human-readable, model-facing name for each retrieval source type. */
+const SOURCE_TYPE_PROMPT_LABELS: Record<AssistantCitationType, string> = {
+  article: 'help center articles',
+  post: 'feedback posts',
+  snippet: 'saved answer snippets',
+  summary: "this customer's past conversation summaries",
+  ticket: 'resolved ticket summaries',
+  changelog: 'changelog entries',
+}
+
+/**
+ * The model-facing enumeration of the turn's enabled retrieval sources, folded
+ * into `search_knowledge`'s promptGuidance at assembly time (assistant.tools.ts)
+ * so the description the model reads is dynamic per turn while the static tool
+ * definition contract stays fixed. Posts carry a standing caveat: they are
+ * customer-submitted, cited as feedback, never asserted as fact. `''` when no
+ * source is enabled (the tool is not assembled at all in that case).
+ */
+export function describeEnabledKnowledgeSources(
+  sources: ReadonlySet<AssistantCitationType>
+): string {
+  const ordered = ASSISTANT_CITATION_TYPES.filter((type) => sources.has(type))
+  if (ordered.length === 0) return ''
+  const labels = ordered.map((type) => SOURCE_TYPE_PROMPT_LABELS[type])
+  const caveat = sources.has('post')
+    ? ' Feedback posts are customer-submitted; cite them as customer feedback, not as verified fact.'
+    : ''
+  return `This turn's knowledge sources: ${labels.join(', ')}. Pass the optional sources parameter to search only a subset.${caveat}`
+}
+
+/**
+ * Resolve the active source adapters for a turn from its enabled-source set
+ * (`AssistantKnowledgeSnapshot.sources`): the knowledge-base source when
+ * `article` is enabled, plus the feedback-posts, snippets, past-conversation-
+ * summaries, closed-tickets, and changelog sources each iff their type is in
+ * the set. Each optional source's domain is imported dynamically so this module
+ * (and everything that statically imports it, including assistant.toolspec.ts)
+ * never pulls in a disabled source's schema at load time.
+ *
+ * `enabled` defaults to `{article}` — the KB-only pass-through — for legacy
+ * direct callers/tests that pass no snapshot, matching the historical
+ * "knowledge base always available" default before per-agent toggles existed.
  */
 export async function resolveKnowledgeSources(
-  knowledgeEnabled?: boolean
+  enabled?: ReadonlySet<AssistantCitationType>
 ): Promise<KnowledgeSource[]> {
-  const sources: KnowledgeSource[] = [...STATIC_SOURCES]
-  const includeAdditionalSources =
-    knowledgeEnabled ?? (await isFeatureEnabled('assistantKnowledge'))
-  if (includeAdditionalSources) {
-    const [
-      { postsKnowledgeSource },
-      { snippetsKnowledgeSource },
-      summaries,
-      { ticketsKnowledgeSource },
-      { changelogKnowledgeSource },
-    ] = await Promise.all([
-      import('./posts-retrieval'),
-      import('./snippets-retrieval'),
-      import('./conversation-summary-retrieval'),
-      import('./tickets-retrieval'),
-      import('./changelog-retrieval'),
-    ])
+  const enabledSet = enabled ?? new Set<AssistantCitationType>(['article'])
+  const sources: KnowledgeSource[] = []
+  if (enabledSet.has('article')) sources.push(kbKnowledgeSource)
+  if (enabledSet.has('post')) {
+    sources.push((await import('./posts-retrieval')).postsKnowledgeSource)
+  }
+  if (enabledSet.has('snippet')) {
+    sources.push((await import('./snippets-retrieval')).snippetsKnowledgeSource)
+  }
+  if (enabledSet.has('summary')) {
     sources.push(
-      postsKnowledgeSource,
-      snippetsKnowledgeSource,
-      summaries.conversationSummariesKnowledgeSource,
-      ticketsKnowledgeSource,
-      changelogKnowledgeSource
+      (await import('./conversation-summary-retrieval')).conversationSummariesKnowledgeSource
     )
+  }
+  if (enabledSet.has('ticket')) {
+    sources.push((await import('./tickets-retrieval')).ticketsKnowledgeSource)
+  }
+  if (enabledSet.has('changelog')) {
+    sources.push((await import('./changelog-retrieval')).changelogKnowledgeSource)
   }
   return sources
 }
@@ -202,11 +292,12 @@ export async function resolveKnowledgeSources(
  * another source's genuinely-scored items.
  *
  * `sourceTypes`, when given, is a per-request NARROWING filter applied after
- * `resolveKnowledgeSources()`: it can only drop sources the flags already
- * registered, never add one back that a flag left unregistered (the copilot
- * Answer-sources picker is the caller; it lets a teammate turn a source off
- * for one question, not turn on a source the workspace hasn't enabled).
- * `undefined` (the default) consults every registered source, unchanged.
+ * `resolveKnowledgeSources()`: it can only drop sources the snapshot already
+ * registered, never add one back the agent's config left unregistered (the
+ * copilot Answer-sources picker, intersected with any model-supplied `sources`
+ * target, is the caller; it lets a teammate turn a source off for one
+ * question, not turn on a source the workspace hasn't enabled). `undefined`
+ * (the default) consults every registered source, unchanged.
  */
 export async function retrieveKnowledge(
   query: string,
@@ -217,12 +308,13 @@ export async function retrieveKnowledge(
     customerPrincipalId?: PrincipalId
     conversationId?: ConversationId | null
     sourceTypes?: RetrievedItem['sourceType'][]
-    /** Turn-scoped feature snapshot; omitted only by legacy direct callers/tests. */
-    knowledgeEnabled?: boolean
+    /** The turn's enabled retrieval sources (config v3); omitted only by legacy
+     *  direct callers/tests, which then default to the KB-only pass-through. */
+    enabledSources?: ReadonlySet<AssistantCitationType>
   } = {}
 ): Promise<RetrievedItem[]> {
   const topK = opts.topK ?? KNOWLEDGE_TOP_K
-  const resolved = await resolveKnowledgeSources(opts.knowledgeEnabled)
+  const resolved = await resolveKnowledgeSources(opts.enabledSources)
   const sources = opts.sourceTypes
     ? resolved.filter((source) => opts.sourceTypes!.includes(source.sourceType))
     : resolved

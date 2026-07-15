@@ -967,10 +967,6 @@ export interface FeatureFlags {
    *  `copilot.use` permission and item-viewability gate; see
    *  routes/api/admin/assistant/suggest.ts). */
   assistantProactiveSuggestions: boolean
-  /** Extra team-only knowledge for Copilot: feedback posts, private snippets,
-   *  and same-customer past-conversation summaries. Customer-facing Quinn
-   *  remains limited to vetted public support content. */
-  assistantKnowledge: boolean
   /** What the AI assistant may DO: built-in actions such as closing
    *  conversations and creating tickets. Every action has per-action
    *  controls and approvals. */
@@ -993,9 +989,6 @@ export const LEGACY_FLAG_MAP: Record<string, keyof FeatureFlags> = {
   assistantCopilot: 'inboxAi',
   inboxTranslation: 'inboxAi',
   aiAttributeDetection: 'inboxAi',
-  assistantPostGrounding: 'assistantKnowledge',
-  assistantSnippets: 'assistantKnowledge',
-  assistantConversationGrounding: 'assistantKnowledge',
   assistantActions: 'assistantTools',
 }
 
@@ -1047,7 +1040,6 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   visitorDeviceTracking: false,
   inboxAi: false,
   assistantProactiveSuggestions: false,
-  assistantKnowledge: false,
   assistantTools: false,
 }
 
@@ -1103,11 +1095,6 @@ export const FEATURE_FLAG_REGISTRY: Record<
     label: 'Inbox AI',
     description:
       'AI for your team inside the inbox: a private Copilot tab for asking questions about a conversation, two-way message translation, and automatic classification of conversation attributes you opt in. Requires an AI model to be configured; each capability has its own controls.',
-  },
-  assistantKnowledge: {
-    label: 'Assistant knowledge sources',
-    description:
-      "Let Copilot use team-only feedback posts, private snippets, and the same customer's past conversation summaries. Customer-facing Quinn remains limited to vetted public support content.",
   },
   assistantTools: {
     label: 'Assistant actions',
@@ -1244,7 +1231,6 @@ export const LAB_SECTIONS: Array<{
       { key: 'helpCenterAiAnswers' },
       { key: 'aiFeedbackExtraction' },
       { key: 'inboxAi', subFlags: ['assistantProactiveSuggestions'] },
-      { key: 'assistantKnowledge' },
       { key: 'assistantTools' },
     ],
   },

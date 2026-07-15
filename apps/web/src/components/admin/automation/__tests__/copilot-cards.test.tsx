@@ -97,7 +97,7 @@ describe('CopilotCapabilitiesCard', () => {
 })
 
 describe('CopilotKnowledgeCard', () => {
-  it('lists all seven sources with the honest rollout hint', async () => {
+  it('lists all seven live sources (toggles are wired into the runtime)', async () => {
     renderWithProviders(<CopilotKnowledgeCard />)
     expect(await screen.findByText('Help center')).toBeInTheDocument()
     expect(screen.getByText('Past conversations')).toBeInTheDocument()
@@ -105,9 +105,10 @@ describe('CopilotKnowledgeCard', () => {
     expect(screen.getByText('Tickets')).toBeInTheDocument()
     expect(screen.getByText('Changelog')).toBeInTheDocument()
     expect(screen.getByText('System status')).toBeInTheDocument()
+    // The config-only rollout hint is gone now that toggles drive the toolset.
     expect(
-      screen.getByText(/take effect when Quinn’s knowledge tools roll out/)
-    ).toBeInTheDocument()
+      screen.queryByText(/take effect when Quinn’s knowledge tools roll out/)
+    ).not.toBeInTheDocument()
     // Status is a live lookup, not an index.
     expect(screen.getByText(/Live lookup/)).toBeInTheDocument()
   })

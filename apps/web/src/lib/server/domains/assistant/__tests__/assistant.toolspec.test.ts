@@ -170,6 +170,7 @@ describe('resolveToolSpecs', () => {
       'capture_feedback',
       'create_ticket',
       'end_conversation',
+      'get_status',
       'handoff_to_human',
       'report_inability',
       'search_knowledge',

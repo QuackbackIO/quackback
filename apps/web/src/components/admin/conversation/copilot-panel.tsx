@@ -239,13 +239,15 @@ function turnMeta(turn: CopilotTurn): Pick<CopilotEventInput, 'answerType' | 'in
 
 export function CopilotPanel({
   item,
-  flags,
   onInsert,
   askInputRef,
 }: {
   /** The open item (unified inbox §2.9) grounds the turn on its thread. */
   item: InboxItemRef
-  flags: FeatureFlags | undefined
+  /** Retained for parent compatibility (the inbox passes workspace flags); the
+   *  Answer-sources picker no longer keys off a feature flag — source
+   *  availability is per-agent config the runtime enforces. */
+  flags?: FeatureFlags | undefined
   onInsert: (text: string, mode: InsertMode) => void
   /** The ask textarea's DOM node, for hosts that focus it from outside
    *  (e.g. an inbox keyboard shortcut). */
@@ -255,7 +257,7 @@ export function CopilotPanel({
   const assistantName = 'Copilot'
   const headerLabel = 'Copilot'
 
-  const sourceOptions = useMemo(() => visibleSourceOptions(flags), [flags])
+  const sourceOptions = useMemo(() => visibleSourceOptions(), [])
   const visibleTypes = useMemo(() => sourceOptions.map((o) => o.type), [sourceOptions])
   const { checked, toggle } = useSourceFilter(principal?.id, visibleTypes)
   const sourceTypesParam = checked.size === visibleTypes.length ? undefined : Array.from(checked)

@@ -33,8 +33,32 @@ import {
   type AssistantToolCall,
 } from './tool-audit'
 import { proposePendingAction, type AssistantPendingAction } from './pending-actions.service'
+import { describeEnabledKnowledgeSources } from './retrieval-sources'
 
 const log = logger.child({ component: 'assistant-tools' })
+
+/**
+ * Fold the turn's enabled-source enumeration into `search_knowledge`'s
+ * promptGuidance so the model learns which sources it may search this turn and
+ * that it can target a subset. This makes the model-facing description dynamic
+ * without touching the static tool definition — the spec/definition contract
+ * stays fixed (the `sources` enum and output shape are the same every turn);
+ * only the prompt line the "Your tools" section composes varies. Returns fresh
+ * spec objects, never mutating the shared registry entries; `tools[i]` is
+ * unaffected (it binds `spec.definition`, which is identical here).
+ */
+function withDynamicPromptGuidance(
+  specs: AssistantToolSpec[],
+  ctx: AssistantToolContext
+): AssistantToolSpec[] {
+  const enumeration = describeEnabledKnowledgeSources(ctx.knowledge.sources)
+  if (!enumeration) return specs
+  return specs.map((spec) =>
+    spec.name === 'search_knowledge'
+      ? { ...spec, promptGuidance: `${spec.promptGuidance} ${enumeration}` }
+      : spec
+  )
+}
 
 const PENDING_APPROVAL_NOTE =
   'A teammate must approve this action; tell the customer it has been requested.'
@@ -396,7 +420,7 @@ export async function assembleAssistantToolset(
     )
     return {
       tools: legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)),
-      activeSpecs: legacySpecs,
+      activeSpecs: withDynamicPromptGuidance(legacySpecs, ctx),
     }
   }
 
@@ -414,6 +438,9 @@ export async function assembleAssistantToolset(
     tools: active.map(({ spec, mode }) =>
       spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
     ),
-    activeSpecs: active.map((entry) => entry.spec),
+    activeSpecs: withDynamicPromptGuidance(
+      active.map((entry) => entry.spec),
+      ctx
+    ),
   }
 }

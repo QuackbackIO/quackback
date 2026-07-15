@@ -5,9 +5,9 @@
  * knowledge base: retrieval over `posts`, same audience-scoped hybrid shape as
  * `retrieveKbArticles` (retrieval.ts) — semantic (pgvector cosine over
  * `posts.embedding`) blended with tsvector (`posts.searchVector`) when a
- * query embedding is available, keyword-only otherwise. Registered only
- * behind the `assistantKnowledge` flag (see `resolveKnowledgeSources`),
- * default off.
+ * query embedding is available, keyword-only otherwise. Registered per turn
+ * when the resolved agent's `posts` knowledge toggle is on (config v3 — see
+ * `resolveKnowledgeSources`), default off.
  *
  * Changelog entries have no tsvector or embedding today, so they are not a
  * grounding source yet — deferred, not in scope here.
@@ -214,11 +214,13 @@ export async function retrievePosts(
   ceiling: ContentAudience,
   options: RetrievePostsOptions = {}
 ): Promise<RetrievedPost[]> {
-  // Published feedback is still customer-authored, not vetted support
-  // knowledge. Keep it available to teammates, but never ground an autonomous
-  // customer-facing answer with it.
-  if (ceiling === 'public') return []
-
+  // The posts source is only ever registered on a turn whose agent enabled the
+  // `posts` knowledge toggle (config v3), so reaching here already means the
+  // agent opted in. At the public ceiling, `postsVisibilityConditions('public')`
+  // narrows to anonymous-viewable boards only (D8) — the customer-facing Agent
+  // grounds on public feedback, cited as customer feedback and never asserted
+  // as fact (the prompt caveat lives in `describeEnabledKnowledgeSources`); the
+  // team ceiling (Copilot) sees every non-deleted board.
   const topK = options.topK ?? POSTS_ASK_TOP_K
   const minScore = options.minScore ?? POSTS_SEMANTIC_SIMILARITY_FLOOR
   const keywordRankFloor = options.keywordRankFloor ?? POSTS_KEYWORD_RANK_FLOOR
@@ -245,7 +247,8 @@ export async function retrievePosts(
 /**
  * The feedback-posts `KnowledgeSource`: wraps `retrievePosts`, mapping its
  * audience-scoped rows onto `RetrievedItem`. Dynamically imported by
- * `resolveKnowledgeSources` only when `assistantKnowledge` is on.
+ * `resolveKnowledgeSources` only when the resolved agent's `posts` toggle
+ * enabled the `post` source for this turn.
  */
 export const postsKnowledgeSource: KnowledgeSource = {
   sourceType: 'post',

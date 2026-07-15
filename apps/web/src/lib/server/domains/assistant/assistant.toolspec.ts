@@ -31,10 +31,15 @@ import {
   type ConversationId,
   type TicketId,
   type AssistantInvolvementId,
+  type SegmentId,
 } from '@quackback/ids'
 import { type ContentAudience } from './audience'
-import { retrieveKnowledge, type RetrievedItem } from './retrieval-sources'
-import type { AssistantCitationType } from './citation-types'
+import {
+  retrieveKnowledge,
+  type RetrievedItem,
+  type AssistantKnowledgeSnapshot,
+} from './retrieval-sources'
+import { ASSISTANT_CITATION_TYPES, type AssistantCitationType } from './citation-types'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { TICKET_TYPES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import type { Actor } from '@/lib/server/policy/types'
@@ -226,8 +231,15 @@ export interface AssistantToolContext {
    * `retrieveKnowledge` in `./retrieval-sources`.
    */
   sourceTypes?: RetrievedItem['sourceType'][]
-  /** Turn-scoped feature snapshot used by search without re-reading settings. */
-  knowledgeEnabled?: boolean
+  /**
+   * The turn's compiled knowledge snapshot (config v3): the enabled retrieval
+   * source types (drives which sources `search_knowledge` consults and its
+   * dynamic enumeration) and whether `get_status` is registered. Minted by
+   * `resolveAssistantKnowledgeSnapshot` (retrieval-sources.ts) from the
+   * resolved agent's per-agent `knowledge` map; never re-read from settings
+   * mid-turn.
+   */
+  knowledge: AssistantKnowledgeSnapshot
   /**
    * The per-attempt mutable ledger: sources surfaced, calls/outcomes recorded,
    * and orchestration decisions (handoff/inability/proposals) emitted this
@@ -290,7 +302,7 @@ export function makeAssistantToolContext(init: {
   ticketId?: TicketId | null
   customerPrincipalId?: PrincipalId | null
   sourceTypes?: RetrievedItem['sourceType'][]
-  knowledgeEnabled?: boolean
+  knowledge?: AssistantKnowledgeSnapshot
   involvementId?: AssistantInvolvementId | null
   latestCustomerMessageId?: string | null
   simulate?: boolean
@@ -307,7 +319,13 @@ export function makeAssistantToolContext(init: {
     ticketId: init.ticketId ?? null,
     customerPrincipalId: init.customerPrincipalId ?? undefined,
     sourceTypes: init.sourceTypes,
-    knowledgeEnabled: init.knowledgeEnabled ?? false,
+    // Non-runtime callers (the approved-action executor) never retrieve, so the
+    // KB-only default is a safe floor; the turn runtime always passes a real
+    // snapshot compiled from the agent's config.
+    knowledge: init.knowledge ?? {
+      sources: new Set<AssistantCitationType>(['article']),
+      status: false,
+    },
     ledger: makeAssistantToolLedger(),
     simulate: init.simulate ?? init.conversationId === null,
     writeToolPolicy: init.writeToolPolicy,
@@ -426,7 +444,7 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
 }
 
 const searchKnowledgeOutputSchema = z.object({
-  articles: z.array(
+  results: z.array(
     z.object({
       id: z.string(),
       title: z.string(),
@@ -439,15 +457,43 @@ const searchKnowledgeOutputSchema = z.object({
 export const searchKnowledgeTool = toolDefinition({
   name: 'search_knowledge',
   description:
-    'Search the knowledge base for articles relevant to the customer question. Returns only content the current viewer is allowed to see. Call this before answering and cite the returned article ids.',
+    'Search the workspace knowledge for content relevant to the question. The enabled sources for this turn are listed in the operating guidance. Returns only content the current viewer is allowed to see. Call this before answering and cite the returned result ids.',
   inputSchema: z.object({
     query: z.string().min(1).max(500).describe('A focused search query derived from the question.'),
+    sources: z
+      .array(z.enum(ASSISTANT_CITATION_TYPES))
+      .min(1)
+      .max(ASSISTANT_CITATION_TYPES.length)
+      .optional()
+      .describe(
+        "Optional: restrict this search to a subset of the turn's enabled sources. Omit to search all of them. Values outside the enabled set are ignored."
+      ),
   }),
   outputSchema: withGateEnvelope(searchKnowledgeOutputSchema),
 })
 
 type SearchKnowledgeArgs = InferToolInput<typeof searchKnowledgeTool>
 type SearchKnowledgeOutput = z.infer<typeof searchKnowledgeOutputSchema>
+
+/**
+ * Combine the two independent NARROWING inputs to search — the copilot
+ * Answer-sources picker (`ctx.sourceTypes`) and the model's per-call `sources`
+ * target — into one list, or `undefined` (search everything registered) when
+ * neither is set. When both are present the result is their intersection: each
+ * can only remove sources, so a source survives only if both allow it.
+ * `retrieveKnowledge` then intersects the survivors with the registered set,
+ * so a value neither enabled nor registered is a harmless no-op.
+ */
+function intersectSourceTypes(
+  picker: RetrievedItem['sourceType'][] | undefined,
+  requested: AssistantCitationType[] | undefined
+): AssistantCitationType[] | undefined {
+  if (!picker && !requested) return undefined
+  if (!picker) return requested
+  if (!requested) return picker
+  const requestedSet = new Set(requested)
+  return picker.filter((type) => requestedSet.has(type))
+}
 
 async function executeSearchKnowledge(
   args: SearchKnowledgeArgs,
@@ -458,22 +504,25 @@ async function executeSearchKnowledge(
   ctx.ledger.searchCalls += 1
   if (ctx.ledger.searchCalls > SEARCH_BUDGET_PER_TURN) {
     return {
-      articles: [],
-      note: 'Search limit reached for this turn. Answer the customer now using only the articles already retrieved; if none were relevant, say you do not know and offer to connect a human.',
+      results: [],
+      note: 'Search limit reached for this turn. Answer the customer now using only the results already retrieved; if none were relevant, say you do not know and offer to connect a human.',
     }
   }
   // Audience-scoped from day one: the citation set can never exceed what the
   // viewer could already see. retrieveKnowledge composes every registered
-  // grounding source (the knowledge base always; feedback posts, snippets,
-  // and past-conversation summaries behind their own flags) behind one call,
-  // each source mapping the audience boundary (or, for summaries, the
-  // customer boundary) itself. customerPrincipalId/conversationId are only
-  // consumed by the summaries source; every other source ignores them.
+  // grounding source (per the turn's enabled-source snapshot) behind one call,
+  // each source mapping the audience boundary (or, for summaries, the customer
+  // boundary) itself. customerPrincipalId/conversationId are only consumed by
+  // the summaries source; every other source ignores them. The effective
+  // narrowing intersects the copilot Answer-sources picker (ctx.sourceTypes)
+  // with any model-supplied `sources` target — either can only drop sources,
+  // never re-enable one the snapshot left unregistered.
+  const narrowing = intersectSourceTypes(ctx.sourceTypes, args.sources)
   const items = await retrieveKnowledge(args.query, ctx.audience, {
     customerPrincipalId: ctx.customerPrincipalId,
     conversationId: ctx.conversationId,
-    sourceTypes: ctx.sourceTypes,
-    knowledgeEnabled: ctx.knowledgeEnabled,
+    sourceTypes: narrowing,
+    enabledSources: ctx.knowledge.sources,
   })
   for (const item of items) {
     // `updatedAt` rides the ledgered citation itself (see its doc on
@@ -485,7 +534,7 @@ async function executeSearchKnowledge(
     )
   }
   return {
-    articles: items.map((item) => ({
+    results: items.map((item) => ({
       id: item.id,
       title: item.title,
       snippet: item.excerpt,
@@ -495,6 +544,128 @@ async function executeSearchKnowledge(
     // content-not-instructions note — see RETRIEVED_CONTENT_NOTE
     // (injection-guard.ts) for why it is a trailing note rather than a fence.
     ...(items.length > 0 ? { note: RETRIEVED_CONTENT_NOTE } : {}),
+  }
+}
+
+const getStatusOutputSchema = z.object({
+  /** Worst-of over the viewer's visible components, or 'unavailable' when the
+   *  status page cannot be shown to this viewer. */
+  overall: z.string(),
+  /** Where to point the person for detail: the public status page for the
+   *  customer Agent, the admin status view for Copilot. Null when unavailable. */
+  statusPageUrl: z.string().nullable(),
+  components: z.array(z.object({ name: z.string(), status: z.string() })),
+  activeIncidents: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      kind: z.string(),
+      status: z.string(),
+      impact: z.string(),
+    })
+  ),
+  upcomingMaintenance: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      status: z.string(),
+      scheduledStartAt: z.string().nullable(),
+      scheduledEndAt: z.string().nullable(),
+    })
+  ),
+  note: z.string().optional(),
+})
+
+export const getStatusTool = toolDefinition({
+  name: 'get_status',
+  description:
+    'Look up the current live service status: component operational states, active incidents, and scheduled maintenance. Use this for real-time "is X down / is there an outage / is maintenance planned" questions — the result is live state, never a stale indexed snapshot. Reference the statusPageUrl it returns rather than citing it as a knowledge source.',
+  inputSchema: z.object({}),
+  outputSchema: withGateEnvelope(getStatusOutputSchema),
+})
+
+type GetStatusOutput = z.infer<typeof getStatusOutputSchema>
+
+/**
+ * Real-time status lookup (never index-backed): the customer Agent (public
+ * ceiling) sees the exact public status-page projection an anonymous visitor
+ * would — segment-gated components/incidents are dropped, and if the page's
+ * audience excludes anonymous visitors nothing is returned at all; Copilot
+ * (team ceiling) sees every component and incident via a team service actor.
+ * Best-effort: any failure (status product off, transient error) returns a
+ * graceful note rather than throwing into the agentic loop.
+ */
+async function executeGetStatus(
+  _args: InferToolInput<typeof getStatusTool>,
+  ctx: AssistantToolContext
+): Promise<GetStatusOutput> {
+  const unavailable = (note: string): GetStatusOutput => ({
+    overall: 'unavailable',
+    statusPageUrl: null,
+    components: [],
+    activeIncidents: [],
+    upcomingMaintenance: [],
+    note,
+  })
+  try {
+    const isPublic = ctx.audience === 'public'
+    const [
+      { getStatusPageSnapshot, isStatusAudienceGranted },
+      { getStatusSettings },
+      { ANONYMOUS_ACTOR },
+    ] = await Promise.all([
+      import('@/lib/server/domains/status'),
+      import('@/lib/server/domains/settings/settings.status'),
+      import('@/lib/server/policy/types'),
+    ])
+    const settings = await getStatusSettings()
+    // Public ceiling reuses the anonymous portal actor exactly, so the tool can
+    // never surface a segment-gated component the visitor could not already
+    // see. Team ceiling builds a service actor whose team role short-circuits
+    // segment filtering (mirrors /api/v1/status/summary's convention), giving
+    // Copilot the full projection including gated components and scheduled
+    // maintenance.
+    const actor: Actor = isPublic
+      ? ANONYMOUS_ACTOR
+      : {
+          principalId: ctx.assistantPrincipalId,
+          role: 'member',
+          principalType: 'service',
+          segmentIds: new Set<SegmentId>(),
+        }
+    if (isPublic && !isStatusAudienceGranted(actor, settings)) {
+      return unavailable('The status page is not publicly available.')
+    }
+    const snapshot = await getStatusPageSnapshot(actor, settings)
+    const components = [
+      ...snapshot.ungroupedComponents,
+      ...snapshot.groups.flatMap((group) => group.components),
+    ]
+    return {
+      overall: snapshot.topLevel.status,
+      statusPageUrl: isPublic ? '/status' : '/admin/status',
+      components: components.map((component) => ({
+        name: component.name,
+        status: component.status,
+      })),
+      activeIncidents: snapshot.activeIncidents.map((incident) => ({
+        id: incident.id,
+        title: incident.title,
+        kind: incident.kind,
+        status: incident.status,
+        impact: incident.impact,
+      })),
+      upcomingMaintenance: snapshot.upcomingMaintenance.map((window) => ({
+        id: window.id,
+        title: window.title,
+        status: window.status,
+        scheduledStartAt: window.scheduledStartAt?.toISOString() ?? null,
+        scheduledEndAt: window.scheduledEndAt?.toISOString() ?? null,
+      })),
+    }
+  } catch (err) {
+    log.warn({ err }, 'get_status lookup failed; returning unavailable')
+    return unavailable('Live status information could not be retrieved right now.')
   }
 }
 
@@ -906,9 +1077,31 @@ const SPECS: readonly AssistantToolSpec[] = [
     // conversation — see AssistantToolContext's own doc), so it belongs on
     // both a conversation-scoped and a ticket-scoped turn.
     parents: ['conversation', 'ticket'],
+    // Registered iff the resolved agent enabled ≥1 retrieval source this turn
+    // (D7): an agent with every knowledge source off has no search tool at all.
+    availableWhen: (ctx) => ctx.knowledge.sources.size > 0,
     definition: searchKnowledgeTool,
     execute: executeSearchKnowledge,
     summarize: (args) => `Search knowledge for "${args.query}"`,
+  }),
+  defineToolSpec({
+    label: 'Get status',
+    description:
+      'Look up live service status — component states, active incidents, and scheduled maintenance — from the status page.',
+    promptGuidance:
+      'Call for a real-time service-status, outage, or planned-maintenance question. It returns live state, not an indexed snapshot; reference the statusPageUrl it returns instead of a citation.',
+    risk: 'read',
+    // Status reads are audience-scoped inside the tool (public vs team actor);
+    // no separate conversation/ticket permission applies.
+    permissions: [],
+    // Never keys off the conversation/ticket — belongs on both parents.
+    parents: ['conversation', 'ticket'],
+    // Registered only when the resolved agent enabled the `status` knowledge
+    // source for this turn (config v3).
+    availableWhen: (ctx) => ctx.knowledge.status,
+    definition: getStatusTool,
+    execute: executeGetStatus,
+    summarize: () => 'Look up service status',
   }),
   defineToolSpec({
     label: 'Handoff to human',

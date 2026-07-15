@@ -8,7 +8,7 @@
  * semantic (pgvector cosine over `assistantSnippets.embedding`) when a query
  * embedding is available; snippets have no tsvector column, so the fallback
  * is a plain keyword ILIKE over title/content rather than a ts_rank blend.
- * Registered only behind the `assistantKnowledge` flag (see
+ * registered per the agent's config-v3 knowledge toggles (resolveAssistantKnowledgeSnapshot)
  * `resolveKnowledgeSources`), default off.
  */
 import { db, assistantSnippets, and, desc, eq, ilike, inArray, or, sql } from '@/lib/server/db'

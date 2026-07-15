@@ -63,7 +63,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
 })
 
 // Stand-ins for the three optional knowledge sources: resolveKnowledgeSources
-// dynamically imports all of them when assistantKnowledge is on, so each must
+// dynamically imports each one its type enables in the turn snapshot, so each must
 // be stubbed or a grounding test would reach the real (DB-backed) domains.
 const mockPostsRetrieve = vi.fn()
 vi.mock('../posts-retrieval', () => ({
@@ -171,7 +171,6 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
   revision: 1,
   workspaceName: 'Quackback',
   actionsEnabled: false,
-  knowledgeEnabled: false,
 }
 
 const mockGetAssistantRuntimeConfig = vi.fn()
@@ -605,6 +604,42 @@ describe('terminal completion protocol', () => {
           sources: new Map(),
           toolCalls: ['search_knowledge', 'report_inability'],
           inabilityReported: true,
+          handoffRequested: false,
+        }
+      )
+    ).not.toThrow()
+  })
+
+  it('accepts a get_status-grounded answer: the tool result is the resolution basis, zero search citations', () => {
+    // A status answer grounds on the live get_status tool result, not on
+    // retrieval — no citation is minted. The tool call is a non-search
+    // resolution tool, so the completion validator must accept it.
+    expect(() =>
+      validateAssistantCompletion(
+        {
+          text: 'The API is currently experiencing a major outage. See the status page.',
+          citations: [],
+        },
+        {
+          searchCalls: 0,
+          sources: new Map(),
+          toolCalls: ['get_status'],
+          inabilityReported: false,
+          handoffRequested: false,
+        }
+      )
+    ).not.toThrow()
+
+    // Even if the model also searched and found nothing, get_status is an
+    // alternative tool result that resolves the turn.
+    expect(() =>
+      validateAssistantCompletion(
+        { text: 'The API is down right now; here is the status page.', citations: [] },
+        {
+          searchCalls: 1,
+          sources: new Map(),
+          toolCalls: ['search_knowledge', 'get_status'],
+          inabilityReported: false,
           handoffRequested: false,
         }
       )
@@ -1669,10 +1704,9 @@ describe('runAssistantTurn: customer-scoped retrieval context (P2-A.4)', () => {
     )
   }
 
-  it("resolves the conversation's visitorPrincipalId and threads it into the tool context and retrieval", async () => {
+  it("resolves the conversation's visitorPrincipalId (narrow customer_support lookup) and threads it into the tool context", async () => {
     mockRetrieve.mockResolvedValue([])
     mockConversationLookupLimit.mockResolvedValue([{ visitorPrincipalId: 'principal_customer_1' }])
-    mockRuntimeConfig({ knowledgeEnabled: true })
     let capturedCtx: { customerPrincipalId?: unknown; conversationId?: unknown } | undefined
     driveSearch((ctx) => {
       capturedCtx = ctx as typeof capturedCtx
@@ -1684,16 +1718,13 @@ describe('runAssistantTurn: customer-scoped retrieval context (P2-A.4)', () => {
       conversationId: 'conversation_42' as never,
     })
 
+    // The narrow (customer_support) lookup resolves the visitor and threads it
+    // onto the tool context. The past-conversation-summaries source itself is
+    // Copilot-only (D8), so a customer_support turn never registers it — that
+    // threading-into-retrieval path is covered by the copilot test below.
     expect(capturedCtx?.customerPrincipalId).toBe('principal_customer_1')
     expect(capturedCtx?.conversationId).toBe('conversation_42')
-    expect(mockConversationSummariesRetrieve).toHaveBeenCalledWith(
-      'billing',
-      'public',
-      expect.objectContaining({
-        customerPrincipalId: 'principal_customer_1',
-        conversationId: 'conversation_42',
-      })
-    )
+    expect(mockConversationSummariesRetrieve).not.toHaveBeenCalled()
   })
 
   it('never queries the conversation row when there is no conversationId (sandbox)', async () => {
@@ -2228,7 +2259,8 @@ describe('runAssistantTurn: conversation-scoped grounding (copilot conversation 
   it('keeps the customer-history retrieval source excluding the current conversation (unchanged)', async () => {
     mockConversationLookupLimit.mockResolvedValue([FACTS_ROW])
     mockListConversationMessagesForGrounding.mockResolvedValue([])
-    mockRuntimeConfig({ knowledgeEnabled: true })
+    // Copilot's default knowledge map enables pastConversations, so the
+    // summary source registers without any override.
     let capturedCtx: { customerPrincipalId?: unknown; conversationId?: unknown } | undefined
     mockChat.mockImplementation(
       (opts: {
@@ -2323,7 +2355,12 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
       responseLength: 'brief',
     })
     expect(mockAssembleAssistantToolset).toHaveBeenCalledWith(
-      expect.objectContaining({ assistantName: 'Nova', knowledgeEnabled: false }),
+      expect.objectContaining({
+        assistantName: 'Nova',
+        // The Agent's default knowledge map (helpCenter only among retrieval
+        // sources) compiles to this snapshot on a customer_support turn.
+        knowledge: { sources: new Set(['article']), status: false },
+      }),
       undefined,
       false
     )

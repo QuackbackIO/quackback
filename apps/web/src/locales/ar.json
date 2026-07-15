@@ -1004,7 +1004,6 @@
   "automation.knowledge.title": "",
   "automation.knowledge.description": "",
   "automation.knowledge.toggleAria": "Use {source}",
-  "automation.knowledge.rolloutHint": "",
   "automation.knowledge.saveError": "",
   "automation.knowledge.readiness.ready": "",
   "automation.knowledge.readiness.live": "",

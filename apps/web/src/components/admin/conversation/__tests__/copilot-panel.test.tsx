@@ -77,7 +77,6 @@ import { CopilotPanel } from '../copilot-panel'
 const CONVERSATION_ID = 'conversation_1' as ConversationId
 
 const ALL_FLAGS_ON: FeatureFlags = {
-  assistantKnowledge: true,
   inboxAi: true,
 } as unknown as FeatureFlags
 
@@ -686,20 +685,21 @@ describe('<CopilotPanel> "Add to composer & modify" menu', () => {
 })
 
 describe('<CopilotPanel> Answer-sources popover', () => {
-  it('hides rows whose flag is off', async () => {
+  it('offers every source type (availability is per-agent config the runtime enforces, not a flag)', async () => {
     vi.stubGlobal('fetch', vi.fn())
-    renderPanel({
-      flags: {
-        assistantKnowledge: false,
-      } as unknown as FeatureFlags,
-    })
+    renderPanel()
 
     fireEvent.click(screen.getByRole('button', { name: /answer sources/i }))
 
+    // The picker is a per-teammate narrowing preference; it can't read the
+    // manage-gated assistant config, so it lists every source type and the
+    // runtime intersects the selection with the workspace's enabled sources.
     expect(await screen.findByText('Help center articles')).toBeInTheDocument()
-    expect(screen.queryByText('Snippets')).not.toBeInTheDocument()
-    expect(screen.queryByText('Roadmap posts')).not.toBeInTheDocument()
-    expect(screen.queryByText('Past conversations')).not.toBeInTheDocument()
+    expect(screen.getByText('Snippets')).toBeInTheDocument()
+    expect(screen.getByText('Roadmap posts')).toBeInTheDocument()
+    expect(screen.getByText('Past conversations')).toBeInTheDocument()
+    expect(screen.getByText('Tickets')).toBeInTheDocument()
+    expect(screen.getByText('Changelog')).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 
@@ -730,19 +730,25 @@ describe('<CopilotPanel> Answer-sources popover', () => {
 
   it('keeps at least one source checked (cannot uncheck the last one)', async () => {
     vi.stubGlobal('fetch', vi.fn())
-    renderPanel({
-      flags: {
-        assistantKnowledge: false,
-      } as unknown as FeatureFlags,
-    })
+    renderPanel()
 
     fireEvent.click(screen.getByRole('button', { name: /answer sources/i }))
-    const articleRow = await screen.findByText('Help center articles')
-    // Only one visible row (article) — clicking it should not uncheck it.
-    fireEvent.click(articleRow)
+    await screen.findByText('Help center articles')
+    // Uncheck every source in turn; the guard blocks the final uncheck, so at
+    // least one stays checked.
+    for (const label of [
+      'Help center articles',
+      'Snippets',
+      'Roadmap posts',
+      'Past conversations',
+      'Tickets',
+      'Changelog',
+    ]) {
+      fireEvent.click(screen.getByText(label))
+    }
 
-    const checkbox = screen.getByRole('checkbox')
-    expect(checkbox).toHaveAttribute('data-state', 'checked')
+    const checkboxes = screen.getAllByRole('checkbox')
+    expect(checkboxes.some((cb) => cb.getAttribute('data-state') === 'checked')).toBe(true)
     vi.unstubAllGlobals()
   })
 })

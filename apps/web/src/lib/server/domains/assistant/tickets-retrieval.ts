@@ -14,7 +14,7 @@
  * surface that ever sees it. Every citation it produces is flagged
  * `internal: true` (the copilot leak gate), always: unlike posts or KB
  * articles there is no "public ticket" tier to distinguish. Registered only
- * behind the `assistantKnowledge` flag (see `resolveKnowledgeSources`),
+ * per the agent's config-v3 knowledge toggles (see `resolveKnowledgeSources`),
  * default off.
  *
  * UNLIKE `conversation-summary-retrieval.ts`, this source is NOT customer-

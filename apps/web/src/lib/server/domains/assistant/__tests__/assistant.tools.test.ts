@@ -11,9 +11,10 @@ vi.mock('../retrieval', () => ({
   retrieveKbArticles: (...args: unknown[]) => mockRetrieve(...args),
 }))
 
-// Stand-ins for the three optional knowledge sources: resolveKnowledgeSources
-// dynamically imports all of them when assistantKnowledge is on, so each must
-// be stubbed or a grounding test would reach the real (DB-backed) domains.
+// Stand-ins for the optional knowledge sources: resolveKnowledgeSources
+// dynamically imports each one whose type the turn's knowledge snapshot
+// enabled, so each must be stubbed or a grounding test would reach the real
+// (DB-backed) domains.
 const mockPostsRetrieve = vi.fn()
 vi.mock('../posts-retrieval', () => ({
   postsKnowledgeSource: {
@@ -83,8 +84,13 @@ vi.mock('@/lib/server/logger', () => ({
 import { assembleAssistantToolset, resolveEffectiveToolMode } from '../assistant.tools'
 import { makeToolTestContext, fakePendingActionRow } from './assistant-tool-fixtures'
 import { ASSISTANT_TOOL_SPECS } from '../assistant.toolspec'
+import { ASSISTANT_CITATION_TYPES } from '../citation-types'
 import { RETRIEVED_CONTENT_NOTE } from '../injection-guard'
 import type { AssistantToolContext, AssistantToolSpec } from '../assistant.toolspec'
+
+/** Every retrieval source enabled — the config-v3 snapshot that replaces the
+ *  old `knowledgeEnabled: true` bundle so all optional sources register. */
+const ALL_KNOWLEDGE = { sources: new Set(ASSISTANT_CITATION_TYPES), status: true }
 
 /** Tools-only view of the assembly, for the many cases here that don't need
  *  the paired specs. */
@@ -184,17 +190,17 @@ describe('search_knowledge', () => {
     const search = await findTool(c, 'search_knowledge')
 
     const out = (await search.execute({ query: 'billing' }, toolCtx(c))) as {
-      articles: Array<{ id: string; title: string; snippet: string }>
+      results: Array<{ id: string; title: string; snippet: string }>
     }
 
     expect(mockRetrieve).toHaveBeenCalledWith('billing', { audience: 'team' })
-    expect(out.articles).toHaveLength(1)
-    expect(out.articles[0]).toEqual({
+    expect(out.results).toHaveLength(1)
+    expect(out.results[0]).toEqual({
       id: 'kb_article_1',
       title: 'Title kb_article_1',
       snippet: expect.any(String),
     })
-    expect(out.articles[0].snippet.length).toBeLessThanOrEqual(1200)
+    expect(out.results[0].snippet.length).toBeLessThanOrEqual(1200)
     expect(c.ledger.sources.get('kb_article_1')).toEqual({
       type: 'article',
       id: 'kb_article_1',
@@ -208,8 +214,8 @@ describe('search_knowledge', () => {
     mockRetrieve.mockResolvedValue([])
     const c = ctx()
     const search = await findTool(c, 'search_knowledge')
-    const out = (await search.execute({ query: 'nope' }, toolCtx(c))) as { articles: unknown[] }
-    expect(out.articles).toEqual([])
+    const out = (await search.execute({ query: 'nope' }, toolCtx(c))) as { results: unknown[] }
+    expect(out.results).toEqual([])
     expect(c.ledger.sources.size).toBe(0)
   })
 
@@ -252,11 +258,11 @@ describe('search_knowledge', () => {
     expect(mockRetrieve).toHaveBeenCalledTimes(3)
 
     const out = (await search.execute({ query: 'q4' }, toolCtx(c))) as {
-      articles: unknown[]
+      results: unknown[]
       note?: string
     }
     expect(mockRetrieve).toHaveBeenCalledTimes(3)
-    expect(out.articles).toEqual([])
+    expect(out.results).toEqual([])
     expect(out.note).toMatch(/answer/i)
     expect(c.ledger.sources.has('kb_article_1')).toBe(true)
   })
@@ -268,10 +274,10 @@ describe('search_knowledge', () => {
     const c = ctx({ sourceTypes: ['post'] })
     const search = await findTool(c, 'search_knowledge')
 
-    const out = (await search.execute({ query: 'billing' }, toolCtx(c))) as { articles: unknown[] }
+    const out = (await search.execute({ query: 'billing' }, toolCtx(c))) as { results: unknown[] }
 
     expect(mockRetrieve).not.toHaveBeenCalled()
-    expect(out.articles).toEqual([])
+    expect(out.results).toEqual([])
   })
 
   it("threads the context's customerPrincipalId and conversationId into the past-conversation-summaries source", async () => {
@@ -279,7 +285,7 @@ describe('search_knowledge', () => {
     const c = ctx({
       customerPrincipalId: 'principal_customer_1' as never,
       conversationId: 'conversation_current' as never,
-      knowledgeEnabled: true,
+      knowledge: ALL_KNOWLEDGE,
     })
     const search = await findTool(c, 'search_knowledge')
 
@@ -297,7 +303,7 @@ describe('search_knowledge', () => {
 
   it('runs the summaries source with an undefined customerPrincipalId when the context has none (sandbox)', async () => {
     mockRetrieve.mockResolvedValue([])
-    const c = ctx({ conversationId: null, knowledgeEnabled: true })
+    const c = ctx({ conversationId: null, knowledge: ALL_KNOWLEDGE })
     const search = await findTool(c, 'search_knowledge')
 
     await search.execute({ query: 'billing' }, toolCtx(c))
@@ -699,10 +705,49 @@ describe('assembleAssistantToolset: sandbox simulate mode', () => {
 
     const c = ctx({ conversationId: null, simulate: true })
     const tool = await findTool(c, 'search_knowledge')
-    const out = (await tool.execute({ query: 'billing' }, toolCtx(c))) as { articles: unknown[] }
+    const out = (await tool.execute({ query: 'billing' }, toolCtx(c))) as { results: unknown[] }
 
     expect(mockRetrieve).toHaveBeenCalled()
-    expect(out.articles).toHaveLength(1)
+    expect(out.results).toHaveLength(1)
+  })
+})
+
+describe('knowledge-snapshot registration (D7)', () => {
+  async function toolNames(c: AssistantToolContext) {
+    return (await assembleTools(c)).map((t) => t.name)
+  }
+
+  it('registers search_knowledge iff ≥1 retrieval source is enabled', async () => {
+    const withArticle = await toolNames(
+      ctx({ knowledge: { sources: new Set(['article']), status: false } })
+    )
+    expect(withArticle).toContain('search_knowledge')
+
+    const noSources = await toolNames(ctx({ knowledge: { sources: new Set(), status: false } }))
+    expect(noSources).not.toContain('search_knowledge')
+  })
+
+  it('registers get_status iff the status toggle is on', async () => {
+    const statusOn = await toolNames(
+      ctx({ knowledge: { sources: new Set(['article']), status: true } })
+    )
+    expect(statusOn).toContain('get_status')
+
+    const statusOff = await toolNames(
+      ctx({ knowledge: { sources: new Set(['article']), status: false } })
+    )
+    expect(statusOff).not.toContain('get_status')
+  })
+
+  it("folds the enabled-source enumeration into search_knowledge's promptGuidance", async () => {
+    const { activeSpecs } = await assembleAssistantToolset(
+      ctx({ knowledge: { sources: new Set(['article', 'post']), status: false } })
+    )
+    const search = activeSpecs.find((s) => s.name === 'search_knowledge')!
+    expect(search.promptGuidance).toContain('help center articles')
+    expect(search.promptGuidance).toContain('feedback posts')
+    // Posts carry the customer-feedback caveat.
+    expect(search.promptGuidance).toMatch(/customer feedback, not/i)
   })
 })
 

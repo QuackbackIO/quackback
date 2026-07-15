@@ -127,7 +127,6 @@ function settingsRow(overrides: Record<string, unknown> = {}) {
     managedFieldPaths: [],
     featureFlags: JSON.stringify({
       assistantTools: true,
-      assistantKnowledge: false,
     }),
     ...overrides,
   }
@@ -272,7 +271,6 @@ describe('V2 assistant configuration reads', () => {
       revision: 23,
       workspaceName: 'Acme Support',
       actionsEnabled: true,
-      knowledgeEnabled: false,
       configFallbackReason: 'invalid_assistant_config',
     })
     expect(result.config).not.toBe(DEFAULT_ASSISTANT_CONFIG)

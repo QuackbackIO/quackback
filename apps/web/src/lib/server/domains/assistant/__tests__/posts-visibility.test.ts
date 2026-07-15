@@ -1,14 +1,15 @@
 /**
- * Feedback-post trust boundary plus execution-level coverage for the team-only
- * SQL predicate. Public retrieval must return before embedding or database IO;
- * teammate retrieval still excludes unpublished, merged, and deleted rows.
+ * Feedback-post visibility predicate coverage. The Agent's `posts` toggle
+ * relaxes the customer-facing ceiling to public boards only (D8): a `public`
+ * ceiling narrows to anonymous-viewable boards, while a `team` ceiling sees any
+ * non-deleted board. Both ceilings exclude unpublished, merged, and deleted rows.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { sql, eq, and } from 'drizzle-orm'
 import { boards, posts, principal, type BoardAccess, type Database } from '@/lib/server/db'
 // eslint-disable-next-line no-restricted-imports -- legitimate second createDb caller (see board-view-filter-parity.test.ts)
 import { createDb } from '@quackback/db/client'
-import { postsVisibilityConditions, retrievePosts } from '../posts-retrieval'
+import { postsVisibilityConditions } from '../posts-retrieval'
 import { createId, type PrincipalId, type BoardId, type PostId } from '@quackback/ids'
 
 const mockGenerateEmbedding = vi.hoisted(() => vi.fn())
@@ -83,6 +84,9 @@ interface PostCase {
   deleted?: boolean
   /** Whether this row should be visible for the 'team' ceiling. */
   teamVisible: boolean
+  /** Whether this row should be visible for the 'public' (Agent) ceiling —
+   *  published rows on an anonymous-viewable board only (D8). */
+  publicVisible: boolean
 }
 
 const cases: PostCase[] = [
@@ -91,12 +95,14 @@ const cases: PostCase[] = [
     boardName: 'public',
     moderationState: 'published',
     teamVisible: true,
+    publicVisible: true,
   },
   {
     name: 'pending_public_board',
     boardName: 'public',
     moderationState: 'pending',
     teamVisible: false,
+    publicVisible: false,
   },
   {
     name: 'merged_public_board',
@@ -104,6 +110,7 @@ const cases: PostCase[] = [
     moderationState: 'published',
     merged: true,
     teamVisible: false,
+    publicVisible: false,
   },
   {
     name: 'deleted_public_board',
@@ -111,25 +118,29 @@ const cases: PostCase[] = [
     moderationState: 'published',
     deleted: true,
     teamVisible: false,
+    publicVisible: false,
   },
   {
     name: 'published_restricted_board',
     boardName: 'restricted',
     moderationState: 'published',
     teamVisible: true,
+    // A non-anonymous (team-access) board is never public-visible.
+    publicVisible: false,
   },
 ]
 
 const boardIds = new Map<string, BoardId>()
 const postIds = new Map<string, PostId>()
 
-describe('retrievePosts public trust boundary', () => {
-  it('returns [] without generating an embedding or touching the DB', async () => {
-    const result = await retrievePosts('dark mode', 'public')
-
-    expect(result).toEqual([])
-    expect(mockGenerateEmbedding).not.toHaveBeenCalled()
-    expect(mockDbSelect).not.toHaveBeenCalled()
+describe('postsVisibilityConditions ceiling relaxation (D8)', () => {
+  it('adds the anonymous-viewable board filter for the public ceiling only', () => {
+    const publicConditions = postsVisibilityConditions('public')
+    const teamConditions = postsVisibilityConditions('team')
+    // The public ceiling carries exactly one extra predicate over the team
+    // ceiling: the anonymous-viewable board narrowing (the Agent sees public
+    // boards only, D8). Team sees any non-deleted board.
+    expect(publicConditions.length).toBe(teamConditions.length + 1)
   })
 })
 
@@ -195,6 +206,21 @@ describe.skipIf(!dbAvailable)('postsVisibilityConditions (execution-level)', () 
         .where(and(eq(posts.id, postId), ...postsVisibilityConditions('team')))
 
       expect(matched.length === 1).toBe(c.teamVisible)
+    })
+
+    it(`case=${c.name} ceiling=public -> visible=${c.publicVisible}`, async () => {
+      if (!activeDb) return
+      const postId = postIds.get(c.name)
+      expect(postId, `seed missing for ${c.name}`).toBeDefined()
+      if (!postId) return
+
+      const matched = await activeDb
+        .select({ id: posts.id })
+        .from(posts)
+        .innerJoin(boards, eq(posts.boardId, boards.id))
+        .where(and(eq(posts.id, postId), ...postsVisibilityConditions('public')))
+
+      expect(matched.length === 1).toBe(c.publicVisible)
     })
   }
 })

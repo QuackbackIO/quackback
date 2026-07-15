@@ -26,7 +26,7 @@
  * (the admin sandbox, or a context nobody threaded a conversation into) gets
  * `[]`, never an unscoped query. Never relax this into "no filter" as a
  * fallback — a missing scope must read as "nothing", not "everything".
- * Registered only behind the `assistantKnowledge` flag (see
+ * registered per the agent's config-v3 knowledge toggles (resolveAssistantKnowledgeSnapshot)
  * `resolveKnowledgeSources`), default off.
  */
 import { db, conversationSummaries, and, desc, eq, ilike, ne, sql } from '@/lib/server/db'

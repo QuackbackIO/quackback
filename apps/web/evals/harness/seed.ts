@@ -31,9 +31,12 @@ import {
   ticketStatuses,
   ticketSummaries,
   changelogEntries,
+  statusComponents,
+  statusIncidents,
+  statusIncidentComponents,
 } from '@/lib/server/db'
 import { testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { DEFAULT_ASSISTANT_CONFIG } from '@/lib/shared/assistant/config'
+import { DEFAULT_ASSISTANT_CONFIG, type AssistantConfig } from '@/lib/shared/assistant/config'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant'
 import { openInvolvement } from '@/lib/server/domains/assistant/assistant.involvement'
 import {
@@ -48,11 +51,41 @@ import type {
   SeedChangelogEntry,
   SeedGuidance,
   SeedKbArticle,
+  SeedStatusIncident,
   SeedTicketSummary,
 } from '../types'
 
 function suffix(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * Build the v3 assistant config a scenario runs under: the default config with
+ * the scenario's Agent voice (tone/length/instructions) and its per-agent
+ * knowledge-source overrides merged onto the default `knowledge` maps. Shared by
+ * `applyScenarioSettings` (which writes it to the settings row the runtime
+ * reads) and the toolset runner (which resolves the snapshot from it directly).
+ */
+export function buildScenarioAssistantConfig(config: ScenarioConfig = {}): AssistantConfig {
+  const base = DEFAULT_ASSISTANT_CONFIG
+  return {
+    ...base,
+    agents: {
+      agent: {
+        ...base.agents.agent,
+        voice: {
+          tone: config.tone ?? base.agents.agent.voice.tone,
+          responseLength: config.responseLength ?? base.agents.agent.voice.responseLength,
+          additionalInstructions: config.additionalInstructions ?? '',
+        },
+        knowledge: { ...base.agents.agent.knowledge, ...config.knowledge?.agent },
+      },
+      copilot: {
+        ...base.agents.copilot,
+        knowledge: { ...base.agents.copilot.knowledge, ...config.knowledge?.copilot },
+      },
+    },
+  }
 }
 
 /**
@@ -70,24 +103,9 @@ export async function applyScenarioSettings(config: ScenarioConfig = {}): Promis
         '(bun run db:seed) so the workspace singleton exists.'
     )
   }
-  const assistantConfig = {
-    ...DEFAULT_ASSISTANT_CONFIG,
-    agents: {
-      ...DEFAULT_ASSISTANT_CONFIG.agents,
-      agent: {
-        ...DEFAULT_ASSISTANT_CONFIG.agents.agent,
-        voice: {
-          tone: config.tone ?? DEFAULT_ASSISTANT_CONFIG.agents.agent.voice.tone,
-          responseLength:
-            config.responseLength ?? DEFAULT_ASSISTANT_CONFIG.agents.agent.voice.responseLength,
-          additionalInstructions: config.additionalInstructions ?? '',
-        },
-      },
-    },
-  }
+  const assistantConfig = buildScenarioAssistantConfig(config)
   const featureFlags = JSON.stringify({
     assistantTools: config.assistantTools === true,
-    assistantKnowledge: config.assistantKnowledge === true,
   })
   await testDb
     .update(settings)
@@ -236,6 +254,39 @@ export async function seedChangelogEntry(entry: SeedChangelogEntry): Promise<str
   return entryId
 }
 
+/**
+ * Seed a status component in a given operational state plus an OPEN incident
+ * affecting it, so the real-time `get_status` tool (Phase 3) reads live state.
+ * Ungated (segmentIds []) so the public Agent projection sees it. No embedding:
+ * status is never index-backed.
+ */
+export async function seedStatusIncident(incident: SeedStatusIncident): Promise<void> {
+  const componentId = createId('status_component')
+  await testDb.insert(statusComponents).values({
+    id: componentId,
+    name: incident.componentName,
+    status: incident.componentStatus ?? 'major_outage',
+    segmentIds: [],
+  })
+  const incidentId = createId('status_incident')
+  await testDb.insert(statusIncidents).values({
+    id: incidentId,
+    kind: 'incident',
+    title: incident.incidentTitle,
+    // An unresolved incident (resolvedAt null) is 'active' in the snapshot.
+    status: 'investigating',
+    impact: 'major',
+    startedAt: new Date(Date.now() - 60_000),
+    resolvedAt: null,
+    backfilled: false,
+  })
+  await testDb.insert(statusIncidentComponents).values({
+    incidentId,
+    componentId,
+    componentStatus: incident.componentStatus ?? 'major_outage',
+  })
+}
+
 export async function seedGuidanceRule(rule: SeedGuidance): Promise<void> {
   await testDb.insert(assistantGuidanceRules).values({
     id: createId('assistant_guidance'),
@@ -327,6 +378,9 @@ export async function seedFixtures(
   }
   for (const entry of fixtures?.changelogEntries ?? []) {
     await seedChangelogEntry(entry)
+  }
+  if (fixtures?.statusIncident) {
+    await seedStatusIncident(fixtures.statusIncident)
   }
   for (const rule of fixtures?.guidance ?? []) {
     await seedGuidanceRule(rule)

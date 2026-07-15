@@ -18,7 +18,6 @@ import {
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { CitationFreshness } from '@/components/shared/conversation/assistant-turn'
-import type { FeatureFlags } from '@/lib/shared/types/settings'
 import type { CopilotCitation } from '@/lib/shared/assistant/copilot-contract'
 
 export type SourceType = CopilotCitation['type']
@@ -31,7 +30,6 @@ export interface SourceOption {
   rowLabel: string
   subtitle?: string
   icon: typeof BookOpenIcon
-  flagKey?: keyof FeatureFlags
 }
 
 // Single source of truth for each source type's icon + labels: the popover
@@ -49,14 +47,12 @@ export const SOURCE_OPTIONS: SourceOption[] = [
     label: 'Snippets',
     rowLabel: 'Snippet',
     icon: DocumentTextIcon,
-    flagKey: 'assistantKnowledge',
   },
   {
     type: 'post',
     label: 'Roadmap posts',
     rowLabel: 'Roadmap post',
     icon: MapIcon,
-    flagKey: 'assistantKnowledge',
   },
   {
     type: 'summary',
@@ -64,7 +60,6 @@ export const SOURCE_OPTIONS: SourceOption[] = [
     rowLabel: 'Past conversation',
     subtitle: "This customer's closed conversations",
     icon: ChatBubbleLeftRightIcon,
-    flagKey: 'assistantKnowledge',
   },
   {
     type: 'ticket',
@@ -72,14 +67,12 @@ export const SOURCE_OPTIONS: SourceOption[] = [
     rowLabel: 'Ticket',
     subtitle: 'Closed-ticket resolution summaries',
     icon: LifebuoyIcon,
-    flagKey: 'assistantKnowledge',
   },
   {
     type: 'changelog',
     label: 'Changelog',
     rowLabel: 'Changelog entry',
     icon: MegaphoneIcon,
-    flagKey: 'assistantKnowledge',
   },
 ]
 
@@ -88,8 +81,18 @@ const SOURCE_TYPE_META: Record<SourceType, { icon: typeof BookOpenIcon; label: s
     SOURCE_OPTIONS.map((opt) => [opt.type, { icon: opt.icon, label: opt.rowLabel }])
   ) as Record<SourceType, { icon: typeof BookOpenIcon; label: string }>
 
-export function visibleSourceOptions(flags: FeatureFlags | undefined): SourceOption[] {
-  return SOURCE_OPTIONS.filter((opt) => !opt.flagKey || flags?.[opt.flagKey])
+/**
+ * The Answer-sources the Copilot picker offers — every citation source type.
+ * This is a per-teammate NARROWING preference (persisted in localStorage): a
+ * teammate turns a source off for their own questions. Which sources actually
+ * exist is workspace config the runtime enforces (it intersects this narrowing
+ * with the Copilot's enabled knowledge sources), so unchecking a source the
+ * workspace already disabled is a harmless no-op and the picker never needs the
+ * manage-gated assistant config to render correctly. (The `assistantKnowledge`
+ * feature flag that used to hide these rows retired into the per-agent config.)
+ */
+export function visibleSourceOptions(): SourceOption[] {
+  return SOURCE_OPTIONS
 }
 
 export function CopilotSourcesList({ citations }: { citations: CopilotCitation[] }) {

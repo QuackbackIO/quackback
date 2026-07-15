@@ -11,6 +11,8 @@
 import type {
   AssistantRole,
   AssistantAgentKind,
+  AssistantAgentKnowledge,
+  AssistantCopilotKnowledge,
   AssistantTone,
   AssistantResponseLength,
 } from '@/lib/shared/assistant/config'
@@ -65,6 +67,25 @@ export interface SeedGuidance {
   priority?: number
 }
 
+/**
+ * An active status incident seeded for the real-time `get_status` tool (Phase
+ * 3). A component (given operational state) plus an open incident affecting it;
+ * `get_status` reads live state, never an embedding index.
+ */
+export interface SeedStatusIncident {
+  /** Component display name (e.g. "API"). */
+  componentName: string
+  /** The component's current operational state. Default: 'major_outage'. */
+  componentStatus?:
+    | 'operational'
+    | 'degraded_performance'
+    | 'partial_outage'
+    | 'major_outage'
+    | 'under_maintenance'
+  /** Incident title (e.g. "Elevated API error rate"). */
+  incidentTitle: string
+}
+
 /** A conversation-attribute definition so `set_attribute` has a valid target. */
 export interface SeedAttribute {
   key: string
@@ -80,8 +101,17 @@ export interface ScenarioConfig {
   additionalInstructions?: string
   /** settings.feature_flags.assistantTools — gates write-tool assembly. */
   assistantTools?: boolean
-  /** settings.feature_flags.assistantKnowledge — extra Copilot sources. */
-  assistantKnowledge?: boolean
+  /**
+   * Per-agent knowledge-source overrides merged onto the default config v3
+   * `agents.<agent>.knowledge` maps. Replaces the retired `assistantKnowledge`
+   * feature flag: a source is now enabled per agent (helpCenter/posts/status on
+   * both, plus pastConversations/internalNotes/tickets on Copilot, changelog on
+   * both). e.g. `{ copilot: { tickets: true } }` or `{ agent: { changelog: true } }`.
+   */
+  knowledge?: {
+    agent?: Partial<AssistantAgentKnowledge>
+    copilot?: Partial<AssistantCopilotKnowledge>
+  }
 }
 
 export interface Fixtures {
@@ -90,6 +120,8 @@ export interface Fixtures {
   ticketSummaries?: SeedTicketSummary[]
   /** Changelog entries, published or draft (Phase 4). */
   changelogEntries?: SeedChangelogEntry[]
+  /** An active status incident for the real-time `get_status` tool (Phase 3). */
+  statusIncident?: SeedStatusIncident
   guidance?: SeedGuidance[]
   attributes?: SeedAttribute[]
   /**
@@ -125,6 +157,9 @@ export type Structural =
   | { type: 'noProposals' }
   | { type: 'executedTool'; name: string }
   | { type: 'proposedTool'; name: string }
+  /** The named tool appears in this turn's tool ledger (any outcome) — for a
+   *  read tool like get_status that never settles an 'executed' write. */
+  | { type: 'calledTool'; name: string }
   | { type: 'textIncludesAny'; values: string[] }
   | { type: 'textExcludesAll'; values: string[] }
   // Toolset-kind assertions (evaluated against the assembled tool set, no model call):
