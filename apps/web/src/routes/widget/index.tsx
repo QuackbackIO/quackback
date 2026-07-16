@@ -20,6 +20,7 @@ import {
 } from '@/components/widget/widget-nav'
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
+import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
 import { WidgetPostDetail } from '@/components/widget/widget-post-detail'
 import { WidgetChangelog } from '@/components/widget/widget-changelog'
 import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-detail'
@@ -619,15 +620,6 @@ function WidgetPage() {
       )
     ) : undefined
 
-  // The Home hero (brand gradient or uploaded image) fills the whole panel
-  // behind the floating header; rendered by the shell.
-  const heroStyle =
-    home?.headerStyle === 'image' && home.heroImageUrl
-      ? { style: 'image' as const, imageUrl: home.heroImageUrl }
-      : home?.headerStyle === 'gradient'
-        ? { style: 'gradient' as const }
-        : null
-
   return (
     <WidgetShell
       orgSlug={orgSlug}
@@ -638,9 +630,10 @@ function WidgetPage() {
       portalAccess={portalAccess}
       portalOrigin={portalOrigin}
       team={team}
-      hero={heroStyle}
       logoUrl={(home?.showLogo ?? true) ? logoUrl : null}
       headerContent={messengerHeader}
+      // The hero backdrop belongs to Home only; detail views keep a plain panel.
+      backdrop={view === 'overview' ? <WidgetHeroBackdrop home={home} /> : undefined}
       // Immersive views: the conversation thread and single-item reading views
       // (post/article/changelog) drop the tab bar; the back chevron handles exit.
       hideTabBar={view === 'messenger' || isExpandedView(view)}

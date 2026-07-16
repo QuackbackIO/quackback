@@ -82,15 +82,14 @@ interface WidgetShellProps {
   portalOrigin?: string
   /** Teammate avatars shown as a small cluster in the Home header. */
   team?: { name: string; avatarUrl: string | null }[]
-  /** Home hero — when set, a full-panel backdrop (brand gradient or uploaded
-   *  image) fills the widget behind the header and body, and the header floats
-   *  transparently over it. */
-  hero?: { style: 'gradient' | 'image'; imageUrl?: string | null } | null
   /** Workspace logo shown top-left on Home (null hides it). */
   logoUrl?: string | null
   /** Extra header content beside the back button (e.g. the messenger thread's
    *  assistant identity), keeping the widget to a single header row. */
   headerContent?: ReactNode
+  /** Full-panel backdrop layer (the Home hero) rendered behind the header row
+   *  and body; the tab bar stays solid above it. */
+  backdrop?: ReactNode
   /** Hide the bottom tab bar (immersive views like the conversation thread). */
   hideTabBar?: boolean
   /** Whether the host panel is expanded for the current view — the tab bar's
@@ -111,9 +110,9 @@ export function WidgetShell({
   portalAccess,
   portalOrigin,
   team = [],
-  hero = null,
   logoUrl = null,
   headerContent,
+  backdrop,
   hideTabBar = false,
   panelExpanded = false,
   expandControl,
@@ -164,11 +163,6 @@ export function WidgetShell({
   const { user, isIdentified, hmacRequired, closeWidget } = useWidgetAuth()
 
   const onHome = activeTab === 'home' && !onBack
-  // On Home with a hero, the header floats over the full-panel backdrop; over
-  // an image hero the chrome switches to white for contrast against the scrim.
-  const activeHero = onHome ? hero : null
-  const headerFloats = activeHero !== null
-  const overImage = activeHero?.style === 'image'
 
   // Global Escape key handler — close widget from anywhere
   useEffect(() => {
@@ -208,36 +202,14 @@ export function WidgetShell({
 
   return (
     <div className="relative flex flex-col h-full bg-background text-foreground overflow-x-hidden">
-      {/* Full-panel hero backdrop — starts at the very top (behind the header)
-          and fills the whole body; the solid bottom bar sits above it. */}
-      {activeHero && (
-        <div className="absolute inset-0 z-0" aria-hidden>
-          {activeHero.style === 'image' && activeHero.imageUrl ? (
-            <>
-              <img src={activeHero.imageUrl} alt="" className="h-full w-full object-cover" />
-              {/* Scrim: dark at the top for header/greeting contrast, fading
-                  into the app background so the content stays readable. */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-background" />
-            </>
-          ) : (
-            <div className="h-full w-full bg-gradient-to-b from-primary/30 via-primary/10 to-transparent" />
-          )}
-        </div>
-      )}
-      <div
-        className={cn(
-          'flex items-center justify-between gap-2 px-4 py-3 shrink-0',
-          headerFloats ? 'absolute inset-x-0 top-0 z-20' : 'relative z-10'
-        )}
-      >
+      {/* The Home hero backdrop fills the panel behind the header row and
+          body; the header/content render transparently over it. */}
+      {backdrop}
+      <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 shrink-0">
         {/* Left: back button on detail views; workspace logo on Home. */}
         <div className="flex items-center gap-1">
           {onHome && logoUrl && (
-            <img
-              src={logoUrl}
-              alt=""
-              className={cn('h-6 max-w-[120px] object-contain', overImage && 'drop-shadow-sm')}
-            />
+            <img src={logoUrl} alt="" className="h-6 max-w-[120px] object-contain" />
           )}
           {onBack && (
             <button
@@ -334,21 +306,13 @@ export function WidgetShell({
           <button
             type="button"
             onClick={closeWidget}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
-              overImage ? 'hover:bg-white/20' : 'hover:bg-muted'
-            )}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted"
             aria-label={intl.formatMessage({
               id: 'widget.shell.aria.close',
               defaultMessage: 'Close feedback widget',
             })}
           >
-            <XMarkIcon
-              className={cn(
-                'w-5 h-5',
-                overImage ? 'text-white drop-shadow-sm' : 'text-muted-foreground'
-              )}
-            />
+            <XMarkIcon className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
       </div>

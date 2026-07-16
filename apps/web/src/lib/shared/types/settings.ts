@@ -31,6 +31,7 @@ export type {
   WidgetHomeCardType,
   WidgetCardAudience,
   WidgetHomeConfig,
+  WidgetHeroPatternId,
 } from '@/lib/server/domains/settings/settings.types'
 
 // Runtime constants — safe because settings.types has no DB dependencies

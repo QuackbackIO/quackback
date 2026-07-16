@@ -14,6 +14,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/shared/utils'
 import type { WidgetHomeCard, WidgetHomeConfig } from '@/lib/shared/types/settings'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
+import { heroBackdropStyle } from '@/lib/shared/widget/hero-style'
 import { cardVisibleToVisitor } from '@/lib/shared/widget/home-cards'
 import { useConversationSummary } from './use-messenger-summary'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -105,12 +106,11 @@ export function WidgetOverview({
   // when the Messages surface is enabled.
   const { conversation, teamName, agentsOnline } = useConversationSummary(!!tabs.messages)
 
-  // The hero backdrop itself is rendered by the shell (it fills the whole
-  // panel, behind the floating header); here we only adapt typography —
-  // larger greeting, white text over an image, and top padding that clears
-  // the floating header.
+  // The hero backdrop itself renders in the shell (it fills the whole panel,
+  // header row included); here we only adapt the greeting typography and
+  // spacing to whether a backdrop is active.
   const overImage = home?.headerStyle === 'image' && !!home.heroImageUrl
-  const heroActive = overImage || home?.headerStyle === 'gradient'
+  const heroActive = overImage || heroBackdropStyle(home) !== null
   // A blank custom title/subtitle means "unset" — the admin editor persists an
   // empty string when a field is cleared, so normalise it back to the built-in
   // default copy rather than rendering an empty card.
@@ -281,7 +281,7 @@ export function WidgetOverview({
     <div className="flex flex-col h-full">
       <ScrollArea scrollBarClassName="w-1.5" className="flex-1 min-h-0 h-full">
         <div className="flex flex-col gap-4 pb-4">
-          <header className={cn('space-y-1 px-4', heroActive ? 'pt-16 pb-4' : 'pt-6')}>
+          <header className={cn('relative space-y-1 px-4', heroActive ? 'pt-6 pb-4' : 'pt-6')}>
             <h1
               className={cn(
                 'font-semibold leading-tight',

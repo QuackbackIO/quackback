@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter, useRouteContext, Link } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { useState, useTransition, useMemo, useEffect } from 'react'
+import { useState, useTransition, useMemo, useEffect, type ReactNode } from 'react'
 import { useTheme } from 'next-themes'
 import {
   ChatBubbleLeftRightIcon,
@@ -12,12 +12,30 @@ import {
   SparklesIcon,
   SunIcon,
   MoonIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
   TrashIcon,
   PlusIcon,
   ArrowRightIcon,
+  PhotoIcon,
+  Bars3Icon,
 } from '@heroicons/react/24/solid'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   HighlightedCode,
   type SyntaxLang,
@@ -28,6 +46,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { WarningBox } from '@/components/shared/warning-box'
 import { WidgetPreview } from '@/components/admin/settings/widget/widget-preview'
+import { PreviewToggleButton } from '@/components/admin/settings/preview-toggle'
 import { InlineSpinner } from '@/components/admin/settings/inline-spinner'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -58,6 +77,9 @@ import type {
 import { SUPPORTED_LOCALES } from '@/lib/shared/i18n'
 import type { WidgetContentTranslation, WidgetTranslations } from '@/lib/shared/widget/translations'
 import { DEFAULT_WIDGET_HOME_CARDS } from '@/lib/shared/types/settings'
+import { WIDGET_HERO_PATTERNS, heroBackdropStyle } from '@/lib/shared/widget/hero-style'
+import { ColorPickerGrid, ColorHexInput } from '@/components/shared/color-picker'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 export const Route = createFileRoute('/admin/settings/widget')({
   loader: async ({ context }) => {
@@ -157,35 +179,24 @@ function WidgetSettingsPage() {
         </div>
 
         <div className="xl:sticky xl:top-6 min-w-0 xl:h-[calc(100vh-7.5rem)] flex flex-col">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm font-medium">Preview</span>
-            <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-              <button
-                type="button"
+          <div className="mb-3 flex items-center gap-3">
+            <span className="text-sm font-medium">Live preview</span>
+            <span className="hidden sm:inline text-xs text-muted-foreground">
+              the real widget — content and actions are real
+            </span>
+            <div className="ms-auto flex items-center gap-1 rounded-lg border border-border p-0.5">
+              <PreviewToggleButton
+                active={previewTheme === 'light'}
                 onClick={() => setPreviewThemeOverride('light')}
-                className={cn(
-                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                  previewTheme === 'light'
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <SunIcon className="h-3.5 w-3.5" />
-                Light
-              </button>
-              <button
-                type="button"
+                icon={SunIcon}
+                label="Light"
+              />
+              <PreviewToggleButton
+                active={previewTheme === 'dark'}
                 onClick={() => setPreviewThemeOverride('dark')}
-                className={cn(
-                  'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
-                  previewTheme === 'dark'
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <MoonIcon className="h-3.5 w-3.5" />
-                Dark
-              </button>
+                icon={MoonIcon}
+                label="Dark"
+              />
             </div>
           </div>
           <div className="flex-1 min-h-0">
@@ -197,9 +208,6 @@ function WidgetSettingsPage() {
               />
             )}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            This is your live widget. It shows real content, and actions in it are real.
-          </p>
         </div>
       </div>
 
@@ -237,7 +245,11 @@ function WidgetToggle({ initialEnabled }: { initialEnabled: boolean }) {
             Show on your website
           </Label>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Paste the install snippet below after turning this on
+            Paste the{' '}
+            <a href="#widget-installation" className="font-medium text-primary hover:underline">
+              install snippet
+            </a>{' '}
+            after turning this on
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -373,6 +385,7 @@ function ModulesCard({
           description="Search, vote, and submit ideas"
           checked={tabs.feedback}
           disabled={isBusy || (tabs.feedback && !tabs.changelog)}
+          disabledHint="At least one of Feedback or Changelog stays on — enable Changelog to turn this off."
           saving={saving}
           onChange={(checked) => {
             if (!checked && !tabs.changelog) return
@@ -398,6 +411,7 @@ function ModulesCard({
           description="Show product updates and shipped features"
           checked={tabs.changelog}
           disabled={isBusy || (tabs.changelog && !tabs.feedback)}
+          disabledHint="At least one of Feedback or Changelog stays on — enable Feedback to turn this off."
           saving={saving}
           onChange={(checked) => {
             if (!checked && !tabs.feedback) return
@@ -494,6 +508,7 @@ function TabRow({
   description,
   checked,
   disabled,
+  disabledHint,
   saving,
   onChange,
 }: {
@@ -502,9 +517,25 @@ function TabRow({
   description: string
   checked: boolean
   disabled: boolean
+  /** Why the switch is locked — shown as a tooltip so an inert control never
+   *  reads as broken. */
+  disabledHint?: string
   saving: boolean
   onChange: (checked: boolean) => void
 }) {
+  const showHint = disabled && !!disabledHint
+  const switchControl = (
+    <Switch
+      id={id}
+      checked={checked}
+      onCheckedChange={onChange}
+      disabled={disabled}
+      aria-label={`${label} tab`}
+      // Disabled controls swallow pointer events, which would keep the
+      // wrapper tooltip from ever opening — route them to the span instead.
+      className={showHint ? 'pointer-events-none' : undefined}
+    />
+  )
   return (
     <div className="flex items-center justify-between rounded-lg border border-border/50 px-3 py-2.5">
       <div className="pe-3">
@@ -515,15 +546,67 @@ function TabRow({
       </div>
       <div className="flex items-center gap-2">
         <InlineSpinner visible={saving} />
-        <Switch
-          id={id}
-          checked={checked}
-          onCheckedChange={onChange}
-          disabled={disabled}
-          aria-label={`${label} tab`}
-        />
+        {showHint ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              {/* span trigger so the tooltip works over a disabled control */}
+              <TooltipTrigger asChild>
+                <span tabIndex={0} className="inline-flex rounded-full">
+                  {switchControl}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="left">{disabledHint}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          switchControl
+        )}
       </div>
     </div>
+  )
+}
+
+/**
+ * One hero color slot: a swatch that opens the shared picker. Empty means
+ * "brand color" — shown as a primary-tinted swatch with a dashed ring so it
+ * reads as inherited rather than chosen.
+ */
+function HeroColorSwatch({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value?: string
+  disabled?: boolean
+  onChange: (color: string) => void
+}) {
+  const isCustom = !!value
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50"
+        >
+          <span
+            className={cn(
+              'size-4 rounded-full border',
+              isCustom ? 'border-border/50' : 'border-dashed border-muted-foreground/50 bg-primary'
+            )}
+            style={isCustom ? { backgroundColor: value } : undefined}
+            aria-hidden
+          />
+          {label}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto space-y-2 p-3" align="start">
+        <ColorPickerGrid selectedColor={value ?? ''} onColorChange={onChange} />
+        <ColorHexInput color={value ?? ''} onColorChange={onChange} />
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -554,6 +637,10 @@ function HomeCustomizationCard({
 
   const isBusy = saving || isPending || uploadHero.isPending || deleteHero.isPending
   const cards = home.cards?.length ? home.cards : DEFAULT_WIDGET_HOME_CARDS
+  const cardSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
 
   async function handleHeroFile(file: File | undefined) {
     if (!file) return
@@ -595,12 +682,13 @@ function HomeCustomizationCard({
     commit({ cards: next })
   }
 
-  function moveCard(index: number, delta: -1 | 1) {
-    const next = [...cards]
-    const target = index + delta
-    if (target < 0 || target >= next.length) return
-    ;[next[index], next[target]] = [next[target], next[index]]
-    commitCards(next)
+  function handleCardDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = cards.findIndex((c) => c.id === active.id)
+    const newIndex = cards.findIndex((c) => c.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    commitCards(arrayMove(cards, oldIndex, newIndex))
   }
 
   function updateCard(index: number, patch: Partial<WidgetHomeCard>) {
@@ -656,26 +744,149 @@ function HomeCustomizationCard({
 
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">Background</Label>
-          <Select
-            value={home.headerStyle ?? 'plain'}
-            onValueChange={(val: 'plain' | 'gradient' | 'image') => commit({ headerStyle: val })}
-            disabled={isBusy}
+          {/* Visual radio tiles: every style is visible at a glance (no
+              dropdown to open), and the options panel below reads as attached
+              to the selected tile — one bordered group, morphing per choice. */}
+          <div
+            className="rounded-lg border border-border/50 p-2"
+            role="radiogroup"
+            aria-label="Home background style"
           >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="plain">Plain</SelectItem>
-              <SelectItem value="gradient">Brand gradient</SelectItem>
-              <SelectItem value="image">Image</SelectItem>
-            </SelectContent>
-          </Select>
+            <div className="grid grid-cols-4 gap-2">
+              {(
+                [
+                  { id: 'plain', name: 'Plain' },
+                  { id: 'gradient', name: 'Gradient' },
+                  { id: 'pattern', name: 'Pattern' },
+                  { id: 'image', name: 'Image' },
+                ] as const
+              ).map((tile) => {
+                const active = (home.headerStyle ?? 'plain') === tile.id
+                return (
+                  <button
+                    key={tile.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    disabled={isBusy}
+                    onClick={() => commit({ headerStyle: tile.id })}
+                    className={cn(
+                      'flex flex-col items-center gap-1 rounded-lg border p-1.5 text-xs transition-colors',
+                      active
+                        ? 'border-primary ring-1 ring-primary'
+                        : 'border-border hover:border-primary/50'
+                    )}
+                  >
+                    {tile.id === 'image' ? (
+                      heroImageUrl ? (
+                        <img
+                          src={heroImageUrl}
+                          alt=""
+                          className="h-10 w-full rounded-md border border-border/40 object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-10 w-full items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
+                          <PhotoIcon className="size-4 text-muted-foreground/60" />
+                        </span>
+                      )
+                    ) : (
+                      <span
+                        className="h-10 w-full rounded-md border border-border/40 bg-background"
+                        style={
+                          heroBackdropStyle({
+                            headerStyle: tile.id,
+                            pattern: home.pattern,
+                            gradient: home.gradient,
+                          }) ?? undefined
+                        }
+                        aria-hidden
+                      />
+                    )}
+                    <span className="text-muted-foreground">{tile.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {home.headerStyle === 'pattern' && (
+              <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2.5">
+                <Label className="text-xs text-muted-foreground">Pattern</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {WIDGET_HERO_PATTERNS.map((preset) => {
+                    const active = (home.pattern ?? 'mesh') === preset.id
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => commit({ pattern: preset.id })}
+                        className={cn(
+                          'flex flex-col items-center gap-1 rounded-lg border p-1.5 text-xs transition-colors',
+                          active
+                            ? 'border-primary ring-1 ring-primary'
+                            : 'border-border hover:border-primary/50'
+                        )}
+                      >
+                        <span
+                          className="h-8 w-full rounded-md bg-background"
+                          style={
+                            heroBackdropStyle({
+                              headerStyle: 'pattern',
+                              pattern: preset.id,
+                              gradient: home.gradient,
+                            }) ?? undefined
+                          }
+                          aria-hidden
+                        />
+                        <span className="text-muted-foreground">{preset.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(home.headerStyle === 'gradient' || home.headerStyle === 'pattern') && (
+              <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2.5">
+                <Label className="text-xs text-muted-foreground">Colors</Label>
+                <div className="flex items-center gap-2">
+                  <HeroColorSwatch
+                    label="From"
+                    value={home.gradient?.from}
+                    disabled={isBusy}
+                    onChange={(color) => commit({ gradient: { ...home.gradient, from: color } })}
+                  />
+                  <HeroColorSwatch
+                    label="To"
+                    value={home.gradient?.to}
+                    disabled={isBusy}
+                    onChange={(color) => commit({ gradient: { ...home.gradient, to: color } })}
+                  />
+                  {(home.gradient?.from || home.gradient?.to) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      disabled={isBusy}
+                      onClick={() => commit({ gradient: { from: '', to: '' } })}
+                    >
+                      Use brand color
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Empty swatches follow your theme&apos;s primary color
+                </p>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
-            Fills the whole widget behind the header and Home content
+            A backdrop for the Home tab. It fills the widget panel, including the header, and fades
+            into the background
           </p>
         </div>
 
-        {(home.headerStyle === 'image' || heroImageUrl) && (
+        {home.headerStyle === 'image' && (
           <div className="space-y-2 rounded-lg border border-border/50 p-3">
             {heroImageUrl ? (
               <div className="flex items-center gap-3">
@@ -786,12 +997,7 @@ function HomeCustomizationCard({
               onClick={() => {
                 commitCards([
                   ...cards,
-                  {
-                    id: `link-${cards.length}-${cards.map((c) => c.id).join('').length}`,
-                    type: 'link',
-                    title: '',
-                    url: '',
-                  },
+                  { id: crypto.randomUUID(), type: 'link', title: '', url: '' },
                 ])
               }}
             >
@@ -800,125 +1006,159 @@ function HomeCustomizationCard({
             </Button>
           </div>
 
-          <div className="space-y-2">
-            {cards.map((card, index) => (
-              <div key={card.id} className="rounded-lg border border-border/50 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-foreground">
-                    {CARD_TYPE_LABEL[card.type] ?? card.type}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      disabled={isBusy || index === 0}
-                      onClick={() => moveCard(index, -1)}
-                      aria-label="Move up"
-                    >
-                      <ArrowUpIcon className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      disabled={isBusy || index === cards.length - 1}
-                      onClick={() => moveCard(index, 1)}
-                      aria-label="Move down"
-                    >
-                      <ArrowDownIcon className="h-3 w-3" />
-                    </Button>
-                    {card.type === 'link' ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-destructive"
-                        disabled={isBusy}
-                        onClick={() => commitCards(cards.filter((_, i) => i !== index))}
-                        aria-label="Remove card"
-                      >
-                        <TrashIcon className="h-3 w-3" />
-                      </Button>
-                    ) : (
-                      <Switch
-                        checked={card.enabled !== false}
-                        onCheckedChange={(checked) => updateCard(index, { enabled: checked })}
-                        disabled={isBusy}
-                        aria-label={`${CARD_TYPE_LABEL[card.type]} card`}
-                        className="ms-1"
-                      />
+          <DndContext
+            sensors={cardSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleCardDragEnd}
+          >
+            <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {cards.map((card, index) => (
+                  <SortableHomeCardShell key={card.id} id={card.id}>
+                    {(dragHandle) => (
+                      <div className="rounded-lg border border-border/50 p-3 space-y-2 bg-card">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {dragHandle}
+                            <span className="text-xs font-medium text-foreground truncate">
+                              {CARD_TYPE_LABEL[card.type] ?? card.type}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {card.type === 'link' ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive"
+                                disabled={isBusy}
+                                onClick={() => commitCards(cards.filter((_, i) => i !== index))}
+                                aria-label="Remove card"
+                              >
+                                <TrashIcon className="h-3 w-3" />
+                              </Button>
+                            ) : (
+                              <Switch
+                                checked={card.enabled !== false}
+                                onCheckedChange={(checked) =>
+                                  updateCard(index, { enabled: checked })
+                                }
+                                disabled={isBusy}
+                                aria-label={`${CARD_TYPE_LABEL[card.type]} card`}
+                                className="ms-1"
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            defaultValue={card.title ?? ''}
+                            maxLength={80}
+                            placeholder="Title (default)"
+                            className="h-8 text-xs"
+                            onBlur={(e) => {
+                              const value = e.target.value.trim()
+                              if (value === (card.title ?? '')) return
+                              updateCard(index, { title: value || undefined })
+                            }}
+                            disabled={isBusy}
+                          />
+                          <Input
+                            defaultValue={card.subtitle ?? ''}
+                            maxLength={160}
+                            placeholder="Subtitle (default)"
+                            className="h-8 text-xs"
+                            onBlur={(e) => {
+                              const value = e.target.value.trim()
+                              if (value === (card.subtitle ?? '')) return
+                              updateCard(index, { subtitle: value || undefined })
+                            }}
+                            disabled={isBusy}
+                          />
+                        </div>
+
+                        {card.type === 'link' && (
+                          <Input
+                            defaultValue={card.url ?? ''}
+                            maxLength={2000}
+                            placeholder="https://example.com"
+                            className="h-8 text-xs"
+                            onBlur={(e) => {
+                              const value = e.target.value.trim()
+                              if (value === (card.url ?? '')) return
+                              updateCard(index, { url: value })
+                            }}
+                            disabled={isBusy}
+                          />
+                        )}
+
+                        <Select
+                          value={card.audience ?? 'everyone'}
+                          onValueChange={(val: WidgetCardAudience) =>
+                            updateCard(index, { audience: val === 'everyone' ? undefined : val })
+                          }
+                          disabled={isBusy}
+                        >
+                          <SelectTrigger size="sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="everyone">Show to everyone</SelectItem>
+                            <SelectItem value="anonymous">Signed-out visitors only</SelectItem>
+                            <SelectItem value="identified">Signed-in users only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    defaultValue={card.title ?? ''}
-                    maxLength={80}
-                    placeholder="Title (default)"
-                    className="h-8 text-xs"
-                    onBlur={(e) => {
-                      const value = e.target.value.trim()
-                      if (value === (card.title ?? '')) return
-                      updateCard(index, { title: value || undefined })
-                    }}
-                    disabled={isBusy}
-                  />
-                  <Input
-                    defaultValue={card.subtitle ?? ''}
-                    maxLength={160}
-                    placeholder="Subtitle (default)"
-                    className="h-8 text-xs"
-                    onBlur={(e) => {
-                      const value = e.target.value.trim()
-                      if (value === (card.subtitle ?? '')) return
-                      updateCard(index, { subtitle: value || undefined })
-                    }}
-                    disabled={isBusy}
-                  />
-                </div>
-
-                {card.type === 'link' && (
-                  <Input
-                    defaultValue={card.url ?? ''}
-                    maxLength={2000}
-                    placeholder="https://example.com"
-                    className="h-8 text-xs"
-                    onBlur={(e) => {
-                      const value = e.target.value.trim()
-                      if (value === (card.url ?? '')) return
-                      updateCard(index, { url: value })
-                    }}
-                    disabled={isBusy}
-                  />
-                )}
-
-                <Select
-                  value={card.audience ?? 'everyone'}
-                  onValueChange={(val: WidgetCardAudience) =>
-                    updateCard(index, { audience: val === 'everyone' ? undefined : val })
-                  }
-                  disabled={isBusy}
-                >
-                  <SelectTrigger size="sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="everyone">Show to everyone</SelectItem>
-                    <SelectItem value="anonymous">Signed-out visitors only</SelectItem>
-                    <SelectItem value="identified">Signed-in users only</SelectItem>
-                  </SelectContent>
-                </Select>
+                  </SortableHomeCardShell>
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
           <p className="text-xs text-muted-foreground">
-            Built-in cards hide automatically when their section is disabled. Custom titles override
-            the defaults; leave blank to keep them.
+            Drag to reorder. Built-in cards hide automatically when their section is disabled.
+            Custom titles override the defaults; leave blank to keep them.
           </p>
         </div>
       </div>
     </SettingsCard>
+  )
+}
+
+/**
+ * Sortable wrapper for one Home card editor block. Render-prop hands the drag
+ * handle in so the card keeps its own layout; keyboard reorder works via the
+ * handle (dnd-kit KeyboardSensor).
+ */
+function SortableHomeCardShell({
+  id,
+  children,
+}: {
+  id: string
+  children: (dragHandle: ReactNode) => ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  })
+  const dragHandle = (
+    <button
+      type="button"
+      className="cursor-grab touch-none p-0.5 text-muted-foreground/60 hover:text-muted-foreground"
+      aria-label="Reorder card"
+      {...attributes}
+      {...listeners}
+    >
+      <Bars3Icon className="size-3.5" />
+    </button>
+  )
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(isDragging && 'relative z-10 opacity-60')}
+    >
+      {children(dragHandle)}
+    </div>
   )
 }
 
@@ -1359,7 +1599,10 @@ function WidgetInstallation({ secret, baseUrl }: { secret: string | null; baseUr
     : null
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[480px]">
+    <div
+      id="widget-installation"
+      className="scroll-mt-6 rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[480px]"
+    >
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] flex-1">
         {/* Left: Configuration */}
         <div className="flex flex-col border-b lg:border-b-0 lg:border-r border-border divide-y divide-border">

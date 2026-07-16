@@ -775,10 +775,22 @@ const messengerConfigInputSchema = z.object({
 
 // heroImageKey is intentionally absent: the hero image is written only via
 // saveWidgetHeroImageKeyFn, which owns the S3 object lifecycle.
+// Hex-only (or empty = "use brand color"): these values are interpolated into
+// inline styles on the public widget, so the boundary must reject anything
+// that could smuggle CSS.
+const heroColorSchema = z.union([z.literal(''), z.string().regex(/^#[0-9a-f]{6}$/i)])
+
 const widgetHomeConfigSchema = z.object({
   greeting: z.string().max(120).optional(),
   subtitle: z.string().max(200).optional(),
-  headerStyle: z.enum(['plain', 'gradient', 'image']).optional(),
+  headerStyle: z.enum(['plain', 'gradient', 'pattern', 'image']).optional(),
+  gradient: z
+    .object({
+      from: heroColorSchema.optional(),
+      to: heroColorSchema.optional(),
+    })
+    .optional(),
+  pattern: z.enum(['dots', 'grid', 'mesh', 'waves']).optional(),
   showLogo: z.boolean().optional(),
   showTeamAvatars: z.boolean().optional(),
   cards: z

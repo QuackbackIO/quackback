@@ -554,15 +554,25 @@ export const DEFAULT_WIDGET_HOME_CARDS: WidgetHomeCard[] = [
   { id: 'latest-updates', type: 'latest_updates' },
 ]
 
+/** Abstract pattern presets for the widget Home hero backdrop. */
+export type WidgetHeroPatternId = 'dots' | 'grid' | 'mesh' | 'waves'
+
 /** Customisation for the aggregated Home surface (greeting, hero, quick links). */
 export interface WidgetHomeConfig {
   /** Greeting heading; supports a `{name}` placeholder (e.g. "Hi {name} 👋"). */
   greeting?: string
   /** Subtitle under the greeting (e.g. "How can we help?"). */
   subtitle?: string
-  /** Home hero treatment: plain background, a brand-tinted gradient, or an
-   *  uploaded image that fades into the content. */
-  headerStyle?: 'plain' | 'gradient' | 'image'
+  /** Home hero treatment: plain background, a color gradient (brand-tinted
+   *  unless `gradient` sets custom colors), an abstract pattern preset, or an
+   *  uploaded image. Fills the whole Home panel behind the header and cards,
+   *  dissolving into the background toward the bottom. */
+  headerStyle?: 'plain' | 'gradient' | 'image' | 'pattern'
+  /** Custom hero colors (hex, e.g. "#7c3aed"). Applies to 'gradient' and
+   *  'pattern' styles; absent/empty = tinted from the theme's primary. */
+  gradient?: { from?: string; to?: string }
+  /** Which abstract pattern the 'pattern' style shows. Default 'mesh'. */
+  pattern?: WidgetHeroPatternId
   /** S3 key of the uploaded hero image. Written ONLY via saveWidgetHeroImageKey
    *  (single writer owns the S3 object lifecycle) — never through the generic
    *  config update; resolved to `heroImageUrl` in the public projection. */
