@@ -41,9 +41,9 @@ interface AzureDevOpsConfigProps {
 const EVENT_CONFIG = [
   {
     id: 'post.status_changed' as const,
-    label: 'Create work item when feedback is Under Review',
+    label: 'Create work item when feedback is Planned',
     description:
-      "Automatically create an Azure DevOps work item when a post's status changes to Under Review",
+      "Automatically create an Azure DevOps work item when a post's status changes to Planned",
   },
 ]
 
