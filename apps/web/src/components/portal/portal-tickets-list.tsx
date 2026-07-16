@@ -14,8 +14,10 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline'
+import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PageHeader } from '@/components/shared/page-header'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { TimeAgo } from '@/components/ui/time-ago'
@@ -53,17 +55,24 @@ function Highlighted({ text }: { text: string }) {
   )
 }
 
-/** A muted chip for the ticket's customer-facing stage. Resolved reads as done. */
+/** Semantic soft-chip colors per customer-facing stage — neutral while queued,
+ *  blue while worked, amber when the ball is in the requester's court
+ *  (Intercom's "waiting on customer" attention state), emerald when done. */
+const STAGE_CHIP_CLASS: Record<string, string> = {
+  received: 'bg-muted/60 text-muted-foreground',
+  in_progress: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+  awaiting_requester: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  resolved: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+}
+
 function StageChip({ slot, label }: { slot: string | null; label: string | null }) {
   if (!label) return null
-  const done = slot === 'resolved'
   return (
     <span
-      className={
-        done
-          ? 'inline-flex shrink-0 items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300'
-          : 'inline-flex shrink-0 items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary'
-      }
+      className={cn(
+        'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+        (slot && STAGE_CHIP_CLASS[slot]) ?? 'bg-muted/60 text-muted-foreground'
+      )}
     >
       {label}
     </span>
@@ -93,25 +102,24 @@ export function PortalTicketsList({ isLoggedIn }: { isLoggedIn: boolean }) {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-8">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">
-            <FormattedMessage id="portal.tickets.title" defaultMessage="Tickets" />
-          </h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            <FormattedMessage
-              id="portal.tickets.subtitle"
-              defaultMessage="Track your requests through to resolution"
-            />
-          </p>
-        </div>
-        {isLoggedIn && (
-          <Button size="sm" onClick={() => setNewOpen(true)}>
-            <PlusIcon className="me-1.5 h-4 w-4" />
-            <FormattedMessage id="portal.tickets.new" defaultMessage="New ticket" />
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        size="large"
+        title={intl.formatMessage({ id: 'portal.tickets.title', defaultMessage: 'Tickets' })}
+        description={intl.formatMessage({
+          id: 'portal.tickets.subtitle',
+          defaultMessage: 'Track your requests through to resolution',
+        })}
+        action={
+          isLoggedIn ? (
+            <Button size="sm" onClick={() => setNewOpen(true)}>
+              <PlusIcon className="me-1.5 h-4 w-4" />
+              <FormattedMessage id="portal.tickets.new" defaultMessage="New ticket" />
+            </Button>
+          ) : undefined
+        }
+        animate
+        className="mb-6"
+      />
 
       {isLoggedIn && (
         <div className="relative mb-4">
@@ -174,12 +182,12 @@ export function PortalTicketsList({ isLoggedIn }: { isLoggedIn: boolean }) {
                   className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:bg-muted/40"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-muted-foreground/70">
-                        {r.ticket.reference}
-                      </span>
+                    <span className="flex items-baseline gap-2">
                       <span className="truncate text-sm font-medium text-foreground">
                         {r.ticket.title}
+                      </span>
+                      <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">
+                        {r.ticket.reference}
                       </span>
                     </span>
                     <span className="mt-1 block truncate text-xs text-muted-foreground">
@@ -224,17 +232,17 @@ export function PortalTicketsList({ isLoggedIn }: { isLoggedIn: boolean }) {
                 className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:bg-muted/40"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] text-muted-foreground/70">
+                  <span className="flex items-baseline gap-2">
+                    <span className="truncate text-sm font-medium text-foreground">{t.title}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">
                       {t.reference}
                     </span>
-                    <span className="truncate text-sm font-medium text-foreground">{t.title}</span>
                   </span>
                   <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                    <StageChip slot={t.stage.slot} label={t.stage.label} />
                     <TimeAgo date={t.updatedAt} />
                   </span>
                 </span>
+                <StageChip slot={t.stage.slot} label={t.stage.label} />
                 <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 rtl:rotate-180" />
               </Link>
             </li>

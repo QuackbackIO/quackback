@@ -6,10 +6,10 @@
  * enforced by the requester server fns.
  */
 import { useCallback, useRef, useState } from 'react'
-import { createFileRoute, Link, Navigate, useRouteContext } from '@tanstack/react-router'
+import { createFileRoute, Navigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { ArrowLeftIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid'
+import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import type { JSONContent } from '@tiptap/core'
 import type { TicketId } from '@quackback/ids'
@@ -25,39 +25,64 @@ import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
-import { TicketIcon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { BackLink } from '@/components/ui/back-link'
+import { TicketIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 
 export const Route = createFileRoute('/_portal/support/ticket/$ticketId')({
   component: PortalTicketPage,
 })
 
-/** The received -> in_progress -> awaiting_requester -> resolved progress bar. */
+/** The received -> in_progress -> awaiting_requester -> resolved progress bar,
+ *  with every stage labeled under its segment (Featurebase/Intercom show the
+ *  full progression, not just the current stop). Mobile keeps only the current
+ *  label — four labels don't fit a phone row. */
 function StageTracker({ slot }: { slot: string | null }) {
   if (!slot) return null
   const currentIndex = TICKET_STAGES.indexOf(slot as (typeof TICKET_STAGES)[number])
   return (
-    <ol className="flex items-center gap-1.5" aria-label="Ticket progress">
+    <ol className="flex items-start gap-1.5" aria-label="Ticket progress">
       {TICKET_STAGES.map((stage, i) => {
         const reached = i <= currentIndex
+        const current = i === currentIndex
         return (
-          <li key={stage} className="flex flex-1 items-center gap-1.5">
+          <li key={stage} aria-current={current ? 'step' : undefined} className="flex-1">
             <span
               className={cn(
-                'h-1.5 flex-1 rounded-full transition-colors',
+                'block h-1.5 rounded-full transition-colors',
                 reached ? (slot === 'resolved' ? 'bg-emerald-500' : 'bg-primary') : 'bg-border'
               )}
             />
-            {i === currentIndex && (
-              <span className="shrink-0 text-[11px] font-medium text-foreground">
-                {DEFAULT_TICKET_STAGE_LABELS[stage]}
-              </span>
-            )}
+            <span
+              className={cn(
+                'mt-1.5 block text-[11px]',
+                current
+                  ? 'font-semibold text-foreground'
+                  : 'hidden text-muted-foreground/70 sm:block'
+              )}
+            >
+              {DEFAULT_TICKET_STAGE_LABELS[stage]}
+            </span>
           </li>
         )
       })}
     </ol>
   )
+}
+
+/** Async-thread timestamps need the day, not just a clock time — tickets span
+ *  days, unlike the live messenger this bubble component was built for. */
+function formatMessageTime(iso: string): string {
+  const date = new Date(iso)
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
 function PortalTicketPage() {
@@ -127,13 +152,9 @@ function PortalTicketPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col px-4 sm:px-6 py-6">
-      <Link
-        to="/support"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4 rtl:rotate-180" />
+      <BackLink to="/support" className="mb-4 self-start">
         <FormattedMessage id="portal.tickets.back" defaultMessage="All tickets" />
-      </Link>
+      </BackLink>
 
       {isLoading ? (
         <div className="flex justify-center py-16">
@@ -156,8 +177,8 @@ function PortalTicketPage() {
           <div className="mb-1 flex items-center gap-2">
             <span className="font-mono text-xs text-muted-foreground/70">{ticket.reference}</span>
           </div>
-          <h1 className="text-lg font-semibold leading-tight text-foreground">{ticket.title}</h1>
-          <div className="mt-4">
+          <h1 className="text-xl font-semibold leading-tight text-foreground">{ticket.title}</h1>
+          <div className="mt-5">
             <StageTracker slot={ticket.stage.slot} />
           </div>
 
@@ -180,11 +201,21 @@ function PortalTicketPage() {
                   isAssistant={m.isAssistant}
                   attachments={m.attachments}
                   citations={m.citations}
-                  time={m.createdAt}
+                  time={formatMessageTime(m.createdAt)}
                 />
               ))
             )}
           </div>
+
+          {ticket.stage.slot === 'awaiting_requester' && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/[0.04] px-3 py-2 text-[13px] text-amber-700 dark:text-amber-400">
+              <ChatBubbleLeftRightIcon className="size-4 shrink-0" />
+              <FormattedMessage
+                id="portal.tickets.awaitingReply"
+                defaultMessage="The team is waiting on your reply."
+              />
+            </div>
+          )}
 
           <div className="mt-4 rounded-lg border border-border bg-background p-2 focus-within:ring-2 focus-within:ring-primary/20">
             <RichTextEditor
@@ -202,15 +233,10 @@ function PortalTicketPage() {
               onSubmit={handleSend}
             />
             <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={!canSend}
-                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-40 transition-opacity"
-              >
-                <PaperAirplaneIcon className="h-4 w-4" />
+              <Button size="sm" onClick={handleSend} disabled={!canSend}>
+                <PaperAirplaneIcon className="me-1.5 h-4 w-4 rtl:rotate-180" />
                 <FormattedMessage id="portal.tickets.reply.send" defaultMessage="Send" />
-              </button>
+              </Button>
             </div>
           </div>
         </>
