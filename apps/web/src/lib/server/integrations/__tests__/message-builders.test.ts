@@ -94,16 +94,11 @@ describe.each([
 })
 
 // ---------------------------------------------------------------------------
-// HTML-based builders (Asana, Azure DevOps)
+// HTML-based builders (Asana)
 // ---------------------------------------------------------------------------
 
 describe.each([
   { name: 'Asana', build: (e: EventData) => buildAsanaTaskBody(e, ROOT), bodyKey: 'htmlNotes' },
-  {
-    name: 'Azure DevOps',
-    build: (e: EventData) => buildAzureDevOpsWorkItemBody(e, ROOT),
-    bodyKey: 'description',
-  },
 ])('$name message builder', ({ build, bodyKey }) => {
   it('does not include vote count', () => {
     const result = build(makeEvent()) as Record<string, string>
@@ -121,6 +116,64 @@ describe.each([
     const result = build(makeEvent({ authorName: 'A <script> & "B"' })) as Record<string, string>
     expect(result[bodyKey]).toContain('&lt;script&gt;')
     expect(result[bodyKey]).toContain('&amp;')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Azure DevOps (builds from post.status_changed, not post.created)
+// ---------------------------------------------------------------------------
+
+function makeStatusChangedEvent(overrides: Record<string, unknown> = {}): EventData {
+  return {
+    id: 'evt-1',
+    type: 'post.status_changed',
+    timestamp: '2025-01-01T00:00:00Z',
+    actor: { type: 'user', userId: 'user_1', email: 'actor@test.com' },
+    data: {
+      post: {
+        id: 'post_1',
+        title: 'Dark mode support',
+        boardId: 'board_1',
+        boardSlug: 'features',
+      },
+      previousStatus: 'Open',
+      newStatus: 'Planned',
+      previousStatusSlug: 'open',
+      newStatusSlug: 'planned',
+      ...overrides,
+    },
+  } as unknown as EventData
+}
+
+describe('Azure DevOps message builder', () => {
+  it('uses the post title', () => {
+    const { title } = buildAzureDevOpsWorkItemBody(makeStatusChangedEvent(), ROOT)
+    expect(title).toBe('Dark mode support')
+  })
+
+  it('includes the status transition, board, and link', () => {
+    const { description, postUrl } = buildAzureDevOpsWorkItemBody(makeStatusChangedEvent(), ROOT)
+    expect(description).toContain('Open')
+    expect(description).toContain('Planned')
+    expect(description).toContain('features')
+    expect(description).toContain('View in Quackback')
+    expect(postUrl).toContain('/b/features/posts/post_1')
+  })
+
+  it('escapes HTML special characters in the status name', () => {
+    const { description } = buildAzureDevOpsWorkItemBody(
+      makeStatusChangedEvent({ newStatus: 'A <script> & "B"' }),
+      ROOT
+    )
+    expect(description).toContain('&lt;script&gt;')
+    expect(description).toContain('&amp;')
+  })
+
+  it('returns a fallback for non post.status_changed events (e.g. post.created)', () => {
+    const { title, description, postUrl } = buildAzureDevOpsWorkItemBody(makeEvent(), ROOT)
+    expect(title).toBe('Feedback')
+    expect(description).toBe('')
+    expect(postUrl).toBe('')
   })
 })
 
@@ -213,7 +266,6 @@ describe('non post.created fallbacks', () => {
     { name: 'ClickUp', build: () => buildClickUpTaskBody(event, ROOT) },
     { name: 'Shortcut', build: () => buildShortcutStoryBody(event, ROOT) },
     { name: 'Asana', build: () => buildAsanaTaskBody(event, ROOT) },
-    { name: 'Azure DevOps', build: () => buildAzureDevOpsWorkItemBody(event, ROOT) },
   ])('$name returns fallback title', ({ build }) => {
     const result = build() as Record<string, unknown>
     const title = result.title ?? result.name

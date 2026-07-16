@@ -9,9 +9,9 @@ import { buildPostUrl, escapeHtml } from '../message-utils'
 export function buildAzureDevOpsWorkItemBody(
   event: EventData,
   rootUrl: string
-): { title: string; description: string } {
+): { title: string; description: string; postUrl: string } {
   if (event.type !== 'post.status_changed') {
-    return { title: 'Feedback', description: '' }
+    return { title: 'Feedback', description: '', postUrl: '' }
   }
 
   const { post, previousStatus, newStatus } = event.data
@@ -23,5 +23,5 @@ export function buildAzureDevOpsWorkItemBody(
     `<p><a href="${escapeHtml(postUrl)}">View in Quackback</a></p>`,
   ].join('\n')
 
-  return { title: post.title, description }
+  return { title: post.title, description, postUrl }
 }

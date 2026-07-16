@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ArrowPathIcon, FolderIcon } from '@heroicons/react/24/solid'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -77,6 +78,10 @@ export function AzureDevOpsConfig({
   const [workItemTypeError, setWorkItemTypeError] = useState<string | null>(null)
   const [selectedWorkItemType, setSelectedWorkItemType] = useState(initialWorkItemType)
 
+  const [parentWorkItemId, setParentWorkItemId] = useState(
+    (initialConfig.parentWorkItemId as string) || ''
+  )
+
   const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
@@ -142,6 +147,12 @@ export function AzureDevOpsConfig({
     setSelectedWorkItemType(workItemType)
     const channelId = `${selectedProject}:${workItemType}`
     updateMutation.mutate({ id: integrationId, config: { channelId } })
+  }
+
+  const handleParentWorkItemIdBlur = () => {
+    const trimmed = parentWorkItemId.trim()
+    setParentWorkItemId(trimmed)
+    updateMutation.mutate({ id: integrationId, config: { parentWorkItemId: trimmed } })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {
@@ -261,6 +272,23 @@ export function AzureDevOpsConfig({
         )}
         <p className="text-xs text-muted-foreground">
           The work item type used when creating items from feedback.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="parent-work-item-id">Parent work item ID (optional)</Label>
+        <Input
+          id="parent-work-item-id"
+          type="text"
+          inputMode="numeric"
+          placeholder="e.g. 6541"
+          value={parentWorkItemId}
+          onChange={(e) => setParentWorkItemId(e.target.value)}
+          onBlur={handleParentWorkItemIdBlur}
+          disabled={saving || !integrationEnabled}
+        />
+        <p className="text-xs text-muted-foreground">
+          If set, created work items are filed as a child of this work item (e.g. an Epic).
         </p>
       </div>
 
