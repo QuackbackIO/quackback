@@ -380,6 +380,9 @@ export const INLINE_CLASSIFICATIONS: Record<string, Classification> = {
     resolvesTo: PERMISSIONS.CONVERSATION_VIEW,
     why: 'transcript export carries internal notes; team-only on top of the CONVERSATION_VIEW permission gate',
   },
+  'lib/server/functions/embeds.ts::scopeTicketEmbed::isTeamMember': NOT_A_GATE(
+    'getEmbedPreviewFn already gates on portal access; team resolves any ticket embed (teammate read path), non-team callers resolve only their own customer ticket via the same ownership rule as loadOwnedTicketOr404'
+  ),
   'lib/server/functions/tickets.ts::listTicketMessagesFn::isTeamMember': NOT_A_GATE(
     'internal notes are agent-only; requesters never see them'
   ),
