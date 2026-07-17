@@ -9,7 +9,7 @@
  *
  * Radix Select needs pointer-capture/layout APIs happy-dom doesn't implement,
  * so `@/components/ui/select` is swapped for a native <select>/<option> pair
- * here — the same pattern import-wizard.test.tsx uses.
+ * here — the same pattern monday-config.test.tsx uses.
  */
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -79,7 +79,7 @@ vi.mock('@/lib/client/queries/conversation-attributes', () => ({
 }))
 
 // Native <select>/<option> stand-in: Radix's Select relies on pointer-capture
-// and scroll APIs happy-dom doesn't implement (see import-wizard.test.tsx for
+// and scroll APIs happy-dom doesn't implement (see monday-config.test.tsx for
 // the same workaround).
 vi.mock('@/components/ui/select', () => ({
   Select: ({

@@ -192,6 +192,12 @@ export const WORKER_REGISTRY: readonly WorkerEntry[] = [
     close: () =>
       import('@/lib/server/domains/import/import-queue').then((m) => m.closeImportQueue()),
   },
+  {
+    // Async workspace data export. Initializes on first enqueue.
+    name: 'export',
+    close: () =>
+      import('@/lib/server/domains/export/export-queue').then((m) => m.closeExportQueue()),
+  },
 ]
 
 type WorkerBootState = 'pending' | 'running' | 'failed'

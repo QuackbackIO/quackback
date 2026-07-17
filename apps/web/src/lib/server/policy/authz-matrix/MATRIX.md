@@ -859,7 +859,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-183 of 849 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+186 of 852 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -982,10 +982,13 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/devices.ts`::POST | route |
 | `routes/api/export.conversations.ts`::GET | route |
 | `routes/api/export.ts`::GET | route |
+| `routes/api/export/runs.$runId.download.ts`::GET | route |
+| `routes/api/export/runs.$runId.ts`::GET | route |
+| `routes/api/export/runs.ts`::GET | route |
+| `routes/api/export/workspace.ts`::POST | route |
 | `routes/api/health.live.ts`::GET | route |
 | `routes/api/health.ready.ts`::GET | route |
 | `routes/api/health.ts`::GET | route |
-| `routes/api/import/detect.ts`::POST | route |
 | `routes/api/import/index.ts`::POST | route |
 | `routes/api/import/runs.$runId.ts`::GET | route |
 | `routes/api/import/runs.ts`::GET | route |

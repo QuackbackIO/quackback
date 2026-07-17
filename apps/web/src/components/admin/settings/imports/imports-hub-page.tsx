@@ -1,18 +1,11 @@
-import { Link } from '@tanstack/react-router'
-import {
-  DocumentTextIcon,
-  ShieldCheckIcon,
-  CircleStackIcon,
-  UserGroupIcon,
-  ChatBubbleLeftRightIcon,
-} from '@heroicons/react/24/outline'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { BackLink } from '@/components/ui/back-link'
-import { Button } from '@/components/ui/button'
 import { ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
-import { ImportWizard } from './import-wizard'
+import { ImportCsv } from './import-csv'
 import { ImportHistoryList } from './import-history-list'
+import { ExportWorkspaceAction } from './export-workspace-action'
+import { ExportHistoryList } from './export-history-list'
 
 export function ImportsHubPage() {
   return (
@@ -23,56 +16,36 @@ export function ImportsHubPage() {
       <PageHeader
         icon={ArrowsRightLeftIcon}
         title="Imports & exports"
-        description="Move feedback data in from a CSV or another tool, and out as CSV or JSON."
+        description="Move feedback data in from a CSV or another tool, and out as a full workspace export."
       />
 
       <SettingsCard
         title="Imports"
-        description="Upload a CSV of posts, or pull from a tool you already use."
+        description="Upload a CSV of posts using the template — new boards, statuses, and tags are created as part of the import."
       >
-        <ImportWizard />
+        <ImportCsv />
         <div className="mt-6 border-t border-border/50 pt-4 space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">Migrating from another tool</p>
+          <p className="text-xs font-medium text-muted-foreground">Moving from another tool</p>
           <p className="text-xs text-muted-foreground">
-            Migrating from UserVoice or Canny? Export your data from that tool, then upload the
-            file above the same way as a CSV.
+            Export your data from the old tool, map it onto the template columns (only title and
+            content are required), and upload it above. Keep the source_id column filled to re-run
+            an import later without duplicating posts.
           </p>
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Exports" description="Download your data as CSV or JSON.">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Button variant="outline" asChild className="justify-start">
-            <a href="/api/export">
-              <DocumentTextIcon className="size-4" />
-              Export posts (CSV)
-            </a>
-          </Button>
-          <Button variant="outline" asChild className="justify-start">
-            <a href="/api/export/users">
-              <UserGroupIcon className="size-4" />
-              Export users (CSV)
-            </a>
-          </Button>
-          <Button variant="outline" asChild className="justify-start">
-            <a href="/api/export/conversations">
-              <ChatBubbleLeftRightIcon className="size-4" />
-              Export conversations (JSONL)
-            </a>
-          </Button>
-          <Button variant="outline" asChild className="justify-start">
-            <Link to="/admin/settings/security/authentication" search={{ tab: 'audit-log' }}>
-              <ShieldCheckIcon className="size-4" />
-              Export audit log (CSV)
-            </Link>
-          </Button>
+      <SettingsCard
+        title="Export workspace data"
+        description="Everything in your workspace as one ZIP: posts, comments, votes, boards, people, companies, conversations, and changelog — plus a manifest. CSV for tabular data, JSONL for conversations. Download links expire after 7 days."
+      >
+        <ExportWorkspaceAction />
+        <div className="mt-6 border-t border-border/50 pt-4">
+          <ExportHistoryList />
         </div>
-        <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-          <CircleStackIcon className="size-4 shrink-0 mt-0.5" />
-          <p>
-            Need a full database backup instead? Use the <code>backup</code> CLI command that ships
-            with your Quackback install — it produces an encrypted, restorable archive covering
-            everything, not just what CSV/JSON can express.
+        <div className="mt-4 space-y-1.5">
+          <p className="text-xs text-muted-foreground">
+            Looking for a filtered slice instead? Users and companies CSVs live in the People
+            directory, posts CSV in board settings, and the audit log CSV in Security settings.
           </p>
         </div>
       </SettingsCard>

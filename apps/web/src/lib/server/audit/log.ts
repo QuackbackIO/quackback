@@ -112,6 +112,9 @@ export type AuditEventType =
   | 'portal.invite.expired' // emitted by the daily sweep for pending invites past their expiry
   // Imports & exports hub (§I3): full-content conversation/ticket export
   | 'export.conversations.downloaded'
+  // Workspace data export (async ZIP): requested from the hub, artifact downloaded
+  | 'export.workspace.requested'
+  | 'export.workspace.downloaded'
   // AI config changelog: assistant customization mutations surfaced together
   // on the assistant admin page.
   | 'assistant.guidance.created'

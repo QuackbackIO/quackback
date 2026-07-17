@@ -19,6 +19,7 @@ const WORKER_MODULES = [
   'domains/analytics/partition-maintenance-queue.ts',
   'domains/conversation/conversation.email-imap-queue.ts',
   'domains/conversation/snooze-sweep-queue.ts',
+  'domains/export/export-queue.ts',
   'domains/feedback/queues/feedback-ai-queue.ts',
   'domains/feedback/queues/feedback-ingest-queue.ts',
   'domains/help-center/help-center-translate-queue.ts',

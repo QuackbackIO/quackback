@@ -11,7 +11,9 @@ import Papa from 'papaparse'
 import { z } from 'zod'
 import {
   db,
+  boards,
   posts,
+  postStatuses,
   postTags,
   postTagAssignments,
   postExternalLinks,
@@ -58,6 +60,8 @@ export interface BatchResult {
   skipped: number
   errors: ImportRowError[]
   createdTags: string[]
+  createdStatuses: string[]
+  createdBoards: string[]
 }
 
 /**
@@ -124,10 +128,14 @@ export async function processBatch(
     skipped: 0,
     errors: [],
     createdTags: [],
+    createdStatuses: [],
+    createdBoards: [],
   }
 
   const ctx = await loadRowContext()
   const tagsToCreate = new Set<string>()
+  const statusesToCreate = new Map<string, string>()
+  const boardsToCreate = new Map<string, string>()
 
   const { validRows, errors, skipped } = await resolveRows(
     rows,
@@ -136,10 +144,59 @@ export async function processBatch(
     userResolver,
     fallbackPrincipalId,
     ctx,
-    tagsToCreate
+    tagsToCreate,
+    statusesToCreate,
+    boardsToCreate
   )
   result.errors = errors
   result.skipped = skipped
+
+  // Auto-create boards/statuses the CSV references but that don't exist yet
+  // (template-driven CSV flow: unknown values become new taxonomy with
+  // schema-default access/settings, mirroring tag auto-creation below).
+  // Direct inserts — deliberately not createBoard/createStatusFn, so bulk
+  // imports don't fan out board/status events per row.
+  for (const [slug, name] of boardsToCreate) {
+    if (ctx.boardMap.has(slug)) continue
+    const id = createId('board')
+    await db.insert(boards).values({ id, name, slug })
+    ctx.boardMap.set(slug, { id, slug })
+    result.createdBoards.push(name)
+  }
+
+  let statusPosition = ctx.nextActiveStatusPosition
+  for (const [slug, name] of statusesToCreate) {
+    if (ctx.statusMap.has(slug)) continue
+    const id = createId('post_status')
+    await db.insert(postStatuses).values({
+      id,
+      name,
+      slug,
+      color: '#6b7280',
+      category: 'active',
+      position: statusPosition++,
+    })
+    ctx.statusMap.set(slug, { id, category: 'active', slug, name })
+    result.createdStatuses.push(name)
+  }
+
+  // Point rows that referenced not-yet-existing values at the fresh ids.
+  for (const { row } of validRows) {
+    if (row.pendingBoardSlug) {
+      const board = ctx.boardMap.get(row.pendingBoardSlug)
+      if (board) {
+        row.boardId = board.id
+        row.boardSlug = board.slug
+      }
+    }
+    if (row.pendingStatusSlug) {
+      const status = ctx.statusMap.get(row.pendingStatusSlug)
+      if (status) {
+        row.statusId = status.id
+        row.statusLabel = status.name
+      }
+    }
+  }
 
   // Idempotence: match rows carrying a source_id against prior import links.
   const sourceIds = validRows.map(({ row }) => row.sourceId).filter((id): id is string => !!id)
@@ -352,7 +409,8 @@ export function mergeResults(current: ImportResult, batch: BatchResult): ImportR
     skipped: current.skipped + batch.skipped,
     errors: [...current.errors, ...batch.errors].slice(0, MAX_ERRORS),
     createdTags: [...new Set([...current.createdTags, ...batch.createdTags])],
-    // Tracked on the run-wide resolver, not per batch; processImport sets it once.
+    createdStatuses: [...new Set([...current.createdStatuses, ...batch.createdStatuses])],
+    createdBoards: [...new Set([...current.createdBoards, ...batch.createdBoards])],
   }
 }
 
@@ -372,6 +430,8 @@ export async function processImport(data: ImportInput): Promise<ImportResult> {
     skipped: 0,
     errors: [],
     createdTags: [],
+    createdStatuses: [],
+    createdBoards: [],
   }
 
   // Single UserResolver instance shared across all batches (caches email->principalId lookups)

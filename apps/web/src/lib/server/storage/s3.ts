@@ -534,10 +534,14 @@ export function getPublicUrl(key: string): string {
  *   The sole caller (GET /api/storage 302 redirect) marks the redirect
  *   cacheable for 24h, so the presigned URL must outlive cached copies;
  *   48h keeps a 2x margin over that cache window.
+ * @param downloadName - When set, S3 responds with
+ *   `Content-Disposition: attachment; filename="<downloadName>"`, so the
+ *   browser saves a friendly name instead of the raw object key.
  */
 export async function generatePresignedGetUrl(
   key: string,
-  expiresIn: number = 172800
+  expiresIn: number = 172800,
+  downloadName?: string
 ): Promise<string> {
   const s3Config = getS3Config()
   const client = await getS3Client()
@@ -547,6 +551,9 @@ export async function generatePresignedGetUrl(
   const command = new GetObjectCommand({
     Bucket: s3Config.bucket,
     Key: key,
+    ...(downloadName
+      ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
+      : {}),
   })
 
   return getSignedUrl(client, command, { expiresIn })

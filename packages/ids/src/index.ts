@@ -100,6 +100,7 @@ export type {
   PostExternalLinkId,
   TicketExternalLinkId,
   ImportRunId,
+  ExportRunId,
   PostSubscriptionId,
   NotifPrefId,
   UnsubTokenId,
@@ -216,6 +217,7 @@ export {
   domainIdSchema,
   segmentIdSchema,
   importRunIdSchema,
+  exportRunIdSchema,
   // Pre-built strict schemas - feedback aggregation
   feedbackSourceIdSchema,
   rawFeedbackItemIdSchema,

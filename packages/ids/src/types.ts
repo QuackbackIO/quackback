@@ -118,6 +118,9 @@ export type SlackMonitorId = TypeId<'slack_monitor'>
 /** Import run ID - e.g., import_run_01h455vb4pex5vsknk084sn02q */
 export type ImportRunId = TypeId<'import_run'>
 
+/** Export run ID - e.g., export_run_01h455vb4pex5vsknk084sn02q */
+export type ExportRunId = TypeId<'export_run'>
+
 /** Post subscription ID - e.g., post_sub_01h455vb4pex5vsknk084sn02q */
 export type PostSubscriptionId = TypeId<'post_sub'>
 
@@ -453,6 +456,7 @@ export interface EntityIdMap {
   ticket_external_link: TicketExternalLinkId
   slack_monitor: SlackMonitorId
   import_run: ImportRunId
+  export_run: ExportRunId
   post_subscription: PostSubscriptionId
   notif_pref: NotifPrefId
   unsub_token: UnsubTokenId

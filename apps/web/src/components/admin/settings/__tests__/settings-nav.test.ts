@@ -184,9 +184,18 @@ describe('buildNavSections', () => {
   })
 
   it('Data contains People and Imports & exports (always), Conversations under supportInbox', () => {
-    expect(itemLabels(buildNavSections(), 'Data')).toEqual(['People', 'Imports & exports'])
+    expect(itemLabels(buildNavSections(), 'Data')).toEqual([
+      'People',
+      'Companies',
+      'Imports & exports',
+    ])
     const sections = buildNavSections({ supportInbox: true })
-    expect(itemLabels(sections, 'Data')).toEqual(['People', 'Conversations', 'Imports & exports'])
+    expect(itemLabels(sections, 'Data')).toEqual([
+      'People',
+      'Companies',
+      'Conversations',
+      'Imports & exports',
+    ])
     const s = sections.find((x) => x.label === 'Data')!
     const conv = s.items.find((i) => i.label === 'Conversations')!
     expect(!isNavGroup(conv) && conv.to).toBe('/admin/settings/conversation-data')

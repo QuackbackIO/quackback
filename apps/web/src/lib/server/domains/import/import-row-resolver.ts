@@ -4,9 +4,15 @@
  * schema, status/board/tag lookups, and author resolution. Read-only —
  * nothing in this module writes to the database, which is what makes the
  * dry run safe.
+ *
+ * Unknown status/board values are collected (not written) into the
+ * `statusesToCreate`/`boardsToCreate` maps the caller passes in — the commit
+ * path creates them, the dry run just reports them. Slugify is the identity:
+ * "Feature Requests" and "feature-requests" are the same board.
  */
 import { z } from 'zod'
 import { db, postStatuses, eq } from '@/lib/server/db'
+import { slugify } from '@/lib/shared/utils'
 import type { BoardId, PrincipalId, PostTagId, PostStatusId } from '@quackback/ids'
 import type { ImportRowError } from './types'
 import type { ImportUserResolver } from './user-resolver'
@@ -85,6 +91,10 @@ export interface ProcessedRow {
   tagNames: string[]
   principalId: PrincipalId
   sourceId: string | null
+  /** Slug of a board this row needs created (null when it matched an existing board). */
+  pendingBoardSlug: string | null
+  /** Slug of a status this row needs created (null when it matched an existing status). */
+  pendingStatusSlug: string | null
 }
 
 export interface ResolvedRow {
@@ -95,9 +105,17 @@ export interface ResolvedRow {
 /** Read-only lookups shared by every row in a batch. */
 export interface RowContext {
   defaultStatusId: PostStatusId | null
+  /** Statuses by slug. */
   statusMap: Map<string, { id: PostStatusId; category: string; slug: string; name: string }>
+  /** Lowercase status name -> slug, so "In Progress" matches the in_progress slug. */
+  statusNames: Map<string, string>
+  /** Position for the next auto-created 'active' status (max existing + 1). */
+  nextActiveStatusPosition: number
   tagMap: Map<string, { id: PostTagId }>
+  /** Boards by slug. */
   boardMap: Map<string, { id: BoardId; slug: string }>
+  /** Lowercase board name -> slug. */
+  boardNames: Map<string, string>
 }
 
 export async function loadRowContext(): Promise<RowContext> {
@@ -107,6 +125,12 @@ export async function loadRowContext(): Promise<RowContext> {
 
   const existingStatuses = await db.query.postStatuses.findMany()
   const statusMap = new Map(existingStatuses.map((s) => [s.slug, s]))
+  const statusNames = new Map(existingStatuses.map((s) => [s.name.toLowerCase(), s.slug]))
+  const nextActiveStatusPosition =
+    existingStatuses.reduce(
+      (max, s) => (s.category === 'active' ? Math.max(max, s.position) : max),
+      -1
+    ) + 1
 
   const existingTags = await db.query.postTags.findMany()
   const tagMap = new Map<string, { id: PostTagId }>(
@@ -117,13 +141,34 @@ export async function loadRowContext(): Promise<RowContext> {
   const boardMap = new Map(
     existingBoards.map((b) => [b.slug, { id: b.id as BoardId, slug: b.slug }])
   )
+  const boardNames = new Map(existingBoards.map((b) => [b.name.toLowerCase(), b.slug]))
 
   return {
     defaultStatusId: (defaultStatus?.id ?? null) as PostStatusId | null,
     statusMap,
+    statusNames,
+    nextActiveStatusPosition,
     tagMap,
     boardMap,
+    boardNames,
   }
+}
+
+/**
+ * Resolve a CSV status/board cell to an existing entry: exact slug, then
+ * slugified cell ("Feature Requests" -> feature-requests), then
+ * case-insensitive name. Returns the canonical slug on a hit, null otherwise.
+ */
+export function matchExistingSlug(
+  value: string,
+  bySlug: ReadonlyMap<string, unknown>,
+  byName: ReadonlyMap<string, string>
+): string | null {
+  const lowered = value.trim().toLowerCase()
+  if (bySlug.has(lowered)) return lowered
+  const slugged = slugify(value)
+  if (slugged && bySlug.has(slugged)) return slugged
+  return byName.get(lowered) ?? null
 }
 
 function legacyStatusFor(status?: {
@@ -143,7 +188,9 @@ function legacyStatusFor(status?: {
  * Validate and resolve a batch of raw CSV rows: status/board lookups, tag
  * parsing, and author resolution. Read-only against posts/tags — safe to
  * call for a dry run. `tagsToCreate` is mutated so callers can pre-generate
- * IDs for genuinely new tag names across the whole batch.
+ * IDs for genuinely new tag names across the whole batch; `statusesToCreate`
+ * and `boardsToCreate` (slug -> display name) collect unknown values the same
+ * way — the commit path creates them, the dry run reports them.
  */
 export async function resolveRows(
   rows: Record<string, string>[],
@@ -152,7 +199,9 @@ export async function resolveRows(
   userResolver: ImportUserResolver,
   fallbackPrincipalId: PrincipalId,
   ctx: RowContext,
-  tagsToCreate: Set<string>
+  tagsToCreate: Set<string>,
+  statusesToCreate: Map<string, string>,
+  boardsToCreate: Map<string, string>
 ): Promise<{ validRows: ResolvedRow[]; errors: ImportRowError[]; skipped: number }> {
   const validRows: ResolvedRow[] = []
   const errors: ImportRowError[] = []
@@ -175,24 +224,49 @@ export async function resolveRows(
 
     const row = parseResult.data
 
+    // Status: match an existing one by slug/slugified/name; otherwise queue
+    // the value for auto-creation (commit path) and label the row with the
+    // raw text so the preview shows what will be created.
     let statusId: PostStatusId | null = ctx.defaultStatusId
     let statusLabel: string | null = null
-    const status = row.status ? ctx.statusMap.get(row.status.toLowerCase()) : undefined
-    if (status) {
-      statusId = status.id
-      statusLabel = status.name
+    let status: { id: PostStatusId; category: string; slug: string; name: string } | undefined
+    let pendingStatusSlug: string | null = null
+    if (row.status) {
+      const matchedSlug = matchExistingSlug(row.status, ctx.statusMap, ctx.statusNames)
+      if (matchedSlug) {
+        status = ctx.statusMap.get(matchedSlug)
+        statusId = status!.id
+        statusLabel = status!.name
+      } else {
+        const slug = slugify(row.status)
+        if (slug) {
+          pendingStatusSlug = slug
+          statusId = null
+          statusLabel = row.status.trim()
+          if (!statusesToCreate.has(slug)) statusesToCreate.set(slug, row.status.trim())
+        }
+      }
     }
 
-    // Per-row board routing: the mapped "board" column carries a board slug
-    // (the wizard's board-mapping step resolves free-text values to slugs
-    // before upload). Falls back to the default board when absent or unknown.
+    // Per-row board routing: the "board" column matches an existing board by
+    // slug/slugified/name; unknown values are queued for auto-creation. Rows
+    // without a board cell land on the default board.
     let boardId = defaultBoardId
     let boardSlug: string | null = null
+    let pendingBoardSlug: string | null = null
     if (row.board) {
-      const board = ctx.boardMap.get(row.board.toLowerCase())
-      if (board) {
+      const matchedSlug = matchExistingSlug(row.board, ctx.boardMap, ctx.boardNames)
+      if (matchedSlug) {
+        const board = ctx.boardMap.get(matchedSlug)!
         boardId = board.id
         boardSlug = board.slug
+      } else {
+        const slug = slugify(row.board)
+        if (slug) {
+          pendingBoardSlug = slug
+          boardSlug = slug
+          if (!boardsToCreate.has(slug)) boardsToCreate.set(slug, row.board.trim())
+        }
       }
     }
 
@@ -239,6 +313,8 @@ export async function resolveRows(
         tagNames,
         principalId,
         sourceId: row.source_id || null,
+        pendingBoardSlug,
+        pendingStatusSlug,
       },
       index: rowIndex,
     })

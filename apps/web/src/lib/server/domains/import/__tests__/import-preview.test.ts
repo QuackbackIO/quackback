@@ -80,7 +80,7 @@ describe('previewImport', () => {
       { id: 'status_open', slug: 'open', category: 'active', name: 'Open' },
     ])
     hoisted.findManyPostTags.mockResolvedValue([])
-    hoisted.findManyBoards.mockResolvedValue([{ id: 'board_bugs', slug: 'bugs' }])
+    hoisted.findManyBoards.mockResolvedValue([{ id: 'board_bugs', slug: 'bugs', name: 'Bugs' }])
     hoisted.findManyPostExternalLinks.mockResolvedValue([])
   })
 
@@ -96,7 +96,11 @@ describe('previewImport', () => {
       'First,Body one,open,bugs,alice@example.com\n' +
       'Second,Body two,open,bugs,alice@example.com\n'
 
-    const preview = await previewImport({ ...BASE_INPUT, csvContent: csvContent(csv), totalRows: 2 })
+    const preview = await previewImport({
+      ...BASE_INPUT,
+      csvContent: csvContent(csv),
+      totalRows: 2,
+    })
 
     expect(preview.counts.byBoard).toEqual({ bugs: 2 })
     expect(preview.counts.byStatus).toEqual({ Open: 2 })
@@ -117,7 +121,11 @@ describe('previewImport', () => {
       'First,Body one,new@example.com\n' +
       'Second,Body two,new@example.com\n'
 
-    const preview = await previewImport({ ...BASE_INPUT, csvContent: csvContent(csv), totalRows: 2 })
+    const preview = await previewImport({
+      ...BASE_INPUT,
+      csvContent: csvContent(csv),
+      totalRows: 2,
+    })
 
     expect(preview.sample[0].isNewAuthor).toBe(true)
     expect(preview.sample[1].isNewAuthor).toBe(false)
@@ -125,10 +133,40 @@ describe('previewImport', () => {
 
   it('reports per-row validation errors without throwing', async () => {
     const csv = 'title,content\n,Body without a title\n'
-    const preview = await previewImport({ ...BASE_INPUT, csvContent: csvContent(csv), totalRows: 1 })
+    const preview = await previewImport({
+      ...BASE_INPUT,
+      csvContent: csvContent(csv),
+      totalRows: 1,
+    })
 
     expect(preview.errors).toHaveLength(1)
     expect(preview.errors[0].row).toBe(1)
+  })
+
+  it('reports to-be-created statuses, boards, and tags without writing them', async () => {
+    const csv =
+      'title,content,status,board,tags\n' +
+      'First,Body one,In Progress,Feature Requests,"ui,theme"\n' +
+      'Second,Body two,open,bugs,ui\n'
+
+    const preview = await previewImport({
+      ...BASE_INPUT,
+      csvContent: csvContent(csv),
+      totalRows: 2,
+    })
+
+    expect(preview.creates.statuses).toEqual(['In Progress'])
+    expect(preview.creates.boards).toEqual(['Feature Requests'])
+    expect(preview.creates.tags.sort()).toEqual(['theme', 'ui'])
+    // Existing taxonomy matched by slug/name is NOT reported as new.
+    expect(preview.creates.statuses).not.toContain('open')
+    expect(preview.creates.boards).not.toContain('bugs')
+    // The pending row shows the raw status label and the slugified board.
+    expect(preview.sample[0]).toMatchObject({
+      status: 'In Progress',
+      board: 'feature-requests',
+    })
+    expect(hoisted.insert).not.toHaveBeenCalled()
   })
 
   it('marks a row as an update when its source_id matches a prior import link', async () => {
@@ -137,7 +175,11 @@ describe('previewImport', () => {
     ])
     const csv = 'title,content,source_id\nExisting,Body,ext-1\n'
 
-    const preview = await previewImport({ ...BASE_INPUT, csvContent: csvContent(csv), totalRows: 1 })
+    const preview = await previewImport({
+      ...BASE_INPUT,
+      csvContent: csvContent(csv),
+      totalRows: 1,
+    })
 
     expect(preview.sample[0].action).toBe('update')
     expect(preview.updatedCount).toBe(1)

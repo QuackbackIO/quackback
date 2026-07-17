@@ -1,6 +1,6 @@
 /**
- * Import commit queue (§I1) — the async conversion of the CSV/UserVoice/Canny
- * pipeline. Lazy-init Promise singleton matches the {feedback-ingest} pattern.
+ * Import commit queue (§I1) — the async side of the CSV import pipeline.
+ * Lazy-init Promise singleton matches the {feedback-ingest} pattern.
  *
  * A single attempt per job: a retry with no idempotence tracking (§I2 adds
  * source-id matching) would re-run the whole batch and double-import rows

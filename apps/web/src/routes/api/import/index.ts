@@ -21,9 +21,8 @@ const MAX_ROWS = 10000
  * rejects oversized uploads with 413 before the multipart body is buffered.
  *
  * `mode=dry_run` (§I2) validates and resolves every row without writing
- * anything and returns the preview summary directly (200) — the wizard's
- * mapping steps run before this call, so the file has already been remapped
- * onto the canonical headers by the time it reaches here.
+ * anything and returns the preview summary directly (200) — unknown
+ * status/board/tag values in the CSV are reported as to-be-created.
  *
  * `mode=commit` (default, §I1) is async: it creates an `import_runs` row,
  * enqueues the commit job, and returns the run id immediately (202) — the
@@ -64,8 +63,6 @@ export async function handleImportPost(request: Request): Promise<Response> {
     const boardIdParam = formData.get('boardId') as string | null
     const modeParam = formData.get('mode') as string | null
     const mode = modeParam === 'dry_run' ? 'dry_run' : 'commit'
-    const sourceParam = formData.get('source') as string | null
-    const source = sourceParam === 'uservoice' || sourceParam === 'canny' ? sourceParam : 'csv'
 
     log.info(
       { file_name: file?.name || 'none', file_size: file?.size || 0, mode },
@@ -157,26 +154,11 @@ export async function handleImportPost(request: Request): Promise<Response> {
     // Encode CSV as base64 for the import service
     const csvContent = Buffer.from(csvText).toString('base64')
 
-    // Real per-row voters (§I3), carried alongside a UserVoice/Canny-detected
-    // upload. Malformed JSON is treated the same as "not provided" — voters
-    // are a value-add on top of the CSV's own vote_count column, never a
-    // hard requirement.
-    const votersJson = formData.get('votersJson') as string | null
-    let voters: ImportInput['voters']
-    if (votersJson) {
-      try {
-        voters = JSON.parse(votersJson) as ImportInput['voters']
-      } catch {
-        log.warn('ignoring malformed votersJson field')
-      }
-    }
-
     const importData: ImportInput = {
       boardId: targetBoardId!,
       csvContent,
       totalRows,
       initiatedByPrincipalId: validation.principal.id,
-      voters,
     }
 
     if (mode === 'dry_run') {
@@ -188,12 +170,12 @@ export async function handleImportPost(request: Request): Promise<Response> {
     log.info({ total_rows: totalRows }, 'queuing import rows')
 
     const run = await createImportRun({
-      source,
+      source: 'csv',
       fileName: file.name,
       initiatedByPrincipalId: validation.principal.id,
     })
 
-    await enqueueImportCommitJob({ runId: run.id, source, input: importData })
+    await enqueueImportCommitJob({ runId: run.id, source: 'csv', input: importData })
 
     log.info({ run_id: run.id }, 'csv import enqueued')
     return Response.json({ runId: run.id, status: run.status, totalRows }, { status: 202 })

@@ -24,6 +24,8 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
   const ctx = await loadRowContext()
   const userResolver = new ImportUserResolver()
   const tagsToCreate = new Set<string>()
+  const statusesToCreate = new Map<string, string>()
+  const boardsToCreate = new Map<string, string>()
 
   const errors: ImportRowError[] = []
   const byBoard: Record<string, number> = {}
@@ -47,7 +49,9 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
       userResolver,
       data.initiatedByPrincipalId,
       ctx,
-      tagsToCreate
+      tagsToCreate,
+      statusesToCreate,
+      boardsToCreate
     )
     errors.push(...batchErrors)
 
@@ -100,6 +104,11 @@ export async function previewImport(data: ImportInput): Promise<ImportPreview> {
   return {
     totalRows: data.totalRows,
     counts: { byBoard, byStatus, byAuthor },
+    creates: {
+      boards: [...boardsToCreate.values()],
+      statuses: [...statusesToCreate.values()],
+      tags: [...tagsToCreate],
+    },
     sample: finalSample,
     errors: errors.slice(0, MAX_ERRORS),
     // Every source-id-bearing row past the sample cap still counts toward

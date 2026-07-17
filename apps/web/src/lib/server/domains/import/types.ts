@@ -61,6 +61,10 @@ export interface ImportResult {
   errors: ImportRowError[]
   /** List of tag names that were auto-created */
   createdTags: string[]
+  /** List of status names that were auto-created (template CSV flow) */
+  createdStatuses: string[]
+  /** List of board names that were auto-created (template CSV flow) */
+  createdBoards: string[]
 }
 
 /**
@@ -93,6 +97,12 @@ export interface ImportPreview {
     byBoard: Record<string, number>
     byStatus: Record<string, number>
     byAuthor: Record<string, number>
+  }
+  /** Taxonomy the commit would auto-create (template CSV flow). */
+  creates: {
+    boards: string[]
+    statuses: string[]
+    tags: string[]
   }
   /** Capped sample of resolved rows for display */
   sample: ImportPreviewRow[]

@@ -217,6 +217,9 @@ export {
   // Schema tables - import runs (imports & exports hub)
   importRuns,
   importRunsRelations,
+  // Schema tables - export runs (workspace data export)
+  exportRuns,
+  exportRunsRelations,
   // Schema tables - changelog
   changelogEntries,
   changelogEntriesRelations,
@@ -465,6 +468,7 @@ export type {
   ImportRunTotals,
   ImportRunErrorEntry,
 } from '@quackback/db'
+export type { ExportRunStatus, ExportRunEntityCounts } from '@quackback/db'
 export type {
   Workflow,
   WorkflowRun,

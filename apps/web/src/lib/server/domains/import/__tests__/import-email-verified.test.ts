@@ -55,8 +55,11 @@ describe('resolveRows email_verified plumb', () => {
     return {
       defaultStatusId: 'post_status_default' as PostStatusId,
       statusMap: new Map(),
+      statusNames: new Map(),
+      nextActiveStatusPosition: 0,
       tagMap: new Map(),
       boardMap: new Map(),
+      boardNames: new Map(),
     }
   }
 
@@ -86,7 +89,9 @@ describe('resolveRows email_verified plumb', () => {
       resolver,
       FALLBACK,
       stubCtx(),
-      new Set()
+      new Set(),
+      new Map(),
+      new Map()
     )
 
     expect(errors).toEqual([])

@@ -54,6 +54,7 @@ vi.mock('@/lib/server/db', () => ({
     }),
   },
   posts: { id: 'posts.id' },
+  boards: {},
   postTags: {},
   postTagAssignments: { postId: 'post_tag_assignments.post_id' },
   postStatuses: { isDefault: 'is_default', slug: 'slug' },
@@ -147,6 +148,74 @@ describe('processBatch', () => {
     })
   })
 
+  describe('taxonomy auto-creation (template CSV flow)', () => {
+    it('creates unknown statuses and boards, then points rows at them', async () => {
+      hoisted.findManyBoards.mockResolvedValue([
+        { id: 'board_default', slug: 'default', name: 'Default' },
+      ])
+      const rows = [
+        {
+          title: 'Row one',
+          content: 'Body one',
+          status: 'In Progress',
+          board: 'Feature Requests',
+        },
+      ]
+
+      const result = await processBatch(
+        rows,
+        'board_default' as never,
+        0,
+        fakeResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId
+      )
+
+      expect(result.createdStatuses).toEqual(['In Progress'])
+      expect(result.createdBoards).toEqual(['Feature Requests'])
+
+      // Board insert happens first, then the status insert, then the post.
+      const boardInsert = hoisted.insertValues.mock.calls[0][0]
+      expect(boardInsert).toMatchObject({ name: 'Feature Requests', slug: 'feature-requests' })
+      const statusInsert = hoisted.insertValues.mock.calls[1][0]
+      expect(statusInsert).toMatchObject({
+        name: 'In Progress',
+        slug: 'in-progress',
+        category: 'active',
+      })
+      const postInsert = hoisted.insertValues.mock.calls[2][0][0]
+      expect(postInsert.boardId).toBe(boardInsert.id)
+      expect(postInsert.statusId).toBe(statusInsert.id)
+    })
+
+    it('matches existing taxonomy by name or slugified value instead of creating', async () => {
+      hoisted.findManyPostStatuses.mockResolvedValue([
+        { id: 'status_open', slug: 'open', category: 'active', name: 'Open', position: 0 },
+      ])
+      hoisted.findManyBoards.mockResolvedValue([{ id: 'board_bugs', slug: 'bugs', name: 'Bugs' }])
+      const rows = [
+        { title: 'A', content: 'Body', status: 'Open', board: 'Bugs' },
+        { title: 'B', content: 'Body', status: 'open', board: 'bugs' },
+      ]
+
+      const result = await processBatch(
+        rows,
+        'board_bugs' as never,
+        0,
+        fakeResolver('principal_fallback' as PrincipalId),
+        'principal_fallback' as PrincipalId
+      )
+
+      expect(result.createdStatuses).toEqual([])
+      expect(result.createdBoards).toEqual([])
+      // Both posts inserted, no board/status inserts.
+      const [first, second] = hoisted.insertValues.mock.calls[0][0]
+      expect(first.statusId).toBe('status_open')
+      expect(second.statusId).toBe('status_open')
+      expect(first.boardId).toBe('board_bugs')
+      expect(second.boardId).toBe('board_bugs')
+    })
+  })
+
   describe('source-id idempotence', () => {
     it('creates a new post and an external link when the source_id has not been seen before', async () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([])
@@ -198,7 +267,9 @@ describe('processBatch', () => {
   describe('real voter import (§I3)', () => {
     it('creates real post_votes rows and sets voteCount from the deduped voter count', async () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([])
-      const rows = [{ title: 'Dark mode', content: 'Please', source_id: 'idea-1', vote_count: '99' }]
+      const rows = [
+        { title: 'Dark mode', content: 'Please', source_id: 'idea-1', vote_count: '99' },
+      ]
       const voters = {
         'idea-1': [
           { email: 'alice@example.com' },
@@ -236,7 +307,9 @@ describe('processBatch', () => {
 
     it('falls back to vote-count backfill when no voters entry exists for the row', async () => {
       hoisted.findManyPostExternalLinks.mockResolvedValue([])
-      const rows = [{ title: 'No voters here', content: 'Body', source_id: 'idea-2', vote_count: '5' }]
+      const rows = [
+        { title: 'No voters here', content: 'Body', source_id: 'idea-2', vote_count: '5' },
+      ]
 
       await processBatch(
         rows,

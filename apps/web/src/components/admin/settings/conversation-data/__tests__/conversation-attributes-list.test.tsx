@@ -10,7 +10,7 @@
  * Radix Select relies on pointer-capture/layout APIs happy-dom doesn't
  * implement, so `@/components/ui/select` is swapped for a native
  * <select>/<option> pair here — the same pattern condition-editor.test.tsx /
- * import-wizard.test.tsx use.
+ * monday-config.test.tsx use.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import type { ReactElement } from 'react'

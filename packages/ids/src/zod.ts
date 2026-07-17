@@ -192,6 +192,7 @@ export const inviteIdSchema = typeIdSchema(ID_PREFIXES.invite)
 export const domainIdSchema = typeIdSchema(ID_PREFIXES.domain)
 export const segmentIdSchema = typeIdSchema(ID_PREFIXES.segment)
 export const importRunIdSchema = typeIdSchema(ID_PREFIXES.import_run)
+export const exportRunIdSchema = typeIdSchema(ID_PREFIXES.export_run)
 
 // Feedback aggregation schemas
 export const feedbackSourceIdSchema = typeIdSchema(ID_PREFIXES.feedback_source)
