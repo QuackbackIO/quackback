@@ -41,7 +41,6 @@ import { getSubscriptionStatus } from '@/lib/server/domains/subscriptions/subscr
 import { listPublicRoadmaps } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getPublicRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
 import { getPublicRoadmapDateBuckets } from '@/lib/server/domains/roadmaps/roadmap.query'
-import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
 import {
   boardIdInputSchema,
@@ -340,10 +339,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     // isTeamActor). Same resolution path as list reads.
     const auth = hasAuthCredentials() ? await getOptionalAuth() : null
     const actor = await policyActorFromAuth(auth)
-    const [result, portalConfig] = await Promise.all([
-      getPublicPostDetail(data.postId as PostId, actor),
-      getPortalConfig(),
-    ])
+    const result = await getPublicPostDetail(data.postId as PostId, actor)
 
     if (!result) return null
 
@@ -402,12 +398,7 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       ...serializable,
       contentJson: result.contentJson ?? {},
       createdAt: toISOString(result.createdAt),
-      eta:
-        !portalConfig.privacy?.privateEtas || isTeamMember(auth?.principal.role ?? null)
-          ? result.eta
-            ? toISOString(result.eta)
-            : null
-          : null,
+      eta: result.eta ? toISOString(result.eta) : null,
       comments: result.comments.map(serializeComment),
       mergeInfo,
       mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
@@ -652,26 +643,21 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
 
       const actor = await policyActorFromAuth(auth)
 
-      const [result, portalConfig] = await Promise.all([
-        getPublicRoadmapPosts(
-          data.roadmapId as RoadmapId,
-          {
-            statusId: data.statusId as PostStatusId | undefined,
-            bucketId: data.bucketId,
-            limit: data.limit ?? 20,
-            offset: data.offset ?? 0,
-            search: data.search,
-            boardIds: data.boardIds as BoardId[] | undefined,
-            tagIds: data.tagIds as PostTagId[] | undefined,
-            segmentIds,
-            sort: data.sort,
-          },
-          actor
-        ),
-        getPortalConfig(),
-      ])
-      const exposeEta =
-        !portalConfig.privacy?.privateEtas || isTeamMember(auth?.principal.role ?? null)
+      const result = await getPublicRoadmapPosts(
+        data.roadmapId as RoadmapId,
+        {
+          statusId: data.statusId as PostStatusId | undefined,
+          bucketId: data.bucketId,
+          limit: data.limit ?? 20,
+          offset: data.offset ?? 0,
+          search: data.search,
+          boardIds: data.boardIds as BoardId[] | undefined,
+          tagIds: data.tagIds as PostTagId[] | undefined,
+          segmentIds,
+          sort: data.sort,
+        },
+        actor
+      )
 
       return {
         ...result,
@@ -680,7 +666,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
           title: item.title,
           voteCount: item.voteCount,
           statusId: item.statusId ? String(item.statusId) : null,
-          eta: exposeEta ? toIsoStringOrNull(item.eta) : null,
+          eta: toIsoStringOrNull(item.eta),
           board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
         })),
       }

@@ -5,10 +5,8 @@
  * Covers the data contract that matters:
  *   - Hovering the trigger fetches the profile ON OPEN (not on mount) and
  *     renders the payload (name, member-since, counts).
- *   - A null payload (profiles off / anonymous / not visible) shows no card
- *     body — the plain trigger text stays and nothing else renders.
- *   - When the workspace publicProfiles feature is off, the wrapper degrades
- *     to plain text with no link affordance and never fetches.
+ *   - A null payload (anonymous / not visible) shows no card body — the
+ *     plain trigger text stays and nothing else renders.
  *
  * The router and the profile server fn are mocked so the test focuses on the
  * component's open→fetch→render wiring without a real router or network.
@@ -22,13 +20,10 @@ import { IntlProvider } from 'react-intl'
 // ---- Mocks -----------------------------------------------------------
 
 const navigate = vi.fn()
-// Route context is toggled per-test via this mutable holder so a single mock
-// module can serve both the enabled and disabled cases.
 let routeContext: unknown = {
   settings: {
     name: 'Acme',
     brandingData: { logoUrl: null, name: 'Acme' },
-    portalConfig: { features: { publicProfiles: true } },
   },
 }
 vi.mock('@tanstack/react-router', () => ({
@@ -75,7 +70,6 @@ beforeEach(() => {
     settings: {
       name: 'Acme',
       brandingData: { logoUrl: null, name: 'Acme' },
-      portalConfig: { features: { publicProfiles: true } },
     },
   }
 })
@@ -133,26 +127,5 @@ describe('AuthorHoverCard', () => {
     expect(screen.queryByTestId('author-hover-card-body')).not.toBeInTheDocument()
     // Plain trigger text remains.
     expect(screen.getByText('Ghost')).toBeInTheDocument()
-  })
-
-  it('renders plain text with no link when publicProfiles is off', () => {
-    routeContext = {
-      settings: {
-        name: 'Acme',
-        brandingData: { logoUrl: null, name: 'Acme' },
-        portalConfig: { features: { publicProfiles: false } },
-      },
-    }
-    renderCard(
-      <AuthorHoverCard principalId="principal_abc" displayName="Ada Lovelace">
-        Ada Lovelace
-      </AuthorHoverCard>
-    )
-
-    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument()
-    // No link affordance and no fetch on hover.
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
-    fireEvent.mouseEnter(screen.getByText('Ada Lovelace'))
-    expect(getPublicUserProfileFn).not.toHaveBeenCalled()
   })
 })

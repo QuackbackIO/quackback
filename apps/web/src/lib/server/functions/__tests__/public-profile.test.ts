@@ -1,19 +1,18 @@
 /**
  * Public-profile server fns: pins the gate composition.
  *
- *  - getPublicUserProfileFn: portal-access denial → null; publicProfiles
- *    setting off → null; invalid TypeID → null; every miss is
- *    shape-identical (null) and the domain query is never reached when an
- *    outer gate fails. The serialized payload carries no email.
+ *  - getPublicUserProfileFn: portal-access denial → null; invalid TypeID →
+ *    null; every miss is shape-identical (null) and the domain query is
+ *    never reached when an outer gate fails. The serialized payload carries
+ *    no email.
  *
  *  - getProfileTeamContextFn: requires people.view via requireAuth BEFORE
- *    any work; setting off → null even for a permitted caller.
+ *    any work.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const hoisted = vi.hoisted(() => ({
   mockResolvePortalAccess: vi.fn(),
-  mockGetPortalConfig: vi.fn(),
   mockGetOptionalAuth: vi.fn(),
   mockPolicyActorFromAuth: vi.fn(),
   mockRequireAuth: vi.fn(),
@@ -41,10 +40,6 @@ vi.mock('@tanstack/react-start', () => ({
 
 vi.mock('@/lib/server/functions/portal-access', () => ({
   resolvePortalAccessForRequest: hoisted.mockResolvePortalAccess,
-}))
-
-vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getPortalConfig: hoisted.mockGetPortalConfig,
 }))
 
 vi.mock('@/lib/server/functions/auth-helpers', () => ({
@@ -101,14 +96,9 @@ const DOMAIN_PROFILE = {
   upvotes: [],
 }
 
-function configWithProfiles(enabled: boolean) {
-  return { features: { publicProfiles: enabled } }
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.mockResolvePortalAccess.mockResolvedValue({ granted: true, reason: 'public' })
-  hoisted.mockGetPortalConfig.mockResolvedValue(configWithProfiles(true))
   hoisted.mockGetOptionalAuth.mockResolvedValue(null)
   hoisted.mockPolicyActorFromAuth.mockResolvedValue(ACTOR)
   hoisted.mockGetPublicUserProfile.mockResolvedValue(DOMAIN_PROFILE)
@@ -136,19 +126,6 @@ describe('getPublicUserProfileFn', () => {
     const result = await profileHandler({ data: { principalId: VALID_ID } })
     expect(result).toBeNull()
     expect(hoisted.mockGetPublicUserProfile).not.toHaveBeenCalled()
-  })
-
-  it('returns null when the publicProfiles setting is off', async () => {
-    hoisted.mockGetPortalConfig.mockResolvedValue(configWithProfiles(false))
-    const result = await profileHandler({ data: { principalId: VALID_ID } })
-    expect(result).toBeNull()
-    expect(hoisted.mockGetPublicUserProfile).not.toHaveBeenCalled()
-  })
-
-  it('treats a missing publicProfiles key as ON (default)', async () => {
-    hoisted.mockGetPortalConfig.mockResolvedValue({ features: {} })
-    const result = await profileHandler({ data: { principalId: VALID_ID } })
-    expect(result).not.toBeNull()
   })
 
   it('returns null when the domain resolves no viewer-visible profile', async () => {
@@ -195,13 +172,6 @@ describe('getProfileTeamContextFn', () => {
       'Access denied'
     )
     expect(hoisted.mockRequireAuth).toHaveBeenCalledWith({ permission: 'people.view' })
-    expect(hoisted.mockGetProfileTeamContext).not.toHaveBeenCalled()
-  })
-
-  it('returns null when the publicProfiles setting is off', async () => {
-    hoisted.mockGetPortalConfig.mockResolvedValue(configWithProfiles(false))
-    const result = await teamContextHandler({ data: { principalId: VALID_ID } })
-    expect(result).toBeNull()
     expect(hoisted.mockGetProfileTeamContext).not.toHaveBeenCalled()
   })
 

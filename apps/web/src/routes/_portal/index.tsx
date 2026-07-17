@@ -6,6 +6,7 @@ import { ChatBubbleOvalLeftEllipsisIcon } from '@heroicons/react/24/outline'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
 import { FeedbackContainer } from '@/components/public/feedback/feedback-container'
+import { usePreviewDraft } from '@/components/public/preview-draft-context'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { votedPostsKeys } from '@/lib/client/hooks/use-portal-posts-query'
 import { isProductEnabled } from '@/lib/shared/types/settings'
@@ -125,7 +126,11 @@ function PublicPortalPage() {
   const intl = useIntl()
   const loaderData = Route.useLoaderData()
   const search = Route.useSearch()
-  const { org, session, welcomeCard } = loaderData
+  const { org, session, welcomeCard: savedWelcomeCard } = loaderData
+  // Admin branding preview: unsaved welcome-card drafts win over the saved
+  // config. Null outside the preview iframe.
+  const previewDraft = usePreviewDraft()
+  const welcomeCard = previewDraft?.welcomeCard ?? savedWelcomeCard
 
   // Read filters directly from URL for instant updates
   const currentBoard = search.board

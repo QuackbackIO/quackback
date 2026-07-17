@@ -1,5 +1,8 @@
-import { createFileRoute, redirect, Outlet } from '@tanstack/react-router'
+import { createFileRoute, redirect, Outlet, retainSearchParams } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { setResponseHeader } from '@tanstack/react-start/server'
 import { fetchUserAvatar } from '@/lib/server/functions/portal'
+import { PortalPreviewProvider } from '@/components/public/portal-preview-listener'
 import { getMyPortalPermissionsFn } from '@/lib/server/functions/portal-permissions'
 import { PortalPermissionsProvider } from '@/lib/client/hooks/use-portal-permissions'
 import { isTeamMember } from '@/lib/shared/roles'
@@ -25,6 +28,17 @@ import { isSafeCallbackUrl } from '@/lib/shared/routing'
 import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 
+/**
+ * Portal documents may be framed same-origin only — the admin Branding page
+ * embeds the live portal as its preview. Explicit (rather than the implicit
+ * no-header default) so a future hardening pass can't silently break the
+ * preview; unlike /widget, which is intentionally embeddable anywhere
+ * (frame-ancestors *), the portal has no cross-origin embed use case.
+ */
+const setPortalFrameHeaders = createServerFn({ method: 'GET' }).handler(async () => {
+  setResponseHeader('Content-Security-Policy', "frame-ancestors 'self'")
+})
+
 export const Route = createFileRoute('/_portal')({
   // Only type the auth-prompt keys; child routes receive their own params from
   // the raw URL independently (TanStack Router does not chain parent
@@ -39,12 +53,22 @@ export const Route = createFileRoute('/_portal')({
     auth?: string
     callbackUrl?: string
     error?: string
+    theme?: 'light' | 'dark'
+    preview?: boolean
   } => ({
     auth:
       search.auth === 'signin' || search.auth === 'signup' ? (search.auth as string) : undefined,
     callbackUrl: isSafeCallbackUrl(search.callbackUrl) ? (search.callbackUrl as string) : undefined,
     error: typeof search.error === 'string' ? search.error : undefined,
+    // Admin branding preview: `theme` forces the document theme (handled in
+    // __root.tsx, never persisted to the cookie); `preview` enables the
+    // postMessage draft bridge. Both retained across in-app navigation below.
+    theme: search.theme === 'light' || search.theme === 'dark' ? search.theme : undefined,
+    preview: search.preview === true || search.preview === 1 || search.preview === '1' || undefined,
   }),
+  search: {
+    middlewares: [retainSearchParams(['theme', 'preview'])],
+  },
   loaderDeps: ({ search }) => ({
     auth: search.auth,
     callbackUrl: search.callbackUrl,
@@ -52,6 +76,12 @@ export const Route = createFileRoute('/_portal')({
   }),
   loader: async ({ context, deps, location }) => {
     const { session, settings, userRole, baseUrl, registeredAuthProviders } = context
+
+    // Document response header — only meaningful (and only cheap) during SSR;
+    // client-side navigations skip the extra RPC.
+    if (typeof document === 'undefined') {
+      await setPortalFrameHeaders()
+    }
 
     // Portal-level visibility gate — evaluated here in the loader (NOT
     // beforeLoad) so the post-sign-in router.invalidate() re-runs it and the
@@ -247,6 +277,7 @@ export const Route = createFileRoute('/_portal')({
 
 function PortalLayout() {
   const loaderData = Route.useLoaderData()
+  const { preview } = Route.useSearch()
 
   // Access denied: render the in-place sign-in wall (a normal 200 page). The
   // gate is self-contained (it mounts its own PortalIntlProvider).
@@ -296,26 +327,32 @@ function PortalLayout() {
             error={prompt.error}
             isAuthenticated={isAuthenticated}
           />
-          <div className="min-h-screen bg-background flex flex-col">
-            {themeStyles && (
-              <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
-            )}
-            {/* Custom CSS is injected after theme styles so it can override */}
-            {customCss && (
-              <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />
-            )}
-            <PortalHeader
-              orgName={org.name}
-              orgLogo={brandingData?.logoUrl ?? null}
-              userRole={userRole}
-              initialUserData={initialUserData}
-              showThemeToggle={themeMode === 'user'}
-            />
-            <main className="flex-1 w-full flex flex-col">
-              <Outlet />
-            </main>
-            <AuthDialog authConfig={authConfig} workspaceName={org.name} />
-          </div>
+          {/* Draft bridge for the admin branding preview; renders children
+              untouched (and provides no context) outside preview mode. */}
+          <PortalPreviewProvider enabled={preview === true}>
+            <div className="min-h-screen bg-background flex flex-col">
+              {themeStyles && (
+                <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(themeStyles) }} />
+              )}
+              {/* Custom CSS is injected after theme styles so it can override */}
+              {customCss && (
+                <style dangerouslySetInnerHTML={{ __html: escapeInlineStyle(customCss) }} />
+              )}
+              <PortalHeader
+                orgName={org.name}
+                orgLogo={brandingData?.logoUrl ?? null}
+                userRole={userRole}
+                initialUserData={initialUserData}
+                // The toggle is inert under a forced theme, and the preview
+                // always forces one — hide it there.
+                showThemeToggle={themeMode === 'user' && !preview}
+              />
+              <main className="flex-1 w-full flex flex-col">
+                <Outlet />
+              </main>
+              <AuthDialog authConfig={authConfig} workspaceName={org.name} />
+            </div>
+          </PortalPreviewProvider>
         </AuthPopoverProvider>
       </PortalPermissionsProvider>
     </PortalIntlProvider>

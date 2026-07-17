@@ -18,10 +18,9 @@ import {
 
 export const Route = createFileRoute('/_portal/u/$principalId')({
   loader: async ({ params, context }) => {
-    // The fn composes portal access + the publicProfiles workspace setting +
-    // viewer-scoped activity visibility; every miss returns null, so this
-    // notFound() is shape-identical for "no such user", "feature off", and
-    // "nothing visible to you".
+    // The fn composes portal access + viewer-scoped activity visibility;
+    // every miss returns null, so this notFound() is shape-identical for
+    // "no such user" and "nothing visible to you".
     const profile = await getPublicUserProfileFn({ data: { principalId: params.principalId } })
     if (!profile) {
       throw notFound()

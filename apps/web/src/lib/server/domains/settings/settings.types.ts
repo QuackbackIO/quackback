@@ -198,13 +198,6 @@ export interface PortalFeatures {
   allowDeleteAfterEngagement: boolean
   /** Show public edit history on posts */
   showPublicEditHistory: boolean
-  /**
-   * Public user profile pages (`/u/:principalId`) on the portal. Default ON.
-   * When off, the profile route and both profile server fns 404/return empty
-   * for every viewer. Stored rows without the key inherit `true` via the
-   * read-time default merge in `parseJsonConfig` — no migration needed.
-   */
-  publicProfiles: boolean
 }
 
 /**
@@ -254,6 +247,48 @@ export interface PortalAccessConfig {
 }
 
 /**
+ * Types of tab the portal top-nav can show. Built-in types map to fixed
+ * portal routes and keep their localized labels; 'link' is an admin-defined
+ * external link.
+ */
+export type PortalNavItemType =
+  | 'feedback'
+  | 'roadmap'
+  | 'changelog'
+  | 'help'
+  | 'support'
+  | 'status'
+  | 'link'
+
+/** An ordered, admin-configurable tab in the portal top-nav. */
+export interface PortalNavItemConfig {
+  /** Built-ins use their type as a stable id; links get a generated UUID. */
+  id: string
+  type: PortalNavItemType
+  /** Hidden without being removed (defaults to shown). */
+  enabled?: boolean
+  /** Label override. Built-ins without an override keep their i18n label.
+   *  Overrides are single-language plain text (same policy as widget Home
+   *  card title overrides). */
+  label?: string
+  /** 'link' only. Absolute http(s) URL. */
+  url?: string
+  /** 'link' only. Defaults true. */
+  newTab?: boolean
+}
+
+/**
+ * Portal top-nav customization. Absent (or empty items) = default order and
+ * visibility, i.e. the behavior before this setting existed. Kept a sibling
+ * of `access` — the access block is redacted from client payloads and nav
+ * must reach every portal visitor.
+ */
+export interface PortalNavConfig {
+  /** Ordered. Saved wholesale — never patch single items. */
+  items?: PortalNavItemConfig[]
+}
+
+/**
  * Portal configuration
  * Controls the public feedback portal behavior
  */
@@ -266,10 +301,8 @@ export interface PortalConfig {
   moderationDefault: ModerationDefault
   /** Portal-level access control (visibility gate). */
   access?: PortalAccessConfig
-  /** Portal privacy controls. Private ETAs remain available to team members. */
-  privacy?: {
-    privateEtas: boolean
-  }
+  /** Top-nav customization. Optional — absent = default tabs. */
+  nav?: PortalNavConfig
   /** Support tab (conversations on the portal). Optional — absent = disabled. */
   support?: PortalSupportConfig
 }
@@ -291,7 +324,6 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
     allowDeleteAfterEngagement: false,
     showPublicEditHistory: false,
     allowAnonymous: true,
-    publicProfiles: true,
   },
   welcomeCard: {
     enabled: false,
@@ -300,7 +332,6 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   },
   moderationDefault: { requireApproval: 'none' },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
-  privacy: { privateEtas: false },
   support: { enabled: false },
 }
 
@@ -829,7 +860,8 @@ export interface UpdatePortalConfigInput {
   welcomeCard?: Partial<PortalWelcomeCard>
   moderationDefault?: ModerationDefault
   access?: Partial<PortalAccessConfig>
-  privacy?: Partial<NonNullable<PortalConfig['privacy']>>
+  /** Replaced wholesale (items is an ordered array — never merged). */
+  nav?: PortalNavConfig
   support?: Partial<PortalSupportConfig>
 }
 

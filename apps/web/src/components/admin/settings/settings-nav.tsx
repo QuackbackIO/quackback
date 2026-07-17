@@ -136,7 +136,6 @@ export function buildNavSections(flags?: Partial<FeatureFlags>): NavSection[] {
         { label: 'General', to: '/admin/settings/general', icon: Cog6ToothIcon },
         { label: 'Notifications', to: '/admin/settings/notifications', icon: BellIcon },
         { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
-        { label: 'Portal', to: '/admin/settings/portal', icon: MegaphoneIcon },
         { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
         { label: 'Members & Teams', to: '/admin/settings/members', icon: UsersIcon },
         {

@@ -3,11 +3,11 @@
  *
  * Two fns, two trust levels:
  *
- *  - getPublicUserProfileFn: public. Composes (1) the portal-access gate,
- *    (2) the workspace `publicProfiles` feature (default ON), and (3) the
- *    sanitized domain query that filters ALL activity through the caller's
- *    own board visibility. Returns null (route 404s) on any miss — the
- *    response never distinguishes "no such user" from "not visible to you".
+ *  - getPublicUserProfileFn: public. Composes (1) the portal-access gate and
+ *    (2) the sanitized domain query that filters ALL activity through the
+ *    caller's own board visibility. Returns null (route 404s) on any miss —
+ *    the response never distinguishes "no such user" from "not visible to
+ *    you".
  *
  *  - getProfileTeamContextFn: people.view-gated. Returns the team-only
  *    context strip (sanitized email, company, segments). Never called by
@@ -68,18 +68,11 @@ function serializeItem(item: PublicProfileActivityItem): PublicProfileActivityIt
   }
 }
 
-/** Whether public profiles are enabled for the workspace (default ON). */
-async function publicProfilesEnabled(): Promise<boolean> {
-  const { getPortalConfig } = await import('@/lib/server/domains/settings/settings.service')
-  const config = await getPortalConfig()
-  return config.features.publicProfiles !== false
-}
-
 /**
  * Public profile payload for /u/$principalId. Returns null when the profile
  * must not resolve for this caller (unknown id, anonymous/service principal,
- * feature off, portal access denied, or zero viewer-visible activity) — the
- * route maps null to notFound(), and every miss is shape-identical.
+ * portal access denied, or zero viewer-visible activity) — the route maps
+ * null to notFound(), and every miss is shape-identical.
  */
 export const getPublicUserProfileFn = createServerFn({ method: 'GET' })
   .validator(profileParamsSchema)
@@ -91,9 +84,6 @@ export const getPublicUserProfileFn = createServerFn({ method: 'GET' })
       const { resolvePortalAccessForRequest } = await import('./portal-access')
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) return null
-
-      // Workspace kill switch (default ON).
-      if (!(await publicProfilesEnabled())) return null
 
       // Resolve the CALLER's actor so all activity filtering runs from the
       // viewer's perspective (anonymous visitors get the anonymous actor).
@@ -131,8 +121,7 @@ export const getPublicUserProfileFn = createServerFn({ method: 'GET' })
  * Team-only context strip for a profile: sanitized email, company summary,
  * segment chips, for viewers holding people.view. The client only queries
  * this when `can('people.view')`; the permission is enforced server-side
- * here regardless. Returns null when the feature is off or the principal
- * isn't profile-eligible.
+ * here regardless. Returns null when the principal isn't profile-eligible.
  */
 export const getProfileTeamContextFn = createServerFn({ method: 'GET' })
   .validator(profileParamsSchema)
@@ -141,7 +130,6 @@ export const getProfileTeamContextFn = createServerFn({ method: 'GET' })
     await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
     try {
       if (!isValidTypeId(data.principalId, 'principal')) return null
-      if (!(await publicProfilesEnabled())) return null
 
       const { getProfileTeamContext } =
         await import('@/lib/server/domains/users/user.public-profile')

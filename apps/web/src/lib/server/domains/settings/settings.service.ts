@@ -824,7 +824,12 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
     const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
     return {
-      features: portalConfig.features,
+      features: {
+        allowAnonymous: portalConfig.features.allowAnonymous,
+        allowEditAfterEngagement: portalConfig.features.allowEditAfterEngagement,
+        allowDeleteAfterEngagement: portalConfig.features.allowDeleteAfterEngagement,
+        showPublicEditHistory: portalConfig.features.showPublicEditHistory,
+      },
       ...(oidcProviders.length > 0 && { oidcProviders }),
       ...(welcome && { welcomeCard: welcome }),
       portalAccess: {

@@ -292,7 +292,6 @@ const updatePortalConfigSchema = z.object({
   features: z
     .object({
       allowAnonymous: z.boolean().optional(),
-      publicProfiles: z.boolean().optional(),
     })
     .optional(),
   welcomeCard: z
@@ -309,9 +308,27 @@ const updatePortalConfigSchema = z.object({
       enabled: z.boolean().optional(),
     })
     .optional(),
-  privacy: z
+  nav: z
     .object({
-      privateEtas: z.boolean().optional(),
+      items: z
+        .array(
+          z.object({
+            id: z.string().min(1).max(64),
+            type: z.enum(['feedback', 'roadmap', 'changelog', 'help', 'support', 'status', 'link']),
+            enabled: z.boolean().optional(),
+            label: z.string().trim().max(30).optional(),
+            // http(s) only — blocks javascript:/data: URLs at the boundary.
+            url: z
+              .string()
+              .url()
+              .max(2048)
+              .refine((u) => /^https?:\/\//i.test(u), 'URL must be http(s)')
+              .optional(),
+            newTab: z.boolean().optional(),
+          })
+        )
+        .max(20)
+        .optional(),
     })
     .optional(),
 })

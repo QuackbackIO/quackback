@@ -232,9 +232,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   const widgetLocaleParam = useRouterState({
     select: (s) => (s.location.search as { locale?: string }).locale,
   })
-  // The widget also honors a `?theme=` override (the admin settings preview
-  // appends it): forced for that document only, never persisted to the cookie.
-  const widgetThemeParam = useRouterState({
+  // The widget and portal both honor a `?theme=` override (the admin settings
+  // previews append it): forced for that document only, never persisted to the
+  // cookie.
+  const themeParam = useRouterState({
     select: (s) => (s.location.search as { theme?: string }).theme,
   })
 
@@ -242,12 +243,13 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   // Admin and other non-portal routes always respect the user's preference.
   const isPortalRoute = !NON_PORTAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   const themeMode = settings?.brandingConfig?.themeMode ?? 'user'
-  const widgetForcedTheme =
-    routeIds.includes('/widget') && (widgetThemeParam === 'light' || widgetThemeParam === 'dark')
-      ? widgetThemeParam
+  const searchForcedTheme =
+    (routeIds.includes('/widget') || isPortalRoute) &&
+    (themeParam === 'light' || themeParam === 'dark')
+      ? themeParam
       : undefined
   const forcedTheme =
-    widgetForcedTheme ?? (isPortalRoute && themeMode !== 'user' ? themeMode : undefined)
+    searchForcedTheme ?? (isPortalRoute && themeMode !== 'user' ? themeMode : undefined)
 
   // next-themes' inline script sets the class on <html> before first paint.
   // We pass the resolved default so the script knows what to apply.
@@ -296,7 +298,10 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
           enableSystem={!forcedTheme}
           forcedTheme={forcedTheme}
           disableTransitionOnChange
-          syncCookie={!routeIds.includes('/widget')}
+          // Never write the shared theme cookie from a forced-theme document:
+          // the widget iframe and the same-origin portal preview iframe would
+          // otherwise flip the admin's own theme.
+          syncCookie={!routeIds.includes('/widget') && !searchForcedTheme}
         >
           {children}
           <Toaster />

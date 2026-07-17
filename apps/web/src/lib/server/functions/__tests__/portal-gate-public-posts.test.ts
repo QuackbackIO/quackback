@@ -104,7 +104,7 @@ vi.mock('@/lib/server/functions/auth-helpers', () => ({
 
 vi.mock('@/lib/server/functions/workspace', () => ({ getSettings: vi.fn() }))
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
-  getPortalConfig: vi.fn().mockResolvedValue({ privacy: { privateEtas: false } }),
+  getPortalConfig: vi.fn().mockResolvedValue({}),
 }))
 const mockCanVotePost = vi.fn(() => ({ allowed: true }) as { allowed: boolean; reason?: string })
 vi.mock('@/lib/server/policy', () => ({

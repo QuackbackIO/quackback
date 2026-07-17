@@ -14,13 +14,10 @@
  *     with a short staleTime, shows a skeleton while loading, and renders the
  *     avatar, name, team badge / "Member since {month year}", and the
  *     posts / comments / upvotes counts.
- *   - A null payload (profiles disabled, anonymous / service principal, or
- *     nothing visible to this viewer) shows no card at all — the plain trigger
- *     text stays, click merely 404s. This is the anti-enumeration contract of
- *     the profile fn surfaced in the UI.
- *   - When the workspace `publicProfiles` feature is off (read from the client
- *     route context), the wrapper degrades to plain text with no link or hover
- *     affordance.
+ *   - A null payload (anonymous / service principal, or nothing visible to
+ *     this viewer) shows no card at all — the plain trigger text stays,
+ *     click merely 404s. This is the anti-enumeration contract of the
+ *     profile fn surfaced in the UI.
  *
  * Team-badge styling and the branding logo/label are read from the root route
  * context, matching the pinned-comment / mention-hover-card convention.
@@ -43,18 +40,7 @@ interface PortalRootContext {
   settings?: {
     name?: string | null
     brandingData?: { logoUrl?: string | null; name?: string | null } | null
-    portalConfig?: { features?: { publicProfiles?: boolean } } | null
   } | null
-}
-
-/**
- * Whether public profiles are enabled for the workspace, read from the client
- * route context. Fails OPEN (default ON) — the server fn is the real gate, so a
- * link on a disabled workspace merely 404s / shows an empty hover.
- */
-export function usePublicProfilesEnabled(): boolean {
-  const ctx = useRouteContext({ from: '__root__' }) as PortalRootContext
-  return ctx.settings?.portalConfig?.features?.publicProfiles !== false
 }
 
 interface AuthorHoverCardProps {
@@ -76,7 +62,6 @@ export function AuthorHoverCard({
   const intl = useIntl()
   const navigate = useNavigate()
   const ctx = useRouteContext({ from: '__root__' }) as PortalRootContext
-  const publicProfilesEnabled = ctx.settings?.portalConfig?.features?.publicProfiles !== false
   const teamBadgeLogoUrl = ctx.settings?.brandingData?.logoUrl ?? null
   const teamBadgeLabel =
     ctx.settings?.brandingData?.name ??
@@ -93,11 +78,6 @@ export function AuthorHoverCard({
     enabled: open,
     staleTime: 60_000,
   })
-
-  // Profiles disabled for this workspace → plain text, no link/hover.
-  if (!publicProfilesEnabled) {
-    return <>{children}</>
-  }
 
   function clearTimers() {
     if (openTimer.current) clearTimeout(openTimer.current)

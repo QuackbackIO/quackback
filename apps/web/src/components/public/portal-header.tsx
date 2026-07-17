@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useRouter, useRouterState, useRouteContext } from '@tanstack/react-router'
 import { useTheme } from 'next-themes'
-import { buildNavItems } from './portal-header-nav'
+import { resolvePortalNavItems } from './portal-header-nav'
+import { usePreviewDraft } from './preview-draft-context'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
@@ -86,13 +87,19 @@ export function PortalHeader({
     (settings?.statusConfig?.portalTabEnabled ?? true) &&
     (statusAudience === 'public' || statusLoggedIn)
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
-  const navItems = buildNavItems({
-    feedbackEnabled,
-    helpCenterEnabled,
-    supportEnabled,
-    changelogEnabled,
-    statusEnabled,
-  })
+  // Unsaved drafts from the admin branding preview (null outside preview mode).
+  const previewDraft = usePreviewDraft()
+  const navItems = resolvePortalNavItems(
+    {
+      feedback: feedbackEnabled,
+      roadmap: feedbackEnabled,
+      changelog: changelogEnabled,
+      help: helpCenterEnabled,
+      support: supportEnabled,
+      status: statusEnabled,
+    },
+    previewDraft?.nav ?? settings?.portalConfig?.nav
+  )
 
   // Hide Log in / Sign up when no portal sign-in surface is usable.
   // Team members can still reach /admin/login directly. Counts any registered
@@ -188,9 +195,31 @@ export function PortalHeader({
   }
 
   // Navigation component
+  const navItemClass = (isActive: boolean) =>
+    cn(
+      'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
+      isActive
+        ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
+        : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
+    )
+
   const Navigation = () => (
     <nav className="portal-nav flex items-center gap-1 whitespace-nowrap">
       {navItems.map((item) => {
+        if (item.kind === 'link') {
+          return (
+            <a
+              key={item.id}
+              href={item.href}
+              target={item.newTab ? '_blank' : undefined}
+              rel="noopener noreferrer"
+              className={navItemClass(false)}
+            >
+              {item.label}
+            </a>
+          )
+        }
+
         const isActive =
           item.to === '/'
             ? pathname === '/' || /^\/[^/]+\/posts\//.test(pathname)
@@ -199,18 +228,10 @@ export function PortalHeader({
               : pathname.startsWith(item.to)
 
         return (
-          <Link
-            key={item.to}
-            to={item.to}
-            className={cn(
-              'portal-nav__item px-3 py-2 text-sm font-medium transition-colors [border-radius:calc(var(--radius)*0.8)]',
-              isActive
-                ? 'portal-nav__item--active bg-[var(--nav-active-background)] text-[var(--nav-active-foreground)]'
-                : 'text-[var(--nav-inactive-color)] hover:text-[var(--nav-active-foreground)] hover:bg-[var(--nav-active-background)]/50'
-            )}
-          >
-            {intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
-            {item.to === '/support' && supportUnreadTotal > 0 && (
+          <Link key={item.id} to={item.to} className={navItemClass(isActive)}>
+            {item.label ??
+              intl.formatMessage({ id: item.messageId, defaultMessage: item.defaultMessage })}
+            {item.type === 'support' && supportUnreadTotal > 0 && (
               <span
                 className="ms-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground"
                 aria-label={intl.formatMessage(

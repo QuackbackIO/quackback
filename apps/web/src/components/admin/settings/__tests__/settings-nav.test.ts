@@ -137,7 +137,6 @@ describe('buildNavSections', () => {
       'General',
       'Notifications',
       'Branding',
-      'Portal',
       'Widget',
       'Members & Teams',
       'Access & Security',

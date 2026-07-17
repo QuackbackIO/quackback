@@ -44,8 +44,6 @@ import { resolvePortalAccessForRequest } from './portal-access'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import { logger } from '@/lib/server/logger'
-import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
-import { isTeamMember } from '@/lib/shared/roles'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
 
@@ -645,21 +643,16 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
 
       const { roadmapId, statusId, bucketId, limit, offset } = data
 
-      const [result, portalConfig] = await Promise.all([
-        getPublicRoadmapPosts(
-          roadmapId as RoadmapId,
-          {
-            statusId: statusId as PostStatusId | undefined,
-            bucketId,
-            limit,
-            offset,
-          },
-          actor
-        ),
-        getPortalConfig(),
-      ])
-      const exposeEta =
-        !portalConfig.privacy?.privateEtas || isTeamMember(auth?.principal.role ?? null)
+      const result = await getPublicRoadmapPosts(
+        roadmapId as RoadmapId,
+        {
+          statusId: statusId as PostStatusId | undefined,
+          bucketId,
+          limit,
+          offset,
+        },
+        actor
+      )
       log.debug({ count: result.items.length }, 'get public roadmap posts results')
 
       // Serialize branded types to plain strings for turbo-stream
@@ -670,7 +663,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
           title: item.title,
           voteCount: item.voteCount,
           statusId: item.statusId ? String(item.statusId) : null,
-          eta: exposeEta ? toIsoStringOrNull(item.eta) : null,
+          eta: toIsoStringOrNull(item.eta),
           board: {
             id: String(item.board.id),
             name: item.board.name,

@@ -11,7 +11,11 @@
 
 export type {
   PortalConfig,
+  PortalNavConfig,
+  PortalNavItemConfig,
+  PortalNavItemType,
   PortalWelcomeCard,
+  HeaderDisplayMode,
   TenantSettings,
   HelpCenterConfig,
   HelpCenterDomainConfig,
