@@ -85,7 +85,7 @@ export async function pollOnce(
   for (const message of messages) {
     try {
       const result = await ingest(parseRawEmail(message.raw))
-      if (result.status === 'ingested') ingested++
+      if (result.status === 'ingested' || result.status === 'ingested_ticket') ingested++
       await client.markSeen(message.uid)
     } catch (err) {
       failed++

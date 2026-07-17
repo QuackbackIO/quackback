@@ -5,7 +5,8 @@
  * no-op (idempotency). Drops payloads it can't route rather than throwing.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { inboundReplyToAddress } from '../conversation.email-channel'
+import { inboundReplyToAddress, inboundTicketReplyToAddress } from '../conversation.email-channel'
+import { NotFoundError } from '@/lib/shared/errors'
 
 // Inbound signing must be configured for the plus-address to verify (the real,
 // un-mocked conversation.email-channel signs + checks the conversation id).
@@ -15,11 +16,19 @@ const REPLY_TO = inboundReplyToAddress('conversation_abc')!
 
 const sendVisitorMessage = vi.fn()
 const assertConversationSendRate = vi.fn()
-const getReceivedEmail = vi.fn<(...a: unknown[]) => Promise<{ text: string | null; html: string | null } | null>>()
+const getReceivedEmail =
+  vi.fn<(...a: unknown[]) => Promise<{ text: string | null; html: string | null } | null>>()
 const resolveConversationByMessageIds = vi.fn<(...a: unknown[]) => Promise<string | null>>()
 const resolvePrincipalIdByEmail = vi.fn<(...a: unknown[]) => Promise<string | null>>()
 const uploadImageBuffer = vi.fn()
 const uploadObject = vi.fn()
+// Ticket reply branch (D9) seams: the ticket load + the requester-reply append
+// core are mocked (the append core is exercised for real in the tickets domain's
+// requester.service.test.ts); the cold-inbound channel resolver is spied so a
+// `tkt-` mail can be PROVEN never to fall through to cold inbound.
+const loadTicketOr404 = vi.fn<(...a: unknown[]) => Promise<Record<string, unknown>>>()
+const appendInboundTicketReply = vi.fn()
+const resolveChannelAccountByRecipient = vi.fn()
 let conversationRow: Record<string, unknown> | undefined
 let principalRow: Record<string, unknown> | undefined
 let userRow: Record<string, unknown> | undefined
@@ -81,6 +90,18 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => ({
   uploadObject: (...a: unknown[]) => uploadObject(...a),
 }))
 
+vi.mock('@/lib/server/domains/tickets/ticket.service', () => ({
+  loadTicketOr404: (...a: unknown[]) => loadTicketOr404(...a),
+}))
+
+vi.mock('@/lib/server/domains/tickets/requester.service', () => ({
+  appendInboundTicketReply: (...a: unknown[]) => appendInboundTicketReply(...a),
+}))
+
+vi.mock('@/lib/server/domains/channel-accounts/channel-account.service', () => ({
+  resolveChannelAccountByRecipient: (...a: unknown[]) => resolveChannelAccountByRecipient(...a),
+}))
+
 import { ingestInboundEmail, ingestParsedEmail } from '../conversation.email-inbound.service'
 import { parseRawEmail } from '../conversation.email-inbound'
 import type { ParsedInboundEmail, ParsedEmailAttachment } from '../conversation.email-inbound'
@@ -118,7 +139,9 @@ beforeEach(() => {
   uploadImageBuffer.mockImplementation(async (bytes: Buffer, mime: string) => ({
     url: `https://quackback.ngrok.app/api/storage/chat-images/img-${bytes.length}.${mime.split('/')[1]}`,
   }))
-  uploadObject.mockImplementation(async (key: string) => `https://quackback.ngrok.app/api/storage/${key}`)
+  uploadObject.mockImplementation(
+    async (key: string) => `https://quackback.ngrok.app/api/storage/${key}`
+  )
 })
 
 describe('ingestInboundEmail', () => {
@@ -536,7 +559,8 @@ describe('ingestInboundEmail', () => {
   describe('MIME attachment rehosting (P4.4)', () => {
     // Valid PNG magic bytes so the real magic-byte sniff accepts the image parts.
     const PNG = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+      0x52,
     ])
 
     const part = (over: Partial<ParsedEmailAttachment>): ParsedEmailAttachment => ({
@@ -633,7 +657,9 @@ describe('ingestInboundEmail', () => {
 
     it('drops an oversized part but still ingests the message', async () => {
       const result = await ingestParsedEmail(
-        reply({ attachments: [part({ filename: 'big.pdf', bytes: Buffer.alloc(5 * 1024 * 1024 + 1) })] })
+        reply({
+          attachments: [part({ filename: 'big.pdf', bytes: Buffer.alloc(5 * 1024 * 1024 + 1) })],
+        })
       )
       expect(result).toEqual({ status: 'ingested', conversationId: 'conversation_abc' })
       expect(lastSend()[0].attachments).toBeUndefined()
@@ -709,5 +735,193 @@ describe('ingestInboundEmail', () => {
       expect(JSON.stringify(contentJson)).not.toContain('/api/storage/chat-images')
       expect(uploadImageBuffer).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+// Reply-by-email into a ticket thread (D9). A signed `reply+tkt-…` recipient
+// routes into the ticket's requester-reply core; every rejection fails quiet and
+// a `tkt-` address can never open a conversation or fall through to cold inbound.
+describe('ingestInboundEmail — ticket reply branch (D9)', () => {
+  const TICKET_REPLY_TO = inboundTicketReplyToAddress('ticket_abc')!
+
+  const ticketEvent = (over: Record<string, unknown> = {}) => ({
+    type: 'email.received',
+    data: {
+      to: [TICKET_REPLY_TO],
+      from: 'jane@example.com',
+      subject: 'Re: [Ticket] still broken',
+      text: 'Yes, still broken.\n\nOn Mon wrote:\n> old ticket mail',
+      headers: [{ name: 'Message-ID', value: '<t-1@x>' }],
+      ...over,
+    },
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    dupeRows = []
+    // The requester the signed address resolves to; the From must match one of
+    // its known addresses (account email → principal contact email).
+    principalRow = {
+      id: 'principal_req',
+      type: 'anonymous',
+      displayName: 'Jane',
+      contactEmail: 'jane@example.com',
+      userId: null,
+    }
+    userRow = undefined
+    loadTicketOr404.mockResolvedValue({
+      id: 'ticket_abc',
+      type: 'customer',
+      requesterPrincipalId: 'principal_req',
+    })
+    appendInboundTicketReply.mockResolvedValue({ message: { id: 'conversation_msg_t' } })
+    resolveChannelAccountByRecipient.mockResolvedValue(undefined)
+  })
+
+  it('appends a verified reply through the requester-reply core, quoted history stripped', async () => {
+    const result = await ingestInboundEmail(ticketEvent())
+
+    expect(result).toEqual({ status: 'ingested_ticket', ticketId: 'ticket_abc' })
+    expect(appendInboundTicketReply).toHaveBeenCalledTimes(1)
+    const [ticketId, requesterId, input, principalType] = appendInboundTicketReply.mock.calls[0]
+    expect(ticketId).toBe('ticket_abc')
+    expect(requesterId).toBe('principal_req')
+    expect(input).toMatchObject({
+      content: 'Yes, still broken.', // quoted history stripped
+      metadata: { source: 'email', emailMessageId: '<t-1@x>' },
+    })
+    expect(principalType).toBe('anonymous')
+    // Never routed as a conversation, never opened as cold inbound.
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+    expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+  })
+
+  it("matches an identified requester's account email (case-insensitive)", async () => {
+    principalRow = {
+      id: 'principal_req',
+      type: 'user',
+      displayName: 'Jane',
+      contactEmail: null,
+      userId: 'user_req',
+    }
+    userRow = { id: 'user_req', email: 'jane@corp.example' }
+
+    const result = await ingestInboundEmail(
+      ticketEvent({
+        from: 'Jane <JANE@Corp.example>',
+        headers: [{ name: 'Message-ID', value: '<t-2@x>' }],
+      })
+    )
+
+    expect(result).toEqual({ status: 'ingested_ticket', ticketId: 'ticket_abc' })
+    expect(appendInboundTicketReply).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a tampered signature and never falls through to cold inbound', async () => {
+    const result = await ingestInboundEmail({
+      type: 'email.received',
+      data: {
+        to: ['reply+tkt-abc.wrongsignature@tenaevexeo.resend.app'],
+        from: 'jane@example.com',
+        text: 'injected as the requester',
+        headers: [{ name: 'Message-ID', value: '<t-tamper@x>' }],
+      },
+    })
+
+    expect(result).toEqual({ status: 'no_ticket' })
+    expect(loadTicketOr404).not.toHaveBeenCalled()
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+    expect(sendVisitorMessage).not.toHaveBeenCalled()
+    expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+  })
+
+  it('drops when the sender is not the requester (never falls through to cold inbound)', async () => {
+    const result = await ingestInboundEmail(
+      ticketEvent({
+        from: 'attacker@evil.example',
+        headers: [{ name: 'Message-ID', value: '<t-3@x>' }],
+      })
+    )
+
+    expect(result).toEqual({ status: 'from_mismatch' })
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+    expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+  })
+
+  it('drops when the ticket is unknown or deleted', async () => {
+    loadTicketOr404.mockRejectedValue(new NotFoundError('TICKET_NOT_FOUND', 'gone'))
+
+    const result = await ingestInboundEmail(
+      ticketEvent({ headers: [{ name: 'Message-ID', value: '<t-4@x>' }] })
+    )
+
+    expect(result).toEqual({ status: 'no_ticket' })
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+    expect(resolveChannelAccountByRecipient).not.toHaveBeenCalled()
+  })
+
+  it('drops a non-customer ticket', async () => {
+    loadTicketOr404.mockResolvedValue({
+      id: 'ticket_abc',
+      type: 'back_office',
+      requesterPrincipalId: 'principal_req',
+    })
+
+    const result = await ingestInboundEmail(
+      ticketEvent({ headers: [{ name: 'Message-ID', value: '<t-5@x>' }] })
+    )
+
+    expect(result).toEqual({ status: 'no_ticket' })
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+  })
+
+  it('suppresses an auto-reply before it reaches the ticket branch', async () => {
+    const result = await ingestInboundEmail(
+      ticketEvent({
+        headers: [
+          { name: 'Message-ID', value: '<t-6@x>' },
+          { name: 'Auto-Submitted', value: 'auto-replied' },
+        ],
+      })
+    )
+
+    expect(result).toEqual({ status: 'suppressed' })
+    expect(loadTicketOr404).not.toHaveBeenCalled()
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op for a redelivered Message-ID (idempotency)', async () => {
+    dupeRows = [{ id: 'conversation_msg_existing' }]
+
+    const result = await ingestInboundEmail(
+      ticketEvent({ headers: [{ name: 'Message-ID', value: '<t-dup@x>' }] })
+    )
+
+    expect(result).toEqual({ status: 'duplicate' })
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+  })
+
+  it('suppresses a reply from a blocked requester (never appends)', async () => {
+    // isBlocked() reads the same principal row; a non-null blockedAt blocks it.
+    principalRow = { ...(principalRow as Record<string, unknown>), blockedAt: new Date() }
+
+    const result = await ingestInboundEmail(
+      ticketEvent({ headers: [{ name: 'Message-ID', value: '<t-blocked@x>' }] })
+    )
+
+    expect(result).toEqual({ status: 'suppressed' })
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
+  })
+
+  it('rate-limits a verified requester and never appends', async () => {
+    const { ConversationRateLimitError } = await import('../conversation.ratelimit')
+    assertConversationSendRate.mockRejectedValueOnce(new ConversationRateLimitError(5))
+
+    const result = await ingestInboundEmail(
+      ticketEvent({ headers: [{ name: 'Message-ID', value: '<t-rl@x>' }] })
+    )
+
+    expect(result).toEqual({ status: 'rate_limited' })
+    expect(appendInboundTicketReply).not.toHaveBeenCalled()
   })
 })

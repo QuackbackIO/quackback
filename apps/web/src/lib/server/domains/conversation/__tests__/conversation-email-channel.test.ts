@@ -139,3 +139,49 @@ describe('outbound Message-ID threading', () => {
     expect(domains).toEqual(new Set(['acme.example', 'x.resend.app']))
   })
 })
+
+describe('ticket reply-to addressing (watcher emails)', async () => {
+  const { inboundTicketReplyToAddress, ticketIdFromInboundAddress, ticketRootMessageId } =
+    await import('../conversation.email-channel')
+  const env = {
+    EMAIL_INBOUND_DOMAIN: 'mail.example.com',
+    EMAIL_INBOUND_SIGNING_SECRET:
+      'whsec_' + Buffer.from('test-secret-key-32-bytes-long!!!').toString('base64'),
+    EMAIL_FROM: 'noreply@acme.example.com',
+  }
+  const ticketId = 'ticket_01h455vb4pex5vsknk084sn02q' as never
+
+  it('round-trips a signed ticket address', () => {
+    const addr = inboundTicketReplyToAddress(ticketId, env)
+    expect(addr).toMatch(
+      /^reply\+tkt-01h455vb4pex5vsknk084sn02q\.[A-Za-z0-9_-]{22}@mail\.example\.com$/
+    )
+    expect(ticketIdFromInboundAddress(addr!, env)).toBe(ticketId)
+  })
+
+  it('rejects a tampered signature and a conversation-shaped address', () => {
+    const addr = inboundTicketReplyToAddress(ticketId, env)!
+    const tampered = addr.replace(/\.[^@]+@/, '.AAAAAAAAAAAAAAAAAAAAAA@')
+    expect(ticketIdFromInboundAddress(tampered, env)).toBeNull()
+    expect(
+      ticketIdFromInboundAddress('reply+01h455vb4pex5vsknk084sn02q.sig@mail.example.com', env)
+    ).toBeNull()
+  })
+
+  it('a ticket address never verifies as a conversation and vice versa', async () => {
+    const { conversationIdFromInboundAddress, inboundReplyToAddress } =
+      await import('../conversation.email-channel')
+    const ticketAddr = inboundTicketReplyToAddress(ticketId, env)!
+    expect(conversationIdFromInboundAddress(ticketAddr, env)).toBeNull()
+    const convAddr = inboundReplyToAddress('conversation_01h455vb4pex5vsknk084sn02q' as never, env)!
+    expect(ticketIdFromInboundAddress(convAddr, env)).toBeNull()
+  })
+
+  it('returns null without inbound config; root message id is deterministic', () => {
+    expect(inboundTicketReplyToAddress(ticketId, {})).toBeNull()
+    expect(ticketRootMessageId(ticketId, env)).toBe(
+      'ticket-01h455vb4pex5vsknk084sn02q@acme.example.com'
+    )
+    expect(ticketRootMessageId(ticketId, env)).toBe(ticketRootMessageId(ticketId, env))
+  })
+})

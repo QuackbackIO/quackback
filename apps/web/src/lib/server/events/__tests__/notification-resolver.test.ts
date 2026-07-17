@@ -17,6 +17,11 @@ const h = vi.hoisted(() => ({
   getTicketRepliedTargets: vi.fn(),
   getTicketNoteAddedTargets: vi.fn(),
   getMessageCreatedTargets: vi.fn(),
+  getTicketCreatedEmailTargets: vi.fn(),
+  getTicketRepliedEmailTargets: vi.fn(),
+  getTicketResolvedEmailTargets: vi.fn(),
+  getTicketAssignedEmailTargets: vi.fn(),
+  getSlaEmailTargets: vi.fn(),
 }))
 vi.mock('../hook-context', () => ({ buildHookContext: h.buildHookContext }))
 vi.mock('../targets', () => ({
@@ -34,6 +39,11 @@ vi.mock('../targets', () => ({
   getTicketRepliedTargets: h.getTicketRepliedTargets,
   getTicketNoteAddedTargets: h.getTicketNoteAddedTargets,
   getMessageCreatedTargets: h.getMessageCreatedTargets,
+  getTicketCreatedEmailTargets: h.getTicketCreatedEmailTargets,
+  getTicketRepliedEmailTargets: h.getTicketRepliedEmailTargets,
+  getTicketResolvedEmailTargets: h.getTicketResolvedEmailTargets,
+  getTicketAssignedEmailTargets: h.getTicketAssignedEmailTargets,
+  getSlaEmailTargets: h.getSlaEmailTargets,
 }))
 
 import { createId } from '@quackback/ids'
@@ -68,6 +78,12 @@ describe('notification resolver routing (WO-8c)', () => {
     h.getTicketRepliedTargets.mockResolvedValue(T('ticket_replied_bell')[0])
     h.getTicketNoteAddedTargets.mockResolvedValue(T('ticket_note_bell')[0])
     h.getMessageCreatedTargets.mockResolvedValue(T('message_bell')[0])
+    // Email builders return arrays; default empty so only the routed ones matter.
+    h.getTicketCreatedEmailTargets.mockResolvedValue([])
+    h.getTicketRepliedEmailTargets.mockResolvedValue([])
+    h.getTicketResolvedEmailTargets.mockResolvedValue([])
+    h.getTicketAssignedEmailTargets.mockResolvedValue([])
+    h.getSlaEmailTargets.mockResolvedValue([])
   })
 
   it('interestedIn covers subscriber, mention, status-publish, and bell types', () => {
@@ -80,7 +96,10 @@ describe('notification resolver routing (WO-8c)', () => {
     expect(notificationResolver.interestedIn('ticket.status_changed')).toBe(true)
     expect(notificationResolver.interestedIn('message.created')).toBe(true)
     expect(notificationResolver.interestedIn('post.created')).toBe(false)
-    expect(notificationResolver.interestedIn('ticket.created')).toBe(false)
+    // ticket.created + SLA now route here for their email builders.
+    expect(notificationResolver.interestedIn('ticket.created')).toBe(true)
+    expect(notificationResolver.interestedIn('sla.approaching_breach')).toBe(true)
+    expect(notificationResolver.interestedIn('sla.breached')).toBe(true)
   })
 
   it('routes subscriber events to getSubscriberTargets', async () => {
@@ -128,6 +147,50 @@ describe('notification resolver routing (WO-8c)', () => {
     const out = await notificationResolver.resolve(evt('message.created'))
     expect(out.map((t) => t.type)).toEqual(['message_bell'])
     expect(h.getMessageCreatedTargets).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes ticket.created to the email builder only (no bell for it)', async () => {
+    h.getTicketCreatedEmailTargets.mockResolvedValue(T('created_email'))
+    const out = await notificationResolver.resolve(evt('ticket.created'))
+    expect(out.map((t) => t.type)).toEqual(['created_email'])
+    expect(h.getTicketCreatedEmailTargets).toHaveBeenCalledTimes(1)
+  })
+
+  it('concats bell + email targets for ticket.replied', async () => {
+    h.getTicketRepliedEmailTargets.mockResolvedValue([
+      ...T('replied_email_a'),
+      ...T('replied_email_b'),
+    ])
+    const out = await notificationResolver.resolve(evt('ticket.replied'))
+    expect(out.map((t) => t.type)).toEqual([
+      'replied_email_a',
+      'replied_email_b',
+      'ticket_replied_bell',
+    ])
+    expect(h.getTicketRepliedEmailTargets).toHaveBeenCalledTimes(1)
+    expect(h.getTicketRepliedTargets).toHaveBeenCalledTimes(1)
+  })
+
+  it('concats bell + email targets for ticket.assigned', async () => {
+    h.getTicketAssignedTargets.mockResolvedValue(T('assigned_bell')[0])
+    h.getTicketAssignedEmailTargets.mockResolvedValue(T('assigned_email'))
+    const out = await notificationResolver.resolve(evt('ticket.assigned'))
+    expect(out.map((t) => t.type)).toEqual(['assigned_email', 'assigned_bell'])
+  })
+
+  it('routes SLA events to the SLA email builder', async () => {
+    h.getSlaEmailTargets.mockResolvedValue(T('sla_email'))
+    const warn = await notificationResolver.resolve(evt('sla.approaching_breach'))
+    expect(warn.map((t) => t.type)).toEqual(['sla_email'])
+    const breach = await notificationResolver.resolve(evt('sla.breached'))
+    expect(breach.map((t) => t.type)).toEqual(['sla_email'])
+    expect(h.getSlaEmailTargets).toHaveBeenCalledTimes(2)
+  })
+
+  it('builds the hook context exactly once per email-only resolve', async () => {
+    h.getSlaEmailTargets.mockResolvedValue(T('sla_email'))
+    await notificationResolver.resolve(evt('sla.breached'))
+    expect(h.buildHookContext).toHaveBeenCalledTimes(1)
   })
 
   it('drops a bell that resolves to no recipient (builder returns null)', async () => {

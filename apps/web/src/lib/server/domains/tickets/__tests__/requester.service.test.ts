@@ -31,6 +31,15 @@ vi.mock('@/lib/server/config', () => ({
 const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
 vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 
+// Spy the fire-and-forget `ticket.replied` dispatch so the append-core tests can
+// assert it fires without running the real event pipeline. Spread keeps every
+// other webhook export (e.g. createTicketCore's emit) real.
+const emitTicketReplied = vi.hoisted(() => vi.fn())
+vi.mock('../ticket.webhooks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../ticket.webhooks')>()),
+  emitTicketReplied,
+}))
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   tickets,
@@ -49,6 +58,7 @@ import {
   getMyTicketThread,
   replyToMyTicket,
   createMyTicket,
+  appendInboundTicketReply,
 } from '../requester.service'
 import { sendTicketMessage, addTicketNote } from '../ticket-message.service'
 
@@ -395,6 +405,47 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     expect(await currentStatusCategory(ticketId)).toBe('open')
     expect(row.resolvedAt).toBeNull()
     expect(row.reopenedCount).toBe(1)
+  })
+
+  // The reply-by-email ingest core: same visitor-message + auto-reopen + emit
+  // semantics as `replyToMyTicket`, but the caller (the inbound email pipeline)
+  // has already verified ownership, so it takes the resolved requester id directly.
+  it('appendInboundTicketReply posts a visitor reply, reopens a closed ticket, and emits ticket.replied', async () => {
+    await testDb
+      .insert(settings)
+      .values({ name: 'WS', slug: `ws_${suffix()}`, createdAt: new Date() })
+    const s = await seedStagedStatuses()
+    const me = await seedPrincipal()
+    const ticketId = createId('ticket') as TicketId
+    await testDb.insert(tickets).values({
+      id: ticketId,
+      title: 'T',
+      statusId: s.closed.id,
+      type: 'customer',
+      requesterPrincipalId: me,
+      resolvedAt: new Date(),
+    })
+    emitTicketReplied.mockClear()
+
+    const { message } = await appendInboundTicketReply(
+      ticketId,
+      me,
+      { content: 'Yes, still broken.', metadata: { source: 'email', emailMessageId: '<m@x>' } },
+      'user'
+    )
+
+    expect(message.senderType).toBe('visitor')
+    expect(message.ticketId).toBe(ticketId)
+    // Auto-reopen fired: a closed ticket moves to open, clears resolvedAt, counts it.
+    const row = await readTicketRow(ticketId)
+    expect(await currentStatusCategory(ticketId)).toBe('open')
+    expect(row.resolvedAt).toBeNull()
+    expect(row.reopenedCount).toBe(1)
+    // ticket.replied fired with the requester as the event actor + the visitor message.
+    expect(emitTicketReplied).toHaveBeenCalledTimes(1)
+    const [actorArg, , messageArg] = emitTicketReplied.mock.calls[0]
+    expect((actorArg as Actor).principalId).toBe(me)
+    expect((messageArg as { senderType: string }).senderType).toBe('visitor')
   })
 
   it('a requester reply on an already-open ticket does not change its status', async () => {

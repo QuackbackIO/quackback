@@ -62,6 +62,7 @@ export async function handleInboundEmailWebhook(request: Request): Promise<Respo
     const result = await ingestInboundEmail(event)
     if (
       result.status === 'no_conversation' ||
+      result.status === 'no_ticket' ||
       result.status === 'empty' ||
       result.status === 'from_mismatch' ||
       result.status === 'rate_limited'

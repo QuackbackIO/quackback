@@ -7,7 +7,7 @@
  */
 import { db, tickets, eq, and, isNull, desc, type Ticket } from '@/lib/server/db'
 import type { TicketId, PrincipalId } from '@quackback/ids'
-import type { Actor } from '@/lib/server/policy/types'
+import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import type { TiptapContent, ConversationAttachment } from '@/lib/shared/db-types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
@@ -108,6 +108,32 @@ export async function createMyTicket(
   )
 }
 
+/**
+ * The requester-reply write core, shared by the portal reply (`replyToMyTicket`)
+ * and the reply-by-email ingest (`appendInboundTicketReply`). The CALLER owns the
+ * ownership check (portal: signed-in requester; email: verified From ↔ requester);
+ * this only performs the append with requester semantics — `senderType: 'visitor'`,
+ * `isInternal: false`, not a "first response" — then the §4.2 auto-reopen and the
+ * agent/integration-facing `ticket.replied` signal (fire-and-forget). `actor` is
+ * the requester, threaded through so the reopen timeline and the event actor read
+ * as the requester, never as an anonymous system flip.
+ */
+async function appendRequesterReply(
+  ticketId: TicketId,
+  requesterPrincipalId: PrincipalId,
+  input: SendTicketMessageInput,
+  actor: Actor
+): Promise<{ message: ConversationMessageDTO }> {
+  const { message, ticket } = await insertTicketMessage(input, requesterPrincipalId, {
+    senderType: 'visitor',
+    isInternal: false,
+    stampFirstResponse: false,
+  })
+  await autoReopenOnRequesterReply(ticketId, requesterPrincipalId)
+  void emitTicketReplied(actor, ticket, message)
+  return { message }
+}
+
 /** The requester replies on their own ticket thread (a customer-visible message). */
 export async function replyToMyTicket(
   actor: Actor,
@@ -115,20 +141,38 @@ export async function replyToMyTicket(
 ): Promise<{ message: ConversationMessageDTO }> {
   const principalId = requireRequester(actor)
   await loadOwnedTicketOr404(input.ticketId, principalId)
-  const { message, ticket } = await insertTicketMessage(input, principalId, {
-    senderType: 'visitor',
-    isInternal: false,
-    // A requester reply is not an agent "first response".
-    stampFirstResponse: false,
-  })
-  // A reply from a waiting/closed requester reopens the ticket (§4.2). The
-  // requester is passed through as the activity actor so the timeline reads
-  // "reopened by <requester>'s reply", not as an anonymous system flip.
-  await autoReopenOnRequesterReply(input.ticketId, principalId)
-  // Agent/integration-facing signal (senderType 'visitor'): customer activity
-  // the team's integrations want, fire-and-forget after the write commits.
-  void emitTicketReplied(actor, ticket, message)
-  return { message }
+  return appendRequesterReply(input.ticketId, principalId, input, actor)
+}
+
+/**
+ * Reply-by-email ingest core: append an inbound email as the requester's reply on
+ * their ticket thread, with the exact `replyToMyTicket` semantics (visitor message,
+ * auto-reopen, `ticket.replied`). The caller (the inbound email pipeline) has
+ * already verified the signed `tkt-` address AND that the sender matches the
+ * ticket's requester, so this takes the resolved `requesterPrincipalId` and its
+ * type directly — there is no signed-in `Actor` on the inbound path, so one is
+ * synthesized for the requester to drive the reopen-timeline attribution and the
+ * event actor. A requester is never a `service` principal, so the synthesized
+ * actor's role/segments/permissions are empty (unused by the requester-reply path).
+ */
+export async function appendInboundTicketReply(
+  ticketId: TicketId,
+  requesterPrincipalId: PrincipalId,
+  input: {
+    content: string
+    contentJson?: TiptapContent | null
+    attachments?: ConversationAttachment[]
+    metadata?: Record<string, unknown>
+  },
+  requesterPrincipalType: PrincipalType = 'user'
+): Promise<{ message: ConversationMessageDTO }> {
+  const actor: Actor = {
+    principalId: requesterPrincipalId,
+    role: null,
+    principalType: requesterPrincipalType,
+    segmentIds: new Set(),
+  }
+  return appendRequesterReply(ticketId, requesterPrincipalId, { ticketId, ...input }, actor)
 }
 
 // ---------------------------------------------------------------------------

@@ -22,6 +22,9 @@ export type NotificationType =
   | 'ticket_assigned'
   | 'ticket_replied'
   | 'ticket_note_added'
+  | 'ticket_created'
+  | 'sla_warning'
+  | 'sla_breach'
   | 'comment_mentioned'
   | 'assistant_handed_off'
 

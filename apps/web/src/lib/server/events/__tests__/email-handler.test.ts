@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the email package before importing the handler
 vi.mock('@quackback/email', () => ({
@@ -6,16 +6,27 @@ vi.mock('@quackback/email', () => ({
   sendNewCommentEmail: vi.fn(),
   sendChangelogPublishedEmail: vi.fn(),
   sendPostMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
+  sendTicketEventEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
+// Threading helpers are pure but read env-derived domains; force a known domain
+// so the created-root Message-ID assertion is deterministic.
+vi.stubEnv('EMAIL_FROM', 'Support <support@acme.test>')
+
 import { emailHook } from '../handlers/email'
-import { sendStatusChangeEmail, sendNewCommentEmail, sendPostMentionEmail } from '@quackback/email'
-import type { EmailTarget, EmailConfig } from '../hook-types'
+import {
+  sendStatusChangeEmail,
+  sendNewCommentEmail,
+  sendPostMentionEmail,
+  sendTicketEventEmail,
+} from '@quackback/email'
+import type { EmailTarget, EmailConfig, TicketEmailConfig } from '../hook-types'
 import type { EventData } from '../types'
 
 const mockStatusChangeEmail = vi.mocked(sendStatusChangeEmail)
 const mockNewCommentEmail = vi.mocked(sendNewCommentEmail)
 const mockPostMentionEmail = vi.mocked(sendPostMentionEmail)
+const mockTicketEventEmail = vi.mocked(sendTicketEventEmail)
 
 // The email handler only reads event.type, so data is irrelevant for these tests
 const statusChangedEvent = {
@@ -225,5 +236,96 @@ describe('emailHook — post.mentioned', () => {
         excerpt: 'Hey @alice, what do you think?',
       })
     )
+  })
+})
+
+describe('emailHook — ticket + SLA lifecycle', () => {
+  const evt = (type: string): EventData =>
+    ({
+      id: 'evt-t',
+      type,
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user' },
+    }) as EventData
+
+  const ticketConfig = (
+    over: Partial<TicketEmailConfig>
+  ): TicketEmailConfig & Record<string, unknown> => ({
+    kind: 'created',
+    workspaceName: 'Acme',
+    ticketLabel: '#1',
+    title: 'Cannot log in',
+    ticketId: 'ticket_1',
+    ctaUrl: 'https://p/support/ticket/ticket_1',
+    ...over,
+  })
+
+  beforeEach(() => {
+    mockTicketEventEmail.mockClear()
+    mockTicketEventEmail.mockResolvedValue({ sent: true })
+  })
+
+  it.each([
+    ['ticket.created', 'created'],
+    ['ticket.replied', 'reply'],
+    ['ticket.status_changed', 'status_resolved'],
+    ['ticket.assigned', 'assigned'],
+    ['sla.approaching_breach', 'sla_warning'],
+    ['sla.breached', 'sla_breach'],
+  ] as const)('routes %s → sendTicketEventEmail(kind=%s)', async (type, kind) => {
+    const config = kind.startsWith('sla')
+      ? ticketConfig({
+          kind,
+          ticketId: undefined,
+          ctaUrl: 'https://p/admin/inbox?i=conversation_1',
+        })
+      : ticketConfig({ kind })
+    const result = await emailHook.run(evt(type), baseTarget, config)
+    expect(result).toEqual({ success: true })
+    expect(mockTicketEventEmail).toHaveBeenCalledTimes(1)
+    expect(mockTicketEventEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'user@example.com', kind, ctaUrl: config.ctaUrl })
+    )
+  })
+
+  it('created email carries the deterministic ticket root id as its own Message-ID', async () => {
+    await emailHook.run(evt('ticket.created'), baseTarget, ticketConfig({ kind: 'created' }))
+    expect(mockTicketEventEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: 'ticket-1@acme.test',
+        inReplyTo: undefined,
+        references: undefined,
+      })
+    )
+  })
+
+  it('a later ticket email mints a fresh Message-ID and References the root', async () => {
+    await emailHook.run(evt('ticket.replied'), baseTarget, ticketConfig({ kind: 'reply' }))
+    const args = mockTicketEventEmail.mock.calls[0][0]
+    expect(args.messageId).toMatch(/^ticket-1\..+@acme\.test$/)
+    expect(args.inReplyTo).toBe('ticket-1@acme.test')
+    expect(args.references).toEqual(['ticket-1@acme.test'])
+  })
+
+  it('an SLA email (no ticket id) threads on nothing', async () => {
+    await emailHook.run(
+      evt('sla.breached'),
+      baseTarget,
+      ticketConfig({ kind: 'sla_breach', ticketId: undefined })
+    )
+    const args = mockTicketEventEmail.mock.calls[0][0]
+    expect(args.messageId).toBeUndefined()
+    expect(args.inReplyTo).toBeUndefined()
+    expect(args.references).toBeUndefined()
+  })
+
+  it('still rejects a genuinely unsupported type', async () => {
+    const result = await emailHook.run(
+      { id: 'x', type: 'post.created', timestamp: '', actor: { type: 'user' } } as EventData,
+      baseTarget,
+      baseConfig
+    )
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Unsupported event type')
   })
 })

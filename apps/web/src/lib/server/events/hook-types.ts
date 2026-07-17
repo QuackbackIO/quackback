@@ -131,3 +131,39 @@ export interface EmailConfig {
    *  page. Not token-based — requires the recipient to be logged in. */
   preferencesUrl?: string
 }
+
+/**
+ * Ticket lifecycle email config (support platform): its own shape instead of
+ * widening the post-specific EmailConfig — the email hook casts per branch,
+ * the same way the changelog/status branches do.
+ */
+export interface TicketEmailConfig {
+  /** Which of the seven copy-map kinds to render. */
+  kind:
+    | 'created'
+    | 'reply'
+    | 'status_resolved'
+    | 'assigned'
+    | 'assigned_team'
+    | 'sla_warning'
+    | 'sla_breach'
+  workspaceName: string
+  /** Formatted reference, e.g. "#142". */
+  ticketLabel: string
+  /** Ticket title (SLA kinds carry the counterpart identifier instead). */
+  title: string
+  ctaUrl: string
+  /** Ticket id — the deterministic threading root derives from it. */
+  ticketId?: string
+  messageBody?: string
+  authorName?: string
+  statusChange?: { previousLabel: string | null; newLabel: string }
+  clockLabel?: string
+  dueLabel?: string
+  /** Per-team From (resolveSendingAddress result); absent = EMAIL_FROM. */
+  from?: string
+  /** Signed per-ticket inbound reply address; absent = no reply-by-email. */
+  replyTo?: string
+  logoUrl?: string
+  preferencesUrl?: string
+}

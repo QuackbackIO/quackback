@@ -97,6 +97,11 @@ export interface SendTicketMessageInput {
   content: string
   contentJson?: TiptapContent | null
   attachments?: ConversationAttachment[]
+  /** Provenance/dedup metadata carried onto the stored row. The reply-by-email
+   *  path stamps `{ source: 'email', emailMessageId }` so a redelivered inbound
+   *  message is caught by the (metadata->>'emailMessageId') partial unique index
+   *  the conversation path already relies on; the portal reply path omits it. */
+  metadata?: Record<string, unknown>
 }
 
 function assertCan(actor: Actor, permission: PermissionKey, action: string): void {
@@ -159,6 +164,7 @@ export async function insertTicketMessage(
         contentJson: safeContentJson,
         isInternal: opts.isInternal,
         attachments: attachments.length > 0 ? attachments : null,
+        metadata: input.metadata ?? undefined,
       })
       .returning()
 

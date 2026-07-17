@@ -115,6 +115,27 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     group: 'support',
     surfaces: ['admin'],
   },
+  {
+    type: 'ticket_created',
+    label: 'Ticket received',
+    description: 'Confirmation when we receive your ticket',
+    group: 'support',
+    surfaces: ['portal'],
+  },
+  {
+    type: 'sla_warning',
+    label: 'SLA breach warning',
+    description: 'An SLA clock you own is approaching breach',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
+    type: 'sla_breach',
+    label: 'SLA breached',
+    description: 'An SLA clock you own has breached',
+    group: 'support',
+    surfaces: ['admin'],
+  },
   // Changelog
   {
     type: 'changelog_published',

@@ -21,6 +21,7 @@ import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
 import { PostMentionEmail } from './templates/post-mention'
+import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
 import { PasswordResetEmail } from './templates/password-reset'
@@ -740,6 +741,172 @@ export async function sendConversationMessageEmail(
     inReplyTo,
     references,
     from,
+  })
+}
+
+// ============================================================================
+// Ticket Event Email (support platform: watcher/lifecycle notifications)
+// ============================================================================
+
+export type TicketEmailKind =
+  | 'created'
+  | 'reply'
+  | 'status_resolved'
+  | 'assigned'
+  | 'assigned_team'
+  | 'sla_warning'
+  | 'sla_breach'
+
+export interface SendTicketEventEmailParams {
+  to: string
+  kind: TicketEmailKind
+  /** Formatted ticket reference, e.g. "#142". */
+  ticketLabel: string
+  /** Ticket title (or, for SLA kinds, the counterpart identifier). */
+  title: string
+  workspaceName: string
+  ctaUrl: string
+  /** Reply body (kind 'reply'): full markdown rendered to plain text. */
+  messageBody?: string
+  /** Reply author display name (kind 'reply'). */
+  authorName?: string
+  /** Stage labels (kind 'status_resolved'). */
+  statusChange?: { previousLabel: string | null; newLabel: string }
+  /** SLA kinds: which clock and when it is/was due. */
+  clockLabel?: string
+  dueLabel?: string
+  preferencesUrl?: string
+  logoUrl?: string
+  /** Per-team sending address override; absent = branded EMAIL_FROM. */
+  from?: string
+  /** Per-ticket inbound reply address (reply-by-email); absent = no Reply-To. */
+  replyTo?: string
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+}
+
+interface TicketEmailCopy {
+  subject: string
+  heading: string
+  intro: string
+  ctaLabel: string
+  reason: string
+  note?: string
+  factLine?: string
+}
+
+/**
+ * Per-kind copy, derived from structured facts — the sendConversationMessageEmail
+ * `direction` pattern generalized to the seven ticket kinds. The app passes
+ * facts (labels, names, times), never prose.
+ */
+function ticketEventCopy(p: SendTicketEventEmailParams): TicketEmailCopy {
+  const requesterReason = `You're receiving this because you opened ticket ${p.ticketLabel} at ${p.workspaceName}.`
+  switch (p.kind) {
+    case 'created':
+      return {
+        subject: `We received your ticket ${p.ticketLabel}: ${p.title}`,
+        heading: "We've got your ticket",
+        intro: `Your ticket ${p.ticketLabel} "${p.title}" is with the ${p.workspaceName} team. We'll email you as soon as there's a reply.`,
+        ctaLabel: 'View your ticket',
+        reason: requesterReason,
+      }
+    case 'reply':
+      return {
+        subject: `New reply on ${p.ticketLabel}: ${p.title}`,
+        heading: 'New reply on your ticket',
+        intro: `${p.authorName ?? 'The team'} replied to ${p.ticketLabel} "${p.title}":`,
+        ctaLabel: 'View your ticket',
+        reason: requesterReason,
+      }
+    case 'status_resolved':
+      return {
+        subject: `Your ticket ${p.ticketLabel} was resolved`,
+        heading: 'Your ticket was resolved',
+        intro: `${p.ticketLabel} "${p.title}" has been marked resolved by the ${p.workspaceName} team.`,
+        note: "Reply on the ticket thread if this isn't fixed for you; replying reopens it.",
+        ctaLabel: 'View your ticket',
+        reason: requesterReason,
+      }
+    case 'assigned':
+      return {
+        subject: `Ticket ${p.ticketLabel} assigned to you`,
+        heading: 'You were assigned a ticket',
+        intro: `${p.ticketLabel} "${p.title}" was assigned to you.`,
+        ctaLabel: 'Open in inbox',
+        reason: "You're receiving this because the ticket was assigned to you.",
+      }
+    case 'assigned_team':
+      return {
+        subject: `Ticket ${p.ticketLabel} assigned to your team`,
+        heading: 'A ticket was assigned to your team',
+        intro: `${p.ticketLabel} "${p.title}" was assigned to your team.`,
+        ctaLabel: 'Open in inbox',
+        reason: "You're receiving this because the ticket was assigned to your team.",
+      }
+    case 'sla_warning':
+      return {
+        subject: `SLA at risk: ${p.clockLabel ?? 'response'} due ${p.dueLabel ?? 'soon'}`,
+        heading: `${capitalize(p.clockLabel ?? 'Response')} SLA approaching breach`,
+        intro: `The conversation with ${p.title} needs a ${p.clockLabel ?? 'response'} soon.`,
+        factLine: `${capitalize(p.clockLabel ?? 'Response')} due ${p.dueLabel ?? 'soon'}`,
+        ctaLabel: 'Open in inbox',
+        reason: "You're receiving this because you're responsible for this conversation.",
+      }
+    case 'sla_breach':
+      return {
+        subject: `SLA breached: ${p.clockLabel ?? 'response'} for ${p.title}`,
+        heading: `${capitalize(p.clockLabel ?? 'Response')} SLA breached`,
+        intro: `The conversation with ${p.title} has passed its ${p.clockLabel ?? 'response'} target.`,
+        factLine: `${capitalize(p.clockLabel ?? 'Response')} was due ${p.dueLabel ?? 'earlier'}`,
+        ctaLabel: 'Open in inbox',
+        reason: "You're receiving this because you're responsible for this conversation.",
+      }
+  }
+}
+
+function capitalize(s: string): string {
+  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1)
+}
+
+/** Send one of the seven ticket lifecycle emails (single template + copy map). */
+export async function sendTicketEventEmail(
+  params: SendTicketEventEmailParams
+): Promise<EmailResult> {
+  const copy = ticketEventCopy(params)
+
+  if (getProvider() === 'console') {
+    log.debug(
+      { email_type: 'TicketEventEmail', kind: params.kind, to: params.to, ctaUrl: params.ctaUrl },
+      '[dev] email preview (console provider)'
+    )
+    return { sent: false }
+  }
+
+  return sendEmail({
+    to: params.to,
+    subject: copy.subject,
+    react: TicketEventEmail({
+      heading: copy.heading,
+      intro: copy.intro,
+      messageBody: params.messageBody,
+      authorName: params.authorName,
+      statusChange: params.statusChange,
+      factLine: copy.factLine,
+      note: copy.note,
+      ctaUrl: params.ctaUrl,
+      ctaLabel: copy.ctaLabel,
+      organizationName: params.workspaceName,
+      reason: copy.reason,
+      preferencesUrl: params.preferencesUrl,
+      logoUrl: params.logoUrl,
+    }),
+    from: params.from,
+    replyTo: params.replyTo,
+    messageId: params.messageId,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
   })
 }
 

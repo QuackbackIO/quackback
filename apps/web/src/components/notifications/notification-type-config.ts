@@ -83,6 +83,23 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     iconClass: 'text-amber-500',
     bgClass: 'bg-amber-500/10',
   },
+  // Email-only types (never rendered as bells today; entries satisfy the
+  // exhaustive map and future-proof an in-app channel).
+  ticket_created: {
+    icon: TicketIcon,
+    iconClass: 'text-emerald-500',
+    bgClass: 'bg-emerald-500/10',
+  },
+  sla_warning: {
+    icon: TicketIcon,
+    iconClass: 'text-orange-500',
+    bgClass: 'bg-orange-500/10',
+  },
+  sla_breach: {
+    icon: TicketIcon,
+    iconClass: 'text-red-500',
+    bgClass: 'bg-red-500/10',
+  },
   comment_mentioned: {
     icon: AtSymbolIcon,
     iconClass: 'text-fuchsia-500',

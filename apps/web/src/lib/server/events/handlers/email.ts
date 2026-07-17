@@ -10,12 +10,61 @@ import {
   sendPostMentionEmail,
   sendStatusIncidentPublishedEmail,
   sendStatusMaintenanceScheduledEmail,
+  sendTicketEventEmail,
 } from '@quackback/email'
 import type { IncidentImpact } from '@quackback/email'
-import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../hook-types'
+import type { TicketId } from '@quackback/ids'
+import type {
+  HookHandler,
+  HookResult,
+  EmailTarget,
+  EmailConfig,
+  TicketEmailConfig,
+} from '../hook-types'
 import type { EventData, EventPostMentionedData } from '../types'
+import {
+  ticketRootMessageId,
+  mintTicketOutboundMessageId,
+} from '@/lib/server/domains/conversation/conversation.email-channel'
 import { isRetryableError } from '../hook-utils'
 import { logger } from '@/lib/server/logger'
+
+/** The event types whose email is one of the seven ticket-lifecycle kinds. */
+const TICKET_EMAIL_EVENT_TYPES = new Set<string>([
+  'ticket.created',
+  'ticket.replied',
+  'ticket.status_changed',
+  'ticket.assigned',
+  'sla.approaching_breach',
+  'sla.breached',
+])
+
+/**
+ * Threading headers for a ticket email. The `created` confirmation IS the thread
+ * root (its own Message-ID is the deterministic root id); every later ticket
+ * email mints a fresh Message-ID and References the root, so a ticket's emails
+ * collapse into one client conversation. SLA emails carry no ticket id (they're
+ * conversation-scoped agent alerts) and so thread on nothing.
+ */
+function ticketThreading(cfg: TicketEmailConfig): {
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+} {
+  if (!cfg.ticketId) return {}
+  const ticketId = cfg.ticketId as TicketId
+  const root = ticketRootMessageId(ticketId)
+  if (cfg.kind === 'created') {
+    // The root email threads on nothing above itself; keep the keys present
+    // (value undefined) so the emitted param shape is uniform across kinds.
+    return { messageId: root ?? undefined, inReplyTo: undefined, references: undefined }
+  }
+  return {
+    messageId: mintTicketOutboundMessageId(ticketId) ?? undefined,
+    inReplyTo: root ?? undefined,
+    references: root ? [root] : undefined,
+  }
+}
 
 const log = logger.child({ component: 'email' })
 
@@ -113,6 +162,15 @@ export const emailHook: HookHandler = {
           preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
         })
+      } else if (TICKET_EMAIL_EVENT_TYPES.has(event.type)) {
+        // All six ticket/SLA event types map onto sendTicketEventEmail; the
+        // per-recipient config already carries the copy `kind`, CTA, per-team
+        // From, and reply-by-email Reply-To, so the hook only computes threading.
+        const t = config as TicketEmailConfig
+        // TicketEmailConfig's field names already match SendTicketEventEmailParams;
+        // spread it plus the hook-computed threading (the extra `ticketId` the
+        // config carries for threading is a harmless excess property).
+        result = await sendTicketEventEmail({ to: email, ...t, ...ticketThreading(t) })
       } else {
         return { success: false, error: `Unsupported event type: ${event.type}` }
       }

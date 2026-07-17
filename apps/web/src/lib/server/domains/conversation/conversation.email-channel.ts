@@ -16,7 +16,7 @@
  * value. The parser re-attaches it. The HMAC is still taken over the full id.
  */
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
-import { ID_PREFIXES, type ConversationId } from '@quackback/ids'
+import { ID_PREFIXES, type ConversationId, type TicketId } from '@quackback/ids'
 import { extractEmailAddress } from './conversation.email-inbound'
 
 type EnvLike = Record<string, string | undefined>
@@ -50,15 +50,23 @@ export function isEmailInboundConfigured(env: EnvLike = process.env): boolean {
   return Boolean(env[INBOUND_DOMAIN_ENV] && env[INBOUND_SECRET_ENV])
 }
 
+/** HMAC tag binding an inbound id (conversation or ticket) to this workspace's
+ *  inbound secret, or null when no secret is configured. Taken over the full
+ *  prefixed id, so a conversation id and a ticket id never produce a colliding
+ *  tag — the sole reason the two address families route unambiguously. */
+function signInboundId(id: string, env: EnvLike): string | null {
+  const key = signingKey(env)
+  if (!key) return null
+  return createHmac('sha256', key).update(id).digest('base64url').slice(0, SIG_LEN)
+}
+
 /** HMAC tag binding a conversation id to this workspace's inbound secret, or
  *  null when no secret is configured. */
 export function signConversationId(
   conversationId: string,
   env: EnvLike = process.env
 ): string | null {
-  const key = signingKey(env)
-  if (!key) return null
-  return createHmac('sha256', key).update(conversationId).digest('base64url').slice(0, SIG_LEN)
+  return signInboundId(conversationId, env)
 }
 
 /** `reply+<id-suffix>.<sig>@<inbound-domain>`, or null when the inbound domain
@@ -150,4 +158,79 @@ export function mintOutboundMessageId(
   const suffix = conversationId.slice(CONVERSATION_PREFIX.length)
   const nonce = randomBytes(9).toString('base64url')
   return `c.${suffix}.${nonce}@${domain}`
+}
+
+// ============================================================================
+// Ticket reply-to addressing. Same grammar and signing secret as the
+// conversation addresses above, with a `tkt-` marker so the two route
+// unambiguously: `reply+tkt-<id-suffix>.<sig>@<inbound-domain>`. A ticket
+// address fed to the conversation parser re-attaches the wrong prefix and
+// fails the HMAC, and vice versa, so misrouting is structurally impossible.
+// This module stays the single owner of the plus-address grammar.
+// ============================================================================
+
+const TICKET_PREFIX = `${ID_PREFIXES.ticket}_`
+const TICKET_MARKER = 'tkt-'
+
+/** HMAC tag binding a ticket id to this workspace's inbound secret. */
+export function signTicketId(ticketId: string, env: EnvLike = process.env): string | null {
+  return signInboundId(ticketId, env)
+}
+
+/** `reply+tkt-<id-suffix>.<sig>@<inbound-domain>`, or null when inbound email
+ *  is not configured — the caller then sends without a Reply-To and the email
+ *  footer points at the portal thread instead. */
+export function inboundTicketReplyToAddress(
+  ticketId: TicketId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = env[INBOUND_DOMAIN_ENV]
+  const sig = signTicketId(ticketId, env)
+  if (!domain || !sig) return null
+  const suffix = ticketId.slice(TICKET_PREFIX.length)
+  return `reply+${TICKET_MARKER}${suffix}.${sig}@${domain}`
+}
+
+/** Extract + verify the ticket id from a `reply+tkt-<id-suffix>.<sig>@domain`
+ *  recipient. Constant-time signature check; a tampered or wrong-secret
+ *  address yields null so a forged reply-to can't inject into a ticket. */
+export function ticketIdFromInboundAddress(
+  address: string,
+  env: EnvLike = process.env
+): string | null {
+  const match = /reply\+tkt-([^@>\s]+)@/i.exec(address)
+  if (!match) return null
+  const local = match[1]
+  const dot = local.lastIndexOf('.')
+  if (dot === -1) return null
+  const id = `${TICKET_PREFIX}${local.slice(0, dot)}`
+  const provided = local.slice(dot + 1)
+  const expected = signTicketId(id, env)
+  if (!expected) return null
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  if (a.byteLength !== b.byteLength || !timingSafeEqual(a, b)) return null
+  return id
+}
+
+/** Deterministic Message-ID for a ticket's email-thread ROOT: every ticket
+ *  email References this id, so a ticket's notifications collapse into one
+ *  client conversation. Stateless (derived from the ticket id); the received
+ *  confirmation carries it as its own Message-ID, later sends mint fresh ids
+ *  via mintTicketOutboundMessageId and Reference this. */
+export function ticketRootMessageId(ticketId: TicketId, env: EnvLike = process.env): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  return `ticket-${ticketId.slice(TICKET_PREFIX.length)}@${domain}`
+}
+
+/** Fresh per-send Message-ID for a ticket email (non-root sends). */
+export function mintTicketOutboundMessageId(
+  ticketId: TicketId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  const nonce = randomBytes(6).toString('base64url')
+  return `ticket-${ticketId.slice(TICKET_PREFIX.length)}.${nonce}@${domain}`
 }
