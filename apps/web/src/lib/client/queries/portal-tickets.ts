@@ -5,13 +5,20 @@
  */
 import { queryOptions } from '@tanstack/react-query'
 import type { TicketId } from '@quackback/ids'
-import { listMyTicketsFn, getMyTicketFn, getMyTicketThreadFn } from '@/lib/server/functions/tickets'
+import {
+  listMyTicketsFn,
+  getMyTicketFn,
+  getMyTicketThreadFn,
+  getMyTicketWatchStatusFn,
+} from '@/lib/server/functions/tickets'
 
 export const portalTicketKeys = {
   all: () => ['portal', 'tickets'] as const,
   list: () => [...portalTicketKeys.all(), 'list'] as const,
   detail: (id: TicketId) => [...portalTicketKeys.all(), 'detail', id] as const,
   thread: (id: TicketId) => [...portalTicketKeys.all(), 'thread', id] as const,
+  /** The requester's own watch status on one of their tickets (the bell toggle). */
+  watch: (id: TicketId) => [...portalTicketKeys.all(), 'watch', id] as const,
 }
 
 export const portalTicketQueries = {
@@ -37,5 +44,13 @@ export const portalTicketQueries = {
       queryKey: portalTicketKeys.thread(id),
       queryFn: () => getMyTicketThreadFn({ data: { ticketId: id } }),
       staleTime: 10_000,
+    }),
+
+  /** The requester's own watch status on one of their tickets. */
+  watch: (id: TicketId) =>
+    queryOptions({
+      queryKey: portalTicketKeys.watch(id),
+      queryFn: () => getMyTicketWatchStatusFn({ data: { ticketId: id } }),
+      staleTime: 30_000,
     }),
 }

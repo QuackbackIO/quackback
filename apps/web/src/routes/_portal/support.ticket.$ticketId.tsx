@@ -10,13 +10,19 @@ import { createFileRoute, Navigate, useRouteContext } from '@tanstack/react-rout
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
+import { BellIcon as BellIconOutline } from '@heroicons/react/24/outline'
+import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import type { JSONContent } from '@tiptap/core'
 import type { TicketId } from '@quackback/ids'
 import { TICKET_STAGES } from '@/lib/shared/db-types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
-import { replyToMyTicketFn } from '@/lib/server/functions/tickets'
+import {
+  replyToMyTicketFn,
+  watchMyTicketFn,
+  unwatchMyTicketFn,
+} from '@/lib/server/functions/tickets'
 import { portalTicketQueries, portalTicketKeys } from '@/lib/client/queries/portal-tickets'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
@@ -27,6 +33,7 @@ import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { BackLink } from '@/components/ui/back-link'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TicketIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 
@@ -117,6 +124,22 @@ function PortalTicketPage() {
     ...portalTicketQueries.thread(id),
     enabled: supportTicketsEnabled && isLoggedIn,
   })
+  const { data: watchStatus } = useQuery({
+    ...portalTicketQueries.watch(id),
+    enabled: supportTicketsEnabled && isLoggedIn,
+  })
+  const watching = watchStatus?.watching ?? false
+
+  const toggleWatch = useMutation({
+    mutationFn: () =>
+      watching
+        ? unwatchMyTicketFn({ data: { ticketId: id } })
+        : watchMyTicketFn({ data: { ticketId: id } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: portalTicketKeys.watch(id) })
+    },
+    onError: () => toast.error('Failed to update watch status'),
+  })
 
   const send = useMutation({
     mutationFn: (contentJson: TiptapContent | null) =>
@@ -177,7 +200,40 @@ function PortalTicketPage() {
           <div className="mb-1 flex items-center gap-2">
             <span className="font-mono text-xs text-muted-foreground/70">{ticket.reference}</span>
           </div>
-          <h1 className="text-xl font-semibold leading-tight text-foreground">{ticket.title}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-xl font-semibold leading-tight text-foreground">{ticket.title}</h1>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  shape="default"
+                  className="shrink-0"
+                  disabled={toggleWatch.isPending}
+                  onClick={() => toggleWatch.mutate()}
+                  aria-label={intl.formatMessage(
+                    watching
+                      ? { id: 'portal.tickets.watch.unwatch', defaultMessage: 'Stop watching' }
+                      : { id: 'portal.tickets.watch.watch', defaultMessage: 'Watch this ticket' }
+                  )}
+                  aria-pressed={watching}
+                >
+                  {watching ? (
+                    <BellIconSolid className="size-4 text-primary" />
+                  ) : (
+                    <BellIconOutline className="size-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <FormattedMessage
+                  id={watching ? 'portal.tickets.watch.unwatch' : 'portal.tickets.watch.watch'}
+                  defaultMessage={watching ? 'Stop watching' : 'Watch this ticket'}
+                />
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <div className="mt-5">
             <StageTracker slot={ticket.stage.slot} />
           </div>

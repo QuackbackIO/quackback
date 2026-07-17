@@ -157,6 +157,15 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/tickets.ts::searchMyTicketsFn': END_USER(
     'requester searches their own customer tickets'
   ),
+  'lib/server/functions/tickets.ts::getMyTicketWatchStatusFn': END_USER(
+    'requester reads the watch state of their own ticket (flag-gated)'
+  ),
+  'lib/server/functions/tickets.ts::watchMyTicketFn': END_USER(
+    'requester watches their own ticket (flag-gated)'
+  ),
+  'lib/server/functions/tickets.ts::unwatchMyTicketFn': END_USER(
+    'requester unwatches their own ticket (flag-gated)'
+  ),
 
   // Comments / reactions: end-user create + own-edit/delete.
   'lib/server/functions/comments.ts::createCommentFn': END_USER('end-user posts a comment'),

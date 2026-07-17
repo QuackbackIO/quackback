@@ -158,7 +158,10 @@ export async function emitTicketReplied(
       message.id,
       contentJsonToMarkdown(message.contentJson, message.content),
       messageAttachments(message),
-      message.senderType === 'visitor' ? 'visitor' : 'agent'
+      message.senderType === 'visitor' ? 'visitor' : 'agent',
+      ticket.title,
+      message.author?.displayName ?? null,
+      ticket.requesterPrincipalId ?? null
     )
   )
 }
@@ -176,7 +179,9 @@ export async function emitTicketNoteAdded(
       message.id,
       contentJsonToMarkdown(message.contentJson, message.content),
       messageAttachments(message),
-      'agent'
+      'agent',
+      ticket.title,
+      message.author?.displayName ?? null
     )
   )
 }

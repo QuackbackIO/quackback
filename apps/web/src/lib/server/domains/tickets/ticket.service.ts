@@ -59,6 +59,7 @@ import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { emitTicketCreated, emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
 import { recordTicketActivity } from './ticket-activity.service'
+import { subscribeToTicket, safeSubscribeToTicket } from './ticket-subscription.service'
 import { ticketFtsMatch } from './ticket-search.service'
 import { statusTransition, firstResponseStamp, resolveStage } from './ticket.lifecycle'
 import type {
@@ -417,6 +418,13 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
         attachments: openingAttachments.length > 0 ? openingAttachments : null,
       })
     }
+
+    // The requester watches their own ticket from birth (reason 'requester'),
+    // in the same transaction so the first fan-out can never race past the
+    // subscription row.
+    if (input.requesterPrincipalId) {
+      await subscribeToTicket(input.requesterPrincipalId, ticket.id, 'requester', { tx })
+    }
     return ticket
   })
 
@@ -725,6 +733,14 @@ export async function assignTicket(
     existing.assigneePrincipalId !== updated.assigneePrincipalId ||
     existing.assigneeTeamId !== updated.assigneeTeamId
   ) {
+    // A real assignment re-opts the assignee in as a watcher (even after an
+    // explicit unwatch). Must never fail the assignment itself.
+    if (
+      updated.assigneePrincipalId &&
+      existing.assigneePrincipalId !== updated.assigneePrincipalId
+    ) {
+      await safeSubscribeToTicket(updated.assigneePrincipalId, id, 'assignee')
+    }
     void emitTicketAssigned(
       actor,
       updated,

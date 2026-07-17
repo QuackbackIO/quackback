@@ -778,3 +778,154 @@ export const searchMyTicketsFn = createServerFn({ method: 'GET' })
     const { searchTickets } = await import('@/lib/server/domains/tickets/ticket-search.service')
     return searchTickets(actor, { query: data.query, audience: 'requester', limit: data.limit })
   })
+
+// ---------------------------------------------------------------------------
+// Ticket watchers (subscriptions). Agent side gates on TICKET_VIEW +
+// assertTicketVisible (watching is a read-side self-action — same visibility
+// as reading the ticket); managing OTHER watchers gates on TICKET_ASSIGN, the
+// established "manage this ticket's associations" permission. Requester side
+// is ownership-gated in requester.service, mirroring the fns above.
+// ---------------------------------------------------------------------------
+
+/** The caller's principal id, or refuse — watch state is per-principal. */
+function requireSelfPrincipal(actor: { principalId: PrincipalId | null }): PrincipalId {
+  if (!actor.principalId) throw new ForbiddenError('FORBIDDEN', 'You must be signed in')
+  return actor.principalId
+}
+
+export const getTicketWatchStatusFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { getTicketWatchStatus } =
+      await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    return getTicketWatchStatus(requireSelfPrincipal(actor), data.ticketId as TicketId)
+  })
+
+export const watchTicketFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { subscribeToTicket } =
+      await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    await subscribeToTicket(requireSelfPrincipal(actor), data.ticketId as TicketId, 'manual')
+  })
+
+export const unwatchTicketFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { unsubscribeFromTicket } =
+      await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    await unsubscribeFromTicket(requireSelfPrincipal(actor), data.ticketId as TicketId)
+  })
+
+export const muteTicketFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), days: z.number().int().min(1).max(30).default(7) }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { muteTicket } = await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    const until = new Date(Date.now() + data.days * 24 * 60 * 60 * 1000)
+    await muteTicket(requireSelfPrincipal(actor), data.ticketId as TicketId, until)
+  })
+
+export const unmuteTicketFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { unmuteTicket } =
+      await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    await unmuteTicket(requireSelfPrincipal(actor), data.ticketId as TicketId)
+  })
+
+export const listTicketWatchersFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { listTicketWatchers } =
+      await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    return listTicketWatchers(data.ticketId as TicketId)
+  })
+
+export const adminAddTicketWatcherFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), principalId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { addManualTicketWatcher } =
+      await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    await addManualTicketWatcher(data.principalId as PrincipalId, data.ticketId as TicketId)
+  })
+
+export const adminRemoveTicketWatcherFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string(), principalId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
+    const actor = await policyActorFromAuth(ctx)
+    const { assertTicketVisible } = await import('@/lib/server/domains/tickets/ticket.service')
+    await assertTicketVisible(data.ticketId as TicketId, actor)
+    const { unsubscribeFromTicket } =
+      await import('@/lib/server/domains/tickets/ticket-subscription.service')
+    await unsubscribeFromTicket(data.principalId as PrincipalId, data.ticketId as TicketId)
+  })
+
+// Requester side (portal): ownership-gated in requester.service, flag-gated
+// here like createMyTicketFn.
+
+async function requireSupportTicketsEnabled(): Promise<void> {
+  const { isSupportTicketsEnabled } = await import('@/lib/server/domains/settings/settings.support')
+  if (!(await isSupportTicketsEnabled())) {
+    throw new ForbiddenError('FORBIDDEN', 'Tickets are not available')
+  }
+}
+
+export const getMyTicketWatchStatusFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    await requireSupportTicketsEnabled()
+    const actor = await policyActorFromAuth(ctx)
+    const { getMyTicketWatchStatus } =
+      await import('@/lib/server/domains/tickets/requester.service')
+    return getMyTicketWatchStatus(actor, data.ticketId as TicketId)
+  })
+
+export const watchMyTicketFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    await requireSupportTicketsEnabled()
+    const actor = await policyActorFromAuth(ctx)
+    const { watchMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
+    await watchMyTicket(actor, data.ticketId as TicketId)
+  })
+
+export const unwatchMyTicketFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    await requireSupportTicketsEnabled()
+    const actor = await policyActorFromAuth(ctx)
+    const { unwatchMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
+    await unwatchMyTicket(actor, data.ticketId as TicketId)
+  })

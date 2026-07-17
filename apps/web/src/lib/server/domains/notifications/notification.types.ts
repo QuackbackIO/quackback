@@ -20,6 +20,8 @@ export type NotificationType =
   | 'ticket_status_changed'
   | 'conversation_assigned'
   | 'ticket_assigned'
+  | 'ticket_replied'
+  | 'ticket_note_added'
   | 'comment_mentioned'
   | 'assistant_handed_off'
 

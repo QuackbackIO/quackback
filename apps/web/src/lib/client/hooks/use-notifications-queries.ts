@@ -56,6 +56,9 @@ export interface SerializedNotification {
   actorName: string | null
   /** Avatar URL for the actor (from metadata); null when unavailable. */
   actorAvatarUrl: string | null
+  /** Which app this row's deep link belongs to (from metadata, ticket bells only):
+   *  'portal' for the requester, 'admin' for agent watchers; null on older rows. */
+  audience: 'admin' | 'portal' | null
   readAt: string | null
   archivedAt: string | null
   createdAt: string

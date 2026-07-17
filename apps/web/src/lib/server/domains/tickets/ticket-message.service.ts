@@ -49,6 +49,7 @@ import { enrichMessagesForAgent } from '../conversation/conversation.query'
 import { firstResponseStamp } from './ticket.lifecycle'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
+import { safeSubscribeToTicket } from './ticket-subscription.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
@@ -200,6 +201,9 @@ export async function sendTicketMessage(
     isInternal: false,
     stampFirstResponse: true,
   })
+  // Replying opts the agent in as a watcher (reason 'replier'). Must never
+  // fail the send itself; note authors and visitor replies subscribe nobody.
+  await safeSubscribeToTicket(principalId, input.ticketId, 'replier')
   // Agent/integration-facing signal, fire-and-forget after the write commits.
   void emitTicketReplied(actor, ticket, message)
   return { message }

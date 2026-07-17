@@ -212,6 +212,9 @@ export const P = {
     content: z.string(),
     attachments: z.array(attachment).nullable(),
     senderType: z.enum(['agent', 'visitor']),
+    title: z.string(),
+    authorName: nullableStr,
+    requesterPrincipalId: nullableStr,
   }),
   'ticket.note_added': z.looseObject({
     ticket: ticketRef,
@@ -219,6 +222,8 @@ export const P = {
     content: z.string(),
     attachments: z.array(attachment).nullable(),
     senderType: z.enum(['agent', 'visitor']),
+    title: z.string(),
+    authorName: nullableStr,
   }),
   // assistant + sla
   'assistant.handed_off': z.looseObject({ conversationId: id, reason: z.string() }),

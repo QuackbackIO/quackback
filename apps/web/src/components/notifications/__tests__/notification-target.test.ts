@@ -24,6 +24,7 @@ function buildNotification(overrides: Partial<SerializedNotification>): Serializ
     incidentId: null,
     actorName: null,
     actorAvatarUrl: null,
+    audience: null,
     readAt: null,
     archivedAt: null,
     createdAt: new Date().toISOString(),
@@ -114,6 +115,46 @@ describe('getNotificationTarget', () => {
     expect(getNotificationTarget(notification)).toEqual({
       to: '/support/ticket/$ticketId',
       params: { ticketId: 'ticket_1' },
+    })
+  })
+
+  it('routes ticket_status_changed with admin audience (agent watcher) to the admin inbox', () => {
+    const notification = buildNotification({
+      type: 'ticket_status_changed',
+      ticketId: 'ticket_1',
+      audience: 'admin',
+    })
+    expect(getNotificationTarget(notification)).toEqual({
+      to: '/admin/inbox',
+      search: { i: 'ticket_1' },
+    })
+  })
+
+  it('routes ticket_replied per audience: portal for the requester, admin for agent watchers, portal for legacy rows', () => {
+    expect(
+      getNotificationTarget(
+        buildNotification({ type: 'ticket_replied', ticketId: 'ticket_2', audience: 'portal' })
+      )
+    ).toEqual({ to: '/support/ticket/$ticketId', params: { ticketId: 'ticket_2' } })
+    expect(
+      getNotificationTarget(
+        buildNotification({ type: 'ticket_replied', ticketId: 'ticket_2', audience: 'admin' })
+      )
+    ).toEqual({ to: '/admin/inbox', search: { i: 'ticket_2' } })
+    expect(
+      getNotificationTarget(buildNotification({ type: 'ticket_replied', ticketId: 'ticket_2' }))
+    ).toEqual({ to: '/support/ticket/$ticketId', params: { ticketId: 'ticket_2' } })
+  })
+
+  it('routes ticket_note_added to the admin inbox unconditionally (agents-only bell)', () => {
+    const notification = buildNotification({
+      type: 'ticket_note_added',
+      ticketId: 'ticket_3',
+      audience: 'admin',
+    })
+    expect(getNotificationTarget(notification)).toEqual({
+      to: '/admin/inbox',
+      search: { i: 'ticket_3' },
     })
   })
 

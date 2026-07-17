@@ -15,6 +15,15 @@ vi.mock('@/lib/server/domains/settings/settings.tickets', () => ({
   getStageLabels: () => getStageLabels(),
 }))
 
+// Watchers (ticket subscriptions): default empty so the original
+// requester-only characterization holds unchanged; union cases live in
+// targets-ticket-watchers.test.ts.
+const getTicketWatchersForEvent = vi.fn<() => Promise<string[]>>()
+vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
+  getTicketWatchersForEvent: () => getTicketWatchersForEvent(),
+  getTicketAgentWatchersForEvent: vi.fn().mockResolvedValue([]),
+}))
+
 const { getTicketStatusChangedTargets } = await import('../targets')
 
 beforeEach(() => {
@@ -25,6 +34,8 @@ beforeEach(() => {
     awaiting_requester: 'Awaiting your reply',
     resolved: 'Resolved',
   })
+  getTicketWatchersForEvent.mockReset()
+  getTicketWatchersForEvent.mockResolvedValue([])
 })
 
 const ticketRef = {
@@ -64,6 +75,7 @@ describe('getTicketStatusChangedTargets', () => {
         title: 'Cannot log in',
         stageLabel: 'Resolved',
         previousStageLabel: 'Received',
+        requesterPrincipalId: 'principal_requester',
       },
     })
     expect(getStageLabels).toHaveBeenCalledTimes(1)
@@ -83,7 +95,7 @@ describe('getTicketStatusChangedTargets', () => {
     expect(getStageLabels).not.toHaveBeenCalled()
   })
 
-  it('is a no-op when there is no requester — also covers a tracker, which has none of its own', async () => {
+  it('is a no-op when there is no requester AND no watchers — also covers a tracker, which has none of its own', async () => {
     const target = await getTicketStatusChangedTargets(makeEvent({ requesterPrincipalId: null }))
     expect(target).toBeNull()
     expect(getStageLabels).not.toHaveBeenCalled()

@@ -457,6 +457,13 @@ export interface EventTicketMessageData {
   attachments: EventTicketMessageAttachment[] | null
   /** 'agent' for a teammate reply or internal note; 'visitor' for a requester reply. */
   senderType: 'agent' | 'visitor'
+  /** Ticket title, for notification copy (mirrors ticket.status_changed's extra). */
+  title: string
+  /** Message author's display name; null when the author has none. */
+  authorName: string | null
+  /** Requester principal, on `ticket.replied` only — lets per-recipient
+   *  notification metadata mark the requester's row portal-audience. */
+  requesterPrincipalId?: string | null
 }
 
 /**

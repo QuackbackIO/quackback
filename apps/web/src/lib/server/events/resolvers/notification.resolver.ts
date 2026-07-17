@@ -24,6 +24,8 @@ import {
   getAssistantHandedOffTargets,
   getConversationNoteMentionedTargets,
   getTicketStatusChangedTargets,
+  getTicketRepliedTargets,
+  getTicketNoteAddedTargets,
   getMessageCreatedTargets,
 } from '../targets'
 import type { SinkResolver } from './registry'
@@ -53,6 +55,8 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
   'assistant.handed_off': getAssistantHandedOffTargets,
   'conversation.note_mentioned': getConversationNoteMentionedTargets,
   'ticket.status_changed': getTicketStatusChangedTargets,
+  'ticket.replied': getTicketRepliedTargets,
+  'ticket.note_added': getTicketNoteAddedTargets,
   'message.created': getMessageCreatedTargets,
 }
 

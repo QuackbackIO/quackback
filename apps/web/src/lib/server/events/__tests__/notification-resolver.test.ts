@@ -14,6 +14,8 @@ const h = vi.hoisted(() => ({
   getAssistantHandedOffTargets: vi.fn(),
   getConversationNoteMentionedTargets: vi.fn(),
   getTicketStatusChangedTargets: vi.fn(),
+  getTicketRepliedTargets: vi.fn(),
+  getTicketNoteAddedTargets: vi.fn(),
   getMessageCreatedTargets: vi.fn(),
 }))
 vi.mock('../hook-context', () => ({ buildHookContext: h.buildHookContext }))
@@ -29,6 +31,8 @@ vi.mock('../targets', () => ({
   getAssistantHandedOffTargets: h.getAssistantHandedOffTargets,
   getConversationNoteMentionedTargets: h.getConversationNoteMentionedTargets,
   getTicketStatusChangedTargets: h.getTicketStatusChangedTargets,
+  getTicketRepliedTargets: h.getTicketRepliedTargets,
+  getTicketNoteAddedTargets: h.getTicketNoteAddedTargets,
   getMessageCreatedTargets: h.getMessageCreatedTargets,
 }))
 
@@ -61,6 +65,8 @@ describe('notification resolver routing (WO-8c)', () => {
     h.getChangelogSubscriberTargets.mockResolvedValue(T('changelog'))
     h.getStatusSubscriberTargets.mockResolvedValue(T('status'))
     h.getTicketStatusChangedTargets.mockResolvedValue(T('ticket_status_bell')[0])
+    h.getTicketRepliedTargets.mockResolvedValue(T('ticket_replied_bell')[0])
+    h.getTicketNoteAddedTargets.mockResolvedValue(T('ticket_note_bell')[0])
     h.getMessageCreatedTargets.mockResolvedValue(T('message_bell')[0])
   })
 
@@ -103,6 +109,19 @@ describe('notification resolver routing (WO-8c)', () => {
     const out = await notificationResolver.resolve(evt('ticket.status_changed'))
     expect(out.map((t) => t.type)).toEqual(['ticket_status_bell'])
     expect(h.getTicketStatusChangedTargets).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes ticket.replied and ticket.note_added to the watcher bells', async () => {
+    const replied = await notificationResolver.resolve(evt('ticket.replied'))
+    expect(replied.map((t) => t.type)).toEqual(['ticket_replied_bell'])
+    expect(h.getTicketRepliedTargets).toHaveBeenCalledTimes(1)
+
+    const note = await notificationResolver.resolve(evt('ticket.note_added'))
+    expect(note.map((t) => t.type)).toEqual(['ticket_note_bell'])
+    expect(h.getTicketNoteAddedTargets).toHaveBeenCalledTimes(1)
+
+    expect(notificationResolver.interestedIn('ticket.replied')).toBe(true)
+    expect(notificationResolver.interestedIn('ticket.note_added')).toBe(true)
   })
 
   it('routes message.created to the new-message team bell', async () => {

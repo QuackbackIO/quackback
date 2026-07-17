@@ -34,6 +34,9 @@ describe('catalogue payloads (WO-5)', () => {
       content: 'hi',
       attachments: [{ name: 'a.png', url: 'https://x/a.png', contentType: 'image/png', size: 10 }],
       senderType: 'agent',
+      title: 'Cannot log in',
+      authorName: 'Sarah',
+      requesterPrincipalId: 'principal_requester',
     }
     expect(def.payload.parse(good)).toMatchObject({ senderType: 'agent' })
     expect(() => def.payload.parse({ ...good, senderType: 'robot' })).toThrow()

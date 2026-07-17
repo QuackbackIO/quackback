@@ -27,6 +27,7 @@ import {
   conversationMessages,
   conversations,
   ticketConversations,
+  ticketSubscriptions,
   eq,
   and,
   desc,
@@ -87,6 +88,7 @@ import {
 } from '../ticket.service'
 import { NotFoundError } from '@/lib/shared/errors'
 import { listTicketMessages, sendTicketMessage, addTicketNote } from '../ticket-message.service'
+import { unsubscribeFromTicket } from '../ticket-subscription.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 
@@ -588,6 +590,74 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     // Re-assigning the identical teammate changes nothing → no second hook.
     await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
     expect(webhooks.emitTicketAssigned).toHaveBeenCalledTimes(1)
+  })
+
+  describe('watcher auto-subscribe (ticket subscriptions)', () => {
+    const subsFor = (ticketId: TicketId) =>
+      testDb.select().from(ticketSubscriptions).where(eq(ticketSubscriptions.ticketId, ticketId))
+
+    it('createTicket subscribes the requester in the same transaction; no requester, no row', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const requester = await seedTeammate()
+
+      const withRequester = await createTicket(
+        { type: 'customer', title: 'Watched from birth', requesterPrincipalId: requester },
+        adminActor()
+      )
+      const rows = await subsFor(withRequester.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ principalId: requester, reason: 'requester' })
+
+      const withoutRequester = await createTicket(
+        { type: 'back_office', title: 'Nobody asked' },
+        adminActor()
+      )
+      expect(await subsFor(withoutRequester.id)).toHaveLength(0)
+    })
+
+    it('assignTicket subscribes the assignee on a real change only; unwatch + new assignment re-subscribes', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = adminActor()
+      const first = await seedTeammate()
+      const second = await seedTeammate()
+      const created = await createTicket({ type: 'back_office', title: 'Assign me' }, actor)
+
+      await assignTicket(created.id, { assigneePrincipalId: first }, actor)
+      let rows = await subsFor(created.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ principalId: first, reason: 'assignee' })
+
+      // Explicit unwatch, then a no-op re-assign: nothing moved, no row returns.
+      await unsubscribeFromTicket(first, created.id)
+      await assignTicket(created.id, { assigneePrincipalId: first }, actor)
+      expect(await subsFor(created.id)).toHaveLength(0)
+
+      // A real assignment change re-opts the new assignee in (D1 consequence,
+      // pinned deliberately).
+      await assignTicket(created.id, { assigneePrincipalId: second }, actor)
+      await unsubscribeFromTicket(second, created.id)
+      await assignTicket(created.id, { assigneePrincipalId: first }, actor)
+      rows = await subsFor(created.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ principalId: first, reason: 'assignee' })
+    })
+
+    it('an agent reply subscribes the author as replier; an internal note subscribes nobody', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const author = await messageAuthorActor()
+      const created = await createTicket({ type: 'customer', title: 'Reply watch' }, adminActor())
+
+      await addTicketNote(author, { ticketId: created.id, content: 'internal note first' })
+      expect(await subsFor(created.id)).toHaveLength(0)
+
+      await sendTicketMessage(author, { ticketId: created.id, content: 'customer-visible reply' })
+      const rows = await subsFor(created.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ principalId: author.principalId, reason: 'replier' })
+    })
   })
 
   describe('realtime publish (unified inbox §3.2, M3)', () => {

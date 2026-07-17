@@ -101,6 +101,20 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     group: 'support',
     surfaces: ['admin'],
   },
+  {
+    type: 'ticket_replied',
+    label: 'Ticket replies',
+    description: 'A ticket you follow receives a reply',
+    group: 'support',
+    surfaces: ['admin', 'portal'],
+  },
+  {
+    type: 'ticket_note_added',
+    label: 'Ticket internal notes',
+    description: 'A ticket you follow gets an internal note',
+    group: 'support',
+    surfaces: ['admin'],
+  },
   // Changelog
   {
     type: 'changelog_published',

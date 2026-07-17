@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useRouteContext } from '@tanstack/react-router'
 import {
   ArrowTopRightOnSquareIcon,
+  BellIcon,
   BuildingOffice2Icon,
   CalendarIcon,
   CheckBadgeIcon,
@@ -51,6 +52,7 @@ import {
   TicketStatusControl,
   TicketAssigneeControl,
   TicketPriorityControl,
+  TicketWatchControl,
 } from '@/components/admin/inbox/ticket-controls'
 import { TicketLinks } from '@/components/admin/inbox/ticket-links'
 import { TicketActivityTimeline } from '@/components/admin/inbox/ticket-activity-timeline'
@@ -539,6 +541,11 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
               )
             )}
           </Row>
+          {isTicketItem && ticket && (
+            <Row icon={BellIcon} label="Watchers" align="start">
+              <TicketWatchControl ticketId={ticket.id} />
+            </Row>
+          )}
           {!isTicketItem && conversation && (
             <Row icon={TagIcon} label="Tags" align="start">
               <div className="flex flex-wrap justify-end gap-1">

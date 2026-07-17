@@ -187,6 +187,8 @@ export {
   ticketLinksRelations,
   ticketActivity,
   ticketActivityRelations,
+  ticketSubscriptions,
+  ticketSubscriptionsRelations,
   DEFAULT_TICKET_STATUSES,
   // Schema tables - email channel (support platform §4.8)
   channelAccounts,
@@ -451,6 +453,7 @@ export type {
 } from '@quackback/db'
 export type { OfficeHoursSchedule, OfficeHoursInterval } from '@quackback/db'
 export type { ChangelogSubscriptionSource } from '@quackback/db'
+export type { TicketSubscriptionReason } from '@quackback/db'
 export type {
   StatusComponentStatus,
   StatusIncidentStatus,

@@ -291,7 +291,10 @@ const cases: Array<{ type: string; run: () => Promise<void> }> = [
         createId('conversation_message'),
         'reply',
         attachments(),
-        'agent'
+        'agent',
+        'Cannot log in',
+        'Sarah',
+        createId('principal')
       ),
   },
   {
@@ -303,7 +306,9 @@ const cases: Array<{ type: string; run: () => Promise<void> }> = [
         createId('conversation_message'),
         'note',
         null,
-        'agent'
+        'agent',
+        'Cannot log in',
+        'Marco'
       ),
   },
   {

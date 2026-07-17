@@ -59,14 +59,26 @@ export function getNotificationTarget(
     return { to: '/admin/inbox', search: { i: notification.ticketId } }
   }
 
-  // A ticket-stage change notifies the requester (portal); deep-link to the thread.
-  // Deliberately NOT `/admin/inbox?i=` (UNIFIED-INBOX-SPEC.md §4 suggests this):
-  // `existing.requesterPrincipalId` (ticket.service.ts) is only ever set from
-  // `PortalUserPicker`, so every recipient of this notification is a portal
-  // customer without admin access — routing them into `/admin/inbox` would
-  // strand them outside the workspace they can reach.
-  if (notification.type === 'ticket_status_changed' && notification.ticketId) {
+  // Ticket-stage changes and replies reach two audiences since watchers: the
+  // requester (portal thread — an agent inbox link would strand them) and
+  // agent watchers (admin inbox — the portal thread is requester-only and
+  // would 404 for them). The per-recipient `audience` metadata stamped by
+  // buildNotifications disambiguates; rows created before that field existed
+  // default to portal, matching their requester-only recipient set.
+  if (
+    (notification.type === 'ticket_status_changed' || notification.type === 'ticket_replied') &&
+    notification.ticketId
+  ) {
+    if (notification.audience === 'admin') {
+      return { to: '/admin/inbox', search: { i: notification.ticketId } }
+    }
     return { to: '/support/ticket/$ticketId', params: { ticketId: notification.ticketId } }
+  }
+
+  // Internal-note bells only ever reach agents (role-filtered in the target
+  // builder), so the admin inbox is always the destination.
+  if (notification.type === 'ticket_note_added' && notification.ticketId) {
+    return { to: '/admin/inbox', search: { i: notification.ticketId } }
   }
 
   // Deep-link to the specific changelog entry when we have its id. Rows created

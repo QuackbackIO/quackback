@@ -41,6 +41,7 @@ vi.mock('@/components/admin/inbox/ticket-controls', () => ({
   TicketStatusControl: () => null,
   TicketAssigneeControl: () => null,
   TicketPriorityControl: () => null,
+  TicketWatchControl: () => null,
 }))
 vi.mock('@/components/admin/inbox/ticket-links', () => ({ TicketLinks: () => null }))
 vi.mock('@/components/admin/users/block-person-control', () => ({

@@ -73,6 +73,16 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     iconClass: 'text-violet-500',
     bgClass: 'bg-violet-500/10',
   },
+  ticket_replied: {
+    icon: TicketIcon,
+    iconClass: 'text-sky-500',
+    bgClass: 'bg-sky-500/10',
+  },
+  ticket_note_added: {
+    icon: TicketIcon,
+    iconClass: 'text-amber-500',
+    bgClass: 'bg-amber-500/10',
+  },
   comment_mentioned: {
     icon: AtSymbolIcon,
     iconClass: 'text-fuchsia-500',

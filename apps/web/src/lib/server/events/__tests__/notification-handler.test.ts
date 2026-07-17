@@ -409,6 +409,149 @@ describe('notificationHook — ticket.status_changed', () => {
   })
 })
 
+describe('notificationHook — ticket.replied (watchers)', () => {
+  function makeEvent(): EventData {
+    return {
+      id: 'evt-ticket-replied-1',
+      type: 'ticket.replied',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        messageId: 'conversation_message_1',
+        content: 'Fix is queued for the next patch.',
+        attachments: null,
+        senderType: 'agent',
+        title: 'Cannot log in',
+        authorName: 'Sarah',
+        requesterPrincipalId: 'principal_requester',
+      },
+    } as EventData
+  }
+  const config = {
+    ticketId: 'ticket_1',
+    title: 'Cannot log in',
+    authorName: 'Sarah',
+    preview: 'Fix is queued for the next patch.',
+    requesterPrincipalId: 'principal_requester',
+  }
+
+  it('builds ticket_replied rows for every recipient with per-recipient audience metadata', async () => {
+    const target: NotificationTarget = {
+      principalIds: ['principal_requester' as never, 'principal_agent_1' as never],
+    }
+    await notificationHook.run(makeEvent(), target, config)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_requester',
+        type: 'ticket_replied',
+        title: 'Sarah replied on Cannot log in',
+        body: 'Fix is queued for the next patch.',
+        metadata: { ticketId: 'ticket_1', actorName: 'Sarah', audience: 'portal' },
+      }),
+      expect.objectContaining({
+        principalId: 'principal_agent_1',
+        type: 'ticket_replied',
+        metadata: { ticketId: 'ticket_1', actorName: 'Sarah', audience: 'admin' },
+      }),
+    ])
+  })
+
+  it('drops a principal whose matrix turns ticket_replied inApp off (per-type preference)', async () => {
+    prefsSpy.mockResolvedValueOnce(
+      new Map([
+        ['principal_agent_1', { emailMuted: false, matrix: { ticket_replied: { inApp: false } } }],
+      ])
+    )
+    const target: NotificationTarget = {
+      principalIds: ['principal_requester' as never, 'principal_agent_1' as never],
+    }
+    await notificationHook.run(makeEvent(), target, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch).toHaveLength(1)
+    expect(batch[0]).toMatchObject({ principalId: 'principal_requester' })
+  })
+})
+
+describe('notificationHook — ticket.note_added (agent watchers)', () => {
+  it('builds admin-audience ticket_note_added rows', async () => {
+    const event = {
+      id: 'evt-ticket-note-1',
+      type: 'ticket.note_added',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        messageId: 'conversation_message_2',
+        content: 'Repro confirmed on staging.',
+        attachments: null,
+        senderType: 'agent',
+        title: 'Cannot log in',
+        authorName: 'Marco',
+      },
+    } as EventData
+    const target: NotificationTarget = { principalIds: ['principal_agent_1' as never] }
+    const config = {
+      ticketId: 'ticket_1',
+      title: 'Cannot log in',
+      authorName: 'Marco',
+      preview: 'Repro confirmed on staging.',
+    }
+
+    await notificationHook.run(event, target, config)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_agent_1',
+        type: 'ticket_note_added',
+        title: 'Marco added an internal note on Cannot log in',
+        body: 'Repro confirmed on staging.',
+        metadata: { ticketId: 'ticket_1', actorName: 'Marco', audience: 'admin' },
+      }),
+    ])
+  })
+})
+
+describe('notificationHook — ticket.status_changed (watcher audience)', () => {
+  it('marks the requester portal and agent watchers admin when the config carries the requester', async () => {
+    const event = {
+      id: 'evt-ticket-status-2',
+      type: 'ticket.status_changed',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        previousStatus: 'open',
+        newStatus: 'closed',
+        stage: 'resolved',
+        previousStage: 'received',
+        requesterPrincipalId: 'principal_requester',
+        title: 'Cannot log in',
+      },
+    } as EventData
+    const target: NotificationTarget = {
+      principalIds: ['principal_requester' as never, 'principal_agent_1' as never],
+    }
+    const config = {
+      ticketId: 'ticket_1',
+      title: 'Cannot log in',
+      stageLabel: 'Resolved',
+      previousStageLabel: 'Received',
+      requesterPrincipalId: 'principal_requester',
+    }
+
+    await notificationHook.run(event, target, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch[0]).toMatchObject({
+      principalId: 'principal_requester',
+      metadata: { ticketId: 'ticket_1', audience: 'portal' },
+    })
+    expect(batch[1]).toMatchObject({
+      principalId: 'principal_agent_1',
+      metadata: { ticketId: 'ticket_1', audience: 'admin' },
+    })
+  })
+})
+
 describe('notificationHook — assistant.handed_off', () => {
   it('creates a hand-off bell with the truncated reason as the body', async () => {
     const event = {

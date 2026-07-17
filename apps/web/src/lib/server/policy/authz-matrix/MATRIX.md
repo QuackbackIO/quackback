@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 576 surfaces
+### Server functions (`requireAuth`) — 587 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -604,6 +604,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::createMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::searchTicketsFn | ticket.view |
 | `lib/server/functions/tickets.ts`::searchMyTicketsFn | END_USER (any authenticated) |
+| `lib/server/functions/tickets.ts`::getTicketWatchStatusFn | ticket.view |
+| `lib/server/functions/tickets.ts`::watchTicketFn | ticket.view |
+| `lib/server/functions/tickets.ts`::unwatchTicketFn | ticket.view |
+| `lib/server/functions/tickets.ts`::muteTicketFn | ticket.view |
+| `lib/server/functions/tickets.ts`::unmuteTicketFn | ticket.view |
+| `lib/server/functions/tickets.ts`::listTicketWatchersFn | ticket.view |
+| `lib/server/functions/tickets.ts`::adminAddTicketWatcherFn | ticket.assign |
+| `lib/server/functions/tickets.ts`::adminRemoveTicketWatcherFn | ticket.assign |
+| `lib/server/functions/tickets.ts`::getMyTicketWatchStatusFn | END_USER (any authenticated) |
+| `lib/server/functions/tickets.ts`::watchMyTicketFn | END_USER (any authenticated) |
+| `lib/server/functions/tickets.ts`::unwatchMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getPresignedUploadUrlFn | post.create |
 | `lib/server/functions/uploads.ts`::getChangelogImageUploadUrlFn | changelog.manage |
 | `lib/server/functions/uploads.ts`::getPostImageUploadUrlFn | post.create |
@@ -859,7 +870,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-186 of 852 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+186 of 863 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

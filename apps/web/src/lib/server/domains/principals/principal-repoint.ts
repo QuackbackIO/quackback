@@ -46,6 +46,8 @@ import {
   channelIdentities,
   tickets,
   ticketActivity,
+  ticketSubscriptions,
+  ticketSummaries,
   workflowRuns,
   workflowRunEvents,
   changelogSubscriptions,
@@ -344,6 +346,19 @@ export const REPOINT_STEPS: RepointStep[] = [
     'Ticket requester. A ticket filed while anonymous (portal/Messenger) follows the person on merge. Unlike conversations.visitor_principal_id (ON DELETE RESTRICT), this FK is ON DELETE SET NULL, so this re-point step (not the constraint) is what keeps the ticket attributed when the anonymous principal is torn down.'
   ),
   simpleRepoint(
+    'ticket_summaries',
+    ticketSummaries,
+    'requester_principal_id',
+    'Denormalized tickets.requester_principal_id on the resolution-grounding snapshot: follows the person for the same reason the ticket itself does.'
+  ),
+  collisionRepoint(
+    'ticket_subscriptions',
+    ticketSubscriptions,
+    'principal_id',
+    ['ticket_id'],
+    'Ticket watchers; unique (ticket_id, principal_id). An anonymous requester keeps watching after identifying; the identified subscription wins on collision, mirroring post_subscriptions.'
+  ),
+  simpleRepoint(
     'ticket_activity',
     ticketActivity,
     'principal_id',
@@ -466,6 +481,8 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'guidance rule authors are team members, never anonymous',
   'assistant_snippets.created_by_id':
     'snippet authors are team members with assistant.manage, never anonymous',
+  'assistant_actions.created_by_id':
+    'custom-action authors are team members with assistant.manage, never anonymous',
   'assistant_pending_actions.decided_by_id':
     'the agent who approves/rejects a pending action is a team member, never anonymous',
   'assistant_tool_calls.principal_id':

@@ -526,12 +526,24 @@ export async function dispatchTicketReplied(
   messageId: string,
   content: string,
   attachments: EventTicketMessageAttachment[] | null,
-  senderType: 'agent' | 'visitor'
+  senderType: 'agent' | 'visitor',
+  title: string,
+  authorName: string | null,
+  requesterPrincipalId: string | null
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.replied',
-    data: { ticket, messageId, content, attachments, senderType },
+    data: {
+      ticket,
+      messageId,
+      content,
+      attachments,
+      senderType,
+      title,
+      authorName,
+      requesterPrincipalId,
+    },
   })
 }
 
@@ -541,12 +553,14 @@ export async function dispatchTicketNoteAdded(
   messageId: string,
   content: string,
   attachments: EventTicketMessageAttachment[] | null,
-  senderType: 'agent' | 'visitor'
+  senderType: 'agent' | 'visitor',
+  title: string,
+  authorName: string | null
 ): Promise<void> {
   await dispatchEvent({
     ...eventEnvelope(actor),
     type: 'ticket.note_added',
-    data: { ticket, messageId, content, attachments, senderType },
+    data: { ticket, messageId, content, attachments, senderType, title, authorName },
   })
 }
 

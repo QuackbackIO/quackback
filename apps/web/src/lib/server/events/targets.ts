@@ -3,7 +3,15 @@
  * Queries database to determine all targets for an event.
  */
 
-import type { ConversationId, PostId, PrincipalId, SegmentId, TeamId, UserId } from '@quackback/ids'
+import type {
+  ConversationId,
+  PostId,
+  PrincipalId,
+  SegmentId,
+  TeamId,
+  TicketId,
+  UserId,
+} from '@quackback/ids'
 import {
   db,
   eq,
@@ -757,21 +765,45 @@ export function getConversationNoteMentionedTargets(event: EventData): HookTarge
 }
 
 /**
- * Notification target for `ticket.status_changed` (WO-3 slice 4): the
- * requester's bell, reproducing ticket.service.ts's deleted inline block
- * EXACTLY — fires only when the new stage is non-null, differs from the
- * previous stage (a same-stage or null-stage move stays silent, mirroring the
- * thread-event gate right above it in the service), AND a requester exists
- * (a back-office ticket or a tracker — which carries no requester of its
- * own — never self-bells). Stage labels are resolved HERE, not carried in the
- * payload, so a later workspace label edit doesn't retroactively change
- * historical event data.
+ * Notification target for `ticket.status_changed` (WO-3 slice 4, extended
+ * for watchers): the requester ∪ the ticket's watchers, in ONE combined
+ * target (single-target invariant, see getTicketAssignedTargets). Fires only
+ * when the new stage is non-null and differs from the previous stage (a
+ * same-stage or null-stage move stays silent for EVERYONE — the requester
+ * must never see internal status names, and agent watchers get stage moves,
+ * not churn). Watchers are actor-excluded; the requester keeps the original
+ * unconditional bell semantics. Stage labels are resolved HERE, not carried
+ * in the payload, so a later workspace label edit doesn't retroactively
+ * change historical event data.
  */
+/**
+ * Active watchers to notify for a ticket event, actor-excluded. `agentsOnly`
+ * narrows to team-member watchers (internal-note recipients). Dynamic import
+ * avoids a static cycle through the tickets domain.
+ */
+async function actorExcludedTicketWatchers(
+  ticketId: TicketId,
+  actorPrincipalId: string | undefined,
+  opts?: { agentsOnly?: boolean }
+): Promise<PrincipalId[]> {
+  const { getTicketWatchersForEvent, getTicketAgentWatchersForEvent } =
+    await import('@/lib/server/domains/tickets/ticket-subscription.service')
+  const watchers = opts?.agentsOnly
+    ? await getTicketAgentWatchersForEvent(ticketId)
+    : await getTicketWatchersForEvent(ticketId)
+  return watchers.filter((id) => id !== actorPrincipalId)
+}
+
 export async function getTicketStatusChangedTargets(event: EventData): Promise<HookTarget | null> {
   if (event.type !== 'ticket.status_changed') return null
   const { ticket, stage, previousStage, requesterPrincipalId, title } = event.data
   if (!stage || stage === previousStage) return null
-  if (!requesterPrincipalId) return null
+
+  const recipients = new Set<PrincipalId>(
+    await actorExcludedTicketWatchers(ticket.id as TicketId, event.actor.principalId)
+  )
+  if (requesterPrincipalId) recipients.add(requesterPrincipalId as PrincipalId)
+  if (recipients.size === 0) return null
 
   const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
   const stageLabels = await getStageLabels()
@@ -782,8 +814,75 @@ export async function getTicketStatusChangedTargets(event: EventData): Promise<H
 
   return {
     type: 'notification',
-    target: { principalIds: [requesterPrincipalId as PrincipalId] },
-    config: { ticketId: ticket.id, title, stageLabel, previousStageLabel },
+    target: { principalIds: [...recipients] },
+    config: {
+      ticketId: ticket.id,
+      title,
+      stageLabel,
+      previousStageLabel,
+      requesterPrincipalId: (requesterPrincipalId as string | undefined) ?? null,
+    },
+  }
+}
+
+/**
+ * Notification target for `ticket.replied`: everyone watching the ticket
+ * (ticket_subscriptions; the service already drops active mutes) minus the
+ * actor, in ONE combined target. An agent reply bells the
+ * requester-as-watcher plus agent watchers; a requester reply bells agent
+ * watchers (the requester is the actor, excluded).
+ */
+export async function getTicketRepliedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.replied') return null
+  const { ticket, content, senderType, title, authorName, requesterPrincipalId } = event.data
+
+  const recipients = await actorExcludedTicketWatchers(
+    ticket.id as TicketId,
+    event.actor.principalId
+  )
+  if (recipients.length === 0) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: {
+      ticketId: ticket.id,
+      title,
+      authorName: authorName ?? (senderType === 'visitor' ? 'The requester' : 'A teammate'),
+      preview: truncate(content, 140),
+      requesterPrincipalId: requesterPrincipalId ?? null,
+    },
+  }
+}
+
+/**
+ * Notification target for `ticket.note_added`: watching TEAM MEMBERS only —
+ * a requester-watcher is structurally excluded by the role filter, so an
+ * internal note can never leak to a customer through the watcher path.
+ * Actor excluded.
+ */
+export async function getTicketNoteAddedTargets(event: EventData): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.note_added') return null
+  const { ticket, content, title, authorName } = event.data
+
+  const recipients = await actorExcludedTicketWatchers(
+    ticket.id as TicketId,
+    event.actor.principalId,
+    {
+      agentsOnly: true,
+    }
+  )
+  if (recipients.length === 0) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: {
+      ticketId: ticket.id,
+      title,
+      authorName: authorName ?? 'A teammate',
+      preview: truncate(content, 140),
+    },
   }
 }
 

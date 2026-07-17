@@ -61,6 +61,9 @@ export interface NotificationConfig {
   title?: string
   stageLabel?: string
   previousStageLabel?: string | null
+  // ticket.status_changed + ticket.replied (watchers): lets buildNotifications
+  // mark the requester's row portal-audience and everyone else's admin.
+  requesterPrincipalId?: string | null
   // message.created (WO-3 slice 5) — read back out by the anti-spam presence
   // gate in run(), below.
   isFirstMessage?: boolean
@@ -291,7 +294,7 @@ function buildNotifications(
   }
 
   if (event.type === 'ticket.status_changed') {
-    const { ticketId, title, stageLabel, previousStageLabel } = config
+    const { ticketId, title, stageLabel, previousStageLabel, requesterPrincipalId } = config
     const body = previousStageLabel
       ? `Moved from ${previousStageLabel} to ${stageLabel}`
       : 'Open the ticket to see the latest update.'
@@ -300,7 +303,46 @@ function buildNotifications(
       type: 'ticket_status_changed' as NotificationType,
       title: `${title} is now ${stageLabel}`,
       body,
-      metadata: { ticketId },
+      // audience routes the deep link: the requester's row opens the portal
+      // thread, an agent watcher's row opens the admin inbox. A config with no
+      // requesterPrincipalId at all is a pre-watchers outbox row being
+      // redrained — omit audience so the client's portal default preserves its
+      // requester-only behavior.
+      metadata:
+        requesterPrincipalId === undefined
+          ? { ticketId }
+          : {
+              ticketId,
+              audience:
+                requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
+            },
+    }))
+  }
+
+  if (event.type === 'ticket.replied') {
+    const { ticketId, title, authorName, preview, requesterPrincipalId } = config
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'ticket_replied' as NotificationType,
+      title: `${authorName} replied on ${title}`,
+      body: preview,
+      metadata: {
+        ticketId,
+        actorName: authorName,
+        audience: requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
+      },
+    }))
+  }
+
+  if (event.type === 'ticket.note_added') {
+    const { ticketId, title, authorName, preview } = config
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'ticket_note_added' as NotificationType,
+      title: `${authorName} added an internal note on ${title}`,
+      body: preview,
+      // Note recipients are always agents (role-filtered in the target builder).
+      metadata: { ticketId, actorName: authorName, audience: 'admin' },
     }))
   }
 

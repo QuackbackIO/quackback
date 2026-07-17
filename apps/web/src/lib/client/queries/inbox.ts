@@ -26,6 +26,8 @@ import {
   listTicketMessagesFn,
   getTicketLinksFn,
   fetchTicketExternalLinksFn,
+  getTicketWatchStatusFn,
+  listTicketWatchersFn,
 } from '@/lib/server/functions/tickets'
 import type { TicketListFilter } from '@/lib/server/domains/tickets'
 import { asAgentMessage } from '@/lib/shared/conversation/types'
@@ -66,6 +68,10 @@ export const ticketKeys = {
   links: (id: TicketId) => [...ticketKeys.all(), 'links', id] as const,
   /** A single ticket's external issue links (GitHub). */
   externalLinks: (id: TicketId) => [...ticketKeys.all(), 'external-links', id] as const,
+  /** The caller's own watch status on a ticket (watching/reason/mutedUntil). */
+  watch: (id: TicketId) => [...ticketKeys.all(), 'watch', id] as const,
+  /** A ticket's full watcher list (admin watch control). */
+  watchers: (id: TicketId) => [...ticketKeys.all(), 'watchers', id] as const,
 }
 
 export const ticketQueries = {
@@ -108,6 +114,22 @@ export const ticketQueries = {
     queryOptions({
       queryKey: ticketKeys.externalLinks(id),
       queryFn: () => fetchTicketExternalLinksFn({ data: { ticketId: id } }),
+      staleTime: 30_000,
+    }),
+
+  /** The caller's own watch status on a ticket, for the watch control's trigger. */
+  watchStatus: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.watch(id),
+      queryFn: () => getTicketWatchStatusFn({ data: { ticketId: id } }),
+      staleTime: 30_000,
+    }),
+
+  /** A ticket's full watcher list (avatar stack + manage popover). */
+  watchers: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.watchers(id),
+      queryFn: () => listTicketWatchersFn({ data: { ticketId: id } }),
       staleTime: 30_000,
     }),
 }

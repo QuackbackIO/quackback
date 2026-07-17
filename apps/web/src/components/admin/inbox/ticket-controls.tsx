@@ -4,10 +4,20 @@
  * server fn and reuses the conversation inbox's menu pieces (PriorityMenuItems,
  * AssigneeMenuItems, the team roster) so tickets and conversations feel the same.
  */
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDownIcon, CheckIcon, UserCircleIcon } from '@heroicons/react/24/solid'
+import {
+  ChevronDownIcon,
+  CheckIcon,
+  UserCircleIcon,
+  BellIcon,
+  BellSlashIcon,
+} from '@heroicons/react/24/solid'
+import { PlusIcon, XMarkIcon } from '@heroicons/react/16/solid'
 import { toast } from 'sonner'
+import type { TicketId, PrincipalId } from '@quackback/ids'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
+import type { TicketWatcher } from '@/lib/server/domains/tickets/ticket-subscription.service'
 import type { ConversationPriority } from '@/lib/shared/db-types'
 import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
@@ -20,9 +30,16 @@ import {
   useSetTicketStatus,
   useAssignTicket,
   useSetTicketPriority,
+  useWatchTicket,
+  useUnwatchTicket,
+  useMuteTicket,
+  useUnmuteTicket,
+  useAdminAddTicketWatcher,
+  useAdminRemoveTicketWatcher,
 } from '@/lib/client/mutations/inbox'
 import { TicketStatusChip } from '@/components/admin/inbox/ticket-chips'
 import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +48,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/shared/utils'
 
 const triggerClass =
@@ -209,5 +234,252 @@ export function TicketPriorityControl({
         <PriorityMenuItems selected={ticket.priority} onSelect={select} />
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Watchers (support platform ticket-watchers): the caller's own watch/mute
+// state, plus a lighter version of the post voters stack — an overlapping
+// avatar stack capped at 5 that opens a Popover (not a modal) listing every
+// watcher, with a per-row remove and a compact add-watcher select scoped to
+// the same teammate roster the assignee control reads.
+// ---------------------------------------------------------------------------
+
+const REASON_LABEL: Record<TicketWatcher['reason'], string> = {
+  requester: 'Requester',
+  assignee: 'Assignee',
+  replier: 'Replied',
+  manual: 'Added',
+}
+
+function isMuted(mutedUntil: Date | string | null | undefined): boolean {
+  if (!mutedUntil) return false
+  return new Date(mutedUntil).getTime() > Date.now()
+}
+
+/** The caller's own watch/mute control, plus the watcher avatar stack. Renders
+ *  in the ticket Properties section (inbox-detail-panel.tsx), ticket items only. */
+export function TicketWatchControl({ ticketId }: { ticketId: TicketId }) {
+  const { data: status } = useQuery(ticketQueries.watchStatus(ticketId))
+  const { data: watchers } = useQuery(ticketQueries.watchers(ticketId))
+  const watch = useWatchTicket()
+  const unwatch = useUnwatchTicket()
+  const mute = useMuteTicket()
+  const unmute = useUnmuteTicket()
+
+  const watching = status?.watching ?? false
+  const muted = isMuted(status?.mutedUntil)
+  const pending = watch.isPending || unwatch.isPending || mute.isPending || unmute.isPending
+
+  const label = muted ? 'Muted' : watching ? 'Watching' : 'Watch'
+  const TriggerIcon = muted ? BellSlashIcon : BellIcon
+
+  return (
+    <div className="flex items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" disabled={pending} className={triggerClass}>
+            <TriggerIcon className="size-4" />
+            <span>{label}</span>
+            <ChevronDownIcon className="size-3.5 shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {!watching && (
+            <DropdownMenuItem
+              onClick={() =>
+                watch.mutate({ ticketId }, { onError: () => toast.error('Failed to watch ticket') })
+              }
+            >
+              <BellIcon className="size-4" /> Watch
+            </DropdownMenuItem>
+          )}
+          {watching && (
+            <DropdownMenuItem
+              onClick={() =>
+                unwatch.mutate(
+                  { ticketId },
+                  { onError: () => toast.error('Failed to unwatch ticket') }
+                )
+              }
+            >
+              <BellSlashIcon className="size-4" /> Unwatch
+            </DropdownMenuItem>
+          )}
+          {watching && !muted && (
+            <DropdownMenuItem
+              onClick={() =>
+                mute.mutate(
+                  { ticketId, days: 7 },
+                  { onError: () => toast.error('Failed to mute ticket') }
+                )
+              }
+            >
+              <BellSlashIcon className="size-4" /> Mute for a week
+            </DropdownMenuItem>
+          )}
+          {muted && (
+            <DropdownMenuItem
+              onClick={() =>
+                unmute.mutate(
+                  { ticketId },
+                  { onError: () => toast.error('Failed to unmute ticket') }
+                )
+              }
+            >
+              <BellIcon className="size-4" /> Unmute
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <WatcherAvatarStack ticketId={ticketId} watchers={watchers} />
+    </div>
+  )
+}
+
+function WatcherAvatarStack({
+  ticketId,
+  watchers,
+}: {
+  ticketId: TicketId
+  watchers: TicketWatcher[] | undefined
+}) {
+  const [open, setOpen] = useState(false)
+  const displayed = watchers?.slice(0, 5) ?? []
+  const remaining = Math.max(0, (watchers?.length ?? 0) - 5)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        {displayed.length > 0 ? (
+          <button
+            type="button"
+            className="flex items-center -space-x-2 transition-opacity hover:opacity-80"
+            aria-label="Manage watchers"
+          >
+            {displayed.map((w, i) => (
+              <Avatar
+                key={w.principalId}
+                src={w.avatarUrl}
+                name={w.displayName ?? 'Watcher'}
+                className="size-6 text-xs ring-2 ring-background"
+                style={{ zIndex: i + 1 }}
+              />
+            ))}
+            {remaining > 0 && (
+              <span
+                className="relative flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-1 text-[11px] font-medium text-muted-foreground ring-2 ring-background"
+                style={{ zIndex: displayed.length + 1 }}
+              >
+                +{remaining}
+              </span>
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-[13px] text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+          >
+            <PlusIcon className="size-3" />
+            <span>Add watcher</span>
+          </button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-0" sideOffset={4}>
+        <WatcherManagePanel ticketId={ticketId} watchers={watchers ?? []} />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function WatcherManagePanel({
+  ticketId,
+  watchers,
+}: {
+  ticketId: TicketId
+  watchers: TicketWatcher[]
+}) {
+  const { data: members } = useTeamMembers()
+  const addWatcher = useAdminAddTicketWatcher()
+  const removeWatcher = useAdminRemoveTicketWatcher()
+
+  const watcherIds = new Set(watchers.map((w) => w.principalId))
+  const candidates = (members ?? []).filter((m) => !watcherIds.has(m.id))
+
+  return (
+    <div>
+      <div className="max-h-56 overflow-y-auto p-2" onWheel={(e) => e.stopPropagation()}>
+        {watchers.length === 0 ? (
+          <p className="py-3 text-center text-xs text-muted-foreground/60">No watchers yet</p>
+        ) : (
+          <div className="space-y-2">
+            {watchers.map((w) => (
+              <div key={w.principalId} className="group flex items-center gap-2">
+                <Avatar
+                  src={w.avatarUrl}
+                  name={w.displayName ?? 'Watcher'}
+                  className="size-6 shrink-0 text-xs"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-foreground">
+                    {w.displayName ?? 'Unnamed'}
+                  </p>
+                </div>
+                {isMuted(w.mutedUntil) && (
+                  <BellSlashIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
+                )}
+                <Badge size="sm" variant="subtle" shape="pill">
+                  {REASON_LABEL[w.reason]}
+                </Badge>
+                <button
+                  type="button"
+                  onClick={() =>
+                    removeWatcher.mutate(
+                      { ticketId, principalId: w.principalId },
+                      { onError: () => toast.error('Failed to remove watcher') }
+                    )
+                  }
+                  disabled={
+                    removeWatcher.isPending &&
+                    removeWatcher.variables?.principalId === w.principalId
+                  }
+                  className="hidden size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive group-hover:flex"
+                  aria-label="Remove watcher"
+                >
+                  <XMarkIcon className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="border-t border-border/30 p-2">
+        <Select
+          value=""
+          disabled={addWatcher.isPending || candidates.length === 0}
+          onValueChange={(principalId) =>
+            addWatcher.mutate(
+              { ticketId, principalId: principalId as PrincipalId },
+              { onError: () => toast.error('Failed to add watcher') }
+            )
+          }
+        >
+          <SelectTrigger size="sm" className="w-full">
+            <PlusIcon className="size-3.5 shrink-0" />
+            <SelectValue
+              placeholder={candidates.length === 0 ? 'No more teammates' : 'Add watcher…'}
+            />
+          </SelectTrigger>
+          <SelectContent className="max-h-56">
+            {candidates.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                <Avatar src={m.image} name={m.name ?? m.email} className="size-5 text-xs" />
+                <span className="truncate">{m.name ?? m.email ?? 'Unnamed'}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
   )
 }

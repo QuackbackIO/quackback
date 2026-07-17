@@ -75,6 +75,10 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
           // commenterName — fall back so their avatar still renders.
           const actorName = n.metadata?.actorName ?? n.metadata?.commenterName
           const actorAvatarUrl = n.metadata?.actorAvatarUrl
+          // Ticket bells carry a per-recipient audience so the client resolver
+          // can route the requester to the portal thread and agents to the
+          // admin inbox. Absent on pre-watchers rows.
+          const audience = n.metadata?.audience
           return {
             id: n.id,
             principalId: n.principalId,
@@ -89,6 +93,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
             incidentId: typeof incidentId === 'string' ? incidentId : null,
             actorName: typeof actorName === 'string' ? actorName : null,
             actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
+            audience: audience === 'admin' || audience === 'portal' ? audience : null,
             readAt: n.readAt?.toISOString() ?? null,
             archivedAt: n.archivedAt?.toISOString() ?? null,
             createdAt: n.createdAt.toISOString(),

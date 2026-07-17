@@ -130,3 +130,34 @@ export async function replyToMyTicket(
   void emitTicketReplied(actor, ticket, message)
   return { message }
 }
+
+// ---------------------------------------------------------------------------
+// Watch (ticket subscriptions), requester side: ownership-gated wrappers over
+// the subscription service. Watch/unwatch only — no requester mute (the
+// requester's volume is two events per ticket; per-type preferences live in
+// portal settings).
+// ---------------------------------------------------------------------------
+
+/** Watch state for the requester's own ticket. */
+export async function getMyTicketWatchStatus(actor: Actor, ticketId: TicketId) {
+  const principalId = requireRequester(actor)
+  await loadOwnedTicketOr404(ticketId, principalId)
+  const { getTicketWatchStatus } = await import('./ticket-subscription.service')
+  return getTicketWatchStatus(principalId, ticketId)
+}
+
+/** Re-watch the requester's own ticket (reason 'manual' — an explicit opt-in). */
+export async function watchMyTicket(actor: Actor, ticketId: TicketId): Promise<void> {
+  const principalId = requireRequester(actor)
+  await loadOwnedTicketOr404(ticketId, principalId)
+  const { subscribeToTicket } = await import('./ticket-subscription.service')
+  await subscribeToTicket(principalId, ticketId, 'manual')
+}
+
+/** Stop watching the requester's own ticket. */
+export async function unwatchMyTicket(actor: Actor, ticketId: TicketId): Promise<void> {
+  const principalId = requireRequester(actor)
+  await loadOwnedTicketOr404(ticketId, principalId)
+  const { unsubscribeFromTicket } = await import('./ticket-subscription.service')
+  await unsubscribeFromTicket(principalId, ticketId)
+}
