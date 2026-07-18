@@ -167,8 +167,10 @@ export async function linkTicketToIssue(
       ticketId,
       'external_linked',
       `Linked GitHub issue ${externalDisplayId}`,
-      { externalReference: externalDisplayId, externalUrl },
-      tx
+      {
+        metadata: { externalReference: externalDisplayId, externalUrl },
+        exec: tx,
+      }
     )
     return row
   })
@@ -207,8 +209,10 @@ export async function unlinkTicketIssue(
       ticketId,
       'external_unlinked',
       `Unlinked GitHub issue ${reference}`,
-      { externalReference: reference, externalUrl: removed.externalUrl ?? undefined },
-      tx
+      {
+        metadata: { externalReference: reference, externalUrl: removed.externalUrl ?? undefined },
+        exec: tx,
+      }
     )
     log.info({ ticket_id: ticketId, link_id: linkId }, 'ticket external link removed')
   })

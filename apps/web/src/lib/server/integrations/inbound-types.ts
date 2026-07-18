@@ -16,6 +16,14 @@ export interface InboundWebhookResult {
   externalStatus: string
   /** Event type for logging (e.g. 'issue.updated', 'taskStatusUpdated') */
   eventType: string
+  /**
+   * Semantic open/closed transition, when the provider payload states it
+   * outright (GitHub's `action: closed|reopened`). Most providers only report
+   * a workflow-state change with a status name, so this stays undefined and
+   * downstream copy falls back to naming the new status. Optional by design —
+   * do NOT derive it heuristically from status names.
+   */
+  transition?: 'closed' | 'reopened'
 }
 
 /**

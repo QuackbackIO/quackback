@@ -315,6 +315,13 @@ export const conversationMessages = pgTable(
     uniqueIndex('conversation_messages_email_message_id_idx')
       .using('btree', sql`(metadata ->> 'emailMessageId')`)
       .where(sql`(metadata ->> 'emailMessageId') IS NOT NULL`),
+    // Inbound-webhook dedupe: one external-status system note per (ticket,
+    // delivery) — a redelivered tracker webhook no-ops instead of double-noting
+    // (same idiom as emailMessageId above; one delivery fans to many tickets,
+    // hence the composite).
+    uniqueIndex('conversation_messages_inbound_delivery_key_idx')
+      .using('btree', table.ticketId, sql`(metadata ->> 'inboundDeliveryKey')`)
+      .where(sql`(metadata ->> 'inboundDeliveryKey') IS NOT NULL`),
   ]
 )
 

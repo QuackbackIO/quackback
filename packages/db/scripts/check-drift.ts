@@ -126,6 +126,23 @@ const EXEMPTIONS: { reason: string; pattern: RegExp }[] = [
       /^ALTER TABLE "invitation" ALTER COLUMN "magic_link_tokens" SET DEFAULT '\{\}'::text\[\];?$/,
   },
   {
+    // Composite partial unique index mixing a plain column with a jsonb ->>
+    // expression (0210). drizzle-kit introspects the expression member with an
+    // implicit ::text cast the TS declaration cannot render, so it re-emits
+    // the pair on every diff. The migration owns the real DDL; the TS
+    // declaration exists so the schema documents the dedupe contract.
+    reason:
+      'inbound-delivery dedupe index: jsonb ->> expression member does not round-trip introspection, drizzle-kit re-emits the CREATE',
+    pattern:
+      /^CREATE UNIQUE INDEX "conversation_messages_inbound_delivery_key_idx" ON "conversation_messages" USING btree /,
+  },
+  {
+    // Drop half of the spurious pair for the same index.
+    reason:
+      'inbound-delivery dedupe index: jsonb ->> expression member does not round-trip introspection, drizzle-kit re-emits the DROP',
+    pattern: /^DROP INDEX "conversation_messages_inbound_delivery_key_idx"/,
+  },
+  {
     // GIN pg_trgm index for the inbox message-content ILIKE search (0139,
     // narrowed to partial in 0209). It is declared in TS, but drizzle-kit cannot
     // introspect the gin_trgm_ops opclass, so it reads the index as absent and

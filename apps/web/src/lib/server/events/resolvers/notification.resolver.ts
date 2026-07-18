@@ -26,6 +26,7 @@ import {
   getTicketStatusChangedTargets,
   getTicketRepliedTargets,
   getTicketNoteAddedTargets,
+  getTicketExternalStatusChangedTargets,
   getMessageCreatedTargets,
   getTicketCreatedEmailTargets,
   getTicketRepliedEmailTargets,
@@ -63,6 +64,7 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
   'ticket.status_changed': getTicketStatusChangedTargets,
   'ticket.replied': getTicketRepliedTargets,
   'ticket.note_added': getTicketNoteAddedTargets,
+  'ticket.external_status_changed': getTicketExternalStatusChangedTargets,
   'message.created': getMessageCreatedTargets,
 }
 

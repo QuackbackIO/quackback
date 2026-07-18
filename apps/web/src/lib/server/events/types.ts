@@ -68,6 +68,9 @@ export const EVENT_TYPES = [
   'ticket.assigned',
   'ticket.replied',
   'ticket.note_added',
+  // Notification-only: a linked tracker issue changed status upstream (fired by
+  // the inbound integration webhook path, independent of any status mapping).
+  'ticket.external_status_changed',
   'assistant.handed_off',
   // Timer-driven triggers (see TIMER_DRIVEN_EVENT_TYPES above for the rationale).
   ...TIMER_DRIVEN_EVENT_TYPES,
@@ -432,6 +435,29 @@ export interface TicketAssignedPayload {
   previousTeamId: string | null
 }
 
+/**
+ * Payload for ticket.external_status_changed — a tracker issue linked to this
+ * ticket changed status on the external platform. Fired per linked ticket by
+ * the inbound webhook path BEFORE (and regardless of) status-mapping
+ * resolution, so an unmapped or same-status move still reaches agent watchers.
+ * Reference/url come from the stored link row (the inbound payload carries
+ * neither); `transition` is the provider-stated open/closed semantic when
+ * available (see InboundWebhookResult.transition), refining notification copy
+ * from "moved to X" to "was closed"/"was reopened".
+ */
+export interface TicketExternalStatusChangedPayload {
+  ticket: EventTicketRef
+  /** Ticket title — the ref carries no title, notification copy needs it. */
+  title: string
+  integrationType: string
+  /** Human-readable issue reference from the link row (e.g. "acme/app#412"). */
+  externalDisplayId: string | null
+  externalUrl: string | null
+  /** The provider's new status name (e.g. "Done", "Closed"). */
+  externalStatus: string
+  transition: 'closed' | 'reopened' | null
+}
+
 /** A message attachment carried on a ticket reply/note event. */
 export interface EventTicketMessageAttachment {
   name: string
@@ -640,6 +666,9 @@ export interface TicketRepliedEvent extends EventBase<'ticket.replied'> {
 export interface TicketNoteAddedEvent extends EventBase<'ticket.note_added'> {
   data: EventTicketMessageData
 }
+export interface TicketExternalStatusChangedEvent extends EventBase<'ticket.external_status_changed'> {
+  data: TicketExternalStatusChangedPayload
+}
 
 export interface AssistantHandedOffEvent extends EventBase<'assistant.handed_off'> {
   data: AssistantHandedOffPayload
@@ -702,6 +731,7 @@ export type EventData =
   | TicketAssignedEvent
   | TicketRepliedEvent
   | TicketNoteAddedEvent
+  | TicketExternalStatusChangedEvent
   | AssistantHandedOffEvent
   | ConversationCustomerUnresponsiveEvent
   | ConversationTeammateUnresponsiveEvent

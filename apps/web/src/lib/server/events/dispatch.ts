@@ -547,6 +547,31 @@ export async function dispatchTicketReplied(
   })
 }
 
+export async function dispatchTicketExternalStatusChanged(
+  actor: EventActor,
+  ticket: EventTicketRef,
+  title: string,
+  integrationType: string,
+  externalDisplayId: string | null,
+  externalUrl: string | null,
+  externalStatus: string,
+  transition: 'closed' | 'reopened' | null
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'ticket.external_status_changed',
+    data: {
+      ticket,
+      title,
+      integrationType,
+      externalDisplayId,
+      externalUrl,
+      externalStatus,
+      transition,
+    },
+  })
+}
+
 export async function dispatchTicketNoteAdded(
   actor: EventActor,
   ticket: EventTicketRef,

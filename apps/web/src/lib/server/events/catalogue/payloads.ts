@@ -225,6 +225,15 @@ export const P = {
     title: z.string(),
     authorName: nullableStr,
   }),
+  'ticket.external_status_changed': z.looseObject({
+    ticket: ticketRef,
+    title: z.string(),
+    integrationType: z.string(),
+    externalDisplayId: nullableStr,
+    externalUrl: nullableStr,
+    externalStatus: z.string(),
+    transition: z.enum(['closed', 'reopened']).nullable(),
+  }),
   // assistant + sla
   'assistant.handed_off': z.looseObject({ conversationId: id, reason: z.string() }),
   'sla.approaching_breach': z.looseObject({

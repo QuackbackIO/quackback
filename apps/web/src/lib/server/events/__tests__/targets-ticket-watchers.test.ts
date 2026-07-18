@@ -22,8 +22,12 @@ vi.mock('@/lib/server/domains/tickets/ticket-subscription.service', () => ({
   getTicketAgentWatchersForEvent: () => getTicketAgentWatchersForEvent(),
 }))
 
-const { getTicketRepliedTargets, getTicketNoteAddedTargets, getTicketStatusChangedTargets } =
-  await import('../targets')
+const {
+  getTicketRepliedTargets,
+  getTicketNoteAddedTargets,
+  getTicketStatusChangedTargets,
+  getTicketExternalStatusChangedTargets,
+} = await import('../targets')
 
 beforeEach(() => {
   getStageLabels.mockReset()
@@ -98,6 +102,57 @@ function statusEvent(overrides: Partial<Record<string, unknown>> = {}): EventDat
     },
   } as EventData
 }
+
+function externalStatusEvent(overrides: Partial<Record<string, unknown>> = {}): EventData {
+  return {
+    id: 'evt-4',
+    type: 'ticket.external_status_changed',
+    timestamp: '2026-01-01T00:00:00Z',
+    actor: { type: 'service', principalId: 'principal_integration' },
+    data: {
+      ticket: ticketRef,
+      title: 'Cannot log in',
+      integrationType: 'github',
+      externalDisplayId: 'acme/app#412',
+      externalUrl: 'https://github.com/acme/app/issues/412',
+      externalStatus: 'Closed',
+      transition: 'closed',
+      ...overrides,
+    },
+  } as EventData
+}
+
+describe('getTicketExternalStatusChangedTargets', () => {
+  it('resolves AGENT watchers only, with the link reference in config', async () => {
+    getTicketAgentWatchersForEvent.mockResolvedValue(['principal_agent_1', 'principal_agent_2'])
+    const target = await getTicketExternalStatusChangedTargets(externalStatusEvent())
+    expect(getTicketWatchersForEvent).not.toHaveBeenCalled()
+    expect(target).toEqual({
+      type: 'notification',
+      target: { principalIds: ['principal_agent_1', 'principal_agent_2'] },
+      config: {
+        ticketId: 'ticket_1',
+        title: 'Cannot log in',
+        integrationType: 'github',
+        reference: 'acme/app#412',
+        url: 'https://github.com/acme/app/issues/412',
+        externalStatus: 'Closed',
+        transition: 'closed',
+      },
+    })
+  })
+
+  it('returns null when no agent watches the ticket', async () => {
+    getTicketAgentWatchersForEvent.mockResolvedValue([])
+    expect(await getTicketExternalStatusChangedTargets(externalStatusEvent())).toBeNull()
+  })
+
+  it('excludes the integration service principal if it somehow watches', async () => {
+    getTicketAgentWatchersForEvent.mockResolvedValue(['principal_integration', 'principal_agent_1'])
+    const target = await getTicketExternalStatusChangedTargets(externalStatusEvent())
+    expect(target?.target).toEqual({ principalIds: ['principal_agent_1'] })
+  })
+})
 
 describe('getTicketRepliedTargets', () => {
   it('resolves all watchers minus the actor into one target with preview config', async () => {

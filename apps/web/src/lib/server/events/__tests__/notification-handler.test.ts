@@ -511,6 +511,67 @@ describe('notificationHook — ticket.note_added (agent watchers)', () => {
   })
 })
 
+describe('notificationHook — ticket.external_status_changed (agent watchers)', () => {
+  function makeEvent(): EventData {
+    return {
+      id: 'evt-ticket-ext-1',
+      type: 'ticket.external_status_changed',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'service', principalId: 'principal_integration' },
+      data: {
+        ticket: { id: 'ticket_1', number: 1, type: 'customer', priority: 'none' },
+        title: 'Cannot log in',
+        integrationType: 'github',
+        externalDisplayId: 'acme/app#412',
+        externalUrl: 'https://github.com/acme/app/issues/412',
+        externalStatus: 'Closed',
+        transition: 'closed',
+      },
+    } as EventData
+  }
+
+  it('titles a closed transition with the closed verb, admin audience', async () => {
+    const target: NotificationTarget = { principalIds: ['principal_agent_1' as never] }
+    const config = {
+      ticketId: 'ticket_1',
+      title: 'Cannot log in',
+      integrationType: 'github',
+      reference: 'acme/app#412',
+      url: 'https://github.com/acme/app/issues/412',
+      externalStatus: 'Closed',
+      transition: 'closed',
+    }
+    await notificationHook.run(makeEvent(), target, config)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        principalId: 'principal_agent_1',
+        type: 'ticket_external_status_changed',
+        title: 'Linked issue acme/app#412 was closed on Cannot log in',
+        metadata: { ticketId: 'ticket_1', audience: 'admin' },
+      }),
+    ])
+  })
+
+  it('falls back to the status-name verb when the provider states no transition', async () => {
+    const target: NotificationTarget = { principalIds: ['principal_agent_1' as never] }
+    const config = {
+      ticketId: 'ticket_1',
+      title: 'Cannot log in',
+      integrationType: 'jira',
+      reference: 'PROJ-42',
+      url: null,
+      externalStatus: 'Done',
+      transition: null,
+    }
+    await notificationHook.run(makeEvent(), target, config)
+    expect(batchSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        title: 'Linked issue PROJ-42 moved to "Done" on Cannot log in',
+      }),
+    ])
+  })
+})
+
 describe('notificationHook — ticket.status_changed (watcher audience)', () => {
   it('marks the requester portal and agent watchers admin when the config carries the requester', async () => {
     const event = {

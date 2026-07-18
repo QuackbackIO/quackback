@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 /**
  * Adjacent-systems follow-up: the WO-18 cutover made the outbox the SOLE delivery
  * path, so `emit()`'s catalogue zod validation is now a HARD gate on every
- * dispatched event. The 33 legacy `dispatch*` functions build `EventData.data`
+ * dispatched event. The legacy `dispatch*` functions build `EventData.data`
  * and cast it `as unknown` into `emit` — that cast bypasses the compile-time
  * payload check, so a drift between what a dispatcher builds and what its
  * catalogue schema requires would throw at emit time and be swallowed
@@ -309,6 +309,20 @@ const cases: Array<{ type: string; run: () => Promise<void> }> = [
         'agent',
         'Cannot log in',
         'Marco'
+      ),
+  },
+  {
+    type: 'ticket.external_status_changed',
+    run: () =>
+      d.dispatchTicketExternalStatusChanged(
+        actor(),
+        ticketRef(),
+        'Cannot log in',
+        'github',
+        'acme/app#412',
+        'https://github.com/acme/app/issues/412',
+        'Closed',
+        'closed'
       ),
   },
   {

@@ -38,6 +38,7 @@ export type ActivityType =
   | 'comment.deleted'
   | 'comment.removed'
   | 'comment.restored'
+  | 'external.status_changed'
 
 export interface CreateActivityOpts {
   postId: PostId

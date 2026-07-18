@@ -653,6 +653,7 @@ export type ConversationSystemEventKind =
   | 'assistant_action_expired'
   | 'external_linked'
   | 'external_unlinked'
+  | 'external_status_changed'
 
 export interface ConversationSystemEvent {
   kind: ConversationSystemEventKind

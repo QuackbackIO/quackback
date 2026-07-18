@@ -45,6 +45,7 @@ export const githubInboundHandler: InboundWebhookHandler = {
       externalId: String(payload.issue.number),
       externalStatus,
       eventType: `issues.${payload.action}`,
+      transition: payload.action,
     }
   },
 }

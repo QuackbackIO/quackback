@@ -84,6 +84,7 @@ describe('event catalogue coverage', () => {
     'handed_off',
     'csat_submitted',
     'csat_comment_added',
+    'external_status_changed',
     'customer_unresponsive',
     'teammate_unresponsive',
     'approaching_breach',

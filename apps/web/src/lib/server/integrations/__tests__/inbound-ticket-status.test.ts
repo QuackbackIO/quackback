@@ -47,6 +47,7 @@ vi.mock('@/lib/server/domains/tickets/ticket.webhooks', () => ({
   emitTicketCreated: vi.fn().mockResolvedValue(undefined),
   emitTicketStatusChanged: vi.fn().mockResolvedValue(undefined),
   emitTicketAssigned: vi.fn().mockResolvedValue(undefined),
+  emitTicketExternalStatusChanged: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Neutralize the real Redis-backed realtime publish.
@@ -55,8 +56,10 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEve
 import { handleInboundWebhook } from '../inbound-webhook-handler'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { createTicket } from '@/lib/server/domains/tickets/ticket.service'
+import { emitTicketExternalStatusChanged } from '@/lib/server/domains/tickets/ticket.webhooks'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
+import { conversationMessages } from '@/lib/server/db'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -176,10 +179,27 @@ async function ticketState(ticketId: TicketId) {
   return row
 }
 
+/** Internal system notes on the ticket thread with the given event kind. */
+async function systemNotes(ticketId: TicketId, kind: string) {
+  const rows = await testDb
+    .select({
+      content: conversationMessages.content,
+      isInternal: conversationMessages.isInternal,
+      senderType: conversationMessages.senderType,
+      metadata: conversationMessages.metadata,
+    })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.ticketId, ticketId))
+  return rows.filter(
+    (r) => (r.metadata as { systemEvent?: { kind?: string } })?.systemEvent?.kind === kind
+  )
+}
+
 describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rolled back)', () => {
   beforeEach(async () => {
     await fixture.begin()
     vi.mocked(changeStatus).mockClear()
+    vi.mocked(emitTicketExternalStatusChanged).mockClear()
   })
   afterEach(fixture.rollback)
   afterAll(fixture.close)
@@ -201,6 +221,86 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
 
     // No post is linked to this external id, so the post path stayed idle.
     expect(changeStatus).not.toHaveBeenCalled()
+
+    // Close-the-loop: a team-only system note lands on the thread with the
+    // provider-verb copy, and the agent-watcher bell event fires once.
+    const notes = await systemNotes(ticketId, 'external_status_changed')
+    expect(notes).toHaveLength(1)
+    expect(notes[0].content).toBe('GitHub issue acme/widgets#77 was closed')
+    expect(notes[0].isInternal).toBe(true)
+    expect(notes[0].senderType).toBe('system')
+    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(emitTicketExternalStatusChanged).mock.calls[0][2]).toMatchObject({
+      integrationType: 'github',
+      externalDisplayId: 'acme/widgets#77',
+      externalStatus: 'Closed',
+      transition: 'closed',
+    })
+  })
+
+  it('notes and bells even when NO ticket status mapping matches (the silence case)', async () => {
+    await seedSettings()
+    const { open } = await seedStatuses()
+    await seedGitHubIntegration({}) // no ticketStatusMappings at all
+    const actor = await seedActor()
+    const ticketId = await seedLinkedTicket(actor, '90')
+
+    const response = await handleInboundWebhook(githubWebhookRequest('closed', 90), 'github')
+    expect(response.status).toBe(200)
+
+    // Status untouched (no mapping) — but the external fact still lands.
+    expect((await ticketState(ticketId)).statusId).toBe(open)
+    const notes = await systemNotes(ticketId, 'external_status_changed')
+    expect(notes).toHaveLength(1)
+    expect(notes[0].content).toContain('was closed')
+    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('reopened note uses the reopened verb', async () => {
+    await seedSettings()
+    await seedStatuses()
+    await seedGitHubIntegration({})
+    const actor = await seedActor()
+    const ticketId = await seedLinkedTicket(actor, '91')
+
+    await handleInboundWebhook(githubWebhookRequest('reopened', 91), 'github')
+    const notes = await systemNotes(ticketId, 'external_status_changed')
+    expect(notes).toHaveLength(1)
+    expect(notes[0].content).toBe('GitHub issue acme/widgets#91 was reopened')
+  })
+
+  it('a redelivered webhook does not double-note or double-bell (delivery-key dedup)', async () => {
+    await seedSettings()
+    await seedStatuses()
+    await seedGitHubIntegration({})
+    const actor = await seedActor()
+    const ticketId = await seedLinkedTicket(actor, '93')
+
+    // Same body twice = a provider redelivery (byte-identical payload).
+    await handleInboundWebhook(githubWebhookRequest('closed', 93), 'github')
+    await handleInboundWebhook(githubWebhookRequest('closed', 93), 'github')
+
+    expect(await systemNotes(ticketId, 'external_status_changed')).toHaveLength(1)
+    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(1)
+
+    // A genuinely different event (reopen) still lands.
+    await handleInboundWebhook(githubWebhookRequest('reopened', 93), 'github')
+    expect(await systemNotes(ticketId, 'external_status_changed')).toHaveLength(2)
+    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(2)
+  })
+
+  it('notes every ticket linked to the same issue', async () => {
+    await seedSettings()
+    const { closed } = await seedStatuses()
+    await seedGitHubIntegration({ ticketStatusMappings: { Closed: closed } })
+    const actor = await seedActor()
+    const a = await seedLinkedTicket(actor, '92')
+    const b = await seedLinkedTicket(actor, '92')
+
+    await handleInboundWebhook(githubWebhookRequest('closed', 92), 'github')
+    expect(await systemNotes(a, 'external_status_changed')).toHaveLength(1)
+    expect(await systemNotes(b, 'external_status_changed')).toHaveLength(1)
+    expect(emitTicketExternalStatusChanged).toHaveBeenCalledTimes(2)
   })
 
   it('reopens: issues.reopened maps back through the Open mapping', async () => {

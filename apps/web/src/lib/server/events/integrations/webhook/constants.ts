@@ -184,6 +184,11 @@ export const WEBHOOK_EVENT_CONFIG = [
     label: 'Ticket Internal Note',
     description: 'When an agent adds an internal note to a ticket (private content — opt-in)',
   },
+  {
+    id: 'ticket.external_status_changed',
+    label: 'Linked Issue Status Changed',
+    description: 'When a tracker issue linked to a ticket changes status on the external platform',
+  },
 ] as const satisfies ReadonlyArray<{ id: WebhookEventType; label: string; description: string }>
 
 // ============================================

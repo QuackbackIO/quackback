@@ -116,6 +116,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     surfaces: ['admin'],
   },
   {
+    type: 'ticket_external_status_changed',
+    label: 'Linked issue updates',
+    description: 'A tracker issue linked to a ticket you follow changes status',
+    group: 'support',
+    surfaces: ['admin'],
+  },
+  {
     type: 'ticket_created',
     label: 'Ticket received',
     description: 'Confirmation when we receive your ticket',

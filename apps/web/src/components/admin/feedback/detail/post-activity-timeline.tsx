@@ -30,6 +30,7 @@ import {
   ChatBubbleLeftIcon,
   HandThumbUpIcon,
   FolderIcon,
+  LinkIcon,
 } from '@heroicons/react/16/solid'
 import { IconGitMerge } from '@tabler/icons-react'
 import { SOURCE_TYPE_LABELS } from '@/components/admin/feedback/source-type-icon'
@@ -114,6 +115,34 @@ const ACTIVITY_CONFIG: Partial<Record<ActivityType, ActivityDisplayConfig>> = {
   'post.restored': {
     icon: ArrowUturnLeftIcon,
     label: (_, a) => `${actorLabel(a)} restored this post`,
+  },
+  'external.status_changed': {
+    icon: LinkIcon,
+    label: (m) => {
+      const reference = (m.externalDisplayId as string | undefined) ?? 'A linked issue'
+      const transition = m.transition as string | undefined
+      const verb =
+        transition === 'closed'
+          ? 'was closed'
+          : transition === 'reopened'
+            ? 'was reopened'
+            : `moved to "${(m.externalStatus as string | undefined) ?? 'a new status'}"`
+      return `${reference} ${verb}`
+    },
+    detail: (m) => {
+      const url = m.externalUrl as string | undefined
+      if (!url) return null
+      return (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-muted-foreground underline underline-offset-2"
+        >
+          View issue
+        </a>
+      )
+    },
   },
   'status.changed': {
     icon: ChatBubbleLeftIcon,

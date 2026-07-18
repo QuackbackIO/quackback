@@ -29,6 +29,7 @@ import {
   dispatchTicketAssigned,
   dispatchTicketReplied,
   dispatchTicketNoteAdded,
+  dispatchTicketExternalStatusChanged,
 } from '@/lib/server/events/dispatch'
 import { contentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { logger } from '@/lib/server/logger'
@@ -122,6 +123,35 @@ export async function emitTicketStatusChanged(
       previousStage,
       requesterPrincipalId,
       ticket.title
+    )
+  )
+}
+
+/** A linked tracker issue changed status upstream. Fired by the inbound
+ *  integration webhook path per linked ticket, before (and regardless of)
+ *  status-mapping resolution — the mapped ticket.status_changed, when a
+ *  mapping applies, is a separate signal with its own audience. */
+export async function emitTicketExternalStatusChanged(
+  actor: Actor,
+  ticket: Ticket,
+  external: {
+    integrationType: string
+    externalDisplayId: string | null
+    externalUrl: string | null
+    externalStatus: string
+    transition: 'closed' | 'reopened' | null
+  }
+): Promise<void> {
+  await safe('ticket.external_status_changed', () =>
+    dispatchTicketExternalStatusChanged(
+      toEventActor(actor),
+      ticketRef(ticket),
+      ticket.title,
+      external.integrationType,
+      external.externalDisplayId,
+      external.externalUrl,
+      external.externalStatus,
+      external.transition
     )
   )
 }

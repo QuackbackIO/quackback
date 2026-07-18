@@ -79,8 +79,7 @@ export async function linkTicketToTracker(
       linkedTicketId,
       'ticket_linked',
       `Linked to tracker ${formatTicketNumber(tracker.number)}`,
-      { trackerReference: formatTicketNumber(tracker.number) },
-      tx
+      { metadata: { trackerReference: formatTicketNumber(tracker.number) }, exec: tx }
     )
   })
   log.info(

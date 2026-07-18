@@ -67,6 +67,11 @@ export interface NotificationConfig {
   // message.created (WO-3 slice 5) — read back out by the anti-spam presence
   // gate in run(), below.
   isFirstMessage?: boolean
+  // ticket.external_status_changed — the link row's display reference plus the
+  // provider's status/transition, resolved by getTicketExternalStatusChangedTargets.
+  reference?: string | null
+  externalStatus?: string
+  transition?: 'closed' | 'reopened' | null
 }
 
 export const notificationHook: HookHandler = {
@@ -343,6 +348,24 @@ function buildNotifications(
       body: preview,
       // Note recipients are always agents (role-filtered in the target builder).
       metadata: { ticketId, actorName: authorName, audience: 'admin' },
+    }))
+  }
+
+  if (event.type === 'ticket.external_status_changed') {
+    const { ticketId, title, reference, externalStatus, transition } = config
+    const issueLabel = reference ? `Linked issue ${reference}` : 'A linked issue'
+    const verb =
+      transition === 'closed'
+        ? 'was closed'
+        : transition === 'reopened'
+          ? 'was reopened'
+          : `moved to "${externalStatus}"`
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'ticket_external_status_changed' as NotificationType,
+      title: `${issueLabel} ${verb} on ${title}`,
+      // Recipients are always agent watchers (role-filtered in the target builder).
+      metadata: { ticketId, audience: 'admin' },
     }))
   }
 

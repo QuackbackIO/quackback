@@ -68,28 +68,43 @@ const MESSAGE_PAGE_SIZE = 30
  * surface yet (a deliberate gap; see `linkTicketToTracker`'s doc comment in
  * ticket-links.service.ts), so every ticket system event today is team-only.
  *
- * Takes an `Executor` (defaulting to `db`) so a caller already inside a
+ * Takes an `exec` Executor (defaulting to `db`) so a caller already inside a
  * `db.transaction` — `linkTicketToTracker`'s link + audit note — can enlist
  * this insert in the same transaction instead of committing it separately.
  * Unlike `emitSystemMessage` this does not publish or swallow errors: the
  * caller decides whether a failure here should be fatal (as it is for the
  * tracker-link transaction) or best-effort.
+ *
+ * `dedupeKey` makes the insert idempotent for redelivered inbound webhooks:
+ * it lands as top-level `metadata.inboundDeliveryKey`, guarded by the partial
+ * unique index on (ticket_id, metadata->>'inboundDeliveryKey'), and a
+ * conflicting insert is a no-op. Returns whether a row was actually inserted
+ * so callers can gate follow-on side effects (the watcher bell) on it —
+ * mirroring the email path's emailMessageId idiom.
  */
 export async function emitTicketSystemMessage(
   ticketId: TicketId,
   kind: ConversationSystemEventKind,
   body: string,
-  metadata?: Record<string, unknown>,
-  exec: Executor = db
-): Promise<void> {
-  await exec.insert(conversationMessages).values({
-    ticketId,
-    principalId: null,
-    senderType: 'system',
-    isInternal: true,
-    content: body,
-    metadata: { systemEvent: { kind, ...metadata } },
-  })
+  opts?: { metadata?: Record<string, unknown>; exec?: Executor; dedupeKey?: string }
+): Promise<boolean> {
+  const exec = opts?.exec ?? db
+  const rows = await exec
+    .insert(conversationMessages)
+    .values({
+      ticketId,
+      principalId: null,
+      senderType: 'system',
+      isInternal: true,
+      content: body,
+      metadata: {
+        systemEvent: { kind, ...opts?.metadata },
+        ...(opts?.dedupeKey ? { inboundDeliveryKey: opts.dedupeKey } : {}),
+      },
+    })
+    .onConflictDoNothing()
+    .returning({ id: conversationMessages.id })
+  return rows.length > 0
 }
 
 export interface SendTicketMessageInput {

@@ -915,6 +915,49 @@ export async function getTicketNoteAddedTargets(event: EventData): Promise<HookT
 }
 
 /**
+ * Notification target for `ticket.external_status_changed`: agent watchers
+ * only (the requester never hears about tracker plumbing — customer-facing
+ * resolution flows through the mapped ticket.status_changed stage crossing).
+ * The actor is the integration's service principal; exclusion is a no-op
+ * unless that principal somehow watches the ticket.
+ */
+export async function getTicketExternalStatusChangedTargets(
+  event: EventData
+): Promise<HookTarget | null> {
+  if (event.type !== 'ticket.external_status_changed') return null
+  const {
+    ticket,
+    title,
+    integrationType,
+    externalDisplayId,
+    externalUrl,
+    externalStatus,
+    transition,
+  } = event.data
+
+  const recipients = await actorExcludedTicketWatchers(
+    ticket.id as TicketId,
+    event.actor.principalId,
+    { agentsOnly: true }
+  )
+  if (recipients.length === 0) return null
+
+  return {
+    type: 'notification',
+    target: { principalIds: recipients },
+    config: {
+      ticketId: ticket.id,
+      title,
+      integrationType,
+      reference: externalDisplayId,
+      url: externalUrl,
+      externalStatus,
+      transition,
+    },
+  }
+}
+
+/**
  * Notification target for `message.created` (WO-3 slice 5, the riskiest
  * move — reproduces `notifyVisitorMessage`'s deleted team-bell block
  * EXACTLY): only a VISITOR-sent message bells the team. Recipients are every
@@ -1016,9 +1059,7 @@ async function filterByEmailPreference(
 }
 
 /** Ticket facts re-read from the row when the payload doesn't carry them. */
-async function readTicketFacts(
-  ticketId: TicketId
-): Promise<{
+async function readTicketFacts(ticketId: TicketId): Promise<{
   requesterPrincipalId: PrincipalId | null
   title: string
   assignedTeamId: TeamId | null

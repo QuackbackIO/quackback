@@ -8,7 +8,20 @@
  * so the `post.status_changed` event dispatched here won't re-trigger them.
  */
 
-import { db, integrations, postExternalLinks, ticketExternalLinks, eq, and } from '@/lib/server/db'
+import { createHash } from 'crypto'
+import {
+  db,
+  integrations,
+  postActivity,
+  postExternalLinks,
+  ticketExternalLinks,
+  tickets,
+  eq,
+  and,
+  inArray,
+  isNull,
+  sql,
+} from '@/lib/server/db'
 import { getIntegration } from './index'
 import { decryptSecrets } from './encryption'
 import {
@@ -27,6 +40,33 @@ import { logger } from '@/lib/server/logger'
 const log = logger.child({ component: 'inbound-webhook' })
 
 type IntegrationRow = typeof integrations.$inferSelect
+
+/** Provider display name for note/activity copy ("GitHub", "Jira"), falling
+ *  back to the raw type for a provider missing from the registry. */
+function providerName(integrationType: string): string {
+  return getIntegration(integrationType)?.catalog.name ?? integrationType
+}
+
+/** Human verb for the external move — provider-stated transition when known,
+ *  otherwise the new status name (see InboundWebhookResult.transition). */
+function externalMoveVerb(result: InboundWebhookResult): string {
+  if (result.transition === 'closed') return 'was closed'
+  if (result.transition === 'reopened') return 'was reopened'
+  return `moved to "${result.externalStatus}"`
+}
+
+/**
+ * Per-delivery idempotency key for the close-the-loop side effects (note,
+ * bell, post activity). Providers redeliver webhooks (retry-after-timeout,
+ * at-least-once), and a redelivered request carries a byte-identical body —
+ * while a genuinely new event (even close→reopen→close on the same issue)
+ * differs in payload timestamps/ids. Hashing the raw body therefore dedupes
+ * exactly the redelivery case without suppressing real repeats, and needs no
+ * per-provider delivery-id header knowledge.
+ */
+function inboundDeliveryKey(integrationType: string, body: string): string {
+  return createHash('sha256').update(`${integrationType}:${body}`).digest('hex')
+}
 
 /**
  * Handle an inbound webhook from an external platform.
@@ -92,13 +132,14 @@ export async function handleInboundWebhook(
   // two branches are independent, and each failure is swallowed here so one
   // branch's error can't starve the other or 500 the platform into
   // redelivering a half-applied webhook.
+  const deliveryKey = inboundDeliveryKey(integrationType, body)
   try {
-    await applyPostStatusChange(integration, integrationType, config, result)
+    await applyPostStatusChange(integration, integrationType, config, result, deliveryKey)
   } catch (error) {
     log.error({ err: error, integration_type: integrationType }, 'inbound post branch failed')
   }
   try {
-    await applyTicketStatusChange(integration, integrationType, config, result)
+    await applyTicketStatusChange(integration, integrationType, config, result, deliveryKey)
   } catch (error) {
     log.error({ err: error, integration_type: integrationType }, 'inbound ticket branch failed')
   }
@@ -114,7 +155,8 @@ async function applyPostStatusChange(
   integration: IntegrationRow,
   integrationType: string,
   config: Record<string, unknown>,
-  result: InboundWebhookResult
+  result: InboundWebhookResult,
+  deliveryKey: string
 ): Promise<void> {
   // Reverse lookup: find the post linked to this external ID
   const link = await db.query.postExternalLinks.findFirst({
@@ -129,6 +171,38 @@ async function applyPostStatusChange(
       'no linked post for external id, ignoring'
     )
     return
+  }
+
+  // Record the external move on the post's activity timeline BEFORE mapping
+  // resolution: an unmapped (or same-status) move is still a real signal on a
+  // linked issue. A redelivered webhook is skipped via the stamped delivery
+  // key (no unique index here — an existence probe is enough for a
+  // fire-and-forget timeline entry). createActivity itself never throws.
+  const [existing] = await db
+    .select({ id: postActivity.id })
+    .from(postActivity)
+    .where(
+      and(
+        eq(postActivity.postId, link.postId),
+        sql`${postActivity.metadata} ->> 'inboundDeliveryKey' = ${deliveryKey}`
+      )
+    )
+    .limit(1)
+  if (!existing) {
+    const { createActivity } = await import('@/lib/server/domains/activity/activity.service')
+    createActivity({
+      postId: link.postId as PostId,
+      principalId: (integration.principalId as PrincipalId | null) ?? null,
+      type: 'external.status_changed',
+      metadata: {
+        integrationType,
+        externalDisplayId: link.externalDisplayId ?? null,
+        externalUrl: link.externalUrl ?? null,
+        externalStatus: result.externalStatus,
+        transition: result.transition ?? null,
+        inboundDeliveryKey: deliveryKey,
+      },
+    })
   }
 
   // Resolve status mapping
@@ -176,10 +250,15 @@ async function applyTicketStatusChange(
   integration: IntegrationRow,
   integrationType: string,
   config: Record<string, unknown>,
-  result: InboundWebhookResult
+  result: InboundWebhookResult,
+  deliveryKey: string
 ): Promise<void> {
   const links = await db
-    .select({ ticketId: ticketExternalLinks.ticketId })
+    .select({
+      ticketId: ticketExternalLinks.ticketId,
+      externalDisplayId: ticketExternalLinks.externalDisplayId,
+      externalUrl: ticketExternalLinks.externalUrl,
+    })
     .from(ticketExternalLinks)
     .where(
       and(
@@ -195,20 +274,6 @@ async function applyTicketStatusChange(
     return
   }
 
-  const ticketStatusMappings = config.ticketStatusMappings as StatusMappings | undefined
-  const statusId = resolveTicketStatusMapping(result.externalStatus, ticketStatusMappings)
-  if (!statusId) {
-    log.debug(
-      { integration_type: integrationType, external_status: result.externalStatus },
-      'no ticket status mapping, ignoring'
-    )
-    return
-  }
-
-  // Dynamic import keeps the ticket domain out of this module's static
-  // graph (mirrors the fn layer's convention for service imports).
-  const { setTicketStatus } = await import('@/lib/server/domains/tickets/ticket.service')
-
   // Service actor carrying the integration's principal (mirrors the post
   // branch's service-principal attribution) with an explicit capability
   // grant, since a service principal has no role-derived permission set.
@@ -218,6 +283,83 @@ async function applyTicketStatusChange(
     principalType: 'service',
     segmentIds: new Set(),
     permissions: new Set([PERMISSIONS.TICKET_SET_STATUS]),
+  }
+
+  // Dynamic imports keep the ticket domain out of this module's static
+  // graph (mirrors the fn layer's convention for service imports).
+  const { setTicketStatus } = await import('@/lib/server/domains/tickets/ticket.service')
+  const { emitTicketSystemMessage } =
+    await import('@/lib/server/domains/tickets/ticket-message.service')
+  const { emitTicketExternalStatusChanged } =
+    await import('@/lib/server/domains/tickets/ticket.webhooks')
+
+  const ticketRows = await db
+    .select()
+    .from(tickets)
+    .where(
+      and(
+        inArray(
+          tickets.id,
+          links.map((l) => l.ticketId as TicketId)
+        ),
+        isNull(tickets.deletedAt)
+      )
+    )
+  const ticketById = new Map(ticketRows.map((t) => [t.id as string, t]))
+
+  // Close the loop BEFORE mapping resolution: the team-only system note and
+  // the agent-watcher bell reflect the external fact (the linked issue moved),
+  // which is true whether or not a mapping — or any mapping config — exists.
+  // Each link is isolated so one ticket's failure can't starve the others.
+  // The note insert is the idempotency gate: a redelivered webhook (same
+  // delivery key) no-ops the insert, and the bell only fires when the note
+  // actually landed.
+  const verb = externalMoveVerb(result)
+  for (const link of links) {
+    const ticket = ticketById.get(link.ticketId as string)
+    if (!ticket) continue
+    const reference = link.externalDisplayId ?? `#${result.externalId}`
+    let noted = false
+    try {
+      noted = await emitTicketSystemMessage(
+        ticket.id as TicketId,
+        'external_status_changed',
+        `${providerName(integrationType)} issue ${reference} ${verb}`,
+        {
+          metadata: {
+            externalReference: reference,
+            externalUrl: link.externalUrl ?? undefined,
+            externalStatus: result.externalStatus,
+            transition: result.transition ?? undefined,
+          },
+          dedupeKey: deliveryKey,
+        }
+      )
+    } catch (error) {
+      log.error(
+        { err: error, ticket_id: link.ticketId, integration_type: integrationType },
+        'inbound external-status system note failed'
+      )
+    }
+    if (!noted) continue
+    // Already safe-wrapped internally — a dispatch failure only logs.
+    await emitTicketExternalStatusChanged(actor, ticket, {
+      integrationType,
+      externalDisplayId: link.externalDisplayId ?? null,
+      externalUrl: link.externalUrl ?? null,
+      externalStatus: result.externalStatus,
+      transition: result.transition ?? null,
+    })
+  }
+
+  const ticketStatusMappings = config.ticketStatusMappings as StatusMappings | undefined
+  const statusId = resolveTicketStatusMapping(result.externalStatus, ticketStatusMappings)
+  if (!statusId) {
+    log.debug(
+      { integration_type: integrationType, external_status: result.externalStatus },
+      'no ticket status mapping, ignoring'
+    )
+    return
   }
 
   for (const link of links) {

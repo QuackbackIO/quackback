@@ -33,3 +33,12 @@ export const ticketNoteAdded = decl(
   { webhook: true, notification: 'ticket_note_added' },
   S
 )
+// The linked-issue close-the-loop signal. Webhook-exposed like the rest of the
+// ticket family (the family drift gate pins this); loop-safe because outbound
+// tracker hooks only ever fire on post.created.
+export const ticketExternalStatusChanged = decl(
+  'ticket.external_status_changed',
+  'ticket',
+  { webhook: true, notification: 'ticket_external_status_changed' },
+  S
+)

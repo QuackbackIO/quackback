@@ -23,6 +23,7 @@ const ALL_TYPES: Record<NotificationType, true> = {
   ticket_assigned: true,
   ticket_replied: true,
   ticket_note_added: true,
+  ticket_external_status_changed: true,
   ticket_created: true,
   sla_warning: true,
   sla_breach: true,

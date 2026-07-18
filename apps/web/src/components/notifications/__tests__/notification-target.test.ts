@@ -158,6 +158,18 @@ describe('getNotificationTarget', () => {
     })
   })
 
+  it('routes ticket_external_status_changed to the admin inbox unconditionally (agents-only bell)', () => {
+    const notification = buildNotification({
+      type: 'ticket_external_status_changed',
+      ticketId: 'ticket_9',
+      audience: 'admin',
+    })
+    expect(getNotificationTarget(notification)).toEqual({
+      to: '/admin/inbox',
+      search: { i: 'ticket_9' },
+    })
+  })
+
   it('routes ticket_assigned (team member) to the admin inbox, NOT the requester-only portal thread', () => {
     const notification = buildNotification({
       type: 'ticket_assigned',
