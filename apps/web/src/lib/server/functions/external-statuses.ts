@@ -23,6 +23,25 @@ export interface ExternalStatusItem {
 }
 
 /**
+ * Providers the switch below can produce a status list for (hardcoded for
+ * github/azure_devops, live-fetched for the rest). Like status-sync.ts's
+ * registration sets, this switch sits outside the registry and silently
+ * returns [] for an uncovered provider — the declared set is pinned against
+ * the registry by registry-capability-coverage.test.ts so a new inbound
+ * provider without a status source fails CI instead of shipping an empty
+ * mapping UI.
+ */
+export const EXTERNAL_STATUS_PROVIDERS: ReadonlySet<string> = new Set([
+  'linear',
+  'github',
+  'jira',
+  'clickup',
+  'asana',
+  'shortcut',
+  'azure_devops',
+])
+
+/**
  * Fetch available statuses from an external platform.
  * Routes to the appropriate platform-specific fetcher.
  */

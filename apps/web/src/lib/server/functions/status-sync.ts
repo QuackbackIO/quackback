@@ -19,6 +19,31 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'status-sync' })
 
+/**
+ * Providers the enable/disable switches below auto-register webhooks for.
+ * These switch statements sit OUTSIDE the IntegrationDefinition registry, and
+ * a provider missing a case silently no-ops — so the split is declared here
+ * and pinned against the registry by registry-capability-coverage.test.ts:
+ * every inbound-capable tracker must appear in exactly one of these sets, and
+ * adding provider #12 without deciding its webhook-setup story fails CI
+ * instead of silently doing nothing.
+ */
+export const AUTO_WEBHOOK_REGISTRATION_PROVIDERS: ReadonlySet<string> = new Set([
+  'linear',
+  'github',
+  'jira',
+  'clickup',
+  'asana',
+])
+/** Inbound-capable providers whose webhook must be configured by hand on the
+ *  external platform (no registration API used; the UI shows the callback URL). */
+export const MANUAL_WEBHOOK_PROVIDERS: ReadonlySet<string> = new Set([
+  'azure_devops',
+  'gitlab',
+  'shortcut',
+  'trello',
+])
+
 const enableStatusSyncSchema = z.object({
   integrationId: z.string(),
   integrationType: z.string(),
