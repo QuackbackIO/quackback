@@ -129,6 +129,37 @@ export interface IntegrationCatalogEntry {
   docsUrl?: string
 }
 
+/** The stored fields for a ticket ↔ external issue link, produced by
+ *  `IssueTrackerCapability.parseRef`. */
+export interface ParsedIssueRef {
+  /**
+   * MUST be in the same namespace the provider's inbound `parseStatusChange`
+   * emits as `externalId` (GitHub: issue number; Jira: issue key; Azure
+   * DevOps: work item id) — the inbound handler reverse-looks-up links by
+   * this value, so a mismatched namespace silently breaks status sync.
+   */
+  externalId: string
+  /** Human-readable reference shown in the UI (e.g. "acme/app#412", "PROJ-42"). */
+  externalDisplayId: string
+  externalUrl: string | null
+}
+
+/**
+ * Issue-tracker capabilities beyond the event-bus create hook. Optional per
+ * provider; surfaces that offer manual linking / creation gate on the
+ * specific member being present, never on the provider id.
+ */
+export interface IssueTrackerCapability {
+  /**
+   * Parse a user-pasted issue reference (full URL or provider shorthand) into
+   * the stored link fields. Returns null when the input is not recognizably
+   * this provider's reference shape; throws ValidationError for a parseable
+   * ref that violates the connected config (e.g. a foreign repository, when
+   * the integration pins one).
+   */
+  parseRef?(input: string, config: Record<string, unknown>): ParsedIssueRef | null
+}
+
 export interface IntegrationDefinition {
   id: string
   catalog: IntegrationCatalogEntry
@@ -136,6 +167,8 @@ export interface IntegrationDefinition {
   hook?: HookHandler
   /** Inbound webhook handler for receiving status changes from the external platform */
   inbound?: InboundWebhookHandler
+  /** Issue-tracker capabilities (manual ref parsing; issue creation in a later phase). */
+  issues?: IssueTrackerCapability
   /**
    * User data sync handler for CDP-style integrations.
    * Supports inbound identify events (CDP → user.metadata) and outbound

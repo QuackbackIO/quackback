@@ -39,11 +39,13 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({ publishTicketEve
 
 import { createTicket } from '../ticket.service'
 import {
-  parseGitHubIssueRef,
   linkTicketToIssue,
   unlinkTicketIssue,
   listTicketExternalLinks,
 } from '../ticket-external-links.service'
+import { githubIssues } from '@/lib/server/integrations/github/issues'
+import { jiraIssues } from '@/lib/server/integrations/jira/issues'
+import { azureDevOpsIssues } from '@/lib/server/integrations/azure-devops/issues'
 import { listTicketMessages } from '../ticket-message.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
@@ -111,12 +113,15 @@ async function makeTicket(actor: Actor): Promise<TicketId> {
   return dto.id
 }
 
-describe('parseGitHubIssueRef', () => {
-  it('parses a full issue URL', () => {
-    expect(parseGitHubIssueRef('https://github.com/acme/widgets/issues/142')).toEqual({
-      owner: 'acme',
-      repo: 'widgets',
-      number: 142,
+describe('githubIssues.parseRef', () => {
+  const parse = (input: string, config: Record<string, unknown> = {}) =>
+    githubIssues.parseRef!(input, config)
+
+  it('parses a full issue URL into the stored link fields', () => {
+    expect(parse('https://github.com/acme/widgets/issues/142')).toEqual({
+      externalId: '142',
+      externalDisplayId: 'acme/widgets#142',
+      externalUrl: 'https://github.com/acme/widgets/issues/142',
     })
   })
 
@@ -127,29 +132,16 @@ describe('parseGitHubIssueRef', () => {
       'https://github.com/acme/widgets/issues/7?foo=bar',
       'https://github.com/acme/widgets/issues/7#issuecomment-1',
     ]) {
-      expect(parseGitHubIssueRef(input)).toEqual({ owner: 'acme', repo: 'widgets', number: 7 })
+      expect(parse(input)?.externalId).toBe('7')
+      expect(parse(input)?.externalDisplayId).toBe('acme/widgets#7')
     }
   })
 
-  it('parses the owner/repo#number shorthand', () => {
-    expect(parseGitHubIssueRef('acme/widgets#9')).toEqual({
-      owner: 'acme',
-      repo: 'widgets',
-      number: 9,
-    })
-    expect(parseGitHubIssueRef('  acme/widgets#9  ')).toEqual({
-      owner: 'acme',
-      repo: 'widgets',
-      number: 9,
-    })
-  })
-
-  it('handles dots and dashes in owner/repo names', () => {
-    expect(parseGitHubIssueRef('my-org/my.repo-2#3')).toEqual({
-      owner: 'my-org',
-      repo: 'my.repo-2',
-      number: 3,
-    })
+  it('parses the owner/repo#number shorthand (dots/dashes tolerated, trimmed)', () => {
+    expect(parse('  acme/widgets#9  ')?.externalUrl).toBe(
+      'https://github.com/acme/widgets/issues/9'
+    )
+    expect(parse('my-org/my.repo-2#3')?.externalDisplayId).toBe('my-org/my.repo-2#3')
   })
 
   it('rejects everything else', () => {
@@ -165,7 +157,63 @@ describe('parseGitHubIssueRef', () => {
       'https://gitlab.com/acme/widgets/issues/142',
       'https://github.com/acme/issues/142',
     ]) {
-      expect(parseGitHubIssueRef(input)).toBeNull()
+      expect(parse(input)).toBeNull()
+    }
+  })
+
+  it('throws REPO_MISMATCH when the integration pins a different repository', () => {
+    expect(() =>
+      parse('https://github.com/other/repo/issues/1', { channelId: 'acme/widgets' })
+    ).toThrowError(/connected repository/)
+    // Same repo (case-insensitive) passes.
+    expect(parse('ACME/Widgets#1', { channelId: 'acme/widgets' })?.externalId).toBe('1')
+  })
+})
+
+describe('jiraIssues.parseRef', () => {
+  const parse = (input: string, config: Record<string, unknown> = {}) =>
+    jiraIssues.parseRef!(input, config)
+
+  it('parses a browse URL, keeping the pasted URL and uppercasing the key', () => {
+    expect(parse('https://acme.atlassian.net/browse/proj-42')).toEqual({
+      externalId: 'PROJ-42',
+      externalDisplayId: 'PROJ-42',
+      externalUrl: 'https://acme.atlassian.net/browse/proj-42',
+    })
+  })
+
+  it('parses the bare KEY-123 shorthand, deriving a URL from config.siteUrl when present', () => {
+    expect(parse('PROJ-42')).toEqual({
+      externalId: 'PROJ-42',
+      externalDisplayId: 'PROJ-42',
+      externalUrl: null,
+    })
+    expect(parse('proj-42', { siteUrl: 'https://acme.atlassian.net/' })?.externalUrl).toBe(
+      'https://acme.atlassian.net/browse/PROJ-42'
+    )
+  })
+
+  it('rejects non-refs', () => {
+    for (const input of ['', 'PROJ', 'PROJ-', '42', 'https://acme.atlassian.net/browse/']) {
+      expect(parse(input)).toBeNull()
+    }
+  })
+})
+
+describe('azureDevOpsIssues.parseRef', () => {
+  const parse = (input: string) => azureDevOpsIssues.parseRef!(input, {})
+
+  it('parses a work item URL (URL-only by design)', () => {
+    expect(parse('https://dev.azure.com/acme/widgets/_workitems/edit/123')).toEqual({
+      externalId: '123',
+      externalDisplayId: '#123',
+      externalUrl: 'https://dev.azure.com/acme/widgets/_workitems/edit/123',
+    })
+  })
+
+  it('rejects bare numbers and foreign URLs', () => {
+    for (const input of ['123', '#123', 'https://dev.azure.com/acme/widgets/_boards/board/1']) {
+      expect(parse(input)).toBeNull()
     }
   })
 })
@@ -328,6 +376,42 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
     await expect(
       unlinkTicketIssue(ticketId, createId('ticket_external_link'), actor)
     ).resolves.toBeUndefined()
+  })
+
+  it('links a Jira issue by key through the same generic path', async () => {
+    await seedSettings()
+    await seedDefaultStatus()
+    await testDb.insert(integrations).values({
+      integrationType: 'jira',
+      status: 'active',
+      config: { siteUrl: 'https://acme.atlassian.net' },
+    })
+    const actor = await seedActor()
+    const ticketId = await makeTicket(actor)
+
+    const link = await linkTicketToIssue(ticketId, 'proj-42', actor, 'jira')
+    expect(link.integrationType).toBe('jira')
+    expect(link.externalId).toBe('PROJ-42')
+    expect(link.externalUrl).toBe('https://acme.atlassian.net/browse/PROJ-42')
+
+    // The audit note names the provider, not GitHub.
+    const page = await listTicketMessages(ticketId, { includeInternal: true })
+    const event = page.messages.find((m) => m.systemEvent?.kind === 'external_linked')
+    expect(event?.content).toContain('Jira issue PROJ-42')
+  })
+
+  it('rejects linking for a provider without the parseRef capability', async () => {
+    await seedSettings()
+    await seedDefaultStatus()
+    await testDb
+      .insert(integrations)
+      .values({ integrationType: 'linear', status: 'active', config: {} })
+    const actor = await seedActor()
+    const ticketId = await makeTicket(actor)
+
+    await expect(linkTicketToIssue(ticketId, 'ABC-123', actor, 'linear')).rejects.toThrow(
+      /does not support/i
+    )
   })
 
   it("lists a ticket's active links only", async () => {

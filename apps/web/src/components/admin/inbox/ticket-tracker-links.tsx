@@ -7,25 +7,91 @@ import { toast } from 'sonner'
 import type { TicketId, TicketExternalLinkId } from '@quackback/ids'
 import { ticketQueries, ticketKeys } from '@/lib/client/queries/inbox'
 import { linkTicketIssueFn, unlinkTicketIssueFn } from '@/lib/server/functions/tickets'
-import { GitHubIcon } from '@/components/icons/integration-icons'
+import { INTEGRATION_ICON_MAP } from '@/components/icons/integration-icons'
 import { Input } from '@/components/ui/input'
 
+interface TrackerLink {
+  id: TicketExternalLinkId
+  integrationType: string
+  externalId: string
+  externalDisplayId: string | null
+  externalUrl: string | null
+}
+
 /**
- * The GitHub section of the ticket detail panel, next to the tracker links:
- * link the ticket to an existing GitHub issue by URL or owner/repo#number,
- * list the linked issues, unlink. Hidden entirely when the GitHub integration
- * is not connected and nothing is linked. Issue state changes flow back via
- * the inbound webhook's ticket status mapping, not this panel.
+ * The tracker section of the ticket detail panel: link the ticket to an
+ * existing issue on any connected tracker whose integration supports manual
+ * ref parsing (GitHub, Jira, Azure DevOps today), list the linked issues,
+ * unlink. One section per tracker; hidden entirely when nothing is connected
+ * and nothing is linked. Issue state changes flow back via the inbound
+ * webhook's ticket status mapping, not this panel.
  */
-export function TicketGitHubLinks({
+export function TicketTrackerLinks({
   ticketId,
   onChanged,
 }: {
   ticketId: TicketId
   onChanged: () => void
 }) {
-  const qc = useQueryClient()
   const { data } = useQuery(ticketQueries.externalLinks(ticketId))
+  if (!data) return null
+
+  const linksByType = new Map<string, TrackerLink[]>()
+  for (const link of data.links as TrackerLink[]) {
+    const list = linksByType.get(link.integrationType) ?? []
+    list.push(link)
+    linksByType.set(link.integrationType, list)
+  }
+
+  // One section per connected linkable tracker, plus orphan sections for
+  // links whose integration was later disconnected (still visible/removable).
+  const sections: Array<{ type: string; name: string; canLink: boolean }> = data.trackers.map(
+    (t: { integrationType: string; name: string }) => ({
+      type: t.integrationType,
+      name: t.name,
+      canLink: true,
+    })
+  )
+  for (const type of linksByType.keys()) {
+    if (!sections.some((s) => s.type === type)) {
+      sections.push({ type, name: type, canLink: false })
+    }
+  }
+  if (sections.length === 0) return null
+
+  return (
+    <div className="space-y-3">
+      {sections.map((s) => (
+        <TrackerSection
+          key={s.type}
+          ticketId={ticketId}
+          type={s.type}
+          name={s.name}
+          canLink={s.canLink}
+          links={linksByType.get(s.type) ?? []}
+          onChanged={onChanged}
+        />
+      ))}
+    </div>
+  )
+}
+
+function TrackerSection({
+  ticketId,
+  type,
+  name,
+  canLink,
+  links,
+  onChanged,
+}: {
+  ticketId: TicketId
+  type: string
+  name: string
+  canLink: boolean
+  links: TrackerLink[]
+  onChanged: () => void
+}) {
+  const qc = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [issueRef, setIssueRef] = useState('')
 
@@ -37,7 +103,8 @@ export function TicketGitHubLinks({
     toast.error(e instanceof Error ? e.message : 'Could not update the link')
 
   const link = useMutation({
-    mutationFn: (issue: string) => linkTicketIssueFn({ data: { ticketId, issue } }),
+    mutationFn: (issue: string) =>
+      linkTicketIssueFn({ data: { ticketId, issue, integrationType: type } }),
     onSuccess: () => {
       setIssueRef('')
       setAdding(false)
@@ -52,11 +119,7 @@ export function TicketGitHubLinks({
     onError,
   })
 
-  if (!data) return null
-  const links = data.links
-  // Nothing to show or do without the integration (existing links stay
-  // visible/removable even if the integration was later disconnected).
-  if (!data.githubConfigured && links.length === 0) return null
+  const Icon = INTEGRATION_ICON_MAP[type]
 
   const submit = () => {
     const value = issueRef.trim()
@@ -67,9 +130,9 @@ export function TicketGitHubLinks({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <GitHubIcon className="h-4 w-4" /> GitHub
+          {Icon && <Icon className="h-4 w-4" />} {name}
         </span>
-        {data.githubConfigured && !adding && (
+        {canLink && !adding && (
           <button
             type="button"
             onClick={() => setAdding(true)}
@@ -93,10 +156,10 @@ export function TicketGitHubLinks({
                 setIssueRef('')
               }
             }}
-            placeholder="Issue URL or owner/repo#123"
+            placeholder="Issue URL or reference"
             className="h-8 text-[13px]"
             disabled={link.isPending}
-            aria-label="GitHub issue URL or reference"
+            aria-label={`${name} issue URL or reference`}
           />
           <button
             type="button"

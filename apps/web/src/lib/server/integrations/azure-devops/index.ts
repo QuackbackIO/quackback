@@ -1,6 +1,7 @@
 import type { IntegrationDefinition } from '../types'
 import { azureDevOpsHook } from './hook'
 import { azureDevOpsInboundHandler } from './inbound'
+import { azureDevOpsIssues } from './issues'
 import { azureDevOpsCatalog } from './catalog'
 
 export const azureDevOpsIntegration: IntegrationDefinition = {
@@ -9,5 +10,6 @@ export const azureDevOpsIntegration: IntegrationDefinition = {
   // No OAuth — Azure DevOps uses Personal Access Tokens
   hook: azureDevOpsHook,
   inbound: azureDevOpsInboundHandler,
+  issues: azureDevOpsIssues,
   platformCredentials: [],
 }

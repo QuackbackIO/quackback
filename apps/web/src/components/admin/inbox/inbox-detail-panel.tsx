@@ -56,7 +56,7 @@ import {
 } from '@/components/admin/inbox/ticket-controls'
 import { TicketLinks } from '@/components/admin/inbox/ticket-links'
 import { TicketActivityTimeline } from '@/components/admin/inbox/ticket-activity-timeline'
-import { TicketGitHubLinks } from '@/components/admin/inbox/ticket-github-links'
+import { TicketTrackerLinks } from '@/components/admin/inbox/ticket-tracker-links'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -602,7 +602,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
         {isTicketItem && ticket && (
           <div className="space-y-4 border-t border-border/30 pt-4">
             <TicketLinks ticket={ticket} onChanged={onChanged} />
-            <TicketGitHubLinks ticketId={ticket.id} onChanged={onChanged} />
+            <TicketTrackerLinks ticketId={ticket.id} onChanged={onChanged} />
           </div>
         )}
         {!isTicketItem && conversation && (

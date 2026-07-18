@@ -1,17 +1,19 @@
 /**
  * Ticket <-> external issue links: manual linking of a ticket to an EXISTING
- * GitHub issue (by URL or owner/repo#number). The sibling of the post domain's
+ * tracker issue (GitHub, Jira, Azure DevOps — any provider whose registry
+ * definition implements `issues.parseRef`). The sibling of the post domain's
  * outbound-event-driven post_external_links, but team-driven: an agent pastes
- * an issue reference, we validate it against the active GitHub integration's
- * configured repository, and store the reverse-lookup row the inbound webhook
- * handler uses to map issue state changes onto ticket statuses.
+ * an issue reference, the provider capability parses/validates it, and we
+ * store the reverse-lookup row the inbound webhook handler uses to map issue
+ * state changes onto ticket statuses.
  *
- * v1 links existing issues only — there is no reusable issue-create client
- * (the outbound hook's create call is event-bus plumbing), so "create a new
- * issue from a ticket" is deliberately out of scope.
+ * Linking is capability-gated, never provider-id-gated: a tracker without
+ * `issues.parseRef` (e.g. Linear, whose inbound externalId is an internal
+ * UUID a pasted URL cannot supply) simply offers no manual linking.
  */
 import { db, eq, and, asc, integrations, ticketExternalLinks } from '@/lib/server/db'
 import type { TicketId, TicketExternalLinkId } from '@quackback/ids'
+import { getIntegration } from '@/lib/server/integrations'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -27,28 +29,9 @@ function assertCan(actor: Actor, permission: PermissionKey, action: string): voi
   if (!can(actor, permission)) throw new ForbiddenError('FORBIDDEN', `You cannot ${action}`)
 }
 
-// --------------------------------------------------------------- reference parsing
-
-export interface GitHubIssueRef {
-  owner: string
-  repo: string
-  number: number
-}
-
-// A full issue URL (query/hash/trailing-slash tolerated) or the
-// owner/repo#number shorthand. Owner/repo segments follow GitHub's charset.
-const ISSUE_URL_RE =
-  /^https?:\/\/(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/issues\/(\d+)\/?(?:[?#].*)?$/
-const ISSUE_SHORTHAND_RE = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)$/
-
-/** Parse a GitHub issue URL or owner/repo#number shorthand; null when neither. */
-export function parseGitHubIssueRef(input: string): GitHubIssueRef | null {
-  const trimmed = input.trim()
-  const m = ISSUE_URL_RE.exec(trimmed) ?? ISSUE_SHORTHAND_RE.exec(trimmed)
-  if (!m) return null
-  const number = Number.parseInt(m[3], 10)
-  if (!Number.isSafeInteger(number) || number <= 0) return null
-  return { owner: m[1], repo: m[2], number }
+/** Provider display name for note copy, falling back to the raw type. */
+function providerName(integrationType: string): string {
+  return getIntegration(integrationType)?.catalog.name ?? integrationType
 }
 
 // ------------------------------------------------------------------------- DTOs
@@ -75,75 +58,93 @@ function toDTO(row: LinkRow): TicketExternalLinkDTO {
   }
 }
 
+/** A connected tracker the panel can offer manual linking for. */
+export interface LinkableTrackerDTO {
+  integrationType: string
+  name: string
+}
+
 // ------------------------------------------------------------------------ service
 
-/** The active GitHub integration row, or null (drives the fn/panel gate too). */
-export async function getActiveGitHubIntegration() {
+/** The active integration row for a tracker type, or null. */
+export async function getActiveTrackerIntegration(integrationType: string) {
   return (
     (await db.query.integrations.findFirst({
-      where: and(eq(integrations.integrationType, 'github'), eq(integrations.status, 'active')),
+      where: and(
+        eq(integrations.integrationType, integrationType),
+        eq(integrations.status, 'active')
+      ),
     })) ?? null
   )
 }
 
 /**
- * Link a ticket to an existing GitHub issue (team-only, TICKET_ASSIGN — same
- * gate as tracker links). Accepts a full issue URL or owner/repo#number.
- * Validates the active GitHub integration and, when the integration pins a
- * repository, that the issue belongs to it: inbound webhooks reverse-look-up
- * by bare issue number, so a foreign repo's numbers would collide. No issue
- * metadata is fetched — there is no read client; we store what the reference
- * gives. Re-linking the same issue is an idempotent no-op. Records a
- * team-only 'external_linked' note on the ticket thread.
+ * Connected trackers that support manual issue linking — active integration
+ * row AND a registry `issues.parseRef` capability. Drives the ticket panel's
+ * per-tracker sections and its link affordance.
+ */
+export async function listLinkableTrackers(): Promise<LinkableTrackerDTO[]> {
+  const rows = await db.query.integrations.findMany({
+    where: eq(integrations.status, 'active'),
+  })
+  return rows
+    .filter((row) => getIntegration(row.integrationType)?.issues?.parseRef)
+    .map((row) => ({
+      integrationType: row.integrationType,
+      name: providerName(row.integrationType),
+    }))
+}
+
+/**
+ * Link a ticket to an existing tracker issue (team-only, TICKET_ASSIGN — same
+ * gate as tracker links). The provider capability parses the pasted reference
+ * (URL or provider shorthand) and enforces its own config validation (e.g.
+ * GitHub's connected-repository pin). No issue metadata is fetched — there is
+ * no read client; we store what the reference gives. Re-linking the same
+ * issue is an idempotent no-op. Records a team-only 'external_linked' note on
+ * the ticket thread.
  */
 export async function linkTicketToIssue(
   ticketId: TicketId,
   issueRef: string,
-  actor: Actor
+  actor: Actor,
+  integrationType = 'github'
 ): Promise<TicketExternalLinkDTO> {
   assertCan(actor, PERMISSIONS.TICKET_ASSIGN, 'link this ticket')
   await loadTicketOr404(ticketId)
 
-  const ref = parseGitHubIssueRef(issueRef)
+  const parseRef = getIntegration(integrationType)?.issues?.parseRef
+  if (!parseRef) {
+    throw new ValidationError('NOT_SUPPORTED', 'This integration does not support issue linking')
+  }
+
+  const integration = await getActiveTrackerIntegration(integrationType)
+  if (!integration) {
+    throw new ValidationError(
+      'NOT_CONFIGURED',
+      `Connect the ${providerName(integrationType)} integration first`
+    )
+  }
+
+  const config = (integration.config ?? {}) as Record<string, unknown>
+  const ref = parseRef(issueRef, config)
   if (!ref) {
     throw new ValidationError(
       'INVALID_ISSUE_REF',
-      'Enter a GitHub issue URL or an owner/repo#number reference'
+      `Enter a ${providerName(integrationType)} issue URL or reference`
     )
   }
 
-  const integration = await getActiveGitHubIntegration()
-  if (!integration) {
-    throw new ValidationError('NOT_CONFIGURED', 'Connect the GitHub integration first')
-  }
-
-  // channelId holds the connected "owner/repo" (see GitHubTarget in
-  // integrations/github/hook.ts). Only enforce when it has that shape.
-  const config = (integration.config ?? {}) as Record<string, unknown>
-  const configuredRepo =
-    typeof config.channelId === 'string' && config.channelId.includes('/') ? config.channelId : null
-  const issueRepo = `${ref.owner}/${ref.repo}`
-  if (configuredRepo && configuredRepo.toLowerCase() !== issueRepo.toLowerCase()) {
-    throw new ValidationError(
-      'REPO_MISMATCH',
-      `Issue must belong to the connected repository (${configuredRepo})`
-    )
-  }
-
-  const externalId = String(ref.number)
   const findExisting = () =>
     db.query.ticketExternalLinks.findFirst({
       where: and(
         eq(ticketExternalLinks.ticketId, ticketId),
-        eq(ticketExternalLinks.integrationType, 'github'),
-        eq(ticketExternalLinks.externalId, externalId)
+        eq(ticketExternalLinks.integrationType, integrationType),
+        eq(ticketExternalLinks.externalId, ref.externalId)
       ),
     })
   const existing = await findExisting()
   if (existing) return toDTO(existing) // idempotent re-link
-
-  const externalDisplayId = `${issueRepo}#${ref.number}`
-  const externalUrl = `https://github.com/${issueRepo}/issues/${ref.number}`
 
   const created = await db.transaction(async (tx) => {
     // onConflictDoNothing guards the pre-check race: a concurrent re-link of
@@ -154,10 +155,10 @@ export async function linkTicketToIssue(
       .values({
         ticketId,
         integrationId: integration.id,
-        integrationType: 'github',
-        externalId,
-        externalDisplayId,
-        externalUrl,
+        integrationType,
+        externalId: ref.externalId,
+        externalDisplayId: ref.externalDisplayId,
+        externalUrl: ref.externalUrl,
       })
       .onConflictDoNothing()
       .returning()
@@ -166,9 +167,12 @@ export async function linkTicketToIssue(
     await emitTicketSystemMessage(
       ticketId,
       'external_linked',
-      `Linked GitHub issue ${externalDisplayId}`,
+      `Linked ${providerName(integrationType)} issue ${ref.externalDisplayId}`,
       {
-        metadata: { externalReference: externalDisplayId, externalUrl },
+        metadata: {
+          externalReference: ref.externalDisplayId,
+          externalUrl: ref.externalUrl ?? undefined,
+        },
         exec: tx,
       }
     )
@@ -181,7 +185,7 @@ export async function linkTicketToIssue(
   }
 
   log.info(
-    { ticket_id: ticketId, external_id: externalId, integration_id: integration.id },
+    { ticket_id: ticketId, external_id: ref.externalId, integration_id: integration.id },
     'ticket linked to external issue'
   )
   return toDTO(created)
@@ -208,7 +212,7 @@ export async function unlinkTicketIssue(
     await emitTicketSystemMessage(
       ticketId,
       'external_unlinked',
-      `Unlinked GitHub issue ${reference}`,
+      `Unlinked ${providerName(removed.integrationType)} issue ${reference}`,
       {
         metadata: { externalReference: reference, externalUrl: removed.externalUrl ?? undefined },
         exec: tx,

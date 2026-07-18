@@ -1,6 +1,7 @@
 import type { IntegrationDefinition } from '../types'
 import { githubHook } from './hook'
 import { githubInboundHandler } from './inbound'
+import { githubIssues } from './issues'
 import { getGitHubOAuthUrl, exchangeGitHubCode, revokeGitHubToken } from './oauth'
 import { githubCatalog } from './catalog'
 
@@ -14,6 +15,7 @@ export const githubIntegration: IntegrationDefinition = {
   },
   hook: githubHook,
   inbound: githubInboundHandler,
+  issues: githubIssues,
   platformCredentials: [
     {
       key: 'clientId',

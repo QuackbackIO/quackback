@@ -19,6 +19,7 @@ import {
   StatusSyncConfig,
   type ExternalStatus,
 } from '@/components/admin/settings/integrations/status-sync-config'
+import { TicketStatusSyncConfig } from '@/components/admin/settings/integrations/ticket-status-sync-config'
 import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 
 interface EventMapping {
@@ -229,6 +230,13 @@ export function LinearConfig({
       <StatusSyncConfig
         integrationId={integrationId}
         integrationType="linear"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+      />
+
+      <TicketStatusSyncConfig
+        integrationId={integrationId}
         config={initialConfig}
         enabled={integrationEnabled}
         externalStatuses={externalStatuses}

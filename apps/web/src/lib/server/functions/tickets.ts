@@ -357,37 +357,44 @@ export const unlinkTicketFromTrackerFn = createServerFn({ method: 'POST' })
   })
 
 // ---------------------------------------------------------------------------
-// External issue links (GitHub)
+// External issue links (any tracker with the issues.parseRef capability)
 // ---------------------------------------------------------------------------
 
-/** A ticket's linked GitHub issues, plus whether the integration is connected
- *  (drives the panel's visibility). Reads on TICKET_VIEW. */
+/** A ticket's linked tracker issues, plus the connected trackers that support
+ *  manual linking (drives the panel's per-tracker sections). Reads on
+ *  TICKET_VIEW. */
 export const fetchTicketExternalLinksFn = createServerFn({ method: 'GET' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
-    const { listTicketExternalLinks, getActiveGitHubIntegration } =
+    const { listTicketExternalLinks, listLinkableTrackers } =
       await import('@/lib/server/domains/tickets/ticket-external-links.service')
-    const [links, integration] = await Promise.all([
+    const [links, trackers] = await Promise.all([
       listTicketExternalLinks(data.ticketId as TicketId),
-      getActiveGitHubIntegration(),
+      listLinkableTrackers(),
     ])
-    return { links, githubConfigured: integration !== null }
+    return { links, trackers }
   })
 
-/** Link a ticket to an existing GitHub issue by URL or owner/repo#number.
+/** Link a ticket to an existing tracker issue by URL or provider shorthand.
  *  Gated on TICKET_ASSIGN, like the tracker links. */
 export const linkTicketIssueFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ ticketId: z.string(), issue: z.string().trim().min(1).max(500) }))
+  .validator(
+    z.object({
+      ticketId: z.string(),
+      issue: z.string().trim().min(1).max(500),
+      integrationType: z.string().min(1).max(50).default('github'),
+    })
+  )
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_ASSIGN })
     const actor = await policyActorFromAuth(ctx)
     const { linkTicketToIssue } =
       await import('@/lib/server/domains/tickets/ticket-external-links.service')
-    return linkTicketToIssue(data.ticketId as TicketId, data.issue, actor)
+    return linkTicketToIssue(data.ticketId as TicketId, data.issue, actor, data.integrationType)
   })
 
-/** Remove a ticket's GitHub issue link. Gated on TICKET_ASSIGN. */
+/** Remove a ticket's tracker issue link. Gated on TICKET_ASSIGN. */
 export const unlinkTicketIssueFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string(), linkId: z.string() }))
   .handler(async ({ data }) => {
