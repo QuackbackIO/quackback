@@ -17,6 +17,10 @@ export { refreshVisitorAnalytics, VISITOR_PERIODS } from './src/visitor-rollup'
 // Migration ledger status (bundled journal vs applied rows; readiness probe)
 export { getMigrationStatus, type MigrationStatus } from './src/migration-status'
 
+// System-data reconcile (statuses, RBAC catalogue, preset bundles, assignment
+// backfill + heal) — exported so integration tests can exercise the heal.
+export { seedSystemData } from './src/seed-system'
+
 // Types
 export * from './src/types'
 

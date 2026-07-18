@@ -8,7 +8,7 @@
  * inserts what is missing and reconciles drift (a permission's category or
  * description, a preset's bundle) without duplicating rows.
  */
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull, ne, notExists } from 'drizzle-orm'
 import type { Database } from './client'
 import { postStatuses, DEFAULT_STATUSES } from './schema/statuses'
 import { ticketStatuses, DEFAULT_TICKET_STATUSES } from './schema/tickets'
@@ -103,11 +103,44 @@ export async function seedSystemData(db: Executor): Promise<void> {
     }
   }
 
-  // 5. Backfill principal_role_assignments from the legacy principal.role cache:
+  // 5a. Heal the pre-reconcile era. This backfill used to run without
+  //     setPrincipalRole keeping assignments in sync, so a demoted or removed
+  //     teammate could keep the Owner/Manager row an earlier run seeded — a
+  //     removed admin still passing every permission gate. Delete
+  //     backfill-owned rows (Owner/Manager preset, workspace-wide) whose
+  //     holder's legacy role no longer maps to them. Explicit grants are never
+  //     touched: custom roles and other presets don't match the two role ids,
+  //     and explicit grants record their grantor while backfill/reconcile rows
+  //     leave grantedByPrincipalId NULL.
+  const healTargets = [
+    { roleId: roleIdByKey.get(SYSTEM_ROLES.OWNER), legacyRole: 'admin' },
+    { roleId: roleIdByKey.get(SYSTEM_ROLES.MANAGER), legacyRole: 'member' },
+  ]
+  for (const { roleId, legacyRole } of healTargets) {
+    if (!roleId) continue
+    await db
+      .delete(principalRoleAssignments)
+      .where(
+        and(
+          eq(principalRoleAssignments.roleId, roleId),
+          isNull(principalRoleAssignments.teamId),
+          isNull(principalRoleAssignments.grantedByPrincipalId),
+          inArray(
+            principalRoleAssignments.principalId,
+            db.select({ id: principal.id }).from(principal).where(ne(principal.role, legacyRole))
+          )
+        )
+      )
+  }
+
+  // 5b. Backfill principal_role_assignments from the legacy principal.role cache:
   //    admin -> Owner, member -> Manager, user -> no assignment (service
   //    principals map the same way). Ordered after the preset seed so the role
-  //    ids exist. Idempotent: the partial unique index (principal_id, role_id)
-  //    WHERE team_id IS NULL backstops onConflictDoNothing.
+  //    ids exist. Skips principals that already hold ANY workspace-wide
+  //    assignment, so an explicit grant (a custom role) is never silently
+  //    augmented with a second preset row. Idempotent: the partial unique index
+  //    (principal_id, role_id) WHERE team_id IS NULL backstops
+  //    onConflictDoNothing.
   const legacyToPreset: Record<string, SystemRoleKey> = {
     admin: SYSTEM_ROLES.OWNER,
     member: SYSTEM_ROLES.MANAGER,
@@ -115,7 +148,22 @@ export async function seedSystemData(db: Executor): Promise<void> {
   const legacyPrincipals = await db
     .select({ id: principal.id, role: principal.role })
     .from(principal)
-    .where(inArray(principal.role, Object.keys(legacyToPreset)))
+    .where(
+      and(
+        inArray(principal.role, Object.keys(legacyToPreset)),
+        notExists(
+          db
+            .select({ id: principalRoleAssignments.id })
+            .from(principalRoleAssignments)
+            .where(
+              and(
+                eq(principalRoleAssignments.principalId, principal.id),
+                isNull(principalRoleAssignments.teamId)
+              )
+            )
+        )
+      )
+    )
 
   const assignments: (typeof principalRoleAssignments.$inferInsert)[] = []
   for (const p of legacyPrincipals) {

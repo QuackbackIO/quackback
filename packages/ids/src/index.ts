@@ -167,6 +167,11 @@ export type {
   IdentityProviderId,
   ApiKeyId,
   WebhookId,
+  // RBAC
+  RoleId,
+  PermissionId,
+  RolePermissionId,
+  RoleAssignmentId,
   // Eventing
   EvtId,
   // App platform

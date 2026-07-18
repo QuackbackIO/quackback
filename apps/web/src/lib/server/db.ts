@@ -422,6 +422,8 @@ export {
   presetForLegacyRole,
   // Migration ledger status (readiness probe)
   getMigrationStatus,
+  // System-data reconcile (integration tests exercise the assignment heal)
+  seedSystemData,
   // Types/constants
   REACTION_EMOJIS,
   USE_CASE_TYPES,
