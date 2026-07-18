@@ -150,7 +150,7 @@ function LiveHelpCenterFinder({
     : 'Recent articles'
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       <AdminListHeader
         searchValue={searchValue}
         onSearchChange={setSearchValue}
@@ -294,7 +294,7 @@ function DeletedItemsView() {
   const restoreArticleMutation = useRestoreArticle()
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       <AdminListHeader searchValue="" onSearchChange={() => {}} searchPlaceholder="Deleted items" />
 
       <div className="px-3 pb-3 flex items-center justify-between">

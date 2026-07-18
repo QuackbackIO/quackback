@@ -37,7 +37,7 @@ export function StatusOverviewView() {
   const { data, isLoading } = useQuery(statusOverviewQueries.get())
 
   return (
-    <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0">
+    <div className="max-w-5xl w-full flex flex-col flex-1 min-h-0">
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5 flex items-center gap-2 border-b border-border/40">
         <h2 className="text-sm font-semibold px-1">Overview</h2>
         <div className="flex items-center gap-2 ml-auto">

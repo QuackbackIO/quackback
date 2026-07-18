@@ -371,7 +371,7 @@ export function UsersList({
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <UserListSkeleton />
       </div>
@@ -380,7 +380,7 @@ export function UsersList({
 
   if (users.length === 0) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <UsersEmptyState hasActiveFilters={hasActiveFilters} onClearFilters={onClearFilters} />
       </div>
@@ -388,7 +388,7 @@ export function UsersList({
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       {headerContent}
 
       {/* User List */}

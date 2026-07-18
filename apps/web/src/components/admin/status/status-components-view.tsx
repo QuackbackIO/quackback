@@ -390,7 +390,7 @@ export function StatusComponentsView() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0">
+    <div className="max-w-4xl w-full flex flex-col flex-1 min-h-0">
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-3 py-2.5 flex items-center gap-2 border-b border-border/40">
         <h2 className="text-sm font-semibold px-1">Services</h2>
         <Input

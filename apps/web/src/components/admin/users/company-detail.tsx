@@ -622,7 +622,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
 
   if (isLoading || !company) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {backHeader}
         <div className="p-4 space-y-6">
           <div className="flex items-start gap-4">
@@ -639,7 +639,7 @@ export function CompanyDetail({ companyId, onClose, canManage }: CompanyDetailPr
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       {backHeader}
       <div className="p-4 space-y-6">
         {/* Header */}

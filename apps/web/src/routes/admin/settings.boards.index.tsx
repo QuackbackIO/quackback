@@ -83,7 +83,7 @@ function BoardsSettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto w-full">
+    <div className="space-y-6 max-w-5xl w-full">
       <div className="lg:hidden">
         <BackLink to="/admin/settings">Settings</BackLink>
       </div>

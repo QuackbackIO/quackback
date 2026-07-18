@@ -94,7 +94,7 @@ export function StatusIncidentList({ kind, state, emptyMessage }: StatusIncident
 
   return (
     <>
-      <div className="max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0">
+      <div className="max-w-5xl w-full flex flex-col flex-1 min-h-0">
         <AdminListHeader
           searchValue={searchValue}
           onSearchChange={setSearchValue}

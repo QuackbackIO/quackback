@@ -188,7 +188,7 @@ export function FeedbackTableView({
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <TableSkeleton />
       </div>
@@ -197,7 +197,7 @@ export function FeedbackTableView({
 
   if (filteredPosts.length === 0 && !isSearchingForDuplicateMatches) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <InboxEmptyState
           type={hasActiveFilters ? 'no-results' : 'no-posts'}
@@ -209,7 +209,7 @@ export function FeedbackTableView({
 
   if (isSearchingForDuplicateMatches) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {headerContent}
         <div className="px-3 py-12 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
           <Spinner />
@@ -220,7 +220,7 @@ export function FeedbackTableView({
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       {headerContent}
 
       {/* Post List */}

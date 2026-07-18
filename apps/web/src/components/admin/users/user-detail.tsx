@@ -488,7 +488,7 @@ export function UserDetail({
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto w-full">
+      <div className="max-w-5xl w-full">
         {backHeader}
         <DetailSkeleton />
       </div>
@@ -500,7 +500,7 @@ export function UserDetail({
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full">
+    <div className="max-w-5xl w-full">
       {backHeader}
       <div className="p-4 space-y-6">
         {/* Profile Header */}
