@@ -138,7 +138,8 @@ Example: \`post_01h455vb4pex5vsknk084sn02q\`
       { name: 'Roadmaps', description: 'Manage roadmaps' },
       { name: 'Changelog', description: 'Manage changelog entries' },
       { name: 'Conversations', description: 'Manage support conversations' },
-      { name: 'Tickets', description: 'Read support tickets' },
+      { name: 'Tickets', description: 'Manage support tickets' },
+      { name: 'Moderation', description: 'Review and moderate pending posts and comments' },
       {
         name: 'Status',
         description: 'Manage the status page: components, incidents, and maintenance',

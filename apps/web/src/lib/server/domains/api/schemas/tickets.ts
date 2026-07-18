@@ -1,5 +1,8 @@
 /**
  * Tickets API Schema Registrations (support platform §4.2)
+ *
+ * Read routes (GET) live here. Write routes (POST) live in ./tickets-write.ts,
+ * which imports the shared schemas/constants exported below.
  */
 import 'zod-openapi'
 import { z } from 'zod'
@@ -16,14 +19,14 @@ import {
   NotFoundErrorSchema,
 } from './common'
 
-const TICKET_TYPES = ['customer', 'back_office', 'tracker'] as const
-const TICKET_CATEGORIES = ['open', 'pending', 'closed'] as const
-const TICKET_STAGES = ['received', 'in_progress', 'awaiting_requester', 'resolved'] as const
-const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
+export const TICKET_TYPES = ['customer', 'back_office', 'tracker'] as const
+export const TICKET_CATEGORIES = ['open', 'pending', 'closed'] as const
+export const TICKET_STAGES = ['received', 'in_progress', 'awaiting_requester', 'resolved'] as const
+export const TICKET_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
 const TICKET_SORTS = ['recent', 'oldest', 'created', 'priority'] as const
 
 // Ticket schema (GET /tickets, GET /tickets/:id)
-const TicketSchema = z.object({
+export const TicketSchema = z.object({
   id: TypeIdSchema.meta({ example: 'ticket_01h455vb4pex5vsknk084sn02q' }),
   number: z.number().meta({ description: 'Per-workspace sequential ticket number', example: 42 }),
   reference: z.string().meta({ description: 'Human reference, "#" + number', example: '#42' }),
@@ -82,7 +85,7 @@ const TicketMessageAttachmentSchema = z.object({
 })
 
 // Ticket message schema (GET /tickets/:id/messages)
-const TicketMessageSchema = z.object({
+export const TicketMessageSchema = z.object({
   id: TypeIdSchema.meta({ example: 'conversation_msg_01h455vb4pex5vsknk084sn02q' }),
   ticketId: TypeIdSchema.meta({ example: 'ticket_01h455vb4pex5vsknk084sn02q' }),
   senderType: z.enum(['visitor', 'agent', 'system']).meta({
@@ -116,6 +119,48 @@ const TicketMessageSchema = z.object({
     .nullable()
     .meta({ description: 'Image/file attachments, null if none' }),
   createdAt: TimestampSchema,
+})
+
+// A workspace ticket status (GET /ticket-statuses discovery endpoint, D11).
+const TicketStatusSchema = z.object({
+  id: TypeIdSchema.meta({ example: 'ticket_status_01h455vb4pex5vsknk084sn02q' }),
+  name: z.string().meta({ example: 'In progress' }),
+  slug: z.string().meta({ example: 'in_progress' }),
+  color: z.string().meta({ example: '#3b82f6' }),
+  category: z.enum(TICKET_CATEGORIES).meta({
+    description: 'Internal lifecycle axis (open, pending, closed)',
+    example: 'open',
+  }),
+  stage: z.enum(TICKET_STAGES).nullable().meta({
+    description: 'Customer-facing public stage this status projects to, null if internal-only',
+    example: 'in_progress',
+  }),
+  position: z.number().meta({ description: 'Ordering within its category', example: 0 }),
+  isDefault: z.boolean().meta({ description: 'Whether new tickets open in this status' }),
+})
+
+// Register GET /ticket-statuses (discovery for the opaque status ids)
+registerPath('/ticket-statuses', {
+  get: {
+    tags: ['Tickets'],
+    summary: 'List ticket statuses',
+    description:
+      "Returns the workspace's ticket statuses (ordered by category then position). Use these ids with POST /tickets/{ticketId}/status. Requires a team-role API key.",
+    responses: {
+      200: {
+        description: 'List of ticket statuses',
+        content: {
+          'application/json': {
+            schema: createItemResponseSchema(z.array(TicketStatusSchema), 'Ticket statuses'),
+          },
+        },
+      },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: UnauthorizedErrorSchema } },
+      },
+    },
+  },
 })
 
 // Register GET /tickets

@@ -1,11 +1,36 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
-import { successResponse, handleDomainError } from '@/lib/server/domains/api/responses'
+import {
+  successResponse,
+  createdResponse,
+  badRequestResponse,
+  handleDomainError,
+} from '@/lib/server/domains/api/responses'
+import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
+import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { TICKET_TYPES } from '@/lib/shared/db-types'
 import { serializeTicket } from './-serialize'
+import {
+  priorityEnum,
+  attachmentsSchema,
+  toAttachments,
+  markdownToSanitizedJson,
+} from './-validation'
 import type { TicketType, TicketStatusCategory, TicketStage } from '@/lib/server/db'
 import type { TicketSort } from '@/lib/server/domains/tickets/ticket.types'
 import type { PrincipalId, CompanyId, SegmentId } from '@quackback/ids'
+
+const createTicketSchema = z.object({
+  type: z.enum(TICKET_TYPES),
+  title: z.string().min(1).max(300),
+  description: z.string().max(4000).optional(),
+  priority: priorityEnum.optional(),
+  requesterPrincipalId: z.string().optional(),
+  companyId: z.string().optional(),
+  attachments: attachmentsSchema,
+})
 
 export const Route = createFileRoute('/api/v1/tickets/')({
   server: {
@@ -46,6 +71,55 @@ export const Route = createFileRoute('/api/v1/tickets/')({
           )
 
           return successResponse(tickets.map(serializeTicket))
+        } catch (error) {
+          return handleDomainError(error)
+        }
+      },
+
+      /** POST /api/v1/tickets — open a ticket as a team API key (a service actor). */
+      POST: async ({ request }) => {
+        try {
+          const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_CREATE })
+
+          const parsed = createTicketSchema.safeParse(await request.json().catch(() => null))
+          if (!parsed.success) {
+            return badRequestResponse('Invalid request body', {
+              errors: parsed.error.flatten().fieldErrors,
+            })
+          }
+
+          const requesterPrincipalId = parseOptionalTypeId<PrincipalId>(
+            parsed.data.requesterPrincipalId,
+            'principal',
+            'requester principal ID'
+          )
+          const companyId = parseOptionalTypeId<CompanyId>(
+            parsed.data.companyId,
+            'company',
+            'company ID'
+          )
+
+          const actor = serviceActorFromApiAuth(auth)
+          const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+          const dto = await createTicket(
+            {
+              type: parsed.data.type,
+              title: parsed.data.title,
+              description: parsed.data.description,
+              // Derive a sanitized rich doc from the markdown description so the
+              // opening message renders like every other write path (D3).
+              descriptionJson: parsed.data.description
+                ? markdownToSanitizedJson(parsed.data.description)
+                : undefined,
+              priority: parsed.data.priority,
+              requesterPrincipalId,
+              companyId,
+              attachments: toAttachments(parsed.data.attachments),
+            },
+            actor
+          )
+
+          return createdResponse(serializeTicket(dto))
         } catch (error) {
           return handleDomainError(error)
         }
