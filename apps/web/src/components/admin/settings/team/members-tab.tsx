@@ -12,6 +12,7 @@ import { settingsQueries } from '@/lib/client/queries/settings'
 import { EnvelopeIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/shared/utils'
 import {
   Table,
   TableBody,
@@ -43,6 +44,8 @@ type TeamRow =
       name: string
       email: string | null
       role: string
+      /** Resolved workspace assignment (preset or custom) for display. */
+      assignedRole: { id: string; key: string; name: string; isSystem: boolean } | null
       userId: UserId | null
       principalId: PrincipalId
       /** ISO 8601 from the server; null when the user has never
@@ -56,10 +59,38 @@ type TeamRow =
       name: string | null
       email: string
       role: string | null
+      roleName?: string | null
       createdAt: string
       lastSentAt: string | null
       expiresAt: string
     }
+
+/**
+ * One badge for both layouts: the resolved workspace assignment's name when
+ * one exists (presets show Owner/Manager etc., matching the roles tab), the
+ * legacy role text otherwise. Custom roles get the amber treatment.
+ */
+function roleBadge(r: TeamRow, role: string, extra = '') {
+  const assigned = r.type === 'member' ? r.assignedRole : null
+  const inviteRoleName = r.type === 'invitation' ? r.roleName : null
+  const isCustom = (assigned && !assigned.isSystem) || Boolean(inviteRoleName)
+  const label = assigned?.name ?? inviteRoleName ?? role
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        isCustom
+          ? 'border-amber-300/60 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+          : isAdmin(role)
+            ? 'bg-primary/10 text-primary border-primary/30'
+            : 'bg-muted/50',
+        extra
+      )}
+    >
+      {label}
+    </Badge>
+  )
+}
 
 const teamFilterFn: FilterFn<TeamRow> = (row, _columnId, filterValue: string) => {
   const query = filterValue.toLowerCase()
@@ -104,6 +135,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
       name: m.userName,
       email: m.userEmail,
       role: m.role,
+      assignedRole: m.assignedRole,
       userId: m.userId,
       principalId: m.id,
       lastSignInAt: m.lastSignInAt,
@@ -114,6 +146,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
       name: inv.name,
       email: inv.email,
       role: inv.role,
+      roleName: inv.roleName,
       createdAt: inv.createdAt,
       lastSentAt: inv.lastSentAt,
       expiresAt: inv.expiresAt,
@@ -196,16 +229,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
         cell: ({ row }) => {
           const r = row.original
           const role = r.role || 'member'
-          return (
-            <Badge
-              variant="outline"
-              className={
-                isAdmin(role) ? 'bg-primary/10 text-primary border-primary/30' : 'bg-muted/50'
-              }
-            >
-              {role}
-            </Badge>
-          )
+          return roleBadge(r, role)
         },
       },
       {
@@ -264,6 +288,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
                 userId={r.userId}
                 memberName={r.name || r.email || 'Unnamed'}
                 memberRole={r.role as 'admin' | 'member'}
+                assignedRoleId={r.assignedRole?.id ?? null}
                 isLastAdmin={isLastAdmin && isAdmin(r.role)}
               />
             </div>
@@ -406,16 +431,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
                           )}
                         </div>
                       </div>
-                      <Badge
-                        variant="outline"
-                        className={
-                          isAdmin(role)
-                            ? 'bg-primary/10 text-primary border-primary/30 shrink-0'
-                            : 'bg-muted/50 shrink-0'
-                        }
-                      >
-                        {role}
-                      </Badge>
+                      {roleBadge(r, role, 'shrink-0')}
                     </div>
 
                     {/* Secondary: last sign-in or invite expiry */}
@@ -467,6 +483,7 @@ export function MembersTab({ workspaceName, currentMember }: MembersTabProps) {
                             userId={r.userId}
                             memberName={r.name || r.email || 'Unnamed'}
                             memberRole={r.role as 'admin' | 'member'}
+                            assignedRoleId={r.assignedRole?.id ?? null}
                             isLastAdmin={isLastAdmin && isAdmin(r.role)}
                           />
                         )}

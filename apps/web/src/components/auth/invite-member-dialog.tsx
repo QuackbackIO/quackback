@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { useQuery } from '@tanstack/react-query'
+import { settingsQueries } from '@/lib/client/queries/settings'
 import { standardSchemaResolver } from '@hookform/resolvers/standard-schema'
 import { CheckCircleIcon, CheckIcon, ClipboardDocumentIcon } from '@heroicons/react/24/solid'
 import { inviteSchema, type InviteInput } from '@/lib/shared/schemas/auth'
@@ -96,6 +98,10 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
       role: 'member',
     },
   })
+
+  // Custom roles for the select; empty until any exist.
+  const { data: allRoles } = useQuery(settingsQueries.roles())
+  const customRoles = (allRoles ?? []).filter((r) => !r.isSystem)
 
   async function onSubmit(data: InviteInput) {
     setError('')
@@ -199,7 +205,19 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Role</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select
+                      onValueChange={(value) => {
+                        // Custom roles ride role='member' plus the roleId grant.
+                        if (value === 'member' || value === 'admin') {
+                          field.onChange(value)
+                          form.setValue('roleId', undefined)
+                        } else {
+                          field.onChange('member')
+                          form.setValue('roleId', value)
+                        }
+                      }}
+                      value={form.watch('roleId') ?? field.value}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />
@@ -212,6 +230,11 @@ export function InviteMemberDialog({ open, onClose, onSuccess }: InviteMemberDia
                         <SelectItem value="admin">
                           Admin - Can manage settings and members
                         </SelectItem>
+                        {customRoles.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name} - Custom role
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

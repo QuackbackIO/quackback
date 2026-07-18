@@ -23,6 +23,7 @@ import {
   listAssignableTeammatesFn,
 } from '@/lib/server/functions/teams'
 import { getVerifiedDomainsFn, listIdentityProvidersFn } from '@/lib/server/functions/sso'
+import { listRolesFn } from '@/lib/server/functions/roles'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
@@ -135,6 +136,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'team'],
       queryFn: fetchTeamMembersAndInvitations,
+      staleTime: STALE_TIME_SHORT,
+    }),
+
+  roles: () =>
+    queryOptions({
+      queryKey: ['settings', 'roles'],
+      queryFn: () => listRolesFn(),
       staleTime: STALE_TIME_SHORT,
     }),
 

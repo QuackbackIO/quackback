@@ -13,6 +13,9 @@ export interface PendingInvitation {
   email: string
   name: string | null
   role: string | null
+  /** Custom-role grant carried by the invite, when one was chosen. */
+  roleId?: string | null
+  roleName?: string | null
   createdAt: string
   lastSentAt: string | null
   expiresAt: string
