@@ -481,7 +481,7 @@ export function WidgetHomeAnimated({
         if (identToken) {
           try {
             const res = await fetch('/api/widget/session', {
-              headers: { Authorization: *** ${identToken}` },
+              headers: { Authorization: `Bearer ${identToken}` },
             })
             if (res.ok) {
               const body = await res.json()
