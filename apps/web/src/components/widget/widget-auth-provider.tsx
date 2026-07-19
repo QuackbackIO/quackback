@@ -317,17 +317,17 @@ export function WidgetAuthProvider({
     }
   }, [portalSessionToken, portalUser, storeToken])
 
-  // Restore a persisted anonymous session on mount so a returning visitor's
-  // conversation is visible immediately, without waiting for a write. Skipped
-  // when a portal session is present (it takes precedence) or one is already
-  // ready. Restore-only: never mints — the first write lazily mints if nothing
-  // valid was restored.
+  // Restore a persisted session (anonymous or identified) on mount so a
+  // returning visitor's conversation is visible immediately, without waiting
+  // for a write. Skipped when a portal session is present (it takes
+  // precedence) or one is already ready. Restore-only: never mints — the
+  // first write lazily mints if nothing valid was restored.
   const restoreAttemptedRef = useRef(false)
   useEffect(() => {
     if (restoreAttemptedRef.current) return
     if (portalSessionToken || sessionReadyRef.current) return
     restoreAttemptedRef.current = true
-    if (!readPersistedToken()) return
+    if (!readPersistedToken() && !readPersistedIdentifiedToken()) return
     void acquireSession(false)
   }, [portalSessionToken, acquireSession])
 
@@ -384,6 +384,10 @@ export function WidgetAuthProvider({
     async function handleAnonymousIdentify() {
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
+      // Clear any persisted identified token so a previously-identified
+      // visitor who now loads the host app logged out cannot have their old
+      // token restored and write as the prior user.
+      clearIdentifiedToken()
       setUser(null)
       sendToHost({ type: 'quackback:identify-result', success: true, user: null })
       sendToHost({ type: 'quackback:auth-change', user: null })
