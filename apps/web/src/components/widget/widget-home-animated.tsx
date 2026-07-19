@@ -490,7 +490,6 @@ export function WidgetHomeAnimated({
                   await import('@/lib/client/widget-auth')
                 setWidgetToken(identToken)
                 persistIdentifiedToken(identToken)
-                setUser(body.data.user)
                 // Re-resolve board permissions with the restored identity
                 const [{ getWidgetAuthHeaders }, { fetchBoardCapabilitiesFn }] =
                   await Promise.all([

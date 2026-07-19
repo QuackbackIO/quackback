@@ -33,6 +33,7 @@
   "widget.home.form.errorEmail": "Ihre E-Mail-Adresse konnte nicht überprüft werden. Bitte versuchen Sie es erneut.",
   "widget.home.form.errorSession": "Sitzung konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
   "widget.home.form.errorNetwork": "Netzwerkfehler. Bitte versuchen Sie es erneut.",
+  "widget.home.form.errorReauthRequired": "Your session has expired. Please sign in again to submit feedback.",
   "widget.home.similar.heading": "Ähnliche Ideen",
   "widget.home.popular.heading": "Beliebte Ideen",
   "widget.home.popular.search.placeholder": "Ideen suchen...",

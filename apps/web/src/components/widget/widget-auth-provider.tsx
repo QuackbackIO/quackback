@@ -152,7 +152,7 @@ export function WidgetAuthProvider({
           if (persistedIdent) {
             try {
               const res = await fetch('/api/widget/session', {
-                headers: { Authorization: `${persistedIdent}` },
+                headers: { Authorization: `Bearer ${persistedIdent}` },
               })
               if (res.ok) {
                 const body = await res.json()
