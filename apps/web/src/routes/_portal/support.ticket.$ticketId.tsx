@@ -151,7 +151,11 @@ function PortalTicketPage() {
       replyJsonRef.current = null
       setHasContent(false)
       setEditorKey((k) => k + 1)
-      void queryClient.invalidateQueries({ queryKey: portalTicketKeys.thread(id) })
+      // Invalidate the whole tickets tree, not just the thread: a requester
+      // reply auto-reopens the ticket (awaiting_requester → open), so the
+      // detail-driven StageTracker/awaiting banner and the list's stage chip +
+      // activity ordering would otherwise stay stale until they expire.
+      void queryClient.invalidateQueries({ queryKey: portalTicketKeys.all() })
     },
     onError: () => toast.error('Failed to send your reply'),
   })

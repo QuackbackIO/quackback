@@ -194,14 +194,20 @@ export function TriggerEditor({
       )}
 
       {isApproachingBreachTrigger && (
-        <MinutesField
-          label="Lead time"
-          prefix="Warn"
-          suffix="minutes before the deadline"
-          value={breachLeadMinutes}
-          max={MAX_BREACH_LEAD_MINUTES}
-          onCommit={setBreachLeadMinutes}
-        />
+        <>
+          <MinutesField
+            label="Lead time"
+            prefix="Warn"
+            suffix="minutes before the deadline"
+            value={breachLeadMinutes}
+            max={MAX_BREACH_LEAD_MINUTES}
+            onCommit={setBreachLeadMinutes}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            With several live workflows on this trigger, the widest lead time governs — all of them
+            fire together at that earliest point.
+          </p>
+        </>
       )}
 
       {isTicketStatusChangedTrigger && (

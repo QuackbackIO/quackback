@@ -23,6 +23,7 @@ import {
   ticketStatuses,
   conversationMessages,
   ticketConversations,
+  conversations,
   principal,
   teams,
   type Ticket,
@@ -55,7 +56,6 @@ import {
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { getStageLabels } from '../settings/settings.tickets'
-import { resumeTicketSlaFromPending } from '../sla/ticket-sla.service'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { emitTicketCreated, emitTicketStatusChanged, emitTicketAssigned } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, ticketRowToDTO } from './ticket.dto'
@@ -342,6 +342,17 @@ async function publishTicketUpdated(row: Ticket): Promise<TicketDTO> {
  * Open a ticket WITHOUT a permission check — the caller authorizes (agent
  * TICKET_CREATE via createTicket, or requester self-creation via createMyTicket).
  * Resolves the default status; `number` auto-increments.
+ *
+ * The input's assignee/company are stored as given — the AGENT defaulting
+ * rules (inherit the source conversation's assignee, else the creating agent;
+ * propagate the requester's company) live in `createTicket`, so the requester
+ * intake (`createMyTicket`) keeps its born-unassigned, company-less shape.
+ * The watcher set is resolved here, though, in the create transaction: the
+ * requester (reason 'requester'), a distinct assignee ('assignee'), and the
+ * creating principal when they are neither ('manual') — the last skipped when
+ * the actor's principal id doesn't resolve to a real row (a bare/synthetic id
+ * could never satisfy the subscription's FK), so self-creation by the
+ * requester adds nothing beyond their 'requester' row.
  */
 export async function createTicketCore(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
   const title = input.title?.trim()
@@ -395,6 +406,7 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
         statusId: defaultStatus.id,
         priority: input.priority ?? 'none',
         requesterPrincipalId: input.requesterPrincipalId ?? null,
+        assigneePrincipalId: input.assigneePrincipalId ?? null,
         companyId: input.companyId ?? null,
         customAttributes: input.customAttributes ?? {},
       })
@@ -420,11 +432,31 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
       })
     }
 
-    // The requester watches their own ticket from birth (reason 'requester'),
-    // in the same transaction so the first fan-out can never race past the
-    // subscription row.
+    // The watcher set from birth, in the same transaction so the first fan-out
+    // can never race past the subscription rows. The requester watches their
+    // own ticket (reason 'requester'); a distinct assignee watches as
+    // 'assignee'; the creating principal watches as 'manual' when they are
+    // neither — skipped when their id resolves to no real principal row (the
+    // subscription FKs principal, so a bare/synthetic actor id could never be
+    // written). First-reason-wins ordering: requester, then assignee, then
+    // creator, with onConflictDoNothing collapsing any overlap.
     if (input.requesterPrincipalId) {
       await subscribeToTicket(input.requesterPrincipalId, ticket.id, 'requester', { tx })
+    }
+    if (input.assigneePrincipalId && input.assigneePrincipalId !== input.requesterPrincipalId) {
+      await subscribeToTicket(input.assigneePrincipalId, ticket.id, 'assignee', { tx })
+    }
+    if (
+      actor.principalId &&
+      actor.principalId !== input.requesterPrincipalId &&
+      actor.principalId !== input.assigneePrincipalId
+    ) {
+      const [creator] = await tx
+        .select({ id: principal.id })
+        .from(principal)
+        .where(eq(principal.id, actor.principalId))
+        .limit(1)
+      if (creator) await subscribeToTicket(actor.principalId, ticket.id, 'manual', { tx })
     }
     return ticket
   })
@@ -450,10 +482,65 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
   return publishTicketUpdated(created)
 }
 
-/** Open a ticket as an agent (any type, optional requester). */
+/**
+ * Open a ticket as an agent (any type, optional requester). Agent-created
+ * tickets are born OWNED: the assignee defaults to the source conversation's
+ * assignee (`input.sourceConversationId`, the create-from-a-conversation
+ * flow), else to the creating agent — an explicit `input.assigneePrincipalId`
+ * always wins and is validated like an `assignTicket` target. The company
+ * propagates from the requester's own `principal.companyId` when the ticket
+ * has a requester and no explicit company. The requester intake
+ * (`createMyTicket`) calls `createTicketCore` directly and gets NONE of this —
+ * it stays born-unassigned and company-less by design.
+ */
 export async function createTicket(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_CREATE, 'create a ticket')
-  return createTicketCore(input, actor)
+
+  // Assignee resolution: explicit > source conversation's assignee > creating
+  // agent. The two defaults are best-effort — a missing conversation or a
+  // creator whose principal doesn't resolve to a team member simply leaves
+  // the ticket unassigned (a default must never fail the create); an EXPLICIT
+  // assignee, by contrast, is validated hard, mirroring assignTicket.
+  let assigneePrincipalId = input.assigneePrincipalId ?? null
+  if (assigneePrincipalId) {
+    const [assignee] = await db
+      .select({ role: principal.role })
+      .from(principal)
+      .where(eq(principal.id, assigneePrincipalId))
+      .limit(1)
+    if (!assignee || !isTeamMember(assignee.role)) {
+      throw new ValidationError('INVALID_ASSIGNEE', 'Can only assign to a team member')
+    }
+  } else if (input.sourceConversationId) {
+    const [conversation] = await db
+      .select({ assigned: conversations.assignedAgentPrincipalId })
+      .from(conversations)
+      .where(eq(conversations.id, input.sourceConversationId))
+      .limit(1)
+    assigneePrincipalId = conversation?.assigned ?? null
+  }
+  if (!assigneePrincipalId && actor.principalId) {
+    const [creator] = await db
+      .select({ role: principal.role })
+      .from(principal)
+      .where(eq(principal.id, actor.principalId))
+      .limit(1)
+    if (creator && isTeamMember(creator.role)) assigneePrincipalId = actor.principalId
+  }
+
+  // Company propagation: the requester's own company fills in when nothing
+  // explicit was passed; a requester-less ticket stays company-less.
+  let companyId = input.companyId ?? null
+  if (!companyId && input.requesterPrincipalId) {
+    const [requester] = await db
+      .select({ companyId: principal.companyId })
+      .from(principal)
+      .where(eq(principal.id, input.requesterPrincipalId))
+      .limit(1)
+    companyId = requester?.companyId ?? null
+  }
+
+  return createTicketCore({ ...input, assigneePrincipalId, companyId }, actor)
 }
 
 /**
@@ -495,7 +582,8 @@ export async function setTicketStatus(
   if (!target) throw new NotFoundError('STATUS_NOT_FOUND', `Ticket status ${statusId} not found`)
 
   const now = new Date()
-  const transition = statusTransition(current?.category ?? 'open', target.category, now)
+  const previousCategory = current?.category ?? 'open'
+  const transition = statusTransition(previousCategory, target.category, now)
   const patch: Partial<Ticket> = { statusId, updatedAt: now }
   if (transition.resolvedAt !== undefined) patch.resolvedAt = transition.resolvedAt
   if (transition.reopenedIncrement) {
@@ -541,7 +629,7 @@ export async function setTicketStatus(
   void emitTicketStatusChanged(
     actor,
     updated,
-    current?.category ?? 'open',
+    previousCategory,
     target.category,
     resolveStage(target),
     previousStage,
@@ -558,14 +646,18 @@ export async function setTicketStatus(
   if (newStage && newStage !== previousStage) {
     const stageLabels = await getStageLabels()
     await postTicketStatusEvent(id, stageLabels[newStage])
+  }
 
-    // A tracker fans its stage progress onto the customer tickets it tracks
-    // (§4.9): each linked ticket takes the tracker's status and runs its own
-    // crossing (its requester's bell + thread event). Trackers carry no
-    // requester of their own, so the bell never fires for them.
-    if (existing.type === 'tracker') {
-      await cascadeTrackerStatus(id, statusId, actor)
-    }
+  // A tracker fans its status onto the customer tickets it tracks (§4.9),
+  // driven off the CATEGORY transition — entering closed, reopening out of it,
+  // or an open<->pending move — never off the stage crossing. The old
+  // stage-driven rule meant closing a tracker via a null-stage status ("Won't
+  // do", "Duplicate") cascaded nothing, leaving the tracked tickets open under
+  // a closed tracker permanently. The cascade is internal plumbing, so it runs
+  // even when the customer-facing stage event above legitimately stays silent
+  // for a null-stage status.
+  if (existing.type === 'tracker' && previousCategory !== target.category) {
+    await cascadeTrackerStatus(id, statusId, actor)
   }
 
   return dto
@@ -628,8 +720,17 @@ async function postTicketStatusEvent(ticketId: TicketId, stageLabel: string): Pr
  * (clearing resolved_at + counting the reopen when leaving closed). No-op
  * otherwise. No permission check — the trigger is a requester reply on their own
  * ticket, verified upstream (`byPrincipalId` is that requester, recorded as the
- * activity actor; null keeps the event fully system-attributed). Returns
- * whether it moved.
+ * activity actor and carried as the event actor; null keeps both fully
+ * system-attributed). Returns whether it moved.
+ *
+ * The reopen emits the SAME signals `setTicketStatus` does — the realtime
+ * publish, the `ticket.status_changed` event (categories + stages), and the
+ * customer-facing thread stage notice on a real stage crossing — so every
+ * event consumer (the SLA hook's pending-resume, watcher notifications,
+ * webhooks, workflows) treats a requester-reply reopen exactly like an agent's
+ * status move. The durable timeline keeps its distinct `ticket.reopened` type,
+ * though: the history must read "reopened by the requester's reply", not an
+ * anonymous status flip.
  */
 export async function autoReopenOnRequesterReply(
   id: TicketId,
@@ -650,7 +751,11 @@ export async function autoReopenOnRequesterReply(
   if (!awaiting && current.category !== 'closed') return false
 
   const [firstOpen] = await db
-    .select({ id: ticketStatuses.id, name: ticketStatuses.name })
+    .select({
+      id: ticketStatuses.id,
+      name: ticketStatuses.name,
+      publicStage: ticketStatuses.publicStage,
+    })
     .from(ticketStatuses)
     .where(and(eq(ticketStatuses.category, 'open'), isNull(ticketStatuses.deletedAt)))
     .orderBy(asc(ticketStatuses.position))
@@ -664,23 +769,7 @@ export async function autoReopenOnRequesterReply(
   if (transition.reopenedIncrement) {
     patch.reopenedCount = sql`${tickets.reopenedCount} + 1` as unknown as number
   }
-  await db.update(tickets).set(patch).where(eq(tickets.id, id))
-
-  // SLA: a pending -> open reopen never emits ticket.status_changed (this path
-  // bypasses the bus), so the SLA event hook's resume never fires and the TTR
-  // stamp would keep pausedAt forever — the sweep skips paused stamps and a
-  // later close would settle against a deadline shifted by the whole
-  // post-reply span. Run the resume here instead. Best-effort: the reopen
-  // already landed, and resumeTicketSlaFromPending no-ops when no SLA stamp is
-  // paused. (Closed -> open needs nothing: the first resolution settled TTR
-  // permanently, so a settled stamp carries no pause.)
-  if (current.category === 'pending') {
-    try {
-      await resumeTicketSlaFromPending(id, now)
-    } catch (err) {
-      logger.error({ err, ticketId: id }, 'resume ticket SLA on requester-reply reopen failed')
-    }
-  }
+  const [updated] = await db.update(tickets).set(patch).where(eq(tickets.id, id)).returning()
 
   // Durable timeline record (fire-and-forget): a distinct 'ticket.reopened'
   // type — not 'status.changed' — so the timeline reads honestly ("reopened by
@@ -697,6 +786,46 @@ export async function autoReopenOnRequesterReply(
       trigger: 'requester_reply',
     },
   })
+
+  // Realtime signal, mirroring setTicketStatus (unified inbox §3.2, M3): an
+  // inbox row re-render on the reopen. The returned DTO is unused here (this
+  // path returns whether it moved).
+  await publishTicketUpdated(updated)
+
+  // Agent/integration-facing signal, mirroring setTicketStatus. previousStage
+  // is captured off the pre-write status row (unrecoverable after the UPDATE
+  // commits). The event actor is the requester themselves — synthesized the
+  // same way appendInboundTicketReply's is (a requester is never a service
+  // principal, so role/segments stay empty), so downstream actor gating treats
+  // the move as a human action, which it is. The SLA event hook's
+  // pending-resume rides this event (resumeTicketSlaFromPending no-ops when no
+  // stamp is paused), so this path needs no direct SLA call of its own.
+  const previousStage = resolveStage(current)
+  const newStage = resolveStage(firstOpen)
+  const actor: Actor = {
+    principalId: byPrincipalId,
+    role: null,
+    principalType: 'user',
+    segmentIds: new Set(),
+  }
+  void emitTicketStatusChanged(
+    actor,
+    updated,
+    current.category,
+    'open',
+    newStage,
+    previousStage,
+    existing.requesterPrincipalId ?? null
+  )
+
+  // The customer-facing thread stage notice, mirroring setTicketStatus: a real
+  // public_stage crossing posts the stage event; a null target stage stays
+  // silent, exactly as there.
+  if (newStage && newStage !== previousStage) {
+    const stageLabels = await getStageLabels()
+    await postTicketStatusEvent(id, stageLabels[newStage])
+  }
+
   return true
 }
 

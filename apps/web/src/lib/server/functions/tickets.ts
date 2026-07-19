@@ -153,6 +153,11 @@ const createTicketSchema = z.object({
   descriptionJson: z.any().nullable().optional(),
   attachments: z.array(ticketAttachmentSchema).optional(),
   requesterPrincipalId: z.string().optional(),
+  assigneePrincipalId: z.string().optional(),
+  // The create-from-a-conversation flow passes the source conversation so the
+  // ticket can inherit its assignee (the link itself is the separate
+  // linkTicketToConversationFn step).
+  conversationId: z.string().optional(),
   priority: prioritySchema.optional(),
   companyId: z.string().optional(),
   customAttributes: z.record(z.string(), z.unknown()).optional(),
@@ -174,6 +179,14 @@ export const createTicketFn = createServerFn({ method: 'POST' })
         requesterPrincipalId:
           data.requesterPrincipalId && isValidTypeId(data.requesterPrincipalId, 'principal')
             ? (data.requesterPrincipalId as PrincipalId)
+            : undefined,
+        assigneePrincipalId:
+          data.assigneePrincipalId && isValidTypeId(data.assigneePrincipalId, 'principal')
+            ? (data.assigneePrincipalId as PrincipalId)
+            : undefined,
+        sourceConversationId:
+          data.conversationId && isValidTypeId(data.conversationId, 'conversation')
+            ? (data.conversationId as ConversationId)
             : undefined,
         priority: data.priority,
         companyId:

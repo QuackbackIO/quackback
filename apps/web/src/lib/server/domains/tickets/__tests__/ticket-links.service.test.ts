@@ -86,19 +86,23 @@ async function seedSettings(): Promise<void> {
     .values({ name: 'Test WS', slug: `test_${suffix()}`, createdAt: new Date() })
 }
 
-async function seedDefaultStatus(): Promise<void> {
+async function seedDefaultStatus() {
   await testDb
     .update(ticketStatuses)
     .set({ isDefault: false })
     .where(eq(ticketStatuses.isDefault, true))
-  await testDb.insert(ticketStatuses).values({
-    name: 'T-Open',
-    slug: `t_open_${suffix()}`,
-    category: 'open',
-    position: 100,
-    isDefault: true,
-    publicStage: 'received',
-  })
+  const [open] = await testDb
+    .insert(ticketStatuses)
+    .values({
+      name: 'T-Open',
+      slug: `t_open_${suffix()}`,
+      category: 'open',
+      position: 100,
+      isDefault: true,
+      publicStage: 'received',
+    })
+    .returning()
+  return open
 }
 
 async function makeTicket(type: 'customer' | 'tracker', actor: Actor): Promise<TicketId> {
@@ -241,7 +245,100 @@ describe.skipIf(!fixture.available)('ticket-links.service (real DB, rolled back)
     expect(await getTrackerForTicket(loner)).toBeNull()
   })
 
-  it('a tracker stage crossing cascades its status onto the linked customer tickets', async () => {
+  it('closing a tracker cascades its status onto the linked customer tickets', async () => {
+    await seedSettings()
+    await seedDefaultStatus()
+    const { closed } = await seedCascadeStatuses()
+    const actor = await seedActor()
+    const tracker = await makeTicket('tracker', actor)
+    const a = await makeTicket('customer', actor)
+    const b = await makeTicket('customer', actor)
+    await linkTicketToTracker(tracker, a, actor)
+    await linkTicketToTracker(tracker, b, actor)
+
+    // Tracker crosses into the closed category (received -> resolved); both
+    // linked tickets follow.
+    await setTicketStatus(tracker, closed, actor)
+
+    expect(await statusOf(a)).toBe(closed)
+    expect(await statusOf(b)).toBe(closed)
+  })
+
+  it('closing a tracker via a NULL-STAGE status ("Won\'t do") cascades too, silently', async () => {
+    await seedSettings()
+    await seedDefaultStatus()
+    // A closed status with no public stage — the "Won't do"/"Duplicate" shape:
+    // invisible to the requester, but still a real close for the cascade.
+    const [wontDo] = await testDb
+      .insert(ticketStatuses)
+      .values({
+        name: "Won't do",
+        slug: `t_wd_${suffix()}`,
+        category: 'closed',
+        position: 300,
+        publicStage: null,
+      })
+      .returning()
+    const actor = await seedActor()
+    const tracker = await makeTicket('tracker', actor)
+    const a = await makeTicket('customer', actor)
+    const b = await makeTicket('customer', actor)
+    await linkTicketToTracker(tracker, a, actor)
+    await linkTicketToTracker(tracker, b, actor)
+
+    await setTicketStatus(tracker, wontDo.id, actor)
+
+    // The category crossing (open -> closed) drives the cascade even though
+    // the status projects no stage at all...
+    expect(await statusOf(a)).toBe(wontDo.id)
+    expect(await statusOf(b)).toBe(wontDo.id)
+    // ...while the customer-facing stage event legitimately stays silent on
+    // the tracker's own thread (null-stage statuses never post one).
+    const page = await listTicketMessages(tracker, { includeInternal: true })
+    expect(
+      page.messages.find((m) => m.systemEvent?.kind === 'ticket_status_changed')
+    ).toBeUndefined()
+  })
+
+  it('reopening a tracker cascades back out, but never regresses an already-closed linked ticket', async () => {
+    await seedSettings()
+    const openDefault = await seedDefaultStatus()
+    const { closed } = await seedCascadeStatuses()
+    // A second open status the tracker reopens INTO (distinct from the
+    // seeded default so the cascade has a real move to fan out).
+    const [reopened] = await testDb
+      .insert(ticketStatuses)
+      .values({
+        name: 'Reopened',
+        slug: `t_re_${suffix()}`,
+        category: 'open',
+        position: 50,
+        publicStage: 'received',
+      })
+      .returning()
+    const actor = await seedActor()
+    const tracker = await makeTicket('tracker', actor)
+    const a = await makeTicket('customer', actor)
+    const b = await makeTicket('customer', actor)
+    await linkTicketToTracker(tracker, a, actor)
+    await linkTicketToTracker(tracker, b, actor)
+
+    // Resolve A on its own, then close the tracker (B follows; A already sat
+    // on that very status). Reopen B on its own afterwards, so the tracker
+    // reopens with one closed and one open linked ticket.
+    await setTicketStatus(a, closed, actor)
+    await setTicketStatus(tracker, closed, actor)
+    await setTicketStatus(b, openDefault.id, actor)
+
+    await setTicketStatus(tracker, reopened.id, actor) // closed -> open crossing
+
+    // The open linked ticket follows the tracker's reopen...
+    expect(await statusOf(b)).toBe(reopened.id)
+    // ...but the closed one holds — the cascade never regresses a resolved ticket.
+    expect(await statusOf(a)).toBe(closed)
+  })
+
+  it('a lateral stage move (open -> open, no category crossing) does not cascade', async () => {
     await seedSettings()
     await seedDefaultStatus()
     const { inProgress } = await seedCascadeStatuses()
@@ -252,30 +349,15 @@ describe.skipIf(!fixture.available)('ticket-links.service (real DB, rolled back)
     await linkTicketToTracker(tracker, a, actor)
     await linkTicketToTracker(tracker, b, actor)
 
-    // Tracker crosses received -> in_progress; both linked tickets follow.
+    // Tracker crosses received -> in_progress: a real STAGE crossing (the
+    // tracker's own thread posts the event) but no CATEGORY crossing, so the
+    // linked tickets stay put.
+    const beforeA = await statusOf(a)
+    const beforeB = await statusOf(b)
     await setTicketStatus(tracker, inProgress, actor)
 
-    expect(await statusOf(a)).toBe(inProgress)
-    expect(await statusOf(b)).toBe(inProgress)
-  })
-
-  it('the cascade never regresses a linked ticket already closed', async () => {
-    await seedSettings()
-    await seedDefaultStatus()
-    const { inProgress, closed } = await seedCascadeStatuses()
-    const actor = await seedActor()
-    const tracker = await makeTicket('tracker', actor)
-    const openTicket = await makeTicket('customer', actor)
-    const closedTicket = await makeTicket('customer', actor)
-    await linkTicketToTracker(tracker, openTicket, actor)
-    await linkTicketToTracker(tracker, closedTicket, actor)
-    await setTicketStatus(closedTicket, closed, actor) // resolve one first
-
-    // Tracker moves to in_progress: the open one follows, the closed one holds.
-    await setTicketStatus(tracker, inProgress, actor)
-
-    expect(await statusOf(openTicket)).toBe(inProgress)
-    expect(await statusOf(closedTicket)).toBe(closed)
+    expect(await statusOf(a)).toBe(beforeA)
+    expect(await statusOf(b)).toBe(beforeB)
   })
 
   it('refuses a caller without ticket.assign', async () => {

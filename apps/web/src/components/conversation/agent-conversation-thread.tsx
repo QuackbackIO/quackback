@@ -47,7 +47,12 @@ import {
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
-import type { ConversationId, ConversationMessageId, TicketId } from '@quackback/ids'
+import type {
+  ConversationId,
+  ConversationMessageId,
+  TicketId,
+  TicketStatusId,
+} from '@quackback/ids'
 import {
   sendAgentMessageFn,
   addConversationNoteFn,
@@ -83,9 +88,13 @@ import type {
   AgentConversationMessageDTO,
   ConversationDTO,
 } from '@/lib/shared/conversation/types'
-import type { InboxItemRef } from '@/lib/shared/inbox/items'
+import type { InboxItemRef, LinkedTicketSummary } from '@/lib/shared/inbox/items'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
-import { resolveDefaultClosedStatusId } from '@/lib/shared/tickets'
+import {
+  formatTicketNumber,
+  resolveDefaultClosedStatusId,
+  resolveResolvedStatusId,
+} from '@/lib/shared/tickets'
 import { AgentMessageBubble, UnreadDivider } from '@/components/conversation/message-bubble'
 import { computeBlockStates } from '@/components/shared/conversation/conversation-rows'
 import {
@@ -146,6 +155,7 @@ import { ComposerAttachmentTray } from '@/components/shared/composer-attachment-
 import { LinkPreviews } from '@/components/shared/link-preview-card'
 import { conversationInboxQueries } from '@/lib/client/queries/conversation-inbox'
 import { inboxQueries, ticketKeys, ticketQueries } from '@/lib/client/queries/inbox'
+import { useSetTicketStatus } from '@/lib/client/mutations/inbox'
 import {
   buildAdminConversationRows,
   type AdminConversationRow,
@@ -182,6 +192,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -365,9 +383,13 @@ export function AgentConversationThread({
   const panelTicket: TicketDTO | null | undefined = isTicket ? ticket : linkedTicketFull
 
   // The ticket status catalogue, needed to resolve "Resolve" -> the default
-  // closed-category status (§3.4). Shared cache key with the route's own
-  // read, so mounting both costs one request, not two.
-  const { data: ticketStatusList } = useQuery({ ...ticketQueries.statuses(), enabled: isTicket })
+  // closed-category status (§3.4), and the close-confirm's "Resolve ticket
+  // and close" -> the 'resolved' closed status. Shared cache key with the
+  // route's own read, so mounting both costs one request, not two.
+  const { data: ticketStatusList } = useQuery({
+    ...ticketQueries.statuses(),
+    enabled: isTicket || !!linkedTicketId,
+  })
 
   const conversation = convThread?.conversation
   const messages: AgentConversationMessageDTO[] = isTicket
@@ -1098,9 +1120,21 @@ export function AgentConversationThread({
     },
     onError: () => toast.error('Failed to resolve ticket'),
   })
+  // Closing a conversation that still links an OPEN customer ticket asks
+  // first (the one-row rule would then hide that open ticket from every
+  // default surface): the confirm offers "Resolve ticket and close" vs
+  // "Close conversation only". The open-ness check re-reads the link at
+  // click time — `staleTime: 0` forces a refetch past the link query's 30s
+  // cache, so a ticket resolved (or reopened) seconds ago is never judged
+  // from the stale summary. The linked-ticket resolve goes through the
+  // shared mutation hook, which seeds the ticket's detail cache the same
+  // way the header's own status control does.
+  const [closeConfirmTicket, setCloseConfirmTicket] = useState<LinkedTicketSummary | null>(null)
+  const [closeCheckPending, setCloseCheckPending] = useState(false)
+  const linkedTicketStatusMutation = useSetTicketStatus()
   const primaryActionPending = isTicket
     ? resolveTicketMutation.isPending
-    : closeConversationMutation.isPending
+    : closeConversationMutation.isPending || closeCheckPending
   const runPrimaryAction = useCallback(() => {
     if (isTicket) {
       const closedStatusId = resolveDefaultClosedStatusId(ticketStatusList)
@@ -1109,10 +1143,59 @@ export function AgentConversationThread({
         return
       }
       resolveTicketMutation.mutate(closedStatusId)
-    } else {
-      closeConversationMutation.mutate()
+      return
     }
-  }, [isTicket, ticketStatusList, resolveTicketMutation, closeConversationMutation])
+    setCloseCheckPending(true)
+    queryClient
+      .fetchQuery({
+        ...inboxQueries.conversationTicketLink(conversationId ?? INACTIVE_CONVERSATION_ID),
+        staleTime: 0,
+      })
+      .then((linked) => {
+        if (linked && linked.statusCategory !== 'closed') setCloseConfirmTicket(linked)
+        else closeConversationMutation.mutate()
+      })
+      // A failed freshness check must not block the close — fall back to the
+      // pre-guard behavior (close unconditionally).
+      .catch(() => closeConversationMutation.mutate())
+      .finally(() => setCloseCheckPending(false))
+  }, [
+    isTicket,
+    ticketStatusList,
+    resolveTicketMutation,
+    closeConversationMutation,
+    queryClient,
+    conversationId,
+  ])
+  // The close confirm's two non-cancel actions. "Resolve ticket and close"
+  // stamps the workspace's resolved closed-category status on the linked
+  // ticket first and only then closes — a failed resolve leaves both sides
+  // untouched (and the dialog open).
+  const closeConfirmPending =
+    linkedTicketStatusMutation.isPending || closeConversationMutation.isPending
+  const closeConversationOnly = useCallback(() => {
+    setCloseConfirmTicket(null)
+    closeConversationMutation.mutate()
+  }, [closeConversationMutation])
+  const resolveTicketAndClose = useCallback(async () => {
+    if (!closeConfirmTicket) return
+    const statusId = resolveResolvedStatusId(ticketStatusList)
+    if (!statusId) {
+      toast.error('No closed ticket status is configured')
+      return
+    }
+    try {
+      await linkedTicketStatusMutation.mutateAsync({
+        ticketId: closeConfirmTicket.id,
+        statusId: statusId as TicketStatusId,
+      })
+    } catch {
+      toast.error('Failed to resolve ticket')
+      return
+    }
+    setCloseConfirmTicket(null)
+    closeConversationMutation.mutate()
+  }, [closeConfirmTicket, ticketStatusList, linkedTicketStatusMutation, closeConversationMutation])
 
   // Seed an insert into a mode's draft, then remount that editor so the new
   // value is loaded and the cursor lands at its end. The unified RichTextEditor
@@ -1912,6 +1995,53 @@ export function AgentConversationThread({
             isPending={blockMutation.isPending}
             onConfirm={() => blockMutation.mutate()}
           />
+          {/* Close-with-open-linked-ticket guard (three actions, so not the
+              shared ConfirmDialog — the button trio follows
+              internal-sources-confirm.tsx's AlertDialog pattern). */}
+          <AlertDialog
+            open={!!closeConfirmTicket}
+            onOpenChange={(o) => {
+              if (!o) setCloseConfirmTicket(null)
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Ticket {closeConfirmTicket ? formatTicketNumber(closeConfirmTicket.number) : ''}{' '}
+                  is still open
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Closing the conversation leaves the ticket open — and with its own inbox row
+                  folded into the conversation, it can go stale unnoticed.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={closeConfirmPending}
+                  onClick={() => setCloseConfirmTicket(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={closeConfirmPending}
+                  onClick={closeConversationOnly}
+                >
+                  Close conversation only
+                </Button>
+                <Button
+                  type="button"
+                  disabled={closeConfirmPending}
+                  onClick={() => void resolveTicketAndClose()}
+                >
+                  Resolve ticket and close
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Dialog open={snoozeCustomOpen} onOpenChange={setSnoozeCustomOpen}>
             <DialogContent className="sm:max-w-sm">
               <DialogHeader>

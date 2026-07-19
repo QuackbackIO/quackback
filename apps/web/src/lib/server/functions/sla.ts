@@ -172,6 +172,10 @@ export interface SlaPolicyOption {
   id: string
   name: string
   targetsSummary: string
+  /** Whether the policy sets a time-to-resolve target — the Apply-SLA picker's
+   *  'ticket' target flags policies without one (applySlaToTicket no-ops on
+   *  them, so picking one there would silently do nothing). */
+  hasTimeToResolveTarget: boolean
 }
 
 /** Live policies for the workflow canvas's Apply-SLA picker. */
@@ -182,6 +186,7 @@ export const listSlaPolicyOptionsFn = createServerFn({ method: 'GET' }).handler(
       id: p.id,
       name: p.name,
       targetsSummary: slaTargetsSummary(p),
+      hasTimeToResolveTarget: p.timeToResolveTargetSecs != null,
     }))
   }
 )

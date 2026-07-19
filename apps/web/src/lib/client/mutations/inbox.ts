@@ -78,6 +78,8 @@ export function useCreateTicket() {
           descriptionJson: input.descriptionJson,
           attachments: input.attachments,
           requesterPrincipalId: input.requesterPrincipalId ?? undefined,
+          assigneePrincipalId: input.assigneePrincipalId ?? undefined,
+          conversationId: input.sourceConversationId ?? undefined,
           priority: input.priority,
           companyId: input.companyId ?? undefined,
         },

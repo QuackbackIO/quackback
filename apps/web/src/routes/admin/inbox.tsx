@@ -797,6 +797,16 @@ function InboxPage() {
     }
     return selectedRef?.kind === 'ticket'
   }, [hasSelection, selectedIds, selectedRef])
+  // The solo active conversation's linked customer ticket (the one-row rule's
+  // chip data rides on the list row). Gates the command bar's create_ticket —
+  // a second ticket for the same conversation would be an orphan the list
+  // never surfaces (the header icon/panel already hide their own affordance)
+  // — and swaps in open_ticket, which navigates to the linked ticket instead.
+  const activeLinkedTicket = useMemo(() => {
+    if (hasSelection || selectedRef?.kind !== 'conversation') return null
+    const row = items.find((it) => itemRefId(it) === selectedRef.id)
+    return row?.kind === 'conversation' ? row.linkedTicket : null
+  }, [hasSelection, selectedRef, items])
   // Which value menu the floating bar shows open — driven by the command bar /
   // keyboard so a single keypress can pop the right picker.
   const [bulkMenu, setBulkMenu] = useState<BulkMenuId | null>(null)
@@ -1246,8 +1256,18 @@ function InboxPage() {
           if (needsTarget) void applyReopen()
           break
         case 'create_ticket':
+          // Never mint an orphan ticket on a conversation that already links
+          // one (the palette row is greyed out via hasLinkedTicket; this also
+          // covers the `c` key, which skips the palette's disabled gate).
+          if (activeLinkedTicket) break
           if (selectedRef?.kind === 'conversation') setCreateTicketToken((t) => t + 1)
           else if (!hasTicketTarget) setStandaloneCreateTicketOpen(true)
+          break
+        case 'open_ticket':
+          // The linked-ticket alternative to create_ticket: the ticket has no
+          // row of its own (one-row rule), but selecting its id opens its
+          // thread the same way a cross-scope deep-link would.
+          if (activeLinkedTicket) setSelectedId(activeLinkedTicket.id)
           break
         case 'copilot':
           // No-op unless the Copilot tab actually exists for this viewer and
@@ -1261,11 +1281,13 @@ function InboxPage() {
       hasSelection,
       hasActiveConversation,
       hasTicketTarget,
+      activeLinkedTicket,
       selectedRef,
       focusComposer,
       moveSelection,
       selectedId,
       toggleSelect,
+      setSelectedId,
       applyClose,
       applyReopen,
       copilotAvailable,
@@ -1432,6 +1454,8 @@ function InboxPage() {
         hasSelection={hasSelection}
         hasActiveConversation={hasActiveConversation}
         hasTicketTarget={hasTicketTarget}
+        hasLinkedTicket={!!activeLinkedTicket}
+        linkedTicketNumber={activeLinkedTicket?.number}
         copilotAvailable={copilotAvailable}
       />
       <ShortcutHelpPanel

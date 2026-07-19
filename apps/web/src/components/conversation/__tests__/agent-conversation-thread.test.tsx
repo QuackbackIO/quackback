@@ -16,10 +16,11 @@
  * that would otherwise hit real server functions.
  */
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import type { ConversationDTO, AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
+import type { LinkedTicketSummary } from '@/lib/shared/inbox/items'
 
 afterEach(cleanup)
 
@@ -209,61 +210,69 @@ vi.mock('@/lib/server/functions/blocking', () => ({
   unblockPersonFn: vi.fn(),
 }))
 
-const { mockTicket, mockTicketThread, mockTicketVariants } = vi.hoisted(() => {
-  const mockTicket = {
-    id: 'ticket_1',
-    number: 1,
-    reference: '#1',
-    type: 'customer',
-    title: 'Cannot log in',
-    status: { id: 'ticket_status_1', name: 'Open', color: '#22c55e', category: 'open' },
-    stage: { slot: null, label: null },
-    priority: 'none',
-    requester: null,
-    assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
-    company: null,
-    firstResponseAt: null,
-    dueAt: null,
-    resolvedAt: null,
-    sla: null,
-    createdAt: '2026-07-03T00:00:00.000Z',
-    updatedAt: '2026-07-03T00:00:00.000Z',
-    reopenedCount: 0,
-    customAttributes: {},
-    lastMessagePreview: 'Help please',
-    lastMessageAt: '2026-07-03T00:00:00.000Z',
-  } as TicketDTO
-  const mockTicketThread = {
-    hasMore: false,
-    messages: [
-      {
-        id: 'conversation_msg_1',
-        conversationId: null,
-        ticketId: 'ticket_1',
-        senderType: 'visitor',
-        content: 'Help please',
-        createdAt: '2026-07-03T00:00:00.000Z',
-        author: null,
-        attachments: [],
-        citations: [],
-        isAssistant: false,
-        isInternal: false,
-        contentJson: null,
-        viaEmail: false,
-        systemEvent: null,
-        reactions: [],
-        flaggedAt: null,
-        postSuggestion: null,
-        translatedFrom: null,
-      },
-    ],
-  }
-  // Per-id ticket-detail overrides for tests that need a variant (e.g. a
-  // closed-category status) to survive the mount refetch — seeding the query
-  // cache alone gets overwritten by the mocked queryFn's canonical row.
-  const mockTicketVariants: Record<string, Partial<TicketDTO>> = {}
-  return { mockTicket, mockTicketThread, mockTicketVariants }
-})
+const { mockTicket, mockTicketThread, mockTicketVariants, mockTicketLink, mockTicketStatuses } =
+  vi.hoisted(() => {
+    const mockTicket = {
+      id: 'ticket_1',
+      number: 1,
+      reference: '#1',
+      type: 'customer',
+      title: 'Cannot log in',
+      status: { id: 'ticket_status_1', name: 'Open', color: '#22c55e', category: 'open' },
+      stage: { slot: null, label: null },
+      priority: 'none',
+      requester: null,
+      assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
+      company: null,
+      firstResponseAt: null,
+      dueAt: null,
+      resolvedAt: null,
+      sla: null,
+      createdAt: '2026-07-03T00:00:00.000Z',
+      updatedAt: '2026-07-03T00:00:00.000Z',
+      reopenedCount: 0,
+      customAttributes: {},
+      lastMessagePreview: 'Help please',
+      lastMessageAt: '2026-07-03T00:00:00.000Z',
+    } as TicketDTO
+    const mockTicketThread = {
+      hasMore: false,
+      messages: [
+        {
+          id: 'conversation_msg_1',
+          conversationId: null,
+          ticketId: 'ticket_1',
+          senderType: 'visitor',
+          content: 'Help please',
+          createdAt: '2026-07-03T00:00:00.000Z',
+          author: null,
+          attachments: [],
+          citations: [],
+          isAssistant: false,
+          isInternal: false,
+          contentJson: null,
+          viaEmail: false,
+          systemEvent: null,
+          reactions: [],
+          flaggedAt: null,
+          postSuggestion: null,
+          translatedFrom: null,
+        },
+      ],
+    }
+    // Per-id ticket-detail overrides for tests that need a variant (e.g. a
+    // closed-category status) to survive the mount refetch — seeding the query
+    // cache alone gets overwritten by the mocked queryFn's canonical row.
+    const mockTicketVariants: Record<string, Partial<TicketDTO>> = {}
+    // The linked-ticket summary the conversationTicketLink queryFn hands back
+    // (null = no linked ticket) and the status catalogue the statuses queryFn
+    // serves — object refs so individual tests can flip them per render.
+    const mockTicketLink: { value: LinkedTicketSummary | null } = { value: null }
+    const mockTicketStatuses: {
+      value: { id: string; slug: string; category: string; isDefault: boolean }[]
+    } = { value: [] }
+    return { mockTicket, mockTicketThread, mockTicketVariants, mockTicketLink, mockTicketStatuses }
+  })
 
 vi.mock('@/lib/server/functions/tickets', () => ({
   sendTicketMessageFn: vi.fn(),
@@ -288,13 +297,13 @@ vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
     }),
     conversationTicketLink: (id: string) => ({
       queryKey: ['conversation-ticket-link', id],
-      queryFn: () => Promise.resolve(null),
+      queryFn: () => Promise.resolve(mockTicketLink.value),
     }),
   },
   ticketQueries: {
     statuses: () => ({
       queryKey: ['ticket-statuses'],
-      queryFn: () => Promise.resolve([]),
+      queryFn: () => Promise.resolve(mockTicketStatuses.value),
     }),
   },
 }))
@@ -313,6 +322,14 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
 }))
 
 import { AgentConversationThread } from '../agent-conversation-thread'
+import { setConversationStatusFn } from '@/lib/server/functions/conversation'
+import { setTicketStatusFn } from '@/lib/server/functions/tickets'
+
+afterEach(() => {
+  mockTicketLink.value = null
+  mockTicketStatuses.value = []
+  vi.clearAllMocks()
+})
 
 function makeConversation(overrides: Partial<ConversationDTO> = {}): ConversationDTO {
   return {
@@ -632,5 +649,67 @@ describe('AgentConversationThread — suggested-reply card wiring', () => {
     const card = await screen.findByTestId('suggested-reply-card')
     expect(card).toHaveAttribute('data-has-ask-copilot', 'false')
     expect(screen.queryByText('Ask Copilot (stub)')).not.toBeInTheDocument()
+  })
+})
+
+describe('AgentConversationThread — close with a linked ticket', () => {
+  const openLink: LinkedTicketSummary = {
+    id: 'ticket_9' as LinkedTicketSummary['id'],
+    number: 1042,
+    statusName: 'Open',
+    statusCategory: 'open',
+  }
+
+  it('a plain close (no linked ticket) skips the confirm and closes directly', async () => {
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(setConversationStatusFn).toHaveBeenCalled())
+    expect(screen.queryByText(/is still open/)).not.toBeInTheDocument()
+    expect(setTicketStatusFn).not.toHaveBeenCalled()
+  })
+
+  it('closing with an OPEN linked ticket asks first; "Close conversation only" leaves the ticket alone', async () => {
+    mockTicketLink.value = openLink
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByText('Ticket #1042 is still open')).toBeInTheDocument()
+    // Nothing has happened yet — the guard held the close.
+    expect(setConversationStatusFn).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close conversation only' }))
+    await waitFor(() => expect(setConversationStatusFn).toHaveBeenCalled())
+    expect(setTicketStatusFn).not.toHaveBeenCalled()
+  })
+
+  it('"Resolve ticket and close" stamps the resolved status on the linked ticket, then closes', async () => {
+    mockTicketLink.value = openLink
+    // A closed-category default that ISN'T 'resolved' proves the resolve
+    // picks the 'resolved' slug over resolveDefaultClosedStatusId's default.
+    mockTicketStatuses.value = [
+      { id: 'ticket_status_new', slug: 'new', category: 'open', isDefault: true },
+      { id: 'ticket_status_wont_do', slug: 'wont_do', category: 'closed', isDefault: true },
+      { id: 'ticket_status_resolved', slug: 'resolved', category: 'closed', isDefault: false },
+    ]
+    // useSetTicketStatus seeds the detail cache with the fn's return value.
+    vi.mocked(setTicketStatusFn).mockResolvedValue({
+      ...mockTicket,
+      id: 'ticket_9',
+    } as TicketDTO)
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    expect(await screen.findByText('Ticket #1042 is still open')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve ticket and close' }))
+    await waitFor(() => expect(setConversationStatusFn).toHaveBeenCalled())
+    expect(setTicketStatusFn).toHaveBeenCalledWith({
+      data: { ticketId: 'ticket_9', statusId: 'ticket_status_resolved' },
+    })
+  })
+
+  it('a closed-category linked ticket skips the confirm entirely', async () => {
+    mockTicketLink.value = { ...openLink, statusName: 'Resolved', statusCategory: 'closed' }
+    renderThread({ kind: 'conversation', id: 'conversation_1' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(setConversationStatusFn).toHaveBeenCalled())
+    expect(screen.queryByText(/is still open/)).not.toBeInTheDocument()
+    expect(setTicketStatusFn).not.toHaveBeenCalled()
   })
 })

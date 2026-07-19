@@ -128,6 +128,10 @@ export function CreateTicketDialog({
           ? null
           : (descriptionJson as TiptapContent),
         requesterPrincipalId: requester?.principalId as PrincipalId | undefined,
+        // Lets the create inherit this conversation's assignee (born owned by
+        // whoever owns the conversation); the link row itself is written by
+        // the linkTicketToConversationFn step below.
+        sourceConversationId: conversationId,
       },
       {
         onSuccess: async (ticket) => {

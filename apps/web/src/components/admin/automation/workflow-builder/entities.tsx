@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { fetchConversationTagsFn } from '@/lib/server/functions/conversation-tags'
-import { listSlaPolicyOptionsFn } from '@/lib/server/functions/sla'
+import { listSlaPolicyOptionsFn, type SlaPolicyOption } from '@/lib/server/functions/sla'
 import { ticketQueries } from '@/lib/client/queries/inbox'
 import {
   conversationAttributeQueries,
@@ -35,7 +35,7 @@ export interface WorkflowEntities {
   teams: EntityOption[]
   tags: EntityOption[]
   /** Live SLA policies for the Apply-SLA picker, with their targets line. */
-  slaPolicies: { id: string; name: string; targetsSummary: string }[]
+  slaPolicies: SlaPolicyOption[]
   /** The workspace's ticket status catalogue, read-only, for the
    *  set_ticket_status action's picker (support platform's ticket-actions
    *  extension) — reuses the same query the ticket workspace's own status

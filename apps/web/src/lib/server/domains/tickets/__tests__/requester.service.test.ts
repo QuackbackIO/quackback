@@ -44,10 +44,14 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   tickets,
   ticketStatuses,
+  ticketSubscriptions,
+  companies,
   principal,
   user,
   settings,
   eq,
+  and,
+  isNull,
   PERMISSIONS,
   type PermissionKey,
 } from '@/lib/server/db'
@@ -149,6 +153,13 @@ async function seedStagedStatuses() {
     .update(ticketStatuses)
     .set({ isDefault: false })
     .where(eq(ticketStatuses.isDefault, true))
+  // Soft-delete every committed OPEN status so the seeded first-open is the
+  // reopen's only possible landing (the reopen query filters deletedAt);
+  // without this a committed status can outrank it on position.
+  await testDb
+    .update(ticketStatuses)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(ticketStatuses.category, 'open'), isNull(ticketStatuses.deletedAt)))
   const [firstOpen] = await testDb
     .insert(ticketStatuses)
     .values({
@@ -574,6 +585,27 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     expect(created.sla).toBeNull()
   })
 
+  it('createMyTicket stays unassigned and company-less, and subscribes only the requester', async () => {
+    const me = await seedDefaultStatusWorld()
+    // Give the requester a company: the requester intake must NOT propagate it
+    // (company propagation is an agent-create default, see createTicket).
+    const [company] = await testDb
+      .insert(companies)
+      .values({ name: `Acme-${suffix()}` })
+      .returning()
+    await testDb.update(principal).set({ companyId: company.id }).where(eq(principal.id, me))
+
+    const dto = await createMyTicket(requesterActor(me), { title: 'Self-filed' })
+    expect(dto.assignee.principalId).toBeNull()
+    expect(dto.company).toBeNull()
+    const rows = await testDb
+      .select()
+      .from(ticketSubscriptions)
+      .where(eq(ticketSubscriptions.ticketId, dto.id))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ principalId: me, reason: 'requester' })
+  })
+
   it('a requester reply that reopens a pending ticket resumes its paused TTR clock', async () => {
     await testDb
       .insert(settings)
@@ -601,15 +633,48 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     })
     await replyToMyTicket(requesterActor(me), { ticketId, content: 'here is the info' })
     expect(await currentStatusCategory(ticketId)).toBe('open')
-    // This path emits no ticket.status_changed, so the resume must have run
-    // inside autoReopenOnRequesterReply: pausedAt cleared, deadline shifted
-    // forward by the paused span.
+    // The reopen emits ticket.status_changed like any other status move, so
+    // the resume rides that event's SLA hook (fire-and-forget through the
+    // dispatch pipeline) rather than a direct call inside the reopen — wait
+    // for the hook to land: pausedAt cleared, deadline shifted forward by the
+    // paused span.
+    await vi.waitFor(
+      async () => {
+        const stamp = (await readTicketRow(ticketId)).slaApplied as {
+          pausedAt?: string | null
+        }
+        expect(stamp.pausedAt ?? null).toBeNull()
+      },
+      { timeout: 5000 }
+    )
     const stamp = (await readTicketRow(ticketId)).slaApplied as {
       pausedAt?: string | null
       timeToResolveDueAt: string
     }
-    expect(stamp.pausedAt ?? null).toBeNull()
     const expected = dueAt.getTime() + (Date.now() - pausedAt.getTime())
     expect(Math.abs(new Date(stamp.timeToResolveDueAt).getTime() - expected)).toBeLessThan(60_000)
+  })
+
+  it('a requester reply that reopens an awaiting ticket posts the customer-visible stage event', async () => {
+    await testDb
+      .insert(settings)
+      .values({ name: 'WS', slug: `ws_${suffix()}`, createdAt: new Date() })
+    const s = await seedStagedStatuses()
+    const me = await seedPrincipal()
+    const ticketId = createId('ticket') as TicketId
+    await testDb.insert(tickets).values({
+      id: ticketId,
+      title: 'T',
+      statusId: s.awaiting.id,
+      type: 'customer',
+      requesterPrincipalId: me,
+    })
+    await replyToMyTicket(requesterActor(me), { ticketId, content: 'still broken' })
+    // Mirroring setTicketStatus, the reopen's stage crossing (awaiting_requester
+    // -> received) posts a status event into the requester-visible thread.
+    const page = await getMyTicketThread(requesterActor(me), ticketId)
+    const event = page.messages.find((m) => m.systemEvent?.kind === 'ticket_status_changed')
+    expect(event).toBeDefined()
+    expect(event?.senderType).toBe('system')
   })
 })

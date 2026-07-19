@@ -24,12 +24,14 @@ import {
   principal,
   user,
   settings,
+  companies,
   conversationMessages,
   conversations,
   ticketConversations,
   ticketSubscriptions,
   eq,
   and,
+  isNull,
   desc,
   PERMISSIONS,
   type PermissionKey,
@@ -81,6 +83,7 @@ import {
   assignTicket,
   setTicketPriority,
   softDeleteTicket,
+  autoReopenOnRequesterReply,
   listTickets,
   getTicket,
   assertTicketVisible,
@@ -729,6 +732,263 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
         kind: 'ticket_updated',
         ticket: expect.objectContaining({ id: created.id }),
       })
+    })
+  })
+
+  describe('autoReopenOnRequesterReply (requester-reply reopen)', () => {
+    /**
+     * A default open + an awaiting-requester pending status (+ a closed one for
+     * the closed-reopen case), with every committed OPEN status soft-deleted so
+     * the seeded default is the reopen's only possible landing (the reopen
+     * query filters deletedAt) — without this a committed status can outrank
+     * the seeded one on position and make the landing stage nondeterministic.
+     */
+    async function seedReopenWorld() {
+      await testDb
+        .update(ticketStatuses)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(ticketStatuses.category, 'open'), isNull(ticketStatuses.deletedAt)))
+      const { open, closed } = await seedStatuses() // default open projects 'received'
+      const [awaiting] = await testDb
+        .insert(ticketStatuses)
+        .values({
+          name: 'Waiting',
+          slug: `wait_${suffix()}`,
+          category: 'pending',
+          position: 150,
+          publicStage: 'awaiting_requester',
+        })
+        .returning()
+      return { open, closed, awaiting }
+    }
+
+    it('emits ticket.status_changed, publishes ticket_updated, and posts the thread stage event — the same signals as setTicketStatus', async () => {
+      await seedSettings()
+      const { awaiting } = await seedReopenWorld()
+      const actor = adminActor()
+      const requester = await seedTeammate()
+      const created = await createTicket(
+        { type: 'customer', title: 'Reopen me', requesterPrincipalId: requester },
+        actor
+      )
+      await setTicketStatus(created.id, awaiting.id, actor) // received -> awaiting_requester
+      webhooks.emitTicketStatusChanged.mockClear()
+      realtime.publishTicketEvent.mockClear()
+
+      const moved = await autoReopenOnRequesterReply(created.id, requester)
+      expect(moved).toBe(true)
+      // The reopen lands back on the seeded default open (stage 'received').
+      expect((await readTicket(created.id)).statusId).not.toBe(awaiting.id)
+
+      // ...the agent/integration-facing event, on the category axis like
+      // setTicketStatus's, with the pre-write stage captured.
+      expect(webhooks.emitTicketStatusChanged).toHaveBeenCalledTimes(1)
+      const [eventActor, , previousStatus, newStatus, stage, previousStage, requesterPrincipalId] =
+        webhooks.emitTicketStatusChanged.mock.calls[0]
+      expect(previousStatus).toBe('pending')
+      expect(newStatus).toBe('open')
+      expect(previousStage).toBe('awaiting_requester')
+      expect(stage).toBe('received')
+      expect(requesterPrincipalId).toBe(requester)
+      // ...attributed to the requester (a human 'user' actor), never an
+      // anonymous system flip.
+      expect(eventActor).toMatchObject({ principalId: requester, principalType: 'user' })
+
+      // ...the realtime publish mirrors setTicketStatus...
+      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(created.id, {
+        kind: 'ticket_updated',
+        ticket: expect.objectContaining({ id: created.id }),
+      })
+
+      // ...and the customer-facing thread stage notice posts on the crossing.
+      const page = await listTicketMessages(created.id, { includeInternal: true })
+      const event = page.messages.find((m) => m.systemEvent?.kind === 'ticket_status_changed')
+      expect(event).toBeDefined()
+      expect(event?.senderType).toBe('system')
+    })
+
+    it('a closed ticket reopen reports the closed -> open category crossing', async () => {
+      await seedSettings()
+      const { closed } = await seedReopenWorld()
+      const actor = adminActor()
+      const requester = await seedTeammate()
+      const created = await createTicket(
+        { type: 'customer', title: 'Reopen from closed', requesterPrincipalId: requester },
+        actor
+      )
+      await setTicketStatus(created.id, closed.id, actor) // received -> resolved
+      webhooks.emitTicketStatusChanged.mockClear()
+
+      const moved = await autoReopenOnRequesterReply(created.id, requester)
+      expect(moved).toBe(true)
+      expect(webhooks.emitTicketStatusChanged).toHaveBeenCalledTimes(1)
+      const [, , previousStatus, newStatus, , previousStage] =
+        webhooks.emitTicketStatusChanged.mock.calls[0]
+      expect(previousStatus).toBe('closed')
+      expect(newStatus).toBe('open')
+      expect(previousStage).toBe('resolved')
+    })
+
+    it('an open ticket stays put and emits nothing', async () => {
+      await seedSettings()
+      await seedReopenWorld()
+      const actor = adminActor()
+      const created = await createTicket({ type: 'customer', title: 'Already open' }, actor)
+      webhooks.emitTicketStatusChanged.mockClear()
+      realtime.publishTicketEvent.mockClear()
+
+      const moved = await autoReopenOnRequesterReply(created.id, null)
+      expect(moved).toBe(false)
+      expect(webhooks.emitTicketStatusChanged).not.toHaveBeenCalled()
+      expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('agent-created tickets are born owned', () => {
+    const subsFor = (ticketId: TicketId) =>
+      testDb.select().from(ticketSubscriptions).where(eq(ticketSubscriptions.ticketId, ticketId))
+
+    async function seedCompany(name = 'Acme') {
+      const [company] = await testDb
+        .insert(companies)
+        .values({ name: `${name}-${suffix()}` })
+        .returning()
+      return company
+    }
+
+    it('defaults the assignee to the creating agent and subscribes them as assignee', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor() // a backed admin principal
+      const created = await createTicket({ type: 'back_office', title: 'Born owned' }, actor)
+
+      expect((await readTicket(created.id)).assigneePrincipalId).toBe(actor.principalId)
+      expect(created.assignee.principalId).toBe(actor.principalId)
+      // The creator is the assignee, so one watcher row with the assignee reason.
+      const rows = await subsFor(created.id)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ principalId: actor.principalId, reason: 'assignee' })
+    })
+
+    it('an explicit assignee wins over the creator default; the creator watches as manual', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      const teammate = await seedTeammate()
+      const created = await createTicket(
+        { type: 'customer', title: 'Explicitly assigned', assigneePrincipalId: teammate },
+        actor
+      )
+
+      expect((await readTicket(created.id)).assigneePrincipalId).toBe(teammate)
+      const rows = await subsFor(created.id)
+      expect(rows).toHaveLength(2)
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ principalId: teammate, reason: 'assignee' }),
+          expect.objectContaining({ principalId: actor.principalId, reason: 'manual' }),
+        ])
+      )
+    })
+
+    it('rejects an explicit assignee who is not a team member', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      // An end-user principal (role 'user') is not assignable.
+      const userId = createId('user') as UserId
+      const endUser = createId('principal') as PrincipalId
+      await testDb.insert(user).values({ id: userId, name: 'End User' })
+      await testDb
+        .insert(principal)
+        .values({ id: endUser, userId, role: 'user', type: 'user', createdAt: new Date() })
+
+      await expect(
+        createTicket({ type: 'customer', title: 'Nope', assigneePrincipalId: endUser }, actor)
+      ).rejects.toThrow(/team member/i)
+    })
+
+    it("inherits the source conversation's assignee; an explicit assignee still wins", async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      const conversationAssignee = await seedTeammate()
+      const visitor = await seedTeammate()
+      const conversationId = createId('conversation') as ConversationId
+      await testDb.insert(conversations).values({
+        id: conversationId,
+        visitorPrincipalId: visitor,
+        channel: 'messenger',
+        assignedAgentPrincipalId: conversationAssignee,
+      })
+
+      const created = await createTicket(
+        { type: 'customer', title: 'From a conversation', sourceConversationId: conversationId },
+        actor
+      )
+      expect((await readTicket(created.id)).assigneePrincipalId).toBe(conversationAssignee)
+      const rows = await subsFor(created.id)
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ principalId: conversationAssignee, reason: 'assignee' }),
+          expect.objectContaining({ principalId: actor.principalId, reason: 'manual' }),
+        ])
+      )
+
+      // An explicit assignee beats the conversation inheritance.
+      const explicit = await seedTeammate()
+      const other = await createTicket(
+        {
+          type: 'customer',
+          title: 'From a conversation, explicitly assigned',
+          sourceConversationId: conversationId,
+          assigneePrincipalId: explicit,
+        },
+        actor
+      )
+      expect((await readTicket(other.id)).assigneePrincipalId).toBe(explicit)
+    })
+
+    it("propagates the requester's company when none is given; an explicit company wins", async () => {
+      await seedSettings()
+      await seedStatuses()
+      const actor = await messageAuthorActor()
+      const company = await seedCompany()
+      const otherCompany = await seedCompany('Other')
+      const requester = await seedTeammate()
+      await testDb
+        .update(principal)
+        .set({ companyId: company.id })
+        .where(eq(principal.id, requester))
+
+      const created = await createTicket(
+        { type: 'customer', title: 'Company inferred', requesterPrincipalId: requester },
+        actor
+      )
+      expect((await readTicket(created.id)).companyId).toBe(company.id)
+      expect(created.company?.id).toBe(company.id)
+
+      const explicit = await createTicket(
+        {
+          type: 'customer',
+          title: 'Company explicit',
+          requesterPrincipalId: requester,
+          companyId: otherCompany.id,
+        },
+        actor
+      )
+      expect((await readTicket(explicit.id)).companyId).toBe(otherCompany.id)
+    })
+
+    it('a bare (unbacked) creator id gets no default assignee and no watcher row', async () => {
+      await seedSettings()
+      await seedStatuses()
+      // adminActor()'s principal id is deliberately NOT backed by a row: a
+      // default must never fail the create (or its subscription FK) — the
+      // ticket is simply born unassigned, as before.
+      const created = await createTicket({ type: 'back_office', title: 'Bare actor' }, adminActor())
+      expect((await readTicket(created.id)).assigneePrincipalId).toBeNull()
+      expect(await subsFor(created.id)).toHaveLength(0)
     })
   })
 

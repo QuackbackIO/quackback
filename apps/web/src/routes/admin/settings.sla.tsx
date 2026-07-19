@@ -256,12 +256,17 @@ function SlaSettingsPage() {
             the reply clocks; re-applying the same policy keeps the elapsed time.
           </li>
           <li>
+            The time-to-resolve target runs on the linked customer ticket, not the conversation. It
+            is applied by a workflow (Apply SLA → Linked ticket), or automatically when a customer
+            ticket is linked to a conversation that already carries the policy.
+          </li>
+          <li>
             Targets are snapshotted at apply time. Editing a policy affects future applications
             only, never clocks already running.
           </li>
           <li>
-            Clocks count only your workspace office hours when they are configured; otherwise they
-            run around the clock.
+            Clocks count only your workspace office hours when they are configured — holidays pause
+            them too; otherwise they run around the clock.
           </li>
           <li>
             Archived policies can no longer be applied, but they stay on conversations that already
@@ -394,6 +399,10 @@ function PolicyEditorDialog({
 
   const { data: officeHours } = useQuery(slaOfficeHoursQuery)
   const officeHoursEnabled = officeHours?.officeHoursEnabled ?? false
+  // The pending pause only moves the ticket's resolve clock — without a
+  // time-to-resolve target the flag is inert (the policy row likewise hides
+  // its chip then), so the switch stays off-limits until one is set.
+  const hasResolveTarget = toSecs(targets.timeToResolveTargetSecs) != null
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -538,12 +547,14 @@ function PolicyEditorDialog({
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Stop a ticket&apos;s resolve clock while it waits in a pending status (on the
                 customer or a third party).
+                {!hasResolveTarget && ' Inert without a time-to-resolve target.'}
               </p>
             </div>
             <Switch
               id="sla-pause-on-pending"
               checked={pauseOnPending}
               onCheckedChange={setPauseOnPending}
+              disabled={!hasResolveTarget}
             />
           </div>
 

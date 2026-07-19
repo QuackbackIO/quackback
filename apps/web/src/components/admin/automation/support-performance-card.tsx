@@ -17,7 +17,7 @@ import type { SlaAttainment, SlaBreachHeatmapCell } from '@/lib/server/domains/s
 const CLOCKS: { key: keyof SlaAttainment; label: string }[] = [
   { key: 'firstResponse', label: 'First response' },
   { key: 'nextResponse', label: 'Next response' },
-  { key: 'resolution', label: 'Resolution' },
+  { key: 'resolution', label: 'Time to close' },
   { key: 'timeToResolve', label: 'Time to resolve' },
 ]
 

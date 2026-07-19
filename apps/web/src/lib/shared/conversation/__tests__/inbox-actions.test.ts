@@ -57,10 +57,13 @@ describe('INBOX_ACTIONS registry', () => {
     expect(byId('toggle_select').scope).toBe('selection')
   })
 
-  it('gives every action a shortcut and keeps the chars unique', () => {
-    const keys = INBOX_ACTIONS.map((a) => a.shortcut)
+  it('gives every keyed action a shortcut and keeps the chars unique', () => {
+    // open_ticket is deliberately keyless (palette-only — see its descriptor).
+    const keyed = INBOX_ACTIONS.filter((a) => a.id !== 'open_ticket')
+    const keys = keyed.map((a) => a.shortcut)
     expect(keys.every((k) => typeof k === 'string' && k.length > 0)).toBe(true)
     expect(new Set(keys).size).toBe(keys.length)
+    expect(byId('open_ticket').shortcut).toBeUndefined()
   })
 
   it('only uses declared groups', () => {
@@ -158,6 +161,42 @@ describe('isInboxActionEnabled', () => {
         hasSelection: false,
         hasTicketTarget: true,
       })
+    ).toBe(false)
+  })
+
+  it('create_ticket is disabled when the active conversation already links a ticket', () => {
+    const createTicket = byId('create_ticket')
+    expect(
+      isInboxActionEnabled(createTicket, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        hasLinkedTicket: true,
+      })
+    ).toBe(false)
+    // …and a bare create with nothing open is unaffected (no orphan risk).
+    expect(
+      isInboxActionEnabled(createTicket, {
+        hasActiveConversation: false,
+        hasSelection: false,
+        hasLinkedTicket: false,
+      })
+    ).toBe(true)
+  })
+
+  it('open_ticket is enabled exactly when the active conversation links a ticket', () => {
+    const openTicket = byId('open_ticket')
+    expect(
+      isInboxActionEnabled(openTicket, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        hasLinkedTicket: true,
+      })
+    ).toBe(true)
+    expect(
+      isInboxActionEnabled(openTicket, { hasActiveConversation: true, hasSelection: false })
+    ).toBe(false)
+    expect(
+      isInboxActionEnabled(openTicket, { hasActiveConversation: false, hasSelection: false })
     ).toBe(false)
   })
 

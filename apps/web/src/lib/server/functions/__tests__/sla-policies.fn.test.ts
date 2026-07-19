@@ -207,7 +207,12 @@ describe('listSlaPolicyOptionsFn', () => {
     hoisted.listSlaPolicies.mockResolvedValue([makePolicy()])
     const options = await listSlaPolicyOptionsFn()
     expect(options).toEqual([
-      { id: 'sla_policy_1', name: 'Gold', targetsSummary: 'First response 4h · close 3d' },
+      {
+        id: 'sla_policy_1',
+        name: 'Gold',
+        targetsSummary: 'First response 4h · close 3d',
+        hasTimeToResolveTarget: false,
+      },
     ])
   })
 
@@ -219,6 +224,7 @@ describe('listSlaPolicyOptionsFn', () => {
         id: 'sla_policy_1',
         name: 'Gold',
         targetsSummary: 'First response 4h · close 3d · resolve 5d',
+        hasTimeToResolveTarget: true,
       },
     ])
   })

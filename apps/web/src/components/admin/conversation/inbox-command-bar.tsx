@@ -12,6 +12,7 @@ import {
   isInboxActionEnabled,
   type InboxActionId,
 } from '@/lib/shared/conversation/inbox-actions'
+import { formatTicketNumber } from '@/lib/shared/tickets'
 import {
   Command,
   CommandEmpty,
@@ -31,6 +32,13 @@ export interface InboxCommandBarProps {
   /** True when the target (selection, or the solo active item) includes a
    *  ticket — disables the Snooze row (UNIFIED-INBOX-SPEC.md §2.5). */
   hasTicketTarget?: boolean
+  /** True when the solo active conversation already carries a linked customer
+   *  ticket (one-row rule) — greys out Create ticket (never mint an orphan)
+   *  and enables the Open ticket row in its place. */
+  hasLinkedTicket?: boolean
+  /** The linked ticket's number, so the Open ticket row can read
+   *  "Open ticket #N" (falls back to the bare "Open ticket" label). */
+  linkedTicketNumber?: number
   /** True when the detail panel's Copilot tab exists for this viewer right
    *  now (flag + copilot.use + ≥xl viewport) — gates the Ask Copilot row. */
   copilotAvailable?: boolean
@@ -43,6 +51,8 @@ export function InboxCommandBar({
   hasSelection,
   hasActiveConversation,
   hasTicketTarget,
+  hasLinkedTicket,
+  linkedTicketNumber,
   copilotAvailable,
 }: InboxCommandBarProps) {
   function run(id: InboxActionId) {
@@ -72,17 +82,22 @@ export function InboxCommandBar({
                       hasActiveConversation,
                       hasSelection,
                       hasTicketTarget,
+                      hasLinkedTicket,
                       copilotAvailable,
                     })
+                    const label =
+                      action.id === 'open_ticket' && linkedTicketNumber != null
+                        ? `Open ticket ${formatTicketNumber(linkedTicketNumber)}`
+                        : action.label
                     return (
                       <CommandItem
                         key={action.id}
-                        value={action.label}
+                        value={label}
                         keywords={[action.id, action.group]}
                         disabled={disabled}
                         onSelect={() => run(action.id)}
                       >
-                        <span>{action.label}</span>
+                        <span>{label}</span>
                         {action.shortcut && (
                           <kbd className="bg-muted text-muted-foreground ml-auto rounded border px-1.5 py-0.5 text-xs">
                             {action.shortcut}

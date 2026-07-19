@@ -4,7 +4,14 @@
  * plain JSON (ISO strings, resolved display names) so a client can import them
  * type-only with no server dependency.
  */
-import type { TicketId, TicketStatusId, PrincipalId, TeamId, CompanyId } from '@quackback/ids'
+import type {
+  TicketId,
+  TicketStatusId,
+  PrincipalId,
+  TeamId,
+  CompanyId,
+  ConversationId,
+} from '@quackback/ids'
 import type {
   TicketType,
   TicketStage,
@@ -36,8 +43,16 @@ export interface CreateTicketInput {
   /** Attachments on the opening message, same shape/limits as a reply. */
   attachments?: ConversationAttachment[]
   requesterPrincipalId?: PrincipalId | null
+  /** Explicit assignee. Always wins over the agent-create defaults (the source
+   *  conversation's assignee, else the creating agent — see `createTicket`). */
+  assigneePrincipalId?: PrincipalId | null
   priority?: ConversationPriority
   companyId?: CompanyId | null
+  /** Set by the create-from-a-conversation flow (unified inbox §M5): the
+   *  conversation the ticket is being opened from. Used by the agent-create
+   *  defaults to inherit the conversation's assignee; the link row itself is
+   *  still written by the separate link step (`linkTicketToConversation`). */
+  sourceConversationId?: ConversationId | null
   customAttributes?: Record<string, unknown>
 }
 

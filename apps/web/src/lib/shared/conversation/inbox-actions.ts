@@ -23,6 +23,7 @@ export type InboxActionId =
   | 'close'
   | 'reopen'
   | 'create_ticket'
+  | 'open_ticket'
   | 'next'
   | 'prev'
   | 'toggle_select'
@@ -82,6 +83,16 @@ export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
     scope: 'both',
     shortcut: 'c',
   },
+  // No shortcut: the keyboard hook and the help panel only ever advertise
+  // keys, and this row is the palette-only alternative to `create_ticket`
+  // when the active conversation already links a ticket (the route renders
+  // the label as "Open ticket #N").
+  {
+    id: 'open_ticket',
+    label: 'Open ticket',
+    group: 'Status',
+    scope: 'active',
+  },
   { id: 'next', label: 'Next conversation', group: 'Navigate', scope: 'active', shortcut: 'j' },
   { id: 'prev', label: 'Previous conversation', group: 'Navigate', scope: 'active', shortcut: 'k' },
   {
@@ -106,6 +117,14 @@ export interface InboxActionContext {
    */
   hasTicketTarget?: boolean
   /**
+   * True when the target is the single active conversation and it already
+   * carries a linked CUSTOMER ticket (the one-row rule): `create_ticket`
+   * must not mint an orphan ticket the list would never surface, so the
+   * palette greys it out and offers `open_ticket` instead. Only ever set by
+   * the inbox route, which reads the linked-ticket chip off the list row.
+   */
+  hasLinkedTicket?: boolean
+  /**
    * True when the detail panel's Copilot tab exists for this viewer right now
    * (`inboxAi` flag + `copilot.use` + the ≥xl viewport that renders
    * the panel). Optional; when absent the `copilot` action is disabled.
@@ -119,17 +138,21 @@ export interface InboxActionContext {
  * ticket-row equivalent — the status axis stands in for it); create_ticket is
  * the reverse, available with no target at all (a bare create) or a
  * conversation target, but disabled once the target IS a ticket (nothing to
- * create from). Copilot additionally requires the tab to actually exist for
- * this viewer/viewport (`copilotAvailable`), so the palette row and the `q`
- * key can never point at a panel that isn't rendered. Pure; shared by the
- * palette and unit-tested directly.
+ * create from) or when the active conversation already links a customer
+ * ticket (never mint an orphan — `open_ticket`, enabled on exactly that
+ * condition, navigates to the linked ticket instead). Copilot additionally
+ * requires the tab to actually exist for this viewer/viewport
+ * (`copilotAvailable`), so the palette row and the `q` key can never point at
+ * a panel that isn't rendered. Pure; shared by the palette and unit-tested
+ * directly.
  */
 export function isInboxActionEnabled(
   descriptor: InboxActionDescriptor,
   ctx: InboxActionContext
 ): boolean {
   if (descriptor.id === 'snooze' && ctx.hasTicketTarget) return false
-  if (descriptor.id === 'create_ticket') return !ctx.hasTicketTarget
+  if (descriptor.id === 'create_ticket') return !ctx.hasTicketTarget && !ctx.hasLinkedTicket
+  if (descriptor.id === 'open_ticket') return ctx.hasLinkedTicket === true
   if (descriptor.id === 'copilot' && !ctx.copilotAvailable) return false
   switch (descriptor.scope) {
     case 'active':

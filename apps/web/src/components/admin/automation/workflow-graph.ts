@@ -748,9 +748,9 @@ export const TRIGGER_DESCRIPTIONS: Partial<Record<TriggerType, string>> = {
   'conversation.teammate_unresponsive':
     'Runs once when no teammate has replied for the configured time after the customer’s last message. Never fires on a closed or snoozed conversation.',
   'sla.approaching_breach':
-    'Runs once when an applied SLA’s first-response or resolution clock enters its lead window. Set the lead time below.',
+    'Runs once when an applied SLA’s first response, next response, time to close, or linked ticket’s time to resolve clock enters its lead window. Set the lead time below.',
   'sla.breached':
-    'Runs once when an applied SLA’s first-response or resolution clock passes its due date with nothing settling it.',
+    'Runs once when an applied SLA’s first response, next response, time to close, or linked ticket’s time to resolve clock passes its due date with nothing settling it.',
   'ticket.created':
     'Only fires for a ticket that has a linked conversation — a standalone ticket with no linked conversation never triggers this.',
   'ticket.status_changed':

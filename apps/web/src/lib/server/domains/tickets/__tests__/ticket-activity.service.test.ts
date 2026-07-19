@@ -268,8 +268,10 @@ describe.skipIf(!fixture.available)('ticket-activity.service (real DB, rolled ba
     it('assignTicket records ticket.assigned with principal from/to (ids + names)', async () => {
       await seedSettings()
       await seedStatuses()
-      const actor = await backedAdminActor()
+      const actor = await backedAdminActor('Casey Creator')
       const teammate = await seedTeammate('Jordan Assignee')
+      // Agent-created tickets are born assigned to their creator, so the first
+      // explicit assignment is a real from -> to move.
       const created = await createTicket({ type: 'back_office', title: 'Assign me' }, actor)
 
       await assignTicket(created.id, { assigneePrincipalId: teammate }, actor)
@@ -279,8 +281,8 @@ describe.skipIf(!fixture.available)('ticket-activity.service (real DB, rolled ba
       expect(assigned).toBeDefined()
       expect(assigned?.principalId).toBe(actor.principalId)
       expect(assigned?.metadata).toEqual({
-        fromPrincipalId: null,
-        fromPrincipalName: null,
+        fromPrincipalId: actor.principalId,
+        fromPrincipalName: 'Casey Creator',
         toPrincipalId: teammate,
         toPrincipalName: 'Jordan Assignee',
       })

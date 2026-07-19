@@ -193,6 +193,12 @@ export function ActionEditor({
                 <SelectItem value="ticket">Linked ticket (time to resolve)</SelectItem>
               </SelectContent>
             </Select>
+            {(action.target ?? 'conversation') === 'ticket' && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Applies to the conversation&apos;s linked customer ticket. No linked ticket — or a
+                policy with no time-to-resolve target — does nothing.
+              </p>
+            )}
           </Field>
           <Field label="SLA policy">
             {/* Template needs-setup placeholders read as unset (show the
@@ -208,7 +214,15 @@ export function ActionEditor({
                 {slaPolicies.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     <span className="flex flex-col items-start">
-                      <span>{p.name}</span>
+                      <span>
+                        {p.name}
+                        {/* Target=ticket only reads the resolve clock — say so on
+                            policies that don't set one (they no-op there). */}
+                        {(action.target ?? 'conversation') === 'ticket' &&
+                          !p.hasTimeToResolveTarget && (
+                            <span className="text-muted-foreground"> (no resolve target)</span>
+                          )}
+                      </span>
                       <span className="text-xs text-muted-foreground">{p.targetsSummary}</span>
                     </span>
                   </SelectItem>

@@ -31,6 +31,22 @@ export function resolveDefaultClosedStatusId(
   return closed.find((s) => s.isDefault)?.id ?? closed[0]?.id
 }
 
+/** The workspace's RESOLVED closed-category ticket status — the 'resolved'
+ *  slug when the catalogue carries it, else the first closed status by
+ *  position (the catalogue is ordered by category then position). Unlike
+ *  `resolveDefaultClosedStatusId` (the workspace-configured default closed
+ *  status, which a workspace can point at e.g. "Won't do"), this always means
+ *  resolved, so it's the right target for a flow that resolves a ticket on
+ *  the agent's behalf (the close-with-open-linked-ticket confirm) rather
+ *  than merely closing it. */
+export function resolveResolvedStatusId(
+  statuses: { id: string; slug: string; category: string }[] | undefined
+): string | undefined {
+  if (!statuses) return undefined
+  const closed = statuses.filter((s) => s.category === 'closed')
+  return closed.find((s) => s.slug === 'resolved')?.id ?? closed[0]?.id
+}
+
 /** Customer-facing labels for the four requester stages. */
 export type TicketStageLabels = Record<TicketStage, string>
 
