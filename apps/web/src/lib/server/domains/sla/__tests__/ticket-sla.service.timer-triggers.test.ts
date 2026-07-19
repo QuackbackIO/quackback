@@ -1,16 +1,15 @@
 /**
  * Real-DB coverage for the ticket-anchored TTR clock's two timer-driven
  * trigger scans (support platform §4.6): sweepApproachingTicketSlaBreaches /
- * sweepTicketSlaBreachTriggers. Both are CAS-guarded fire-once claims on
- * `tickets.sla_applied`, on DISTINCT marker fields from each other and from
- * the per-minute reporting sweep (sweepOverdueTicketSlaBreaches), so the
- * three never block one another — the same discipline the conversation side
- * keeps (see sla.service.timer-triggers.test.ts). A claimed candidate is only
- * RETURNED when the ticket has a linked CUSTOMER conversation to dispatch
- * against: a back-office ticket's marker is still claimed (fire-once holds)
- * but nothing is dispatched — the documented v1 limitation (see
- * ticket-sla.sweep.ts's resolveTicketTriggerTarget). The dispatch half is
- * workflow-sweep.ts's job and is covered there.
+ * sweepTicketSlaBreachTriggers, plus the post-enqueue claim
+ * (claimTicketSlaTimerTriggerMarker). Same claim-after-enqueue contract as
+ * the conversation side (see sla.service.timer-triggers.test.ts's module
+ * doc): the scans are UNCLAIMED and the caller claims per dispatched
+ * candidate. The ticket-specific wrinkle: a BACK-OFFICE ticket (no linked
+ * CUSTOMER conversation) is never returned as a candidate — its marker is
+ * claimed INLINE instead, so later ticks stop re-scanning a candidate that
+ * can never dispatch (the documented v1 limitation, unchanged by
+ * claim-after-enqueue — see ticket-sla.sweep.ts's resolveTicketTriggerTarget).
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import {
@@ -60,6 +59,7 @@ import {
   type TicketSlaApplied,
 } from '../ticket-sla.service'
 import {
+  claimTicketSlaTimerTriggerMarker,
   sweepApproachingTicketSlaBreaches,
   sweepTicketSlaBreachTriggers,
   sweepOverdueTicketSlaBreaches,
@@ -144,8 +144,8 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
   })
   afterEach(fixture.rollback)
 
-  describe('sweepApproachingTicketSlaBreaches', () => {
-    it('claims a linked ticket whose TTR clock enters the lead window, once', async () => {
+  describe('sweepApproachingTicketSlaBreaches + claimTicketSlaTimerTriggerMarker(warning)', () => {
+    it('scans a linked ticket whose TTR clock enters the lead window WITHOUT claiming; the claim then stamps the marker exactly once', async () => {
       const { ticketId, conversationId } = await seedTicket({ linked: true })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
       // Due 11:00. At 10:50, 10 minutes out — inside a 15-minute lead window.
@@ -168,19 +168,34 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
           policyId: policy.id,
           clock: 'time_to_resolve',
           dueAt: '2026-01-05T11:00:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
+      // Scan alone must not claim (claim-after-enqueue).
+      expect((await loadStamp(ticketId))?.resolutionWarningFiredAt).toBeFalsy()
 
-      // A re-scan (same tick or a later one, still before due) must not re-claim.
+      expect(
+        await claimTicketSlaTimerTriggerMarker(
+          first[0],
+          'warning',
+          new Date('2026-01-05T10:50:00Z')
+        )
+      ).toBe(true)
+      expect((await loadStamp(ticketId))?.resolutionWarningFiredAt).toBe('2026-01-05T10:50:00.000Z')
+      // A sibling claim loses the CAS; a re-scan never returns the clock again.
+      expect(
+        await claimTicketSlaTimerTriggerMarker(
+          first[0],
+          'warning',
+          new Date('2026-01-05T10:51:00Z')
+        )
+      ).toBe(false)
       expect(await sweepApproachingTicketSlaBreaches(15, new Date('2026-01-05T10:55:00Z'))).toEqual(
         []
       )
-
-      const stamp = await loadStamp(ticketId)
-      expect(stamp?.resolutionWarningFiredAt).toBe('2026-01-05T10:50:00.000Z')
     })
 
-    it('does not claim a clock still outside the lead window, or one already past due', async () => {
+    it('does not scan a clock still outside the lead window, or one already past due', async () => {
       const { ticketId } = await seedTicket({ linked: true })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
       await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -195,7 +210,7 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
       )
     })
 
-    it('never claims a settled clock', async () => {
+    it('never scans a settled clock', async () => {
       const { ticketId } = await seedTicket({ linked: true })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
       await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -206,7 +221,31 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
       )
     })
 
-    it('never claims a currently-paused clock, and claims against the pause-shifted deadline after a resume', async () => {
+    it('a settle landing between scan and claim suppresses the claim (A2)', async () => {
+      const { ticketId } = await seedTicket({ linked: true })
+      const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
+      await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+      const [candidate] = await sweepApproachingTicketSlaBreaches(
+        15,
+        new Date('2026-01-05T10:50:00Z')
+      )
+      expect(candidate).toBeTruthy()
+      // The close lands after the scan but before the claim: the claim's CAS
+      // re-checks `resolvedAt`, so it misses and the marker stays truthful.
+      await recordTicketResolution(ticketId, new Date('2026-01-05T10:52:00Z'))
+
+      expect(
+        await claimTicketSlaTimerTriggerMarker(
+          candidate,
+          'warning',
+          new Date('2026-01-05T10:53:00Z')
+        )
+      ).toBe(false)
+      expect((await loadStamp(ticketId))?.resolutionWarningFiredAt).toBeFalsy()
+    })
+
+    it('never scans a currently-paused clock, and scans against the pause-shifted deadline after a resume', async () => {
       const { ticketId, conversationId } = await seedTicket({ linked: true })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
       await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -220,8 +259,8 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
 
       await resumeTicketSlaFromPending(ticketId, new Date('2026-01-05T10:50:00Z'))
       // Inside the shifted window (15 min before 11:30).
-      const claimed = await sweepApproachingTicketSlaBreaches(15, new Date('2026-01-05T11:16:00Z'))
-      expect(claimed).toEqual([
+      const scanned = await sweepApproachingTicketSlaBreaches(15, new Date('2026-01-05T11:16:00Z'))
+      expect(scanned).toEqual([
         expect.objectContaining({
           conversationId,
           ticketId,
@@ -238,18 +277,27 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
 
       // Warning fires first (10:50), then the clock actually breaches (11:05) —
       // the reporting sweep's own claim must still succeed independently.
-      await sweepApproachingTicketSlaBreaches(15, new Date('2026-01-05T10:50:00Z'))
+      const [candidate] = await sweepApproachingTicketSlaBreaches(
+        15,
+        new Date('2026-01-05T10:50:00Z')
+      )
+      expect(
+        await claimTicketSlaTimerTriggerMarker(
+          candidate,
+          'warning',
+          new Date('2026-01-05T10:50:00Z')
+        )
+      ).toBe(true)
       expect((await sweepOverdueTicketSlaBreaches(new Date('2026-01-05T11:05:00Z'))).recorded).toBe(
         1
       )
     })
 
-    it("claims a back-office ticket's marker without returning a dispatch candidate (documented v1 limitation)", async () => {
+    it("claims a back-office ticket's marker inline without returning a dispatch candidate (documented v1 limitation)", async () => {
       // A back-office ticket has no linked CUSTOMER conversation, so there is
-      // no conversation context to run a workflow against. The fire-once
-      // marker is still claimed — a later tick must not re-attempt a dispatch
-      // that can never succeed — and the reporting sweep still records the
-      // breach itself (see ticket-sla.service.test.ts).
+      // no conversation context to run a workflow against — and no dispatch
+      // to protect from loss, so the fire-once marker is claimed inline
+      // (a later tick must not keep re-scanning it).
       const { ticketId } = await seedTicket({ type: 'back_office' })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
       await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -263,8 +311,8 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
     })
   })
 
-  describe('sweepTicketSlaBreachTriggers', () => {
-    it('claims an overdue, unsettled TTR clock exactly once', async () => {
+  describe('sweepTicketSlaBreachTriggers + claimTicketSlaTimerTriggerMarker(breach)', () => {
+    it('scans an overdue, unsettled TTR clock; the claim stamps the trigger marker exactly once', async () => {
       const { ticketId, conversationId } = await seedTicket({ linked: true })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
       await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -286,12 +334,21 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
           policyId: policy.id,
           clock: 'time_to_resolve',
           dueAt: '2026-01-05T11:00:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
+      expect((await loadStamp(ticketId))?.resolutionBreachTriggerFiredAt).toBeFalsy()
+
+      expect(
+        await claimTicketSlaTimerTriggerMarker(first[0], 'breach', new Date('2026-01-05T11:05:00Z'))
+      ).toBe(true)
+      expect((await loadStamp(ticketId))?.resolutionBreachTriggerFiredAt).toBe(
+        '2026-01-05T11:05:00.000Z'
+      )
       expect(await sweepTicketSlaBreachTriggers(new Date('2026-01-05T11:10:00Z'))).toEqual([])
     })
 
-    it('does not claim a clock not yet due, a settled clock, or a paused one', async () => {
+    it('does not scan a clock not yet due, a settled clock, or a paused one', async () => {
       const notDue = await seedTicket({ linked: true })
       const settled = await seedTicket({ linked: true })
       const paused = await seedTicket({ linked: true })
@@ -308,6 +365,25 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
       ])
     })
 
+    it('a settle landing between scan and claim suppresses the claim (A2)', async () => {
+      const { ticketId } = await seedTicket({ linked: true })
+      const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
+      await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+      const [candidate] = await sweepTicketSlaBreachTriggers(new Date('2026-01-05T11:05:00Z'))
+      expect(candidate).toBeTruthy()
+      await recordTicketResolution(ticketId, new Date('2026-01-05T11:06:00Z'))
+
+      expect(
+        await claimTicketSlaTimerTriggerMarker(
+          candidate,
+          'breach',
+          new Date('2026-01-05T11:07:00Z')
+        )
+      ).toBe(false)
+      expect((await loadStamp(ticketId))?.resolutionBreachTriggerFiredAt).toBeFalsy()
+    })
+
     it('is independent of the per-minute breach-reporting sweep having already claimed its own marker', async () => {
       const { ticketId } = await seedTicket({ linked: true })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
@@ -317,12 +393,21 @@ describe.skipIf(!fixture.available)('ticket SLA timer-trigger scans (real DB, ro
       expect((await sweepOverdueTicketSlaBreaches(new Date('2026-01-05T11:05:00Z'))).recorded).toBe(
         1
       )
-      // ...but the trigger sweep still fires once off its own, distinct marker.
-      expect(await sweepTicketSlaBreachTriggers(new Date('2026-01-05T11:06:00Z'))).toHaveLength(1)
+      // ...but the trigger sweep still scans + claims once off its own,
+      // distinct marker.
+      const [candidate] = await sweepTicketSlaBreachTriggers(new Date('2026-01-05T11:06:00Z'))
+      expect(candidate).toBeTruthy()
+      expect(
+        await claimTicketSlaTimerTriggerMarker(
+          candidate,
+          'breach',
+          new Date('2026-01-05T11:06:00Z')
+        )
+      ).toBe(true)
       expect(await sweepTicketSlaBreachTriggers(new Date('2026-01-05T11:07:00Z'))).toEqual([])
     })
 
-    it("claims a back-office ticket's marker without returning a dispatch candidate (documented v1 limitation)", async () => {
+    it("claims a back-office ticket's marker inline without returning a dispatch candidate (documented v1 limitation)", async () => {
       const { ticketId } = await seedTicket({ type: 'back_office' })
       const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
       await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))

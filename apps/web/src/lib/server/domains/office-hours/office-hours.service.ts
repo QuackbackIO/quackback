@@ -18,6 +18,7 @@ import {
   type OfficeHoursInterval,
 } from '@/lib/server/db'
 import type { OfficeHoursId } from '@quackback/ids'
+import { logger } from '@/lib/server/logger'
 // The DST-safe timezone primitives live in one place (shared with Messenger /
 // Quinn / the settings resolver) so office-hours math can never drift.
 import {
@@ -30,6 +31,8 @@ import type {
   OfficeHoursHoliday,
   OfficeHoursSchedule as WorkspaceOfficeHoursSchedule,
 } from '@/lib/shared/office-hours'
+
+const log = logger.child({ component: 'office-hours' })
 
 /**
  * The schedule shape the clock engine runs on: weekly windows in a timezone,
@@ -97,6 +100,15 @@ export function isWithinOfficeHours(schedule: EngineSchedule, at: Date): boolean
  * (24/7) schedule falls back to plain wall-clock unless it carries holidays.
  * Walks forward window-by-window, waiting through closed spans, DST-correct
  * throughout on the shared zonedParts + zonedWallClockToUtc primitives.
+ *
+ * The day-iteration bound is a BACKSTOP, not a budget: the schema caps a
+ * target at one year of open seconds (functions/sla.ts's targetSecs), which
+ * on an 8h/day weekdays-only schedule needs ~1100 open days (~1500+ calendar
+ * days) of walking — 4000 covers that with room for holiday-dense calendars.
+ * If the walk ever exhausts the bound with time still unconsumed (a
+ * pathological schedule, e.g. one whose windows never advance the clock), the
+ * deadline must STILL land rather than truncate silently mid-schedule: log a
+ * warning and fall back to plain wall-clock from `start`.
  */
 export function addOfficeHoursSeconds(
   schedule: EngineSchedule,
@@ -129,9 +141,9 @@ export function addOfficeHoursSeconds(
   let remaining = seconds * 1000
   let cursor = start.getTime()
 
-  // A non-empty schedule always has open time, so this converges quickly; the
-  // bound is only a backstop against a pathological input.
-  for (let iter = 0; iter < 400 && remaining > 0; iter++) {
+  // A non-empty schedule always has open time, so this converges; the bound is
+  // only a backstop against a pathological input (see this function's doc).
+  for (let iter = 0; iter < 4000 && remaining > 0; iter++) {
     const z = zonedParts(tz, new Date(cursor))
     const { year, month, day, weekday } = z
     // A holiday is fully closed: skip its windows and fall through to the
@@ -151,6 +163,16 @@ export function addOfficeHoursSeconds(
     }
     // Nothing (more) open today — jump to the next local midnight.
     cursor = Math.max(cursor, wallToMs(year, month, day + 1, 0))
+  }
+  if (remaining > 0) {
+    // The backstop fired: the walk consumed every iteration without covering
+    // the target. Returning `cursor` here would land the deadline YEARS early
+    // (truncation), so fall back to wall-clock — a deadline always lands.
+    log.warn(
+      { seconds, timezone: tz },
+      'addOfficeHoursSeconds exhausted its iteration bound; falling back to plain wall-clock'
+    )
+    return new Date(start.getTime() + seconds * 1000)
   }
   return new Date(cursor)
 }

@@ -61,10 +61,12 @@ import {
   dispatchSlaBreached,
 } from '@/lib/server/events/dispatch'
 import {
+  claimSlaTimerTriggerMarker,
   sweepApproachingSlaBreaches,
   sweepSlaBreachTriggers,
-} from '@/lib/server/domains/sla/sla.service'
+} from '@/lib/server/domains/sla/sla.sweep'
 import {
+  claimTicketSlaTimerTriggerMarker,
   sweepApproachingTicketSlaBreaches,
   sweepTicketSlaBreachTriggers,
 } from '@/lib/server/domains/sla/ticket-sla.sweep'
@@ -448,9 +450,9 @@ function readInactivityMinutes(workflow: Pick<Workflow, 'triggerSettings'>): num
  * "silence" is a conversations-table concept (waitingSince/lastMessageAt),
  * scanned inline right here rather than through a separate domain, so the
  * exclusion is just another SQL predicate on this same query. Contrast the
- * SLA pair (sla.service.ts's sweepApproachingSlaBreaches/sweepSlaBreachTriggers,
+ * SLA pair (sla.sweep.ts's sweepApproachingSlaBreaches/sweepSlaBreachTriggers,
  * scanned further below): that scan lives in the SLA domain and deliberately
- * does NOT exclude closed/snoozed — see scanAndClaimSlaClocks's doc there for
+ * does NOT exclude closed/snoozed — see scanSlaClockCandidates's doc there for
  * why. Two triggers, two different status rules, by design; not something to
  * reconcile by moving code between the two.
  *
@@ -566,13 +568,15 @@ export async function sweepUnresponsiveConversations(now: Date): Promise<number>
 
 // ---------------------------------------------------------------------------
 // Timer-driven SLA triggers (support platform §4.6): sla.approaching_breach /
-// sla.breached. The actual scan + CAS-guarded fire-once claim lives in the
-// SLA domain (sla.service.ts's sweepApproachingSlaBreaches /
-// sweepSlaBreachTriggers) — this section only orchestrates: reads which live
+// sla.breached. The actual scan + fire-once marker claim lives in the SLA
+// domain (sla.sweep.ts's sweepApproachingSlaBreaches / sweepSlaBreachTriggers
+// + claimSlaTimerTriggerMarker, and their ticket twins in
+// ticket-sla.sweep.ts) — this section only orchestrates: reads which live
 // workflows care (so an idle workspace with none pays no extra scan), resolves
-// the lead-time input those functions need, and dispatches a synthetic event
-// per claimed candidate. See sla.service.ts's module doc, right above those
-// two functions, for why this pair dispatches through the STANDARD
+// the lead-time input those functions need, enqueues a synthetic event per
+// scanned candidate, and claims each candidate's marker after its enqueue
+// (claim-after-enqueue — see sweepSlaTimerTriggers' doc). See sla.sweep.ts's
+// module doc for why this pair dispatches through the STANDARD
 // multi-workflow fan-out (dispatchWorkflowTrigger) instead of the unresponsive
 // pair's single-workflow dispatchWorkflowTrigger `targetWorkflowId` dispatch.
 // ---------------------------------------------------------------------------
@@ -604,22 +608,35 @@ async function liveWorkflowsForTrigger(triggerType: string): Promise<Workflow[]>
 /**
  * Scan + dispatch both SLA timer triggers. `sla.approaching_breach` scans at
  * the WIDEST `breachLeadMinutes` configured across every live workflow of
- * that type (see sla.service.ts's module doc for why one scalar marker can't
+ * that type (see sla.sweep.ts's module doc for why one scalar marker can't
  * fire each live workflow independently at ITS OWN lead); `sla.breached` has
  * no configurable lead, so it only needs a live-workflow existence check.
  * Each trigger scans TWO axes per tick, sharing the same live-workflow
- * pre-check and lead resolution: the conversation clocks (sla.service.ts) and
- * the ticket-anchored TTR clock (ticket-sla.service.ts). A claimed ticket
+ * pre-check and lead resolution: the conversation clocks (sla.sweep.ts) and
+ * the ticket-anchored TTR clock (ticket-sla.sweep.ts). A scanned ticket
  * candidate dispatches the same synthetic event shape as a conversation one,
  * extended with the ticket identity (`ticketId` + `ticket` ref) and
  * conversationId/conversation pointing at the ticket's linked CUSTOMER
  * conversation — all workflow runs are conversation-context, so a ticket
  * clock's trigger rides the conversation the ticket is anchored to. The
  * ticket scans already skip back-office tickets entirely (no customer
- * conversation to run against; their marker is still claimed — see
- * ticket-sla.service.ts's resolveTicketTriggerTarget), so every candidate
+ * conversation to run against; their marker is claimed inline — see
+ * ticket-sla.sweep.ts's resolveTicketTriggerTarget), so every candidate
  * reaching here dispatches. Returns the total number of synthetic events
  * fired.
+ *
+ * CLAIM-AFTER-ENQUEUE: the scans return candidates WITHOUT their fire-once
+ * marker claimed. Per candidate, this pass first enqueues the dispatch (a
+ * deterministic BullMQ jobId per (trigger, conversation-or-ticket, clock,
+ * dueAt) — a sibling tick racing the same candidate enqueues the SAME id and
+ * is deduped by the queue), and only claims the marker (CAS) once the
+ * enqueue succeeded. An enqueue failure therefore leaves the marker unset
+ * and the next tick retries — under the old claim-then-dispatch order that
+ * same failure lost the trigger forever, the claimed marker suppressing every
+ * later scan. A claim that misses AFTER a successful enqueue only ever means
+ * a sibling tick claimed first (harmless: the queue already holds exactly
+ * one job) or the clock settled/paused/re-applied meanwhile (the stamp stays
+ * truthful: the trigger never fired for that clock state).
  */
 export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
   let fired = 0
@@ -637,13 +654,17 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
           clock: c.clock,
           dueAt: c.dueAt,
         })
-        fired++
       } catch (err) {
+        // Marker left unclaimed — a later tick re-scans and retries (see the
+        // claim-after-enqueue doc above).
         log.error(
           { err, conversationId: c.conversationId, clock: c.clock },
           'sla.approaching_breach dispatch failed; continuing the rest of the batch'
         )
+        return
       }
+      await claimSlaTimerTriggerMarker(c, 'warning', now)
+      fired++
     })
 
     // Ticket-anchored TTR pass — same lead window, same trigger type; the
@@ -662,13 +683,15 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
           ticketId: c.ticketId,
           ticket: c.ticket,
         })
-        fired++
       } catch (err) {
         log.error(
           { err, ticketId: c.ticketId, clock: c.clock },
           'sla.approaching_breach ticket dispatch failed; continuing the rest of the batch'
         )
+        return
       }
+      await claimTicketSlaTimerTriggerMarker(c, 'warning', now)
+      fired++
     })
   }
 
@@ -684,13 +707,15 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
           clock: c.clock,
           dueAt: c.dueAt,
         })
-        fired++
       } catch (err) {
         log.error(
           { err, conversationId: c.conversationId, clock: c.clock },
           'sla.breached dispatch failed; continuing the rest of the batch'
         )
+        return
       }
+      await claimSlaTimerTriggerMarker(c, 'breach', now)
+      fired++
     })
 
     // Ticket-anchored TTR pass — see the approaching_breach ticket pass above.
@@ -706,13 +731,15 @@ export async function sweepSlaTimerTriggers(now: Date): Promise<number> {
           ticketId: c.ticketId,
           ticket: c.ticket,
         })
-        fired++
       } catch (err) {
         log.error(
           { err, ticketId: c.ticketId, clock: c.clock },
           'sla.breached ticket dispatch failed; continuing the rest of the batch'
         )
+        return
       }
+      await claimTicketSlaTimerTriggerMarker(c, 'breach', now)
+      fired++
     })
   }
 

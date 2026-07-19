@@ -3,7 +3,14 @@
  * settings-blob → engine-shape adapter (both DB-free). The resolver is the
  * piece SLA + workflows lean on, so its timezone/DST behavior is pinned hard.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// The walker logs a warning when it has to fall back to wall-clock (the
+// iteration-bound backstop) — spied here so the fallback test can assert it.
+const { warn } = vi.hoisted(() => ({ warn: vi.fn() }))
+vi.mock('@/lib/server/logger', () => ({
+  logger: { child: () => ({ warn }) },
+}))
 
 import {
   isWithinOfficeHours,
@@ -117,6 +124,34 @@ describe('addOfficeHoursSeconds', () => {
     expect(iso(addOfficeHoursSeconds(ny, new Date('2026-07-06T13:00:00Z'), 3600))).toBe(
       '2026-07-06T14:00:00.000Z'
     )
+  })
+
+  it('covers the schema max (1y of open seconds) on an 8h/day schedule — lands ~4y out, not ~400 days', () => {
+    // The policy schema caps a target at 365*86400s. On a Mon-Fri 8h/day
+    // schedule that is 1095 open days (~1530 calendar days) of walking — the
+    // walker's iteration bound must cover it. (The old 400-iteration bound
+    // truncated the deadline at ~2027-02-09.)
+    expect(
+      iso(addOfficeHoursSeconds(weekdays, new Date('2026-01-05T10:00:00Z'), 365 * 86400))
+    ).toBe('2030-03-18T10:00:00.000Z')
+    expect(warn).not.toHaveBeenCalled() // no fallback — the walk converges
+  })
+
+  it('falls back to plain wall-clock (with a warning) if the walk ever exhausts its bound', () => {
+    // A schedule that never advances: every local date for the next ~11 years
+    // is a holiday, so no window ever opens. The deadline must still LAND —
+    // wall-clock from start — rather than truncate years early.
+    const holidays = Array.from({ length: 4200 }, (_, i) => {
+      const d = new Date(Date.UTC(2026, 0, 5 + i))
+      return { date: d.toISOString().slice(0, 10) }
+    })
+    const closed = { timezone: 'UTC', intervals: [], holidays }
+    warn.mockClear()
+
+    expect(iso(addOfficeHoursSeconds(closed, new Date('2026-01-05T10:00:00Z'), 3600))).toBe(
+      '2026-01-05T11:00:00.000Z'
+    )
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -4,7 +4,7 @@
  * sweepOverdueSlaBreaches). The lazy evaluator in sla.event-hooks.ts only fires
  * on agent reply / close, so without this sweep a conversation that blows its
  * deadline in silence would never be marked breached. The ticket-anchored TTR
- * clock (ticket-sla.service.ts's sweepOverdueTicketSlaBreaches) runs in the
+ * clock (ticket-sla.sweep.ts's sweepOverdueTicketSlaBreaches) runs in the
  * same job: its lazy evaluator only fires on ticket status changes, so a
  * ticket that blows its deadline with no status move needs the sweep just the
  * same.
@@ -48,7 +48,7 @@ async function initializeQueue() {
         QUEUE_NAME,
         async (job) => {
           if (job.data.type === 'record-overdue-breaches') {
-            const { sweepOverdueSlaBreaches } = await import('./sla.service')
+            const { sweepOverdueSlaBreaches } = await import('./sla.sweep')
             const result = await sweepOverdueSlaBreaches()
             // The ticket-anchored TTR twin — same per-minute tick, same
             // exactly-once marker discipline on its own stamp.

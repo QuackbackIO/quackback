@@ -82,29 +82,39 @@ vi.mock('@/lib/server/events/dispatch', () => ({
 }))
 
 // The SLA domain's own scan/claim correctness (fire-once markers, pause
-// shifting, ...) is covered by sla.service.timer-triggers.test.ts; here the
-// orchestration is what's under test (which live workflows gate the scan,
-// what lead time is resolved, how a claimed candidate becomes a dispatch
-// call) so the underlying scans are stubbed.
-const { sweepApproachingSlaBreaches, sweepSlaBreachTriggers } = vi.hoisted(() => ({
-  sweepApproachingSlaBreaches: vi.fn().mockResolvedValue([]),
-  sweepSlaBreachTriggers: vi.fn().mockResolvedValue([]),
-}))
-vi.mock('@/lib/server/domains/sla/sla.service', () => ({
+// shifting, settle suppression) is covered by sla.service.timer-triggers.test.ts;
+// here the orchestration is what's under test (which live workflows gate the
+// scan, what lead time is resolved, how a scanned candidate becomes a dispatch
+// call, and that the marker claim happens only AFTER a successful enqueue —
+// claim-after-enqueue) so the underlying scans + claims are stubbed.
+const { sweepApproachingSlaBreaches, sweepSlaBreachTriggers, claimSlaTimerTriggerMarker } =
+  vi.hoisted(() => ({
+    sweepApproachingSlaBreaches: vi.fn().mockResolvedValue([]),
+    sweepSlaBreachTriggers: vi.fn().mockResolvedValue([]),
+    claimSlaTimerTriggerMarker: vi.fn().mockResolvedValue(true),
+  }))
+vi.mock('@/lib/server/domains/sla/sla.sweep', () => ({
   sweepApproachingSlaBreaches,
   sweepSlaBreachTriggers,
+  claimSlaTimerTriggerMarker,
 }))
 
 // The ticket-anchored TTR twins — stubbed for the same reason as the
 // conversation scans above (their own scan/claim correctness lives in
 // ticket-sla.service.timer-triggers.test.ts).
-const { sweepApproachingTicketSlaBreaches, sweepTicketSlaBreachTriggers } = vi.hoisted(() => ({
+const {
+  sweepApproachingTicketSlaBreaches,
+  sweepTicketSlaBreachTriggers,
+  claimTicketSlaTimerTriggerMarker,
+} = vi.hoisted(() => ({
   sweepApproachingTicketSlaBreaches: vi.fn().mockResolvedValue([]),
   sweepTicketSlaBreachTriggers: vi.fn().mockResolvedValue([]),
+  claimTicketSlaTimerTriggerMarker: vi.fn().mockResolvedValue(true),
 }))
 vi.mock('@/lib/server/domains/sla/ticket-sla.sweep', () => ({
   sweepApproachingTicketSlaBreaches,
   sweepTicketSlaBreachTriggers,
+  claimTicketSlaTimerTriggerMarker,
 }))
 
 import { createWorkflow } from '../workflow.service'
@@ -237,8 +247,10 @@ beforeEach(() => {
   dispatchSlaBreached.mockClear()
   sweepApproachingSlaBreaches.mockReset().mockResolvedValue([])
   sweepSlaBreachTriggers.mockReset().mockResolvedValue([])
+  claimSlaTimerTriggerMarker.mockReset().mockResolvedValue(true)
   sweepApproachingTicketSlaBreaches.mockReset().mockResolvedValue([])
   sweepTicketSlaBreachTriggers.mockReset().mockResolvedValue([])
+  claimTicketSlaTimerTriggerMarker.mockReset().mockResolvedValue(true)
 })
 
 describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)', () => {
@@ -1153,21 +1165,22 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(sweepTicketSlaBreachTriggers).not.toHaveBeenCalled()
     })
 
-    it('resolves the widest breachLeadMinutes across live approaching_breach workflows and dispatches each claimed candidate', async () => {
+    it('resolves the widest breachLeadMinutes across live approaching_breach workflows and dispatches each scanned candidate, claiming the marker after the enqueue', async () => {
       await seedLiveTimerWorkflow('sla.approaching_breach', { breachLeadMinutes: 10 })
       await seedLiveTimerWorkflow('sla.approaching_breach', { breachLeadMinutes: 30 })
       const conversationId = await seedConversation()
-      sweepApproachingSlaBreaches.mockResolvedValue([
-        {
-          conversationId,
-          conversation: conversationRef(conversationId),
-          policyId: 'sla_policy_1',
-          clock: 'first_response',
-          dueAt: '2026-01-05T11:00:00.000Z',
-        },
-      ])
+      const candidate = {
+        conversationId,
+        conversation: conversationRef(conversationId),
+        policyId: 'sla_policy_1',
+        clock: 'first_response',
+        dueAt: '2026-01-05T11:00:00.000Z',
+        appliedAt: '2026-01-05T10:00:00.000Z',
+      }
+      sweepApproachingSlaBreaches.mockResolvedValue([candidate])
 
-      const fired = await sweepSlaTimerTriggers(new Date('2026-01-05T10:35:00Z'))
+      const now = new Date('2026-01-05T10:35:00Z')
+      const fired = await sweepSlaTimerTriggers(now)
       expect(fired).toBe(1)
       expect(sweepApproachingSlaBreaches).toHaveBeenCalledWith(30, expect.any(Date))
       expect(dispatchSlaApproachingBreach).toHaveBeenCalledWith(
@@ -1179,22 +1192,26 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
           dueAt: '2026-01-05T11:00:00.000Z',
         }
       )
+      // Claim-after-enqueue: the fire-once marker is claimed only after the
+      // dispatch was enqueued, with the sweep's `now`.
+      expect(claimSlaTimerTriggerMarker).toHaveBeenCalledWith(candidate, 'warning', now)
     })
 
-    it('dispatches sla.breached for each claimed candidate only when a live workflow subscribes', async () => {
+    it('dispatches sla.breached for each scanned candidate only when a live workflow subscribes', async () => {
       await seedLiveTimerWorkflow('sla.breached', {})
       const conversationId = await seedConversation()
-      sweepSlaBreachTriggers.mockResolvedValue([
-        {
-          conversationId,
-          conversation: conversationRef(conversationId),
-          policyId: 'sla_policy_1',
-          clock: 'resolution',
-          dueAt: '2026-01-05T09:00:00.000Z',
-        },
-      ])
+      const candidate = {
+        conversationId,
+        conversation: conversationRef(conversationId),
+        policyId: 'sla_policy_1',
+        clock: 'resolution',
+        dueAt: '2026-01-05T09:00:00.000Z',
+        appliedAt: '2026-01-05T08:00:00.000Z',
+      }
+      sweepSlaBreachTriggers.mockResolvedValue([candidate])
 
-      const fired = await sweepSlaTimerTriggers(new Date())
+      const now = new Date()
+      const fired = await sweepSlaTimerTriggers(now)
       expect(fired).toBe(1)
       expect(dispatchSlaBreached).toHaveBeenCalledWith(expect.any(String), {
         conversationId,
@@ -1202,28 +1219,23 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
         clock: 'resolution',
         dueAt: '2026-01-05T09:00:00.000Z',
       })
+      expect(claimSlaTimerTriggerMarker).toHaveBeenCalledWith(candidate, 'breach', now)
     })
 
-    it('one failed sla.breached dispatch does not stop the rest of the claimed batch', async () => {
+    it('one failed sla.breached dispatch does not stop the rest of the scanned batch — and leaves its own marker unclaimed', async () => {
       await seedLiveTimerWorkflow('sla.breached', {})
       const failingConversationId = await seedConversation()
       const okConversationId = await seedConversation()
-      sweepSlaBreachTriggers.mockResolvedValue([
-        {
-          conversationId: failingConversationId,
-          conversation: conversationRef(failingConversationId),
-          policyId: 'sla_policy_1',
-          clock: 'resolution',
-          dueAt: '2026-01-05T09:00:00.000Z',
-        },
-        {
-          conversationId: okConversationId,
-          conversation: conversationRef(okConversationId),
-          policyId: 'sla_policy_1',
-          clock: 'resolution',
-          dueAt: '2026-01-05T09:00:00.000Z',
-        },
-      ])
+      const failing = {
+        conversationId: failingConversationId,
+        conversation: conversationRef(failingConversationId),
+        policyId: 'sla_policy_1',
+        clock: 'resolution',
+        dueAt: '2026-01-05T09:00:00.000Z',
+        appliedAt: '2026-01-05T08:00:00.000Z',
+      }
+      const ok = { ...failing, conversationId: okConversationId }
+      sweepSlaBreachTriggers.mockResolvedValue([failing, ok])
       dispatchSlaBreached.mockImplementation(async (_jobId, payload) => {
         if (payload.conversationId === failingConversationId) throw new Error('transient failure')
       })
@@ -1235,14 +1247,52 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
         expect.any(String),
         expect.objectContaining({ conversationId: okConversationId })
       )
+      // Only the successfully enqueued candidate gets its marker claimed.
+      expect(claimSlaTimerTriggerMarker).toHaveBeenCalledTimes(1)
+      expect(claimSlaTimerTriggerMarker).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: okConversationId }),
+        'breach',
+        expect.any(Date)
+      )
     })
 
-    // --- Ticket-anchored TTR candidates (ticket-sla.service.ts) ride the same
+    it('a failed enqueue leaves the marker unclaimed so the next tick re-scans and retries (A4)', async () => {
+      await seedLiveTimerWorkflow('sla.breached', {})
+      const conversationId = await seedConversation()
+      const candidate = {
+        conversationId,
+        conversation: conversationRef(conversationId),
+        policyId: 'sla_policy_1',
+        clock: 'first_response',
+        dueAt: '2026-01-05T11:00:00.000Z',
+        appliedAt: '2026-01-05T10:00:00.000Z',
+      }
+      // The marker is never claimed while the enqueue fails, so the scan
+      // keeps re-finding the candidate on later ticks.
+      sweepSlaBreachTriggers.mockResolvedValue([candidate])
+      dispatchSlaBreached.mockRejectedValueOnce(new Error('queue down'))
+
+      const firstTick = await sweepSlaTimerTriggers(new Date('2026-01-05T11:05:00Z'))
+      expect(firstTick).toBe(0)
+      expect(claimSlaTimerTriggerMarker).not.toHaveBeenCalled()
+
+      const secondTick = await sweepSlaTimerTriggers(new Date('2026-01-05T11:10:00Z'))
+      expect(secondTick).toBe(1)
+      expect(dispatchSlaBreached).toHaveBeenCalledTimes(2)
+      expect(claimSlaTimerTriggerMarker).toHaveBeenCalledTimes(1)
+      expect(claimSlaTimerTriggerMarker).toHaveBeenCalledWith(
+        candidate,
+        'breach',
+        new Date('2026-01-05T11:10:00Z')
+      )
+    })
+
+    // --- Ticket-anchored TTR candidates (ticket-sla.sweep.ts) ride the same
     // trigger types, extended with the ticket identity. The scans already
     // filter out back-office tickets, so every candidate here dispatches. ---
 
-    /** A claimed ticket-clock candidate, shaped like
-     *  ticket-sla.service.ts's TicketSlaTimerTriggerCandidate. */
+    /** A scanned ticket-clock candidate, shaped like
+     *  ticket-sla.sweep.ts's TicketSlaTimerTriggerCandidate. */
     function ticketCandidate(overrides: Record<string, unknown> = {}) {
       const ticketId = 'ticket_abc'
       const conversationId = 'conversation_xyz'
@@ -1267,16 +1317,18 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
         policyId: 'sla_policy_1',
         clock: 'time_to_resolve',
         dueAt: '2026-01-05T11:00:00.000Z',
+        appliedAt: '2026-01-05T10:00:00.000Z',
         ...overrides,
       }
     }
 
-    it('dispatches sla.approaching_breach for a claimed ticket candidate with the ticket identity and a ticket-keyed jobId', async () => {
+    it('dispatches sla.approaching_breach for a scanned ticket candidate with the ticket identity and a ticket-keyed jobId, claiming after the enqueue', async () => {
       await seedLiveTimerWorkflow('sla.approaching_breach', { breachLeadMinutes: 20 })
       const candidate = ticketCandidate()
       sweepApproachingTicketSlaBreaches.mockResolvedValue([candidate])
 
-      const fired = await sweepSlaTimerTriggers(new Date('2026-01-05T10:45:00Z'))
+      const now = new Date('2026-01-05T10:45:00Z')
+      const fired = await sweepSlaTimerTriggers(now)
       expect(fired).toBe(1)
       // The same lead resolution feeds the ticket scan as the conversation one.
       expect(sweepApproachingTicketSlaBreaches).toHaveBeenCalledWith(20, expect.any(Date))
@@ -1291,14 +1343,16 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
           ticket: candidate.ticket,
         }
       )
+      expect(claimTicketSlaTimerTriggerMarker).toHaveBeenCalledWith(candidate, 'warning', now)
     })
 
-    it('dispatches sla.breached for a claimed ticket candidate with the ticket identity and a ticket-keyed jobId', async () => {
+    it('dispatches sla.breached for a scanned ticket candidate with the ticket identity and a ticket-keyed jobId', async () => {
       await seedLiveTimerWorkflow('sla.breached', {})
       const candidate = ticketCandidate()
       sweepTicketSlaBreachTriggers.mockResolvedValue([candidate])
 
-      const fired = await sweepSlaTimerTriggers(new Date())
+      const now = new Date()
+      const fired = await sweepSlaTimerTriggers(now)
       expect(fired).toBe(1)
       expect(dispatchSlaBreached).toHaveBeenCalledWith(
         `timer:sla.breached:ticket:${candidate.ticketId}:${candidate.clock}:${candidate.dueAt}`,
@@ -1311,9 +1365,10 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
           ticket: candidate.ticket,
         }
       )
+      expect(claimTicketSlaTimerTriggerMarker).toHaveBeenCalledWith(candidate, 'breach', now)
     })
 
-    it('one failed ticket dispatch does not stop the rest of the claimed ticket batch', async () => {
+    it('one failed ticket dispatch does not stop the rest of the scanned ticket batch — and leaves its own marker unclaimed', async () => {
       await seedLiveTimerWorkflow('sla.breached', {})
       const failing = ticketCandidate({ ticketId: 'ticket_bad' })
       const ok = ticketCandidate({ ticketId: 'ticket_ok' })
@@ -1328,6 +1383,12 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(dispatchSlaBreached).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ ticketId: 'ticket_ok' })
+      )
+      expect(claimTicketSlaTimerTriggerMarker).toHaveBeenCalledTimes(1)
+      expect(claimTicketSlaTimerTriggerMarker).toHaveBeenCalledWith(
+        expect.objectContaining({ ticketId: 'ticket_ok' }),
+        'breach',
+        expect.any(Date)
       )
     })
   })

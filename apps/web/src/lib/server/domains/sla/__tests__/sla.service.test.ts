@@ -36,7 +36,7 @@ vi.mock('@/lib/server/domains/settings/settings.office-hours', () => ({
   getOfficeHoursSchedule: vi.fn(async () => workspaceHours.schedule),
 }))
 
-import { createSlaPolicy } from '../sla-policy.service'
+import { createSlaPolicy, softDeleteSlaPolicy } from '../sla-policy.service'
 import {
   applySlaToConversation,
   recordFirstResponse,
@@ -45,8 +45,8 @@ import {
   recordResolution,
   pauseSlaOnSnooze,
   resumeSlaFromSnooze,
-  sweepOverdueSlaBreaches,
 } from '../sla.service'
+import { sweepOverdueSlaBreaches } from '../sla.sweep'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -810,5 +810,184 @@ describe.skipIf(!fixture.available)('next-response clock (real DB, rolled back)'
     // 1h Mon from 09:00 -> Mon 10:00 (NOT Fri 18:00).
     await rearmNextResponse(conversationId, new Date('2026-01-09T16:00:00Z'))
     expect((await loadStamp(conversationId)).nextResponseDueAt).toBe('2026-01-12T10:00:00.000Z')
+  })
+})
+
+/**
+ * Apply-while-paused (A6): an SLA applied onto a conversation that is ALREADY
+ * snoozed starts its clock already paused when the policy pauses on snooze —
+ * the snooze predated the apply, so no pause event will ever arrive for it.
+ */
+describe.skipIf(!fixture.available)(
+  'applySlaToConversation on a snoozed conversation (real DB, rolled back)',
+  () => {
+    beforeEach(() => {
+      workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+      return fixture.begin()
+    })
+    afterEach(fixture.rollback)
+
+    it('seeds pausedAt = appliedAt on a snoozed conversation under a pauseOnSnooze policy', async () => {
+      const conversationId = await seedConversation()
+      await testDb
+        .update(conversations)
+        .set({ status: 'snoozed' })
+        .where(eq(conversations.id, conversationId))
+      const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
+
+      const applied = await applySlaToConversation(
+        conversationId,
+        policy.id,
+        new Date('2026-01-05T10:00:00Z')
+      )
+      expect(applied.pausedAt).toBe('2026-01-05T10:00:00.000Z')
+
+      // A clock that starts paused never breaches while snoozed — the sweep
+      // skips paused stamps even past the stamped deadline.
+      expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T12:00:00Z'))).recorded).toBe(0)
+      // ...and leaving snooze resumes it (shifted by the paused span).
+      await resumeSlaFromSnooze(conversationId, new Date('2026-01-05T10:30:00Z'))
+      const [conv] = await testDb
+        .select({ slaApplied: conversations.slaApplied })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+      const stamp = conv.slaApplied as { firstResponseDueAt: string; pausedAt?: string | null }
+      expect(stamp.pausedAt).toBeNull()
+      expect(stamp.firstResponseDueAt).toBe('2026-01-05T11:30:00.000Z')
+    })
+
+    it('does NOT seed pausedAt when the policy opted out of pause-on-snooze', async () => {
+      const conversationId = await seedConversation()
+      await testDb
+        .update(conversations)
+        .set({ status: 'snoozed' })
+        .where(eq(conversations.id, conversationId))
+      const policy = await createSlaPolicy({
+        name: 'NoPause',
+        firstResponseTargetSecs: 3600,
+        pauseOnSnooze: false,
+      })
+
+      const applied = await applySlaToConversation(
+        conversationId,
+        policy.id,
+        new Date('2026-01-05T10:00:00Z')
+      )
+      expect(applied.pausedAt).toBeFalsy()
+    })
+  }
+)
+
+/**
+ * The stamp's schedule snapshot (A8): applySlaToConversation stores the
+ * RESOLVED schedule on the stamp, and rearmNextResponse computes fresh cycle
+ * deadlines from it — never from the live policy. An archived policy keeps
+ * its armed clocks re-arming, and a mid-cycle schedule edit never moves a
+ * running clock.
+ */
+describe.skipIf(!fixture.available)('schedule snapshot (real DB, rolled back)', () => {
+  beforeEach(() => {
+    workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+    return fixture.begin()
+  })
+  afterEach(fixture.rollback)
+
+  const loadStamp = async (conversationId: ConversationId) => {
+    const [conv] = await testDb
+      .select({ slaApplied: conversations.slaApplied })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    return conv.slaApplied as {
+      scheduleSnapshot?: { timezone: string; intervals: unknown[]; holidays?: unknown[] } | null
+      nextResponseDueAt?: string | null
+    }
+  }
+
+  /** Apply an FRT+NRT policy and settle the first response, so a cycle can arm. */
+  async function seedWithSettledFirstResponse(): Promise<{
+    conversationId: ConversationId
+    policyId: string
+  }> {
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({
+      name: 'FR+NR',
+      firstResponseTargetSecs: 3600,
+      nextResponseTargetSecs: 2 * 3600,
+    })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+    await recordFirstResponse(conversationId, new Date('2026-01-05T10:30:00Z'))
+    return { conversationId, policyId: policy.id }
+  }
+
+  it('stores the resolved schedule on the stamp at apply time', async () => {
+    workspaceHours.schedule = {
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [1, 2, 3, 4, 5].map((day) => ({ day, start: '09:00', end: '17:00' })),
+    }
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+    const stamp = await loadStamp(conversationId)
+    expect(stamp.scheduleSnapshot).toEqual({
+      timezone: 'UTC',
+      intervals: [1, 2, 3, 4, 5].map((day) => ({ day, start: '09:00', end: '17:00' })),
+      holidays: [],
+    })
+  })
+
+  it('re-arms the next-response clock even after the policy is archived', async () => {
+    const { conversationId, policyId } = await seedWithSettledFirstResponse()
+    // Archive (soft-delete) the policy: pre-snapshot this silently stopped
+    // every future re-arm, because the re-arm re-fetched the LIVE policy.
+    await softDeleteSlaPolicy(policyId as never)
+
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z'))
+    expect((await loadStamp(conversationId)).nextResponseDueAt).toBe('2026-01-05T12:40:00.000Z')
+  })
+
+  it('a mid-cycle schedule edit does not move the armed deadline', async () => {
+    const { conversationId } = await seedWithSettledFirstResponse()
+    // The workspace schedule CHANGES after apply: the snapshot (24/7) must
+    // still govern — the live Mon-Fri 09:00-17:00 schedule would move a
+    // Friday-evening re-arm to Monday morning instead.
+    workspaceHours.schedule = {
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [1, 2, 3, 4, 5].map((day) => ({ day, start: '09:00', end: '17:00' })),
+    }
+
+    // Fri 2026-01-09 16:00 + 2h: the 24/7 snapshot gives Fri 18:00 (NOT Mon
+    // 10:00, which the edited live schedule would produce).
+    await rearmNextResponse(conversationId, new Date('2026-01-09T16:00:00Z'))
+    expect((await loadStamp(conversationId)).nextResponseDueAt).toBe('2026-01-09T18:00:00.000Z')
+  })
+
+  it('a legacy stamp without a snapshot falls back to the live policy (and no-ops when it is archived)', async () => {
+    const { conversationId, policyId } = await seedWithSettledFirstResponse()
+    // Strip the snapshot to simulate a stamp written before the field existed.
+    const stamp = await loadStamp(conversationId)
+    const { scheduleSnapshot: _stripped, ...legacy } = stamp as Record<string, unknown>
+    await testDb
+      .update(conversations)
+      .set({ slaApplied: legacy })
+      .where(eq(conversations.id, conversationId))
+
+    // Fallback resolves the live policy's schedule — here 24/7, so the re-arm
+    // lands exactly as the snapshot path would have.
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z'))
+    expect((await loadStamp(conversationId)).nextResponseDueAt).toBe('2026-01-05T12:40:00.000Z')
+
+    // With the policy archived, the legacy stamp's re-arm is a no-op (the
+    // documented backfill tolerance — only snapshot-carrying stamps keep
+    // re-arming under an archived policy).
+    await softDeleteSlaPolicy(policyId as never)
+    await testDb
+      .update(conversations)
+      .set({ slaApplied: { ...legacy, nextResponseDueAt: null } })
+      .where(eq(conversations.id, conversationId))
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:50:00Z'))
+    expect((await loadStamp(conversationId)).nextResponseDueAt).toBeFalsy()
   })
 })

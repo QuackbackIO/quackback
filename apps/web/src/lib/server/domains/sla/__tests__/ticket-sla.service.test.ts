@@ -503,3 +503,82 @@ describe.skipIf(!fixture.available)('sweepOverdueTicketSlaBreaches (real DB, rol
     expect(breach?.meta.dueAt).toBe('2026-01-05T12:00:00.000Z')
   })
 })
+
+/**
+ * Apply-while-paused + apply-on-closed (A6): an SLA applied onto a ticket
+ * already in a 'pending'-category status starts its clock already paused when
+ * the policy pauses on pending (the pending state predated the apply, so no
+ * pause event will ever arrive for it); applying onto an already-closed
+ * ticket is a silent no-op — an armed TTR clock there could only ever breach.
+ */
+describe.skipIf(!fixture.available)(
+  'applySlaToTicket status-aware apply (real DB, rolled back)',
+  () => {
+    beforeEach(() => {
+      workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+      return fixture.begin()
+    })
+    afterEach(fixture.rollback)
+
+    /** Seed a ticket whose status has the given category. */
+    async function seedTicketInCategory(
+      category: 'open' | 'pending' | 'closed'
+    ): Promise<TicketId> {
+      const statusId = await seedStatus(category)
+      const [row] = await testDb
+        .insert(tickets)
+        .values({ type: 'customer', title: `Ticket-${suffix()}`, statusId })
+        .returning()
+      return row.id
+    }
+
+    it('seeds pausedAt = appliedAt on a pending ticket under a pauseOnPending policy', async () => {
+      const ticketId = await seedTicketInCategory('pending')
+      const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
+
+      const applied = await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
+      expect(applied?.pausedAt).toBe('2026-01-05T10:00:00.000Z')
+
+      // A clock that starts paused never breaches while pending...
+      expect((await sweepOverdueTicketSlaBreaches(new Date('2026-01-05T12:00:00Z'))).recorded).toBe(
+        0
+      )
+      // ...and leaving pending resumes it, shifted by the paused span.
+      await resumeTicketSlaFromPending(ticketId, new Date('2026-01-05T10:30:00Z'))
+      const stamp = await loadStamp(ticketId)
+      expect(stamp?.pausedAt).toBeNull()
+      expect(stamp?.timeToResolveDueAt).toBe('2026-01-05T11:30:00.000Z')
+    })
+
+    it('does NOT seed pausedAt on a pending ticket when the policy opted out of pause-on-pending', async () => {
+      const ticketId = await seedTicketInCategory('pending')
+      const policy = await createSlaPolicy({
+        name: 'NoPause',
+        timeToResolveTargetSecs: 3600,
+        pauseOnPending: false,
+      })
+
+      const applied = await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
+      expect(applied?.pausedAt).toBeFalsy()
+    })
+
+    it('is a silent no-op on an already-closed ticket (an armed TTR there could only ever breach)', async () => {
+      const ticketId = await seedTicketInCategory('closed')
+      const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
+
+      const applied = await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
+      expect(applied).toBeNull()
+      expect(await loadStamp(ticketId)).toBeNull()
+      expect(await eventsFor(ticketId)).toHaveLength(0)
+    })
+
+    it('stores the resolved schedule on the stamp at apply time (A8)', async () => {
+      const ticketId = await seedTicket()
+      const policy = await createSlaPolicy({ name: 'TTR', timeToResolveTargetSecs: 3600 })
+
+      await applySlaToTicket(ticketId, policy.id, new Date('2026-01-05T10:00:00Z'))
+      const stamp = await loadStamp(ticketId)
+      expect(stamp?.scheduleSnapshot).toEqual({ timezone: 'UTC', intervals: [], holidays: [] })
+    })
+  }
+)

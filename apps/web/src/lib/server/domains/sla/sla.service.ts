@@ -7,21 +7,23 @@
  * Breach evaluation reads `sla_applied` and appends to the append-only
  * `sla_events` log, from two directions that share one recording path:
  * lazily on agent reply / close (sla.event-hooks.ts), and via the per-minute
- * sweep (sla-breach-sweep-queue.ts) for deadlines that pass with no event.
+ * sweep (sla.sweep.ts's sweepOverdueSlaBreaches, run by
+ * sla-breach-sweep-queue.ts) for deadlines that pass with no event. The
+ * timer-driven workflow-trigger scans live in sla.sweep.ts too.
  */
 import {
   db,
   and,
   eq,
-  isNotNull,
   sql,
   conversations,
   slaEvents,
   type Conversation,
   type SlaPolicy,
+  type Database,
+  type Transaction,
 } from '@/lib/server/db'
 import type { ConversationId, SlaPolicyId } from '@quackback/ids'
-import type { EventConversationRef } from '@/lib/server/events/types'
 import { getSlaPolicy } from './sla-policy.service'
 import {
   addOfficeHoursSeconds,
@@ -35,12 +37,47 @@ import { getOfficeHoursSchedule } from '../settings/settings.office-hours'
  * The `conversations.sla_applied` shape: the one active SLA on a conversation.
  * A `type` (not `interface`) so it stays assignable to the column's
  * `Record<string, unknown>` json type.
+ *
+ * FIELD OWNERSHIP (the write contract every mutator below honors): no writer
+ * ever rewrites the whole stamp. Each writer merges ONLY the fields it owns
+ * into the live stamp via jsonb `||` (see commitStamp), guarded by the
+ * identity CAS (slaStampGuard) plus content predicates on the fields its
+ * computation depends on — so two writers touching DISJOINT fields both land
+ * (no lost update), and two writers touching the SAME field are serialized by
+ * that field's own predicate (the loser reloads + recomputes instead of
+ * clobbering). Ownership:
+ *
+ *  - settle recorders (recordFirstResponse/recordNextResponse/
+ *    recordResolution) own their clock's `*At` outcome and, when the settle
+ *    itself notes the breach, that clock's `*BreachedAt`;
+ *  - pauseSlaOnSnooze/resumeSlaFromSnooze own `pausedAt` and the pause-shift
+ *    of the still-unsettled `*DueAt` deadlines;
+ *  - rearmNextResponse owns the next-response cycle fields
+ *    (`nextResponseDueAt`, `nextResponseAt`, and the per-cycle markers) — a
+ *    fresh customer message replaces the cycle wholesale, and the merge's
+ *    explicit nulls clear the old cycle's fields (jsonb-merge sets the key to
+ *    null, which `->> field IS NULL` guards and falsy JS readers both treat
+ *    as unset);
+ *  - the sweeps (sla.sweep.ts) own the `*BreachedAt` / `*WarningFiredAt` /
+ *    `*BreachTriggerFiredAt` markers.
  */
 export type SlaApplied = {
   policyId: SlaPolicyId
   // Snapshot for display without a join back to the (possibly edited/deleted) policy.
   policyName: string
   appliedAt: string // ISO
+  // The office-hours schedule the policy's clocks run on, snapshotted at apply
+  // time (the resolved { timezone, intervals, holidays } — already the ENGINE
+  // shape, so no re-resolution is ever needed). rearmNextResponse computes its
+  // fresh cycle deadline from THIS snapshot, not from the live policy: an
+  // archived policy keeps its armed clocks re-arming (matching how FRT/TTC
+  // already behave), and a mid-cycle schedule edit never moves a clock that
+  // is already running — the same snapshot contract the deadlines themselves
+  // keep. Absent on stamps written before this field existed: rearmNextResponse
+  // falls back to resolving the live policy's schedule (the pre-snapshot
+  // behavior — an archived policy's legacy stamps simply stop re-arming, the
+  // documented backfill tolerance).
+  scheduleSnapshot?: EngineSchedule | null
   // Absolute, office-hours-aware deadlines; null = that clock is untracked by the
   // policy. The next-response clock restarts on every customer message, so its
   // due time is NOT computed at apply time — only its target (seconds) is
@@ -68,13 +105,14 @@ export type SlaApplied = {
   // DISTINCT from the breach-noted markers above, which exist purely to keep
   // the sla_events reporting log exactly-once and are read/written by
   // recordFirstResponse/recordResolution/sweepOverdueSlaBreaches regardless
-  // of whether any workflow cares. These four exist only so
-  // sweepApproachingSlaBreaches / sweepSlaBreachTriggers (below) fire
+  // of whether any workflow cares. These four exist only so sla.sweep.ts's
+  // sweepApproachingSlaBreaches / sweepSlaBreachTriggers fire
   // conversation.customer_unresponsive's SLA siblings — sla.approaching_breach
   // and sla.breached — at most once per clock per SLA application. Set the
-  // moment that trigger's dispatch is enqueued (CAS-guarded the same way as
-  // the breach-noted markers), cleared implicitly on a fresh apply (a new
-  // `appliedAt` reads every marker below as absent again).
+  // moment that trigger's dispatch is enqueued (claimed CAS-guarded after the
+  // enqueue — see sla.sweep.ts's claimSlaTimerTriggerMarker), cleared
+  // implicitly on a fresh apply (a new `appliedAt` reads every marker below
+  // as absent again).
   firstResponseWarningFiredAt?: string | null
   nextResponseWarningFiredAt?: string | null
   resolutionWarningFiredAt?: string | null
@@ -114,6 +152,12 @@ export async function resolveScheduleFor(policy: SlaPolicy): Promise<EngineSched
  * Apply a policy to a conversation: compute the deadlines, stamp `sla_applied`,
  * and log an 'applied' event. Re-applying replaces the active SLA (one per
  * conversation). `at` is injectable so callers/tests pin the clock origin.
+ *
+ * Apply-while-paused: a conversation that is ALREADY 'snoozed' under a
+ * pauseOnSnooze policy gets its clock stamped already-paused (pausedAt =
+ * appliedAt) — the snooze predated the apply, so no pause event will ever
+ * arrive for it, and without the seed the fresh clock would run (and could
+ * breach) while the conversation sits snoozed.
  */
 export async function applySlaToConversation(
   conversationId: ConversationId,
@@ -123,11 +167,23 @@ export async function applySlaToConversation(
   const policy = await getSlaPolicy(policyId)
   if (!policy) throw new Error(`SLA policy ${policyId} not found`)
   const schedule = await resolveScheduleFor(policy)
+  const [convo] = await db
+    .select({ status: conversations.status })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
 
   const applied: SlaApplied = {
     policyId: policy.id,
     policyName: policy.name,
     appliedAt: at.toISOString(),
+    // The schedule snapshot is the stamp's own (see the field's doc on
+    // SlaApplied): a trimmed copy, never the live row/blob reference.
+    scheduleSnapshot: {
+      timezone: schedule.timezone,
+      intervals: schedule.intervals,
+      holidays: schedule.holidays ?? [],
+    },
     firstResponseDueAt: policy.firstResponseTargetSecs
       ? addOfficeHoursSeconds(schedule, at, policy.firstResponseTargetSecs).toISOString()
       : null,
@@ -137,6 +193,7 @@ export async function applySlaToConversation(
       : null,
     firstResponseAt: null,
     pauseOnSnooze: policy.pauseOnSnooze,
+    pausedAt: convo?.status === 'snoozed' && policy.pauseOnSnooze ? at.toISOString() : null,
   }
 
   await db
@@ -171,14 +228,17 @@ export async function loadSlaApplied(conversationId: ConversationId): Promise<Sl
 }
 
 /**
- * The CAS guard shared by every writer of `conversations.sla_applied`
- * (pause/resume/settle): the update only lands while the stamp is still the
- * exact one the caller read from — `appliedAt` identifies which SLA
- * application it is, `pausedAt` identifies which pause state (or its absence,
- * `null`) the caller computed its write from. A miss means a concurrent
- * apply/pause/resume/settle already moved the stamp, and that write must win
- * over this one rather than get overwritten. One helper so the three call
- * sites can't drift on the predicate shape.
+ * The identity half of the CAS guard shared by every writer of
+ * `conversations.sla_applied` (pause/resume/settle/re-arm/sweep claims, all
+ * via commitStamp): the update only lands while the stamp is still the exact
+ * one the caller read from — `appliedAt` identifies which SLA application it
+ * is, `pausedAt` identifies which pause state (or its absence, `null`) the
+ * caller computed its write from. A miss means a concurrent
+ * apply/pause/resume already moved the stamp, and that write must win over
+ * this one rather than get overwritten. Field-level races between writers
+ * that change NEITHER guard field (two settles, a settle vs a sweep claim)
+ * are caught by the content predicates commitStamp layers on top — see
+ * StampContentGuard.
  */
 export function slaStampGuard(
   conversationId: ConversationId,
@@ -195,16 +255,20 @@ export function slaStampGuard(
 }
 
 /** Append one clock event to the log — the single meta shape both the lazy
- *  evaluator and the sweep record with. */
-async function insertClockEvent(
+ *  evaluator and the sweep record with. Takes an executor so the event can
+ *  travel in the same transaction as the stamp write it belongs to (see
+ *  commitClockEvent). Exported for sla.sweep.ts's reporting pass, whose
+ *  claim + insert pair is atomic the same way. */
+export async function insertClockEvent(
   conversationId: ConversationId,
   policyId: SlaPolicyId,
   kind: string,
   dueAt: string,
-  at: Date
+  at: Date,
+  executor: StampExecutor = db
 ): Promise<void> {
   const overdueMs = at.getTime() - new Date(dueAt).getTime()
-  await db.insert(slaEvents).values({
+  await executor.insert(slaEvents).values({
     conversationId,
     policyId,
     kind,
@@ -212,46 +276,113 @@ async function insertClockEvent(
   })
 }
 
+/** The executor the stamp writers run against: the global db, or the
+ *  transaction handle when a stamp write travels with its event insert (see
+ *  commitClockEvent) so the pair lands atomically or not at all. */
+export type StampExecutor = Database | Transaction
+
 /**
- * Persist a mutated stamp with NO clock event — for settling a clock whose
- * breach the sweep already logged (the event must stay exactly-once). Guarded
- * by slaStampGuard on the `(appliedAt, pausedAt)` the caller computed `next`
- * from — the same CAS pause/resume already use — so a concurrent
- * pause/resume/settle that moved the stamp first wins instead of getting
- * clobbered by this write. Returns whether the write landed; a caller whose
- * guard misses must reload the stamp and recompute before retrying (see
- * recordFirstResponse/recordResolution), the same trade-off pauseSlaOnSnooze's
- * guard documents.
+ * The content predicates a stamp merge-write pins BEYOND the identity CAS
+ * (slaStampGuard). Two shapes, both evaluated against the live row at write
+ * time:
+ *
+ *  - `unsetFields` must still be unset (`->> field IS NULL`) — the
+ *    double-write guard. A concurrent writer that already stamped one of
+ *    these fields wins; this write misses instead of clobbering it or
+ *    double-logging its event. A settle guards on its own `*At` outcome (a
+ *    second concurrent settle loses) and, when it logs the breach itself, on
+ *    the breach-noted marker (a sweep that claimed it first wins).
+ *  - `pinnedFields` must still equal the exact values the caller computed its
+ *    patch from (`->> field = value`, or IS NULL for a null pin) — the
+ *    stale-read guard. A concurrent write that moved one of these fields
+ *    invalidates the computation, so this write must miss and let the caller
+ *    reload + recompute against fresh state (rearmNextResponse pins the exact
+ *    `nextResponseDueAt` it is replacing).
  */
-async function commitStamp(
+export interface StampContentGuard {
+  unsetFields?: (keyof SlaApplied)[]
+  pinnedFields?: Partial<Record<keyof SlaApplied, string | null>>
+}
+
+/**
+ * Merge a stamp mutation into the live stamp — the ONE write primitive every
+ * stamp mutator in this domain uses (directly, or under commitClockEvent when
+ * the mutation travels with a clock event). The write contract has two halves:
+ *
+ *  1. MERGE, never rewrite: `sla_applied = sla_applied || patch`, where
+ *     `patch` carries ONLY the fields this writer owns (the ownership map on
+ *     SlaApplied). A whole-stamp write would resurrect stale values over any
+ *     field a concurrent writer changed between this writer's read and write;
+ *     the jsonb merge leaves every field not in the patch untouched, so
+ *     disjoint writers (e.g. a settle and a pause landing together) both keep
+ *     their fields. An explicit null in the patch sets the key to jsonb null
+ *     (rearmNextResponse's cycle clear), which `->> field IS NULL` guards and
+ *     falsy JS readers both treat as unset.
+ *  2. GUARD the merge: the identity CAS (slaStampGuard on the appliedAt +
+ *     pausedAt the caller computed from) plus `content` — the field-level
+ *     predicates above. A miss means a concurrent writer already moved the
+ *     state this computation depended on, and that writer must win rather
+ *     than get clobbered.
+ *
+ * Returns whether the write landed; a caller whose guard misses must reload
+ * the stamp and recompute before retrying (see recordFirstResponse/
+ * recordResolution), the same trade-off pauseSlaOnSnooze documents. Also used
+ * for settling a clock whose breach the sweep already logged (the event must
+ * stay exactly-once), and by sla.sweep.ts's marker claims.
+ */
+export async function commitStamp(
   conversationId: ConversationId,
-  next: SlaApplied,
+  patch: Partial<SlaApplied>,
   at: Date,
-  guard: { appliedAt: string; pausedAt: string | null }
+  guard: { appliedAt: string; pausedAt: string | null },
+  content: StampContentGuard = {},
+  executor: StampExecutor = db
 ): Promise<boolean> {
-  const [row] = await db
+  const [row] = await executor
     .update(conversations)
-    .set({ slaApplied: next, updatedAt: at })
-    .where(slaStampGuard(conversationId, guard.appliedAt, guard.pausedAt))
+    .set({
+      slaApplied: sql`${conversations.slaApplied} || ${JSON.stringify(patch)}::jsonb`,
+      updatedAt: at,
+    })
+    .where(
+      and(
+        slaStampGuard(conversationId, guard.appliedAt, guard.pausedAt),
+        ...(content.unsetFields ?? []).map(
+          (field) => sql`(${conversations.slaApplied} ->> ${field}) IS NULL`
+        ),
+        ...Object.entries(content.pinnedFields ?? {}).map(([field, value]) =>
+          value === null
+            ? sql`(${conversations.slaApplied} ->> ${field}) IS NULL`
+            : sql`(${conversations.slaApplied} ->> ${field}) = ${value}`
+        )
+      )
+    )
     .returning({ id: conversations.id })
   return Boolean(row)
 }
 
-/** Persist a mutated stamp + append one clock event in a single spot (both
- *  writes always travel together, so callers never leave the stamp and log out
- *  of sync). Same guarded write as commitStamp — the event is logged only when
- *  the stamp write landed. */
+/** Persist a stamp mutation + append one clock event in a single spot — and,
+ *  crucially, in a single TRANSACTION: the event is the durable record of the
+ *  stamp change, so the two must land atomically or not at all (a failure
+ *  between them would otherwise leave the log disagreeing with the stamp —
+ *  e.g. a settled clock with no settle event, or vice versa). Same guarded
+ *  merge as commitStamp — the event is logged only when the stamp write
+ *  landed, and a guard miss commits nothing. */
 async function commitClockEvent(
   conversationId: ConversationId,
-  next: SlaApplied,
+  policyId: SlaPolicyId,
+  patch: Partial<SlaApplied>,
   kind: string,
   dueAt: string,
   at: Date,
-  guard: { appliedAt: string; pausedAt: string | null }
+  guard: { appliedAt: string; pausedAt: string | null },
+  content: StampContentGuard
 ): Promise<boolean> {
-  if (!(await commitStamp(conversationId, next, at, guard))) return false
-  await insertClockEvent(conversationId, next.policyId, kind, dueAt, at)
-  return true
+  return db.transaction(async (tx) => {
+    if (!(await commitStamp(conversationId, patch, at, guard, content, tx))) return false
+    await insertClockEvent(conversationId, policyId, kind, dueAt, at, tx)
+    return true
+  })
 }
 
 /**
@@ -305,29 +436,41 @@ export async function recordFirstResponse(
     let committed: boolean
     if (applied.firstResponseBreachedAt) {
       // Settle-only (the breach event stays exactly-once), but log the late
-      // settle itself for time-after-miss reporting.
+      // settle itself for time-after-miss reporting. The content CAS re-checks
+      // the outcome field itself: a concurrent settle that landed first owns
+      // it, and this write must miss rather than double-log the settle.
       committed = await commitClockEvent(
         conversationId,
-        { ...applied, firstResponseAt: at.toISOString() },
+        applied.policyId,
+        { firstResponseAt: at.toISOString() },
         'first_response_settled_after_breach',
         dueAtForSettle(applied.firstResponseDueAt, applied.pausedAt, at).toISOString(),
         at,
-        guard
+        guard,
+        { unsetFields: ['firstResponseAt'] }
       )
     } else {
       const dueAt = dueAtForSettle(applied.firstResponseDueAt, applied.pausedAt, at)
       const breached = at.getTime() > dueAt.getTime()
       committed = await commitClockEvent(
         conversationId,
-        {
-          ...applied,
-          firstResponseAt: at.toISOString(),
-          ...(breached ? { firstResponseBreachedAt: at.toISOString() } : {}),
-        },
+        applied.policyId,
+        breached
+          ? { firstResponseAt: at.toISOString(), firstResponseBreachedAt: at.toISOString() }
+          : { firstResponseAt: at.toISOString() },
         breached ? 'first_response_breached' : 'first_response_met',
         dueAt.toISOString(),
         at,
-        guard
+        guard,
+        // When this settle logs the breach itself, the breach-noted marker is
+        // part of the content CAS too: a sweep claim that landed first owns
+        // it, and this settle must miss + reload into the settle-after-breach
+        // path above rather than double-log the breach.
+        {
+          unsetFields: breached
+            ? ['firstResponseAt', 'firstResponseBreachedAt']
+            : ['firstResponseAt'],
+        }
       )
     }
     if (committed) return
@@ -367,29 +510,35 @@ export async function recordResolution(
     let committed: boolean
     if (applied.resolutionBreachedAt) {
       // Settle-only (the breach event stays exactly-once), but log the late
-      // settle itself for time-after-miss reporting.
+      // settle itself for time-after-miss reporting. The content CAS re-checks
+      // the outcome field itself: a concurrent settle that landed first owns
+      // it, and this write must miss rather than double-log the settle.
       committed = await commitClockEvent(
         conversationId,
-        { ...applied, resolvedAt: at.toISOString() },
+        applied.policyId,
+        { resolvedAt: at.toISOString() },
         'resolution_settled_after_breach',
         dueAtForSettle(applied.timeToCloseDueAt, applied.pausedAt, at).toISOString(),
         at,
-        guard
+        guard,
+        { unsetFields: ['resolvedAt'] }
       )
     } else {
       const dueAt = dueAtForSettle(applied.timeToCloseDueAt, applied.pausedAt, at)
       const breached = at.getTime() > dueAt.getTime()
       committed = await commitClockEvent(
         conversationId,
-        {
-          ...applied,
-          resolvedAt: at.toISOString(),
-          ...(breached ? { resolutionBreachedAt: at.toISOString() } : {}),
-        },
+        applied.policyId,
+        breached
+          ? { resolvedAt: at.toISOString(), resolutionBreachedAt: at.toISOString() }
+          : { resolvedAt: at.toISOString() },
         breached ? 'resolution_breached' : 'resolution_met',
         dueAt.toISOString(),
         at,
-        guard
+        guard,
+        // See recordFirstResponse for why the breach-noted marker joins the
+        // content CAS when this settle logs the breach itself.
+        { unsetFields: breached ? ['resolvedAt', 'resolutionBreachedAt'] : ['resolvedAt'] }
       )
     }
     if (committed) return
@@ -416,15 +565,25 @@ export function shiftIso(iso: string, ms: number): string {
  * measured by firstResponseDueAt alone. Old stamps (no nextResponseDueAt
  * field) arm here the same way; absent simply means "not yet armed".
  *
- * The deadline math needs the policy's office-hours schedule, so the policy
- * row is re-read (via the snapshotted policyId) rather than relying on the
- * stamp alone; a since-deleted policy makes this a no-op — the stamp's other
- * clocks are untouched.
+ * The deadline math runs on the stamp's OWN scheduleSnapshot (see SlaApplied),
+ * never the live policy: an archived (soft-deleted) policy keeps its armed
+ * clocks re-arming, and a mid-cycle schedule edit never moves a running
+ * clock — the stamp's snapshot contract. Stamps written before the snapshot
+ * existed fall back to resolving the live policy's schedule (the pre-snapshot
+ * behavior, including its archived-policy no-op — the documented backfill
+ * tolerance).
  *
  * Guarded and retried on a CAS miss exactly like recordFirstResponse (see its
- * doc comment): a concurrent settle/pause/resume that moved the stamp first
- * wins, and the re-arm recomputes against the freshly reloaded stamp. No
- * sla_events row is logged — arming is stamp state, not a reportable clock
+ * doc comment). Beyond the identity CAS, the re-arm PINS the exact
+ * `nextResponseDueAt` it is replacing (see StampContentGuard): the merge
+ * clears `nextResponseAt` as part of the fresh cycle, so if a concurrent
+ * writer moved the cycle between read and write — a resume's due shift, or a
+ * sibling re-arm — this computation is stale and must miss rather than
+ * resurrect the state it read over the newer cycle. A settle racing the
+ * re-arm touches only `nextResponseAt` — a field the re-arm owns and
+ * legitimately resets for the new cycle — so the merge itself can never tear
+ * the stamp; ordering between the two is decided by whichever lands first.
+ * No sla_events row is logged — arming is stamp state, not a reportable clock
  * event.
  */
 export async function rearmNextResponse(
@@ -434,28 +593,38 @@ export async function rearmNextResponse(
   let applied = await loadSlaApplied(conversationId)
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!applied || !applied.nextResponseTargetSecs || !applied.firstResponseAt) return
-    const policy = await getSlaPolicy(applied.policyId)
-    if (!policy) return
-    const schedule = await resolveScheduleFor(policy)
-    const next: SlaApplied = {
-      ...applied,
-      nextResponseDueAt: addOfficeHoursSeconds(
-        schedule,
-        at,
-        applied.nextResponseTargetSecs
-      ).toISOString(),
-      nextResponseAt: null,
-      nextResponseBreachedAt: null,
-      nextResponseWarningFiredAt: null,
-      nextResponseBreachTriggerFiredAt: null,
-    }
-    const committed = await commitStamp(conversationId, next, at, {
-      appliedAt: applied.appliedAt,
-      pausedAt: applied.pausedAt ?? null,
-    })
+    const schedule = applied.scheduleSnapshot ?? (await legacyScheduleFor(applied.policyId))
+    if (!schedule) return
+    const committed = await commitStamp(
+      conversationId,
+      {
+        nextResponseDueAt: addOfficeHoursSeconds(
+          schedule,
+          at,
+          applied.nextResponseTargetSecs
+        ).toISOString(),
+        nextResponseAt: null,
+        nextResponseBreachedAt: null,
+        nextResponseWarningFiredAt: null,
+        nextResponseBreachTriggerFiredAt: null,
+      },
+      at,
+      { appliedAt: applied.appliedAt, pausedAt: applied.pausedAt ?? null },
+      { pinnedFields: { nextResponseDueAt: applied.nextResponseDueAt ?? null } }
+    )
     if (committed) return
     applied = await loadSlaApplied(conversationId)
   }
+}
+
+/** The pre-scheduleSnapshot schedule source: resolve the LIVE policy's
+ *  schedule for a stamp that carries no snapshot of its own. Returns null
+ *  when the policy is gone (deleted/archived) — the pre-snapshot behavior,
+ *  kept only for stamps written before the snapshot existed. */
+async function legacyScheduleFor(policyId: SlaPolicyId): Promise<EngineSchedule | null> {
+  const policy = await getSlaPolicy(policyId)
+  if (!policy) return null
+  return resolveScheduleFor(policy)
 }
 
 /**
@@ -482,29 +651,37 @@ export async function recordNextResponse(
     let committed: boolean
     if (applied.nextResponseBreachedAt) {
       // Settle-only (the breach event stays exactly-once), but log the late
-      // settle itself for time-after-miss reporting.
+      // settle itself for time-after-miss reporting. The content CAS re-checks
+      // the outcome field itself: a concurrent settle that landed first owns
+      // it, and this write must miss rather than double-log the settle.
       committed = await commitClockEvent(
         conversationId,
-        { ...applied, nextResponseAt: at.toISOString() },
+        applied.policyId,
+        { nextResponseAt: at.toISOString() },
         'next_response_settled_after_breach',
         dueAtForSettle(applied.nextResponseDueAt, applied.pausedAt, at).toISOString(),
         at,
-        guard
+        guard,
+        { unsetFields: ['nextResponseAt'] }
       )
     } else {
       const dueAt = dueAtForSettle(applied.nextResponseDueAt, applied.pausedAt, at)
       const breached = at.getTime() > dueAt.getTime()
       committed = await commitClockEvent(
         conversationId,
-        {
-          ...applied,
-          nextResponseAt: at.toISOString(),
-          ...(breached ? { nextResponseBreachedAt: at.toISOString() } : {}),
-        },
+        applied.policyId,
+        breached
+          ? { nextResponseAt: at.toISOString(), nextResponseBreachedAt: at.toISOString() }
+          : { nextResponseAt: at.toISOString() },
         breached ? 'next_response_breached' : 'next_response_met',
         dueAt.toISOString(),
         at,
-        guard
+        guard,
+        // See recordFirstResponse for why the breach-noted marker joins the
+        // content CAS when this settle logs the breach itself.
+        {
+          unsetFields: breached ? ['nextResponseAt', 'nextResponseBreachedAt'] : ['nextResponseAt'],
+        }
       )
     }
     if (committed) return
@@ -517,12 +694,13 @@ export async function recordNextResponse(
  * SLA whose policy opted into `pauseOnSnooze` enters 'snoozed', stamp the
  * moment the clock stopped. The stamped deadlines themselves are left
  * untouched here; they only shift once the paused duration is known, on
- * resume. Uses a single guarded UPDATE (matches the appliedAt + pausedAt this
- * call read) so a concurrent apply/pause/resume doesn't get clobbered. If the
- * guard misses, this quietly skips rather than overwriting a newer stamp; the
- * existing read-modify-write race in this domain is out of scope to fully fix.
- * A no-op without an applied SLA, when the policy opted out of pausing, or
- * when the clock is already paused (idempotent against a duplicate event).
+ * resume. Uses the shared guarded merge-write (commitStamp): the patch is
+ * `pausedAt` alone, so a settle racing the pause keeps its own fields, and
+ * the identity CAS on `(appliedAt, pausedAt: null)` means a concurrent
+ * apply/pause/resume wins instead of getting clobbered. If the guard misses,
+ * this quietly skips rather than overwriting a newer stamp. A no-op without
+ * an applied SLA, when the policy opted out of pausing, or when the clock is
+ * already paused (idempotent against a duplicate event).
  */
 export async function pauseSlaOnSnooze(
   conversationId: ConversationId,
@@ -531,13 +709,11 @@ export async function pauseSlaOnSnooze(
   const applied = await loadSlaApplied(conversationId)
   if (!applied || applied.pauseOnSnooze === false || applied.pausedAt) return
 
-  const next: SlaApplied = { ...applied, pausedAt: at.toISOString() }
-  const [row] = await db
-    .update(conversations)
-    .set({ slaApplied: next, updatedAt: at })
-    .where(slaStampGuard(conversationId, applied.appliedAt, null))
-    .returning({ id: conversations.id })
-  if (!row) return
+  const landed = await commitStamp(conversationId, { pausedAt: at.toISOString() }, at, {
+    appliedAt: applied.appliedAt,
+    pausedAt: null,
+  })
+  if (!landed) return
 
   await db.insert(slaEvents).values({
     conversationId,
@@ -572,29 +748,26 @@ export async function resumeSlaFromSnooze(
 
   const pausedAt = applied.pausedAt
   const shiftMs = Math.max(0, at.getTime() - new Date(pausedAt).getTime())
-  const next: SlaApplied = {
-    ...applied,
-    pausedAt: null,
-    firstResponseDueAt:
-      !applied.firstResponseDueAt || applied.firstResponseAt
-        ? applied.firstResponseDueAt
-        : shiftIso(applied.firstResponseDueAt, shiftMs),
-    nextResponseDueAt:
-      !applied.nextResponseDueAt || applied.nextResponseAt
-        ? applied.nextResponseDueAt
-        : shiftIso(applied.nextResponseDueAt, shiftMs),
-    timeToCloseDueAt:
-      !applied.timeToCloseDueAt || applied.resolvedAt
-        ? applied.timeToCloseDueAt
-        : shiftIso(applied.timeToCloseDueAt, shiftMs),
+  // The merge patch carries ONLY the fields resume owns: the cleared pause
+  // plus the shift of each still-unsettled deadline (a settled clock's due is
+  // left out of the patch entirely — it settled against whatever was live at
+  // the time, and merging nothing leaves the field byte-identical).
+  const patch: Partial<SlaApplied> = { pausedAt: null }
+  if (applied.firstResponseDueAt && !applied.firstResponseAt) {
+    patch.firstResponseDueAt = shiftIso(applied.firstResponseDueAt, shiftMs)
+  }
+  if (applied.nextResponseDueAt && !applied.nextResponseAt) {
+    patch.nextResponseDueAt = shiftIso(applied.nextResponseDueAt, shiftMs)
+  }
+  if (applied.timeToCloseDueAt && !applied.resolvedAt) {
+    patch.timeToCloseDueAt = shiftIso(applied.timeToCloseDueAt, shiftMs)
   }
 
-  const [row] = await db
-    .update(conversations)
-    .set({ slaApplied: next, updatedAt: at })
-    .where(slaStampGuard(conversationId, applied.appliedAt, pausedAt))
-    .returning({ id: conversations.id })
-  if (!row) return null
+  const landed = await commitStamp(conversationId, patch, at, {
+    appliedAt: applied.appliedAt,
+    pausedAt,
+  })
+  if (!landed) return null
 
   await db.insert(slaEvents).values({
     conversationId,
@@ -602,436 +775,9 @@ export async function resumeSlaFromSnooze(
     kind: 'resumed',
     meta: { pausedForSecs: Math.round(shiftMs / 1000), at: at.toISOString() },
   })
-  return next
-}
-
-// Upper bound on conversations handled per sweep run; anything beyond waits a
-// minute for the next tick (the SQL filter keeps re-finding them).
-const SWEEP_BATCH_LIMIT = 500
-
-// The three SLA clocks every sweep pass reads, as ONE stamp-field descriptor
-// table (support platform §4.6) — merged from what were two nearly-identical
-// tables (a SWEEP_CLOCKS for this per-minute reporting sweep, a separate
-// TIMER_TRIGGER_CLOCKS for the two 5-minute workflow-trigger sweeps further
-// below): `breachedField` here is the SAME stamp field both former tables
-// independently named (SWEEP_CLOCKS' `markerField` / TIMER_TRIGGER_CLOCKS'
-// `breachNotedField`) — `*BreachedAt`, set the moment this sweep (or the lazy
-// evaluator) first notes the breach. `warningMarkerField`/`breachMarkerField`
-// are the SEPARATE, independent workflow-trigger fire-once markers — see
-// sweepSlaBreachTriggers' doc below for why they're never the same field as
-// `breachedField`. `reportKind` is the sla_events `kind` THIS sweep logs;
-// `clock` is the public clock name the workflow-trigger sweeps' dispatched
-// event payload uses (a different vocabulary — 'first_response_breached' vs
-// 'first_response' — so both names are kept, not just one). The next_response
-// row's markers are PER-CYCLE: rearmNextResponse clears them (and the settle
-// outcome) on every customer message, so each fresh cycle can breach/warn/
-// trigger once of its own.
-const SLA_CLOCKS = [
-  {
-    reportKind: 'first_response_breached',
-    clock: 'first_response',
-    dueField: 'firstResponseDueAt',
-    settledField: 'firstResponseAt',
-    breachedField: 'firstResponseBreachedAt',
-    warningMarkerField: 'firstResponseWarningFiredAt',
-    breachMarkerField: 'firstResponseBreachTriggerFiredAt',
-  },
-  {
-    reportKind: 'next_response_breached',
-    clock: 'next_response',
-    dueField: 'nextResponseDueAt',
-    settledField: 'nextResponseAt',
-    breachedField: 'nextResponseBreachedAt',
-    warningMarkerField: 'nextResponseWarningFiredAt',
-    breachMarkerField: 'nextResponseBreachTriggerFiredAt',
-  },
-  {
-    reportKind: 'resolution_breached',
-    clock: 'resolution',
-    dueField: 'timeToCloseDueAt',
-    settledField: 'resolvedAt',
-    breachedField: 'resolutionBreachedAt',
-    warningMarkerField: 'resolutionWarningFiredAt',
-    breachMarkerField: 'resolutionBreachTriggerFiredAt',
-  },
-] as const
-
-type SlaClock = (typeof SLA_CLOCKS)[number]
-
-/** A row scanAndClaimSlaClocks selects: the SLA stamp plus the
- *  EventConversationRef fields the two timer-trigger sweeps need to build
- *  each claimed candidate's `conversation` ref (webhook payload parity). */
-interface SlaSweepRow {
-  id: ConversationId
-  slaApplied: unknown
-  status: string
-  channel: string
-  priority: string
-  assignedTeamId: string | null
-}
-
-/** Build the EventConversationRef every sibling conversation event embeds,
- *  from a scanAndClaimSlaClocks row. */
-function conversationRefFromRow(row: SlaSweepRow): EventConversationRef {
-  return {
-    id: row.id,
-    status: row.status as EventConversationRef['status'],
-    channel: row.channel as EventConversationRef['channel'],
-    priority: row.priority as EventConversationRef['priority'],
-    assignedTeamId: row.assignedTeamId,
-  }
-}
-
-/**
- * The generic scan-and-claim skeleton shared by every SLA sweep pass below
- * (sweepOverdueSlaBreaches here, plus sweepApproachingSlaBreaches /
- * sweepSlaBreachTriggers further down): fetch every conversation with an
- * active (non-paused) SLA whose stamp satisfies `buildWindowSql` (batched at
- * SWEEP_BATCH_LIMIT), then for each of SLA_CLOCKS' three clocks on each row,
- * re-check `isEligible` in JS (SQL only narrows the scan; the
- * recording/claiming rule always lives in JS, per every sweep in this module)
- * and, if still eligible, atomically claim `markerField(clock)` — CAS-guarded
- * by slaStampGuard the same way every stamp writer in this module is, plus
- * whatever `extraUnsetFields(clock)` names must ALSO still be unset under
- * that same guard (only sweepOverdueSlaBreaches uses this, to re-check
- * `settledField` in the claim itself — see its own call site for why).
- * `onClaimed` runs only after a landed claim: the one place the three
- * passes actually diverge (log an sla_events row vs. push a workflow-trigger
- * candidate).
- *
- * Deliberately status-blind: none of the three sweeps below filter on
- * `conversations.status` at all (contrast workflow-sweep.ts's
- * scanUnresponsiveForWorkflow, which explicitly excludes closed/snoozed
- * conversations by SQL filter for the customer/teammate_unresponsive pair).
- * A snoozed conversation only stops its clock when the policy opted into
- * `pauseOnSnooze` (pauseSlaOnSnooze/resumeSlaFromSnooze, above) — under a
- * no-pause policy it keeps running and can legitimately breach while
- * snoozed. A closed conversation whose first-response (or resolution) clock
- * was never settled before close is a real, reportable fact — "nobody
- * responded before this was closed" — not a scan artifact to suppress.
- * Whether that fact is still actionable for a given workflow (e.g. "don't
- * reopen a closed conversation just because it breached") is left to that
- * workflow's OWN condition/branch on `conversation.status`, the same way any
- * other trigger's downstream filtering works — it is not baked into the scan.
- */
-async function scanAndClaimSlaClocks(
-  at: Date,
-  buildWindowSql: (nowIso: string) => ReturnType<typeof sql>,
-  isEligible: (clock: SlaClock, applied: SlaApplied, dueAt: string) => boolean,
-  markerField: (clock: SlaClock) => keyof SlaApplied,
-  extraUnsetFields: (clock: SlaClock) => (keyof SlaApplied)[],
-  onClaimed: (
-    row: SlaSweepRow,
-    applied: SlaApplied,
-    clock: SlaClock,
-    dueAt: string
-  ) => Promise<void>
-): Promise<void> {
-  const nowIso = at.toISOString() // ISO-8601 compares lexicographically = chronologically
-  const rows = await db
-    .select({
-      id: conversations.id,
-      slaApplied: conversations.slaApplied,
-      // Only sweepApproachingSlaBreaches/sweepSlaBreachTriggers actually use
-      // these (to build each claimed candidate's EventConversationRef —
-      // support platform §4.6, webhook payload parity); sweepOverdueSlaBreaches
-      // ignores them. Selected unconditionally rather than threading a second
-      // query shape through this shared skeleton for one caller.
-      status: conversations.status,
-      channel: conversations.channel,
-      priority: conversations.priority,
-      assignedTeamId: conversations.assignedTeamId,
-    })
-    .from(conversations)
-    .where(
-      and(
-        isNotNull(conversations.slaApplied),
-        sql`(${conversations.slaApplied} ->> 'pausedAt') IS NULL`,
-        // Redundant given buildWindowSql's own OR'd window below (every
-        // candidate row already satisfies one arm, since each OR branch
-        // requires its own clock's due set + settledField IS NULL) — repeated
-        // here VERBATIM as its own top-level AND clause, matching
-        // conversations_sla_unsettled_idx's predicate (migration 0187, widened
-        // by 0213 for the next-response arm / schema/conversation.ts), so the
-        // planner can prove the partial index applies via a literal clause
-        // match instead of having to reason through the OR structure itself.
-        // The next-response arm is `dueAt set AND unsettled` (not just
-        // `nextResponseAt IS NULL`, which — unlike the other two outcomes —
-        // is absent-until-settled and would otherwise be true for nearly
-        // every stamp, gutting the partial index back to 0186's
-        // `IS NOT NULL` selectivity): the only rows it adds beyond the other
-        // two arms are an ARMED next-response cycle on a conversation whose
-        // first-response AND resolution clocks both already settled (e.g. a
-        // customer re-pinging a reopened, resolved thread).
-        sql`((${conversations.slaApplied} ->> 'firstResponseAt') IS NULL OR (${conversations.slaApplied} ->> 'resolvedAt') IS NULL OR ((${conversations.slaApplied} ->> 'nextResponseDueAt') IS NOT NULL AND (${conversations.slaApplied} ->> 'nextResponseAt') IS NULL))`,
-        buildWindowSql(nowIso)
-      )
-    )
-    .limit(SWEEP_BATCH_LIMIT)
-
-  for (const row of rows) {
-    // Re-check in JS (the recording rule lives here; SQL only narrows the scan).
-    const applied = row.slaApplied as SlaApplied
-    if (applied.pausedAt) continue // paused clocks are stopped, never eligible
-    for (const clock of SLA_CLOCKS) {
-      const dueAt = applied[clock.dueField]
-      if (!dueAt || !isEligible(clock, applied, dueAt)) continue
-      const landed = await claimSlaClockMarker(
-        row.id,
-        applied,
-        clock.dueField,
-        markerField(clock),
-        dueAt,
-        at,
-        extraUnsetFields(clock)
-      )
-      if (!landed) continue // settled, paused, re-applied, or claimed meanwhile
-      await onClaimed(row, applied, clock, dueAt)
-    }
-  }
-}
-
-/**
- * The breach sweep (run every minute by sla-breach-sweep-queue): find
- * conversations whose stamped first-response / next-response / time-to-close
- * deadline has
- * passed with no settle and no breach noted yet, and record the breach.
- *
- * Exactly-once: each breach is CLAIMED before its event is logged, with a
- * single UPDATE that merges the breach-noted marker into the live stamp. The
- * claim's predicate is slaStampGuard — the same CAS every other stamp writer
- * (pause/resume/settle) uses — narrowed to the clock being claimed: the due
- * date must still be the scanned one (a pause+resume cycle between scan and
- * write keeps pausedAt null but shifts the deadline) and the clock must still
- * be unsettled and unmarked (this sweep's claim ALSO re-checks `settledField`
- * itself, unlike the two workflow-trigger sweeps below — passed here as
- * `extraUnsetFields` — closing a narrow race a lazy settle landing between
- * this sweep's SELECT and its own UPDATE would otherwise slip through: the
- * settle doesn't change `appliedAt`/`pausedAt`, so slaStampGuard alone
- * wouldn't catch it). So a lazy evaluation (agent reply / close), a pause, or
- * a re-apply racing the sweep across its wide scan-to-write span can't
- * produce a duplicate event, and the jsonb merge can never clobber a
- * concurrently-settled stamp.
- *
- * Pause-aware: a stamp whose clock is currently paused (pausedAt set, not yet
- * resumed) never breaches — the scan excludes it in SQL and the loop re-checks
- * in JS. Resume shifts the unsettled deadlines forward by the paused span, so
- * once the conversation leaves snooze the normal scan judges the shifted
- * deadline. Returns the number recorded.
- */
-export async function sweepOverdueSlaBreaches(
-  at: Date = new Date()
-): Promise<{ recorded: number }> {
-  let recorded = 0
-  await scanAndClaimSlaClocks(
-    at,
-    (nowIso) => sql`(
-          ((${conversations.slaApplied} ->> 'firstResponseDueAt') < ${nowIso}
-            AND (${conversations.slaApplied} ->> 'firstResponseAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'firstResponseBreachedAt') IS NULL)
-          OR ((${conversations.slaApplied} ->> 'nextResponseDueAt') < ${nowIso}
-            AND (${conversations.slaApplied} ->> 'nextResponseAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'nextResponseBreachedAt') IS NULL)
-          OR ((${conversations.slaApplied} ->> 'timeToCloseDueAt') < ${nowIso}
-            AND (${conversations.slaApplied} ->> 'resolvedAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'resolutionBreachedAt') IS NULL)
-        )`,
-    (clock, applied, dueAt) =>
-      !applied[clock.settledField] &&
-      !applied[clock.breachedField] &&
-      at.getTime() > new Date(dueAt).getTime(),
-    (clock) => clock.breachedField,
-    (clock) => [clock.settledField],
-    async (row, applied, clock, dueAt) => {
-      await insertClockEvent(row.id, applied.policyId, clock.reportKind, dueAt, at)
-      recorded++
-    }
-  )
-  return { recorded }
-}
-
-// ---------------------------------------------------------------------------
-// Timer-driven workflow triggers (support platform §4.6): sla.approaching_breach
-// / sla.breached. Both are called from workflow-sweep.ts's 5-minute tick (NOT
-// the per-minute sla-breach-sweep-queue above, which exists purely for
-// sla_events reporting and is otherwise unrelated) and dispatch through the
-// STANDARD multi-workflow fan-out (dispatchWorkflowTrigger, via
-// dispatchSlaApproachingBreach/dispatchSlaBreached -> processEvent), unlike
-// the conversation.customer_unresponsive / teammate_unresponsive pair in
-// event-trigger.ts, which routes to one pre-selected workflow instead.
-//
-// Why the difference: that pair's fire-once dedupe is a BullMQ jobId keyed by
-// (workflowId, conversationId, silence-start), so scanning "per live workflow,
-// with that workflow's own threshold" costs nothing extra — each workflow
-// naturally gets its own independent firing. SLA's fire-once dedupe is a
-// CAS-guarded marker stamped on `sla_applied` (below), which — per the task
-// spec — is scoped per (conversation, clock), not per workflow: there is only
-// ONE `firstResponseWarningFiredAt` slot per SLA application, not one per
-// live workflow. So when more than one live workflow subscribes to
-// sla.approaching_breach with DIFFERENT `breachLeadMinutes`, there is no way
-// to fire each independently off a single scalar marker — workflow-sweep.ts
-// resolves this by scanning at the WIDEST (maximum) configured lead across
-// every live workflow of that trigger type, claims the ONE marker at that
-// moment, and dispatches to every live workflow together. A workflow
-// configured with a NARROWER lead than the winning one is notified earlier
-// than it asked for. This is a deliberate, documented v1 simplification
-// (per-workflow independent SLA warning timing is deferred) rather than a
-// bug: expanding the marker to a per-workflow map is the natural follow-up if
-// multiple SLA-trigger workflows with different leads turns out to matter in
-// practice.
-// ---------------------------------------------------------------------------
-
-/** One (conversation, clock) pair a timer-trigger sweep claimed and needs
- *  dispatched — workflow-sweep.ts turns each into a dispatchSlaApproachingBreach
- *  / dispatchSlaBreached call. */
-export interface SlaTimerTriggerCandidate {
-  conversationId: ConversationId
-  conversation: EventConversationRef
-  policyId: SlaPolicyId
-  clock: 'first_response' | 'next_response' | 'resolution'
-  dueAt: string
-}
-
-/** Claim `markerField` on `conversationId`'s stamp via the same guarded
- *  jsonb-merge CAS every stamp writer in this module uses (slaStampGuard),
- *  narrowed to the exact due date and to the marker still being unset —
- *  optionally ALSO re-checking any `extraUnsetFields` under that same guard
- *  (only sweepOverdueSlaBreaches passes any, to re-check `settledField`
- *  itself; see its own doc for why). Returns whether the claim landed. Shared
- *  by all three sweep passes above/below (via scanAndClaimSlaClocks) so the
- *  CAS predicate can't drift between them. */
-async function claimSlaClockMarker(
-  conversationId: ConversationId,
-  applied: SlaApplied,
-  dueField: string,
-  markerField: string,
-  dueAt: string,
-  at: Date,
-  extraUnsetFields: string[] = []
-): Promise<boolean> {
-  const claimed = await db
-    .update(conversations)
-    .set({
-      slaApplied: sql`${conversations.slaApplied} || ${JSON.stringify({
-        [markerField]: at.toISOString(),
-      })}::jsonb`,
-      updatedAt: at,
-    })
-    .where(
-      and(
-        slaStampGuard(conversationId, applied.appliedAt, null),
-        sql`(${conversations.slaApplied} ->> ${dueField}) = ${dueAt}`,
-        sql`(${conversations.slaApplied} ->> ${markerField}) IS NULL`,
-        ...extraUnsetFields.map((field) => sql`(${conversations.slaApplied} ->> ${field}) IS NULL`)
-      )
-    )
-    .returning({ id: conversations.id })
-  return claimed.length > 0
-}
-
-/**
- * Scan for conversations whose unsettled clock enters the approaching-breach
- * lead window (`due - leadMinutes <= now < due`) and claim
- * `*WarningFiredAt` for each — CAS-guarded exactly like sweepOverdueSlaBreaches's
- * `*BreachedAt` claim, just on a different marker field (see this section's
- * module doc for why `leadMinutes` is a single value, not per-workflow).
- * Pause-aware the same way sweepOverdueSlaBreaches is: a currently-paused
- * clock never approaches (excluded in SQL and re-checked in JS). Already-due
- * clocks are excluded too — those are sla.breached's job below, not a warning.
- * Returns the claimed candidates for the caller (workflow-sweep.ts) to
- * dispatch.
- */
-export async function sweepApproachingSlaBreaches(
-  leadMinutes: number,
-  at: Date = new Date()
-): Promise<SlaTimerTriggerCandidate[]> {
-  const horizon = new Date(at.getTime() + leadMinutes * 60_000).toISOString()
-  const claimed: SlaTimerTriggerCandidate[] = []
-  await scanAndClaimSlaClocks(
-    at,
-    (nowIso) => sql`(
-          ((${conversations.slaApplied} ->> 'firstResponseDueAt') > ${nowIso}
-            AND (${conversations.slaApplied} ->> 'firstResponseDueAt') <= ${horizon}
-            AND (${conversations.slaApplied} ->> 'firstResponseAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'firstResponseBreachedAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'firstResponseWarningFiredAt') IS NULL)
-          OR ((${conversations.slaApplied} ->> 'nextResponseDueAt') > ${nowIso}
-            AND (${conversations.slaApplied} ->> 'nextResponseDueAt') <= ${horizon}
-            AND (${conversations.slaApplied} ->> 'nextResponseAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'nextResponseBreachedAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'nextResponseWarningFiredAt') IS NULL)
-          OR ((${conversations.slaApplied} ->> 'timeToCloseDueAt') > ${nowIso}
-            AND (${conversations.slaApplied} ->> 'timeToCloseDueAt') <= ${horizon}
-            AND (${conversations.slaApplied} ->> 'resolvedAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'resolutionBreachedAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'resolutionWarningFiredAt') IS NULL)
-        )`,
-    (clock, applied, dueAt) => {
-      if (applied[clock.settledField] || applied[clock.breachedField]) return false
-      if (applied[clock.warningMarkerField]) return false
-      const dueMs = new Date(dueAt).getTime()
-      return dueMs > at.getTime() && dueMs <= at.getTime() + leadMinutes * 60_000
-    },
-    (clock) => clock.warningMarkerField,
-    () => [],
-    async (row, applied, clock, dueAt) => {
-      claimed.push({
-        conversationId: row.id,
-        conversation: conversationRefFromRow(row),
-        policyId: applied.policyId,
-        clock: clock.clock,
-        dueAt,
-      })
-    }
-  )
-  return claimed
-}
-
-/**
- * Scan for conversations whose unsettled clock has passed its due date and
- * claim `*BreachTriggerFiredAt` for each — independent of (and in addition
- * to) sweepOverdueSlaBreaches's own `*BreachedAt` claim above: different
- * marker field, so whichever of the per-minute reporting sweep or this
- * 5-minute trigger sweep runs first never blocks the other. No lead time:
- * this fires the instant `now >= due`, same as sweepOverdueSlaBreaches's own
- * breach detection. Returns the claimed candidates for the caller
- * (workflow-sweep.ts) to dispatch.
- */
-export async function sweepSlaBreachTriggers(
-  at: Date = new Date()
-): Promise<SlaTimerTriggerCandidate[]> {
-  const claimed: SlaTimerTriggerCandidate[] = []
-  await scanAndClaimSlaClocks(
-    at,
-    (nowIso) => sql`(
-          ((${conversations.slaApplied} ->> 'firstResponseDueAt') < ${nowIso}
-            AND (${conversations.slaApplied} ->> 'firstResponseAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'firstResponseBreachTriggerFiredAt') IS NULL)
-          OR ((${conversations.slaApplied} ->> 'nextResponseDueAt') < ${nowIso}
-            AND (${conversations.slaApplied} ->> 'nextResponseAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'nextResponseBreachTriggerFiredAt') IS NULL)
-          OR ((${conversations.slaApplied} ->> 'timeToCloseDueAt') < ${nowIso}
-            AND (${conversations.slaApplied} ->> 'resolvedAt') IS NULL
-            AND (${conversations.slaApplied} ->> 'resolutionBreachTriggerFiredAt') IS NULL)
-        )`,
-    (clock, applied, dueAt) => {
-      if (applied[clock.settledField]) return false
-      if (applied[clock.breachMarkerField]) return false
-      return at.getTime() > new Date(dueAt).getTime()
-    },
-    (clock) => clock.breachMarkerField,
-    () => [],
-    async (row, applied, clock, dueAt) => {
-      claimed.push({
-        conversationId: row.id,
-        conversation: conversationRefFromRow(row),
-        policyId: applied.policyId,
-        clock: clock.clock,
-        dueAt,
-      })
-    }
-  )
-  return claimed
+  // Reconstruct the post-write stamp (exactly what the merge produced) for a
+  // caller settling right after — see this function's doc above.
+  return { ...applied, ...patch }
 }
 
 /**

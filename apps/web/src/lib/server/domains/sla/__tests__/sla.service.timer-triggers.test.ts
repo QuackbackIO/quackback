@@ -1,12 +1,16 @@
 /**
- * Real-DB coverage for the two timer-driven SLA triggers' scan half
- * (support platform §4.6): sweepApproachingSlaBreaches / sweepSlaBreachTriggers.
- * Both are CAS-guarded fire-once claims on `conversations.sla_applied`,
- * mirroring sweepOverdueSlaBreaches's own pattern (see sla.service.test.ts) but
- * on DISTINCT marker fields, so the two trigger sweeps and the pre-existing
- * per-minute reporting sweep never block each other. The dispatch half
- * (turning a claimed candidate into an actual synthetic event) is
- * workflow-sweep.ts's job and is covered there instead.
+ * Real-DB coverage for the two timer-driven SLA triggers (support platform
+ * §4.6): sweepApproachingSlaBreaches / sweepSlaBreachTriggers, plus the
+ * post-enqueue claim the caller (workflow-sweep.ts) performs per dispatched
+ * candidate (claimSlaTimerTriggerMarker).
+ *
+ * Since the claim moved after the enqueue (claim-after-enqueue — see
+ * sla.sweep.ts's docs), the scans themselves are now UNCLAIMED: they return
+ * eligible candidates without touching the fire-once markers, and the claim
+ * is a separate CAS that re-verifies the stamp (identity, exact due, marker
+ * unset, clock unsettled) before stamping. Fire-once is still guaranteed
+ * end-to-end: the first landed claim excludes every later scan and every
+ * sibling claim.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
 import { createId, type PrincipalId, type UserId, type ConversationId } from '@quackback/ids'
@@ -37,10 +41,13 @@ import {
   rearmNextResponse,
   pauseSlaOnSnooze,
   resumeSlaFromSnooze,
+} from '../sla.service'
+import {
+  claimSlaTimerTriggerMarker,
   sweepApproachingSlaBreaches,
   sweepSlaBreachTriggers,
   sweepOverdueSlaBreaches,
-} from '../sla.service'
+} from '../sla.sweep'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -68,7 +75,7 @@ async function seedConversation(): Promise<ConversationId> {
 
 /** The EventConversationRef a plain seedConversation() row resolves to
  *  (status 'open' by default, channel 'messenger', priority 'none',
- *  unassigned) — every claimed SlaTimerTriggerCandidate below carries this,
+ *  unassigned) — every scanned SlaTimerTriggerCandidate below carries this,
  *  since none of these tests change those columns. */
 function conversationRef(conversationId: ConversationId) {
   return {
@@ -80,6 +87,20 @@ function conversationRef(conversationId: ConversationId) {
   }
 }
 
+const loadStamp = async (conversationId: ConversationId) => {
+  const [conv] = await testDb
+    .select({ slaApplied: conversations.slaApplied })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+  return conv.slaApplied as {
+    appliedAt: string
+    firstResponseWarningFiredAt?: string | null
+    firstResponseBreachTriggerFiredAt?: string | null
+    nextResponseWarningFiredAt?: string | null
+    nextResponseBreachTriggerFiredAt?: string | null
+  }
+}
+
 describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled back)', () => {
   beforeEach(() => {
     workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
@@ -87,8 +108,8 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
   })
   afterEach(fixture.rollback)
 
-  describe('sweepApproachingSlaBreaches', () => {
-    it('claims a conversation whose clock enters the lead window, once', async () => {
+  describe('sweepApproachingSlaBreaches + claimSlaTimerTriggerMarker(warning)', () => {
+    it('scans a conversation whose clock enters the lead window WITHOUT claiming; the claim then stamps the marker exactly once', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       // Due 11:00. At 10:50, 10 minutes out — inside a 15-minute lead window.
@@ -102,23 +123,28 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
           policyId: policy.id,
           clock: 'first_response',
           dueAt: '2026-01-05T11:00:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
+      // The scan alone must NOT claim the marker (claim-after-enqueue): an
+      // enqueue failure leaves it free for the next tick's retry.
+      expect((await loadStamp(conversationId)).firstResponseWarningFiredAt).toBeFalsy()
 
-      // A re-scan (same tick or a later one, still before due) must not re-claim.
-      const second = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:55:00Z'))
-      expect(second).toEqual([])
-
-      const [conv] = await testDb
-        .select({ slaApplied: conversations.slaApplied })
-        .from(conversations)
-        .where(eq(conversations.id, conversationId))
+      // The post-enqueue claim stamps it; a sibling claim loses the CAS; and
+      // a re-scan (same tick or a later one) never returns the clock again.
       expect(
-        (conv.slaApplied as { firstResponseWarningFiredAt?: string }).firstResponseWarningFiredAt
-      ).toBe('2026-01-05T10:50:00.000Z')
+        await claimSlaTimerTriggerMarker(first[0], 'warning', new Date('2026-01-05T10:50:00Z'))
+      ).toBe(true)
+      expect((await loadStamp(conversationId)).firstResponseWarningFiredAt).toBe(
+        '2026-01-05T10:50:00.000Z'
+      )
+      expect(
+        await claimSlaTimerTriggerMarker(first[0], 'warning', new Date('2026-01-05T10:51:00Z'))
+      ).toBe(false)
+      expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:55:00Z'))).toEqual([])
     })
 
-    it('does not claim a clock still outside the lead window', async () => {
+    it('does not scan a clock still outside the lead window', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -127,7 +153,7 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:30:00Z'))).toEqual([])
     })
 
-    it('does not claim a clock that has already passed its due date (that is sla.breached, not a warning)', async () => {
+    it('does not scan a clock that has already passed its due date (that is sla.breached, not a warning)', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -135,7 +161,7 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T11:05:00Z'))).toEqual([])
     })
 
-    it('never claims a settled clock', async () => {
+    it('never scans a settled clock', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -144,7 +170,27 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:50:00Z'))).toEqual([])
     })
 
-    it('never claims a clock that is currently paused', async () => {
+    it('a settle landing between scan and claim suppresses the claim (A2)', async () => {
+      const conversationId = await seedConversation()
+      const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
+      await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+      const [candidate] = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:50:00Z'))
+      expect(candidate).toBeTruthy()
+      // The reply lands after the scan but before the claim: the claim's CAS
+      // re-checks the settled field, so it misses and the marker stays
+      // truthful (the trigger never fired for the settled clock).
+      await recordFirstResponse(conversationId, new Date('2026-01-05T10:52:00Z'))
+
+      expect(
+        await claimSlaTimerTriggerMarker(candidate, 'warning', new Date('2026-01-05T10:53:00Z'))
+      ).toBe(false)
+      expect((await loadStamp(conversationId)).firstResponseWarningFiredAt).toBeFalsy()
+      // And the settled clock is gone from every later scan.
+      expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:54:00Z'))).toEqual([])
+    })
+
+    it('never scans a clock that is currently paused', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -154,27 +200,38 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:50:00Z'))).toEqual([])
     })
 
-    it('claims against the pause-shifted deadline after a resume', async () => {
+    it('scans against the pause-shifted deadline after a resume, and a claim pinned to the pre-shift deadline misses', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
-      // Paused 10:20 -> 10:50 (30 min): due shifts from 11:00 to 11:30.
-      await pauseSlaOnSnooze(conversationId, new Date('2026-01-05T10:20:00Z'))
-      await resumeSlaFromSnooze(conversationId, new Date('2026-01-05T10:50:00Z'))
 
-      // Inside the original 11:00 lead window but the real (shifted) due is 11:30 — not yet due.
-      expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:50:01Z'))).toEqual([])
-      // Inside the shifted window (15 min before 11:30).
-      const claimed = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T11:16:00Z'))
-      expect(claimed).toEqual([
+      // A scan at the ORIGINAL deadline's window, then a pause+resume cycle
+      // shifts due from 11:00 to 11:30 before the claim lands: the claim's
+      // due pin invalidates the stale computation.
+      const [stale] = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:50:00Z'))
+      expect(stale.dueAt).toBe('2026-01-05T11:00:00.000Z')
+      await pauseSlaOnSnooze(conversationId, new Date('2026-01-05T10:51:00Z'))
+      await resumeSlaFromSnooze(conversationId, new Date('2026-01-05T11:21:00Z')) // +30m shift
+
+      expect(
+        await claimSlaTimerTriggerMarker(stale, 'warning', new Date('2026-01-05T11:22:00Z'))
+      ).toBe(false)
+
+      // The shifted deadline (11:30) scans inside its own window and claims.
+      const fresh = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T11:22:00Z'))
+      expect(fresh).toEqual([
         {
           conversationId,
           conversation: conversationRef(conversationId),
           policyId: policy.id,
           clock: 'first_response',
           dueAt: '2026-01-05T11:30:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
+      expect(
+        await claimSlaTimerTriggerMarker(fresh[0], 'warning', new Date('2026-01-05T11:22:00Z'))
+      ).toBe(true)
     })
 
     it('does not block, or get blocked by, the per-minute breach-reporting sweep (distinct marker fields)', async () => {
@@ -184,12 +241,15 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
 
       // Warning fires first (10:50), then the clock actually breaches (11:05) —
       // the reporting sweep's own claim must still succeed independently.
-      await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:50:00Z'))
+      const [candidate] = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T10:50:00Z'))
+      expect(
+        await claimSlaTimerTriggerMarker(candidate, 'warning', new Date('2026-01-05T10:50:00Z'))
+      ).toBe(true)
       const breachResult = await sweepOverdueSlaBreaches(new Date('2026-01-05T11:05:00Z'))
       expect(breachResult.recorded).toBe(1)
     })
 
-    it('claims an armed next-response cycle inside the lead window, and re-arms for a fresh cycle', async () => {
+    it('scans an armed next-response cycle inside the lead window, and a fresh cycle warns again', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({
         name: 'FR+NR',
@@ -200,16 +260,15 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       await recordFirstResponse(conversationId, new Date('2026-01-05T10:30:00Z'))
       await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // NRT due 12:40
 
-      const claimed = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T12:30:00Z'))
-      expect(claimed).toEqual([
-        {
-          conversationId,
-          conversation: conversationRef(conversationId),
-          policyId: policy.id,
-          clock: 'next_response',
-          dueAt: '2026-01-05T12:40:00.000Z',
-        },
-      ])
+      const [candidate] = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T12:30:00Z'))
+      expect(candidate).toMatchObject({
+        conversationId,
+        clock: 'next_response',
+        dueAt: '2026-01-05T12:40:00.000Z',
+      })
+      expect(
+        await claimSlaTimerTriggerMarker(candidate, 'warning', new Date('2026-01-05T12:30:00Z'))
+      ).toBe(true)
       // Fire-once within the cycle.
       expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T12:32:00Z'))).toEqual([])
 
@@ -223,13 +282,14 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
           policyId: policy.id,
           clock: 'next_response',
           dueAt: '2026-01-05T14:33:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
     })
   })
 
-  describe('sweepSlaBreachTriggers', () => {
-    it('claims an overdue, unsettled clock exactly once', async () => {
+  describe('sweepSlaBreachTriggers + claimSlaTimerTriggerMarker(breach)', () => {
+    it('scans an overdue, unsettled clock; the claim stamps the trigger marker exactly once', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -242,12 +302,21 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
           policyId: policy.id,
           clock: 'first_response',
           dueAt: '2026-01-05T11:00:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
+      expect((await loadStamp(conversationId)).firstResponseBreachTriggerFiredAt).toBeFalsy()
+
+      expect(
+        await claimSlaTimerTriggerMarker(first[0], 'breach', new Date('2026-01-05T11:05:00Z'))
+      ).toBe(true)
+      expect((await loadStamp(conversationId)).firstResponseBreachTriggerFiredAt).toBe(
+        '2026-01-05T11:05:00.000Z'
+      )
       expect(await sweepSlaBreachTriggers(new Date('2026-01-05T11:10:00Z'))).toEqual([])
     })
 
-    it('does not claim a clock not yet due', async () => {
+    it('does not scan a clock not yet due', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -255,7 +324,7 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       expect(await sweepSlaBreachTriggers(new Date('2026-01-05T10:45:00Z'))).toEqual([])
     })
 
-    it('never claims a settled clock', async () => {
+    it('never scans a settled clock', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -264,7 +333,22 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       expect(await sweepSlaBreachTriggers(new Date('2026-01-05T11:05:00Z'))).toEqual([])
     })
 
-    it('never claims a currently-paused clock', async () => {
+    it('a settle landing between scan and claim suppresses the claim (A2)', async () => {
+      const conversationId = await seedConversation()
+      const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
+      await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+      const [candidate] = await sweepSlaBreachTriggers(new Date('2026-01-05T11:05:00Z'))
+      expect(candidate).toBeTruthy()
+      await recordFirstResponse(conversationId, new Date('2026-01-05T11:06:00Z'))
+
+      expect(
+        await claimSlaTimerTriggerMarker(candidate, 'breach', new Date('2026-01-05T11:07:00Z'))
+      ).toBe(false)
+      expect((await loadStamp(conversationId)).firstResponseBreachTriggerFiredAt).toBeFalsy()
+    })
+
+    it('never scans a currently-paused clock', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -281,13 +365,17 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       // The per-minute reporting sweep claims its own marker first...
       const reported = await sweepOverdueSlaBreaches(new Date('2026-01-05T11:05:00Z'))
       expect(reported.recorded).toBe(1)
-      // ...but the trigger sweep still fires once off its own, distinct marker.
-      const triggered = await sweepSlaBreachTriggers(new Date('2026-01-05T11:06:00Z'))
-      expect(triggered).toHaveLength(1)
+      // ...but the trigger sweep still scans + claims once off its own,
+      // distinct marker.
+      const [candidate] = await sweepSlaBreachTriggers(new Date('2026-01-05T11:06:00Z'))
+      expect(candidate).toBeTruthy()
+      expect(
+        await claimSlaTimerTriggerMarker(candidate, 'breach', new Date('2026-01-05T11:06:00Z'))
+      ).toBe(true)
       expect(await sweepSlaBreachTriggers(new Date('2026-01-05T11:07:00Z'))).toEqual([])
     })
 
-    it('claims an overdue, armed next-response cycle exactly once', async () => {
+    it('scans an overdue, armed next-response cycle exactly once', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({
         name: 'FR+NR',
@@ -306,13 +394,17 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
           policyId: policy.id,
           clock: 'next_response',
           dueAt: '2026-01-05T12:40:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
+      expect(
+        await claimSlaTimerTriggerMarker(first[0], 'breach', new Date('2026-01-05T12:45:00Z'))
+      ).toBe(true)
       expect(await sweepSlaBreachTriggers(new Date('2026-01-05T12:50:00Z'))).toEqual([])
     })
 
-    // Deliberate design (see this module's doc comment right above SLA_CLOCKS/
-    // scanAndClaimSlaClocks): unlike the customer/teammate_unresponsive scan
+    // Deliberate design (see sla.sweep.ts's module doc and
+    // scanSlaClockCandidates): unlike the customer/teammate_unresponsive scan
     // (workflow-sweep.ts's scanUnresponsiveForWorkflow), which excludes
     // closed/snoozed conversations by SQL filter, none of the three SLA sweeps
     // filter on conversation status at all — a snoozed conversation under a
@@ -321,7 +413,7 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
     // a real, reportable breach; whether that's actionable is left to a
     // workflow's OWN condition/branch on conversation.status, not baked into
     // the scan.
-    it('still fires sla.breached for a closed conversation whose first-response clock was never settled', async () => {
+    it('still scans sla.breached for a closed conversation whose first-response clock was never settled', async () => {
       const conversationId = await seedConversation()
       const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
       await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
@@ -330,14 +422,15 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
         .set({ status: 'closed' })
         .where(eq(conversations.id, conversationId))
 
-      const triggered = await sweepSlaBreachTriggers(new Date('2026-01-05T11:05:00Z'))
-      expect(triggered).toEqual([
+      const scanned = await sweepSlaBreachTriggers(new Date('2026-01-05T11:05:00Z'))
+      expect(scanned).toEqual([
         {
           conversationId,
           conversation: { ...conversationRef(conversationId), status: 'closed' },
           policyId: policy.id,
           clock: 'first_response',
           dueAt: '2026-01-05T11:00:00.000Z',
+          appliedAt: '2026-01-05T10:00:00.000Z',
         },
       ])
     })
