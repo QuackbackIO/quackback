@@ -384,10 +384,12 @@ export function WidgetAuthProvider({
     async function handleAnonymousIdentify() {
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
-      // Clear any persisted identified token so a previously-identified
-      // visitor who now loads the host app logged out cannot have their old
-      // token restored and write as the prior user.
-      clearIdentifiedToken()
+      // Clear both the in-memory token and any persisted identified token so
+      // a previously-identified visitor who now loads the host app logged
+      // out cannot have their old identity restored by an in-flight or
+      // completed token restore and continue writing as the prior user.
+      clearWidgetToken()
+      sessionReadyRef.current = false
       setUser(null)
       sendToHost({ type: 'quackback:identify-result', success: true, user: null })
       sendToHost({ type: 'quackback:auth-change', user: null })
