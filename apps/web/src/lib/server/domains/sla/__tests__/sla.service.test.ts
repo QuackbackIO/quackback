@@ -40,6 +40,8 @@ import { createSlaPolicy } from '../sla-policy.service'
 import {
   applySlaToConversation,
   recordFirstResponse,
+  recordNextResponse,
+  rearmNextResponse,
   recordResolution,
   pauseSlaOnSnooze,
   resumeSlaFromSnooze,
@@ -549,17 +551,22 @@ describe.skipIf(!fixture.available)('sweepOverdueSlaBreaches (real DB, rolled ba
     expect(kinds).toEqual(['first_response_breached', 'resolution_breached'])
   })
 
-  it('a late reply after the sweep noted the breach settles the clock without a second event', async () => {
+  it('a late reply after the sweep noted the breach settles the clock with no second BREACH event, but a settle-after-breach event', async () => {
     const conversationId = await seedConversation()
     const policy = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
     await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
     await sweepOverdueSlaBreaches(new Date('2026-01-05T11:05:00Z'))
 
     await recordFirstResponse(conversationId, new Date('2026-01-05T11:30:00Z'))
-    const kinds = (await eventsFor(conversationId))
-      .map((e) => e.kind)
-      .filter((k) => k !== 'applied')
-    expect(kinds).toEqual(['first_response_breached'])
+    const events = (await eventsFor(conversationId)).filter((e) => e.kind !== 'applied')
+    // The breach stays exactly-once; the late settle logs its own event with
+    // the lag from due (11:00) to settle (11:30) for time-after-miss reporting.
+    expect(events.map((e) => e.kind)).toEqual([
+      'first_response_breached',
+      'first_response_settled_after_breach',
+    ])
+    expect(events[1].meta.overdueSecs).toBe(1800)
+    expect(events[1].meta.dueAt).toBe('2026-01-05T11:00:00.000Z')
     // The clock is settled, so nextSlaDue-style consumers stop counting.
     const [conv] = await testDb
       .select({ slaApplied: conversations.slaApplied })
@@ -568,6 +575,23 @@ describe.skipIf(!fixture.available)('sweepOverdueSlaBreaches (real DB, rolled ba
     expect((conv.slaApplied as { firstResponseAt: string }).firstResponseAt).toBe(
       '2026-01-05T11:30:00.000Z'
     )
+  })
+
+  it('a late close after the sweep noted the resolution breach logs resolution_settled_after_breach', async () => {
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({ name: 'Close', timeToCloseTargetSecs: 4 * 3600 })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+
+    // Due 14:00, nobody closes. Sweep at 14:10 notes the breach.
+    expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T14:10:00Z'))).recorded).toBe(1)
+    // Closed an hour late: the breach stays exactly-once, the settle logs its lag.
+    await recordResolution(conversationId, new Date('2026-01-05T15:00:00Z'))
+    const events = (await eventsFor(conversationId)).filter((e) => e.kind !== 'applied')
+    expect(events.map((e) => e.kind)).toEqual([
+      'resolution_breached',
+      'resolution_settled_after_breach',
+    ])
+    expect(events[1].meta.overdueSecs).toBe(3600)
   })
 
   it('overlapping sweeps of the same overdue clock record exactly one event (atomic claim)', async () => {
@@ -599,5 +623,192 @@ describe.skipIf(!fixture.available)('sweepOverdueSlaBreaches (real DB, rolled ba
       .map((e) => e.kind)
       .filter((k) => k !== 'applied')
     expect(kinds).toEqual(['first_response_breached'])
+  })
+})
+
+/**
+ * The next-response clock (support platform §4.6): a visitor message (re-)arms
+ * a cycle once the first-response clock has settled, a teammate reply settles
+ * it, and the sweep covers a cycle nobody answers. Each fresh customer message
+ * re-arms — new deadline, cleared settle + per-cycle markers — so every cycle
+ * can breach/warn once of its own.
+ */
+describe.skipIf(!fixture.available)('next-response clock (real DB, rolled back)', () => {
+  beforeEach(() => {
+    workspaceHours.schedule = { enabled: false, timezone: 'UTC', intervals: [] }
+    return fixture.begin()
+  })
+  afterEach(fixture.rollback)
+
+  const eventsFor = async (conversationId: ConversationId) =>
+    testDb.select().from(slaEvents).where(eq(slaEvents.conversationId, conversationId))
+
+  const loadStamp = async (conversationId: ConversationId) => {
+    const [conv] = await testDb
+      .select({ slaApplied: conversations.slaApplied })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    return conv.slaApplied as {
+      nextResponseDueAt?: string | null
+      nextResponseAt?: string | null
+      nextResponseBreachedAt?: string | null
+      nextResponseWarningFiredAt?: string | null
+      nextResponseBreachTriggerFiredAt?: string | null
+    }
+  }
+
+  /** Apply a FRT+NRT policy and settle the first response, so a cycle can arm. */
+  async function seedWithSettledFirstResponse(): Promise<ConversationId> {
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({
+      name: 'FR+NR',
+      firstResponseTargetSecs: 3600,
+      nextResponseTargetSecs: 2 * 3600,
+    })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+    await recordFirstResponse(conversationId, new Date('2026-01-05T10:30:00Z'))
+    return conversationId
+  }
+
+  it('arms on a customer message after the first response and settles met on the reply (idempotent)', async () => {
+    const conversationId = await seedWithSettledFirstResponse()
+
+    // The customer follows up at 10:40: armed for 12:40 (24/7).
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z'))
+    expect((await loadStamp(conversationId)).nextResponseDueAt).toBe('2026-01-05T12:40:00.000Z')
+
+    // The teammate replies at 11:40 -> met. A second reply must not double-count.
+    await recordNextResponse(conversationId, new Date('2026-01-05T11:40:00Z'))
+    await recordNextResponse(conversationId, new Date('2026-01-05T11:50:00Z'))
+
+    const nrt = (await eventsFor(conversationId)).filter((e) => e.kind.startsWith('next_response'))
+    expect(nrt).toHaveLength(1)
+    expect(nrt[0].kind).toBe('next_response_met')
+    expect(nrt[0].meta.overdueSecs).toBe(0)
+    expect(nrt[0].meta.dueAt).toBe('2026-01-05T12:40:00.000Z')
+    expect((await loadStamp(conversationId)).nextResponseAt).toBe('2026-01-05T11:40:00.000Z')
+  })
+
+  it('never arms while the first-response clock is still open (no doubling), nor without a tracked target', async () => {
+    // No first reply yet: the customer message must NOT arm a second clock.
+    const waiting = await seedConversation()
+    const policy = await createSlaPolicy({
+      name: 'FR+NR',
+      firstResponseTargetSecs: 3600,
+      nextResponseTargetSecs: 2 * 3600,
+    })
+    await applySlaToConversation(waiting, policy.id, new Date('2026-01-05T10:00:00Z'))
+    await rearmNextResponse(waiting, new Date('2026-01-05T10:10:00Z'))
+    expect((await loadStamp(waiting)).nextResponseDueAt).toBeFalsy()
+
+    // A policy without a next-response target never arms, even post-first-reply.
+    const noNrt = await seedConversation()
+    const frOnly = await createSlaPolicy({ name: 'FR', firstResponseTargetSecs: 3600 })
+    await applySlaToConversation(noNrt, frOnly.id, new Date('2026-01-05T10:00:00Z'))
+    await recordFirstResponse(noNrt, new Date('2026-01-05T10:30:00Z'))
+    await rearmNextResponse(noNrt, new Date('2026-01-05T10:40:00Z'))
+    await recordNextResponse(noNrt, new Date('2026-01-05T10:50:00Z'))
+    expect((await loadStamp(noNrt)).nextResponseDueAt).toBeFalsy()
+    const kinds = (await eventsFor(noNrt)).map((e) => e.kind)
+    expect(kinds).toEqual(['applied', 'first_response_met'])
+  })
+
+  it('records a breached settle with the overdue seconds when the reply lands past the deadline', async () => {
+    const conversationId = await seedWithSettledFirstResponse()
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // due 12:40
+
+    await recordNextResponse(conversationId, new Date('2026-01-05T12:50:00Z'))
+    const nrt = (await eventsFor(conversationId)).filter((e) => e.kind.startsWith('next_response'))
+    expect(nrt).toHaveLength(1)
+    expect(nrt[0].kind).toBe('next_response_breached')
+    expect(nrt[0].meta.overdueSecs).toBe(600)
+    // The breach-noted marker keeps the sweep exactly-once.
+    expect((await loadStamp(conversationId)).nextResponseBreachedAt).toBe(
+      '2026-01-05T12:50:00.000Z'
+    )
+    expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T13:00:00Z'))).recorded).toBe(0)
+  })
+
+  it('the sweep records an unanswered cycle exactly once; a late reply settles with next_response_settled_after_breach', async () => {
+    const conversationId = await seedWithSettledFirstResponse()
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // due 12:40
+
+    // Due passes with no reply: one breach event, repeat sweeps are no-ops.
+    expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T12:45:00Z'))).recorded).toBe(1)
+    expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T12:50:00Z'))).recorded).toBe(0)
+
+    await recordNextResponse(conversationId, new Date('2026-01-05T13:00:00Z'))
+    const nrt = (await eventsFor(conversationId)).filter((e) => e.kind.startsWith('next_response'))
+    expect(nrt.map((e) => e.kind)).toEqual([
+      'next_response_breached',
+      'next_response_settled_after_breach',
+    ])
+    // Lag from the (pause-adjusted) due 12:40 to the 13:00 settle.
+    expect(nrt[1].meta.overdueSecs).toBe(1200)
+    expect(nrt[1].meta.dueAt).toBe('2026-01-05T12:40:00.000Z')
+    expect((await loadStamp(conversationId)).nextResponseAt).toBe('2026-01-05T13:00:00.000Z')
+  })
+
+  it('a fresh customer message re-arms: new deadline, cleared settle + per-cycle markers, and the new cycle can breach again', async () => {
+    const conversationId = await seedWithSettledFirstResponse()
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // due 12:40
+
+    // Cycle 1 goes stale and breaches; the warning marker is stamped too.
+    expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T12:45:00Z'))).recorded).toBe(1)
+
+    // The customer pings again at 12:50: a brand-new cycle (due 14:50).
+    await rearmNextResponse(conversationId, new Date('2026-01-05T12:50:00Z'))
+    const rearmed = await loadStamp(conversationId)
+    expect(rearmed.nextResponseDueAt).toBe('2026-01-05T14:50:00.000Z')
+    expect(rearmed.nextResponseAt).toBeNull()
+    expect(rearmed.nextResponseBreachedAt).toBeNull()
+    expect(rearmed.nextResponseWarningFiredAt).toBeNull()
+    expect(rearmed.nextResponseBreachTriggerFiredAt).toBeNull()
+
+    // Still inside cycle 1's (now replaced) deadline: no breach. Past the new
+    // deadline: the new cycle breaches exactly once of its own.
+    expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T12:55:00Z'))).recorded).toBe(0)
+    expect((await sweepOverdueSlaBreaches(new Date('2026-01-05T14:55:00Z'))).recorded).toBe(1)
+    const breaches = (await eventsFor(conversationId)).filter(
+      (e) => e.kind === 'next_response_breached'
+    )
+    expect(breaches).toHaveLength(2)
+    expect(breaches[1].meta.dueAt).toBe('2026-01-05T14:50:00.000Z')
+  })
+
+  it('settle-while-paused excludes the elapsed pause, and resume shifts the armed deadline', async () => {
+    const conversationId = await seedWithSettledFirstResponse()
+    await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // due 12:40
+
+    // Snoozed at 12:00, still snoozed when the teammate replies at 12:50.
+    // Elapsed pause 50min -> effective due 13:30 -> met, not breached.
+    await pauseSlaOnSnooze(conversationId, new Date('2026-01-05T12:00:00Z'))
+    await recordNextResponse(conversationId, new Date('2026-01-05T12:50:00Z'))
+    const nrt = (await eventsFor(conversationId)).filter((e) => e.kind.startsWith('next_response'))
+    expect(nrt).toHaveLength(1)
+    expect(nrt[0].kind).toBe('next_response_met')
+    expect(nrt[0].meta.dueAt).toBe('2026-01-05T13:30:00.000Z')
+
+    // A settled cycle is left untouched by resume; an ARMED one shifts.
+    const other = await seedWithSettledFirstResponse()
+    await rearmNextResponse(other, new Date('2026-01-05T10:40:00Z')) // due 12:40
+    await pauseSlaOnSnooze(other, new Date('2026-01-05T12:00:00Z'))
+    await resumeSlaFromSnooze(other, new Date('2026-01-05T12:30:00Z'))
+    expect((await loadStamp(other)).nextResponseDueAt).toBe('2026-01-05T13:10:00.000Z')
+  })
+
+  it('the armed deadline is office-hours aware (skips closed time)', async () => {
+    // Mon-Fri 09:00-17:00 UTC in the settings blob (the canonical hours source).
+    workspaceHours.schedule = {
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [1, 2, 3, 4, 5].map((day) => ({ day, start: '09:00', end: '17:00' })),
+    }
+    const conversationId = await seedWithSettledFirstResponse()
+
+    // Fri 2026-01-09 16:00 + 2 open hours: 1h Fri (16->17), weekend closed,
+    // 1h Mon from 09:00 -> Mon 10:00 (NOT Fri 18:00).
+    await rearmNextResponse(conversationId, new Date('2026-01-09T16:00:00Z'))
+    expect((await loadStamp(conversationId)).nextResponseDueAt).toBe('2026-01-12T10:00:00.000Z')
   })
 })

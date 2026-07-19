@@ -95,6 +95,18 @@ vi.mock('@/lib/server/domains/sla/sla.service', () => ({
   sweepSlaBreachTriggers,
 }))
 
+// The ticket-anchored TTR twins — stubbed for the same reason as the
+// conversation scans above (their own scan/claim correctness lives in
+// ticket-sla.service.timer-triggers.test.ts).
+const { sweepApproachingTicketSlaBreaches, sweepTicketSlaBreachTriggers } = vi.hoisted(() => ({
+  sweepApproachingTicketSlaBreaches: vi.fn().mockResolvedValue([]),
+  sweepTicketSlaBreachTriggers: vi.fn().mockResolvedValue([]),
+}))
+vi.mock('@/lib/server/domains/sla/ticket-sla.sweep', () => ({
+  sweepApproachingTicketSlaBreaches,
+  sweepTicketSlaBreachTriggers,
+}))
+
 import { createWorkflow } from '../workflow.service'
 import {
   sweepStaleRunningRuns,
@@ -225,6 +237,8 @@ beforeEach(() => {
   dispatchSlaBreached.mockClear()
   sweepApproachingSlaBreaches.mockReset().mockResolvedValue([])
   sweepSlaBreachTriggers.mockReset().mockResolvedValue([])
+  sweepApproachingTicketSlaBreaches.mockReset().mockResolvedValue([])
+  sweepTicketSlaBreachTriggers.mockReset().mockResolvedValue([])
 })
 
 describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)', () => {
@@ -1134,6 +1148,9 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(fired).toBe(0)
       expect(sweepApproachingSlaBreaches).not.toHaveBeenCalled()
       expect(sweepSlaBreachTriggers).not.toHaveBeenCalled()
+      // The ticket-axis scans share the same live-workflow pre-check.
+      expect(sweepApproachingTicketSlaBreaches).not.toHaveBeenCalled()
+      expect(sweepTicketSlaBreachTriggers).not.toHaveBeenCalled()
     })
 
     it('resolves the widest breachLeadMinutes across live approaching_breach workflows and dispatches each claimed candidate', async () => {
@@ -1217,6 +1234,100 @@ describe.skipIf(!fixture.available)('workflow run sweeper (real DB, rolled back)
       expect(dispatchSlaBreached).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ conversationId: okConversationId })
+      )
+    })
+
+    // --- Ticket-anchored TTR candidates (ticket-sla.service.ts) ride the same
+    // trigger types, extended with the ticket identity. The scans already
+    // filter out back-office tickets, so every candidate here dispatches. ---
+
+    /** A claimed ticket-clock candidate, shaped like
+     *  ticket-sla.service.ts's TicketSlaTimerTriggerCandidate. */
+    function ticketCandidate(overrides: Record<string, unknown> = {}) {
+      const ticketId = 'ticket_abc'
+      const conversationId = 'conversation_xyz'
+      return {
+        conversationId,
+        conversation: {
+          id: conversationId,
+          status: 'open',
+          channel: 'messenger',
+          priority: 'none',
+          assignedTeamId: null,
+        },
+        ticketId,
+        ticket: {
+          id: ticketId,
+          number: 42,
+          type: 'customer',
+          priority: 'none',
+          assignedPrincipalId: null,
+          assignedTeamId: null,
+        },
+        policyId: 'sla_policy_1',
+        clock: 'time_to_resolve',
+        dueAt: '2026-01-05T11:00:00.000Z',
+        ...overrides,
+      }
+    }
+
+    it('dispatches sla.approaching_breach for a claimed ticket candidate with the ticket identity and a ticket-keyed jobId', async () => {
+      await seedLiveTimerWorkflow('sla.approaching_breach', { breachLeadMinutes: 20 })
+      const candidate = ticketCandidate()
+      sweepApproachingTicketSlaBreaches.mockResolvedValue([candidate])
+
+      const fired = await sweepSlaTimerTriggers(new Date('2026-01-05T10:45:00Z'))
+      expect(fired).toBe(1)
+      // The same lead resolution feeds the ticket scan as the conversation one.
+      expect(sweepApproachingTicketSlaBreaches).toHaveBeenCalledWith(20, expect.any(Date))
+      expect(dispatchSlaApproachingBreach).toHaveBeenCalledWith(
+        `timer:sla.approaching_breach:ticket:${candidate.ticketId}:${candidate.clock}:${candidate.dueAt}`,
+        {
+          conversationId: candidate.conversationId,
+          conversation: candidate.conversation,
+          clock: 'time_to_resolve',
+          dueAt: candidate.dueAt,
+          ticketId: candidate.ticketId,
+          ticket: candidate.ticket,
+        }
+      )
+    })
+
+    it('dispatches sla.breached for a claimed ticket candidate with the ticket identity and a ticket-keyed jobId', async () => {
+      await seedLiveTimerWorkflow('sla.breached', {})
+      const candidate = ticketCandidate()
+      sweepTicketSlaBreachTriggers.mockResolvedValue([candidate])
+
+      const fired = await sweepSlaTimerTriggers(new Date())
+      expect(fired).toBe(1)
+      expect(dispatchSlaBreached).toHaveBeenCalledWith(
+        `timer:sla.breached:ticket:${candidate.ticketId}:${candidate.clock}:${candidate.dueAt}`,
+        {
+          conversationId: candidate.conversationId,
+          conversation: candidate.conversation,
+          clock: 'time_to_resolve',
+          dueAt: candidate.dueAt,
+          ticketId: candidate.ticketId,
+          ticket: candidate.ticket,
+        }
+      )
+    })
+
+    it('one failed ticket dispatch does not stop the rest of the claimed ticket batch', async () => {
+      await seedLiveTimerWorkflow('sla.breached', {})
+      const failing = ticketCandidate({ ticketId: 'ticket_bad' })
+      const ok = ticketCandidate({ ticketId: 'ticket_ok' })
+      sweepTicketSlaBreachTriggers.mockResolvedValue([failing, ok])
+      dispatchSlaBreached.mockImplementation(async (_jobId, payload) => {
+        if (payload.ticketId === 'ticket_bad') throw new Error('transient failure')
+      })
+
+      const fired = await sweepSlaTimerTriggers(new Date())
+      expect(fired).toBe(1)
+      expect(dispatchSlaBreached).toHaveBeenCalledTimes(2)
+      expect(dispatchSlaBreached).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ ticketId: 'ticket_ok' })
       )
     })
   })

@@ -5,7 +5,10 @@
  * consumer — Messenger reply-expectations, the workflows office-hours
  * condition, Quinn handover, SLA clocks — reads); this module adapts that
  * schedule to the engine shape and does the math. An empty schedule is 24/7.
- * Pure resolvers kept exported + DB-free so they unit-test without a fixture.
+ * Holidays (calendar dates the office is fully closed) ride the same engine
+ * shape: the walker skips a holiday's schedule-local date like any other
+ * closed day, and the resolver reports closed on it. Pure resolvers kept
+ * exported + DB-free so they unit-test without a fixture.
  */
 import {
   db,
@@ -17,8 +20,26 @@ import {
 import type { OfficeHoursId } from '@quackback/ids'
 // The DST-safe timezone primitives live in one place (shared with Messenger /
 // Quinn / the settings resolver) so office-hours math can never drift.
-import { zonedParts, zonedWallClockToUtc, parseHm } from '@/lib/shared/office-hours'
-import type { OfficeHoursSchedule as WorkspaceOfficeHoursSchedule } from '@/lib/shared/office-hours'
+import {
+  zonedParts,
+  zonedWallClockToUtc,
+  parseHm,
+  isHolidayLocalDate,
+} from '@/lib/shared/office-hours'
+import type {
+  OfficeHoursHoliday,
+  OfficeHoursSchedule as WorkspaceOfficeHoursSchedule,
+} from '@/lib/shared/office-hours'
+
+/**
+ * The schedule shape the clock engine runs on: weekly windows in a timezone,
+ * plus the calendar dates the office is fully closed. Pinned table rows always
+ * carry `holidays` (the column defaults to '[]'); the workspace-blob adapter
+ * may omit it. Absent or empty means no closed dates.
+ */
+export type EngineSchedule = Pick<OfficeHoursSchedule, 'timezone' | 'intervals'> & {
+  holidays?: OfficeHoursHoliday[] | null
+}
 
 /** Minutes for an engine-window end: '24:00' is an exclusive end-of-day close
  *  (used by the overnight split in {@link engineScheduleFromWorkspace}). */
@@ -50,17 +71,19 @@ function validIntervals(
 
 /**
  * Whether an instant falls inside the schedule's open windows. A schedule with no
- * valid windows is always open (24/7), so an unconfigured workspace never blocks.
+ * valid windows is always open (24/7), so an unconfigured workspace never blocks —
+ * except on a holiday, which closes the whole schedule-local date either way.
  * DST-safe: the instant is projected into the schedule's timezone before matching.
  */
-export function isWithinOfficeHours(
-  schedule: Pick<OfficeHoursSchedule, 'timezone' | 'intervals'>,
-  at: Date
-): boolean {
+export function isWithinOfficeHours(schedule: EngineSchedule, at: Date): boolean {
   const windows = validIntervals(schedule.intervals)
+  const holidays = schedule.holidays?.length ? schedule.holidays : null
+  // No windows and no holidays is plain 24/7 — skip the tz projection entirely.
+  if (windows.length === 0 && !holidays) return true
+  const z = zonedParts(schedule.timezone || 'UTC', at)
+  if (isHolidayLocalDate(holidays, z)) return false
   if (windows.length === 0) return true
-  const { weekday, minutes } = zonedParts(schedule.timezone || 'UTC', at)
-  return windows.some((w) => w.day === weekday && minutes >= w.s && minutes < w.e)
+  return windows.some((w) => w.day === z.weekday && z.minutes >= w.s && z.minutes < w.e)
 }
 
 // ---------------------------------------------------------------------------
@@ -70,17 +93,24 @@ export function isWithinOfficeHours(
 /**
  * Advance `start` by `seconds` of OPEN office-hours time and return the resulting
  * instant — the office-hours-aware SLA clock. Time outside the schedule's windows
- * does not count; an empty (24/7) schedule falls back to plain wall-clock. Walks
- * forward window-by-window, waiting through closed spans, DST-correct throughout
- * on the shared zonedParts + zonedWallClockToUtc primitives.
+ * does not count, and a holiday's whole schedule-local date is skipped; an empty
+ * (24/7) schedule falls back to plain wall-clock unless it carries holidays.
+ * Walks forward window-by-window, waiting through closed spans, DST-correct
+ * throughout on the shared zonedParts + zonedWallClockToUtc primitives.
  */
 export function addOfficeHoursSeconds(
-  schedule: Pick<OfficeHoursSchedule, 'timezone' | 'intervals'>,
+  schedule: EngineSchedule,
   start: Date,
   seconds: number
 ): Date {
-  const windows = validIntervals(schedule.intervals)
-  if (windows.length === 0) return new Date(start.getTime() + seconds * 1000)
+  let windows = validIntervals(schedule.intervals)
+  const holidays = schedule.holidays?.length ? schedule.holidays : null
+  if (windows.length === 0) {
+    // 24/7: plain wall-clock — unless holidays close some local dates, in which
+    // case walk all-day windows so those dates are skipped like any closed day.
+    if (!holidays) return new Date(start.getTime() + seconds * 1000)
+    windows = [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, s: 0, e: 24 * 60 }))
+  }
   if (seconds <= 0) return new Date(start.getTime())
 
   const tz = schedule.timezone || 'UTC'
@@ -102,17 +132,22 @@ export function addOfficeHoursSeconds(
   // A non-empty schedule always has open time, so this converges quickly; the
   // bound is only a backstop against a pathological input.
   for (let iter = 0; iter < 400 && remaining > 0; iter++) {
-    const { year, month, day, weekday } = zonedParts(tz, new Date(cursor))
-    const todays = windows.filter((w) => w.day === weekday).sort((a, b) => a.s - b.s)
-    for (const w of todays) {
-      const openUtc = wallToMs(year, month, day, w.s)
-      const closeUtc = wallToMs(year, month, day, w.e)
-      if (cursor >= closeUtc) continue // window already elapsed today
-      const from = Math.max(cursor, openUtc) // wait for open if we're early
-      const available = closeUtc - from
-      if (available >= remaining) return new Date(from + remaining)
-      remaining -= available
-      cursor = closeUtc
+    const z = zonedParts(tz, new Date(cursor))
+    const { year, month, day, weekday } = z
+    // A holiday is fully closed: skip its windows and fall through to the
+    // next-local-midnight jump below.
+    if (!isHolidayLocalDate(holidays, z)) {
+      const todays = windows.filter((w) => w.day === weekday).sort((a, b) => a.s - b.s)
+      for (const w of todays) {
+        const openUtc = wallToMs(year, month, day, w.s)
+        const closeUtc = wallToMs(year, month, day, w.e)
+        if (cursor >= closeUtc) continue // window already elapsed today
+        const from = Math.max(cursor, openUtc) // wait for open if we're early
+        const available = closeUtc - from
+        if (available >= remaining) return new Date(from + remaining)
+        remaining -= available
+        cursor = closeUtc
+      }
     }
     // Nothing (more) open today — jump to the next local midnight.
     cursor = Math.max(cursor, wallToMs(year, month, day + 1, 0))
@@ -134,10 +169,12 @@ export function addOfficeHoursSeconds(
  *    engine walks same-day windows only.
  *  - An enabled schedule with no valid windows also resolves to 24/7: "never
  *    open" would block an SLA clock forever, and a deadline must always land.
+ *  - Holidays pass through only while enabled; a disabled schedule is 24/7
+ *    outright, so its closed dates stay inert too.
  */
 export function engineScheduleFromWorkspace(
   schedule: WorkspaceOfficeHoursSchedule
-): Pick<OfficeHoursSchedule, 'timezone' | 'intervals'> {
+): EngineSchedule {
   if (!schedule.enabled) return { timezone: 'UTC', intervals: [] }
   const intervals: OfficeHoursInterval[] = []
   for (const iv of schedule.intervals) {
@@ -151,7 +188,8 @@ export function engineScheduleFromWorkspace(
       if (e > 0) intervals.push({ day: (iv.day + 1) % 7, start: '00:00', end: iv.end })
     }
   }
-  return { timezone: schedule.timezone || 'UTC', intervals }
+  // Blobs written before holidays existed omit the key; absent reads as none.
+  return { timezone: schedule.timezone || 'UTC', intervals, holidays: schedule.holidays ?? [] }
 }
 
 /** A table schedule by id (the one an SLA policy pins), or null. The table has

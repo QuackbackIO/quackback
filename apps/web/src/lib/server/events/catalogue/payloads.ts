@@ -236,17 +236,24 @@ export const P = {
   }),
   // assistant + sla
   'assistant.handed_off': z.looseObject({ conversationId: id, reason: z.string() }),
+  // SLA timer triggers (support platform §4.6). `ticketId`/`ticket` are
+  // present only for the ticket-anchored time_to_resolve clock
+  // (ticket-sla.service.ts); conversation clocks omit both.
   'sla.approaching_breach': z.looseObject({
     conversationId: id,
     conversation: conversationRef,
     clock: z.string(),
     dueAt: z.string(),
+    ticketId: id.optional(),
+    ticket: ticketRef.optional(),
   }),
   'sla.breached': z.looseObject({
     conversationId: id,
     conversation: conversationRef,
     clock: z.string(),
     dueAt: z.string(),
+    ticketId: id.optional(),
+    ticket: ticketRef.optional(),
   }),
   // --- WO-6a: identity/admin plane (new, catalogue-only) ---
   'apikey.created': z.looseObject({ apiKeyId: id, name: z.string(), scopes: z.array(z.string()) }),

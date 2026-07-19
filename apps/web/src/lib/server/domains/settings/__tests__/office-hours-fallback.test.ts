@@ -39,6 +39,7 @@ describe('resolveOfficeHoursSchedule', () => {
       enabled: true,
       timezone: 'UTC',
       intervals: [{ day: 1, start: '10:00', end: '16:00' }],
+      holidays: [],
     })
   })
 

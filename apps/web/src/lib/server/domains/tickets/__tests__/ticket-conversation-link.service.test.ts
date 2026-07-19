@@ -16,6 +16,7 @@ import {
   ticketConversations,
   conversations,
   conversationMessages,
+  slaEvents,
   user,
   principal,
   eq,
@@ -40,6 +41,8 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
 
 import { createTicket } from '../ticket.service'
 import { linkTicketToConversation } from '../ticket-conversation-link.service'
+import { createSlaPolicy } from '../../sla/sla-policy.service'
+import { applySlaToConversation } from '../../sla/sla.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 
@@ -170,5 +173,92 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     await expect(linkTicketToConversation(second.id, conversationId, actor)).rejects.toThrow(
       /already/i
     )
+  })
+
+  // --- SLA handoff (support platform §4.6, "applied first time" semantics) ---
+
+  it("starts the linked customer ticket's TTR clock when the conversation has a TTR-tracking SLA", async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({
+      name: 'Resolve fast',
+      timeToResolveTargetSecs: 7200,
+    })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+    const ticket = await createTicket(
+      { type: 'customer', title: "From an SLA'd conversation" },
+      actor
+    )
+
+    const before = Date.now()
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+    const after = Date.now()
+
+    const [row] = await testDb
+      .select({ slaApplied: tickets.slaApplied })
+      .from(tickets)
+      .where(eq(tickets.id, ticket.id))
+    const stamp = row.slaApplied as {
+      policyId: string
+      policyName: string
+      appliedAt: string
+      timeToResolveDueAt: string
+    } | null
+    expect(stamp).not.toBeNull()
+    expect(stamp!.policyId).toBe(policy.id)
+    // The clock ticks from the LINK instant (not the ticket's creation or the
+    // conversation's own application), 24/7: due = appliedAt + 2h.
+    const appliedMs = new Date(stamp!.appliedAt).getTime()
+    expect(appliedMs).toBeGreaterThanOrEqual(before)
+    expect(appliedMs).toBeLessThanOrEqual(after)
+    expect(new Date(stamp!.timeToResolveDueAt).getTime() - appliedMs).toBe(7200 * 1000)
+
+    // Ticket-anchored 'applied' event on the shared timeline.
+    const events = await testDb.select().from(slaEvents).where(eq(slaEvents.ticketId, ticket.id))
+    expect(events).toHaveLength(1)
+    expect(events[0].kind).toBe('applied')
+    expect(events[0].conversationId).toBeNull()
+  })
+
+  it("does not stamp the ticket when the conversation's SLA policy tracks no TTR", async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const conversationId = await seedConversation()
+    // A conversation-side-only policy (FRT/TTC, no time_to_resolve target).
+    const policy = await createSlaPolicy({
+      name: 'First response only',
+      firstResponseTargetSecs: 3600,
+    })
+    await applySlaToConversation(conversationId, policy.id)
+    const ticket = await createTicket({ type: 'customer', title: 'No TTR handoff' }, actor)
+
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+
+    const [row] = await testDb
+      .select({ slaApplied: tickets.slaApplied })
+      .from(tickets)
+      .where(eq(tickets.id, ticket.id))
+    expect(row.slaApplied).toBeNull()
+    const events = await testDb.select().from(slaEvents).where(eq(slaEvents.ticketId, ticket.id))
+    expect(events).toHaveLength(0)
+  })
+
+  it('does not stamp the ticket when the conversation has no SLA at all', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const conversationId = await seedConversation()
+    const ticket = await createTicket({ type: 'customer', title: 'Plain link' }, actor)
+
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+
+    const [row] = await testDb
+      .select({ slaApplied: tickets.slaApplied })
+      .from(tickets)
+      .where(eq(tickets.id, ticket.id))
+    expect(row.slaApplied).toBeNull()
   })
 })

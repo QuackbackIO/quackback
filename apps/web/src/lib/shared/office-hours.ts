@@ -2,7 +2,8 @@
  * The workspace office-hours schedule and its pure evaluation.
  *
  * ONE schedule per workspace: a set of weekly wall-clock intervals expressed in
- * a single IANA timezone. Every consumer (messenger reply expectations, the
+ * a single IANA timezone, plus the calendar dates (holidays) the office is
+ * fully closed. Every consumer (messenger reply expectations, the
  * assistant's handover copy, later the workflows condition and SLA clocks)
  * resolves it through the helpers here so their answers can never drift.
  *
@@ -33,6 +34,18 @@ export interface OfficeHoursInterval {
   end: string
 }
 
+/**
+ * A calendar date the schedule is closed (support platform §4.6). `date` is
+ * 'YYYY-MM-DD' in the schedule's timezone; `recurringAnnual` matches the
+ * month-day every year (fixed-date holidays), otherwise the exact date only.
+ * Mirrors the `office_hours_schedules.holidays` jsonb shape.
+ */
+export interface OfficeHoursHoliday {
+  date: string
+  name?: string
+  recurringAnnual?: boolean
+}
+
 /** The workspace weekly office-hours schedule. */
 export interface OfficeHoursSchedule {
   /** `false` = 24/7 (no schedule — always open). */
@@ -41,6 +54,11 @@ export interface OfficeHoursSchedule {
   timezone: string
   /** Weekly windows. Empty while `enabled` means never open. */
   intervals: OfficeHoursInterval[]
+  /**
+   * Closed dates, evaluated on the schedule-local calendar date. Optional
+   * because blobs written before holidays existed omit it — absent means none.
+   */
+  holidays?: OfficeHoursHoliday[]
 }
 
 /** Default: 24/7 (disabled), no windows. Enabling it in the UI seeds a starter. */
@@ -48,6 +66,7 @@ export const DEFAULT_OFFICE_HOURS_SCHEDULE: OfficeHoursSchedule = {
   enabled: false,
   timezone: 'UTC',
   intervals: [],
+  holidays: [],
 }
 
 const WEEKDAY_ORDER = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
@@ -84,10 +103,29 @@ export const officeHoursIntervalSchema = z
     message: 'start and end must differ (a full day is start 00:00, end 00:00 is not allowed)',
   })
 
+/** "YYYY-MM-DD" with real month/day ranges. A day that never occurs (Feb 30)
+ *  needs no finer check: it simply matches no local date. */
+const YYYYMMDD = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
+
+/** Max closed dates on a schedule — a generous cap on a bounded editor. */
+const MAX_HOLIDAYS = 100
+
+/**
+ * Write-time validation for one closed date. `recurringAnnual` fills to false
+ * (exact date only) when omitted.
+ */
+export const officeHoursHolidaySchema = z.object({
+  date: z.string().regex(YYYYMMDD, 'date must be YYYY-MM-DD'),
+  name: z.string().optional(),
+  recurringAnnual: z.boolean().default(false),
+})
+
 export const officeHoursScheduleSchema = z.object({
   enabled: z.boolean(),
   timezone: z.string().refine(isValidTimeZone, { message: 'unknown IANA timezone' }),
   intervals: z.array(officeHoursIntervalSchema).max(MAX_INTERVALS),
+  // Absent on blobs written before holidays existed → no closed dates.
+  holidays: z.array(officeHoursHolidaySchema).max(MAX_HOLIDAYS).default([]),
 })
 
 export type OfficeHoursScheduleInput = z.infer<typeof officeHoursScheduleSchema>
@@ -207,11 +245,33 @@ export function zonedWallClockToUtc(
 }
 
 /**
+ * Whether the schedule-local calendar date `z` (year/month/day in the
+ * schedule's timezone, e.g. from {@link zonedParts}) is a holiday: an exact
+ * 'YYYY-MM-DD' match, or — for a `recurringAnnual` entry — a month-day match
+ * (fixed-date holidays like 12-25). Pure date arithmetic, so DST never enters
+ * into it. Exported as a primitive the office-hours clock engine reuses.
+ */
+export function isHolidayLocalDate(
+  holidays: OfficeHoursHoliday[] | null | undefined,
+  z: { year: number; month: number; day: number }
+): boolean {
+  if (!holidays?.length) return false
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const monthDay = `${pad(z.month)}-${pad(z.day)}`
+  return holidays.some(
+    (h) =>
+      h.date === `${z.year}-${monthDay}` ||
+      (h.recurringAnnual === true && h.date.slice(5) === monthDay)
+  )
+}
+
+/**
  * Whether `at` falls within office hours, evaluated in the schedule timezone.
  *
  *  - Disabled schedule → 24/7 → always `true`.
  *  - Enabled with no intervals → never open → `false`.
  *  - Unknown timezone → fails closed (`false`).
+ *  - A holiday (exact date or recurring month-day) → closed the whole local day.
  *
  * Overnight windows (`end < start`) count the evening portion on their `day`
  * and the early-morning portion on the following day.
@@ -230,6 +290,8 @@ export function isWithinOfficeHours(
     return false
   }
   if (z.weekday < 0) return false
+  // A holiday closes the whole local day, whatever the windows say.
+  if (isHolidayLocalDate(schedule.holidays, z)) return false
 
   const cur = z.minutes
   const prevDay = (z.weekday + 6) % 7
@@ -275,6 +337,7 @@ export function nextOpenAt(
   if (z.weekday < 0) return null
 
   let best: Date | null = null
+  const holidays = schedule.holidays?.length ? schedule.holidays : null
   // 0..7 so a single-window-per-week schedule still resolves to that weekday
   // next week once today's window has already started.
   for (let offset = 0; offset <= 7; offset++) {
@@ -292,6 +355,8 @@ export function nextOpenAt(
         start % 60,
         tz
       )
+      // A window whose schedule-local date is a holiday never opens.
+      if (holidays && isHolidayLocalDate(holidays, zonedParts(tz, instant))) continue
       if (instant.getTime() > from.getTime() && (!best || instant.getTime() < best.getTime())) {
         best = instant
       }
@@ -354,6 +419,8 @@ export function officeHoursScheduleFromLegacyDays(
     enabled: Boolean(legacy?.enabled),
     timezone: legacy?.timezone || 'UTC',
     intervals,
+    // The legacy config has no holiday concept.
+    holidays: [],
   }
 }
 

@@ -90,7 +90,9 @@ function makePolicy(extra: Partial<SlaPolicy> = {}): SlaPolicy {
     firstResponseTargetSecs: 4 * 3600,
     nextResponseTargetSecs: null,
     timeToCloseTargetSecs: 3 * 86400,
+    timeToResolveTargetSecs: null,
     pauseOnSnooze: true,
+    pauseOnPending: true,
     officeHoursScheduleId: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
@@ -208,6 +210,18 @@ describe('listSlaPolicyOptionsFn', () => {
       { id: 'sla_policy_1', name: 'Gold', targetsSummary: 'First response 4h · close 3d' },
     ])
   })
+
+  it('includes the resolve target in the summary when the ticket clock is set', async () => {
+    hoisted.listSlaPolicies.mockResolvedValue([makePolicy({ timeToResolveTargetSecs: 5 * 86400 })])
+    const options = await listSlaPolicyOptionsFn()
+    expect(options).toEqual([
+      {
+        id: 'sla_policy_1',
+        name: 'Gold',
+        targetsSummary: 'First response 4h · close 3d · resolve 5d',
+      },
+    ])
+  })
 })
 
 describe('getSlaOfficeHoursFn', () => {
@@ -234,6 +248,34 @@ describe('createSlaPolicyFn', () => {
     await expect(createSlaPolicyFn({ data: { name: 'Empty' } })).rejects.toThrow()
     expect(hoisted.createSlaPolicy).not.toHaveBeenCalled()
   })
+
+  it('passes the ticket clock (TTR + pause-on-pending) through to the service', async () => {
+    hoisted.createSlaPolicy.mockResolvedValue(
+      makePolicy({ timeToResolveTargetSecs: 2 * 86400, pauseOnPending: false })
+    )
+    await createSlaPolicyFn({
+      data: {
+        name: 'Gold',
+        firstResponseTargetSecs: 3600,
+        timeToResolveTargetSecs: 2 * 86400,
+        pauseOnPending: false,
+      },
+    })
+    expect(hoisted.createSlaPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timeToResolveTargetSecs: 2 * 86400,
+        pauseOnPending: false,
+      })
+    )
+  })
+
+  it('accepts a TTR-only policy (the ticket clock alone satisfies at-least-one-target)', async () => {
+    hoisted.createSlaPolicy.mockResolvedValue(makePolicy())
+    await createSlaPolicyFn({ data: { name: 'TTR only', timeToResolveTargetSecs: 86400 } })
+    expect(hoisted.createSlaPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ timeToResolveTargetSecs: 86400 })
+    )
+  })
 })
 
 describe('updateSlaPolicyFn', () => {
@@ -244,6 +286,35 @@ describe('updateSlaPolicyFn', () => {
     })
     expect(result).toMatchObject({ ok: false, code: 'TARGET_REMOVAL' })
     expect(hoisted.updateSlaPolicy).not.toHaveBeenCalled()
+  })
+
+  it('applies the no-removal rule to the resolve target too', async () => {
+    hoisted.getSlaPolicy.mockResolvedValue(makePolicy({ timeToResolveTargetSecs: 5 * 86400 }))
+    const result = await updateSlaPolicyFn({
+      data: { id: 'sla_policy_1', timeToResolveTargetSecs: null },
+    })
+    expect(result).toMatchObject({ ok: false, code: 'TARGET_REMOVAL' })
+    expect(hoisted.updateSlaPolicy).not.toHaveBeenCalled()
+  })
+
+  it('passes TTR + pause-on-pending updates through', async () => {
+    hoisted.getSlaPolicy.mockResolvedValue(makePolicy())
+    hoisted.updateSlaPolicy.mockResolvedValue(makePolicy())
+    const result = await updateSlaPolicyFn({
+      data: {
+        id: 'sla_policy_1',
+        timeToResolveTargetSecs: 4 * 86400, // add
+        pauseOnPending: false,
+      },
+    })
+    expect(result).toEqual({ ok: true })
+    expect(hoisted.updateSlaPolicy).toHaveBeenCalledWith(
+      'sla_policy_1',
+      expect.objectContaining({
+        timeToResolveTargetSecs: 4 * 86400,
+        pauseOnPending: false,
+      })
+    )
   })
 
   it('allows changing and adding targets (and clearing a never-set one)', async () => {

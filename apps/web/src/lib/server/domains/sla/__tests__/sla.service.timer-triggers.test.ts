@@ -34,6 +34,7 @@ import { createSlaPolicy } from '../sla-policy.service'
 import {
   applySlaToConversation,
   recordFirstResponse,
+  rearmNextResponse,
   pauseSlaOnSnooze,
   resumeSlaFromSnooze,
   sweepApproachingSlaBreaches,
@@ -187,6 +188,44 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       const breachResult = await sweepOverdueSlaBreaches(new Date('2026-01-05T11:05:00Z'))
       expect(breachResult.recorded).toBe(1)
     })
+
+    it('claims an armed next-response cycle inside the lead window, and re-arms for a fresh cycle', async () => {
+      const conversationId = await seedConversation()
+      const policy = await createSlaPolicy({
+        name: 'FR+NR',
+        firstResponseTargetSecs: 3600,
+        nextResponseTargetSecs: 2 * 3600,
+      })
+      await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+      await recordFirstResponse(conversationId, new Date('2026-01-05T10:30:00Z'))
+      await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // NRT due 12:40
+
+      const claimed = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T12:30:00Z'))
+      expect(claimed).toEqual([
+        {
+          conversationId,
+          conversation: conversationRef(conversationId),
+          policyId: policy.id,
+          clock: 'next_response',
+          dueAt: '2026-01-05T12:40:00.000Z',
+        },
+      ])
+      // Fire-once within the cycle.
+      expect(await sweepApproachingSlaBreaches(15, new Date('2026-01-05T12:32:00Z'))).toEqual([])
+
+      // A fresh customer message re-arms the clock: the new cycle warns again.
+      await rearmNextResponse(conversationId, new Date('2026-01-05T12:33:00Z')) // due 14:33
+      const rearmed = await sweepApproachingSlaBreaches(15, new Date('2026-01-05T14:20:00Z'))
+      expect(rearmed).toEqual([
+        {
+          conversationId,
+          conversation: conversationRef(conversationId),
+          policyId: policy.id,
+          clock: 'next_response',
+          dueAt: '2026-01-05T14:33:00.000Z',
+        },
+      ])
+    })
   })
 
   describe('sweepSlaBreachTriggers', () => {
@@ -246,6 +285,30 @@ describe.skipIf(!fixture.available)('SLA timer-trigger scans (real DB, rolled ba
       const triggered = await sweepSlaBreachTriggers(new Date('2026-01-05T11:06:00Z'))
       expect(triggered).toHaveLength(1)
       expect(await sweepSlaBreachTriggers(new Date('2026-01-05T11:07:00Z'))).toEqual([])
+    })
+
+    it('claims an overdue, armed next-response cycle exactly once', async () => {
+      const conversationId = await seedConversation()
+      const policy = await createSlaPolicy({
+        name: 'FR+NR',
+        firstResponseTargetSecs: 3600,
+        nextResponseTargetSecs: 2 * 3600,
+      })
+      await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+      await recordFirstResponse(conversationId, new Date('2026-01-05T10:30:00Z'))
+      await rearmNextResponse(conversationId, new Date('2026-01-05T10:40:00Z')) // NRT due 12:40
+
+      const first = await sweepSlaBreachTriggers(new Date('2026-01-05T12:45:00Z'))
+      expect(first).toEqual([
+        {
+          conversationId,
+          conversation: conversationRef(conversationId),
+          policyId: policy.id,
+          clock: 'next_response',
+          dueAt: '2026-01-05T12:40:00.000Z',
+        },
+      ])
+      expect(await sweepSlaBreachTriggers(new Date('2026-01-05T12:50:00Z'))).toEqual([])
     })
 
     // Deliberate design (see this module's doc comment right above SLA_CLOCKS/

@@ -106,6 +106,7 @@ import { TICKET_ACTION_PERMISSIONS } from './workflow-actor-permissions'
 import * as conversationService from '@/lib/server/domains/conversation/conversation.service'
 import * as tagService from '@/lib/server/domains/conversation/conversation-tag.service'
 import { applySlaToConversation } from '@/lib/server/domains/sla/sla.service'
+import { applySlaToTicket } from '@/lib/server/domains/sla/ticket-sla.service'
 import { setConversationAttribute } from '@/lib/server/domains/conversation-attributes/set-attribute.service'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
 import { resolveWorkflowVariables, type WorkflowVariables } from './workflow-variables'
@@ -218,7 +219,14 @@ export type WorkflowAction =
   // their own updates for a macro author to ever pick this, which isn't a
   // trivially-free addition alongside this fix; noted rather than done.
   | { type: 'reopen' }
-  | { type: 'apply_sla'; policyId: SlaPolicyId }
+  // `target` picks WHICH object the policy stamps (support platform §4.6's
+  // disjoint-targets rule): 'conversation' (the default, and the only behavior
+  // pre-target graphs know) stamps the conversation clocks; 'ticket' stamps
+  // the policy's time-to-resolve clock onto the conversation's linked
+  // CUSTOMER ticket — a no-op success when none is linked, unlike
+  // set_ticket_status's throw-if-none (an SLA that has nothing to anchor to
+  // is not a misconfiguration worth failing the run over).
+  | { type: 'apply_sla'; policyId: SlaPolicyId; target?: 'conversation' | 'ticket' }
   // `src` overrides the actor-derived default provenance (see the module doc);
   // omitted for every pre-existing caller (macros, plain workflow actions).
   | { type: 'set_attribute'; key: string; value: unknown; src?: ConversationAttributeSource }
@@ -441,9 +449,21 @@ export async function applyAction(
       // without this case needing its own pre-check.
       await conversationService.setConversationStatus(conversationId, 'open', actor)
       return label('reopened')
-    case 'apply_sla':
+    case 'apply_sla': {
+      if (action.target === 'ticket') {
+        // Ticket-anchored TTR: stamp the policy's time-to-resolve clock onto
+        // the conversation's linked CUSTOMER ticket. No linked ticket is a
+        // no-op success (see WorkflowAction's doc) — and a policy without a
+        // TTR target no-ops inside applySlaToTicket, so both "nothing to
+        // anchor to" cases degrade quietly instead of failing the run.
+        const linked = await getLinkedCustomerTicket(conversationId)
+        if (!linked) return label(null)
+        await applySlaToTicket(linked.id, action.policyId)
+        return label('SLA applied to ticket')
+      }
       await applySlaToConversation(conversationId, action.policyId)
       return label('SLA applied')
+    }
     case 'set_attribute':
       // Provenance: an explicit src (the graph walker's collect resume) wins;
       // otherwise it follows the actor — the engine's synthetic service actor

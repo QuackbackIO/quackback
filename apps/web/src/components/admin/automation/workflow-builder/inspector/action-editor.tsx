@@ -173,37 +173,59 @@ export function ActionEditor({
       )}
 
       {action.type === 'apply_sla' && (
-        <Field label="SLA policy">
-          {/* Template needs-setup placeholders read as unset (show the
+        <>
+          <Field label="Apply to">
+            {/* Ticket-anchored TTR (support platform §4.6): 'ticket' stamps
+                the policy's time-to-resolve clock onto the conversation's
+                linked customer ticket instead of the conversation clocks.
+                Absent target = 'conversation' (pre-target graphs). */}
+            <Select
+              value={action.target ?? 'conversation'}
+              onValueChange={(target) =>
+                onChange({ ...action, target: target as 'conversation' | 'ticket' })
+              }
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="conversation">Conversation</SelectItem>
+                <SelectItem value="ticket">Linked ticket (time to resolve)</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="SLA policy">
+            {/* Template needs-setup placeholders read as unset (show the
               placeholder text), unlike a real-but-unresolved stored id. */}
-          <Select
-            value={isNeedsSetupRef(action.policyId) ? undefined : action.policyId || undefined}
-            onValueChange={(policyId) => onChange({ ...action, policyId })}
-          >
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue placeholder="Choose SLA policy" />
-            </SelectTrigger>
-            <SelectContent>
-              {slaPolicies.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  <span className="flex flex-col items-start">
-                    <span>{p.name}</span>
-                    <span className="text-xs text-muted-foreground">{p.targetsSummary}</span>
-                  </span>
-                </SelectItem>
-              ))}
-              {/* A stored id that no longer resolves (archived / imported JSON)
-                  stays selectable so the step doesn't render blank. */}
-              {action.policyId &&
-                !isNeedsSetupRef(action.policyId) &&
-                !slaPolicies.some((p) => p.id === action.policyId) && (
-                  <SelectItem value={action.policyId}>
-                    <span className="font-mono text-xs">{action.policyId}</span>
+            <Select
+              value={isNeedsSetupRef(action.policyId) ? undefined : action.policyId || undefined}
+              onValueChange={(policyId) => onChange({ ...action, policyId })}
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue placeholder="Choose SLA policy" />
+              </SelectTrigger>
+              <SelectContent>
+                {slaPolicies.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    <span className="flex flex-col items-start">
+                      <span>{p.name}</span>
+                      <span className="text-xs text-muted-foreground">{p.targetsSummary}</span>
+                    </span>
                   </SelectItem>
-                )}
-            </SelectContent>
-          </Select>
-        </Field>
+                ))}
+                {/* A stored id that no longer resolves (archived / imported JSON)
+                  stays selectable so the step doesn't render blank. */}
+                {action.policyId &&
+                  !isNeedsSetupRef(action.policyId) &&
+                  !slaPolicies.some((p) => p.id === action.policyId) && (
+                    <SelectItem value={action.policyId}>
+                      <span className="font-mono text-xs">{action.policyId}</span>
+                    </SelectItem>
+                  )}
+              </SelectContent>
+            </Select>
+          </Field>
+        </>
       )}
 
       {action.type === 'set_attribute' && (

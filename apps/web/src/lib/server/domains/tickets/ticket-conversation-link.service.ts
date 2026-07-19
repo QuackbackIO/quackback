@@ -10,6 +10,14 @@
  * conversation, surfaced here as a friendly `ConflictError` instead of a raw
  * constraint violation should two teammates race to link the same
  * conversation.
+ *
+ * SLA handoff (support platform §4.6, "applied first time" semantics): when
+ * the conversation has an active SLA whose policy tracks time-to-resolve, the
+ * freshly linked ticket starts its OWN TTR clock under that same policy,
+ * ticking from the LINK instant (not the ticket's creation — the row may
+ * precede the link by a dialog's worth of drafting). Best-effort like the
+ * announcement: the link already landed, so a handoff failure is logged,
+ * never surfaced to the caller.
  */
 import { db, eq, conversations, ticketConversations } from '@/lib/server/db'
 import type { ConversationId, TicketId } from '@quackback/ids'
@@ -21,6 +29,8 @@ import { isUniqueViolation } from '@/lib/server/utils'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { logger } from '@/lib/server/logger'
 import { loadTicketOr404 } from './ticket.service'
+import { loadSlaApplied } from '../sla/sla.service'
+import { applySlaToTicket } from '../sla/ticket-sla.service'
 
 const log = logger.child({ component: 'ticket-conversation-link' })
 
@@ -80,6 +90,32 @@ export async function linkTicketToConversation(
     kind: 'ticket_created',
     ticketReference: reference,
   })
+
+  // SLA handoff (see the module doc): start the linked ticket's TTR clock
+  // under the conversation's active policy. Only ever fires for the customer
+  // ticket this function accepts — a back-office/tracker ticket can never be
+  // conversation-linked through here (the type guard above rejects them), so
+  // there is no non-customer branch to skip. A conversation with no SLA skips
+  // silently; a policy without a TTR target no-ops inside applySlaToTicket,
+  // which keeps the "does this policy even track TTR" check in ONE place
+  // rather than duplicated here. Best-effort: the link already landed.
+  try {
+    const slaApplied = await loadSlaApplied(conversationId)
+    if (slaApplied) {
+      const applied = await applySlaToTicket(ticketId, slaApplied.policyId)
+      if (applied) {
+        log.info(
+          { ticket_id: ticketId, conversation_id: conversationId, policy_id: applied.policyId },
+          'ticket TTR clock started from conversation SLA handoff'
+        )
+      }
+    }
+  } catch (err) {
+    log.warn(
+      { err, ticket_id: ticketId, conversation_id: conversationId },
+      'ticket SLA handoff failed (link already landed)'
+    )
+  }
 
   log.info(
     { ticket_id: ticketId, conversation_id: conversationId },

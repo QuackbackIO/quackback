@@ -152,4 +152,23 @@ describe('formatSlaTarget / slaTargetsSummary', () => {
       })
     ).toBe('No targets')
   })
+
+  it('includes the resolve target only when the ticket clock is set', () => {
+    expect(
+      slaTargetsSummary({
+        firstResponseTargetSecs: 15 * 60,
+        nextResponseTargetSecs: null,
+        timeToCloseTargetSecs: null,
+        timeToResolveTargetSecs: 5 * 86400,
+      })
+    ).toBe('First response 15m · resolve 5d')
+    // Three-target literals (no TTR key at all) stay exactly as before.
+    expect(
+      slaTargetsSummary({
+        firstResponseTargetSecs: null,
+        nextResponseTargetSecs: null,
+        timeToCloseTargetSecs: 86400,
+      })
+    ).toBe('Close 1d')
+  })
 })

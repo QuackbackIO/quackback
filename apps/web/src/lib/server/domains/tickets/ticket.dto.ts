@@ -20,13 +20,15 @@ import {
   type TicketStatusEntity,
 } from '@/lib/server/db'
 import type { TicketId, TicketStatusId, PrincipalId, TeamId, CompanyId } from '@quackback/ids'
+import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import { formatTicketNumber, type TicketStageLabels } from '@/lib/shared/tickets'
 import { preview } from '@/lib/server/messages/message-core'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { getStageLabels } from '../settings/settings.tickets'
 import { resolveStage } from './ticket.lifecycle'
-import type { TicketDTO, TicketPrincipalRef } from './ticket.types'
+import type { TicketSlaApplied } from '../sla/ticket-sla.service'
+import type { TicketDTO, TicketPrincipalRef, TicketSlaRef } from './ticket.types'
 
 interface TicketDTOContext {
   statuses: Map<TicketStatusId, TicketStatusEntity>
@@ -143,6 +145,28 @@ function uniqueIds<T extends string>(ids: ReadonlyArray<T | null | undefined>): 
   return [...new Set(ids.filter((id): id is T => !!id))]
 }
 
+/**
+ * Project the ticket's SLA stamp (support platform §4.6's ticket-anchored TTR
+ * clock) into its DTO sliver, or null when no SLA is applied. `paused` is
+ * STATUS-derived — a 'pending'-category status under a pauseOnPending policy
+ * — mirroring the conversation chip's `snoozed && pauseOnSnooze` rule
+ * (slaChipState), so the chip agrees with the status pill it renders next to
+ * even in the brief window before the event hook stamps `pausedAt`.
+ */
+function ticketSlaRefFor(slaApplied: unknown, category: TicketStatusCategory): TicketSlaRef | null {
+  if (!slaApplied || typeof slaApplied !== 'object') return null
+  const stamp = slaApplied as TicketSlaApplied
+  // A live stamp always carries the deadline (applySlaToTicket refuses to
+  // stamp a TTR-less policy); the guard is for hand-written/legacy rows.
+  if (!stamp.timeToResolveDueAt) return null
+  return {
+    policyName: stamp.policyName,
+    timeToResolveDueAt: stamp.timeToResolveDueAt,
+    resolvedAt: stamp.resolvedAt ?? null,
+    paused: category === 'pending' && stamp.pauseOnPending !== false,
+  }
+}
+
 /** Resolve every reference a page of tickets needs in one batch per table. */
 export async function buildTicketContext(rows: Ticket[]): Promise<TicketDTOContext> {
   const statusIds = uniqueIds(rows.map((r) => r.statusId))
@@ -223,6 +247,7 @@ export function ticketToDTO(row: Ticket, ctx: TicketDTOContext): TicketDTO {
     firstResponseAt: row.firstResponseAt?.toISOString() ?? null,
     dueAt: row.dueAt?.toISOString() ?? null,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    sla: ticketSlaRefFor(row.slaApplied, status?.category ?? 'open'),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     reopenedCount: row.reopenedCount,

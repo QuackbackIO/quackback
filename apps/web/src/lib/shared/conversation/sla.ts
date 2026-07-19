@@ -102,11 +102,14 @@ export function formatSlaTarget(secs: number): string {
 }
 
 /** One-line targets summary for policy rows and the workflow picker:
- *  "First response 4h · next response 8h · close 3d" (set targets only). */
+ *  "First response 4h · next response 8h · close 3d · resolve 5d" (set targets
+ *  only). `timeToResolveTargetSecs` is optional so three-target literals keep
+ *  typechecking; the resolve part only appears when the ticket clock is set. */
 export function slaTargetsSummary(policy: {
   firstResponseTargetSecs: number | null
   nextResponseTargetSecs: number | null
   timeToCloseTargetSecs: number | null
+  timeToResolveTargetSecs?: number | null
 }): string {
   const parts: string[] = []
   if (policy.firstResponseTargetSecs) {
@@ -117,6 +120,9 @@ export function slaTargetsSummary(policy: {
   }
   if (policy.timeToCloseTargetSecs) {
     parts.push(`close ${formatSlaTarget(policy.timeToCloseTargetSecs)}`)
+  }
+  if (policy.timeToResolveTargetSecs) {
+    parts.push(`resolve ${formatSlaTarget(policy.timeToResolveTargetSecs)}`)
   }
   if (parts.length === 0) return 'No targets'
   const joined = parts.join(' · ')

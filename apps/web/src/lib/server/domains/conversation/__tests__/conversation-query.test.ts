@@ -560,22 +560,37 @@ describe('slaDueAtFor / slaDtoFor', () => {
     expect(slaDueAtFor(c)?.toISOString()).toBe('2026-01-03T13:00:00.000Z')
   })
 
-  it('arms next-response from waiting_since only after the first reply', () => {
+  it('uses the stamped next-response deadline once armed, and drops it once the cycle settles', () => {
+    const armed = {
+      ...stamp,
+      firstResponseAt: '2026-01-03T10:00:00.000Z',
+      nextResponseDueAt: '2026-01-03T22:00:00.000Z',
+    }
+    const c = makeConversation({ slaApplied: armed } as Partial<Conversation>)
+    // The armed 22:00 next-response deadline beats the close deadline.
+    expect(slaDueAtFor(c)?.toISOString()).toBe('2026-01-03T22:00:00.000Z')
+    expect(slaDtoFor(c)?.nextResponseDueAt).toBe('2026-01-03T22:00:00.000Z')
+
+    // Once the teammate answers the cycle, the DTO hides the deadline — the
+    // chip stops counting a clock that is already settled.
+    const settled = makeConversation({
+      slaApplied: { ...armed, nextResponseAt: '2026-01-03T21:00:00.000Z' },
+    } as Partial<Conversation>)
+    expect(slaDtoFor(settled)?.nextResponseDueAt).toBeNull()
+    expect(slaDueAtFor(settled)?.toISOString()).toBe('2026-01-06T09:00:00.000Z')
+  })
+
+  it('shows no next-response clock on an old (pre-evaluator) stamp, even with waiting_since set', () => {
+    // Absent nextResponseDueAt = unarmed: the wall-clock waiting_since
+    // approximation is gone; the next customer message arms the real clock.
     const waiting = new Date('2026-01-03T14:00:00.000Z')
     const settled = { ...stamp, firstResponseAt: '2026-01-03T10:00:00.000Z' }
     const c = makeConversation({
       slaApplied: settled,
       waitingSince: waiting,
     } as Partial<Conversation>)
-    // waiting_since + 8h beats the close deadline.
-    expect(slaDueAtFor(c)?.toISOString()).toBe('2026-01-03T22:00:00.000Z')
-    // While the first-response clock is still open, waiting_since must NOT arm
-    // a second (double-counted) clock.
-    const early = makeConversation({
-      slaApplied: stamp,
-      waitingSince: waiting,
-    } as Partial<Conversation>)
-    expect(slaDueAtFor(early)?.toISOString()).toBe('2026-01-03T13:00:00.000Z')
+    expect(slaDtoFor(c)?.nextResponseDueAt).toBeNull()
+    expect(slaDueAtFor(c)?.toISOString()).toBe('2026-01-06T09:00:00.000Z')
   })
 
   it('falls back to the close deadline once replies are settled, and null once resolved', () => {

@@ -127,7 +127,17 @@ export const actionSchema = z.union([
   // for why this is workflows-only, not shared with macro.schemas.ts's
   // separate MacroAction catalogue.
   z.object({ type: z.literal('reopen') }),
-  z.object({ type: z.literal('apply_sla'), policyId: z.string().min(1) }),
+  z.object({
+    type: z.literal('apply_sla'),
+    policyId: z.string().min(1),
+    // Ticket-anchored TTR (support platform §4.6): 'ticket' stamps the
+    // policy's time-to-resolve clock onto the conversation's linked CUSTOMER
+    // ticket instead of stamping the conversation clocks (a no-op when no
+    // customer ticket is linked — see action.executor.ts). Absent =
+    // 'conversation', so every graph stored before the target existed keeps
+    // its original behavior.
+    target: z.enum(['conversation', 'ticket']).optional(),
+  }),
   z.object({ type: z.literal('set_attribute'), key: z.string().min(1), value: z.unknown() }),
   // EVENTING-V2 WO-10: outbound webhook delivery is awaited through safeFetch
   // (the SSRF chokepoint); the URL is validated here.

@@ -1487,7 +1487,14 @@ export async function getSlaEmailTargets(
   if (recipients.length === 0) return []
 
   const title = conv.visitorName ?? 'a customer'
-  const clockLabel = clock === 'first_response' ? 'first response' : 'resolution'
+  const clockLabel =
+    clock === 'first_response'
+      ? 'first response'
+      : clock === 'next_response'
+        ? 'next response'
+        : clock === 'time_to_resolve'
+          ? 'time to resolve'
+          : 'resolution'
   const dueLabel = formatSlaDue(dueAt)
   const ctaUrl = inboxUrl(context.portalBaseUrl, conversationId)
 

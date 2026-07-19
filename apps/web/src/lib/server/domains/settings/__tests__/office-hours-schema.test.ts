@@ -59,4 +59,41 @@ describe('officeHoursScheduleSchema', () => {
     })
     expect(bad.success).toBe(false)
   })
+
+  it('defaults holidays to [] when the key is absent', () => {
+    const parsed = officeHoursScheduleSchema.parse({
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [{ day: 1, start: '09:00', end: '17:00' }],
+    })
+    expect(parsed.holidays).toEqual([])
+  })
+
+  it('accepts holidays and fills recurringAnnual to false', () => {
+    const parsed = officeHoursScheduleSchema.parse({
+      enabled: true,
+      timezone: 'UTC',
+      intervals: [],
+      holidays: [
+        { date: '2026-12-25', name: 'Christmas' },
+        { date: '2026-01-01', recurringAnnual: true },
+      ],
+    })
+    expect(parsed.holidays).toEqual([
+      { date: '2026-12-25', name: 'Christmas', recurringAnnual: false },
+      { date: '2026-01-01', recurringAnnual: true },
+    ])
+  })
+
+  it('rejects a malformed holiday date', () => {
+    for (const date of ['2026-13-01', '2026-1-05', '25-12-2026', 'not-a-date']) {
+      const bad = officeHoursScheduleSchema.safeParse({
+        enabled: true,
+        timezone: 'UTC',
+        intervals: [],
+        holidays: [{ date }],
+      })
+      expect(bad.success).toBe(false)
+    }
+  })
 })

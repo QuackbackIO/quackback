@@ -17,6 +17,15 @@ export interface OfficeHoursInterval {
   end: string
 }
 
+/** A calendar date the schedule is closed (support platform §4.6). `date` is
+ *  'YYYY-MM-DD' in the schedule's timezone; `recurringAnnual` matches the
+ *  month-day every year (fixed-date holidays), otherwise the exact date only. */
+export interface OfficeHoursHoliday {
+  date: string
+  name?: string
+  recurringAnnual?: boolean
+}
+
 export const officeHoursSchedules = pgTable(
   'office_hours_schedules',
   {
@@ -25,6 +34,11 @@ export const officeHoursSchedules = pgTable(
     timezone: text('timezone').notNull().default('UTC'),
     intervals: jsonb('intervals')
       .$type<OfficeHoursInterval[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    // Calendar dates the schedule is closed (the clock engine skips them).
+    holidays: jsonb('holidays')
+      .$type<OfficeHoursHoliday[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
     isDefault: boolean('is_default').notNull().default(false),

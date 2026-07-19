@@ -13,7 +13,13 @@ export interface SlaPolicyInput {
   firstResponseTargetSecs?: number | null
   nextResponseTargetSecs?: number | null
   timeToCloseTargetSecs?: number | null
+  // Ticket-side clock (disjoint from the conversation targets above): seconds
+  // from ticket-SLA application to a 'closed'-category status. Null = the
+  // policy doesn't track TTR and applySlaToTicket no-ops on it.
+  timeToResolveTargetSecs?: number | null
   pauseOnSnooze?: boolean
+  // Ticket twin of pauseOnSnooze: pause TTR in a 'pending'-category status.
+  pauseOnPending?: boolean
   officeHoursScheduleId?: OfficeHoursId | null
 }
 
@@ -25,7 +31,9 @@ export async function createSlaPolicy(input: SlaPolicyInput): Promise<SlaPolicy>
       firstResponseTargetSecs: input.firstResponseTargetSecs ?? null,
       nextResponseTargetSecs: input.nextResponseTargetSecs ?? null,
       timeToCloseTargetSecs: input.timeToCloseTargetSecs ?? null,
+      timeToResolveTargetSecs: input.timeToResolveTargetSecs ?? null,
       pauseOnSnooze: input.pauseOnSnooze ?? true,
+      pauseOnPending: input.pauseOnPending ?? true,
       officeHoursScheduleId: input.officeHoursScheduleId ?? null,
     })
     .returning()
@@ -71,7 +79,11 @@ export async function updateSlaPolicy(
       ...(patch.timeToCloseTargetSecs !== undefined
         ? { timeToCloseTargetSecs: patch.timeToCloseTargetSecs }
         : {}),
+      ...(patch.timeToResolveTargetSecs !== undefined
+        ? { timeToResolveTargetSecs: patch.timeToResolveTargetSecs }
+        : {}),
       ...(patch.pauseOnSnooze !== undefined ? { pauseOnSnooze: patch.pauseOnSnooze } : {}),
+      ...(patch.pauseOnPending !== undefined ? { pauseOnPending: patch.pauseOnPending } : {}),
       ...(patch.officeHoursScheduleId !== undefined
         ? { officeHoursScheduleId: patch.officeHoursScheduleId }
         : {}),

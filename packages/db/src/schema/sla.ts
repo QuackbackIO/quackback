@@ -13,11 +13,13 @@ import {
   timestamp,
   index,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackback/ids/drizzle'
 import { officeHoursSchedules } from './office-hours'
 import { conversations } from './conversation'
+import { tickets } from './tickets'
 
 export const slaPolicies = pgTable(
   'sla_policies',
@@ -27,7 +29,13 @@ export const slaPolicies = pgTable(
     firstResponseTargetSecs: integer('first_response_target_secs'),
     nextResponseTargetSecs: integer('next_response_target_secs'),
     timeToCloseTargetSecs: integer('time_to_close_target_secs'),
+    // Ticket-side clock: seconds from ticket-SLA application to the ticket
+    // reaching a 'closed'-category status. NULL = the policy doesn't track TTR.
+    timeToResolveTargetSecs: integer('time_to_resolve_target_secs'),
     pauseOnSnooze: boolean('pause_on_snooze').notNull().default(true),
+    // Ticket twin of pause_on_snooze: pause TTR while the ticket sits in a
+    // 'pending'-category status (waiting on customer / third party).
+    pauseOnPending: boolean('pause_on_pending').notNull().default(true),
     officeHoursScheduleId: typeIdColumnNullable('office_hours')('office_hours_schedule_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -46,7 +54,12 @@ export const slaEvents = pgTable(
   'sla_events',
   {
     id: typeIdWithDefault('sla_event')('id').primaryKey(),
-    conversationId: typeIdColumn('conversation')('conversation_id').notNull(),
+    // Polymorphic subject: conversation clocks (FRT/NRT/TTC) log with
+    // conversation_id; the ticket TTR clock logs with ticket_id and a NULL
+    // conversation_id (back-office tickets have no conversation). Exactly one
+    // is set — enforced by sla_events_subject_check.
+    conversationId: typeIdColumnNullable('conversation')('conversation_id'),
+    ticketId: typeIdColumnNullable('ticket')('ticket_id'),
     policyId: typeIdColumn('sla_policy')('policy_id').notNull(),
     kind: text('kind').notNull(),
     meta: jsonb('meta')
@@ -62,11 +75,23 @@ export const slaEvents = pgTable(
       foreignColumns: [conversations.id],
     }).onDelete('cascade'),
     foreignKey({
+      name: 'sla_events_ticket_id_fkey',
+      columns: [table.ticketId],
+      foreignColumns: [tickets.id],
+    }).onDelete('cascade'),
+    foreignKey({
       name: 'sla_events_policy_id_fkey',
       columns: [table.policyId],
       foreignColumns: [slaPolicies.id],
     }).onDelete('restrict'),
+    check(
+      'sla_events_subject_check',
+      sql`${table.conversationId} IS NOT NULL OR ${table.ticketId} IS NOT NULL`
+    ),
     index('sla_events_conversation_at_idx').on(table.conversationId, table.at),
+    index('sla_events_ticket_at_idx').on(table.ticketId, table.at),
+    // Reporting group-by (attainment per policy over a range).
+    index('sla_events_policy_at_idx').on(table.policyId, table.at),
   ]
 )
 

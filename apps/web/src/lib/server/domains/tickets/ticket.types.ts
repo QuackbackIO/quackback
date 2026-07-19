@@ -124,6 +124,29 @@ export interface TicketCompanyRef {
   name: string
 }
 
+/**
+ * The ticket's active SLA (support platform §4.6's ticket-anchored TTR clock),
+ * projected from the `tickets.sla_applied` stamp — null when no SLA is
+ * applied. Only the display fields the inbox chip needs are carried; the full
+ * stamp (markers, pause bookkeeping) stays server-side.
+ */
+export interface TicketSlaRef {
+  /** Snapshot of the policy name (a later policy edit/delete never rewrites it). */
+  policyName: string
+  /** Absolute, office-hours-aware TTR deadline (ISO). */
+  timeToResolveDueAt: string
+  /** When the ticket first reached a closed-category status (ISO), or null
+   *  while the clock is open. Never re-cleared — first resolution settles
+   *  TTR permanently (see ticket-sla.service.ts). */
+  resolvedAt: string | null
+  /** Whether the clock is paused for display: the ticket sits in a
+   *  'pending'-category status under a pauseOnPending policy. Status-derived
+   *  (mirrors slaChipState's snoozed && pauseOnSnooze rule) rather than read
+   *  off the stamp's pausedAt, so the chip can't disagree with the status
+   *  pill it's rendered next to. */
+  paused: boolean
+}
+
 /** The wire shape for a ticket. `number` is the raw sequence; `reference` is it rendered. */
 export interface TicketDTO {
   id: TicketId
@@ -140,6 +163,8 @@ export interface TicketDTO {
   firstResponseAt: string | null
   dueAt: string | null
   resolvedAt: string | null
+  /** The active ticket SLA (TTR clock), or null when none is applied. */
+  sla: TicketSlaRef | null
   createdAt: string
   updatedAt: string
   reopenedCount: number

@@ -1,20 +1,27 @@
 import { queryOptions } from '@tanstack/react-query'
 import {
   slaAttainmentFn,
+  slaAttainmentByPolicyFn,
+  slaBreachHeatmapFn,
+  slaTimeAfterMissFn,
   workflowEffectivenessFn,
   attributeBreakdownFn,
 } from '@/lib/server/functions/support-reporting'
 
-/** SLA attainment + workflow effectiveness for a date range (ISO strings). */
+/** SLA attainment (overall, per policy, breach heatmap, time-after-miss) +
+ *  workflow effectiveness for a date range (ISO strings). */
 export const supportReportingQuery = (from: string, to: string) =>
   queryOptions({
     queryKey: ['support-reporting', from, to],
     queryFn: async () => {
-      const [sla, workflows] = await Promise.all([
+      const [sla, slaByPolicy, slaHeatmap, slaTimeAfterMiss, workflows] = await Promise.all([
         slaAttainmentFn({ data: { from, to } }),
+        slaAttainmentByPolicyFn({ data: { from, to } }),
+        slaBreachHeatmapFn({ data: { from, to } }),
+        slaTimeAfterMissFn({ data: { from, to } }),
         workflowEffectivenessFn({ data: { from, to } }),
       ])
-      return { sla, workflows }
+      return { sla, slaByPolicy, slaHeatmap, slaTimeAfterMiss, workflows }
     },
     staleTime: 5 * 60 * 1000,
   })

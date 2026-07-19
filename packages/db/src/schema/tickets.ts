@@ -113,6 +113,10 @@ export const tickets = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    // The one active SLA applied to this ticket (mirrors
+    // conversations.sla_applied; the TTR clock only — FRT/NRT/TTC stay
+    // conversation-side), or null. ticket-sla.service.ts owns the shape.
+    slaApplied: jsonb('sla_applied').$type<Record<string, unknown>>(),
     // Soft delete; set-null'd actor history survives.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
@@ -167,6 +171,16 @@ export const tickets = pgTable(
     // explicit .desc(): Postgres serves the DESC/DESC keyset scan via a
     // backward scan of this ascending (createdAt, id) index just as well.
     index('tickets_created_at_id_idx').on(table.createdAt, table.id),
+    // Ticket SLA sweep candidate set — mirrors conversations_sla_unsettled_idx
+    // (0187): the predicate selects stamps with an UNSETTLED TTR clock, not
+    // just any stamp, so selectivity doesn't degrade as settled tickets
+    // accumulate. The sweep repeats this exact clause top-level so the
+    // planner proves the index applies.
+    index('tickets_sla_unsettled_idx')
+      .on(table.id)
+      .where(
+        sql`${table.slaApplied} IS NOT NULL AND (${table.slaApplied} ->> 'resolvedAt') IS NULL`
+      ),
   ]
 )
 

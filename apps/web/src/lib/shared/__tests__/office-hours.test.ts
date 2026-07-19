@@ -310,7 +310,7 @@ describe('officeHoursScheduleFromLegacyDays', () => {
 
   it('defaults timezone and tolerates a missing days array', () => {
     const schedule = officeHoursScheduleFromLegacyDays({ enabled: true })
-    expect(schedule).toEqual({ enabled: true, timezone: 'UTC', intervals: [] })
+    expect(schedule).toEqual({ enabled: true, timezone: 'UTC', intervals: [], holidays: [] })
   })
 
   it('produces a schedule the resolver evaluates like the legacy config', () => {
@@ -319,5 +319,53 @@ describe('officeHoursScheduleFromLegacyDays', () => {
     expect(isWithinOfficeHours(schedule, new Date('2026-01-05T12:00:00Z'))).toBe(true)
     expect(isWithinOfficeHours(schedule, new Date('2026-01-04T12:00:00Z'))).toBe(false)
     expect(isWithinOfficeHours(schedule, new Date('2026-01-05T17:00:00Z'))).toBe(false)
+  })
+})
+
+// Holidays close the whole schedule-local date, whatever the weekly windows
+// say; a recurringAnnual entry matches its month-day every year.
+describe('holidays', () => {
+  it('is closed on a holiday that falls inside a weekly window', () => {
+    const schedule = { ...weekdays9to5('UTC'), holidays: [{ date: '2026-01-05' }] }
+    // 2026-01-05 is a Monday — inside a window, but closed all day.
+    expect(isWithinOfficeHours(schedule, new Date('2026-01-05T12:00:00Z'))).toBe(false)
+    expect(isWithinOfficeHours(schedule, new Date('2026-01-06T12:00:00Z'))).toBe(true)
+  })
+
+  it('matches a recurringAnnual holiday by month-day in later years', () => {
+    const recurring = {
+      ...weekdays9to5('UTC'),
+      holidays: [{ date: '2026-01-05', recurringAnnual: true }],
+    }
+    // 2027-01-05 (a Tuesday) shares the 01-05 month-day → closed too.
+    expect(isWithinOfficeHours(recurring, new Date('2027-01-05T12:00:00Z'))).toBe(false)
+    // A non-recurring entry stays pinned to its exact date.
+    const once = { ...weekdays9to5('UTC'), holidays: [{ date: '2026-01-05' }] }
+    expect(isWithinOfficeHours(once, new Date('2027-01-05T12:00:00Z'))).toBe(true)
+  })
+
+  it('evaluates the holiday on the schedule-local date, not the UTC date', () => {
+    // Tokyo is UTC+9: 16:00Z on the 5th is already 01:00 JST on the 6th.
+    const tokyo: OfficeHoursSchedule = {
+      enabled: true,
+      timezone: 'Asia/Tokyo',
+      intervals: [1, 2, 3].map((day) => ({ day, start: '00:00', end: '23:59' })),
+      holidays: [{ date: '2026-01-06' }], // the Tuesday
+    }
+    // Mon 23:00 JST (14:00Z on the 5th): open.
+    expect(isWithinOfficeHours(tokyo, new Date('2026-01-05T14:00:00Z'))).toBe(true)
+    // Tue 01:00 JST (16:00Z on the 5th): the holiday's local date — closed.
+    expect(isWithinOfficeHours(tokyo, new Date('2026-01-05T16:00:00Z'))).toBe(false)
+    // Wed 01:00 JST (16:00Z on the 6th): open again.
+    expect(isWithinOfficeHours(tokyo, new Date('2026-01-06T16:00:00Z'))).toBe(true)
+  })
+
+  it('nextOpenAt skips a holiday instead of pointing at its window', () => {
+    const schedule = { ...weekdays9to5('UTC'), holidays: [{ date: '2026-06-03' }] }
+    // Wednesday 2026-06-03 is a holiday: ahead of its window, the next opening
+    // is Thursday's.
+    expect(nextOpenAt(schedule, new Date('2026-06-03T07:00:00Z'))?.toISOString()).toBe(
+      '2026-06-04T09:00:00.000Z'
+    )
   })
 })

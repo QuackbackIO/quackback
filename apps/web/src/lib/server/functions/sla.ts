@@ -63,7 +63,11 @@ export interface SlaPolicyDTO {
   firstResponseTargetSecs: number | null
   nextResponseTargetSecs: number | null
   timeToCloseTargetSecs: number | null
+  /** Ticket-side TTR clock target; null = the policy doesn't track TTR. */
+  timeToResolveTargetSecs: number | null
   pauseOnSnooze: boolean
+  /** Ticket twin of pauseOnSnooze: pause TTR in a 'pending'-category status. */
+  pauseOnPending: boolean
   officeHoursScheduleId: string | null
   /** Archive timestamp (the domain's soft-delete); null while live. */
   archivedAt: string | null
@@ -79,7 +83,9 @@ function serializePolicy(p: SlaPolicy, usedByWorkflows: SlaWorkflowRef[]): SlaPo
     firstResponseTargetSecs: p.firstResponseTargetSecs,
     nextResponseTargetSecs: p.nextResponseTargetSecs,
     timeToCloseTargetSecs: p.timeToCloseTargetSecs,
+    timeToResolveTargetSecs: p.timeToResolveTargetSecs,
     pauseOnSnooze: p.pauseOnSnooze,
+    pauseOnPending: p.pauseOnPending,
     officeHoursScheduleId: p.officeHoursScheduleId,
     archivedAt: p.deletedAt ? p.deletedAt.toISOString() : null,
     createdAt: p.createdAt.toISOString(),
@@ -105,14 +111,19 @@ const createSchema = z
     firstResponseTargetSecs: targetSecs.optional(),
     nextResponseTargetSecs: targetSecs.optional(),
     timeToCloseTargetSecs: targetSecs.optional(),
+    timeToResolveTargetSecs: targetSecs.optional(),
     pauseOnSnooze: z.boolean().optional(),
+    pauseOnPending: z.boolean().optional(),
     officeHoursScheduleId: scheduleIdSchema.optional(),
   })
   .refine(
     (d) =>
-      [d.firstResponseTargetSecs, d.nextResponseTargetSecs, d.timeToCloseTargetSecs].some(
-        (v) => v != null
-      ),
+      [
+        d.firstResponseTargetSecs,
+        d.nextResponseTargetSecs,
+        d.timeToCloseTargetSecs,
+        d.timeToResolveTargetSecs,
+      ].some((v) => v != null),
     { message: 'Set at least one target' }
   )
 
@@ -122,7 +133,9 @@ const updateSchema = z.object({
   firstResponseTargetSecs: targetSecs.optional(),
   nextResponseTargetSecs: targetSecs.optional(),
   timeToCloseTargetSecs: targetSecs.optional(),
+  timeToResolveTargetSecs: targetSecs.optional(),
   pauseOnSnooze: z.boolean().optional(),
+  pauseOnPending: z.boolean().optional(),
   officeHoursScheduleId: scheduleIdSchema.optional(),
 })
 
@@ -140,6 +153,7 @@ const TARGET_KEYS = [
   'firstResponseTargetSecs',
   'nextResponseTargetSecs',
   'timeToCloseTargetSecs',
+  'timeToResolveTargetSecs',
 ] as const
 
 /** Full policy list (live + archived) with per-policy workflow references. */
@@ -192,7 +206,9 @@ export const createSlaPolicyFn = createServerFn({ method: 'POST' })
       firstResponseTargetSecs: data.firstResponseTargetSecs ?? null,
       nextResponseTargetSecs: data.nextResponseTargetSecs ?? null,
       timeToCloseTargetSecs: data.timeToCloseTargetSecs ?? null,
+      timeToResolveTargetSecs: data.timeToResolveTargetSecs ?? null,
       pauseOnSnooze: data.pauseOnSnooze,
+      pauseOnPending: data.pauseOnPending,
       officeHoursScheduleId: parseScheduleId(data.officeHoursScheduleId) ?? null,
     })
     return serializePolicy(created, [])
@@ -225,7 +241,9 @@ export const updateSlaPolicyFn = createServerFn({ method: 'POST' })
       firstResponseTargetSecs: data.firstResponseTargetSecs,
       nextResponseTargetSecs: data.nextResponseTargetSecs,
       timeToCloseTargetSecs: data.timeToCloseTargetSecs,
+      timeToResolveTargetSecs: data.timeToResolveTargetSecs,
       pauseOnSnooze: data.pauseOnSnooze,
+      pauseOnPending: data.pauseOnPending,
       officeHoursScheduleId: parseScheduleId(data.officeHoursScheduleId),
     })
     return { ok: true }

@@ -348,27 +348,22 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
 
 /**
  * Project the engine's applied-SLA stamp into the agent-only DTO field. The
- * next-response deadline is derived from waiting_since (the clock's re-arm
- * anchor) as a wall-clock approximation until the next-response evaluator
- * lands office-hours math; it only arms after the first teammate reply so it
- * never doubles the first-response clock.
+ * next-response deadline reads the stamp's own `nextResponseDueAt` — stamped
+ * by rearmNextResponse with office-hours math when a customer message arms a
+ * cycle — and hides it once that cycle settled, so the chip stops counting a
+ * clock the teammate already answered. Old stamps (no nextResponseDueAt yet)
+ * simply show no next-response clock until the next customer message arms one.
  */
 export function slaDtoFor(conversation: Conversation): ConversationSlaDTO | null {
   const stamp = conversation.slaApplied as SlaApplied | null
   if (!stamp) return null
-  const nextResponseDueAt =
-    stamp.nextResponseTargetSecs && stamp.firstResponseAt && conversation.waitingSince
-      ? new Date(
-          conversation.waitingSince.getTime() + stamp.nextResponseTargetSecs * 1000
-        ).toISOString()
-      : null
   return {
     policyId: stamp.policyId,
     policyName: stamp.policyName,
     appliedAt: stamp.appliedAt,
     firstResponseDueAt: stamp.firstResponseDueAt,
     firstResponseAt: stamp.firstResponseAt ?? null,
-    nextResponseDueAt,
+    nextResponseDueAt: stamp.nextResponseAt ? null : (stamp.nextResponseDueAt ?? null),
     timeToCloseDueAt: stamp.timeToCloseDueAt,
     resolvedAt: stamp.resolvedAt ?? null,
     pauseOnSnooze: stamp.pauseOnSnooze ?? true,
@@ -993,15 +988,14 @@ const priorityRankExpr = priorityRankSql(conversations.priority)
  * Nearest unmet SLA deadline for the 'sla' sort — the SQL twin of
  * `slaDueAtFor` (keep the arms in lockstep). LEAST ignores NULL arms, so a
  * settled or untracked clock simply drops out; no applied SLA (or nothing
- * unmet) yields NULL and sorts last. The next-response arm mirrors the DTO's
- * wall-clock approximation over waiting_since.
+ * unmet) yields NULL and sorts last. The next-response arm reads the stamp's
+ * own armed deadline (nextResponseDueAt), mirroring the DTO.
  */
 const slaDueExpr = sql`LEAST(
   CASE WHEN ${conversations.slaApplied} ->> 'firstResponseAt' IS NULL
        THEN (${conversations.slaApplied} ->> 'firstResponseDueAt')::timestamptz END,
-  CASE WHEN ${conversations.slaApplied} ->> 'firstResponseAt' IS NOT NULL
-       THEN ${conversations.waitingSince}
-            + ((${conversations.slaApplied} ->> 'nextResponseTargetSecs')::int * interval '1 second') END,
+  CASE WHEN ${conversations.slaApplied} ->> 'nextResponseAt' IS NULL
+       THEN (${conversations.slaApplied} ->> 'nextResponseDueAt')::timestamptz END,
   CASE WHEN ${conversations.slaApplied} ->> 'resolvedAt' IS NULL
        THEN (${conversations.slaApplied} ->> 'timeToCloseDueAt')::timestamptz END
 )`

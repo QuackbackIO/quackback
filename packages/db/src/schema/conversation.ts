@@ -198,13 +198,17 @@ export const conversations = pgTable(
     // once set (a settle just flips fields on the same blob), so a plain
     // `IS NOT NULL` predicate's selectivity degrades monotonically as a
     // workspace ages — narrowed to the real, bounded candidate set instead
-    // (migration 0187, replacing 0186's `conversations_sla_applied_idx`; see
-    // that migration's own comment and scanAndClaimSlaClocks' matching extra
-    // AND clause for why the predicate is repeated verbatim there).
+    // (migration 0187, replacing 0186's `conversations_sla_applied_idx`;
+    // widened by 0213 with the armed-but-unsettled next-response arm, which
+    // must test `nextResponseDueAt IS NOT NULL` too — nextResponseAt is
+    // absent-until-settled, so a bare `IS NULL` arm would match nearly every
+    // stamp; see that migration's own comment and scanAndClaimSlaClocks'
+    // matching extra AND clause for why the predicate is repeated verbatim
+    // there).
     index('conversations_sla_unsettled_idx')
       .on(table.id)
       .where(
-        sql`sla_applied IS NOT NULL AND ((sla_applied ->> 'firstResponseAt') IS NULL OR (sla_applied ->> 'resolvedAt') IS NULL)`
+        sql`sla_applied IS NOT NULL AND ((sla_applied ->> 'firstResponseAt') IS NULL OR (sla_applied ->> 'resolvedAt') IS NULL OR ((sla_applied ->> 'nextResponseDueAt') IS NOT NULL AND (sla_applied ->> 'nextResponseAt') IS NULL))`
       ),
   ]
 )

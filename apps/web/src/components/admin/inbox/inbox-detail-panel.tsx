@@ -136,6 +136,48 @@ function TicketDueChip({ dueAt, resolvedAt }: { dueAt: string | null; resolvedAt
 }
 
 /**
+ * The ticket card's SLA chip (support platform §4.6's ticket-anchored TTR
+ * clock): the time-to-resolve countdown off the ticket's SLA stamp, with the
+ * same tone ladder + 30s tick as `TicketDueChip` above (which stays as-is —
+ * it reads the separate bare `dueAt` column, not the SLA stamp). Shows the
+ * paused state while the ticket sits in a pending-category status under a
+ * pauseOnPending policy (the DTO's status-derived `paused` flag), and renders
+ * nothing once the clock has settled — the first resolution settles TTR
+ * permanently, so there is no "resolved" countdown to show.
+ */
+function TicketSlaChip({ sla }: { sla: NonNullable<TicketDTO['sla']> }) {
+  const [now, setNow] = useState<Date | null>(null)
+  useEffect(() => {
+    setNow(new Date())
+    const id = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  if (sla.resolvedAt || !now) return null
+
+  const remainingMs = new Date(sla.timeToResolveDueAt).getTime() - now.getTime()
+  const tone = sla.paused ? 'paused' : dueCountdownTone(remainingMs)
+  const abs = Math.abs(remainingMs)
+  const label = sla.paused
+    ? 'paused'
+    : tone === 'overdue'
+      ? `${formatSlaCountdown(abs)} over`
+      : formatSlaCountdown(abs)
+
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+        TONE_CLASSES[tone]
+      )}
+      title={`${sla.policyName} · time to resolve target`}
+    >
+      <ClockIcon className="h-3 w-3" aria-hidden />
+      {label}
+    </span>
+  )
+}
+
+/**
  * The viewport at which this panel exists at all — bound to the `xl:` Tailwind
  * breakpoint on the panel's own `hidden xl:flex` <aside> below. The inbox
  * route derives `copilotAvailable` from the SAME query so the Ask Copilot
@@ -462,6 +504,13 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
             {ticket.dueAt && !ticket.resolvedAt && (
               <Row icon={ClockIcon} label="Due">
                 <TicketDueChip dueAt={ticket.dueAt} resolvedAt={ticket.resolvedAt} />
+              </Row>
+            )}
+            {/* The SLA stamp's TTR countdown — separate from the bare `dueAt`
+                row above, which reads the ticket's own due_at column. */}
+            {ticket.sla && !ticket.sla.resolvedAt && (
+              <Row icon={ClockIcon} label="SLA">
+                <TicketSlaChip sla={ticket.sla} />
               </Row>
             )}
             <Row icon={CalendarIcon} label="Opened">

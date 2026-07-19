@@ -31,6 +31,7 @@ const {
   attachTag,
   detachTag,
   applySlaToConversation,
+  applySlaToTicket,
   setConversationAttribute,
   ensureAssistantPrincipal,
   resolveWorkflowVariables,
@@ -50,6 +51,7 @@ const {
   attachTag: vi.fn(),
   detachTag: vi.fn(),
   applySlaToConversation: vi.fn(),
+  applySlaToTicket: vi.fn(),
   setConversationAttribute: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
   resolveWorkflowVariables: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock('@/lib/server/domains/conversation/conversation-tag.service', () => ({
   detachTag,
 }))
 vi.mock('@/lib/server/domains/sla/sla.service', () => ({ applySlaToConversation }))
+vi.mock('@/lib/server/domains/sla/ticket-sla.service', () => ({ applySlaToTicket }))
 vi.mock('@/lib/server/domains/conversation-attributes/set-attribute.service', () => ({
   setConversationAttribute,
 }))
@@ -332,6 +335,46 @@ describe('applyAction', () => {
       await applyAction({ type: 'apply_sla', policyId: 'sla_policy_1' as SlaPolicyId }, ctx)
     ).toMatchObject({ label: 'SLA applied' })
     expect(applySlaToConversation).toHaveBeenCalledWith(conversationId, 'sla_policy_1')
+    expect(applySlaToTicket).not.toHaveBeenCalled()
+  })
+
+  it('apply_sla with an explicit conversation target behaves like the default', async () => {
+    expect(
+      await applyAction(
+        {
+          type: 'apply_sla',
+          policyId: 'sla_policy_1' as SlaPolicyId,
+          target: 'conversation',
+        },
+        ctx
+      )
+    ).toMatchObject({ label: 'SLA applied' })
+    expect(applySlaToConversation).toHaveBeenCalledWith(conversationId, 'sla_policy_1')
+    expect(applySlaToTicket).not.toHaveBeenCalled()
+  })
+
+  it("apply_sla with a ticket target stamps the conversation's linked customer ticket", async () => {
+    getLinkedCustomerTicket.mockResolvedValueOnce({ id: 'ticket_1' })
+    expect(
+      await applyAction(
+        { type: 'apply_sla', policyId: 'sla_policy_1' as SlaPolicyId, target: 'ticket' },
+        ctx
+      )
+    ).toMatchObject({ label: 'SLA applied to ticket' })
+    expect(applySlaToTicket).toHaveBeenCalledWith('ticket_1', 'sla_policy_1')
+    expect(applySlaToConversation).not.toHaveBeenCalled()
+  })
+
+  it('apply_sla with a ticket target is a no-op success when no ticket is linked', async () => {
+    getLinkedCustomerTicket.mockResolvedValueOnce(null)
+    expect(
+      await applyAction(
+        { type: 'apply_sla', policyId: 'sla_policy_1' as SlaPolicyId, target: 'ticket' },
+        ctx
+      )
+    ).toMatchObject({ label: null })
+    expect(applySlaToTicket).not.toHaveBeenCalled()
+    expect(applySlaToConversation).not.toHaveBeenCalled()
   })
 
   it('applies set_attribute through the shared writer with actor-derived provenance', async () => {

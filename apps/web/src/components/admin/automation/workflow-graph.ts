@@ -2362,7 +2362,9 @@ export function actionSummary(action: GraphAction, labels: EntityLabels = {}): s
     case 'reopen':
       return 'Reopen the conversation'
     case 'apply_sla':
-      return `Apply SLA ${named(action.policyId, labels.slaPolicies, '…')}`
+      return action.target === 'ticket'
+        ? `Apply SLA ${named(action.policyId, labels.slaPolicies, '…')} to the linked ticket`
+        : `Apply SLA ${named(action.policyId, labels.slaPolicies, '…')}`
     case 'set_attribute':
       return action.key ? `Set ${action.key}` : 'Set an attribute…'
     case 'add_note':

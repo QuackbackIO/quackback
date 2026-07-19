@@ -10,7 +10,12 @@ import {
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ShieldCheckIcon } from '@heroicons/react/24/solid'
-import { CalendarDaysIcon, EllipsisHorizontalIcon, MoonIcon } from '@heroicons/react/24/outline'
+import {
+  CalendarDaysIcon,
+  EllipsisHorizontalIcon,
+  MoonIcon,
+  PauseIcon,
+} from '@heroicons/react/24/outline'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { slaTargetsSummary } from '@/lib/shared/conversation/sla'
 import {
@@ -117,6 +122,7 @@ const TARGET_FIELDS = [
   { key: 'firstResponseTargetSecs', label: 'First response' },
   { key: 'nextResponseTargetSecs', label: 'Next response' },
   { key: 'timeToCloseTargetSecs', label: 'Time to close' },
+  { key: 'timeToResolveTargetSecs', label: 'Time to resolve' },
 ] as const
 type TargetKey = (typeof TARGET_FIELDS)[number]['key']
 
@@ -313,6 +319,13 @@ function PolicyRow({
               Pauses on snooze
             </span>
           )}
+          {/* Only shown when the ticket clock exists — the flag is inert otherwise. */}
+          {policy.pauseOnPending && policy.timeToResolveTargetSecs && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+              <PauseIcon className="h-3 w-3" aria-hidden />
+              Pauses while pending
+            </span>
+          )}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">{slaTargetsSummary(policy)}</p>
         {usedBy.length > 0 && (
@@ -373,8 +386,10 @@ function PolicyEditorDialog({
     firstResponseTargetSecs: toDraft(seed?.firstResponseTargetSecs ?? null),
     nextResponseTargetSecs: toDraft(seed?.nextResponseTargetSecs ?? null),
     timeToCloseTargetSecs: toDraft(seed?.timeToCloseTargetSecs ?? null),
+    timeToResolveTargetSecs: toDraft(seed?.timeToResolveTargetSecs ?? null),
   })
   const [pauseOnSnooze, setPauseOnSnooze] = useState(seed?.pauseOnSnooze ?? true)
+  const [pauseOnPending, setPauseOnPending] = useState(seed?.pauseOnPending ?? true)
   const [error, setError] = useState<string | null>(null)
 
   const { data: officeHours } = useQuery(slaOfficeHoursQuery)
@@ -401,6 +416,7 @@ function PolicyEditorDialog({
         name: name.trim(),
         ...parsed,
         pauseOnSnooze,
+        pauseOnPending,
       }
       if (editing) {
         const result = await updateSlaPolicyFn({ data: { id: editing.id, ...payload } })
@@ -425,8 +441,9 @@ function PolicyEditorDialog({
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit SLA policy' : 'New SLA policy'}</DialogTitle>
           <DialogDescription>
-            Targets count from the customer's message. Leave a target empty to skip it; at least one
-            is required.
+            Response targets count from the customer&apos;s message; the resolve target clocks the
+            linked ticket to a resolved status. Leave a target empty to skip it; at least one is
+            required.
           </DialogDescription>
         </DialogHeader>
 
@@ -510,6 +527,23 @@ function PolicyEditorDialog({
               id="sla-pause-on-snooze"
               checked={pauseOnSnooze}
               onCheckedChange={setPauseOnSnooze}
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-1">
+            <div className="pr-4">
+              <Label htmlFor="sla-pause-on-pending" className="text-sm font-medium cursor-pointer">
+                Pause while pending
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Stop a ticket&apos;s resolve clock while it waits in a pending status (on the
+                customer or a third party).
+              </p>
+            </div>
+            <Switch
+              id="sla-pause-on-pending"
+              checked={pauseOnPending}
+              onCheckedChange={setPauseOnPending}
             />
           </div>
 

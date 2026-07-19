@@ -7,7 +7,12 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { slaAttainment } from '@/lib/server/domains/sla/sla-reporting'
+import {
+  slaAttainment,
+  slaAttainmentByPolicy,
+  slaBreachHeatmap,
+  slaTimeAfterMiss,
+} from '@/lib/server/domains/sla/sla-reporting'
 import { workflowEffectiveness } from '@/lib/server/domains/workflows/workflow-reporting'
 import { attributeValueBreakdown } from '@/lib/server/domains/conversation-attributes/attribute-reporting'
 import { dateRangeSchema } from '@/lib/shared/schemas'
@@ -17,6 +22,27 @@ export const slaAttainmentFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
     return slaAttainment(new Date(data.from), new Date(data.to))
+  })
+
+export const slaAttainmentByPolicyFn = createServerFn({ method: 'GET' })
+  .validator(dateRangeSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
+    return slaAttainmentByPolicy(new Date(data.from), new Date(data.to))
+  })
+
+export const slaBreachHeatmapFn = createServerFn({ method: 'GET' })
+  .validator(dateRangeSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
+    return slaBreachHeatmap(new Date(data.from), new Date(data.to))
+  })
+
+export const slaTimeAfterMissFn = createServerFn({ method: 'GET' })
+  .validator(dateRangeSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.ANALYTICS_VIEW })
+    return slaTimeAfterMiss(new Date(data.from), new Date(data.to))
   })
 
 export const workflowEffectivenessFn = createServerFn({ method: 'GET' })

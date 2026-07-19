@@ -532,12 +532,21 @@ export interface ConversationUnresponsivePayload {
  * one live workflow subscribes with different `breachLeadMinutes`.
  * `conversation` carries the same ref every sibling conversation event
  * embeds — `conversationId` is kept alongside it for back-compat.
+ *
+ * The `time_to_resolve` clock is TICKET-anchored (ticket-sla.service.ts): the
+ * conversation side of the payload then points at the ticket's linked
+ * CUSTOMER conversation (all workflow runs are conversation-context, so the
+ * trigger rides that anchor), and `ticketId`/`ticket` identify the ticket
+ * whose TTR clock actually fired. Both are absent for conversation clocks.
  */
 export interface SlaTimerPayload {
   conversationId: string
   conversation: EventConversationRef
-  clock: 'first_response' | 'resolution'
+  clock: 'first_response' | 'next_response' | 'resolution' | 'time_to_resolve'
   dueAt: string // ISO
+  /** Ticket-anchored TTR clocks only: the ticket whose clock fired. */
+  ticketId?: string
+  ticket?: EventTicketRef
 }
 
 // ============================================================================
