@@ -17,9 +17,11 @@
 // first-party even when embedded cross-site), so multiple tenants on one host
 // page can't collide.
 const ANON_TOKEN_KEY_PREFIX = 'quackback:anon-token:'
+const IDENT_TOKEN_KEY_PREFIX = 'quackback:ident-token:'
 // Mirror Better Auth's 7-day session TTL so an expired token is dropped
 // client-side instead of triggering a guaranteed-401 validation round-trip.
 const ANON_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const IDENT_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 function anonTokenStore(): Storage | null {
   if (typeof window === 'undefined' || !window.localStorage) return null
@@ -40,10 +42,11 @@ export function getWidgetToken(): string | null {
   return _widgetToken
 }
 
-/** Clears the in-memory token AND any persisted anonymous copy. */
+/** Clears the in-memory token AND any persisted anonymous AND identified copies. */
 export function clearWidgetToken(): void {
   _widgetToken = null
   clearPersistedToken()
+  clearIdentifiedToken()
 }
 
 /**
@@ -112,6 +115,76 @@ export function clearPersistedToken(): void {
   } catch {
     // ignore
   }
+}
+
+/**
+ * Persist an IDENTIFIED session token to the widget iframe's first-party
+ * localStorage so it survives page interactions that clear JS memory.
+ * Stored with a 7-day expiry hint mirroring the server session TTL.
+ * Only ever call this for tokens that resolve to a non-anonymous user.
+ */
+export function persistIdentifiedToken(token: string): void {
+  const store = anonTokenStore()
+  if (!store) return
+  try {
+    store.setItem(
+      identTokenKey(),
+      JSON.stringify({ token, expiresAt: Date.now() + IDENT_TOKEN_TTL_MS })
+    )
+  } catch {
+    // Storage disabled or full — fall back to in-memory only.
+  }
+}
+
+/**
+ * Read a previously persisted identified token. Returns null (and drops
+ * the entry) when missing, malformed, or past its expiry hint.
+ */
+export function readPersistedIdentifiedToken(): string | null {
+  const store = anonTokenStore()
+  if (!store) return null
+  const key = identTokenKey()
+  let raw: string | null
+  try {
+    raw = store.getItem(key)
+  } catch {
+    return null
+  }
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as { token?: unknown; expiresAt?: unknown }
+    if (
+      typeof parsed.token !== 'string' ||
+      typeof parsed.expiresAt !== 'number' ||
+      parsed.expiresAt <= Date.now()
+    ) {
+      store.removeItem(key)
+      return null
+    }
+    return parsed.token
+  } catch {
+    try {
+      store.removeItem(key)
+    } catch {
+      // ignore
+    }
+    return null
+  }
+}
+
+/** Remove only the persisted identified token, leaving in-memory intact. */
+export function clearIdentifiedToken(): void {
+  const store = anonTokenStore()
+  if (!store) return
+  try {
+    store.removeItem(identTokenKey())
+  } catch {
+    // ignore
+  }
+}
+
+function identTokenKey(): string {
+  return `${IDENT_TOKEN_KEY_PREFIX}${window.location.origin}`
 }
 
 export function hasWidgetToken(): boolean {

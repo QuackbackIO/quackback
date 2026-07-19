@@ -17,6 +17,9 @@ import {
   persistAnonymousToken,
   readPersistedToken,
   clearPersistedToken,
+  persistIdentifiedToken,
+  readPersistedIdentifiedToken,
+  clearIdentifiedToken,
 } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
@@ -142,6 +145,31 @@ export function WidgetAuthProvider({
 
       const p = (async (): Promise<boolean> => {
         try {
+          // 0. Try a persisted identified token first — it may have survived a
+          //    page interaction (tab switch, focus loss, browser memory pressure)
+          //    that cleared the in-memory token but not localStorage.
+          const persistedIdent = readPersistedIdentifiedToken()
+          if (persistedIdent) {
+            try {
+              const res = await fetch('/api/widget/session', {
+                headers: { Authorization: *** ${persistedIdent}` },
+              })
+              if (res.ok) {
+                const body = await res.json()
+                if (body.data?.user) {
+                  storeToken(persistedIdent)
+                  persistIdentifiedToken(persistedIdent)
+                  setUser(body.data.user)
+                  return true
+                }
+                // Identified token is stale or demoted — drop it.
+                clearIdentifiedToken()
+              }
+            } catch {
+              // Server unreachable — fall through.
+            }
+          }
+
           // 1. Prefer a persisted anonymous token — validate it server-side
           //    before adopting (it may have expired or been merged away).
           const persisted = readPersistedToken()
@@ -214,9 +242,11 @@ export function WidgetAuthProvider({
     (result: { sessionToken: string; user: WidgetUser; votedPostIds?: string[] }) => {
       storeToken(result.sessionToken)
       // Any anonymous session was merged into this identified user server-side,
-      // so drop its persisted token. Identified tokens are never persisted —
-      // they're re-established via SDK identify / portal passthrough on load.
+      // so drop its persisted token. Persist the identified token so it survives
+      // page interactions (e.g. the user navigates away and returns to the
+      // widget tab) — the server validates it as a Bearer on next use.
       clearPersistedToken()
+      persistIdentifiedToken(result.sessionToken)
       setUser(result.user)
       if (result.votedPostIds) {
         queryClient.setQueryData(
