@@ -50,9 +50,9 @@ import {
   listTicketExternalLinks,
   createIssueForTicket,
 } from '../ticket-external-links.service'
-import { githubIssues } from '@/lib/server/integrations/github/issues'
-import { jiraIssues } from '@/lib/server/integrations/jira/issues'
-import { azureDevOpsIssues } from '@/lib/server/integrations/azure-devops/issues'
+import { githubIssues } from '@/integrations/github/server/issues'
+import { jiraIssues } from '@/integrations/jira/server/issues'
+import { azureDevOpsIssues } from '@/integrations/azure-devops/server/issues'
 import { listTicketMessages } from '../ticket-message.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
 import type { Actor } from '@/lib/server/policy/types'

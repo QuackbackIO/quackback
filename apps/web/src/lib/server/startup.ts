@@ -104,7 +104,7 @@ export function logStartupBanner(): void {
     .then(({ validateAiConfig }) => validateAiConfig())
     .catch((err) => log.error({ err }, 'ai config validation failed'))
 
-  import('@/lib/server/integrations/segment/user-sync')
+  import('@/integrations/segment/server/user-sync')
     .then(({ warnIfSegmentInboundIsInsecure }) => warnIfSegmentInboundIsInsecure())
     .catch((err) => log.error({ err }, 'failed to validate Segment inbound configuration'))
 

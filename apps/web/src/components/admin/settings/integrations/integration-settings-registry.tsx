@@ -66,170 +66,198 @@ export interface IntegrationSettingsEntry {
 // wired through its entry's renderConfig; the route wraps them in one Suspense.
 
 const AsanaConfig = lazy(() =>
-  import('./asana/asana-config').then((m) => ({ default: m.AsanaConfig }))
+  import('@/integrations/asana/ui/asana-config').then((m) => ({ default: m.AsanaConfig }))
 )
 const AzureDevOpsConfig = lazy(() =>
-  import('./azure-devops/azure-devops-config').then((m) => ({ default: m.AzureDevOpsConfig }))
+  import('@/integrations/azure-devops/ui/azure-devops-config').then((m) => ({
+    default: m.AzureDevOpsConfig,
+  }))
 )
 const ClickUpConfig = lazy(() =>
-  import('./clickup/clickup-config').then((m) => ({ default: m.ClickUpConfig }))
+  import('@/integrations/clickup/ui/clickup-config').then((m) => ({ default: m.ClickUpConfig }))
 )
 const DiscordConfig = lazy(() =>
-  import('./discord/discord-config').then((m) => ({ default: m.DiscordConfig }))
+  import('@/integrations/discord/ui/discord-config').then((m) => ({ default: m.DiscordConfig }))
 )
 const FreshdeskConfig = lazy(() =>
-  import('./freshdesk/freshdesk-config').then((m) => ({ default: m.FreshdeskConfig }))
+  import('@/integrations/freshdesk/ui/freshdesk-config').then((m) => ({
+    default: m.FreshdeskConfig,
+  }))
 )
 const GitHubConfig = lazy(() =>
-  import('./github/github-config').then((m) => ({ default: m.GitHubConfig }))
+  import('@/integrations/github/ui/github-config').then((m) => ({ default: m.GitHubConfig }))
 )
 const GitLabConfig = lazy(() =>
-  import('./gitlab/gitlab-config').then((m) => ({ default: m.GitLabConfig }))
+  import('@/integrations/gitlab/ui/gitlab-config').then((m) => ({ default: m.GitLabConfig }))
 )
-const JiraConfig = lazy(() => import('./jira/jira-config').then((m) => ({ default: m.JiraConfig })))
+const JiraConfig = lazy(() =>
+  import('@/integrations/jira/ui/jira-config').then((m) => ({ default: m.JiraConfig }))
+)
 const LinearConfig = lazy(() =>
-  import('./linear/linear-config').then((m) => ({ default: m.LinearConfig }))
+  import('@/integrations/linear/ui/linear-config').then((m) => ({ default: m.LinearConfig }))
 )
-const MakeConfig = lazy(() => import('./make/make-config').then((m) => ({ default: m.MakeConfig })))
+const MakeConfig = lazy(() =>
+  import('@/integrations/make/ui/make-config').then((m) => ({ default: m.MakeConfig }))
+)
 const MondayConfig = lazy(() =>
-  import('./monday/monday-config').then((m) => ({ default: m.MondayConfig }))
+  import('@/integrations/monday/ui/monday-config').then((m) => ({ default: m.MondayConfig }))
 )
-const N8nConfig = lazy(() => import('./n8n/n8n-config').then((m) => ({ default: m.N8nConfig })))
+const N8nConfig = lazy(() =>
+  import('@/integrations/n8n/ui/n8n-config').then((m) => ({ default: m.N8nConfig }))
+)
 const NotionConfig = lazy(() =>
-  import('./notion/notion-config').then((m) => ({ default: m.NotionConfig }))
+  import('@/integrations/notion/ui/notion-config').then((m) => ({ default: m.NotionConfig }))
 )
-const NtfyConfig = lazy(() => import('./ntfy/ntfy-config').then((m) => ({ default: m.NtfyConfig })))
+const NtfyConfig = lazy(() =>
+  import('@/integrations/ntfy/ui/ntfy-config').then((m) => ({ default: m.NtfyConfig }))
+)
 const SalesforceConfig = lazy(() =>
-  import('./salesforce/salesforce-config').then((m) => ({ default: m.SalesforceConfig }))
+  import('@/integrations/salesforce/ui/salesforce-config').then((m) => ({
+    default: m.SalesforceConfig,
+  }))
 )
 const ShortcutConfig = lazy(() =>
-  import('./shortcut/shortcut-config').then((m) => ({ default: m.ShortcutConfig }))
+  import('@/integrations/shortcut/ui/shortcut-config').then((m) => ({ default: m.ShortcutConfig }))
 )
 const SlackConfig = lazy(() =>
-  import('./slack/slack-config').then((m) => ({ default: m.SlackConfig }))
+  import('@/integrations/slack/ui/slack-config').then((m) => ({ default: m.SlackConfig }))
 )
 const StripeConfig = lazy(() =>
-  import('./stripe/stripe-config').then((m) => ({ default: m.StripeConfig }))
+  import('@/integrations/stripe/ui/stripe-config').then((m) => ({ default: m.StripeConfig }))
 )
 const TeamsConfig = lazy(() =>
-  import('./teams/teams-config').then((m) => ({ default: m.TeamsConfig }))
+  import('@/integrations/teams/ui/teams-config').then((m) => ({ default: m.TeamsConfig }))
 )
 const TrelloConfig = lazy(() =>
-  import('./trello/trello-config').then((m) => ({ default: m.TrelloConfig }))
+  import('@/integrations/trello/ui/trello-config').then((m) => ({ default: m.TrelloConfig }))
 )
 const ZapierConfig = lazy(() =>
-  import('./zapier/zapier-config').then((m) => ({ default: m.ZapierConfig }))
+  import('@/integrations/zapier/ui/zapier-config').then((m) => ({ default: m.ZapierConfig }))
 )
 
 // Connection-actions (uniform {integrationId?, isConnected} shape).
 const AsanaConnectionActions = lazy(() =>
-  import('./asana/asana-connection-actions').then((m) => ({ default: m.AsanaConnectionActions }))
+  import('@/integrations/asana/ui/asana-connection-actions').then((m) => ({
+    default: m.AsanaConnectionActions,
+  }))
 )
 const AzureDevOpsConnectionActions = lazy(() =>
-  import('./azure-devops/azure-devops-connection-actions').then((m) => ({
+  import('@/integrations/azure-devops/ui/azure-devops-connection-actions').then((m) => ({
     default: m.AzureDevOpsConnectionActions,
   }))
 )
 const ClickUpConnectionActions = lazy(() =>
-  import('./clickup/clickup-connection-actions').then((m) => ({
+  import('@/integrations/clickup/ui/clickup-connection-actions').then((m) => ({
     default: m.ClickUpConnectionActions,
   }))
 )
 const DiscordConnectionActions = lazy(() =>
-  import('./discord/discord-connection-actions').then((m) => ({
+  import('@/integrations/discord/ui/discord-connection-actions').then((m) => ({
     default: m.DiscordConnectionActions,
   }))
 )
 const FreshdeskConnectionActions = lazy(() =>
-  import('./freshdesk/freshdesk-connection-actions').then((m) => ({
+  import('@/integrations/freshdesk/ui/freshdesk-connection-actions').then((m) => ({
     default: m.FreshdeskConnectionActions,
   }))
 )
 const GitHubConnectionActions = lazy(() =>
-  import('./github/github-connection-actions').then((m) => ({
+  import('@/integrations/github/ui/github-connection-actions').then((m) => ({
     default: m.GitHubConnectionActions,
   }))
 )
 const GitLabConnectionActions = lazy(() =>
-  import('./gitlab/gitlab-connection-actions').then((m) => ({
+  import('@/integrations/gitlab/ui/gitlab-connection-actions').then((m) => ({
     default: m.GitLabConnectionActions,
   }))
 )
 const HubSpotConnectionActions = lazy(() =>
-  import('./hubspot/hubspot-connection-actions').then((m) => ({
+  import('@/integrations/hubspot/ui/hubspot-connection-actions').then((m) => ({
     default: m.HubSpotConnectionActions,
   }))
 )
 const IntercomConnectionActions = lazy(() =>
-  import('./intercom/intercom-connection-actions').then((m) => ({
+  import('@/integrations/intercom/ui/intercom-connection-actions').then((m) => ({
     default: m.IntercomConnectionActions,
   }))
 )
 const JiraConnectionActions = lazy(() =>
-  import('./jira/jira-connection-actions').then((m) => ({ default: m.JiraConnectionActions }))
+  import('@/integrations/jira/ui/jira-connection-actions').then((m) => ({
+    default: m.JiraConnectionActions,
+  }))
 )
 const LinearConnectionActions = lazy(() =>
-  import('./linear/linear-connection-actions').then((m) => ({
+  import('@/integrations/linear/ui/linear-connection-actions').then((m) => ({
     default: m.LinearConnectionActions,
   }))
 )
 const MakeConnectionActions = lazy(() =>
-  import('./make/make-connection-actions').then((m) => ({ default: m.MakeConnectionActions }))
+  import('@/integrations/make/ui/make-connection-actions').then((m) => ({
+    default: m.MakeConnectionActions,
+  }))
 )
 const MondayConnectionActions = lazy(() =>
-  import('./monday/monday-connection-actions').then((m) => ({
+  import('@/integrations/monday/ui/monday-connection-actions').then((m) => ({
     default: m.MondayConnectionActions,
   }))
 )
 const N8nConnectionActions = lazy(() =>
-  import('./n8n/n8n-connection-actions').then((m) => ({ default: m.N8nConnectionActions }))
+  import('@/integrations/n8n/ui/n8n-connection-actions').then((m) => ({
+    default: m.N8nConnectionActions,
+  }))
 )
 const NotionConnectionActions = lazy(() =>
-  import('./notion/notion-connection-actions').then((m) => ({
+  import('@/integrations/notion/ui/notion-connection-actions').then((m) => ({
     default: m.NotionConnectionActions,
   }))
 )
 const NtfyConnectionActions = lazy(() =>
-  import('./ntfy/ntfy-connection-actions').then((m) => ({ default: m.NtfyConnectionActions }))
+  import('@/integrations/ntfy/ui/ntfy-connection-actions').then((m) => ({
+    default: m.NtfyConnectionActions,
+  }))
 )
 const SalesforceConnectionActions = lazy(() =>
-  import('./salesforce/salesforce-connection-actions').then((m) => ({
+  import('@/integrations/salesforce/ui/salesforce-connection-actions').then((m) => ({
     default: m.SalesforceConnectionActions,
   }))
 )
 const SegmentConnectionActions = lazy(() =>
-  import('./segment/segment-connection-actions').then((m) => ({
+  import('@/integrations/segment/ui/segment-connection-actions').then((m) => ({
     default: m.SegmentConnectionActions,
   }))
 )
 const ShortcutConnectionActions = lazy(() =>
-  import('./shortcut/shortcut-connection-actions').then((m) => ({
+  import('@/integrations/shortcut/ui/shortcut-connection-actions').then((m) => ({
     default: m.ShortcutConnectionActions,
   }))
 )
 const SlackConnectionActions = lazy(() =>
-  import('./slack/slack-connection-actions').then((m) => ({ default: m.SlackConnectionActions }))
+  import('@/integrations/slack/ui/slack-connection-actions').then((m) => ({
+    default: m.SlackConnectionActions,
+  }))
 )
 const StripeConnectionActions = lazy(() =>
-  import('./stripe/stripe-connection-actions').then((m) => ({
+  import('@/integrations/stripe/ui/stripe-connection-actions').then((m) => ({
     default: m.StripeConnectionActions,
   }))
 )
 const TeamsConnectionActions = lazy(() =>
-  import('./teams/teams-connection-actions').then((m) => ({ default: m.TeamsConnectionActions }))
+  import('@/integrations/teams/ui/teams-connection-actions').then((m) => ({
+    default: m.TeamsConnectionActions,
+  }))
 )
 const TrelloConnectionActions = lazy(() =>
-  import('./trello/trello-connection-actions').then((m) => ({
+  import('@/integrations/trello/ui/trello-connection-actions').then((m) => ({
     default: m.TrelloConnectionActions,
   }))
 )
 const ZapierConnectionActions = lazy(() =>
-  import('./zapier/zapier-connection-actions').then((m) => ({
+  import('@/integrations/zapier/ui/zapier-connection-actions').then((m) => ({
     default: m.ZapierConnectionActions,
   }))
 )
 const ZendeskConnectionActions = lazy(() =>
-  import('./zendesk/zendesk-connection-actions').then((m) => ({
+  import('@/integrations/zendesk/ui/zendesk-connection-actions').then((m) => ({
     default: m.ZendeskConnectionActions,
   }))
 )

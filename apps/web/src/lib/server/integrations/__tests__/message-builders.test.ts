@@ -7,14 +7,14 @@
 
 import { describe, it, expect } from 'vitest'
 import type { PostCreatedEvent, EventData } from '../../events/types'
-import { buildLinearIssueBody } from '../linear/message'
-import { buildGitHubIssueBody } from '../github/message'
-import { buildJiraIssueBody } from '../jira/message'
-import { buildClickUpTaskBody } from '../clickup/message'
-import { buildShortcutStoryBody } from '../shortcut/message'
-import { buildAsanaTaskBody } from '../asana/message'
-import { buildAzureDevOpsWorkItemBody } from '../azure-devops/message'
-import { buildZapierPayload } from '../zapier/message'
+import { buildLinearIssueBody } from '@/integrations/linear/server/message'
+import { buildGitHubIssueBody } from '@/integrations/github/server/message'
+import { buildJiraIssueBody } from '@/integrations/jira/server/message'
+import { buildClickUpTaskBody } from '@/integrations/clickup/server/message'
+import { buildShortcutStoryBody } from '@/integrations/shortcut/server/message'
+import { buildAsanaTaskBody } from '@/integrations/asana/server/message'
+import { buildAzureDevOpsWorkItemBody } from '@/integrations/azure-devops/server/message'
+import { buildZapierPayload } from '@/integrations/zapier/server/message'
 
 // ---------------------------------------------------------------------------
 // Shared test event factory

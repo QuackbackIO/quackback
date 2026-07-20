@@ -16,8 +16,8 @@ vi.mock('@/lib/server/redis', async (importOriginal) => ({
   cacheDel: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('@/lib/server/integrations/jira/oauth', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/server/integrations/jira/oauth')>()),
+vi.mock('@/integrations/jira/server/oauth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/integrations/jira/server/oauth')>()),
   refreshJiraToken: vi.fn(),
 }))
 
@@ -36,7 +36,7 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import { integrations, eq } from '@/lib/server/db'
 import { encryptSecrets, decryptSecrets } from '../encryption'
 import { getValidAccessToken } from '../token-refresh'
-import { refreshJiraToken } from '../jira/oauth'
+import { refreshJiraToken } from '@/integrations/jira/server/oauth'
 import { cacheDel, CACHE_KEYS } from '@/lib/server/redis'
 import type { IntegrationId } from '@quackback/ids'
 

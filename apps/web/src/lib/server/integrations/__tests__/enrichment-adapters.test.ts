@@ -6,16 +6,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 beforeEach(() => vi.clearAllMocks())
 
-vi.mock('../zendesk/context', () => ({ searchZendeskUser: vi.fn() }))
-vi.mock('../hubspot/context', () => ({ searchHubSpotContact: vi.fn() }))
-vi.mock('../intercom/context', () => ({ searchContact: vi.fn() }))
+vi.mock('@/integrations/zendesk/server/context', () => ({ searchZendeskUser: vi.fn() }))
+vi.mock('@/integrations/hubspot/server/context', () => ({ searchHubSpotContact: vi.fn() }))
+vi.mock('@/integrations/intercom/server/context', () => ({ searchContact: vi.fn() }))
 
-import { zendeskContext } from '../zendesk/enrichment'
-import { hubspotContext } from '../hubspot/enrichment'
-import { intercomContext } from '../intercom/enrichment'
-import { searchZendeskUser } from '../zendesk/context'
-import { searchHubSpotContact } from '../hubspot/context'
-import { searchContact } from '../intercom/context'
+import { zendeskContext } from '@/integrations/zendesk/server/enrichment'
+import { hubspotContext } from '@/integrations/hubspot/server/enrichment'
+import { intercomContext } from '@/integrations/intercom/server/enrichment'
+import { searchZendeskUser } from '@/integrations/zendesk/server/context'
+import { searchHubSpotContact } from '@/integrations/hubspot/server/context'
+import { searchContact } from '@/integrations/intercom/server/context'
 
 describe('zendeskContext', () => {
   it('maps a user + org + tags to a card with a deep link', async () => {
