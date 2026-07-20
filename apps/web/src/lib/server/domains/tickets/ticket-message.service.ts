@@ -6,24 +6,23 @@
  * denormalization: a ticket carries no last-message columns, so an agent reply
  * only stamps `first_response_at` (once) and bumps `updated_at`.
  *
- * 7C.1 is the agent side (reply + internal note + list). Requester replies, the
- * public_stage-change notification path, and live SSE arrive with later slices.
+ * CONVERGENCE PHASE 0 (scratchpad/convergence-design.md): the READ path for a
+ * customer ticket's thread is the pair union — `listTicketMessages` delegates
+ * to pair-thread.service.ts, merging legacy ticket-parented rows with the
+ * linked conversation's messages (internal notes stay ticket-scoped and out of
+ * requester views, whichever parent they hang off). The write path here is
+ * UNCHANGED in Phase 0 — Phase 1a's redirect re-parents new customer-visible
+ * writes to the conversation at the `insertTicketMessage` choke point.
  */
 import {
   db,
   conversationMessages,
   tickets,
   eq,
-  and,
-  lt,
-  or,
-  asc,
-  desc,
-  isNull,
   type Ticket,
   type ConversationSystemEventKind,
 } from '@/lib/server/db'
-import type { TicketId, ConversationMessageId, PrincipalId } from '@quackback/ids'
+import type { TicketId, PrincipalId } from '@quackback/ids'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import type { ConversationAttachment, TiptapContent } from '@/lib/shared/db-types'
 import type {
@@ -46,6 +45,7 @@ import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 // re-querying those tables here. Safe to import statically: conversation.query.ts
 // has no import edge back into this domain (verified — no cycle).
 import { enrichMessagesForAgent } from '../conversation/conversation.query'
+import { listPairThreadMessages } from './pair-thread.service'
 import { firstResponseStamp } from './ticket.lifecycle'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
@@ -56,8 +56,6 @@ import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
-
-const MESSAGE_PAGE_SIZE = 30
 
 /**
  * Insert a team-only, author-less 'system' status event on a ticket thread —
@@ -256,85 +254,27 @@ export interface TicketMessagePage {
  * the cursor). `includeInternal` gates agent-only notes; a requester view passes
  * false. Soft-deleted messages are excluded.
  *
+ * CONVERGENCE PHASE 0: a customer ticket's thread IS the pair union — this
+ * delegates to the pair-thread union loader (pair-thread.service.ts), which
+ * merges the legacy ticket-parented messages with the linked conversation's
+ * messages. A standalone or back-office/tracker ticket degenerates to the
+ * pre-convergence ticket-only read (byte-identical); the `before` message-id
+ * cursor and this return shape are unchanged, so every caller (the inbox
+ * pager, the requester portal/widget, the transcript export, the Summarize
+ * chip, MCP/API v1) wires in without a signature change. The pair loader's
+ * module doc carries the pair rule, merge contract, and audience rule.
+ *
  * `all: true` returns the ENTIRE ordered thread (oldest-first, no page window,
  * no cursor), for callers that need the thread head as well as its tail — the
  * copilot grounding loader (`loadTicketGroundingContext`), which must never drop
  * the original request on a long thread the way the default newest-page window
- * silently would. Every other caller (the inbox pager, the requester portal, the
- * transcript export, the Summarize chip) omits it and keeps the byte-identical
- * newest-`MESSAGE_PAGE_SIZE` page behavior.
+ * silently would.
  */
 export async function listTicketMessages(
   ticketId: TicketId,
   opts: { before?: string; includeInternal?: boolean; all?: boolean } = {}
 ): Promise<TicketMessagePage> {
-  if (opts.all) {
-    const rows = await db
-      .select()
-      .from(conversationMessages)
-      .where(
-        and(
-          eq(conversationMessages.ticketId, ticketId),
-          isNull(conversationMessages.deletedAt),
-          opts.includeInternal ? undefined : eq(conversationMessages.isInternal, false)
-        )
-      )
-      .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))
-
-    const authors = await loadAuthors(rows.map((m) => m.principalId))
-    const messages = rows.map((m) =>
-      toMessageDTO(
-        m,
-        m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null
-      )
-    )
-    return { messages, hasMore: false }
-  }
-
-  const cursor = opts.before
-    ? await db
-        .select({ createdAt: conversationMessages.createdAt, id: conversationMessages.id })
-        .from(conversationMessages)
-        .where(eq(conversationMessages.id, opts.before as ConversationMessageId))
-        .limit(1)
-        .then((r) => r[0])
-    : null
-
-  const rows = await db
-    .select()
-    .from(conversationMessages)
-    .where(
-      and(
-        eq(conversationMessages.ticketId, ticketId),
-        isNull(conversationMessages.deletedAt),
-        opts.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
-        cursor
-          ? or(
-              lt(conversationMessages.createdAt, cursor.createdAt),
-              and(
-                eq(conversationMessages.createdAt, cursor.createdAt),
-                lt(conversationMessages.id, cursor.id)
-              )
-            )
-          : undefined
-      )
-    )
-    .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
-    .limit(MESSAGE_PAGE_SIZE + 1)
-
-  const hasMore = rows.length > MESSAGE_PAGE_SIZE
-  const page = hasMore ? rows.slice(0, MESSAGE_PAGE_SIZE) : rows
-  // Oldest-first for rendering; the query pulled newest-first for the keyset.
-  page.reverse()
-
-  const authors = await loadAuthors(page.map((m) => m.principalId))
-  const messages = page.map((m) =>
-    toMessageDTO(
-      m,
-      m.principalId ? (authors.get(m.principalId) ?? fallbackAuthor(m.principalId)) : null
-    )
-  )
-  return { messages, hasMore }
+  return listPairThreadMessages(ticketId, opts)
 }
 
 export interface AgentTicketMessagePage {

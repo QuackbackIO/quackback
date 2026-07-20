@@ -186,11 +186,13 @@ export const tickets = pgTable(
 
 /**
  * Soft link between a ticket and a conversation (support platform §4.2). A
- * conversation can back several tickets and a ticket can span several
- * conversations, so this is a join, not an FK on either table. `ticket_type` is
- * denormalized from tickets.type at link time so the "at most one CUSTOMER
- * ticket per conversation" rule is a partial unique index here without a join.
- * Both sides cascade: deleting a ticket or conversation removes the link.
+ * conversation can back several tickets, so this is a join, not an FK on either
+ * table — but on the CUSTOMER side the pair is 1:1 (convergence Phase 0,
+ * scratchpad/convergence-design.md): one customer ticket per conversation AND
+ * one conversation per customer ticket, enforced by the two partial unique
+ * indexes below. `ticket_type` is denormalized from tickets.type at link time
+ * so both rules are partial unique indexes here without a join. Both sides
+ * cascade: deleting a ticket or conversation removes the link.
  */
 export const ticketConversations = pgTable(
   'ticket_conversations',
@@ -231,6 +233,12 @@ export const ticketConversations = pgTable(
     // tracker links never collide.
     uniqueIndex('ticket_conversations_customer_uq')
       .on(table.conversationId)
+      .where(sql`ticket_type = 'customer'`),
+    // The mirror image (0214, convergence Phase 0): at most one conversation
+    // per CUSTOMER ticket, so the pair is 1:1 and the pair-thread union loader
+    // resolves "the pair" from either side. Same partial shape.
+    uniqueIndex('ticket_conversations_customer_ticket_uq')
+      .on(table.ticketId)
       .where(sql`ticket_type = 'customer'`),
   ]
 )

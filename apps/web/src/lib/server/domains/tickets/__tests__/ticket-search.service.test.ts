@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import {
   createId,
+  type ConversationId,
   type PrincipalId,
   type UserId,
   type TicketId,
@@ -30,6 +31,9 @@ import {
   principal,
   user,
   settings,
+  conversations,
+  conversationMessages,
+  ticketConversations,
   PERMISSIONS,
   type PermissionKey,
 } from '@/lib/server/db'
@@ -177,5 +181,72 @@ describe.skipIf(!fixture.available)('searchTickets (real DB, rolled back)', () =
   it('an empty query returns nothing', async () => {
     const w = await seedWorld()
     expect(await searchTickets(w.agent, { query: '   ', audience: 'agent' })).toEqual([])
+  })
+
+  // --- Convergence Phase 0: pair-union FTS (the linked conversation's messages) ---
+
+  /** Link mineMsg to a conversation carrying one visible + one internal message. */
+  async function seedLinkedConversation(w: Awaited<ReturnType<typeof seedWorld>>) {
+    const conversationId = createId('conversation') as ConversationId
+    await testDb
+      .insert(conversations)
+      .values({ id: conversationId, visitorPrincipalId: w.me, channel: 'messenger' })
+    await testDb
+      .insert(ticketConversations)
+      .values({ ticketId: w.mineMsg, conversationId, ticketType: 'customer' })
+    await testDb.insert(conversationMessages).values([
+      {
+        conversationId,
+        principalId: w.agent.principalId,
+        senderType: 'agent',
+        content: 'the zanzibar workaround is confirmed',
+        isInternal: false,
+      },
+      {
+        conversationId,
+        principalId: w.agent.principalId,
+        senderType: 'agent',
+        content: 'cloakroom handling stays internal',
+        isInternal: true,
+      },
+    ])
+  }
+
+  it('finds a ticket by a LINKED CONVERSATION message (pair union), per audience', async () => {
+    const w = await seedWorld()
+    await seedLinkedConversation(w)
+
+    // Agent: matches the customer-visible conversation message...
+    const agentVisible = (
+      await searchTickets(w.agent, { query: 'zanzibar', audience: 'agent' })
+    ).map((r) => r.ticket.id)
+    expect(agentVisible).toContain(w.mineMsg)
+    // ...and the conversation parent's internal note.
+    const agentInternal = (
+      await searchTickets(w.agent, { query: 'cloakroom', audience: 'agent' })
+    ).map((r) => r.ticket.id)
+    expect(agentInternal).toContain(w.mineMsg)
+
+    // Requester: the visible conversation message matches their ticket...
+    const requesterVisible = (
+      await searchTickets(requesterActor(w.me), { query: 'zanzibar', audience: 'requester' })
+    ).map((r) => r.ticket.id)
+    expect(requesterVisible).toContain(w.mineMsg)
+    // ...but the linked conversation's internal notes never leak — the strip
+    // applies to both parents.
+    const requesterInternal = (
+      await searchTickets(requesterActor(w.me), { query: 'cloakroom', audience: 'requester' })
+    ).map((r) => r.ticket.id)
+    expect(requesterInternal).not.toContain(w.mineMsg)
+  })
+
+  it('snippets come from the linked conversation when only it matches', async () => {
+    const w = await seedWorld()
+    await seedLinkedConversation(w)
+
+    const [hit] = await searchTickets(w.agent, { query: 'zanzibar', audience: 'agent' })
+    expect(hit.ticket.id).toBe(w.mineMsg)
+    expect(hit.snippet).toMatch(/<mark>/)
+    expect(hit.snippet).toContain('zanzibar')
   })
 })

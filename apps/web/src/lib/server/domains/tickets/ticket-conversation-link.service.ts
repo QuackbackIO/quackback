@@ -5,11 +5,13 @@
  * ticket-links.service.ts's tracker-link note, but on the CONVERSATION side —
  * `emitSystemMessage`'s content is agent-facing plain English, never sent to
  * the customer), and lets that same insert/publish keep any open inbox tab in
- * sync. Customer tickets only: the partial-unique index
- * (`ticket_conversations_customer_uq`) allows at most one CUSTOMER ticket per
- * conversation, surfaced here as a friendly `ConflictError` instead of a raw
- * constraint violation should two teammates race to link the same
- * conversation.
+ * sync. Customer tickets only, and the pair is 1:1 (convergence Phase 0): the
+ * partial-unique indexes (`ticket_conversations_customer_uq`,
+ * `ticket_conversations_customer_ticket_uq`) allow at most one CUSTOMER ticket
+ * per conversation AND at most one conversation per CUSTOMER ticket — a
+ * violation of either surfaces here as a friendly `ConflictError` instead of a
+ * raw constraint violation should two teammates race to link the same
+ * conversation or ticket.
  *
  * SLA handoff (support platform §4.6, "applied first time" semantics): when
  * the conversation has an active SLA whose policy tracks time-to-resolve, the
@@ -75,6 +77,17 @@ export async function linkTicketToConversation(
     })
   } catch (err) {
     if (isUniqueViolation(err)) {
+      // Two partial-unique indexes guard the 1:1 pair (see the module doc):
+      // discriminate which side already has a link. Drizzle wraps the driver
+      // error; the pg fields live on `cause`, and the driver may expose the
+      // violated index as `constraint`, `constraint_name`, or only in the
+      // `detail` text (same idiom as company.service's translateUniqueError).
+      const pgErr = (err as { cause?: unknown }).cause ?? err
+      const e = pgErr as { constraint?: string; constraint_name?: string; detail?: string }
+      const marker = `${e.constraint ?? ''} ${e.constraint_name ?? ''} ${e.detail ?? ''}`
+      if (marker.includes('ticket_conversations_customer_ticket_uq')) {
+        throw new ConflictError('ALREADY_LINKED', 'This ticket is already linked to a conversation')
+      }
       throw new ConflictError('ALREADY_LINKED', 'This conversation already has a linked ticket')
     }
     throw err

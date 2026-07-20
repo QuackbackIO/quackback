@@ -41,6 +41,7 @@ vi.mock('@/lib/server/realtime/conversation-channels', () => ({
 
 import { createTicket } from '../ticket.service'
 import { linkTicketToConversation } from '../ticket-conversation-link.service'
+import { ConflictError } from '@/lib/shared/errors'
 import { createSlaPolicy } from '../../sla/sla-policy.service'
 import { applySlaToConversation } from '../../sla/sla.service'
 import { resolveActorPermissions } from '@/lib/server/policy/permissions'
@@ -173,6 +174,28 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     await expect(linkTicketToConversation(second.id, conversationId, actor)).rejects.toThrow(
       /already/i
     )
+  })
+
+  it('surfaces a friendly conflict when the TICKET is already linked (1:1 pair, 0214)', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const ticket = await createTicket({ type: 'customer', title: 'Linked once' }, actor)
+    const firstConversationId = await seedConversation()
+    const secondConversationId = await seedConversation()
+
+    await linkTicketToConversation(ticket.id, firstConversationId, actor)
+
+    // Convergence Phase 0: the pair is 1:1, so re-linking the same ticket to
+    // ANOTHER conversation trips 0214's ticket-side partial unique index, and
+    // the guard translates it into the same ALREADY_LINKED ConflictError shape
+    // as the conversation-side race.
+    const err = await linkTicketToConversation(ticket.id, secondConversationId, actor).catch(
+      (e) => e
+    )
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).code).toBe('ALREADY_LINKED')
+    expect((err as Error).message).toMatch(/already linked/i)
   })
 
   // --- SLA handoff (support platform §4.6, "applied first time" semantics) ---

@@ -29,6 +29,7 @@ import {
   userSegments,
   segments,
   assistantInvolvements,
+  ticketConversations,
   type Conversation,
   type ConversationMessage,
   type PostSuggestion,
@@ -46,6 +47,7 @@ import {
   type SegmentId,
   type CompanyId,
   type TeamId,
+  type TicketId,
 } from '@quackback/ids'
 import type {
   ConversationSort,
@@ -770,10 +772,78 @@ export async function findBackfillCursor(
   return row ?? null
 }
 
+// ---------------------------------------------------------------------------
+// Convergence Phase 0 — pair thread (scratchpad/convergence-design.md,
+// mechanics appendix "Read (Phase 0)"). pair-thread.service.ts (tickets
+// domain) is the canonical ticket-side union loader; the two helpers below
+// are the conversation-side twins, kept schema-local here (the same
+// cross-table read idiom as inbox.query.ts's loadLinkedCustomerTicketSummaries)
+// so conversation.query keeps no import edge into the tickets domain.
+// ---------------------------------------------------------------------------
+
+/**
+ * The CUSTOMER ticket linked to a conversation, or null. At most one can
+ * exist (0150's partial unique index; 0214's makes the pair 1:1).
+ */
+async function resolvePairTicketId(conversationId: ConversationId): Promise<TicketId | null> {
+  const [link] = await db
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversationId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return link?.ticketId ?? null
+}
+
+/**
+ * Resolve a message-id cursor to its (created_at, id) anchor WITHOUT scoping
+ * to the conversation: with a linked pair, the oldest row of a merged page
+ * (the next `before`) can be a legacy TICKET-parented row, which
+ * findBackfillCursor's conversation scope would silently drop (restarting the
+ * page at the newest). Either parent's id anchors both — the single-cursor
+ * contract pair-thread.service's MERGE CONTRACT note documents.
+ */
+async function findPairCursor(
+  messageId: string
+): Promise<{ createdAt: Date; id: ConversationMessage['id'] } | null> {
+  const [row] = await db
+    .select({ createdAt: conversationMessages.createdAt, id: conversationMessages.id })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.id, messageId as ConversationMessage['id']))
+    .limit(1)
+  return row ?? null
+}
+
+/**
+ * The pair merge contract's total order, newest-first — (created_at DESC, id
+ * DESC), identical to pair-thread.service's comparator. Both parents are
+ * conversation_messages rows (one id sequence space), so the JS string
+ * tiebreak matches SQL's `id DESC`.
+ */
+function compareMessagesNewestFirst(a: ConversationMessage, b: ConversationMessage): number {
+  const t = b.createdAt.getTime() - a.createdAt.getTime()
+  if (t !== 0) return t
+  return a.id > b.id ? -1 : a.id < b.id ? 1 : 0
+}
+
 /**
  * List messages in a conversation, newest-first internally for keyset
  * pagination, returned oldest-first for rendering. `before` is a message id
  * cursor (fetch messages older than it).
+ *
+ * CONVERGENCE PHASE 0: agent surfaces pass `includeLinkedTicket` so a linked
+ * CUSTOMER ticket's legacy ticket-parented rows render inline — one shared
+ * thread per pair (the agent conversation view of a pair; the ticket-side
+ * twin is pair-thread.service.ts's loader, and the merge contract is the
+ * same). The ticket parent's page is fetched with the same (created_at, id)
+ * keyset against its own index and merged in code; the audience rule
+ * (`includeInternal`) applies to both parents alike. The flag unset (every
+ * visitor/grounding/realtime path) or no linked ticket degenerates to the
+ * pre-convergence conversation-only read, byte-identical.
  */
 // The assistant's service principal is a workspace singleton; memoize its id so
 // message loads can flag Quinn's turns (`isAssistant`) without a per-load lookup.
@@ -791,14 +861,29 @@ async function assistantPrincipalIdOnce(): Promise<PrincipalId | null> {
 
 export async function listMessages(
   conversationId: ConversationId,
-  opts?: { before?: string; limit?: number; includeInternal?: boolean }
+  opts?: {
+    before?: string
+    limit?: number
+    includeInternal?: boolean
+    includeLinkedTicket?: boolean
+  }
 ): Promise<MessagePage> {
   const limit = Math.min(opts?.limit ?? MESSAGE_PAGE_SIZE, 100)
+
+  const linkedTicketId = opts?.includeLinkedTicket
+    ? await resolvePairTicketId(conversationId)
+    : null
 
   // Composite keyset cursor on (created_at, id): two messages can share a
   // microsecond timestamp (e.g. same-transaction or concurrent sends), so a
   // strict created_at comparison would silently skip same-timestamp siblings.
-  const cursor = opts?.before ? await findBackfillCursor(conversationId, opts.before) : null
+  // With a linked pair the anchor can be a ticket-parented row, so it resolves
+  // unscoped (findPairCursor).
+  const cursor = opts?.before
+    ? linkedTicketId
+      ? await findPairCursor(opts.before)
+      : await findBackfillCursor(conversationId, opts.before)
+    : null
 
   const rows = await db
     .select()
@@ -823,8 +908,40 @@ export async function listMessages(
     .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
     .limit(limit + 1)
 
-  const hasMore = rows.length > limit
-  const page = hasMore ? rows.slice(0, limit) : rows
+  // The pair union's second parent: the linked ticket's legacy rows, fetched
+  // with the same keyset/audience against the ticket-parent index, then merged
+  // in code (see the doc comment above).
+  const ticketRows = linkedTicketId
+    ? await db
+        .select()
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.ticketId, linkedTicketId),
+            isNull(conversationMessages.deletedAt),
+            opts?.includeInternal ? undefined : eq(conversationMessages.isInternal, false),
+            cursor
+              ? or(
+                  lt(conversationMessages.createdAt, cursor.createdAt),
+                  and(
+                    eq(conversationMessages.createdAt, cursor.createdAt),
+                    lt(conversationMessages.id, cursor.id)
+                  )
+                )
+              : undefined
+          )
+        )
+        .orderBy(desc(conversationMessages.createdAt), desc(conversationMessages.id))
+        .limit(limit + 1)
+    : []
+  const merged =
+    ticketRows.length > 0 ? [...rows, ...ticketRows].sort(compareMessagesNewestFirst) : rows
+
+  // Each parent was fetched with limit+1, so merged overflow is exactly "more
+  // rows exist" (the pair merge contract — cut rows re-emerge on the next
+  // page below the cursor anchor).
+  const hasMore = merged.length > limit
+  const page = hasMore ? merged.slice(0, limit) : merged
   const [authors, assistantPrincipalId] = await Promise.all([
     loadAuthors(page.map((m) => m.principalId)),
     assistantPrincipalIdOnce(),

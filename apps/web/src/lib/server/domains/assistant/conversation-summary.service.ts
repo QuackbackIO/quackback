@@ -290,8 +290,10 @@ export async function generateConversationSummaryText(
 /**
  * Ticket sibling of `loadConversationSummaryInput`: the same config-gated
  * no-op guard and char-budget truncation, over a ticket's thread instead of a
- * conversation's. Returns `null` when AI isn't configured, the ticket can't be
- * found, or there's nothing customer-visible to summarize yet.
+ * conversation's. CONVERGENCE PHASE 0: the ticket thread is the pair union
+ * (listTicketMessages -> pair-thread.service), still with internal notes
+ * excluded on both parents. Returns `null` when AI isn't configured, the
+ * ticket can't be found, or there's nothing customer-visible to summarize yet.
  */
 async function loadTicketSummaryInput(ticketId: TicketId) {
   await enforceAiTokenBudget()

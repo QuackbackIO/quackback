@@ -740,7 +740,10 @@ export function buildTicketContextPrompt(ticket: TicketGroundingFacts, transcrip
  * `all: true` pulls the ENTIRE ordered thread (not the default newest-page
  * window, which silently drops the original request on a long ticket); the
  * shared `budgetTranscript` then trims by chars with a head+tail window, so the
- * opening messages survive even when the thread is over budget. `includeInternal`
+ * opening messages survive even when the thread is over budget. CONVERGENCE
+ * PHASE 0: the ticket thread is the pair union (listTicketMessages ->
+ * pair-thread.service) — a linked conversation's messages fold into the
+ * grounding transcript. `includeInternal`
  * follows the audience (D1): the copilot resolves to 'team', so internal notes
  * are folded into the (teammate-only, never-persisted) grounding block; any
  * future non-team surface passes 'public' and gets the byte-identical notes-free

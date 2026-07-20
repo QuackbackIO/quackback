@@ -660,6 +660,9 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
       await assertConversationViewable(data.conversationId as ConversationId, actor)
       const isTeam = isTeamMember(ctx.principal.role)
       // Agents keep seeing internal notes when paging older messages; visitors never do.
+      // CONVERGENCE PHASE 0: the team branch also folds the linked customer
+      // ticket's legacy rows into the page (includeLinkedTicket — see
+      // listMessages); the visitor branch stays conversation-only in Phase 0.
       // The agent-only `postSuggestions`/`pendingActionPointers`/`translatedFromPointers`
       // maps are pulled out here so they're consumed by the enrichment and never
       // serialized into the response (translatedFromPointers especially — it carries
@@ -668,6 +671,7 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
         await listMessages(data.conversationId as ConversationId, {
           before: data.before,
           includeInternal: isTeam,
+          includeLinkedTicket: isTeam,
         })
       // Team members get the agent-only reaction/flag/suggestion/pending-action
       // enrichment on older messages too; the visitor path returns the clean base DTOs.
@@ -1019,8 +1023,15 @@ export const getConversationFn = createServerFn({ method: 'GET' })
       }
       const [dto, page] = await Promise.all([
         conversationToDTO(conversation, 'agent'),
-        // Agents see internal notes inline.
-        listMessages(conversation.id, { before: data.before, includeInternal: true }),
+        // Agents see internal notes inline. CONVERGENCE PHASE 0: a linked
+        // customer ticket's legacy ticket-parented rows render inline too —
+        // the agent conversation view of a pair is the shared thread (the
+        // ticket-side twin is listTicketMessages -> pair-thread.service).
+        listMessages(conversation.id, {
+          before: data.before,
+          includeInternal: true,
+          includeLinkedTicket: true,
+        }),
       ])
       // Upgrade to AgentConversationMessageDTO[] by attaching the agent-only reaction +
       // flag + post-suggestion + pending-action + translated-from fields. This

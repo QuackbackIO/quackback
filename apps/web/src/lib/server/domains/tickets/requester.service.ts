@@ -136,7 +136,15 @@ export async function getMyTicket(actor: Actor, ticketId: TicketId): Promise<Req
   return ticketToDTO(ticket, ctx, 'requester')
 }
 
-/** The customer-visible thread of a ticket the actor owns (internal notes stripped). */
+/**
+ * The customer-visible thread of a ticket the actor owns (internal notes
+ * stripped). CONVERGENCE PHASE 0: this is the SHARED pair thread — the portal
+ * (`getMyTicketThreadFn`) and widget (`getMyWidgetTicketThreadFn`) views of a
+ * linked ticket render the union of legacy ticket messages and the paired
+ * conversation's messages, via listTicketMessages' delegation to the
+ * pair-thread union loader (pair-thread.service.ts). A standalone ticket
+ * degenerates to its own legacy thread.
+ */
 export async function getMyTicketThread(
   actor: Actor,
   ticketId: TicketId,

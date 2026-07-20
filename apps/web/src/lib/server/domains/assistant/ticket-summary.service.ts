@@ -14,6 +14,10 @@
  *   - The source text is the ticket thread via `listTicketMessages({
  *     includeInternal: false })`, which excludes internal notes in SQL — a
  *     note can never leak into a summary the copilot might later surface.
+ *     CONVERGENCE PHASE 0: that read is now the pair union (pair-thread.service)
+ *     — the linked conversation's customer-visible messages fold in; internal
+ *     notes are stripped on BOTH parents, so the exclusion guarantee is
+ *     unchanged.
  *   - The row is NOT customer-scoped. A closed ticket is team knowledge
  *     retrieved across every requester (tickets-retrieval.ts is a copilot-only,
  *     team-ceiling source), so `requesterPrincipalId` is denormalized for
