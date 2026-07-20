@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { archiveTrelloCard } from './archive'
+import { fetchTrelloStatuses } from './statuses'
 import { trelloHook } from './hook'
 import { getTrelloOAuthUrl, exchangeTrelloCode } from './oauth'
 import { trelloCatalog } from './catalog'
@@ -17,6 +18,7 @@ export const trelloIntegration: IntegrationDefinition = {
   inbound: trelloInboundHandler,
   archive: archiveTrelloCard,
   webhookRegistration: 'manual',
+  listExternalStatuses: fetchTrelloStatuses,
   platformCredentials: [
     {
       key: 'clientId',

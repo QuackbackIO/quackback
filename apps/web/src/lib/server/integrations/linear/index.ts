@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { archiveLinearIssue } from './archive'
+import { fetchLinearStatuses } from './statuses'
 import { registerLinearWebhook, deleteLinearWebhook } from './webhook-registration'
 import { linearHook } from './hook'
 import { linearInboundHandler } from './inbound'
@@ -28,6 +29,7 @@ export const linearIntegration: IntegrationDefinition = {
     unregister: async ({ accessToken, externalWebhookId }) =>
       deleteLinearWebhook(accessToken, externalWebhookId),
   },
+  listExternalStatuses: fetchLinearStatuses,
   platformCredentials: [
     {
       key: 'clientId',

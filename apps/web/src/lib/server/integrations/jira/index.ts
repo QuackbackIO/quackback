@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { closeJiraIssue } from './archive'
+import { fetchJiraStatuses } from './statuses'
 import { registerJiraWebhook, deleteJiraWebhook } from './webhook-registration'
 import { jiraHook } from './hook'
 import { jiraInboundHandler } from './inbound'
@@ -34,6 +35,7 @@ export const jiraIntegration: IntegrationDefinition = {
       if (cloudId) await deleteJiraWebhook(accessToken, cloudId, externalWebhookId)
     },
   },
+  listExternalStatuses: fetchJiraStatuses,
   platformCredentials: [
     {
       key: 'clientId',

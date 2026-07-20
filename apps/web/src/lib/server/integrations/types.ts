@@ -182,6 +182,12 @@ export interface IssueTrackerCapability {
   prepareAuth?(integration: { secrets: unknown; config: unknown }): Promise<Record<string, unknown>>
 }
 
+/** One selectable external status/state, as shown in the status-mapping UI. */
+export interface ExternalStatusItem {
+  id: string
+  name: string
+}
+
 export interface IntegrationDefinition {
   id: string
   catalog: IntegrationCatalogEntry
@@ -211,6 +217,18 @@ export interface IntegrationDefinition {
    * toggled. Expected alongside `inbound` — pinned by
    * registry-capability-coverage so provider #12 can't silently no-op.
    */
+  /**
+   * List the provider's statuses/states for the status-mapping UI. Any
+   * scoping id (team, list, board, cloud) is read from `config` — it is
+   * persisted at connect/config time, never passed per call. Returned ids
+   * MUST use the same vocabulary the provider's inbound handler reports as
+   * `externalStatus`, since mappings are keyed by that name. Expected
+   * alongside `inbound` (pinned by registry-capability-coverage).
+   */
+  listExternalStatuses?: (params: {
+    accessToken: string
+    config: Record<string, unknown>
+  }) => Promise<ExternalStatusItem[]>
   webhookRegistration?:
     | 'manual'
     | {

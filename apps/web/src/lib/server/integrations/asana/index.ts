@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { completeAsanaTask } from './archive'
+import { fetchAsanaSections } from './statuses'
 import { registerAsanaWebhook, deleteAsanaWebhook } from './webhook-registration'
 import { asanaHook } from './hook'
 import { asanaInboundHandler } from './inbound'
@@ -27,6 +28,7 @@ export const asanaIntegration: IntegrationDefinition = {
     unregister: async ({ accessToken, externalWebhookId }) =>
       deleteAsanaWebhook(accessToken, externalWebhookId),
   },
+  listExternalStatuses: fetchAsanaSections,
   platformCredentials: [
     {
       key: 'clientId',

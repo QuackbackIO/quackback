@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { closeAzureDevOpsWorkItem } from './archive'
+import { fetchAzureDevOpsStatuses } from './statuses'
 import { azureDevOpsHook } from './hook'
 import { azureDevOpsInboundHandler } from './inbound'
 import { azureDevOpsIssues } from './issues'
@@ -14,5 +15,6 @@ export const azureDevOpsIntegration: IntegrationDefinition = {
   issues: azureDevOpsIssues,
   archive: closeAzureDevOpsWorkItem,
   webhookRegistration: 'manual',
+  listExternalStatuses: fetchAzureDevOpsStatuses,
   platformCredentials: [],
 }

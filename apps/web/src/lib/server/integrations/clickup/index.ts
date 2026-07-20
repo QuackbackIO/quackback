@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { closeClickUpTask } from './archive'
+import { fetchClickUpStatuses } from './statuses'
 import { registerClickUpWebhook, deleteClickUpWebhook } from './webhook-registration'
 import { clickupHook } from './hook'
 import { clickupInboundHandler } from './inbound'
@@ -30,6 +31,7 @@ export const clickupIntegration: IntegrationDefinition = {
     unregister: async ({ accessToken, externalWebhookId }) =>
       deleteClickUpWebhook(accessToken, externalWebhookId),
   },
+  listExternalStatuses: fetchClickUpStatuses,
   platformCredentials: [
     {
       key: 'clientId',

@@ -18,11 +18,6 @@ import {
 } from '@/lib/server/functions/status-sync'
 import { EXTERNAL_STATUS_PROVIDERS } from '@/lib/server/functions/external-statuses'
 
-/** Inbound-capable providers whose config UI ships no status-mapping surface
- *  yet — a real, documented gap (their configs never mount StatusSyncConfig).
- *  Closing one means removing it here AND adding its statuses case + UI. */
-const KNOWN_STATUS_LIST_GAPS = new Set(['gitlab', 'trello'])
-
 const inboundProviders = listIntegrationTypes().filter((t) => getIntegration(t)?.inbound)
 
 describe('registry capability coverage', () => {
@@ -61,23 +56,15 @@ describe('registry capability coverage', () => {
     )
   })
 
-  it('every inbound provider has an external-status source or a documented gap', () => {
+  it('every inbound provider declares listExternalStatuses (WO-3: no more gap list)', () => {
     for (const type of inboundProviders) {
       expect(
-        EXTERNAL_STATUS_PROVIDERS.has(type) || KNOWN_STATUS_LIST_GAPS.has(type),
-        `${type} has inbound but no external-status source — add a case in ` +
-          `external-statuses.ts (and EXTERNAL_STATUS_PROVIDERS) or document the gap here`
-      ).toBe(true)
+        getIntegration(type)?.listExternalStatuses,
+        `${type} has inbound but no listExternalStatuses — the mapping UI would be empty`
+      ).toBeTypeOf('function')
     }
-  })
-
-  it('documented status-list gaps stay gaps (stale exemptions must be removed)', () => {
-    for (const type of KNOWN_STATUS_LIST_GAPS) {
-      expect(
-        EXTERNAL_STATUS_PROVIDERS.has(type),
-        `${type} now has a status source — remove it from KNOWN_STATUS_LIST_GAPS`
-      ).toBe(false)
-    }
+    // Derived set matches: exactly the inbound providers have a status source.
+    expect([...EXTERNAL_STATUS_PROVIDERS].sort()).toEqual([...inboundProviders].sort())
   })
 
   it('every tracker provider declares archive (WO-1: archive dispatch lives in the registry)', () => {

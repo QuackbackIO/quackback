@@ -13,6 +13,12 @@ import { Button } from '@/components/ui/button'
 import { useUpdateIntegration } from '@/lib/client/mutations'
 import { OnDeleteConfig } from '@/components/admin/settings/integrations/on-delete-config'
 import {
+  StatusSyncConfig,
+  type ExternalStatus,
+} from '@/components/admin/settings/integrations/status-sync-config'
+import { TicketStatusSyncConfig } from '@/components/admin/settings/integrations/ticket-status-sync-config'
+import { fetchExternalStatusesFn } from '@/lib/server/functions/external-statuses'
+import {
   fetchGitLabProjectsFn,
   type GitLabProject,
 } from '@/lib/server/integrations/gitlab/functions'
@@ -49,6 +55,7 @@ export function GitLabConfig({
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
   const [selectedProject, setSelectedProject] = useState(initialConfig.channelId || '')
+  const [externalStatuses, setExternalStatuses] = useState<ExternalStatus[]>([])
   const [integrationEnabled, setIntegrationEnabled] = useState(enabled)
   const [eventSettings, setEventSettings] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -72,9 +79,19 @@ export function GitLabConfig({
     }
   }, [])
 
+  const fetchStatuses = useCallback(async () => {
+    try {
+      const statuses = await fetchExternalStatusesFn({ data: { integrationType: 'gitlab' } })
+      setExternalStatuses(statuses)
+    } catch {
+      // Non-critical — status mapping just won't show options
+    }
+  }, [])
+
   useEffect(() => {
     fetchProjects()
-  }, [fetchProjects])
+    fetchStatuses()
+  }, [fetchProjects, fetchStatuses])
 
   const handleEnabledChange = (checked: boolean) => {
     setIntegrationEnabled(checked)
@@ -200,6 +217,21 @@ export function GitLabConfig({
           {updateMutation.error?.message || 'Failed to save changes'}
         </div>
       )}
+
+      <StatusSyncConfig
+        integrationId={integrationId}
+        integrationType="gitlab"
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+      />
+
+      <TicketStatusSyncConfig
+        integrationId={integrationId}
+        config={initialConfig}
+        enabled={integrationEnabled}
+        externalStatuses={externalStatuses}
+      />
 
       <OnDeleteConfig
         integrationId={integrationId}

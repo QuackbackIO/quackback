@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { closeGitHubIssue } from './archive'
+import { fetchGitHubStatuses } from './statuses'
 import { registerGitHubWebhook, deleteGitHubWebhook } from './webhook-registration'
 import { githubHook } from './hook'
 import { githubInboundHandler } from './inbound'
@@ -31,6 +32,7 @@ export const githubIntegration: IntegrationDefinition = {
       if (ownerRepo) await deleteGitHubWebhook(accessToken, ownerRepo, externalWebhookId)
     },
   },
+  listExternalStatuses: fetchGitHubStatuses,
   platformCredentials: [
     {
       key: 'clientId',

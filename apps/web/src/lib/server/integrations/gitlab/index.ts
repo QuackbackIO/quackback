@@ -1,5 +1,6 @@
 import type { IntegrationDefinition } from '../types'
 import { closeGitLabIssue } from './archive'
+import { fetchGitLabStatuses } from './statuses'
 import { gitlabHook } from './hook'
 import { getGitLabOAuthUrl, exchangeGitLabCode } from './oauth'
 import { gitlabCatalog } from './catalog'
@@ -17,6 +18,7 @@ export const gitlabIntegration: IntegrationDefinition = {
   inbound: gitlabInboundHandler,
   archive: closeGitLabIssue,
   webhookRegistration: 'manual',
+  listExternalStatuses: fetchGitLabStatuses,
   platformCredentials: [
     {
       key: 'clientId',
