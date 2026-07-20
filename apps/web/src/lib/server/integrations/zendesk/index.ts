@@ -1,6 +1,7 @@
 import type { IntegrationDefinition } from '../types'
 import { getZendeskOAuthUrl, exchangeZendeskCode, revokeZendeskToken } from './oauth'
 import { zendeskCatalog } from './catalog'
+import { zendeskContext } from './enrichment'
 
 export const zendeskIntegration: IntegrationDefinition = {
   id: 'zendesk',
@@ -21,6 +22,7 @@ export const zendeskIntegration: IntegrationDefinition = {
     exchangeCode: exchangeZendeskCode,
   },
   // No hook — Zendesk is inbound (enrichment), not outbound (notifications)
+  context: zendeskContext,
   platformCredentials: [
     {
       key: 'clientId',

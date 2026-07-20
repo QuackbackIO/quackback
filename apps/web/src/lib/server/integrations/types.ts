@@ -199,6 +199,27 @@ export interface ExternalStatusItem {
   name: string
 }
 
+/** A single labelled fact on a customer-context card. */
+export interface EnrichmentField {
+  label: string
+  value: string
+}
+
+/**
+ * Normalized customer context (IF WO-9), rendered by the generic enrichment
+ * panel on a post/user. Providers map their own contact/company shape onto
+ * this; the panel never knows the provider's native format.
+ */
+export interface EnrichmentCard {
+  /** Integration id that produced this card (for the icon + label). */
+  provider: string
+  name?: string
+  company?: string
+  /** Deep link to the contact in the provider's own tool. */
+  url?: string
+  fields: EnrichmentField[]
+}
+
 export interface IntegrationDefinition {
   id: string
   catalog: IntegrationCatalogEntry
@@ -238,6 +259,17 @@ export interface IntegrationDefinition {
     refreshToken: string,
     credentials?: Record<string, string>
   ) => Promise<{ accessToken: string; refreshToken?: string; expiresIn: number }>
+  /**
+   * On-demand customer context for the enrichment panel (IF WO-9). Looks the
+   * person up by email in the provider's tool and returns a normalized card,
+   * or null when there's no match. Fetched lazily when an agent opens the
+   * context section — never eagerly per post.
+   */
+  context?: (params: {
+    accessToken: string
+    config: Record<string, unknown>
+    email: string
+  }) => Promise<import('./types').EnrichmentCard | null>
   /**
    * List the provider's statuses/states for the status-mapping UI. Any
    * scoping id (team, list, board, cloud) is read from `config` — it is

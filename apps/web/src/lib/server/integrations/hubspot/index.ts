@@ -6,6 +6,7 @@ import {
   refreshHubSpotToken,
 } from './oauth'
 import { hubspotCatalog } from './catalog'
+import { hubspotContext } from './enrichment'
 
 export const hubspotIntegration: IntegrationDefinition = {
   id: 'hubspot',
@@ -17,6 +18,7 @@ export const hubspotIntegration: IntegrationDefinition = {
   },
   // No hook — HubSpot is inbound (enrichment), not outbound (notifications)
   refreshToken: refreshHubSpotToken,
+  context: hubspotContext,
   platformCredentials: [
     {
       key: 'clientId',

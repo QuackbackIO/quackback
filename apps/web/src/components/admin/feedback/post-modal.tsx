@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
+import { CustomerContextPanel } from '@/components/admin/feedback/customer-context-panel'
 import { ModalFooter } from '@/components/shared/modal-footer'
 import { useUrlModal } from '@/lib/client/hooks/use-url-modal'
 import { useSuspenseQuery, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -519,6 +520,9 @@ function PostModalContent({
               feedbackSource={feedbackSource}
             />
           </Suspense>
+
+          {/* Customer context from connected CRM integrations (WO-9), on demand. */}
+          <CustomerContextPanel email={post.authorEmail} />
         </div>
       </ScrollArea>
 
