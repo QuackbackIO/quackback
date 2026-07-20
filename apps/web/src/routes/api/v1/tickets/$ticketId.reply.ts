@@ -26,7 +26,12 @@ const replySchema = z.object({
 export const Route = createFileRoute('/api/v1/tickets/$ticketId/reply')({
   server: {
     handlers: {
-      /** POST /api/v1/tickets/:id/reply — customer-visible agent reply. */
+      /** POST /api/v1/tickets/:id/reply — customer-visible agent reply. For a
+       *  conversation-linked customer ticket the reply writes to the pair's
+       *  SHARED thread — it lands on the linked conversation (convergence
+       *  Phase 1a redirect), appears in both the ticket thread and the
+       *  conversation, and the conversation pipeline owns SLA/notification
+       *  side effects. Internal notes stay ticket-scoped (see ./:id/note). */
       POST: async ({ request, params }) => {
         try {
           const auth = await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_REPLY })

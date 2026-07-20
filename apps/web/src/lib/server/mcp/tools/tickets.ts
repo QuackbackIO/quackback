@@ -134,7 +134,7 @@ Examples:
     cursor?: string
   }>(server, auth, {
     name: 'get_ticket',
-    description: `Get a ticket and its most recent thread messages, oldest-first. Set includeInternal to also return internal teammate notes.
+    description: `Get a ticket and its most recent thread messages, oldest-first. For a conversation-linked customer ticket the thread is the pair's shared thread (the conversation's messages plus the ticket's own legacy/internal rows). Set includeInternal to also return internal teammate notes.
 
 Example: get_ticket({ ticketId: "ticket_01abc...", includeInternal: true })`,
     schema: {
@@ -273,7 +273,7 @@ Example: create_ticket({ type: "customer", title: "Refund not received", descrip
 
   registerTool<{ ticketId: string; content: string }>(server, auth, {
     name: 'reply_to_ticket',
-    description: `Post a reply on a ticket thread (visible to the requester). Stamps the first-response time on the first reply.
+    description: `Post a reply on a ticket thread (visible to the requester). On a conversation-linked customer ticket the reply lands on the pair's shared thread — the linked conversation — whose first-response machinery owns response timing; on an unlinked ticket the first reply stamps the ticket's first-response time.
 
 Example: reply_to_ticket({ ticketId: "ticket_01abc...", content: "We've issued your refund; it should arrive in 3-5 days." })`,
     schema: {

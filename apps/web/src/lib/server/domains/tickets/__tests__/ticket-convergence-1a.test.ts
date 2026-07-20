@@ -676,12 +676,19 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       expect((await readTicket(ticketId)).assigneeLastReadAt).toBeNull()
     })
 
-    it('still moves the ticket watermark for a ticket-parented anchor on a pair', async () => {
-      const { agentP, ticketId } = await seedPairWithConversationMessage()
+    it('PHASE 3: a ticket-parented legacy anchor on a pair moves the CONVERSATION watermark, never the retired ticket column', async () => {
+      const { agentP, ticketId, conversationId } = await seedPairWithConversationMessage()
       const readAt = new Date('2026-07-11T00:00:00Z')
       await testDb
+        .update(conversations)
+        .set({ agentLastReadAt: readAt })
+        .where(eq(conversations.id, conversationId))
+      // A frozen pre-link ticket watermark stays EXACTLY as it was — Phase 3
+      // stopped the last writer of the legacy column for pairs.
+      const frozen = new Date('2026-07-09T00:00:00Z')
+      await testDb
         .update(tickets)
-        .set({ assigneeLastReadAt: readAt })
+        .set({ assigneeLastReadAt: frozen })
         .where(eq(tickets.id, ticketId))
       const anchorAt = new Date('2026-07-10T12:00:00Z')
       const [anchor] = await testDb
@@ -701,8 +708,13 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
         agentActor(agentP)
       )
 
-      expect((await readTicket(ticketId)).assigneeLastReadAt?.toISOString()).toBe(
+      // The pair's truth — the conversation's agent watermark — rewound to
+      // just before the anchor; the retired ticket column is untouched.
+      expect((await readConversation(conversationId)).agentLastReadAt?.toISOString()).toBe(
         new Date(anchorAt.getTime() - 1).toISOString()
+      )
+      expect((await readTicket(ticketId)).assigneeLastReadAt?.toISOString()).toBe(
+        frozen.toISOString()
       )
     })
 

@@ -22,6 +22,7 @@ import {
   ticketStatuses,
   eq,
   and,
+  or,
   isNull,
   desc,
 } from '@/lib/server/db'
@@ -29,6 +30,7 @@ import {
   listMessages,
   listConversationMessagesForGrounding,
 } from '@/lib/server/domains/conversation/conversation.query'
+import { resolvePairConversationId } from '@/lib/server/domains/tickets/pair-thread.service'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import type { AssistantThreadMessage } from './assistant.runtime'
 
@@ -107,10 +109,13 @@ export interface AssistantItemState {
   /**
    * The item's latest customer-authored message id, or null when the item has
    * none: the newest `senderType: 'visitor'` row that is neither an internal
-   * note nor soft-deleted, by (createdAt, id). These filter semantics are
-   * deliberately identical to the orchestrator's in-memory equivalent over
-   * its already-loaded thread rows (assistant.orchestrator.ts, the
-   * `latestCustomerMessageId` fold: `loadConversationThread` excludes
+   * note nor soft-deleted, by (createdAt, id). For a ticket item this reads
+   * the pair UNION (both parents when the ticket is conversation-linked) —
+   * matching the union thread the client rendered and the orchestrator's own
+   * union-loaded ticket grounding (assistant.runtime.ts). These filter
+   * semantics are deliberately identical to the orchestrator's in-memory
+   * equivalent over its already-loaded thread rows (assistant.orchestrator.ts,
+   * the `latestCustomerMessageId` fold: `loadConversationThread` excludes
    * internal/deleted rows in SQL, then it takes the last 'visitor' row) —
    * change one and you must change the other.
    */
@@ -130,6 +135,14 @@ export async function loadAssistantItemState(
   conversationId: ConversationId | null,
   ticketId: TicketId | null
 ): Promise<AssistantItemState | null> {
+  // CONVERGENCE PHASE 3: a ticket item that is conversation-linked shares ONE
+  // thread with its pair, and the newest customer message can hang off EITHER
+  // parent (post-1a requester replies land on the conversation). The staleness
+  // id must be the union's latest — a ticket-parent-only read disagrees with
+  // the union thread the client rendered (and with the orchestrator's own
+  // union-loaded fold) and false-409s every suggest on a pair. An unlinked
+  // ticket degenerates to the ticket parent alone.
+  const pairConversationId = ticketId ? await resolvePairConversationId(ticketId) : null
   const latestCustomerMessageQuery = db
     .select({ id: conversationMessages.id })
     .from(conversationMessages)
@@ -137,7 +150,12 @@ export async function loadAssistantItemState(
       and(
         conversationId
           ? eq(conversationMessages.conversationId, conversationId)
-          : eq(conversationMessages.ticketId, ticketId as TicketId),
+          : pairConversationId
+            ? or(
+                eq(conversationMessages.ticketId, ticketId as TicketId),
+                eq(conversationMessages.conversationId, pairConversationId)
+              )
+            : eq(conversationMessages.ticketId, ticketId as TicketId),
         eq(conversationMessages.senderType, 'visitor'),
         eq(conversationMessages.isInternal, false),
         isNull(conversationMessages.deletedAt)

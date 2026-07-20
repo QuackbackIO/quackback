@@ -50,6 +50,17 @@
  * creates the backing conversation + link in the intake transaction itself
  * and writes the opening message through this module, riding the same
  * redirect — nothing in this module changes for it.
+ *
+ * PHASE 3 — WATERMARK STATE: the pair's unread truth is the CONVERSATION's
+ * two watermarks (`conversations.agent_last_read_at` /
+ * `visitor_last_read_at`), which the redirected write pipeline already
+ * maintains natively (an agent reply stamps the agent side, a requester
+ * reply arms `waitingSince`). The legacy `tickets.*_last_read_at` columns are
+ * legacy-read only for customer tickets — nothing writes them for a linked
+ * pair anymore (mark-read delegates to the conversation's mark-read;
+ * mark-unread from a legacy ticket-parented anchor moves the conversation's
+ * agent watermark) — and stay live only for threads that kept their own
+ * ticket-scoped messages (back-office/tracker, standalone customer).
  */
 import {
   db,

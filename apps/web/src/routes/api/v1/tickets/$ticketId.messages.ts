@@ -10,8 +10,13 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/messages')({
   server: {
     handlers: {
       /** GET /api/v1/tickets/:id/messages — the ticket thread, oldest-first.
-       *  Internal notes are excluded unless includeInternal=true. Keyset scrollback
-       *  via ?before=<message id>; the page size is fixed. */
+       *  For a conversation-linked customer ticket this is the pair's SHARED
+       *  thread: the union of the linked conversation's messages and the
+       *  ticket's own legacy ticket-parented rows (convergence,
+       *  scratchpad/convergence-design.md) — new customer-visible replies
+       *  land on the conversation, so a conversation-only read would miss
+       *  them. Internal notes are excluded unless includeInternal=true.
+       *  Keyset scrollback via ?before=<message id>; the page size is fixed. */
       GET: async ({ request, params }) => {
         try {
           await withApiKeyAuth(request, { permission: PERMISSIONS.TICKET_VIEW })

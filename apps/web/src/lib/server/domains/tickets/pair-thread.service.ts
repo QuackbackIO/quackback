@@ -68,6 +68,7 @@ import {
   lt,
   asc,
   desc,
+  inArray,
   isNull,
   type ConversationMessage,
 } from '@/lib/server/db'
@@ -124,6 +125,34 @@ export async function resolvePairConversationId(
     )
     .limit(1)
   return link?.conversationId ?? null
+}
+
+/**
+ * Batched sibling of `resolvePairConversationId` for page loaders (the ticket
+ * DTO's activity read, the requester unread map) — one query resolves a whole
+ * page of tickets instead of an N+1. Same pair rule: only `ticket_type =
+ * 'customer'` links resolve, and unlinked tickets are simply absent from the
+ * returned map.
+ */
+export async function resolvePairConversationIds(
+  ticketIds: TicketId[]
+): Promise<Map<TicketId, ConversationId>> {
+  const map = new Map<TicketId, ConversationId>()
+  if (ticketIds.length === 0) return map
+  const links = await db
+    .select({
+      ticketId: ticketConversations.ticketId,
+      conversationId: ticketConversations.conversationId,
+    })
+    .from(ticketConversations)
+    .where(
+      and(
+        inArray(ticketConversations.ticketId, ticketIds),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+  for (const link of links) map.set(link.ticketId, link.conversationId)
+  return map
 }
 
 /**

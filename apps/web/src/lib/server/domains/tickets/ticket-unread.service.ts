@@ -23,6 +23,14 @@
  * badge — `requesterTicketUnreadMap` below); the accepted cutover glitch is
  * that an in-flight pair's legacy ticket-parented rows stop counting toward
  * unread the moment the conversation watermark wins.
+ *
+ * CONVERGENCE PHASE 3 — WRITER CLEANUP COMPLETE: nothing writes the legacy
+ * ticket watermark columns for a linked customer ticket anymore. The one
+ * remaining writer Phase 2 left behind — `markTicketUnreadFromMessage` with a
+ * legacy ticket-parented anchor on a pair — now moves the CONVERSATION's agent
+ * watermark instead. The columns are legacy-READ only on the customer axis
+ * (a standalone ticket's fallback counts against them; a pair's frozen pre-link
+ * values are simply never consulted) and remain live for back-office/tracker.
  */
 import {
   db,
@@ -49,7 +57,20 @@ import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 
 export type TicketUnreadSide = 'requester' | 'assignee'
 
-/** Count messages on the other side that arrived after this side last read. */
+/**
+ * Count messages on the other side that arrived after this side last read.
+ *
+ * SINGLE-PARENT SCOPE (justified, CONVERGENCE PHASE 3): this counts
+ * ticket-parented rows against the legacy ticket watermark, so it is only
+ * meaningful for threads that kept their own ticket-scoped messages —
+ * back-office/tracker tickets and not-yet-linked standalone customer tickets.
+ * A linked customer pair's unread truth is the conversation's watermark (the
+ * mark-read entry points below delegate there), and no production caller may
+ * ask this function about one: the inbox ticket branch lists only unlinked
+ * tickets (`excludeConversationLinked`), and the requester badge uses
+ * `requesterTicketUnreadMap`, which splits the page by link. Kept exported
+ * for the standalone-thread semantics its tests pin.
+ */
 export async function unreadCountForTicket(
   ticketId: TicketId,
   side: TicketUnreadSide
@@ -88,6 +109,15 @@ export async function unreadCountForTicket(
  * enrichment (mirrors conversation.query.ts's listConversationsForAgent
  * unread-rows query). Only tickets with at least one unread message appear in
  * the returned map.
+ *
+ * SINGLE-PARENT SCOPE (justified, CONVERGENCE PHASE 3): the count reads
+ * ticket-parented rows against `tickets.assigneeLastReadAt`, which is the
+ * watermark truth ONLY for unlinked threads. The one production caller — the
+ * unified inbox's ticket branch (inbox.query.ts's fetchTicketBranch) — passes
+ * `excludeConversationLinked: true`, so a linked customer pair never reaches
+ * this query (it lists as its conversation row, whose badge reads
+ * `conversations.agentLastReadAt`). Do not reuse this for a page that can
+ * contain linked pairs.
  */
 export async function ticketUnreadMapForAgent(
   ticketIds: TicketId[]
@@ -314,10 +344,14 @@ export async function requesterTicketUnreadMap(
  * surfaces CONVERSATION-parented rows in the ticket thread, so the anchor an
  * agent picks can belong to the linked conversation rather than to the ticket.
  * Those rows fall back to the conversation's own unread mechanism — the pair's
- * watermark truth (ticket watermark columns retire for customer tickets under
- * convergence; they stay live for back-office/standalone threads, whose rows
- * are all ticket-parented and never reach the fallback). An anchor that
- * belongs to neither parent of the pair 404s exactly as before.
+ * watermark truth. CONVERGENCE PHASE 3: a LEGACY ticket-parented anchor on a
+ * linked pair now moves the conversation's agent watermark too (via
+ * `markConversationUnreadAt`) — the ticket watermark columns are legacy-read
+ * only for customer tickets, so writing one would move nothing any reader
+ * consults. The ticket-column write below therefore remains ONLY for unlinked
+ * threads (back-office/tracker, standalone customer), whose rows are all
+ * ticket-parented. An anchor that belongs to neither parent of the pair 404s
+ * exactly as before.
  */
 export async function markTicketUnreadFromMessage(
   ticketId: TicketId,
@@ -358,6 +392,21 @@ export async function markTicketUnreadFromMessage(
       return
     }
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
+  }
+
+  // LEGACY ticket-parented anchor. CONVERGENCE PHASE 3: on a LINKED customer
+  // pair the ticket watermark columns are legacy-read only — the pair's truth
+  // is the conversation's agent watermark — so "unread from here" moves THAT
+  // watermark to just before the anchor instead of writing the retired column
+  // (which no reader of a pair consults anymore). The ticket-column write
+  // below stays live ONLY for unlinked threads (back-office/tracker,
+  // standalone customer), which kept their own ticket-scoped thread.
+  const pairConversationId = await resolvePairConversationId(ticketId)
+  if (pairConversationId) {
+    const { markConversationUnreadAt } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    await markConversationUnreadAt(pairConversationId, message.createdAt, actor)
+    return
   }
 
   const watermark = unreadWatermarkFromAnchor(ticket.assigneeLastReadAt, message.createdAt)

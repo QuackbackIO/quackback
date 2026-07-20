@@ -262,6 +262,14 @@ export async function enrichMessageForAgent(
  * visibility can narrow further by team/assignment, so a flag on a ticket the
  * viewer no longer has access to quietly drops out of their feed rather than
  * leaking a peek at it).
+ *
+ * CONVERGENCE PHASE 3 (justified single-parent branches): this is a
+ * per-MESSAGE feed with per-parent provenance, not a thread read — a flagged
+ * row lists once, under the parent it actually hangs off. So a linked pair's
+ * conversation-parented flags surface in the conversation branch (linking to
+ * the shared thread) and its legacy ticket-parented flags in the ticket
+ * branch; nothing is hidden and nothing double-lists. It deliberately does
+ * NOT fold the pair's parents into one entry.
  */
 export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageDTO[]> {
   const viewerPrincipalId = actor.principalId

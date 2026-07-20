@@ -15,6 +15,7 @@ import {
   db,
   eq,
   and,
+  or,
   asc,
   ne,
   isNull,
@@ -37,6 +38,7 @@ import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketSystemMessage } from './ticket-message.service'
+import { resolvePairConversationId } from './pair-thread.service'
 
 const log = logger.child({ component: 'ticket-external-links' })
 
@@ -274,6 +276,14 @@ export async function createIssueForTicket(
   // rendered to markdown via the ticket idiom — tickets have no description
   // column. Internal notes are structurally excluded: they must never reach
   // an external tracker.
+  //
+  // CONVERGENCE PHASE 3: the "first message" read unions BOTH parents of a
+  // linked pair — post-1a/1b the opening message lands on the conversation
+  // (intake writes it through the redirect), so a ticket-parent-only read
+  // would find nothing and file an empty narrative. An unlinked thread
+  // (back-office/tracker, standalone customer) degenerates to the ticket
+  // parent alone.
+  const pairConversationId = await resolvePairConversationId(ticketId)
   const [firstMessage] = await db
     .select({
       content: conversationMessages.content,
@@ -282,13 +292,18 @@ export async function createIssueForTicket(
     .from(conversationMessages)
     .where(
       and(
-        eq(conversationMessages.ticketId, ticketId),
+        pairConversationId
+          ? or(
+              eq(conversationMessages.ticketId, ticketId),
+              eq(conversationMessages.conversationId, pairConversationId)
+            )
+          : eq(conversationMessages.ticketId, ticketId),
         ne(conversationMessages.senderType, 'system'),
         eq(conversationMessages.isInternal, false),
         isNull(conversationMessages.deletedAt)
       )
     )
-    .orderBy(asc(conversationMessages.createdAt))
+    .orderBy(asc(conversationMessages.createdAt), asc(conversationMessages.id))
     .limit(1)
   const narrative = firstMessage
     ? truncate(contentJsonToMarkdown(firstMessage.contentJson, firstMessage.content), 2000)

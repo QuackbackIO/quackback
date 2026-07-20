@@ -4,6 +4,17 @@
  * carry the message thread, tickets carry the tracked work (status, assignee,
  * SLA timestamps) and link to conversations through `ticket_conversations`.
  *
+ * THE SHARED-THREAD RULE (convergence, scratchpad/convergence-design.md): a
+ * CUSTOMER ticket SHARES its linked conversation's thread — the pair is 1:1
+ * (the two partial unique indexes on `ticket_conversations` below) and its
+ * customer-visible thread is the read-path UNION of the conversation's
+ * messages and the ticket's own legacy `ticket_id` rows (both parents live in
+ * `conversation_messages`, strictly XOR — see conversation.ts). All new
+ * customer-visible writes land on the conversation; ticket-scoped messages
+ * are internal notes (team-only) plus legacy rows, which are never migrated.
+ * Back-office and tracker tickets keep their own ticket-scoped internal-notes
+ * thread and are never conversation-linked.
+ *
  * Three kinds share one table (`type`): a `customer` ticket is the
  * customer-visible request (at most one per conversation); a `back_office`
  * ticket is an internal task; a `tracker` is an umbrella that fans work out to
@@ -106,6 +117,16 @@ export const tickets = pgTable(
     reopenedCount: integer('reopened_count').notNull().default(0),
     // Read receipts power unread badges on each side independently, mirroring
     // conversations.visitorLastReadAt/agentLastReadAt.
+    //
+    // LEGACY-READ ONLY for customer tickets (convergence Phase 3,
+    // scratchpad/convergence-design.md): a conversation-linked customer
+    // ticket's unread truth is the CONVERSATION's watermark pair — nothing
+    // writes these columns for a linked pair, and any pre-link values stay
+    // frozen forever. They are still READ by the standalone-ticket unread
+    // fallback (a not-yet-linked pre-1b customer ticket counts against them,
+    // and mark-read keeps updating them while the ticket stays standalone),
+    // and they stay fully live for back-office/tracker tickets, which kept
+    // their own ticket-scoped threads. No column drop, no migration.
     requesterLastReadAt: timestamp('requester_last_read_at', { withTimezone: true }),
     assigneeLastReadAt: timestamp('assignee_last_read_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

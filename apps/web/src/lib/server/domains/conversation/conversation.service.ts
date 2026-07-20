@@ -1610,6 +1610,46 @@ export async function markConversationRead(
   })
 }
 
+/** The watermark write + agent-side publish both unread entry points share. */
+async function applyAgentUnreadWatermark(
+  conversation: Conversation,
+  anchorCreatedAt: Date
+): Promise<void> {
+  const watermark = unreadWatermarkFromAnchor(conversation.agentLastReadAt, anchorCreatedAt)
+  await db
+    .update(conversations)
+    .set({ agentLastReadAt: watermark })
+    .where(eq(conversations.id, conversation.id))
+  publishAgentConversationEvent({
+    kind: 'read',
+    conversationId: conversation.id,
+    side: 'agent',
+    at: (watermark ?? new Date(0)).toISOString(),
+  })
+}
+
+/**
+ * Move a conversation's AGENT read watermark to just before an anchor
+ * TIMESTAMP — the shared core of `markConversationUnreadFromMessage`, and the
+ * CONVERGENCE PHASE 3 delegate for a LEGACY ticket-parented "mark unread from
+ * here" anchor on a linked customer pair (ticket-unread.service.ts): the
+ * pair's watermark truth is the conversation's, so rewinding from a
+ * ticket-parented legacy row moves THIS watermark instead of writing the
+ * retired `tickets.assignee_last_read_at` column. Agent-gated; the anchor's
+ * existence/parent validation stays with the caller (each caller scopes it to
+ * its own parent of the pair).
+ */
+export async function markConversationUnreadAt(
+  conversationId: ConversationId,
+  anchorCreatedAt: Date,
+  actor: Actor
+): Promise<void> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  const conversation = await loadConversationOr404(conversationId)
+  await applyAgentUnreadWatermark(conversation, anchorCreatedAt)
+}
+
 /**
  * Mark a conversation unread for the AGENT side starting at a specific message —
  * the "mark unread from here" action. Moves the agent read-watermark to just
@@ -1644,17 +1684,7 @@ export async function markConversationUnreadFromMessage(
   if (!message || message.deletedAt) {
     throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found')
   }
-  const watermark = unreadWatermarkFromAnchor(conversation.agentLastReadAt, message.createdAt)
-  await db
-    .update(conversations)
-    .set({ agentLastReadAt: watermark })
-    .where(eq(conversations.id, conversation.id))
-  publishAgentConversationEvent({
-    kind: 'read',
-    conversationId,
-    side: 'agent',
-    at: (watermark ?? new Date(0)).toISOString(),
-  })
+  await applyAgentUnreadWatermark(conversation, message.createdAt)
 }
 
 // -------------------------------------------------------------- assistant (Quinn) ---

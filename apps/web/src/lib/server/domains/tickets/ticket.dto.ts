@@ -9,6 +9,7 @@ import {
   db,
   eq,
   and,
+  or,
   isNull,
   inArray,
   desc,
@@ -20,6 +21,7 @@ import {
   type TicketStatusEntity,
 } from '@/lib/server/db'
 import type { TicketId, TicketStatusId, PrincipalId, TeamId, CompanyId } from '@quackback/ids'
+import type { ConversationId } from '@quackback/ids'
 import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { JsonValue } from '@/lib/shared/json'
 import { formatTicketNumber, type TicketStageLabels } from '@/lib/shared/tickets'
@@ -27,6 +29,7 @@ import { preview } from '@/lib/server/messages/message-core'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { getStageLabels } from '../settings/settings.tickets'
 import { resolveStage } from './ticket.lifecycle'
+import { resolvePairConversationIds } from './pair-thread.service'
 import type { TicketSlaApplied } from '../sla/ticket-sla.service'
 import type {
   TicketDTO,
@@ -61,24 +64,45 @@ interface TicketActivity {
  * kind" and "latest non-internal" rows can differ; both are served by the
  * existing `(ticket_id, created_at, id)` index.
  *
+ * CONVERGENCE PHASE 3 — UNION ACTIVITY: a linked customer pair's activity is
+ * the union of BOTH parents. Post-1a writes land on the conversation, so a
+ * ticket-parent-only read would freeze the pair's list-row preview at the
+ * conversion point. The page's pair links resolve in one batched query
+ * (`resolvePairConversationIds`), then each concern runs a second DISTINCT ON
+ * over the linked conversation ids (served by the `(conversation_id,
+ * created_at, id)` index) and the two parents' winners merge in code — newer
+ * `createdAt` wins, the same total order the pair-thread loader merges on.
+ * Unlinked threads (back-office/tracker, standalone customer) skip the second
+ * pair of queries entirely.
+ *
  * A single-ticket page (every write path, via `ticketRowToDTO`) takes a
- * cheaper path: two plain `eq(ticketId) ORDER BY created_at DESC LIMIT 1`
+ * cheaper path: two plain parent-scoped `ORDER BY created_at DESC LIMIT 1`
  * lookups instead of a `DISTINCT ON` over a one-element `IN` list — same
- * index, same two round trips, without the DISTINCT ON machinery a mutation
- * enriching a single fresh row doesn't need.
+ * indexes, same two round trips, without the DISTINCT ON machinery a mutation
+ * enriching a single fresh row doesn't need. On a linked pair the parent
+ * predicate is an OR over both parents of the pair.
  */
 async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketActivity>> {
   const map = new Map<TicketId, TicketActivity>()
   for (const r of rows) map.set(r.id, { lastMessageAt: null, lastMessagePreview: r.title })
   if (rows.length === 0) return map
 
+  const pairByTicket = await resolvePairConversationIds(rows.map((r) => r.id))
+
   if (rows.length === 1) {
     const id = rows[0].id
+    const pairConversationId = pairByTicket.get(id)
+    const parentScope = pairConversationId
+      ? or(
+          eq(conversationMessages.ticketId, id),
+          eq(conversationMessages.conversationId, pairConversationId)
+        )
+      : eq(conversationMessages.ticketId, id)
     const [[latestAny], [latestVisible]] = await Promise.all([
       db
         .select({ createdAt: conversationMessages.createdAt })
         .from(conversationMessages)
-        .where(and(eq(conversationMessages.ticketId, id), isNull(conversationMessages.deletedAt)))
+        .where(and(parentScope, isNull(conversationMessages.deletedAt)))
         .orderBy(desc(conversationMessages.createdAt))
         .limit(1),
       db
@@ -89,7 +113,7 @@ async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketA
         .from(conversationMessages)
         .where(
           and(
-            eq(conversationMessages.ticketId, id),
+            parentScope,
             isNull(conversationMessages.deletedAt),
             eq(conversationMessages.isInternal, false)
           )
@@ -105,7 +129,8 @@ async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketA
   }
 
   const ids = rows.map((r) => r.id)
-  const [latestAny, latestVisible] = await Promise.all([
+  const linkedConversationIds = [...new Set(pairByTicket.values())]
+  const [latestAny, latestVisible, latestAnyPair, latestVisiblePair] = await Promise.all([
     db
       .selectDistinctOn([conversationMessages.ticketId], {
         ticketId: conversationMessages.ticketId,
@@ -119,6 +144,9 @@ async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketA
     db
       .selectDistinctOn([conversationMessages.ticketId], {
         ticketId: conversationMessages.ticketId,
+        // The cross-parent merge below compares this row's recency against the
+        // conversation parent's winner, so the visible query carries it too.
+        createdAt: conversationMessages.createdAt,
         content: conversationMessages.content,
         attachments: conversationMessages.attachments,
       })
@@ -131,17 +159,84 @@ async function loadTicketActivity(rows: Ticket[]): Promise<Map<TicketId, TicketA
         )
       )
       .orderBy(conversationMessages.ticketId, desc(conversationMessages.createdAt)),
+    // The pair union's second parent: the linked conversations' own latest
+    // rows, one per conversation, merged in code below.
+    linkedConversationIds.length
+      ? db
+          .selectDistinctOn([conversationMessages.conversationId], {
+            conversationId: conversationMessages.conversationId,
+            createdAt: conversationMessages.createdAt,
+          })
+          .from(conversationMessages)
+          .where(
+            and(
+              inArray(conversationMessages.conversationId, linkedConversationIds),
+              isNull(conversationMessages.deletedAt)
+            )
+          )
+          .orderBy(conversationMessages.conversationId, desc(conversationMessages.createdAt))
+      : Promise.resolve([]),
+    linkedConversationIds.length
+      ? db
+          .selectDistinctOn([conversationMessages.conversationId], {
+            conversationId: conversationMessages.conversationId,
+            createdAt: conversationMessages.createdAt,
+            content: conversationMessages.content,
+            attachments: conversationMessages.attachments,
+          })
+          .from(conversationMessages)
+          .where(
+            and(
+              inArray(conversationMessages.conversationId, linkedConversationIds),
+              isNull(conversationMessages.deletedAt),
+              eq(conversationMessages.isInternal, false)
+            )
+          )
+          .orderBy(conversationMessages.conversationId, desc(conversationMessages.createdAt))
+      : Promise.resolve([]),
   ])
 
-  // The inner join-free selects guarantee a non-null ticketId (the column is
-  // NOT NULL for every ticket-thread message).
+  // The inner join-free selects guarantee a non-null parent id (the XOR CHECK
+  // makes exactly one parent column non-null on every row).
   for (const row of latestAny) {
     const entry = map.get(row.ticketId as TicketId)
     if (entry) entry.lastMessageAt = row.createdAt
   }
+  // Each preview winner's timestamp, for the cross-parent recency compare.
+  const previewAt = new Map<TicketId, Date>()
   for (const row of latestVisible) {
     const entry = map.get(row.ticketId as TicketId)
-    if (entry) entry.lastMessagePreview = preview(row.content, row.attachments ?? [])
+    if (entry) {
+      entry.lastMessagePreview = preview(row.content, row.attachments ?? [])
+      previewAt.set(row.ticketId as TicketId, row.createdAt)
+    }
+  }
+
+  if (latestAnyPair.length > 0 || latestVisiblePair.length > 0) {
+    const ticketByConversation = new Map<ConversationId, TicketId>()
+    for (const [ticketId, conversationId] of pairByTicket) {
+      ticketByConversation.set(conversationId, ticketId)
+    }
+    for (const row of latestAnyPair) {
+      const ticketId = ticketByConversation.get(row.conversationId as ConversationId)
+      if (!ticketId) continue
+      const entry = map.get(ticketId)
+      // Newer of the two parents wins (the pair merge's total order).
+      if (entry && (!entry.lastMessageAt || row.createdAt > entry.lastMessageAt)) {
+        entry.lastMessageAt = row.createdAt
+      }
+    }
+    for (const row of latestVisiblePair) {
+      const ticketId = ticketByConversation.get(row.conversationId as ConversationId)
+      if (!ticketId) continue
+      const entry = map.get(ticketId)
+      if (!entry) continue
+      const current = previewAt.get(ticketId)
+      if (!current || row.createdAt > current) {
+        entry.lastMessagePreview = preview(row.content, row.attachments ?? [])
+        previewAt.set(ticketId, row.createdAt)
+      }
+    }
   }
   return map
 }

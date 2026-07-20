@@ -217,6 +217,20 @@ export const conversations = pgTable(
  * Individual chat messages. Flat (no threading), plain-text content. Author is
  * always a real principal; the visitor-facing welcome message is rendered from
  * settings, not stored, so there are no author-less rows.
+ *
+ * THE XOR PARENT RULE + THE UNION READ CONTRACT (convergence,
+ * scratchpad/convergence-design.md): every row hangs off exactly ONE parent —
+ * `conversation_id` XOR `ticket_id`, enforced by the
+ * `conversation_messages_parent_check` CHECK below and served by one
+ * (parent, created_at, id) index per parent. A customer ticket SHARES its
+ * linked conversation's thread, so the pair's thread is the read-path UNION
+ * of both parents' rows (pair-thread.service.ts merges two keyset pages in
+ * code; `is_internal` filters both parents alike for requester audiences).
+ * New customer-visible writes for a linked pair land on the CONVERSATION
+ * parent; `ticket_id` rows are internal notes (team-only) plus legacy rows
+ * written before convergence — legacy rows are never migrated, the union
+ * reads them forever. Back-office/tracker tickets keep a purely
+ * ticket-parented internal-notes thread.
  */
 export const conversationMessages = pgTable(
   'conversation_messages',

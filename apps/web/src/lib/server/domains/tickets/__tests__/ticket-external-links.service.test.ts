@@ -463,6 +463,58 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
     }
   })
 
+  it('reads the opening message from the linked conversation on a pair (convergence Phase 3 union)', async () => {
+    await seedSettings()
+    await seedDefaultStatus()
+    await seedGitHubIntegration({})
+    await testDb
+      .update(integrations)
+      .set({ secrets: 'encrypted-blob' })
+      .where(eq(integrations.integrationType, 'github'))
+    const actor = await seedActor()
+    const ticketId = await makeTicket(actor)
+    // CONVERGENCE: on a linked pair the opening message lands on the
+    // CONVERSATION (the 1a/1b redirect) — a ticket-parent-only read would file
+    // an empty narrative. Seed the pair + a conversation-parented report.
+    const { conversations, ticketConversations, conversationMessages } =
+      await import('@/lib/server/db')
+    const conversationId = createId('conversation')
+    await testDb.insert(conversations).values({
+      id: conversationId,
+      // Seeded actors always resolve a principal (seedActor inserts one).
+      visitorPrincipalId: actor.principalId!,
+      channel: 'web_form',
+    })
+    await testDb
+      .insert(ticketConversations)
+      .values({ ticketId, conversationId, ticketType: 'customer' })
+    await testDb.insert(conversationMessages).values({
+      conversationId,
+      principalId: actor.principalId,
+      senderType: 'visitor',
+      isInternal: false,
+      content: 'The opening report, filed on the shared thread.',
+    })
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ number: 78, html_url: 'https://github.com/acme/widgets/issues/78' }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+    try {
+      const link = await createIssueForTicket(ticketId, 'github', actor)
+      expect(link.externalId).toBe('78')
+      const [, init] = fetchSpy.mock.calls[0]
+      const sent = JSON.parse((init as RequestInit).body as string)
+      expect(sent.body).toContain('The opening report, filed on the shared thread.')
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it('never puts an internal note into the external issue body', async () => {
     await seedSettings()
     await seedDefaultStatus()
