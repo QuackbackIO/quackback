@@ -30,7 +30,6 @@ import {
   segments,
   assistantInvolvements,
   ticketConversations,
-  tickets,
   type Conversation,
   type ConversationMessage,
   type PostSuggestion,
@@ -58,6 +57,7 @@ import type {
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
 import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
+import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
@@ -1530,15 +1530,9 @@ export async function listConversationsForAgent(
         // conversations carrying an active customer-ticket link. EXISTS keeps
         // the select shape (conversations only); the tickets join excludes a
         // link pointing at a soft-deleted ticket so a deleted ticket's pair
-        // can't keep listing.
-        filter.hasLinkedCustomerTicket
-          ? sql`EXISTS (
-              SELECT 1 FROM ${ticketConversations} tc
-              INNER JOIN ${tickets} t ON t.id = tc.ticket_id AND t.deleted_at IS NULL
-              WHERE tc.conversation_id = ${conversations.id}
-                AND tc.ticket_type = 'customer'
-            )`
-          : undefined,
+        // can't keep listing. The shared fragment keeps this view and the
+        // inbox nav's pair badge in lockstep.
+        filter.hasLinkedCustomerTicket ? hasLinkedCustomerTicketSql() : undefined,
         // Keyset comparison for the active sort (re-resolved cursor row). id is
         // always the final tiebreak so a page boundary never dupes or skips.
         cursor ? cursorConditionForSort(sort, cursor) : undefined

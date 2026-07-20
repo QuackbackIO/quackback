@@ -8,11 +8,7 @@ import type { ConversationId, PrincipalId, TicketId, TicketTypeId } from '@quack
 import type { TicketType, TiptapContent } from '@/lib/shared/db-types'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
-import {
-  validateTicketIntakeValues,
-  type TicketIntakeError,
-  type TicketTypeDTO,
-} from '@/lib/shared/tickets'
+import type { TicketTypeDTO } from '@/lib/shared/tickets'
 import { useCreateTicket } from '@/lib/client/mutations/inbox'
 import { ticketQueries } from '@/lib/client/queries/inbox'
 import {
@@ -24,6 +20,7 @@ import { realEmail } from '@/lib/shared/anonymous-email'
 import { PortalUserPicker } from '@/components/shared/portal-user-picker'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { TicketFormFields } from '@/components/shared/ticket-form-fields'
+import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { CONVERSATION_EDITOR_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -135,13 +132,10 @@ export function CreateTicketDialog({
 }: CreateTicketDialogProps) {
   const fromConversation = !!conversationId
   const [type, setType] = useState<TicketType>('customer')
-  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [descriptionJson, setDescriptionJson] = useState<JSONContent | undefined>(undefined)
   const [descriptionMarkdown, setDescriptionMarkdown] = useState('')
   const [requester, setRequester] = useState<Requester | null>(null)
-  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // CONVERGENCE PHASE 5 — copilot auto-fill (suggestion-only). `suggestedKeys`
   // marks which values currently on the form came from the copilot (the
@@ -164,11 +158,6 @@ export function CreateTicketDialog({
   const { settings } = useRouteContext({ from: '/admin' }) as {
     settings?: { featureFlags?: FeatureFlags } | null
   }
-  const showAutoFill =
-    fromConversation &&
-    selectedTypeId !== null &&
-    !!settings?.featureFlags?.inboxAi &&
-    !autoFillHidden
 
   // The registry types the picker offers (live rows only). From a conversation
   // the pair rule locks the category to customer, so the picker does too.
@@ -177,11 +166,31 @@ export function CreateTicketDialog({
     const live = (registryTypes ?? []).filter((t) => !t.archived)
     return fromConversation ? live.filter((t) => t.category === 'customer') : live
   }, [registryTypes, fromConversation])
-  const selectedType = candidates.find((t) => t.id === selectedTypeId) ?? null
-  const selectedFields = useMemo(
-    () => [...(selectedType?.fields ?? [])].sort((a, b) => a.order - b.order),
-    [selectedType]
-  )
+  // The shared intake plumbing; the agent path resolves its selection through
+  // its own preselection effects (no implicit fallback) and validates the
+  // type's FULL field set (customer-hidden fields included).
+  const {
+    selectedTypeId,
+    selectedType,
+    fields: selectedFields,
+    fieldValues,
+    fieldErrors,
+    setSelectedTypeId,
+    setFieldValues,
+    setFieldErrors,
+    setFieldValue,
+    selectType: selectIntakeType,
+    validate,
+  } = useTicketIntakeForm(candidates, {
+    resolveSelectedType: (types, id) => types.find((t) => t.id === id) ?? null,
+    includeInternal: true,
+  })
+
+  const showAutoFill =
+    fromConversation &&
+    selectedTypeId !== null &&
+    !!settings?.featureFlags?.inboxAi &&
+    !autoFillHidden
 
   // A fresh open starts clean — prefilled from the conversation when opened
   // in that mode, with the category default type preselected. `candidates` is
@@ -223,21 +232,9 @@ export function CreateTicketDialog({
    *  retype rule protects STORED answers, not a draft's stale keys). Any
    *  suggestion state dies with the old type's field set too. */
   const selectType = (id: string) => {
-    setSelectedTypeId(id)
-    setFieldValues({})
-    setFieldErrors({})
+    selectIntakeType(id)
     setSuggestedKeys(new Set())
     setPreSuggestion(null)
-  }
-
-  const setFieldValue = (key: string, value: unknown) => {
-    setFieldValues((prev) => ({ ...prev, [key]: value }))
-    setFieldErrors((prev) => {
-      if (!prev[key]) return prev
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
   }
 
   /**
@@ -310,18 +307,8 @@ export function CreateTicketDialog({
     // field set, customer-hidden fields included).
     let customAttributes: Record<string, unknown> | undefined
     if (selectedType) {
-      const result = validateTicketIntakeValues(selectedFields, fieldValues, {
-        includeInternal: true,
-      })
-      if (!result.ok) {
-        setFieldErrors(
-          result.errors.reduce<Record<string, string>>((acc, e: TicketIntakeError) => {
-            acc[e.key] = e.message
-            return acc
-          }, {})
-        )
-        return
-      }
+      const result = validate()
+      if (!result.ok) return
       customAttributes = Object.keys(result.values).length > 0 ? result.values : undefined
     }
 

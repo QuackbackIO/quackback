@@ -25,7 +25,6 @@ import {
   userSegments,
   conversations,
   tickets,
-  ticketConversations,
 } from '@/lib/server/db'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { formatTicketNumber } from '@/lib/shared/tickets'
@@ -1003,17 +1002,12 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
   // getTicketRepliedEmailTargets) replaces the team-wide bell — non-watcher
   // teammates no longer get belled for pair-conversation visitor messages.
   // Pair-less conversations are untouched.
-  const [pairLink] = await db
-    .select({ ticketId: ticketConversations.ticketId })
-    .from(ticketConversations)
-    .where(
-      and(
-        eq(ticketConversations.conversationId, event.data.message.conversationId as ConversationId),
-        eq(ticketConversations.ticketType, 'customer')
-      )
-    )
-    .limit(1)
-  if (pairLink) return null
+  const { resolvePairTicketIdForConversation } =
+    await import('@/lib/server/domains/tickets/pair-thread.service')
+  const pairTicketId = await resolvePairTicketIdForConversation(
+    event.data.message.conversationId as ConversationId
+  )
+  if (pairTicketId) return null
 
   const team = await db
     .select({ principalId: principal.id })

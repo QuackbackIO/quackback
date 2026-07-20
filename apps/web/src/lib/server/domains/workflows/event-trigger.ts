@@ -58,9 +58,9 @@ import type {
 } from '@quackback/ids'
 import type { PrincipalType } from '@/lib/server/policy/types'
 import type { BlockReplyMetadata, WorkflowRun } from '@/lib/server/db'
-import { db, eq, and, ticketConversations } from '@/lib/server/db'
 import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { BlockAnswer, AssistantOutcome } from './condition.evaluator'
+import { resolvePairConversationId } from '@/lib/server/domains/tickets/pair-thread.service'
 import { dispatchWorkflowTrigger, type WorkflowTrigger } from './dispatcher'
 import { interruptWaitingRuns, resumeWorkflowRun } from './workflow.engine'
 import { logRunEvent } from './workflow-run-events'
@@ -80,26 +80,6 @@ import { readCursor } from './workflow-wait-queue'
  */
 const UNRESOLVED_TICKET_CONVERSATION_ID = '' as ConversationId
 
-/**
- * The linked CUSTOMER ticket's conversation id for `ticketId`, or null when
- * it has none. One indexed lookup: ticket_conversations' real primary key
- * leads with ticket_id (see the schema's own doc), so filtering by ticketId
- * is a straight PK read, not a scan.
- */
-async function resolveTicketConversationId(ticketId: string): Promise<ConversationId | null> {
-  const [row] = await db
-    .select({ conversationId: ticketConversations.conversationId })
-    .from(ticketConversations)
-    .where(
-      and(
-        eq(ticketConversations.ticketId, ticketId as TicketId),
-        eq(ticketConversations.ticketType, 'customer')
-      )
-    )
-    .limit(1)
-  return (row?.conversationId as ConversationId | undefined) ?? null
-}
-
 /** ticket.created-only bounded re-poll (see dispatchWorkflowsForEvent's
  *  ticket branch doc for why): up to 3 extra lookups, ~1.5s apart. */
 const TICKET_CREATED_LINK_POLL_ATTEMPTS = 3
@@ -110,7 +90,9 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * `resolveTicketConversationId`, plus — for `ticket.created` ONLY — a bounded
+ * The ticket's linked customer conversation (via pair-thread.service's
+ * `resolvePairConversationId` — one indexed lookup on ticket_conversations'
+ * ticket_id-leading PK), plus — for `ticket.created` ONLY — a bounded
  * inline re-poll when the first lookup comes back empty. `ticket.created` is
  * emitted inside createTicketCore BEFORE its caller links the conversation
  * (both the convert_to_ticket action and the inbox create-ticket dialog link
@@ -144,13 +126,13 @@ async function resolveTicketConversationIdForDispatch(
   eventType: 'ticket.created' | 'ticket.status_changed',
   ticketId: string
 ): Promise<ConversationId | null> {
-  const first = await resolveTicketConversationId(ticketId)
+  const first = await resolvePairConversationId(ticketId as TicketId)
   if (first || eventType !== 'ticket.created') return first
 
   let conversationId: ConversationId | null = null
   for (let attempt = 0; attempt < TICKET_CREATED_LINK_POLL_ATTEMPTS && !conversationId; attempt++) {
     await delay(TICKET_CREATED_LINK_POLL_MS)
-    conversationId = await resolveTicketConversationId(ticketId)
+    conversationId = await resolvePairConversationId(ticketId as TicketId)
   }
   return conversationId
 }

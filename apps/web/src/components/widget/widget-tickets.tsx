@@ -16,53 +16,11 @@ import { widgetTicketQueries } from '@/lib/client/queries/widget-tickets'
 import { useWidgetAuth } from './widget-auth-provider'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/shared/utils'
+import { StageChip } from '@/components/shared/ticket-stage'
 
 interface WidgetTicketsProps {
   /** Open a ticket: an id opens that thread, 'new' starts a fresh ticket. */
   onOpenTicket: (target: TicketId | 'new') => void
-}
-
-/** Semantic soft-chip colors per customer-facing stage (ported from the portal
- *  StageChip): neutral while queued, blue while worked, amber when the ball is
- *  in the requester's court, emerald when done. */
-const STAGE_CHIP_CLASS: Record<string, string> = {
-  received: 'bg-muted/60 text-muted-foreground',
-  in_progress: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  awaiting_requester: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  resolved: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-}
-
-function StageChip({
-  slot,
-  label,
-  closed = false,
-}: {
-  slot: string | null
-  label: string | null
-  closed?: boolean
-}) {
-  if (!label) {
-    // B22 generic-close projection: a null-stage closed status ("Won't do",
-    // "Duplicate") used to render no chip at all — a silent dead end. Show a
-    // muted localized "Closed" instead; the internal status name never leaks.
-    if (!closed) return null
-    return (
-      <span className="inline-flex shrink-0 items-center rounded-full bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-        <FormattedMessage id="widget.tickets.stage.closed" defaultMessage="Closed" />
-      </span>
-    )
-  }
-  return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
-        (slot && STAGE_CHIP_CLASS[slot]) ?? 'bg-muted/60 text-muted-foreground'
-      )}
-    >
-      {label}
-    </span>
-  )
 }
 
 export function WidgetTickets({ onOpenTicket }: WidgetTicketsProps) {
@@ -151,7 +109,12 @@ export function WidgetTickets({ onOpenTicket }: WidgetTicketsProps) {
                       {t.unreadCount}
                     </span>
                   )}
-                  <StageChip slot={t.stage.slot} label={t.stage.label} closed={t.stage.closed} />
+                  <StageChip
+                    slot={t.stage.slot}
+                    label={t.stage.label}
+                    closed={t.stage.closed}
+                    closedLabelId="widget.tickets.stage.closed"
+                  />
                   <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 rtl:rotate-180" />
                 </button>
               </li>

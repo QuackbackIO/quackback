@@ -38,6 +38,7 @@ import {
   ticketTypes,
   tickets,
   type TicketTypeEntity,
+  type Transaction,
 } from '@/lib/server/db'
 import type { TicketTypeId } from '@quackback/ids'
 import { TICKET_TYPES, type TicketType } from '@/lib/shared/db-types'
@@ -91,6 +92,22 @@ function validateSlug(slug: string): string {
     )
   }
   return trimmed
+}
+
+/** One live default per category: demote the incumbent inside the caller's
+ *  transaction (the atomic swap — the partial unique index backstops a race
+ *  either way). Shared by createTicketType and updateTicketType. */
+async function unsettleCategoryDefault(tx: Transaction, category: TicketType): Promise<void> {
+  await tx
+    .update(ticketTypes)
+    .set({ isDefault: false })
+    .where(
+      and(
+        eq(ticketTypes.category, category),
+        eq(ticketTypes.isDefault, true),
+        isNull(ticketTypes.deletedAt)
+      )
+    )
 }
 
 /** A slug unique across all types (including archived — slug is globally unique). */
@@ -254,16 +271,7 @@ export async function createTicketType(input: CreateTicketTypeInput): Promise<Ti
       if (input.isDefault) {
         // One default per category: unsettle the incumbent atomically with the
         // insert (the partial unique index backstops a race either way).
-        await tx
-          .update(ticketTypes)
-          .set({ isDefault: false })
-          .where(
-            and(
-              eq(ticketTypes.category, category),
-              eq(ticketTypes.isDefault, true),
-              isNull(ticketTypes.deletedAt)
-            )
-          )
+        await unsettleCategoryDefault(tx, category)
       }
       const [created] = await tx
         .insert(ticketTypes)
@@ -338,16 +346,7 @@ export async function updateTicketType(
     return await db.transaction(async (tx) => {
       if (patch.isDefault === true && !existing.isDefault) {
         // The atomic default swap (see createTicketType).
-        await tx
-          .update(ticketTypes)
-          .set({ isDefault: false })
-          .where(
-            and(
-              eq(ticketTypes.category, existing.category),
-              eq(ticketTypes.isDefault, true),
-              isNull(ticketTypes.deletedAt)
-            )
-          )
+        await unsettleCategoryDefault(tx, existing.category)
         updateData.isDefault = true
       }
       const [updated] = await tx
@@ -376,17 +375,6 @@ export async function updateTicketType(
     }
     throw error
   }
-}
-
-/** Promote a type to its category's default, unsettling the incumbent in the
- *  same transaction (the explicit default-switch path). */
-export async function setDefaultTicketType(id: TicketTypeId): Promise<TicketTypeEntity> {
-  const existing = await db.query.ticketTypes.findFirst({
-    where: and(eq(ticketTypes.id, id), isNull(ticketTypes.deletedAt)),
-  })
-  if (!existing) throw new NotFoundError('TICKET_TYPE_NOT_FOUND', `Ticket type ${id} not found`)
-  if (existing.isDefault) return existing
-  return updateTicketType(id, { isDefault: true })
 }
 
 /**

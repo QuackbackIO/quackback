@@ -10,11 +10,20 @@
  * schema defined here.
  */
 import { z } from 'zod'
+import { isValidTypeId, type TicketTypeId } from '@quackback/ids'
 import type { TicketType, TicketStage, TicketStatusCategory } from '@/lib/shared/db-types'
 
 /** Render a ticket's sequential number for display (plain `#142`). */
 export function formatTicketNumber(n: number): string {
   return `#${n}`
+}
+
+/** Coerce an untrusted wire value to a registry ticket-type id: a well-formed
+ *  `ticket_type` TypeID passes, anything else is dropped (a junk id never
+ *  reaches the uuid-backed queries). Shared by the list/create server fns,
+ *  the inbox fn + route search, and the v1 API. */
+export function coerceTicketTypeId(value: string | null | undefined): TicketTypeId | undefined {
+  return value && isValidTypeId(value, 'ticket_type') ? (value as TicketTypeId) : undefined
 }
 
 /** The workspace's default closed-category ticket status (unified inbox §3.4:
@@ -129,9 +138,6 @@ export const ticketFormSchema = z.array(ticketFormFieldSchema).superRefine((fiel
   }
 })
 
-/** The intake form for each ticket type (empty array = no custom fields). */
-export type TicketForms = Record<TicketType, TicketFormField[]>
-
 /**
  * The wire shape of a `ticket_types` registry row (convergence Phase 4 —
  * user-defined types). A type is a label + icon + color + typed field set
@@ -158,13 +164,6 @@ export interface TicketTypeDTO {
   /** Live tickets referencing the type; present only when the caller asked
    *  for usage (the manager's category-lock notice). */
   ticketCount?: number
-}
-
-/** An empty form for every ticket type — the read-time default. */
-export const DEFAULT_TICKET_FORMS: TicketForms = {
-  customer: [],
-  back_office: [],
-  tracker: [],
 }
 
 /**

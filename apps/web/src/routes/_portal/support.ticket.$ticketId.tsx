@@ -15,7 +15,6 @@ import { BellIcon as BellIconSolid } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import type { JSONContent } from '@tiptap/core'
 import type { TicketId } from '@quackback/ids'
-import { TICKET_STAGES } from '@/lib/shared/db-types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import {
@@ -29,6 +28,7 @@ import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-s
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import { SystemEventNotice } from '@/components/shared/conversation/system-event-notice'
+import { StageTracker } from '@/components/shared/ticket-stage'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -39,74 +39,10 @@ import { Button } from '@/components/ui/button'
 import { BackLink } from '@/components/ui/back-link'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TicketIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
-import { cn } from '@/lib/shared/utils'
 
 export const Route = createFileRoute('/_portal/support/ticket/$ticketId')({
   component: PortalTicketPage,
 })
-
-/** The received -> in_progress -> awaiting_requester -> resolved progress bar,
- *  with every stage labeled under its segment (Featurebase/Intercom show the
- *  full progression, not just the current stop). Mobile keeps only the current
- *  label — four labels don't fit a phone row.
- *
- *  `labels` are the workspace's CUSTOMIZED stage labels (B19 — the chips and
- *  emails always used them; the tracker hardcoded the defaults). `closed`
- *  drives the B22 generic-close projection: a status with no public stage
- *  ("Won't do", "Duplicate") used to render no tracker at all — a silent dead
- *  end — so a closed ticket with no stage slot shows a single quiet "Closed"
- *  bar instead. The internal status name is never shown (that is the point of
- *  the null stage). */
-function StageTracker({
-  slot,
-  closed = false,
-  labels,
-}: {
-  slot: string | null
-  closed?: boolean
-  labels: Record<string, string>
-}) {
-  if (!slot && !closed) return null
-  if (!slot) {
-    return (
-      <div aria-label="Ticket progress">
-        <span className="block h-1.5 rounded-full bg-muted-foreground/30" />
-        <span className="mt-1.5 block text-[11px] font-semibold text-muted-foreground">
-          <FormattedMessage id="portal.tickets.stage.closed" defaultMessage="Closed" />
-        </span>
-      </div>
-    )
-  }
-  const currentIndex = TICKET_STAGES.indexOf(slot as (typeof TICKET_STAGES)[number])
-  return (
-    <ol className="flex items-start gap-1.5" aria-label="Ticket progress">
-      {TICKET_STAGES.map((stage, i) => {
-        const reached = i <= currentIndex
-        const current = i === currentIndex
-        return (
-          <li key={stage} aria-current={current ? 'step' : undefined} className="flex-1">
-            <span
-              className={cn(
-                'block h-1.5 rounded-full transition-colors',
-                reached ? (slot === 'resolved' ? 'bg-emerald-500' : 'bg-primary') : 'bg-border'
-              )}
-            />
-            <span
-              className={cn(
-                'mt-1.5 block text-[11px]',
-                current
-                  ? 'font-semibold text-foreground'
-                  : 'hidden text-muted-foreground/70 sm:block'
-              )}
-            >
-              {labels[stage] ?? DEFAULT_TICKET_STAGE_LABELS[stage]}
-            </span>
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
 
 /** Async-thread timestamps need the day, not just a clock time — tickets span
  *  days, unlike the live messenger this bubble component was built for. */
@@ -324,6 +260,7 @@ function PortalTicketPage() {
               slot={ticket.stage.slot}
               closed={ticket.stage.closed}
               labels={stageLabels ?? DEFAULT_TICKET_STAGE_LABELS}
+              closedLabelId="portal.tickets.stage.closed"
             />
           </div>
 

@@ -29,11 +29,7 @@ import {
   TICKET_STAGES,
   CONVERSATION_PRIORITIES,
 } from '@/lib/shared/db-types'
-import {
-  ticketFormSchema,
-  validateTicketIntakeValues,
-  type TicketFormField,
-} from '@/lib/shared/tickets'
+import { validateTicketIntakeValues, coerceTicketTypeId } from '@/lib/shared/tickets'
 import type {
   AssignTicketInput,
   TicketListFilter,
@@ -99,10 +95,7 @@ export const listTicketsFn = createServerFn({ method: 'GET' })
 
     const filter: TicketListFilter = {
       type: data.type,
-      ticketTypeId:
-        data.ticketTypeId && isValidTypeId(data.ticketTypeId, 'ticket_type')
-          ? (data.ticketTypeId as TicketTypeId)
-          : undefined,
+      ticketTypeId: coerceTicketTypeId(data.ticketTypeId),
       statusCategory: data.statusCategory,
       stage: data.stage,
       assignee,
@@ -184,10 +177,7 @@ export const createTicketFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_CREATE })
     const actor = await policyActorFromAuth(ctx)
-    const ticketTypeId =
-      data.ticketTypeId && isValidTypeId(data.ticketTypeId, 'ticket_type')
-        ? (data.ticketTypeId as TicketTypeId)
-        : undefined
+    const ticketTypeId = coerceTicketTypeId(data.ticketTypeId)
 
     // Phase 4: with a registry type chosen, the field answers are validated
     // into customAttributes against the type's form — the same shared
@@ -627,20 +617,6 @@ export const setTicketStageLabelsFn = createServerFn({ method: 'POST' })
     await requireAuth({ permission: PERMISSIONS.TICKET_MANAGE_TYPES })
     const { setStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
     return setStageLabels(data)
-  })
-
-export const getTicketFormsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
-  const { getTicketForms } = await import('@/lib/server/domains/settings/settings.tickets')
-  return getTicketForms()
-})
-
-export const setTicketFormFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ type: ticketTypeSchema, fields: ticketFormSchema }))
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.TICKET_MANAGE_TYPES })
-    const { setTicketForm } = await import('@/lib/server/domains/settings/settings.tickets')
-    return setTicketForm(data.type, data.fields as TicketFormField[])
   })
 
 // ---------------------------------------------------------------------------

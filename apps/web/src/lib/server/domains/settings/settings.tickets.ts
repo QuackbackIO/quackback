@@ -1,13 +1,15 @@
 /**
- * Ticket settings families (support platform §4.2): the customer-facing stage
- * labels and the per-type intake forms.
+ * Ticket settings family (support platform §4.2): the customer-facing stage
+ * labels.
  *
  * Storage: like office-hours, these ride in the generic `settings.metadata`
  * JSON bag (no dedicated column, no migration). Reads default at read time
- * (`DEFAULT_TICKET_STAGE_LABELS` / empty forms) so a workspace that never
- * customized them still resolves a complete set. The client-safe types + label
- * defaults live in `@/lib/shared/tickets`; this module owns the write-time zod
- * schemas and persistence.
+ * (`DEFAULT_TICKET_STAGE_LABELS`) so a workspace that never customized them
+ * still resolves a complete set. The client-safe types + label defaults live
+ * in `@/lib/shared/tickets`; this module owns the write-time zod schemas and
+ * persistence. (The per-type intake forms this family once stored here were
+ * consumed by migration 0215 into the `ticket_types` registry and the legacy
+ * accessors removed.)
  *
  * This family deliberately uses its own metadata keys instead of touching the
  * shared `settings.types.ts` / `settings.service.ts` so it composes without
@@ -15,26 +17,17 @@
  */
 import { z } from 'zod'
 import { logger } from '@/lib/server/logger'
-import { TICKET_STAGES, TICKET_TYPES } from '@/lib/shared/db-types'
-import {
-  DEFAULT_TICKET_STAGE_LABELS,
-  DEFAULT_TICKET_FORMS,
-  ticketFormSchema,
-  type TicketStageLabels,
-  type TicketFormField,
-  type TicketForms,
-} from '@/lib/shared/tickets'
-import type { TicketType } from '@/lib/shared/db-types'
+import { TICKET_STAGES } from '@/lib/shared/db-types'
+import { DEFAULT_TICKET_STAGE_LABELS, type TicketStageLabels } from '@/lib/shared/tickets'
 import { requireSettings, wrapDbError, writeMetadataKey } from './settings.helpers'
 
-export type { TicketStageLabels, TicketFormField, TicketForms }
-export { DEFAULT_TICKET_STAGE_LABELS, DEFAULT_TICKET_FORMS }
+export type { TicketStageLabels }
+export { DEFAULT_TICKET_STAGE_LABELS }
 
 const log = logger.child({ component: 'settings-tickets' })
 
 /** Keys inside the `settings.metadata` JSON bag. */
 const STAGE_LABELS_KEY = 'ticketStageLabels'
-const FORMS_KEY = 'ticketForms'
 
 // ---------------------------------------------------------------------------
 // Write-time schemas
@@ -97,50 +90,5 @@ export async function setStageLabels(
   } catch (error) {
     log.error({ err: error }, 'update ticket stage labels failed')
     wrapDbError('update ticket stage labels', error)
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Ticket forms
-// ---------------------------------------------------------------------------
-
-/** Resolve the per-type intake forms, defaulting any missing type to an empty form. */
-export function resolveTicketForms(metadataJson: string | null): TicketForms {
-  const meta = parseMetadata(metadataJson)
-  const stored = (meta[FORMS_KEY] ?? {}) as Record<string, unknown>
-  const forms = { ...DEFAULT_TICKET_FORMS }
-  for (const type of TICKET_TYPES) {
-    const parsed = ticketFormSchema.safeParse(stored[type])
-    if (parsed.success) forms[type] = parsed.data
-  }
-  return forms
-}
-
-export async function getTicketForms(): Promise<TicketForms> {
-  try {
-    const org = await requireSettings()
-    return resolveTicketForms(org.metadata)
-  } catch (error) {
-    log.error({ err: error }, 'get ticket forms failed')
-    wrapDbError('fetch ticket forms', error)
-  }
-}
-
-/** Persist the intake form for one ticket type; the full form map is returned. */
-export async function setTicketForm(
-  type: TicketType,
-  fields: TicketFormField[]
-): Promise<TicketForms> {
-  log.info({ type }, 'update ticket form')
-  try {
-    const validated = ticketFormSchema.parse(fields)
-    const org = await requireSettings()
-    const forms = resolveTicketForms(org.metadata)
-    forms[type] = validated
-    await writeMetadataKey(FORMS_KEY, forms)
-    return forms
-  } catch (error) {
-    log.error({ err: error }, 'update ticket form failed')
-    wrapDbError('update ticket form', error)
   }
 }

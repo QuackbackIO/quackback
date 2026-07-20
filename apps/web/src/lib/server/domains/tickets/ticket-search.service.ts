@@ -45,16 +45,32 @@ export interface SearchTicketsOptions {
 }
 
 /**
+ * A message's pair-parent match predicate (CONVERGENCE PHASE 0): the message
+ * belongs to the ticket when it hangs off the ticket directly OR off the
+ * conversation the ticket is paired with (1:1 on the customer side, 0150 +
+ * 0214) — the FTS twin of the pair-thread union read. The internal-note strip
+ * applies to both parents alike (one table, one is_internal column). Shared
+ * by `ticketFtsMatch`'s EXISTS and `searchTickets`' best-message-rank
+ * subquery so the two can't drift.
+ */
+function pairMessageParentSql(tsq: SQL, stripInternal: boolean): SQL {
+  return sql`cm.deleted_at IS NULL
+      AND (cm.ticket_id = ${tickets.id} OR cm.conversation_id IN (
+        SELECT tc.conversation_id FROM ticket_conversations tc
+        WHERE tc.ticket_id = ${tickets.id} AND tc.ticket_type = 'customer'
+      ))
+      AND cm.search_vector @@ ${tsq} ${stripInternal ? sql`AND cm.is_internal = false` : sql``}`
+}
+
+/**
  * The `websearch_to_tsquery` + title/message match predicate shared by every
  * ticket FTS entry point: this primitive's `searchTickets`, and the ticket
  * list's `search` filter (`ticket.service.ts` `listTickets`). Audience scoping
  * beyond the internal-note strip (e.g. restricting to the requester's own
  * tickets) is the caller's concern — see `audienceScope` below.
  *
- * CONVERGENCE PHASE 0: a message matches when it hangs off the ticket directly
- * OR off the conversation the ticket is paired with (1:1 on the customer side,
- * 0150 + 0214) — the FTS twin of the pair-thread union read. The internal-note
- * strip applies to both parents alike (one table, one is_internal column).
+ * CONVERGENCE PHASE 0: a message matches when it hangs off either parent of
+ * the pair (see `pairMessageParentSql`).
  */
 export function ticketFtsMatch(
   query: string,
@@ -64,12 +80,7 @@ export function ticketFtsMatch(
   // A message match must respect the internal-note strip for a requester.
   const msgMatch = sql`EXISTS (
     SELECT 1 FROM conversation_messages cm
-    WHERE cm.deleted_at IS NULL
-      AND (cm.ticket_id = ${tickets.id} OR cm.conversation_id IN (
-        SELECT tc.conversation_id FROM ticket_conversations tc
-        WHERE tc.ticket_id = ${tickets.id} AND tc.ticket_type = 'customer'
-      ))
-      AND cm.search_vector @@ ${tsq} ${opts.stripInternal ? sql`AND cm.is_internal = false` : sql``}
+    WHERE ${pairMessageParentSql(tsq, opts.stripInternal)}
   )`
   const titleMatch = sql`to_tsvector('english', ${tickets.title}) @@ ${tsq}`
   return { tsq, condition: sql`(${titleMatch} OR ${msgMatch})` }
@@ -90,12 +101,7 @@ export async function searchTickets(
   const bestMsgRank = sql<number>`coalesce((
     SELECT max(ts_rank(cm.search_vector, ${tsq}))
     FROM conversation_messages cm
-    WHERE cm.deleted_at IS NULL
-      AND (cm.ticket_id = ${tickets.id} OR cm.conversation_id IN (
-        SELECT tc.conversation_id FROM ticket_conversations tc
-        WHERE tc.ticket_id = ${tickets.id} AND tc.ticket_type = 'customer'
-      ))
-      AND cm.search_vector @@ ${tsq} ${requester ? sql`AND cm.is_internal = false` : sql``}
+    WHERE ${pairMessageParentSql(tsq, requester)}
   ), 0)`
   const rank = sql<number>`greatest(${titleRank}, ${bestMsgRank})`
 

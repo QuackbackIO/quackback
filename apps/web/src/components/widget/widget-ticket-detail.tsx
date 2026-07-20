@@ -14,7 +14,6 @@ import { TicketIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline
 import { toast } from 'sonner'
 import type { JSONContent } from '@tiptap/core'
 import type { TicketId } from '@quackback/ids'
-import { TICKET_STAGES } from '@/lib/shared/db-types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
 import {
@@ -27,6 +26,7 @@ import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { useWidgetAuth } from './widget-auth-provider'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import { SystemEventNotice } from '@/components/shared/conversation/system-event-notice'
+import { StageTracker } from '@/components/shared/ticket-stage'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -35,66 +35,9 @@ import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/shared/utils'
 
 interface WidgetTicketDetailProps {
   ticketId: TicketId
-}
-
-/** The received -> in_progress -> awaiting_requester -> resolved progress bar
- *  (ported from the portal thread). `labels` are the workspace's CUSTOMIZED
- *  stage labels (B19); `closed` drives the B22 generic-close projection — a
- *  null-stage close ("Won't do", "Duplicate") shows a quiet "Closed" bar
- *  instead of vanishing, and the internal status name never renders. */
-function StageTracker({
-  slot,
-  closed = false,
-  labels,
-}: {
-  slot: string | null
-  closed?: boolean
-  labels: Record<string, string>
-}) {
-  if (!slot && !closed) return null
-  if (!slot) {
-    return (
-      <div aria-label="Ticket progress">
-        <span className="block h-1.5 rounded-full bg-muted-foreground/30" />
-        <span className="mt-1.5 block text-[11px] font-semibold text-muted-foreground">
-          <FormattedMessage id="widget.tickets.stage.closed" defaultMessage="Closed" />
-        </span>
-      </div>
-    )
-  }
-  const currentIndex = TICKET_STAGES.indexOf(slot as (typeof TICKET_STAGES)[number])
-  return (
-    <ol className="flex items-start gap-1.5" aria-label="Ticket progress">
-      {TICKET_STAGES.map((stage, i) => {
-        const reached = i <= currentIndex
-        const current = i === currentIndex
-        return (
-          <li key={stage} aria-current={current ? 'step' : undefined} className="flex-1">
-            <span
-              className={cn(
-                'block h-1.5 rounded-full transition-colors',
-                reached ? (slot === 'resolved' ? 'bg-emerald-500' : 'bg-primary') : 'bg-border'
-              )}
-            />
-            <span
-              className={cn(
-                'mt-1.5 block text-[11px]',
-                current
-                  ? 'font-semibold text-foreground'
-                  : 'hidden text-muted-foreground/70 sm:block'
-              )}
-            >
-              {labels[stage] ?? DEFAULT_TICKET_STAGE_LABELS[stage]}
-            </span>
-          </li>
-        )
-      })}
-    </ol>
-  )
 }
 
 /** Async-thread timestamps need the day, not just a clock time. */
@@ -231,6 +174,7 @@ export function WidgetTicketDetail({ ticketId }: WidgetTicketDetailProps) {
               slot={ticket.stage.slot}
               closed={ticket.stage.closed}
               labels={stageLabels ?? DEFAULT_TICKET_STAGE_LABELS}
+              closedLabelId="widget.tickets.stage.closed"
             />
           </div>
 

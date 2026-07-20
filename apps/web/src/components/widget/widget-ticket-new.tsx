@@ -19,13 +19,13 @@ import { toast } from 'sonner'
 import type { JSONContent } from '@tiptap/react'
 import type { TicketId } from '@quackback/ids'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import { validateTicketIntakeValues, type TicketIntakeError } from '@/lib/shared/tickets'
 import { createMyWidgetTicketFn } from '@/lib/server/functions/widget-tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { widgetTicketKeys, widgetTicketQueries } from '@/lib/client/queries/widget-tickets'
 import { useWidgetAuth } from './widget-auth-provider'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { TicketFormFields } from '@/components/shared/ticket-form-fields'
+import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { useWidgetImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -58,39 +58,13 @@ export function WidgetTicketNew({ onCreated }: WidgetTicketNewProps) {
   const [title, setTitle] = useState('')
   const [descriptionJson, setDescriptionJson] = useState<JSONContent | undefined>(undefined)
   const [descriptionMarkdown, setDescriptionMarkdown] = useState('')
-  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
-  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const { data: formData, isLoading: formLoading } = useQuery(
     widgetTicketQueries.form(sessionVersion)
   )
   const types = useMemo(() => formData?.types ?? [], [formData])
-  // No explicit selection = the workspace default type (else the only/first
-  // offered type) — the picker reflects the resolved choice.
-  const selectedType =
-    types.find((t) => t.id === selectedTypeId) ??
-    types.find((t) => t.isDefault) ??
-    (types.length === 1 ? types[0] : null) ??
-    null
-  const fields = selectedType?.fields ?? []
-
-  const setFieldValue = (key: string, value: unknown) => {
-    setFieldValues((prev) => ({ ...prev, [key]: value }))
-    setFieldErrors((prev) => {
-      if (!prev[key]) return prev
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
-  }
-
-  /** Type swap: change the field set and drop the old type's draft answers. */
-  const selectType = (id: string) => {
-    setSelectedTypeId(id)
-    setFieldValues({})
-    setFieldErrors({})
-  }
+  const { selectedType, fields, fieldValues, fieldErrors, setFieldValue, selectType, validate } =
+    useTicketIntakeForm(types)
 
   const create = useMutation({
     mutationFn: (vars: {
@@ -130,16 +104,8 @@ export function WidgetTicketNew({ onCreated }: WidgetTicketNewProps) {
     }
 
     // Client inline validation via the same validator the server enforces.
-    const result = validateTicketIntakeValues(fields, fieldValues)
-    if (!result.ok) {
-      setFieldErrors(
-        result.errors.reduce<Record<string, string>>((acc, e: TicketIntakeError) => {
-          acc[e.key] = e.message
-          return acc
-        }, {})
-      )
-      return
-    }
+    const result = validate()
+    if (!result.ok) return
 
     create.mutate({
       title: title.trim(),

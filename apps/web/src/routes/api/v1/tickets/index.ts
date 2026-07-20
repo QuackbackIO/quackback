@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import { isValidTypeId } from '@quackback/ids'
 import { withApiKeyAuth } from '@/lib/server/domains/api/auth'
 import {
   successResponse,
@@ -12,6 +11,7 @@ import { parseOptionalTypeId } from '@/lib/server/domains/api/validation'
 import { serviceActorFromApiAuth } from '@/lib/server/domains/api/service-actor'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
+import { coerceTicketTypeId } from '@/lib/shared/tickets'
 import { serializeTicket } from './-serialize'
 import {
   priorityEnum,
@@ -54,11 +54,7 @@ export const Route = createFileRoute('/api/v1/tickets/')({
           const type = (url.searchParams.get('type') as TicketType | null) ?? undefined
           // The Phase 4 registry-type filter — the TypeID check keeps a junk
           // value out of the uuid-backed query (mirrors listTicketsFn).
-          const rawTicketTypeId = url.searchParams.get('ticketTypeId')
-          const ticketTypeId =
-            rawTicketTypeId && isValidTypeId(rawTicketTypeId, 'ticket_type')
-              ? (rawTicketTypeId as TicketTypeId)
-              : undefined
+          const ticketTypeId = coerceTicketTypeId(url.searchParams.get('ticketTypeId'))
           const statusCategory =
             (url.searchParams.get('statusCategory') as TicketStatusCategory | null) ?? undefined
           const stage = (url.searchParams.get('stage') as TicketStage | null) ?? undefined

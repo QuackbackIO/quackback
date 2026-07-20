@@ -14,11 +14,11 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import type { JSONContent } from '@tiptap/react'
 import type { TiptapContent } from '@/lib/shared/db-types'
-import { validateTicketIntakeValues, type TicketIntakeError } from '@/lib/shared/tickets'
 import { createMyTicketFn, getMyTicketFormFn } from '@/lib/server/functions/tickets'
 import { portalTicketKeys } from '@/lib/client/queries/portal-tickets'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { TicketFormFields } from '@/components/shared/ticket-form-fields'
+import { useTicketIntakeForm } from '@/components/shared/use-ticket-intake-form'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -59,9 +59,6 @@ export function NewPortalTicketDialog({
   const [title, setTitle] = useState('')
   const [descriptionJson, setDescriptionJson] = useState<JSONContent | undefined>(undefined)
   const [descriptionMarkdown, setDescriptionMarkdown] = useState('')
-  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null)
-  const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // The intake types this portal offers (live, intake-visible customer types,
   // customer-visible fields only). Fetched lazily while the dialog is open.
@@ -72,44 +69,27 @@ export function NewPortalTicketDialog({
     staleTime: 60_000,
   })
   const types = useMemo(() => formData?.types ?? [], [formData])
-  // No explicit selection = the workspace default type (else the only offered
-  // type) — the picker reflects the resolved choice.
-  const selectedType =
-    types.find((t) => t.id === selectedTypeId) ??
-    types.find((t) => t.isDefault) ??
-    (types.length === 1 ? types[0] : null) ??
-    null
-  const fields = selectedType?.fields ?? []
+  const {
+    selectedType,
+    fields,
+    fieldValues,
+    fieldErrors,
+    setFieldValue,
+    selectType,
+    reset: resetIntake,
+    validate,
+  } = useTicketIntakeForm(types)
 
   useEffect(() => {
     if (open) {
       setTitle('')
       setDescriptionJson(undefined)
       setDescriptionMarkdown('')
-      setSelectedTypeId(null)
-      setFieldValues({})
-      setFieldErrors({})
+      resetIntake()
     }
-  }, [open])
+  }, [open, resetIntake])
 
   const { upload: uploadImage } = usePortalImageUpload()
-
-  const setFieldValue = (key: string, value: unknown) => {
-    setFieldValues((prev) => ({ ...prev, [key]: value }))
-    setFieldErrors((prev) => {
-      if (!prev[key]) return prev
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
-  }
-
-  /** Type swap: change the field set and drop the old type's draft answers. */
-  const selectType = (id: string) => {
-    setSelectedTypeId(id)
-    setFieldValues({})
-    setFieldErrors({})
-  }
 
   const create = useMutation({
     mutationFn: (vars: {
@@ -141,16 +121,8 @@ export function NewPortalTicketDialog({
     }
 
     // Client inline validation via the same validator the server enforces.
-    const result = validateTicketIntakeValues(fields, fieldValues)
-    if (!result.ok) {
-      setFieldErrors(
-        result.errors.reduce<Record<string, string>>((acc, e: TicketIntakeError) => {
-          acc[e.key] = e.message
-          return acc
-        }, {})
-      )
-      return
-    }
+    const result = validate()
+    if (!result.ok) return
 
     create.mutate({
       title: title.trim(),

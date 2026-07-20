@@ -10,9 +10,10 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
-import type { PrincipalId, TeamId, CompanyId, ConversationId, TicketTypeId } from '@quackback/ids'
+import type { PrincipalId, TeamId, CompanyId, ConversationId } from '@quackback/ids'
 import { TICKET_TYPES, TICKET_STAGES, CONVERSATION_PRIORITIES } from '@/lib/shared/db-types'
 import { INBOX_TRIAGE_FACETS } from '@/lib/shared/inbox/items'
+import { coerceTicketTypeId } from '@/lib/shared/tickets'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
@@ -77,10 +78,7 @@ export const listInboxItemsFn = createServerFn({ method: 'GET' })
       facet: data.facet,
       kinds: data.kinds,
       ticketType: data.ticketType,
-      ticketTypeId:
-        data.ticketTypeId && isValidTypeId(data.ticketTypeId, 'ticket_type')
-          ? (data.ticketTypeId as TicketTypeId)
-          : undefined,
+      ticketTypeId: coerceTicketTypeId(data.ticketTypeId),
       ticketStage: data.ticketStage,
       linkedPairsOnly: data.linkedPairsOnly,
       priority: data.priority,

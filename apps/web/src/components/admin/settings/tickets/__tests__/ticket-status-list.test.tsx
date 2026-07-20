@@ -47,13 +47,11 @@ const STAGE_LABELS = {
 vi.mock('@/lib/server/functions/tickets', () => ({
   listTicketStatusesFn: vi.fn(async () => FIXTURE_STATUSES),
   getTicketStageLabelsFn: vi.fn(async () => STAGE_LABELS),
-  getTicketFormsFn: vi.fn(async () => ({ customer: [], back_office: [], tracker: [] })),
   createTicketStatusFn: vi.fn(),
   updateTicketStatusFn: vi.fn(),
   reorderTicketStatusesFn: vi.fn(),
   deleteTicketStatusFn: vi.fn(),
   setTicketStageLabelsFn: vi.fn(),
-  setTicketFormFn: vi.fn(),
 }))
 
 import { TicketStatusList } from '../ticket-status-list'

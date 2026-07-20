@@ -12,6 +12,7 @@ import type {
   TicketId,
   TicketStatusId,
 } from '@quackback/ids'
+import { coerceTicketTypeId } from '@/lib/shared/tickets'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import {
   isConversationSort,
@@ -221,10 +222,7 @@ export const Route = createFileRoute('/admin/inbox')({
       // The tickets-branch registry-type dropdown — only a well-formed
       // ticket_type id is accepted (a junk value is dropped, never reaching
       // the uuid-backed ticket query).
-      ttype:
-        typeof search.ttype === 'string' && isValidTypeId(search.ttype, 'ticket_type')
-          ? search.ttype
-          : undefined,
+      ttype: coerceTicketTypeId(typeof search.ttype === 'string' ? search.ttype : undefined),
       // Quinn-view sub-filter by involvement outcome; only the canonical buckets.
       ai:
         search.ai === 'resolved' || search.ai === 'escalated' || search.ai === 'pending'

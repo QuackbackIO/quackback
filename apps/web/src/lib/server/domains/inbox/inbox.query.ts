@@ -47,6 +47,7 @@ import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
 import { can } from '@/lib/server/policy/authorize'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import { ticketFilter } from '@/lib/server/policy/tickets'
+import { hasLinkedCustomerTicketSql } from '@/lib/server/messages/pair-link'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { Actor } from '@/lib/server/policy/types'
 import type { TicketAssigneeFilter } from '@/lib/server/domains/tickets/ticket.types'
@@ -555,24 +556,16 @@ async function countTicketScopesByType(
  * CONVERGENCE PHASE 2 (alias semantics): open conversations that ARE a pair
  * (an active link to a non-deleted customer ticket) — the "customer" ticket
  * badge's pair half. A linked pair counts ONCE across the nav, as its
- * conversation; the same EXISTS shape `listConversationsForAgent`'s
- * `hasLinkedCustomerTicket` filter uses keeps badge and view in lockstep.
+ * conversation; the shared `hasLinkedCustomerTicketSql` fragment (also what
+ * `listConversationsForAgent`'s `hasLinkedCustomerTicket` filter runs) keeps
+ * badge and view in lockstep.
  */
 async function countPairConversations(actor: Actor): Promise<number> {
   const [row] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(conversations)
     .where(
-      and(
-        conversationFilter(actor),
-        eq(conversations.status, 'open'),
-        sql`EXISTS (
-          SELECT 1 FROM ${ticketConversations} tc
-          INNER JOIN ${tickets} t ON t.id = tc.ticket_id AND t.deleted_at IS NULL
-          WHERE tc.conversation_id = ${conversations.id}
-            AND tc.ticket_type = 'customer'
-        )`
-      )
+      and(conversationFilter(actor), eq(conversations.status, 'open'), hasLinkedCustomerTicketSql())
     )
   return row?.c ?? 0
 }

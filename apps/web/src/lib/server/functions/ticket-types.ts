@@ -120,12 +120,3 @@ export const restoreTicketTypeFn = createServerFn({ method: 'POST' })
     const svc = await import('@/lib/server/domains/tickets/ticket-type.service')
     return svc.ticketTypeToDTO(await svc.restoreTicketType(data.id as TicketTypeId))
   })
-
-/** Promote a type to its category's default (the atomic swap). */
-export const setDefaultTicketTypeFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ id: ticketTypeIdSchema }))
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.TICKET_MANAGE_TYPES })
-    const svc = await import('@/lib/server/domains/tickets/ticket-type.service')
-    return svc.ticketTypeToDTO(await svc.setDefaultTicketType(data.id as TicketTypeId))
-  })

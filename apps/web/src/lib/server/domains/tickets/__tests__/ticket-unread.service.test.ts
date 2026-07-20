@@ -26,7 +26,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { tickets, ticketStatuses, conversationMessages, principal, user, eq } from '@/lib/server/db'
 import {
-  unreadCountForTicket,
   ticketUnreadMapForAgent,
   markTicketReadForAgent,
   markTicketReadForRequester,
@@ -132,62 +131,6 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  describe('unreadCountForTicket', () => {
-    it('counts agent messages for the requester side with a null watermark (count all)', async () => {
-      const ticketId = await seedTicket()
-      const agentP = await seedAgentPrincipal()
-      await insertMessage({ ticketId, senderType: 'agent', principalId: agentP })
-      await insertMessage({ ticketId, senderType: 'agent', principalId: agentP })
-
-      expect(await unreadCountForTicket(ticketId, 'requester')).toBe(2)
-    })
-
-    it('counts visitor messages for the assignee side with a null watermark (count all)', async () => {
-      const ticketId = await seedTicket()
-      await insertMessage({ ticketId, senderType: 'visitor' })
-      await insertMessage({ ticketId, senderType: 'visitor' })
-      await insertMessage({ ticketId, senderType: 'visitor' })
-
-      expect(await unreadCountForTicket(ticketId, 'assignee')).toBe(3)
-    })
-
-    it('only counts messages newer than the watermark', async () => {
-      const ticketId = await seedTicket()
-      const old = new Date(Date.now() - 60_000)
-      await insertMessage({ ticketId, senderType: 'visitor', createdAt: old })
-      await testDb
-        .update(tickets)
-        .set({ assigneeLastReadAt: new Date(Date.now() - 30_000) })
-        .where(eq(tickets.id, ticketId))
-      await insertMessage({ ticketId, senderType: 'visitor' })
-
-      expect(await unreadCountForTicket(ticketId, 'assignee')).toBe(1)
-    })
-
-    it('excludes internal notes and soft-deleted messages', async () => {
-      const ticketId = await seedTicket()
-      const agentP = await seedAgentPrincipal()
-      await insertMessage({ ticketId, senderType: 'agent', principalId: agentP, isInternal: true })
-      const deleted = await insertMessage({ ticketId, senderType: 'agent', principalId: agentP })
-      await testDb
-        .update(conversationMessages)
-        .set({ deletedAt: new Date() })
-        .where(eq(conversationMessages.id, deleted.id))
-
-      expect(await unreadCountForTicket(ticketId, 'requester')).toBe(0)
-    })
-
-    it('never counts the other ticket parent kind (conversation-scoped messages)', async () => {
-      // Regression guard for the polymorphic conversation_messages table
-      // (§3.3): a ticket's unread count must only ever look at ticket_id = X.
-      const ticketId = await seedTicket()
-      const other = await seedTicket()
-      await insertMessage({ ticketId: other, senderType: 'visitor' })
-
-      expect(await unreadCountForTicket(ticketId, 'assignee')).toBe(0)
-    })
-  })
-
   describe('ticketUnreadMapForAgent', () => {
     it('returns a batched map of requester-authored unread counts keyed by ticket id', async () => {
       const ticketA = await seedTicket()
@@ -253,45 +196,34 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
       expect(after.assigneeLastReadAt).toBeNull()
     })
 
-    it('accepts an explicit `at` timestamp instead of defaulting to now', async () => {
-      const ticketId = await seedTicket()
-      const at = new Date('2026-01-01T00:00:00.000Z')
-
-      await markTicketReadForAgent(ticketId, agentActor(), at)
-
-      const after = await ticketReadWatermarks(ticketId)
-      expect(after.assigneeLastReadAt?.toISOString()).toBe(at.toISOString())
-    })
-
     it('publishes a ticket_read realtime event for each side (unified inbox §3.2, M3)', async () => {
       const ticketId = await seedTicket()
-      const at = new Date('2026-01-01T00:00:00.000Z')
 
-      await markTicketReadForAgent(ticketId, agentActor(), at)
+      await markTicketReadForAgent(ticketId, agentActor())
       expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
         kind: 'ticket_read',
         ticketId,
         side: 'agent',
-        at: at.toISOString(),
+        at: expect.any(String),
       })
 
-      await markTicketReadForRequester(ticketId, requesterActor(), at)
+      await markTicketReadForRequester(ticketId, requesterActor())
       expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
         kind: 'ticket_read',
         ticketId,
         side: 'visitor',
-        at: at.toISOString(),
+        at: expect.any(String),
       })
     })
 
     it('marking read clears the unread count for that side', async () => {
       const ticketId = await seedTicket()
       await insertMessage({ ticketId, senderType: 'visitor' })
-      expect(await unreadCountForTicket(ticketId, 'assignee')).toBe(1)
+      expect((await ticketUnreadMapForAgent([ticketId])).get(ticketId)).toBe(1)
 
       await markTicketReadForAgent(ticketId, agentActor())
 
-      expect(await unreadCountForTicket(ticketId, 'assignee')).toBe(0)
+      expect((await ticketUnreadMapForAgent([ticketId])).get(ticketId)).toBeUndefined()
     })
   })
 

@@ -48,7 +48,6 @@ import {
   updateTicketType,
   archiveTicketType,
   restoreTicketType,
-  setDefaultTicketType,
   listTicketTypes,
   getTicketType,
   countTicketsUsingType,
@@ -191,7 +190,7 @@ describe.skipIf(!fixture.available)('ticket-type.service (real DB, rolled back)'
       /cannot unset the category default/i
     )
 
-    await setDefaultTicketType(b.id)
+    await updateTicketType(b.id, { isDefault: true })
     const defaults = await liveDefaults('customer')
     expect(defaults).toHaveLength(1)
     expect(defaults[0].id).toBe(b.id)

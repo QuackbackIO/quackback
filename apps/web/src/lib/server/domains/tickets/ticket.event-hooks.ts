@@ -19,11 +19,11 @@
  * re-trigger itself; the recorders it calls are status-guarded no-ops when the
  * ticket is already open.
  */
-import { db, ticketConversations, eq, and } from '@/lib/server/db'
 import type { EventData } from '@/lib/server/events/types'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
 import { autoReopenOnRequesterReply } from './ticket.service'
+import { resolvePairTicketIdForConversation } from './pair-thread.service'
 
 const log = logger.child({ component: 'ticket-event-hooks' })
 
@@ -38,24 +38,15 @@ export async function autoReopenPairTicketFromEvent(event: EventData): Promise<v
     if (event.type !== 'message.created') return
     if (event.data.message.senderType !== 'visitor') return
     const conversationId = event.data.message.conversationId as ConversationId
-    const [link] = await db
-      .select({ ticketId: ticketConversations.ticketId })
-      .from(ticketConversations)
-      .where(
-        and(
-          eq(ticketConversations.conversationId, conversationId),
-          eq(ticketConversations.ticketType, 'customer')
-        )
-      )
-      .limit(1)
-    if (!link) return
+    const ticketId = await resolvePairTicketIdForConversation(conversationId)
+    if (!ticketId) return
     // The message author is the requester — threaded through so the reopen's
     // timeline record + event actor attribute the move to them (the function
     // no-ops unless the ticket is awaiting them or closed, so an already-open
     // ticket — e.g. the portal reply path's direct call having landed first —
     // records nothing twice).
     await autoReopenOnRequesterReply(
-      link.ticketId,
+      ticketId,
       (event.data.message.authorPrincipalId as PrincipalId | null) ?? null
     )
   } catch (err) {
