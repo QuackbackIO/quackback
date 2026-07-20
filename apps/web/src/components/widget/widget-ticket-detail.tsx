@@ -6,7 +6,7 @@
  * `awaiting_requester` banner, and a rich-text reply composer. Ownership + the
  * internal-note strip are enforced by the widget requester fns.
  */
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { PaperAirplaneIcon } from '@heroicons/react/24/solid'
@@ -17,9 +17,13 @@ import type { TicketId } from '@quackback/ids'
 import { TICKET_STAGES } from '@/lib/shared/db-types'
 import type { TiptapContent } from '@/lib/shared/db-types'
 import { DEFAULT_TICKET_STAGE_LABELS } from '@/lib/shared/tickets'
-import { replyToMyWidgetTicketFn } from '@/lib/server/functions/widget-tickets'
+import {
+  replyToMyWidgetTicketFn,
+  markMyWidgetTicketReadFn,
+} from '@/lib/server/functions/widget-tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { widgetTicketKeys, widgetTicketQueries } from '@/lib/client/queries/widget-tickets'
+import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import { useWidgetAuth } from './widget-auth-provider'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
@@ -99,6 +103,31 @@ export function WidgetTicketDetail({ ticketId }: WidgetTicketDetailProps) {
     isError,
   } = useQuery(widgetTicketQueries.detail(sessionVersion, ticketId))
   const { data: thread } = useQuery(widgetTicketQueries.thread(sessionVersion, ticketId))
+
+  // Read-through (convergence Phase 2): viewing the ticket marks the pair's
+  // SHARED watermark read — on a linked pair the server writes the
+  // CONVERSATION's visitor_last_read_at, so the Messages-tab row + the
+  // messenger badge clear on the same read. Re-fires when a new message lands
+  // while the detail is open. Fire-and-forget: a failed mark-read must never
+  // break the view.
+  const threadLoaded = !!thread
+  const lastMessageId = thread?.messages?.[thread.messages.length - 1]?.id ?? null
+  useEffect(() => {
+    if (!threadLoaded) return
+    void markMyWidgetTicketReadFn({ data: { ticketId }, headers: getWidgetAuthHeaders() })
+      .then(() => {
+        // Clear the badges that read the shared watermark: the Tickets-tab
+        // rows, the Messages-tab list, and the messenger tab badge.
+        void queryClient.invalidateQueries({ queryKey: widgetTicketKeys.list(sessionVersion) })
+        void queryClient.invalidateQueries({
+          queryKey: conversationKeys.widgetConversationList(sessionVersion),
+        })
+        void queryClient.invalidateQueries({
+          queryKey: ['widget', 'messenger-unread', sessionVersion],
+        })
+      })
+      .catch(() => {})
+  }, [ticketId, sessionVersion, threadLoaded, lastMessageId, queryClient])
 
   const send = useMutation({
     mutationFn: (contentJson: TiptapContent | null) =>

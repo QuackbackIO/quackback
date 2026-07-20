@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 597 surfaces
+### Server functions (`requireAuth`) — 598 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -608,6 +608,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::listMyTicketsFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::getMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::getMyTicketThreadFn | END_USER (any authenticated) |
+| `lib/server/functions/tickets.ts`::markMyTicketReadFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::replyToMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::createMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::searchTicketsFn | ticket.view |
@@ -900,7 +901,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-191 of 897 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+192 of 899 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -1005,6 +1006,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/widget-tickets.ts`::getMyWidgetTicketFn | server-fn |
 | `lib/server/functions/widget-tickets.ts`::getMyWidgetTicketThreadFn | server-fn |
 | `lib/server/functions/widget-tickets.ts`::listMyWidgetTicketsFn | server-fn |
+| `lib/server/functions/widget-tickets.ts`::markMyWidgetTicketReadFn | server-fn |
 | `lib/server/functions/widget-tickets.ts`::replyToMyWidgetTicketFn | server-fn |
 | `lib/server/functions/workspace-utils.ts`::requireWorkspaceRole | server-fn |
 | `lib/server/functions/workspace.ts`::getCurrentUserRole | server-fn |

@@ -67,6 +67,12 @@ export interface InboxListFilter {
   /** A saved view's `ticket_stage` rule (unified inbox §2.8) — no chip sets
    *  this directly. */
   ticketStage?: TicketStage
+  /** CONVERGENCE PHASE 2 (alias semantics): the conversation branch lists only
+   *  PAIR conversations (an active customer-ticket link). Set by the
+   *  Tickets-section scopes ("Customer"/"All tickets") — a linked pair lists
+   *  there as its ONE item, the conversation row, alongside the ticket
+   *  branch's still-standalone rows. Unset everywhere else. */
+  linkedPairsOnly?: boolean
   priority?: ConversationPriority
   search?: string
   /** 'me' | 'unassigned' | a teammate principal id — shared shape with
@@ -325,6 +331,10 @@ async function fetchConversationBranch(
       teamId: filter.teamId,
       companyId: filter.companyId,
       search: filter.search,
+      // Convergence alias semantics: the Tickets-section scopes list a linked
+      // pair as its ONE item — this branch's conversation row (the ticket
+      // branch's exclusion keeps the pair off a second row).
+      hasLinkedCustomerTicket: filter.linkedPairsOnly || undefined,
       sort,
       before: cursor ?? undefined,
       limit,
@@ -459,6 +469,10 @@ export async function listInboxItems(
 export interface InboxCounts {
   mine: number
   unassigned: number
+  /** Open-ticket counts per type. CONVERGENCE PHASE 2 (alias semantics): the
+   *  `customer` bucket counts a linked pair ONCE, as its conversation — open
+   *  standalone customer tickets PLUS open pair conversations (each scope
+   *  gated by its own kind's view permission, mirroring the list branches). */
   ticketsByType: { customer: number; back_office: number; tracker: number }
 }
 
@@ -491,6 +505,10 @@ async function countConversationScope(
  * folding it into the shared WHERE reproduces the previous per-type
  * behavior (customer: excluded-if-linked; the other two: unfiltered)
  * without a CASE/FILTER per bucket.
+ *
+ * The customer bucket these return is therefore the STANDALONE half only —
+ * `countInboxScopes` adds the pair half (`countPairConversations`) so the
+ * badge matches the converged Tickets-scope views.
  */
 async function countTicketScopesByType(
   actor: Actor
@@ -523,16 +541,43 @@ async function countTicketScopesByType(
 }
 
 /**
+ * CONVERGENCE PHASE 2 (alias semantics): open conversations that ARE a pair
+ * (an active link to a non-deleted customer ticket) — the "customer" ticket
+ * badge's pair half. A linked pair counts ONCE across the nav, as its
+ * conversation; the same EXISTS shape `listConversationsForAgent`'s
+ * `hasLinkedCustomerTicket` filter uses keeps badge and view in lockstep.
+ */
+async function countPairConversations(actor: Actor): Promise<number> {
+  const [row] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(conversations)
+    .where(
+      and(
+        conversationFilter(actor),
+        eq(conversations.status, 'open'),
+        sql`EXISTS (
+          SELECT 1 FROM ${ticketConversations} tc
+          INNER JOIN ${tickets} t ON t.id = tc.ticket_id AND t.deleted_at IS NULL
+          WHERE tc.conversation_id = ${conversations.id}
+            AND tc.ticket_type = 'customer'
+        )`
+      )
+    )
+  return row?.c ?? 0
+}
+
+/**
  * Nav-badge counts for the inbox (§3.1): "mine"/"unassigned" open
- * conversations, plus open tickets per type (customer counts respect the
- * one-row rule). Bounded by the same RBAC predicates as the list; a kind the
- * actor cannot view at all contributes 0 rather than querying.
+ * conversations, plus open tickets per type (the customer bucket counts a
+ * linked pair once, as its conversation — see InboxCounts). Bounded by the
+ * same RBAC predicates as the list; a kind the actor cannot view at all
+ * contributes 0 rather than querying.
  */
 export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
   const canConversations = canViewConversations(actor)
   const canTickets = canViewTickets(actor)
 
-  const [mine, unassigned, ticketsByType] = await Promise.all([
+  const [mine, unassigned, ticketsByType, pairConversations] = await Promise.all([
     canConversations && actor.principalId
       ? countConversationScope(actor, { assignedAgentPrincipalId: actor.principalId })
       : Promise.resolve(0),
@@ -540,7 +585,13 @@ export async function countInboxScopes(actor: Actor): Promise<InboxCounts> {
     canTickets
       ? countTicketScopesByType(actor)
       : Promise.resolve({ customer: 0, back_office: 0, tracker: 0 }),
+    canConversations ? countPairConversations(actor) : Promise.resolve(0),
   ])
+
+  // The pair is ONE item: a linked customer ticket's share of the customer
+  // bucket arrives as its conversation (the standalone half is already in
+  // ticketsByType.customer via the ticket-table count).
+  ticketsByType.customer += pairConversations
 
   return { mine, unassigned, ticketsByType }
 }

@@ -374,5 +374,105 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
       const counts = await countInboxScopes(conversationOnlyActor())
       expect(counts.ticketsByType).toEqual({ customer: 0, back_office: 0, tracker: 0 })
     })
+
+    it('a linked pair counts ONCE in the customer bucket — as its conversation (Phase 2)', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+      const actor = buildActor({
+        principalId: createId('principal') as PrincipalId,
+        permissions: new Set([PERMISSIONS.CONVERSATION_VIEW_ALL, PERMISSIONS.TICKET_VIEW_ALL]),
+      })
+
+      // One pair (open conversation + linked open customer ticket), one
+      // standalone open customer ticket, one open back-office ticket.
+      const pairConversation = await seedConversation(visitor)
+      const pairTicket = await createTicket({ type: 'customer', title: 'Pair' }, writeActor())
+      await linkTicketToConversation(pairTicket.id, pairConversation)
+      await createTicket({ type: 'customer', title: 'Standalone' }, writeActor())
+      await createTicket({ type: 'back_office', title: 'BO' }, writeActor())
+
+      const counts = await countInboxScopes(actor)
+      // customer = 1 pair (as its conversation) + 1 standalone — NOT 3.
+      expect(counts.ticketsByType).toEqual({ customer: 2, back_office: 1, tracker: 0 })
+
+      // A closed pair conversation drops out of the badge (the badge tracks
+      // the converged view's open rows).
+      await testDb
+        .update(conversations)
+        .set({ status: 'closed' })
+        .where(eq(conversations.id, pairConversation))
+      const after = await countInboxScopes(actor)
+      expect(after.ticketsByType.customer).toBe(1)
+    })
+  })
+
+  describe('alias semantics (convergence Phase 2)', () => {
+    it('the customer-tickets scope lists the pair as its ONE conversation row, plus standalone tickets', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+      const pairConversation = await seedConversation(visitor)
+      const pairTicket = await createTicket({ type: 'customer', title: 'Pair' }, writeActor())
+      await linkTicketToConversation(pairTicket.id, pairConversation)
+      const standalone = await createTicket({ type: 'customer', title: 'Standalone' }, writeActor())
+      // A plain conversation (no linked ticket) must NOT surface in this scope.
+      const plainConversation = await seedConversation(visitor)
+
+      // The tickets_customer view's param shape (buildInboxListParams).
+      const page = await listInboxItems(serviceActor(), {
+        facet: 'all',
+        kinds: ['conversation', 'ticket'],
+        ticketType: 'customer',
+        linkedPairsOnly: true,
+        limit: 20,
+      })
+
+      const pairRow = page.items.find(
+        (i) => i.kind === 'conversation' && i.conversation.id === pairConversation
+      )
+      expect(pairRow).toBeDefined()
+      expect(pairRow?.kind === 'conversation' && pairRow.linkedTicket?.id).toBe(pairTicket.id)
+      // The pair's ticket never gets a second row…
+      expect(page.items.some((i) => i.kind === 'ticket' && i.ticket.id === pairTicket.id)).toBe(
+        false
+      )
+      // …the standalone customer ticket keeps its own row…
+      expect(page.items.some((i) => i.kind === 'ticket' && i.ticket.id === standalone.id)).toBe(
+        true
+      )
+      // …and the plain conversation is out of scope.
+      expect(
+        page.items.some((i) => i.kind === 'conversation' && i.conversation.id === plainConversation)
+      ).toBe(false)
+    })
+
+    it('the pair vanishes from the customer-tickets scope for a ticket-only actor (branch skip mirrors the badge)', async () => {
+      await seedSettings()
+      await seedStatuses()
+      const { createTicket } = await import('@/lib/server/domains/tickets/ticket.service')
+      const visitor = await seedVisitor()
+      const pairConversation = await seedConversation(visitor)
+      const pairTicket = await createTicket({ type: 'customer', title: 'Pair' }, writeActor())
+      await linkTicketToConversation(pairTicket.id, pairConversation)
+      const standalone = await createTicket({ type: 'customer', title: 'Standalone' }, writeActor())
+
+      const page = await listInboxItems(ticketOnlyActor(), {
+        facet: 'all',
+        kinds: ['conversation', 'ticket'],
+        ticketType: 'customer',
+        linkedPairsOnly: true,
+        limit: 20,
+      })
+
+      // No conversation branch for this actor: the pair has no row at all,
+      // the standalone ticket still does.
+      expect(page.items.every((i) => i.kind === 'ticket')).toBe(true)
+      expect(page.items.some((i) => i.kind === 'ticket' && i.ticket.id === standalone.id)).toBe(
+        true
+      )
+    })
   })
 })

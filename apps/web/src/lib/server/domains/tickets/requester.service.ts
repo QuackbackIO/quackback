@@ -14,6 +14,7 @@ import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
 import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
 import { emitTicketReplied } from './ticket.webhooks'
 import { buildTicketContext, ticketToDTO, toRequesterTicketDTO } from './ticket.dto'
+import { markTicketReadForRequester, requesterTicketUnreadMap } from './ticket-unread.service'
 import {
   insertTicketMessage,
   listTicketMessages,
@@ -109,7 +110,11 @@ async function loadOwnedTicketOr404(ticketId: TicketId, principalId: PrincipalId
   return ticket
 }
 
-/** Every `customer` ticket the actor filed, newest activity first. */
+/** Every `customer` ticket the actor filed, newest activity first. Each row
+ *  carries the requester's unread count — CONVERGENCE PHASE 2: a linked pair's
+ *  count reads the CONVERSATION's visitor watermark (the pair's shared truth),
+ *  an unlinked standalone ticket's reads the legacy ticket column (see
+ *  requesterTicketUnreadMap). */
 export async function listMyTickets(actor: Actor): Promise<RequesterTicketDTO[]> {
   const principalId = requireRequester(actor)
   const rows = await db
@@ -125,7 +130,11 @@ export async function listMyTickets(actor: Actor): Promise<RequesterTicketDTO[]>
     .orderBy(desc(tickets.updatedAt), desc(tickets.id))
     .limit(LIST_LIMIT)
   const ctx = await buildTicketContext(rows)
-  return rows.map((r) => ticketToDTO(r, ctx, 'requester'))
+  const unreadMap = await requesterTicketUnreadMap(rows.map((r) => r.id))
+  return rows.map((r) => ({
+    ...ticketToDTO(r, ctx, 'requester'),
+    unreadCount: unreadMap.get(r.id) ?? 0,
+  }))
 }
 
 /** A single ticket the actor owns as requester. */
@@ -133,7 +142,23 @@ export async function getMyTicket(actor: Actor, ticketId: TicketId): Promise<Req
   const principalId = requireRequester(actor)
   const ticket = await loadOwnedTicketOr404(ticketId, principalId)
   const ctx = await buildTicketContext([ticket])
-  return ticketToDTO(ticket, ctx, 'requester')
+  const unreadMap = await requesterTicketUnreadMap([ticket.id])
+  return { ...ticketToDTO(ticket, ctx, 'requester'), unreadCount: unreadMap.get(ticket.id) ?? 0 }
+}
+
+/**
+ * The requester opens (reads) their own ticket thread — the portal/widget
+ * ticket-page view's mark-read. Ownership-gated like the reads above.
+ * CONVERGENCE PHASE 2 (read-through): `markTicketReadForRequester` resolves
+ * the pair and, for a linked customer ticket, writes the CONVERSATION's
+ * visitor watermark — the Messages space lists the pair natively off that
+ * watermark, so reading the ticket page clears both spaces' badges. A
+ * standalone ticket keeps the legacy ticket-column write.
+ */
+export async function markMyTicketRead(actor: Actor, ticketId: TicketId): Promise<void> {
+  const principalId = requireRequester(actor)
+  await loadOwnedTicketOr404(ticketId, principalId)
+  await markTicketReadForRequester(ticketId, actor)
 }
 
 /**

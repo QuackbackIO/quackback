@@ -30,6 +30,7 @@ import {
   segments,
   assistantInvolvements,
   ticketConversations,
+  tickets,
   type Conversation,
   type ConversationMessage,
   type PostSuggestion,
@@ -56,7 +57,7 @@ import type {
 } from '@/lib/shared/conversation/views'
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
-import { getAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
+import { assistantPrincipalIdOnce } from '@/lib/server/messages/assistant-principal'
 import { conversationFilter } from '@/lib/server/policy/conversations'
 import type { Actor } from '@/lib/server/policy/types'
 import { priorityRankSql } from '@/lib/server/utils/priority-rank'
@@ -845,20 +846,10 @@ function compareMessagesNewestFirst(a: ConversationMessage, b: ConversationMessa
  * visitor/grounding/realtime path) or no linked ticket degenerates to the
  * pre-convergence conversation-only read, byte-identical.
  */
-// The assistant's service principal is a workspace singleton; memoize its id so
-// message loads can flag Quinn's turns (`isAssistant`) without a per-load lookup.
-// A resolved id is cached for the process; a null (Quinn not yet provisioned) is
-// re-checked periodically so enabling Quinn later heals without a restart.
-let cachedAssistantPrincipalId: PrincipalId | null = null
-let assistantPrincipalCheckedAt = 0
-async function assistantPrincipalIdOnce(): Promise<PrincipalId | null> {
-  if (cachedAssistantPrincipalId === null && Date.now() - assistantPrincipalCheckedAt > 60_000) {
-    cachedAssistantPrincipalId = (await getAssistantPrincipal())?.id ?? null
-    assistantPrincipalCheckedAt = Date.now()
-  }
-  return cachedAssistantPrincipalId
-}
-
+// The assistant's service principal is a workspace singleton; the memoized id
+// resolver lives in messages/assistant-principal (shared with the pair-thread
+// union loader) so message loads can flag Quinn's turns (`isAssistant`)
+// without a per-load lookup.
 export async function listMessages(
   conversationId: ConversationId,
   opts?: {
@@ -1063,6 +1054,14 @@ export interface ConversationListFilter {
   /** Custom-attribute view rules (§C2.7): every entry ANDs an additional
    *  predicate against `custom_attributes`. See `attributeFilterCondition`. */
   attributeFilters?: ConversationAttributeFilterParam[]
+  /** CONVERGENCE PHASE 2 (alias semantics): restrict to conversations that ARE
+   *  a pair — i.e. carry an active `ticket_conversations` link to a (non-
+   *  deleted) customer ticket. Set by the Tickets-section inbox scopes
+   *  ("Customer"/"All tickets"), where a linked pair lists as its ONE item —
+   *  the conversation row wearing the ticket chip — alongside any still-
+   *  standalone ticket rows from the ticket branch. Never set by the plain
+   *  conversation scopes (their rows are unrestricted). */
+  hasLinkedCustomerTicket?: boolean
   /** Inbox ordering (default 'recent'). Keyset pagination adapts per sort. */
   sort?: ConversationSort
   /** Cursor: the previous page's last conversation id, re-resolved per sort. */
@@ -1519,6 +1518,19 @@ export async function listConversationsForAgent(
         ...(filter.attributeFilters ?? []).map((f) =>
           attributeFilterCondition(f.key, f.operator, f.value)
         ),
+        // Convergence alias semantics (the Tickets-section scopes): only
+        // conversations carrying an active customer-ticket link. EXISTS keeps
+        // the select shape (conversations only); the tickets join excludes a
+        // link pointing at a soft-deleted ticket so a deleted ticket's pair
+        // can't keep listing.
+        filter.hasLinkedCustomerTicket
+          ? sql`EXISTS (
+              SELECT 1 FROM ${ticketConversations} tc
+              INNER JOIN ${tickets} t ON t.id = tc.ticket_id AND t.deleted_at IS NULL
+              WHERE tc.conversation_id = ${conversations.id}
+                AND tc.ticket_type = 'customer'
+            )`
+          : undefined,
         // Keyset comparison for the active sort (re-resolved cursor row). id is
         // always the final tiebreak so a page boundary never dupes or skips.
         cursor ? cursorConditionForSort(sort, cursor) : undefined

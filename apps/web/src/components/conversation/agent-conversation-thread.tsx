@@ -398,6 +398,15 @@ export function AgentConversationThread({
   const hasMoreOlder = isTicket ? (ticketThread?.hasMore ?? false) : (convThread?.hasMore ?? false)
   const isLoading = isTicket ? ticketThreadLoading || ticketDetailLoading : convLoading
 
+  // CONVERGENCE PHASE 2 provenance: this thread is a PAIR view when its rows
+  // come from both parents — a conversation view with `includeLinkedTicket`,
+  // or a ticket view whose pair-thread union includes conversation-parented
+  // rows. Legacy ticket-parented rows then carry the muted "via ticket
+  // thread" marker (AgentMessageBubble's ticketProvenance). Derived from the
+  // loaded rows rather than the link state so a standalone/back-office thread
+  // (every row ticket-parented) never shows it.
+  const isPairThread = messages.some((m) => m.conversationId != null)
+
   // Derived once the ticket's type is known; a plain-object default while it's
   // still loading (never rendered — the isLoading guard below returns first).
   const capabilities: ThreadCapabilities = isTicket
@@ -1370,6 +1379,7 @@ export function AgentConversationThread({
             linkPreviews={linkPreviewsEnabled}
             translation={inboxTranslation.translationFor(m)}
             blockState={row.blockState}
+            ticketProvenance={isPairThread}
           />
         )
       }

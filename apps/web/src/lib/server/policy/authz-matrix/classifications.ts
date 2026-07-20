@@ -148,6 +148,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   'lib/server/functions/tickets.ts::getMyTicketThreadFn': END_USER(
     'requester reads their own ticket thread'
   ),
+  'lib/server/functions/tickets.ts::markMyTicketReadFn': END_USER(
+    'requester marks their own ticket read (pair read-through: the shared conversation watermark)'
+  ),
   'lib/server/functions/tickets.ts::replyToMyTicketFn': END_USER(
     'requester replies on their own ticket'
   ),

@@ -5,7 +5,7 @@
  * on the right, the team's on the left). Ownership + the internal-note strip are
  * enforced by the requester server fns.
  */
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Navigate, useRouteContext } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -22,8 +22,11 @@ import {
   replyToMyTicketFn,
   watchMyTicketFn,
   unwatchMyTicketFn,
+  markMyTicketReadFn,
 } from '@/lib/server/functions/tickets'
 import { portalTicketQueries, portalTicketKeys } from '@/lib/client/queries/portal-tickets'
+import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
+import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { VisitorMessageBubble } from '@/components/conversation/message-bubble'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
@@ -97,6 +100,7 @@ function PortalTicketPage() {
   const { ticketId } = Route.useParams()
   const id = ticketId as TicketId
   const { session, settings } = useRouteContext({ from: '__root__' })
+  const authPopover = useAuthPopoverSafe()
   const queryClient = useQueryClient()
   // The rich doc lives in a ref (it changes on every keystroke) so the stable
   // `handleSend` below never needs to be rebuilt — RichTextEditor rebuilds its
@@ -129,6 +133,27 @@ function PortalTicketPage() {
     enabled: supportTicketsEnabled && isLoggedIn,
   })
   const watching = watchStatus?.watching ?? false
+
+  // Read-through (convergence Phase 2): viewing the ticket page marks the
+  // pair's SHARED watermark read — on a linked pair the server writes the
+  // CONVERSATION's visitor_last_read_at, so the Messages-space row/badge for
+  // the pair clears on the same read (one watermark, reading either surface
+  // marks both read). Re-fires when a new message lands while the page is
+  // open (the thread query refetches), mirroring the agent thread's ticket
+  // adapter. Fire-and-forget: a failed mark-read must never break the view.
+  const threadLoaded = !!thread
+  const lastMessageId = thread?.messages?.[thread.messages.length - 1]?.id ?? null
+  useEffect(() => {
+    if (!supportTicketsEnabled || !isLoggedIn || !threadLoaded) return
+    void markMyTicketReadFn({ data: { ticketId: id } })
+      .then(() => {
+        // Clear the badges that read the shared watermark: the Tickets list
+        // rows and the Messages-space conversation list.
+        void queryClient.invalidateQueries({ queryKey: portalTicketKeys.list() })
+        void queryClient.invalidateQueries({ queryKey: PORTAL_MY_CONVERSATIONS_QUERY_KEY })
+      })
+      .catch(() => {})
+  }, [id, supportTicketsEnabled, isLoggedIn, threadLoaded, lastMessageId, queryClient])
 
   const toggleWatch = useMutation({
     mutationFn: () =>
@@ -183,7 +208,30 @@ function PortalTicketPage() {
         <FormattedMessage id="portal.tickets.back" defaultMessage="All tickets" />
       </BackLink>
 
-      {isLoading ? (
+      {!isLoggedIn ? (
+        // B16: a signed-out visitor who followed an email CTA lands here — gate
+        // on sign-in (the shared auth popover, login happens in place and the
+        // queries above enable on the same URL), never a misleading "not
+        // found". Mirrors the Tickets list page's gate.
+        <EmptyState
+          icon={TicketIcon}
+          title={intl.formatMessage({
+            id: 'portal.tickets.detail.signIn.title',
+            defaultMessage: 'Sign in to view your ticket',
+          })}
+          description={intl.formatMessage({
+            id: 'portal.tickets.detail.signIn.body',
+            defaultMessage: 'Your support tickets are tied to your account.',
+          })}
+          action={
+            authPopover ? (
+              <Button onClick={() => authPopover.openAuthPopover({ mode: 'login' })}>
+                <FormattedMessage id="portal.tickets.signIn.cta" defaultMessage="Log in" />
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : isLoading ? (
         <div className="flex justify-center py-16">
           <Spinner />
         </div>

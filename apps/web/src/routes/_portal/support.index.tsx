@@ -1,7 +1,9 @@
 import { createFileRoute, Link, Navigate, useRouteContext } from '@tanstack/react-router'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ChatBubbleLeftRightIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Spinner } from '@/components/shared/spinner'
@@ -34,11 +36,17 @@ function SupportListPage() {
   const { session, settings } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
 
-  // Once support tickets are on, the portal surface IS Tickets (§4.2); the
-  // interim conversations list below retires with the cutover.
+  // CONVERGENCE (scratchpad/convergence-design.md): the portal keeps TWO
+  // spaces — Messages (the conversation list) + Tickets (status cards) —
+  // Intercom's exact model. A conversation↔ticket pair dual-lists in BOTH
+  // with ONE shared watermark and read-through (reading either marks both
+  // read; the Tickets rows' badges read the linked conversation's visitor
+  // watermark). The Tickets surface is the default space when it's on.
   const supportTicketsEnabled = !!settings?.featureFlags?.supportTickets
   const supportEnabled =
     !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+  const twoSpaces = supportTicketsEnabled && supportEnabled
+  const [space, setSpace] = useState<'messages' | 'tickets'>('tickets')
 
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'
@@ -46,11 +54,13 @@ function SupportListPage() {
   const { data, isLoading } = useQuery({
     queryKey: PORTAL_MY_CONVERSATIONS_QUERY_KEY,
     queryFn: () => getMyConversationsFn(),
-    enabled: supportEnabled && isLoggedIn && !supportTicketsEnabled,
+    enabled: supportEnabled && isLoggedIn && (!supportTicketsEnabled || space === 'messages'),
     staleTime: 30_000,
   })
 
-  if (supportTicketsEnabled) {
+  // Tickets-only workspace (supportTickets on, supportInbox/portal-support
+  // off): the Tickets surface stands alone — no Messages space to tab to.
+  if (supportTicketsEnabled && !twoSpaces) {
     return <PortalTicketsList isLoggedIn={isLoggedIn} />
   }
 
@@ -60,7 +70,7 @@ function SupportListPage() {
 
   const conversations = data?.conversations ?? []
 
-  return (
+  const messagesSpace = (
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
@@ -168,6 +178,51 @@ function SupportListPage() {
           ))}
         </ul>
       )}
+    </div>
+  )
+
+  if (!twoSpaces) {
+    return messagesSpace
+  }
+
+  // The two-space nav (Messages + Tickets). A pair lists in both: Messages
+  // shows the conversation (native unread off the shared watermark), Tickets
+  // shows the ticket card (badge via the link) — reading either marks both.
+  return (
+    <div>
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <div className="flex gap-1 border-b border-border/60 pt-4" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={space === 'messages'}
+            onClick={() => setSpace('messages')}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              space === 'messages'
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <FormattedMessage id="portal.support.tabs.messages" defaultMessage="Messages" />
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={space === 'tickets'}
+            onClick={() => setSpace('tickets')}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              space === 'tickets'
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <FormattedMessage id="portal.support.tabs.tickets" defaultMessage="Tickets" />
+          </button>
+        </div>
+      </div>
+      {space === 'tickets' ? <PortalTicketsList isLoggedIn={isLoggedIn} /> : messagesSpace}
     </div>
   )
 }

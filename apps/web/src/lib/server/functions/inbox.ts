@@ -33,6 +33,9 @@ export const listInboxItemsSchema = z.object({
   /** A saved view's `ticket_stage` rule (unified inbox §2.8); no chip sets
    *  this directly. */
   ticketStage: ticketStageSchema.optional(),
+  /** Convergence alias semantics: restrict the conversation branch to pair
+   *  conversations (the Tickets-section customer-category scopes). */
+  linkedPairsOnly: z.boolean().optional(),
   priority: prioritySchema.optional(),
   search: z.string().optional(),
   /** 'me' | 'unassigned' | a teammate principal id; validated in the handler
@@ -72,6 +75,7 @@ export const listInboxItemsFn = createServerFn({ method: 'GET' })
       kinds: data.kinds,
       ticketType: data.ticketType,
       ticketStage: data.ticketStage,
+      linkedPairsOnly: data.linkedPairsOnly,
       priority: data.priority,
       search: data.search,
       assignee,

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import {
   createId,
+  type ConversationId,
   type PrincipalId,
   type UserId,
   type TicketId,
@@ -27,8 +28,16 @@ vi.mock('@/lib/server/config', () => ({
 
 // Neutralize the real Redis-backed realtime publish (unified inbox §3.2, M3):
 // replyToMyTicket/createMyTicket now fire it too (via insertTicketMessage /
-// createTicketCore), and this suite isn't exercising that behavior.
-const realtime = vi.hoisted(() => ({ publishTicketEvent: vi.fn() }))
+// createTicketCore), and this suite isn't exercising that behavior. The
+// conversation-channel spies cover the Phase 2 read-through delegation
+// (markMyTicketRead → the conversation domain's mark-read).
+const realtime = vi.hoisted(() => ({
+  publishTicketEvent: vi.fn(),
+  publishConversationEvent: vi.fn(),
+  publishAgentConversationEvent: vi.fn(),
+  publishConversationUpdate: vi.fn(),
+  publishTyping: vi.fn(),
+}))
 vi.mock('@/lib/server/realtime/conversation-channels', () => realtime)
 
 // Spy the fire-and-forget `ticket.replied` dispatch so the append-core tests can
@@ -42,6 +51,9 @@ vi.mock('../ticket.webhooks', async (importOriginal) => ({
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
+  conversations,
+  conversationMessages,
+  ticketConversations,
   tickets,
   ticketStatuses,
   ticketSubscriptions,
@@ -65,6 +77,7 @@ import {
   appendInboundTicketReply,
   captureRequesterEmail,
   requesterHasContactChannel,
+  markMyTicketRead,
 } from '../requester.service'
 import { sendTicketMessage, addTicketNote } from '../ticket-message.service'
 
@@ -221,6 +234,81 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     expect(ids).toContain(w.mine)
     expect(ids).not.toContain(w.theirs) // another requester's
     expect(ids).not.toContain(w.myBackOffice) // not a customer ticket
+  })
+
+  it('listMyTickets carries the Phase 2 unread badge — a linked pair reads the conversation watermark', async () => {
+    const w = await seedWorld()
+    const agent = await seedPrincipal()
+    // Pair my ticket with a conversation and put an agent reply on the SHARED
+    // thread (post-1a writes land conversation-parented; seeded directly).
+    const conversationId = createId('conversation') as ConversationId
+    await testDb
+      .insert(conversations)
+      .values({ id: conversationId, visitorPrincipalId: w.me, channel: 'messenger' })
+    await testDb
+      .insert(ticketConversations)
+      .values({ ticketId: w.mine, conversationId, ticketType: 'customer' })
+    await testDb.insert(conversationMessages).values({
+      conversationId,
+      principalId: agent,
+      senderType: 'agent',
+      content: 'on it',
+    })
+    // A legacy ticket-parented agent row on the PAIR no longer counts (the
+    // accepted cutover glitch — the conversation watermark is the pair truth).
+    await testDb.insert(conversationMessages).values({
+      ticketId: w.mine,
+      principalId: agent,
+      senderType: 'agent',
+      content: 'legacy',
+    })
+    // A standalone ticket of mine with a legacy agent reply — still counts.
+    const standalone = createId('ticket') as TicketId
+    const mineRow = await readTicketRow(w.mine)
+    await testDb.insert(tickets).values({
+      id: standalone,
+      title: 'Alone',
+      statusId: mineRow.statusId,
+      type: 'customer',
+      requesterPrincipalId: w.me,
+    })
+    await testDb.insert(conversationMessages).values({
+      ticketId: standalone,
+      principalId: agent,
+      senderType: 'agent',
+      content: 'legacy agent reply',
+    })
+
+    const list = await listMyTickets(requesterActor(w.me))
+    expect(list.find((t) => t.id === w.mine)?.unreadCount).toBe(1)
+    expect(list.find((t) => t.id === standalone)?.unreadCount).toBe(1)
+  })
+
+  it('markMyTicketRead marks the pair shared watermark read (read-through), ownership-gated', async () => {
+    const w = await seedWorld()
+    const conversationId = createId('conversation') as ConversationId
+    await testDb
+      .insert(conversations)
+      .values({ id: conversationId, visitorPrincipalId: w.me, channel: 'messenger' })
+    await testDb
+      .insert(ticketConversations)
+      .values({ ticketId: w.mine, conversationId, ticketType: 'customer' })
+
+    // Another requester can never mark my ticket read (existence hidden).
+    await expect(markMyTicketRead(requesterActor(w.other), w.mine)).rejects.toThrow(/not found/i)
+
+    await markMyTicketRead(requesterActor(w.me), w.mine)
+
+    // The CONVERSATION's visitor watermark moved (the Messages space reads
+    // it); the legacy ticket columns stayed untouched.
+    const [conv] = await testDb
+      .select({ visitorLastReadAt: conversations.visitorLastReadAt })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+    expect(conv.visitorLastReadAt).not.toBeNull()
+    const ticketRow = await readTicketRow(w.mine)
+    expect(ticketRow.requesterLastReadAt).toBeNull()
+    expect(ticketRow.assigneeLastReadAt).toBeNull()
   })
 
   it("getMyTicket 404s another requester's ticket", async () => {

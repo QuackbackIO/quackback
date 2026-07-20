@@ -326,16 +326,29 @@ describe('buildInboxListParams', () => {
     })
   })
 
-  it('maps All tickets to ticket-only kinds without a type filter', () => {
+  it('maps All tickets to both kinds + the pair-conversation restriction, without a type filter', () => {
+    // Convergence Phase 2 alias semantics: a linked pair lists as its ONE
+    // conversation row; the ticket branch adds still-standalone rows.
     expect(
       buildInboxListParams({ kind: 'view', view: 'tickets_all' }, 'all', 'all', '')
-    ).toMatchObject({ kinds: ['ticket'], ticketType: undefined })
+    ).toMatchObject({
+      kinds: ['conversation', 'ticket'],
+      ticketType: undefined,
+      linkedPairsOnly: true,
+    })
   })
 
-  it('maps type-specific Tickets scopes to ticket-only kinds + ticketType', () => {
+  it('maps the Customer tickets scope to both kinds + ticketType + the pair restriction', () => {
     expect(
       buildInboxListParams({ kind: 'view', view: 'tickets_customer' }, 'all', 'all', '')
-    ).toMatchObject({ kinds: ['ticket'], ticketType: 'customer' })
+    ).toMatchObject({
+      kinds: ['conversation', 'ticket'],
+      ticketType: 'customer',
+      linkedPairsOnly: true,
+    })
+  })
+
+  it('keeps back-office/tracker scopes ticket-only (they never link to a conversation)', () => {
     expect(
       buildInboxListParams({ kind: 'view', view: 'tickets_back_office' }, 'all', 'all', '')
     ).toMatchObject({ kinds: ['ticket'], ticketType: 'back_office' })

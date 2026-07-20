@@ -242,6 +242,14 @@ export function PortalTicketsList({ isLoggedIn }: { isLoggedIn: boolean }) {
                     <TimeAgo date={t.updatedAt} />
                   </span>
                 </span>
+                {/* Unread badge — the pair's SHARED watermark (the linked
+                    conversation's visitor_last_read_at), so it clears the
+                    moment either space's thread is read (read-through). */}
+                {t.unreadCount > 0 && (
+                  <span className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground">
+                    {t.unreadCount}
+                  </span>
+                )}
                 <StageChip slot={t.stage.slot} label={t.stage.label} />
                 <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 rtl:rotate-180" />
               </Link>

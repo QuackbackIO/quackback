@@ -6,11 +6,30 @@
  * discriminates the side ('agent' == assignee, 'visitor' == requester) the
  * same way ticket-message.service.ts's insertTicketMessage does; internal
  * notes and soft-deleted messages never count toward either side's unread.
+ *
+ * CONVERGENCE PHASE 2 — READ-THROUGH (scratchpad/convergence-design.md, "the
+ * pair runs on the conversation's two watermarks"). A customer ticket and its
+ * linked conversation are ONE item with ONE shared watermark per side; reading
+ * either surface of the pair marks BOTH read (Intercom's "a ticket is marked
+ * as read when the linked conversation is read"). The mark-read entry points
+ * here therefore resolve the pair first and, for a linked customer ticket,
+ * delegate to the conversation's own mark-read (which writes
+ * `conversations.agent_last_read_at` / `visitor_last_read_at` and publishes
+ * the conversation 'read' event) instead of touching the legacy ticket
+ * columns. The legacy `tickets.*_last_read_at` columns stay live ONLY for
+ * threads that kept their own ticket-scoped messages: back-office/tracker
+ * tickets and not-yet-linked standalone customer tickets. Unread COUNTS for a
+ * linked pair likewise read the conversation watermark (the requester list
+ * badge — `requesterTicketUnreadMap` below); the accepted cutover glitch is
+ * that an in-flight pair's legacy ticket-parented rows stop counting toward
+ * unread the moment the conversation watermark wins.
  */
 import {
   db,
   conversationMessages,
+  conversations,
   tickets,
+  ticketConversations,
   eq,
   and,
   or,
@@ -19,7 +38,7 @@ import {
   gt,
   sql,
 } from '@/lib/server/db'
-import type { TicketId, ConversationMessageId } from '@quackback/ids'
+import type { TicketId, ConversationId, ConversationMessageId } from '@quackback/ids'
 import { publishTicketEvent } from '@/lib/server/realtime/conversation-channels'
 import { unreadWatermarkFromAnchor } from '@/lib/server/domains/conversation/conversation.lifecycle'
 import { assertTicketVisible } from './ticket.service'
@@ -107,11 +126,29 @@ export async function ticketUnreadMapForAgent(
 /** Mark a ticket read for the assignee (agent) side. Publishes a 'ticket_read'
  *  (unified inbox §3.2, M3) so another tab/teammate's open thread or inbox
  *  list clears the badge live — `side: 'agent'` mirrors the conversation
- *  domain's read event exactly (see conversation-channels.ts). */
+ *  domain's read event exactly (see conversation-channels.ts).
+ *
+ *  CONVERGENCE PHASE 2 (read-through): on a linked customer pair the
+ *  conversation's agent watermark is the pair's truth, so the write delegates
+ *  to the conversation's own mark-read — the pair lists as its conversation
+ *  row, and that row's badge reads `conversations.agentLastReadAt`. The
+ *  delegate re-gates on conversation visibility (an agent who can't see the
+ *  conversation can't hold its badge either — the row is conversationFilter-
+ *  scoped out of their inbox) and derives the side ('agent' for a teammate).
+ *  The legacy ticket column keeps being written ONLY for unlinked threads
+ *  (back-office/tracker, standalone customer), which kept their own thread. */
 export async function markTicketReadForAgent(
   ticketId: TicketId,
+  actor: Actor,
   at: Date = new Date()
 ): Promise<void> {
+  const pairConversationId = await resolvePairConversationId(ticketId)
+  if (pairConversationId) {
+    const { markConversationRead } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    await markConversationRead(pairConversationId, actor)
+    return
+  }
   await db.update(tickets).set({ assigneeLastReadAt: at }).where(eq(tickets.id, ticketId))
   publishTicketEvent(ticketId, {
     kind: 'ticket_read',
@@ -121,13 +158,32 @@ export async function markTicketReadForAgent(
   })
 }
 
-/** Mark a ticket read for the requester side. Published as `side: 'visitor'`
- *  for symmetry, though nothing in the agent inbox reacts to it today (see
- *  `agentEventChangesInboxList`'s `ticket_read` branch). */
+/** Mark a ticket read for the requester side — the portal/widget ticket-page
+ *  view (`markMyTicketRead` in requester.service is the caller; ownership is
+ *  enforced there). Published as `side: 'visitor'` for symmetry, though
+ *  nothing in the agent inbox reacts to it today (see
+ *  `agentEventChangesInboxList`'s `ticket_read` branch).
+ *
+ *  CONVERGENCE PHASE 2 (read-through): on a linked pair the requester reading
+ *  the ticket page marks the CONVERSATION's visitor watermark — the Messages
+ *  space (portal/widget conversation list, messenger badge) lists the pair
+ *  natively and reads that watermark, so one read clears both spaces. The
+ *  delegate derives the 'visitor' side from the requester actor and re-gates
+ *  on conversation visibility (the pair's conversation is the requester's
+ *  own, so the ownership check the caller already ran carries over). Legacy
+ *  ticket-column write + `ticket_read` publish only for unlinked threads. */
 export async function markTicketReadForRequester(
   ticketId: TicketId,
+  actor: Actor,
   at: Date = new Date()
 ): Promise<void> {
+  const pairConversationId = await resolvePairConversationId(ticketId)
+  if (pairConversationId) {
+    const { markConversationRead } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    await markConversationRead(pairConversationId, actor)
+    return
+  }
   await db.update(tickets).set({ requesterLastReadAt: at }).where(eq(tickets.id, ticketId))
   publishTicketEvent(ticketId, {
     kind: 'ticket_read',
@@ -135,6 +191,105 @@ export async function markTicketReadForRequester(
     side: 'visitor',
     at: at.toISOString(),
   })
+}
+
+/**
+ * Batched AGENT-authored unread count for a page of a requester's own tickets
+ * (the portal/widget Tickets-space row badges), CONVERGENCE PHASE 2: a linked
+ * pair's unread reads the CONVERSATION's visitor watermark and counts only the
+ * conversation parent's agent messages (the pair's shared thread is authored
+ * there post-1a; legacy ticket-parented rows stop counting — the accepted
+ * cutover glitch the module doc notes). An unlinked standalone ticket keeps
+ * the legacy ticket-parented count against `tickets.requesterLastReadAt`.
+ * Only tickets with at least one unread message appear in the returned map.
+ */
+export async function requesterTicketUnreadMap(
+  ticketIds: TicketId[]
+): Promise<Map<TicketId, number>> {
+  const map = new Map<TicketId, number>()
+  if (ticketIds.length === 0) return map
+
+  // Split the page into linked (pair) tickets and standalone ones — each group
+  // counts against a different parent + watermark (see the doc comment).
+  const links = await db
+    .select({
+      ticketId: ticketConversations.ticketId,
+      conversationId: ticketConversations.conversationId,
+    })
+    .from(ticketConversations)
+    .where(
+      and(
+        inArray(ticketConversations.ticketId, ticketIds),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+  const linkedByConversation = new Map<ConversationId, TicketId>()
+  const linkedTicketIds = new Set<TicketId>()
+  for (const link of links) {
+    linkedByConversation.set(link.conversationId, link.ticketId)
+    linkedTicketIds.add(link.ticketId)
+  }
+  const standaloneIds = ticketIds.filter((id) => !linkedTicketIds.has(id))
+
+  // Linked pairs: agent messages on the conversation parent, newer than the
+  // conversation's visitor watermark (null watermark == never read == all).
+  if (linkedByConversation.size > 0) {
+    const rows = await db
+      .select({
+        conversationId: conversationMessages.conversationId,
+        c: sql<number>`count(*)::int`,
+      })
+      .from(conversationMessages)
+      .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
+      .where(
+        and(
+          inArray(conversationMessages.conversationId, [...linkedByConversation.keys()]),
+          eq(conversationMessages.senderType, 'agent'),
+          isNull(conversationMessages.deletedAt),
+          // Internal notes never count toward the requester's unread.
+          eq(conversationMessages.isInternal, false),
+          or(
+            isNull(conversations.visitorLastReadAt),
+            sql`${conversationMessages.createdAt} > ${conversations.visitorLastReadAt}`
+          )
+        )
+      )
+      .groupBy(conversationMessages.conversationId)
+    for (const row of rows) {
+      // The inner join on conversations guarantees a non-null conversation_id.
+      const ticketId = linkedByConversation.get(row.conversationId as ConversationId)
+      if (ticketId) map.set(ticketId, row.c)
+    }
+  }
+
+  // Standalone tickets: the legacy ticket-parented count (mirrors
+  // unreadCountForTicket's requester side, batched).
+  if (standaloneIds.length > 0) {
+    const rows = await db
+      .select({
+        ticketId: conversationMessages.ticketId,
+        c: sql<number>`count(*)::int`,
+      })
+      .from(conversationMessages)
+      .innerJoin(tickets, eq(tickets.id, conversationMessages.ticketId))
+      .where(
+        and(
+          inArray(conversationMessages.ticketId, standaloneIds),
+          eq(conversationMessages.senderType, 'agent'),
+          isNull(conversationMessages.deletedAt),
+          eq(conversationMessages.isInternal, false),
+          or(
+            isNull(tickets.requesterLastReadAt),
+            sql`${conversationMessages.createdAt} > ${tickets.requesterLastReadAt}`
+          )
+        )
+      )
+      .groupBy(conversationMessages.ticketId)
+    // The inner join on tickets guarantees a non-null ticket_id.
+    for (const row of rows) map.set(row.ticketId as TicketId, row.c)
+  }
+
+  return map
 }
 
 /**

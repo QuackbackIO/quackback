@@ -119,3 +119,51 @@ describe('AgentMessageBubble — inbox translation (P2-D.1)', () => {
     expect(screen.getByText('Translated to French · Show original')).toBeInTheDocument()
   })
 })
+
+describe('AgentMessageBubble — pair-thread provenance (convergence Phase 2)', () => {
+  it('labels a legacy ticket-parented row "via ticket thread" in a pair view', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          conversationId: null,
+          ticketId: 'ticket_1' as AgentConversationMessageDTO['ticketId'],
+        })}
+        ticketProvenance
+      />
+    )
+    expect(screen.getByText('· via ticket thread')).toBeInTheDocument()
+  })
+
+  it('never labels a conversation-parented row, even in a pair view', () => {
+    render(<AgentMessageBubble message={baseMessage()} ticketProvenance />)
+    expect(screen.queryByText(/via ticket thread/)).not.toBeInTheDocument()
+  })
+
+  it('never labels without the pair-view flag (a standalone ticket thread stays clean)', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          conversationId: null,
+          ticketId: 'ticket_1' as AgentConversationMessageDTO['ticketId'],
+        })}
+      />
+    )
+    expect(screen.queryByText(/via ticket thread/)).not.toBeInTheDocument()
+  })
+
+  it('never labels an internal note (its own "Internal note" marker says what it is)', () => {
+    render(
+      <AgentMessageBubble
+        message={baseMessage({
+          conversationId: null,
+          ticketId: 'ticket_1' as AgentConversationMessageDTO['ticketId'],
+          senderType: 'agent',
+          isInternal: true,
+        })}
+        ticketProvenance
+      />
+    )
+    expect(screen.getByText('Internal note')).toBeInTheDocument()
+    expect(screen.queryByText(/via ticket thread/)).not.toBeInTheDocument()
+  })
+})

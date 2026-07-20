@@ -119,6 +119,19 @@ export const getMyWidgetTicketThreadFn = createServerFn({ method: 'GET' })
     return getMyTicketThread(actor, data.ticketId as TicketId, { before: data.before })
   })
 
+/** The visitor marks their own ticket read (opening its widget ticket detail).
+ *  CONVERGENCE PHASE 2 (read-through): on a linked pair this writes the
+ *  CONVERSATION's visitor watermark — the pair's Messages-tab row + the
+ *  messenger badge read it, so one read clears both spaces. */
+export const markMyWidgetTicketReadFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const { actor } = await requireWidgetTicketActor()
+    const { markMyTicketRead } = await import('@/lib/server/domains/tickets/requester.service')
+    await markMyTicketRead(actor, data.ticketId as TicketId)
+    return { ok: true }
+  })
+
 /** The visitor replies on their own ticket thread (a customer-visible message). */
 export const replyToMyWidgetTicketFn = createServerFn({ method: 'POST' })
   .validator(replySchema)

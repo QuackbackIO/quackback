@@ -52,6 +52,19 @@ function agentActor(overrides: Partial<Actor> = {}): Actor {
   }
 }
 
+/** A non-team requester actor — the portal/widget ticket-page mark-read passes
+ *  one through; the legacy (unlinked) path never reads it, the pair path
+ *  derives the conversation side from it. */
+function requesterActor(overrides: Partial<Actor> = {}): Actor {
+  return {
+    principalId: createId('principal') as PrincipalId,
+    role: 'user',
+    principalType: 'user',
+    segmentIds: new Set(),
+    ...overrides,
+  }
+}
+
 const fixture = await createDbTestFixture({
   probe: async (db) => {
     await db.select({ id: tickets.id }).from(tickets).limit(0)
@@ -218,22 +231,22 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
   })
 
   describe('markTicketReadForAgent / markTicketReadForRequester', () => {
-    it('sets assignee_last_read_at to now by default', async () => {
+    it('sets assignee_last_read_at to now by default (standalone ticket)', async () => {
       const ticketId = await seedTicket()
       const before = await ticketReadWatermarks(ticketId)
       expect(before.assigneeLastReadAt).toBeNull()
 
-      await markTicketReadForAgent(ticketId)
+      await markTicketReadForAgent(ticketId, agentActor())
 
       const after = await ticketReadWatermarks(ticketId)
       expect(after.assigneeLastReadAt).not.toBeNull()
       expect(after.requesterLastReadAt).toBeNull()
     })
 
-    it('sets requester_last_read_at to now by default', async () => {
+    it('sets requester_last_read_at to now by default (standalone ticket)', async () => {
       const ticketId = await seedTicket()
 
-      await markTicketReadForRequester(ticketId)
+      await markTicketReadForRequester(ticketId, requesterActor())
 
       const after = await ticketReadWatermarks(ticketId)
       expect(after.requesterLastReadAt).not.toBeNull()
@@ -244,7 +257,7 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
       const ticketId = await seedTicket()
       const at = new Date('2026-01-01T00:00:00.000Z')
 
-      await markTicketReadForAgent(ticketId, at)
+      await markTicketReadForAgent(ticketId, agentActor(), at)
 
       const after = await ticketReadWatermarks(ticketId)
       expect(after.assigneeLastReadAt?.toISOString()).toBe(at.toISOString())
@@ -254,7 +267,7 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
       const ticketId = await seedTicket()
       const at = new Date('2026-01-01T00:00:00.000Z')
 
-      await markTicketReadForAgent(ticketId, at)
+      await markTicketReadForAgent(ticketId, agentActor(), at)
       expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
         kind: 'ticket_read',
         ticketId,
@@ -262,7 +275,7 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
         at: at.toISOString(),
       })
 
-      await markTicketReadForRequester(ticketId, at)
+      await markTicketReadForRequester(ticketId, requesterActor(), at)
       expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
         kind: 'ticket_read',
         ticketId,
@@ -276,7 +289,7 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
       await insertMessage({ ticketId, senderType: 'visitor' })
       expect(await unreadCountForTicket(ticketId, 'assignee')).toBe(1)
 
-      await markTicketReadForAgent(ticketId)
+      await markTicketReadForAgent(ticketId, agentActor())
 
       expect(await unreadCountForTicket(ticketId, 'assignee')).toBe(0)
     })

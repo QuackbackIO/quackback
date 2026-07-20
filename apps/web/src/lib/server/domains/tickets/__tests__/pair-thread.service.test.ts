@@ -33,6 +33,15 @@ vi.mock('@/lib/server/config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
+// The assistant-principal lookup is memoized process-wide (60s null caching),
+// which a rolled-back test can't seed reliably — stub the resolver itself so
+// the isAssistant flagging test controls the id deterministically. Null by
+// default: every other test sees no assistant.
+const assistantState = vi.hoisted(() => ({ id: null as string | null }))
+vi.mock('@/lib/server/messages/assistant-principal', () => ({
+  assistantPrincipalIdOnce: vi.fn(async () => assistantState.id),
+}))
+
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   conversations,
@@ -306,5 +315,38 @@ describe.skipIf(!fixture.available)('pair-thread union loader (real DB, rolled b
     // transcript export, MCP and API v1 all share after the Phase 0 wiring.
     const page = await listTicketMessages(ticketId, { includeInternal: true })
     expect(page.messages.map((m) => m.id)).toEqual([m1, m2])
+  })
+
+  it('flags Quinn turns (isAssistant) on BOTH parents of the pair (Phase 2)', async () => {
+    const next = seedClock()
+    const quinn = await seedPrincipal()
+    assistantState.id = quinn
+    try {
+      const human = await seedPrincipal()
+      const ticketId = await seedTicket()
+      const conversationId = await seedConversation()
+      await linkPair(ticketId, conversationId)
+
+      // Quinn-authored rows on each parent + a human row for contrast. The
+      // assistant flag must resolve identically whichever parent the row
+      // hangs off (the conversation view's `listMessages` rule).
+      const q1 = await post({ ticketId }, 'quinn on the legacy parent', {
+        at: next(),
+        author: quinn,
+      })
+      const q2 = await post({ conversationId }, 'quinn on the conversation', {
+        at: next(),
+        author: quinn,
+      })
+      const h1 = await post({ conversationId }, 'human reply', { at: next(), author: human })
+
+      const page = await listPairThreadMessages(ticketId, { includeInternal: true })
+      const byId = new Map(page.messages.map((m) => [m.id, m]))
+      expect(byId.get(q1)?.isAssistant).toBe(true)
+      expect(byId.get(q2)?.isAssistant).toBe(true)
+      expect(byId.get(h1)?.isAssistant).toBe(false)
+    } finally {
+      assistantState.id = null
+    }
   })
 })

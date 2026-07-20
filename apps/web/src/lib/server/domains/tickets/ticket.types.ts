@@ -99,11 +99,14 @@ export interface TicketListFilter {
   cursor?: TicketId
   limit?: number
   /**
-   * Unified inbox one-row rule (UNIFIED-INBOX-SPEC.md §2.1): exclude a
-   * `type: 'customer'` ticket that has an active `ticket_conversations` link —
-   * it renders as its linked conversation's row instead. Back-office and
-   * tracker tickets are never excluded by this flag (they have no
-   * conversation-row analogue), even if a link row exists for them.
+   * Unified inbox one-row rule, restated as the CONVERGENCE rule
+   * (scratchpad/convergence-design.md Phase 2 — alias semantics): a
+   * `type: 'customer'` ticket with an active `ticket_conversations` link IS
+   * its conversation — the pair lists/counts/routes as the conversation row
+   * everywhere in the agent inbox, never as a second ticket row. Back-office
+   * and tracker tickets are never excluded by this flag (they have no
+   * conversation-row analogue — their links are context, not a shared
+   * thread), even if a link row exists for them.
    */
   excludeConversationLinked?: boolean
 }
@@ -216,10 +219,20 @@ export interface TicketDTO {
  * deadline — internal commitments, stripped from conversation visitor DTOs
  * for the same reason, see conversation.query.ts's `side` split) are nulled.
  * The requester-facing projection remains `stage`.
+ *
+ * `unreadCount` is the requester-side unread badge (agent-authored messages
+ * newer than the pair's shared watermark). CONVERGENCE PHASE 2: a linked
+ * pair's count reads the CONVERSATION's `visitorLastReadAt` (one shared
+ * watermark — Messages and Tickets dual-list with read-through); an unlinked
+ * standalone ticket's reads the legacy `requesterLastReadAt`. Set by the
+ * list/detail reads (`requesterTicketUnreadMap`); `toRequesterTicketDTO`
+ * defaults it to 0 for the create path (a just-filed ticket has nothing
+ * unread).
  */
 export type RequesterTicketDTO = Omit<TicketDTO, 'status' | 'sla'> & {
   status: null
   sla: null
+  unreadCount: number
 }
 
 /** A page of `listTickets`: the rows plus whether an older page follows. */

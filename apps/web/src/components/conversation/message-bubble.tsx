@@ -248,6 +248,15 @@ interface AgentMessageBubbleProps {
    *  always-live rendering). Read-only: unlike the widget, the admin thread
    *  never lets an agent answer on the customer's behalf here. */
   blockState?: BlockState
+  /** CONVERGENCE PHASE 2 provenance: the thread this bubble renders in is a
+   *  pair (its messages come from BOTH parents of a conversation↔ticket
+   *  pair). When set, a legacy TICKET-parented row carries a muted "via
+   *  ticket thread" marker in the attribution line so its origin doesn't
+   *  confuse (convergence-ui-spec §2). Never set on a standalone ticket
+   *  thread, where every row is ticket-parented and the label would be
+   *  noise; internal notes and system events never carry it (their own
+   *  markers already say what they are). */
+  ticketProvenance?: boolean
 }
 
 interface VisitorMessageBubbleProps {
@@ -285,6 +294,7 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
   linkPreviews = false,
   translation,
   blockState,
+  ticketProvenance = false,
 }: AgentMessageBubbleProps) {
   // Keep the hover toolbar visible while its emoji popover or overflow menu is
   // open (the pointer leaves the row to interact with the portal'd content).
@@ -617,6 +627,13 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
               aria-label="Received by email"
               title="Received by email"
             />
+          )}
+          {/* Pair-thread provenance (convergence Phase 2): a legacy
+              ticket-parented row inside a mixed-parent pair view. Muted text,
+              not a chip — it answers "why does this read differently", nothing
+              more. */}
+          {ticketProvenance && message.ticketId && !isNote && (
+            <span className="shrink-0">· via ticket thread</span>
           )}
           <span>{timeLabel(message.createdAt)}</span>
           {isFlagged && (

@@ -284,7 +284,10 @@ export async function ticketRowToDTO(row: Ticket): Promise<TicketDTO> {
 }
 
 /** Strip the agent-only fields (internal status, SLA sliver) from an agent
- *  DTO — the requester audience projection (see RequesterTicketDTO). */
+ *  DTO — the requester audience projection (see RequesterTicketDTO).
+ *  `unreadCount` defaults to 0: the create path (createMyTicket) builds its
+ *  DTO through here and a just-filed ticket has nothing unread; the
+ *  list/detail reads overwrite it from `requesterTicketUnreadMap`. */
 export function toRequesterTicketDTO(dto: TicketDTO): RequesterTicketDTO {
-  return { ...dto, status: null, sla: null }
+  return { ...dto, status: null, sla: null, unreadCount: 0 }
 }

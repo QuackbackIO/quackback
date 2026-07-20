@@ -216,13 +216,17 @@ function cursorConditionForTicketSort(sort: TicketSort, t: Ticket): SQL {
 }
 
 /**
- * The unified inbox's one-row-rule predicate (UNIFIED-INBOX-SPEC.md §2.1):
- * exclude a `type: 'customer'` ticket that has an active `ticket_conversations`
- * link (it renders as its linked conversation's row in the union endpoint
- * instead). Back-office and tracker tickets are never excluded — the type
- * guard is part of the condition, not just a filter alongside it, since a
- * back-office/tracker ticket can still carry a link row (tracker cascade
- * links, notably) without losing its own row. Exported so
+ * The one-row-rule predicate, restated as the CONVERGENCE rule
+ * (scratchpad/convergence-design.md Phase 2 — alias semantics; originally
+ * UNIFIED-INBOX-SPEC.md §2.1): a `type: 'customer'` ticket with an active
+ * `ticket_conversations` link IS its conversation. The pair is ONE item —
+ * it lists as the conversation row (the ticket chip on it deep-links the
+ * same pair), counts once in nav badges, and never appears as a second
+ * ticket row in any inbox scope. Back-office and tracker tickets are never
+ * excluded — the type guard is part of the condition, not just a filter
+ * alongside it, since a back-office/tracker ticket can still carry a link
+ * row (tracker cascade links, notably) without being conversation-backed
+ * (their links are context, never a shared thread). Exported so
  * `inbox.query.ts`'s count endpoint can reuse the identical predicate rather
  * than re-deriving it.
  */

@@ -279,6 +279,9 @@ export interface InboxListParams {
   /** A saved view's `ticket_stage` rule (unified inbox §2.8) — no URL/chip
    *  equivalent, only ever set when a custom view carries the rule. */
   ticketStage?: TicketStage
+  /** Convergence alias semantics: the conversation branch lists only pair
+   *  conversations (the Tickets-section customer-category scopes). */
+  linkedPairsOnly?: boolean
   priority?: ConversationPriority
   search?: string
   assignee?: string
@@ -365,10 +368,18 @@ export function buildInboxListParams(
     }
   }
   if (nav.kind === 'view' && isTicketInboxView(nav.view)) {
+    // CONVERGENCE PHASE 2 (alias semantics): the customer-category scopes list
+    // a linked pair as its ONE item — the conversation row (wearing the ticket
+    // chip) from the conversation branch, restricted to pair conversations —
+    // PLUS the ticket branch's still-standalone rows (its one-row-rule
+    // exclusion keeps the pair off a second row). Back-office/tracker never
+    // link to a conversation, so their scopes stay ticket-branch-only.
+    const customerCategory = nav.view === 'tickets_all' || nav.view === 'tickets_customer'
     return {
       facet,
-      kinds: ['ticket'],
+      kinds: customerCategory ? ['conversation', 'ticket'] : ['ticket'],
       ticketType: nav.view === 'tickets_all' ? undefined : ticketTypeForView(nav.view),
+      linkedPairsOnly: customerCategory || undefined,
       priority,
       search: searchParam,
       companyId: company,

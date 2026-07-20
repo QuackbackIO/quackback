@@ -654,7 +654,9 @@ export const markTicketUnreadFromMessageFn = createServerFn({ method: 'POST' })
 /** Agent action: mark a ticket read (opening/viewing its thread) — distinct
  *  from `markTicketUnreadFromMessageFn` above, and with no prior server fn at
  *  all. Ticket-visibility-gated so a `ticket.view`-holding agent can only mark
- *  read a ticket they can actually see, matching `ticketFilter`. */
+ *  read a ticket they can actually see, matching `ticketFilter`. CONVERGENCE
+ *  PHASE 2: on a linked pair this writes the CONVERSATION's agent watermark
+ *  (read-through — see markTicketReadForAgent's doc). */
 export const markTicketReadFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
@@ -664,7 +666,7 @@ export const markTicketReadFn = createServerFn({ method: 'POST' })
     await assertTicketVisible(data.ticketId as TicketId, actor)
     const { markTicketReadForAgent } =
       await import('@/lib/server/domains/tickets/ticket-unread.service')
-    await markTicketReadForAgent(data.ticketId as TicketId)
+    await markTicketReadForAgent(data.ticketId as TicketId, actor)
     return { ok: true }
   })
 
@@ -743,6 +745,21 @@ export const getMyTicketThreadFn = createServerFn({ method: 'GET' })
     const actor = await policyActorFromAuth(ctx)
     const { getMyTicketThread } = await import('@/lib/server/domains/tickets/requester.service')
     return getMyTicketThread(actor, data.ticketId as TicketId, { before: data.before })
+  })
+
+/** The requester marks their own ticket read (opening its portal ticket page).
+ *  Ownership-gated in requester.service. CONVERGENCE PHASE 2 (read-through):
+ *  on a linked pair this writes the CONVERSATION's visitor watermark, so the
+ *  Messages-space row + badge for the pair clear too — one shared watermark,
+ *  reading either surface marks both read. */
+export const markMyTicketReadFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    const actor = await policyActorFromAuth(ctx)
+    const { markMyTicketRead } = await import('@/lib/server/domains/tickets/requester.service')
+    await markMyTicketRead(actor, data.ticketId as TicketId)
+    return { ok: true }
   })
 
 export const replyToMyTicketFn = createServerFn({ method: 'POST' })
