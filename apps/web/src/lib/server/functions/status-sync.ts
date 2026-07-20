@@ -101,8 +101,17 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
             { err: error, integration_type: data.integrationType },
             'webhook registration failed'
           )
+          const raw = error instanceof Error ? error.message : 'Unknown error'
+          // Providers reject a second webhook at the same callback URL (Linear:
+          // "url not unique"; GitHub: "Hook already exists"). This means a prior
+          // status-sync webhook was left registered — surface an actionable
+          // message instead of the raw provider text.
+          const isDuplicate = /not unique|already exists|already registered|duplicate/i.test(raw)
           throw new Error(
-            `Failed to register webhook: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            isDuplicate
+              ? 'A status-sync webhook is already registered with this provider for this workspace. ' +
+                  'Turn status sync off, then on again to replace it — or remove the existing webhook in the provider first.'
+              : `Failed to register webhook: ${raw}`,
             { cause: error }
           )
         }

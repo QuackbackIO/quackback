@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import { INTEGRATION_ICON_MAP } from '@/components/icons/integration-icons'
+import { INTEGRATION_UI } from '@/components/admin/settings/integrations/integration-ui'
 import { cn } from '@/lib/shared/utils'
 
 // Custom icons for non-integration source types
@@ -41,52 +42,37 @@ const SOURCE_TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> =
 /** Source types that use the Quackback logo image instead of an SVG icon */
 const LOGO_SOURCE_TYPES = new Set(['quackback'])
 
-/** Source type → background + text color for the icon badge (solid backgrounds for clean overlap) */
-const SOURCE_TYPE_COLORS: Record<string, string> = {
+/** Intrinsic (non-integration) source types — their badge colors live here;
+ *  every provider's color is derived from the shared integration manifest. */
+const INTRINSIC_SOURCE_COLORS: Record<string, string> = {
   quackback: 'bg-yellow-100 dark:bg-yellow-900/80',
   api: 'bg-violet-100 dark:bg-violet-900/80 text-violet-600 dark:text-violet-400',
   csv: 'bg-amber-100 dark:bg-amber-900/80 text-amber-600 dark:text-amber-400',
   email: 'bg-rose-100 dark:bg-rose-900/80 text-rose-600 dark:text-rose-400',
-  slack: 'bg-[#f3e5f5] dark:bg-[#2d1230] text-[#611f69] dark:text-[#E8B4E9]',
-  teams: 'bg-indigo-100 dark:bg-indigo-900/80 text-[#6264A7] dark:text-[#9B9DD4]',
-  zendesk: 'bg-[#e0f2f1] dark:bg-[#0a2528] text-[#03363D] dark:text-[#78B8C1]',
-  intercom: 'bg-blue-100 dark:bg-blue-900/80 text-[#286EFA] dark:text-[#7DAAFC]',
-  hubspot: 'bg-orange-100 dark:bg-orange-900/80 text-[#FF7A59] dark:text-[#FFB199]',
-  discord: 'bg-indigo-100 dark:bg-indigo-900/80 text-[#5865F2] dark:text-[#99A1F7]',
-  github: 'bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300',
-  freshdesk: 'bg-emerald-100 dark:bg-emerald-900/80 text-emerald-600 dark:text-emerald-400',
-  salesforce: 'bg-sky-100 dark:bg-sky-900/80 text-sky-600 dark:text-sky-400',
-  jira: 'bg-blue-100 dark:bg-blue-900/80 text-[#0052CC] dark:text-[#669EFF]',
-  linear: 'bg-violet-100 dark:bg-violet-900/80 text-[#5E6AD2] dark:text-[#9B9FE8]',
-  asana: 'bg-rose-100 dark:bg-rose-900/80 text-[#F06A6A] dark:text-[#F5A3A3]',
-  notion: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300',
-  monday: 'bg-yellow-100 dark:bg-yellow-900/80 text-[#FFCC00] dark:text-[#FFE066]',
-  stripe: 'bg-purple-100 dark:bg-purple-900/80 text-[#635BFF] dark:text-[#A29BFE]',
-  gitlab: 'bg-orange-100 dark:bg-orange-900/80 text-[#FC6D26] dark:text-[#FEA876]',
 }
 
-/** Human-readable label for source types */
-export const SOURCE_TYPE_LABELS: Record<string, string> = {
+/** Source type → badge color, merging intrinsic sources with manifest-derived provider colors. */
+const SOURCE_TYPE_COLORS: Record<string, string> = {
+  ...INTRINSIC_SOURCE_COLORS,
+  ...Object.fromEntries(
+    Object.entries(INTEGRATION_UI)
+      .filter(([, m]) => m.badge)
+      .map(([id, m]) => [id, m.badge as string])
+  ),
+}
+
+/** Intrinsic source-type labels; provider labels are derived from the manifest. */
+const INTRINSIC_SOURCE_LABELS: Record<string, string> = {
   quackback: 'Quackback',
   api: 'API',
   csv: 'CSV Import',
   email: 'Email',
-  slack: 'Slack',
-  teams: 'Microsoft Teams',
-  zendesk: 'Zendesk',
-  intercom: 'Intercom',
-  hubspot: 'HubSpot',
-  github: 'GitHub',
-  discord: 'Discord',
-  freshdesk: 'Freshdesk',
-  salesforce: 'Salesforce',
-  jira: 'Jira',
-  linear: 'Linear',
-  asana: 'Asana',
-  notion: 'Notion',
-  monday: 'Monday',
-  stripe: 'Stripe',
-  gitlab: 'GitLab',
+}
+
+/** Human-readable label for source types (intrinsic + manifest-derived providers). */
+export const SOURCE_TYPE_LABELS: Record<string, string> = {
+  ...INTRINSIC_SOURCE_LABELS,
+  ...Object.fromEntries(Object.entries(INTEGRATION_UI).map(([id, m]) => [id, m.displayName])),
 }
 
 interface SourceTypeIconProps {

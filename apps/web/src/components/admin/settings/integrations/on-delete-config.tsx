@@ -3,7 +3,10 @@
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useUpdateIntegration } from '@/lib/client/mutations'
-import { getIntegrationActionVerb, getIntegrationDisplayName } from '@/lib/shared/integrations'
+import {
+  getIntegrationActionVerb,
+  getIntegrationDisplayName,
+} from '@/components/admin/settings/integrations/integration-ui'
 
 interface OnDeleteConfigProps {
   integrationId: string
