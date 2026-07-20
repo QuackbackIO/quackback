@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import type { JSONContent } from '@tiptap/react'
 import type { ConversationId, PrincipalId, TicketId, TicketTypeId } from '@quackback/ids'
 import type { TicketType, TiptapContent } from '@/lib/shared/db-types'
 import { TICKET_TYPES } from '@/lib/shared/db-types'
+import type { FeatureFlags } from '@/lib/shared/types/settings'
 import {
   validateTicketIntakeValues,
   type TicketIntakeError,
@@ -13,7 +15,10 @@ import {
 } from '@/lib/shared/tickets'
 import { useCreateTicket } from '@/lib/client/mutations/inbox'
 import { ticketQueries } from '@/lib/client/queries/inbox'
-import { linkTicketToConversationFn } from '@/lib/server/functions/tickets'
+import {
+  linkTicketToConversationFn,
+  suggestTicketFieldValuesFn,
+} from '@/lib/server/functions/tickets'
 import { ticketTypeLabel } from '@/components/admin/inbox/ticket-chips'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { PortalUserPicker } from '@/components/shared/portal-user-picker'
@@ -104,6 +109,20 @@ function preselectedType(candidates: TicketTypeDTO[]): TicketTypeDTO | null {
  * dynamic field set rendered from its `fields[]`, validated into
  * `customAttributes` on submit. A workspace with no live registry types keeps
  * the legacy bare-category picker.
+ *
+ * CONVERGENCE PHASE 5 (copilot auto-fill, suggestion-only): from a
+ * conversation with the workspace's AI enabled and a type selected, an
+ * "✨ Auto-fill" button (next to the type picker — an explicit action, not an
+ * auto-trigger on type selection: the dialog's pattern is explicit submits,
+ * and an AI call per swap would spend tokens without intent) asks
+ * `suggestTicketFieldValuesFn` for the type's fields + the title. Suggested
+ * values pre-fill with a "✨ suggested" marker (a header badge counts them)
+ * and stay editable; unanswered fields stay empty with a muted "not
+ * suggested" state; "Undo suggestions" restores the exact pre-suggestion
+ * form. Nothing writes until the normal submit — the save path re-validates
+ * everything server-side. AI disabled/unconfigured, an empty thread, or a
+ * failed/flaky completion → the quiet fallback: the plain Phase-4 form
+ * unchanged, never half-filled.
  */
 export function CreateTicketDialog({
   open,
@@ -123,6 +142,33 @@ export function CreateTicketDialog({
   const [requester, setRequester] = useState<Requester | null>(null)
   const [fieldValues, setFieldValues] = useState<Record<string, unknown>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  // CONVERGENCE PHASE 5 — copilot auto-fill (suggestion-only). `suggestedKeys`
+  // marks which values currently on the form came from the copilot (the
+  // provenance marker); `preSuggestion` is the form snapshot "Undo
+  // suggestions" restores; `autoFillHidden` retires the affordance for this
+  // dialog session once the server says suggestions are unavailable (AI
+  // unconfigured, empty thread, a flaky structured-output completion).
+  const [autoFillLoading, setAutoFillLoading] = useState(false)
+  const [autoFillHidden, setAutoFillHidden] = useState(false)
+  const [suggestedKeys, setSuggestedKeys] = useState<ReadonlySet<string>>(new Set())
+  const [preSuggestion, setPreSuggestion] = useState<{
+    title: string
+    fieldValues: Record<string, unknown>
+  } | null>(null)
+
+  // The client-visible half of the AI gate (the same route-context flag the
+  // Copilot tab reads): the flag off hides the affordance outright. The
+  // server half (assistant configured, budget, non-empty thread) surfaces as
+  // the fn's `unavailable` response, which retires the button below.
+  const { settings } = useRouteContext({ from: '/admin' }) as {
+    settings?: { featureFlags?: FeatureFlags } | null
+  }
+  const showAutoFill =
+    fromConversation &&
+    selectedTypeId !== null &&
+    !!settings?.featureFlags?.inboxAi &&
+    !autoFillHidden
 
   // The registry types the picker offers (live rows only). From a conversation
   // the pair rule locks the category to customer, so the picker does too.
@@ -152,6 +198,10 @@ export function CreateTicketDialog({
       setRequester(fromConversation ? (defaultRequester ?? null) : null)
       setFieldValues({})
       setFieldErrors({})
+      setAutoFillLoading(false)
+      setAutoFillHidden(false)
+      setSuggestedKeys(new Set())
+      setPreSuggestion(null)
     }
   }, [open, fromConversation, defaultTitle, defaultRequester])
 
@@ -170,11 +220,14 @@ export function CreateTicketDialog({
   const canCreate = title.trim().length > 0 && !create.isPending && !linking
 
   /** Type swap: change the field set and drop the old type's answers (the
-   *  retype rule protects STORED answers, not a draft's stale keys). */
+   *  retype rule protects STORED answers, not a draft's stale keys). Any
+   *  suggestion state dies with the old type's field set too. */
   const selectType = (id: string) => {
     setSelectedTypeId(id)
     setFieldValues({})
     setFieldErrors({})
+    setSuggestedKeys(new Set())
+    setPreSuggestion(null)
   }
 
   const setFieldValue = (key: string, value: unknown) => {
@@ -185,6 +238,63 @@ export function CreateTicketDialog({
       delete next[key]
       return next
     })
+  }
+
+  /**
+   * "✨ Auto-fill" (Phase 5): ONE structured-completion call suggests the
+   * chosen type's fields + the title from the conversation. Suggestion-only —
+   * values pre-fill marked and stay editable; nothing writes until the normal
+   * submit. A button, not an auto-trigger on type selection: the dialog's
+   * pattern is explicit actions, and an AI call on every type swap would
+   * spend tokens without intent. Every failure mode (unavailable, error,
+   * empty result) leaves the form exactly as it was — never half-filled.
+   */
+  const runAutoFill = async () => {
+    if (!conversationId || !selectedTypeId || autoFillLoading) return
+    setAutoFillLoading(true)
+    try {
+      const result = await suggestTicketFieldValuesFn({
+        data: { conversationId, ticketTypeId: selectedTypeId as TicketTypeId },
+      })
+      const suggestions = result.unavailable === true ? null : result.suggestions
+      if (!suggestions || Object.keys(suggestions).length === 0) {
+        // The quiet fallback: retire the affordance for this session and
+        // leave the plain Phase-4 form unchanged.
+        setAutoFillHidden(true)
+        toast.info('AI suggestions are unavailable — the form is unchanged.')
+        return
+      }
+      // Snapshot the pre-suggestion form for "Undo suggestions", then apply.
+      setPreSuggestion({ title, fieldValues })
+      const { title: suggestedTitle, ...fieldSuggestions } = suggestions
+      const keys = new Set<string>()
+      if (typeof suggestedTitle === 'string' && suggestedTitle.trim()) {
+        setTitle(suggestedTitle)
+        keys.add('title')
+      }
+      setFieldValues((prev) => ({ ...prev, ...fieldSuggestions }))
+      for (const key of Object.keys(fieldSuggestions)) keys.add(key)
+      setSuggestedKeys(keys)
+      // Suggested values were validated server-side; stale inline errors go.
+      setFieldErrors({})
+    } catch {
+      // An unexpected failure (network, auth): the form stays unchanged and
+      // the button stays (a transient error may succeed on retry).
+      toast.info('AI suggestions are unavailable — the form is unchanged.')
+    } finally {
+      setAutoFillLoading(false)
+    }
+  }
+
+  /** Restore the exact pre-suggestion form (title + field answers) and drop
+   *  every suggestion marker. */
+  const undoSuggestions = () => {
+    if (!preSuggestion) return
+    setTitle(preSuggestion.title)
+    setFieldValues(preSuggestion.fieldValues)
+    setPreSuggestion(null)
+    setSuggestedKeys(new Set())
+    setFieldErrors({})
   }
 
   const submit = () => {
@@ -269,7 +379,14 @@ export function CreateTicketDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{fromConversation ? 'Create ticket' : 'New ticket'}</DialogTitle>
+          <DialogTitle>
+            {fromConversation ? 'Create ticket' : 'New ticket'}
+            {suggestedKeys.size > 0 && (
+              <span className="ms-2 rounded bg-primary/15 px-1.5 py-0.5 align-middle text-[11px] font-medium text-primary">
+                ✨ {suggestedKeys.size} suggested
+              </span>
+            )}
+          </DialogTitle>
           <DialogDescription>
             {fromConversation
               ? 'Open a trackable ticket for this conversation.'
@@ -283,7 +400,23 @@ export function CreateTicketDialog({
               legacy bare-category picker in the standalone flow. */}
           {candidates.length > 0 ? (
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Type</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Type</label>
+                {/* Phase 5 auto-fill entry: a button (explicit action), not an
+                    auto-trigger on type selection — see runAutoFill's doc. */}
+                {showAutoFill && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={runAutoFill}
+                    disabled={autoFillLoading}
+                  >
+                    {autoFillLoading ? '✨ Suggesting…' : '✨ Auto-fill'}
+                  </Button>
+                )}
+              </div>
               <Select value={selectedTypeId ?? ''} onValueChange={selectType}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a type…" />
@@ -326,7 +459,12 @@ export function CreateTicketDialog({
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Title</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Title
+              {suggestedKeys.has('title') && (
+                <span className="ms-1 font-normal text-primary">✨ suggested</span>
+              )}
+            </label>
             <Input
               autoFocus
               value={title}
@@ -352,12 +490,15 @@ export function CreateTicketDialog({
           </div>
 
           {/* The chosen type's field set — agents fill the full set (customer-
-              hidden fields included); answers validate into customAttributes. */}
+              hidden fields included); answers validate into customAttributes.
+              Phase 5: suggestion provenance markers ride suggestedKeys. */}
           <TicketFormFields
             fields={selectedFields}
             values={fieldValues}
             onChange={setFieldValue}
             errors={fieldErrors}
+            suggestedKeys={suggestedKeys}
+            suggestionRun={suggestedKeys.size > 0}
           />
 
           <div className="space-y-1.5">
@@ -408,6 +549,16 @@ export function CreateTicketDialog({
         </div>
 
         <DialogFooter>
+          {preSuggestion && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={undoSuggestions}
+              disabled={create.isPending || linking}
+            >
+              Undo suggestions
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

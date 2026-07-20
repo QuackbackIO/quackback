@@ -4,7 +4,10 @@
  * (category default preselected), the type swap exchanging the dynamic field
  * set, inline validation against the chosen type's fields, and the submit
  * payload carrying ticketTypeId + validated customAttributes (never a bare
- * category alongside a registry type).
+ * category alongside a registry type). Phase 5 adds the copilot auto-fill:
+ * the "✨ Auto-fill" affordance (flag-gated, from-a-conversation only),
+ * suggestion markers + undo, the not-suggested state, the quiet unavailable
+ * fallback, and submits carrying edited suggestions.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
@@ -17,6 +20,11 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   listTicketTypesFn: vi.fn(),
   linkTicketToConversationFn: vi.fn(),
+  suggestTicketFieldValuesFn: vi.fn(),
+  toastInfo: vi.fn(),
+  routeContext: {
+    settings: { featureFlags: { inboxAi: true } },
+  } as Record<string, unknown>,
 }))
 
 vi.mock('@/lib/client/mutations/inbox', () => ({
@@ -27,6 +35,18 @@ vi.mock('@/lib/server/functions/ticket-types', () => ({
 }))
 vi.mock('@/lib/server/functions/tickets', () => ({
   linkTicketToConversationFn: mocks.linkTicketToConversationFn,
+  suggestTicketFieldValuesFn: mocks.suggestTicketFieldValuesFn,
+}))
+vi.mock('@tanstack/react-router', () => ({
+  useRouteContext: () => mocks.routeContext,
+}))
+vi.mock('sonner', () => ({
+  toast: {
+    info: mocks.toastInfo,
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  },
 }))
 // Heavy/irrelevant children stubbed: the rich editor (tiptap), image upload,
 // and the requester picker (covered by its own surface).
@@ -121,6 +141,9 @@ beforeEach(() => {
   Element.prototype.scrollIntoView ??= (() => {}) as never
   mocks.mutate.mockReset()
   mocks.linkTicketToConversationFn.mockReset()
+  mocks.suggestTicketFieldValuesFn.mockReset()
+  mocks.toastInfo.mockReset()
+  mocks.routeContext = { settings: { featureFlags: { inboxAi: true } } }
   mocks.listTicketTypesFn.mockReset()
   mocks.listTicketTypesFn.mockResolvedValue([bugType, refundType, outageType])
 })
@@ -187,5 +210,165 @@ describe('CreateTicketDialog — Phase 4 type picker', () => {
     fireEvent.keyDown(trigger, { key: 'ArrowDown' })
     expect(await screen.findByRole('option', { name: /Bug report/ })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Outage/ })).toBeNull()
+  })
+})
+
+/** A two-field customer type for the auto-fill tests: one field the model
+ *  answers, one it leaves "not suggested". */
+const richType: TicketTypeDTO = {
+  id: 'ticket_type_rich',
+  name: 'Bug report',
+  slug: 'bug_report',
+  category: 'customer',
+  icon: '🐛',
+  color: '#eab308',
+  fields: [
+    field({ key: 'severity', label: 'Severity', type: 'select', options: ['Low', 'High'] }),
+    field({ key: 'steps', label: 'Steps to reproduce', order: 1 }),
+  ],
+  isDefault: true,
+  position: 0,
+  intakeVisible: true,
+  archived: false,
+}
+
+describe('CreateTicketDialog — Phase 5 copilot auto-fill', () => {
+  function renderFromConversation() {
+    mocks.listTicketTypesFn.mockResolvedValue([richType])
+    return renderDialog({ conversationId: 'conversation_1' as never })
+  }
+
+  it('shows the affordance from-a-conversation with the inboxAi flag on; hides it standalone or with the flag off', async () => {
+    renderFromConversation()
+    expect(await screen.findByRole('button', { name: /Auto-fill/ })).toBeInTheDocument()
+    cleanup()
+
+    // Standalone (no conversation): exactly the Phase-4 dialog.
+    renderDialog()
+    await screen.findByText('Bug report')
+    expect(screen.queryByRole('button', { name: /Auto-fill/ })).toBeNull()
+    cleanup()
+
+    // Flag off: the affordance never renders.
+    mocks.routeContext = { settings: { featureFlags: { inboxAi: false } } }
+    renderFromConversation()
+    await screen.findByText('Bug report')
+    expect(screen.queryByRole('button', { name: /Auto-fill/ })).toBeNull()
+  })
+
+  it('populates suggested values with ✨ markers and counts them in the header badge', async () => {
+    mocks.suggestTicketFieldValuesFn.mockResolvedValue({
+      suggestions: { title: 'CSV export drops filter columns', severity: 'High' },
+    })
+    renderFromConversation()
+    fireEvent.click(await screen.findByRole('button', { name: /Auto-fill/ }))
+
+    await waitFor(() =>
+      expect(
+        (screen.getByPlaceholderText('Summarize the request…') as HTMLInputElement).value
+      ).toBe('CSV export drops filter columns')
+    )
+    expect(mocks.suggestTicketFieldValuesFn).toHaveBeenCalledWith({
+      data: { conversationId: 'conversation_1', ticketTypeId: 'ticket_type_rich' },
+    })
+    // The suggested select shows its value; both fields carry the ✨ marker
+    // (title + severity), and the unanswered field renders "not suggested".
+    expect(await screen.findByText('High')).toBeInTheDocument()
+    expect(screen.getAllByText('✨ suggested')).toHaveLength(2)
+    expect(screen.getByText('✨ 2 suggested')).toBeInTheDocument()
+    expect(screen.getByText('— not suggested')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Undo suggestions' })).toBeInTheDocument()
+  })
+
+  it('undo restores the exact pre-suggestion form and drops every marker', async () => {
+    mocks.suggestTicketFieldValuesFn.mockResolvedValue({
+      suggestions: { title: 'Suggested title', severity: 'High', steps: 'suggested steps' },
+    })
+    renderFromConversation()
+    fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
+      target: { value: 'My own title' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Auto-fill/ }))
+    await waitFor(() =>
+      expect(
+        (screen.getByPlaceholderText('Summarize the request…') as HTMLInputElement).value
+      ).toBe('Suggested title')
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo suggestions' }))
+    expect((screen.getByPlaceholderText('Summarize the request…') as HTMLInputElement).value).toBe(
+      'My own title'
+    )
+    expect(screen.queryByText('✨ suggested')).toBeNull()
+    expect(screen.queryByText(/✨ \d+ suggested/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Undo suggestions' })).toBeNull()
+  })
+
+  it('unavailable retires the affordance with a quiet note and leaves the form unchanged', async () => {
+    mocks.suggestTicketFieldValuesFn.mockResolvedValue({ unavailable: true })
+    renderFromConversation()
+    fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
+      target: { value: 'Keep me' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Auto-fill/ }))
+
+    await waitFor(() => expect(mocks.toastInfo).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /Auto-fill/ })).toBeNull()
+    expect((screen.getByPlaceholderText('Summarize the request…') as HTMLInputElement).value).toBe(
+      'Keep me'
+    )
+    expect(screen.queryByText('✨ suggested')).toBeNull()
+  })
+
+  it('a failed call keeps the plain form too (quiet note, button stays for retry)', async () => {
+    mocks.suggestTicketFieldValuesFn.mockRejectedValue(new Error('network down'))
+    renderFromConversation()
+    fireEvent.click(await screen.findByRole('button', { name: /Auto-fill/ }))
+
+    await waitFor(() => expect(mocks.toastInfo).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: /Auto-fill/ })).toBeInTheDocument()
+    expect(screen.queryByText('✨ suggested')).toBeNull()
+  })
+
+  it('submit carries edited suggestions through the normal create path', async () => {
+    mocks.suggestTicketFieldValuesFn.mockResolvedValue({
+      suggestions: { title: 'CSV export drops filter columns', severity: 'High', steps: 'repro' },
+    })
+    renderFromConversation()
+    fireEvent.click(await screen.findByRole('button', { name: /Auto-fill/ }))
+    await screen.findByText('✨ 3 suggested')
+
+    // The agent edits a suggested value before saving — everything stays editable.
+    const stepsInput = (await screen.findByText('Steps to reproduce')).parentElement!.querySelector(
+      'input'
+    )!
+    fireEvent.change(stepsInput, { target: { value: 'edited repro' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
+
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledTimes(1))
+    const [input] = mocks.mutate.mock.calls[0]
+    expect(input).toMatchObject({
+      ticketTypeId: 'ticket_type_rich',
+      title: 'CSV export drops filter columns',
+      customAttributes: { severity: 'High', steps: 'edited repro' },
+    })
+  })
+
+  it('a type swap clears suggestion state with the old field set', async () => {
+    mocks.listTicketTypesFn.mockResolvedValue([richType, refundType])
+    mocks.suggestTicketFieldValuesFn.mockResolvedValue({
+      suggestions: { title: 'Suggested', severity: 'High' },
+    })
+    renderDialog({ conversationId: 'conversation_1' as never })
+    fireEvent.click(await screen.findByRole('button', { name: /Auto-fill/ }))
+    await screen.findByText('✨ 2 suggested')
+
+    // richType's severity select adds a second combobox; the type picker is first.
+    await pickSelectOption((await screen.findAllByRole('combobox'))[0], 'Refund request')
+    expect(screen.queryByText(/✨ \d+ suggested/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Undo suggestions' })).toBeNull()
+    expect((screen.getByPlaceholderText('Summarize the request…') as HTMLInputElement).value).toBe(
+      'Suggested'
+    )
   })
 })

@@ -43,6 +43,7 @@ import type {
 import { requireAuth, policyActorFromAuth, assertPermission } from './auth-helpers'
 import type { ConversationAttachment } from '@/lib/shared/db-types'
 import { ForbiddenError, ValidationError } from '@/lib/shared/errors'
+import { conversationIdSchema } from '@/lib/server/domains/assistant/conversation-id.schema'
 
 const ticketTypeSchema = z.enum(TICKET_TYPES)
 const statusCategorySchema = z.enum(TICKET_STATUS_CATEGORIES)
@@ -492,6 +493,47 @@ export const linkTicketToConversationFn = createServerFn({ method: 'POST' })
       actor
     )
     return { success: true }
+  })
+
+/**
+ * Copilot auto-fill on conversion (convergence Phase 5,
+ * scratchpad/convergence-design.md): the create-ticket dialog's "✨ Auto-fill"
+ * affordance. Suggests values for the chosen type's fields + the ticket title
+ * from the conversation's thread — SUGGESTION-ONLY: nothing is written here,
+ * the returned values pre-fill the form marked "✨ suggested", and the ticket
+ * persists only through the dialog's normal submit (createTicketFn). Two
+ * validation gates keep a poisoned/hallucinated suggestion from persisting:
+ * the service validates the model's output against the type's field schema
+ * before returning it (wholesale — never a half-filled form), and
+ * createTicketFn re-validates the same values into customAttributes on save.
+ *
+ * Gated on ticket.create — the same permission the dialog's create path
+ * requires — plus conversation viewability, since the suggestion grounds on
+ * the conversation's full thread, internal notes included. Returns
+ * `{ unavailable: true }` (never throws) when AI is disabled/unconfigured,
+ * the budget is exhausted, the thread is empty, or the structured-output
+ * completion fails: the dialog maps that to the plain Phase-4 form with a
+ * quiet note. Genuine client errors (an unknown type id) still throw.
+ */
+export const suggestTicketFieldValuesFn = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      conversationId: conversationIdSchema,
+      ticketTypeId: z.string().refine((v) => isValidTypeId(v, 'ticket_type'), {
+        message: 'Invalid ticket type ID format',
+      }),
+    })
+  )
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_CREATE })
+    const actor = await policyActorFromAuth(ctx)
+    const conversationId = data.conversationId as ConversationId
+    const { assertConversationViewable } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    await assertConversationViewable(conversationId, actor)
+    const { suggestTicketFieldValues } =
+      await import('@/lib/server/domains/assistant/ticket-field-suggestion.service')
+    return suggestTicketFieldValues(conversationId, data.ticketTypeId as TicketTypeId)
   })
 
 // ---------------------------------------------------------------------------

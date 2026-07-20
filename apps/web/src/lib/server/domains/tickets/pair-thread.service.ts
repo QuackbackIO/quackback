@@ -156,6 +156,30 @@ export async function resolvePairConversationIds(
 }
 
 /**
+ * The conversation-side twin of `resolvePairConversationId`: the CUSTOMER
+ * ticket a conversation is paired with, or null when none is linked yet (the
+ * pre-conversion case — the create-ticket dialog's auto-fill grounding,
+ * convergence Phase 5, resolves the pair this way and then reads the union
+ * through `listPairThreadMessages` exactly as the ticket side does). At most
+ * one row can match (0150's partial unique index).
+ */
+export async function resolvePairTicketIdForConversation(
+  conversationId: ConversationId
+): Promise<TicketId | null> {
+  const [link] = await db
+    .select({ ticketId: ticketConversations.ticketId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversationId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return link?.ticketId ?? null
+}
+
+/**
  * Resolve a `before` message-id cursor to its (created_at, id) keyset anchor.
  * Unscoped by parent — a message id is globally unique (one table), and either
  * parent's rows keyset correctly against the same anchor (see the MERGE
