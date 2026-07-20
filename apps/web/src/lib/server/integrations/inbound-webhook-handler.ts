@@ -144,6 +144,13 @@ export async function handleInboundWebhook(
     log.error({ err: error, integration_type: integrationType }, 'inbound ticket branch failed')
   }
 
+  // Health telemetry (WO-14): a verified, parsed inbound delivery landed.
+  await db
+    .update(integrations)
+    .set({ lastInboundAt: new Date() })
+    .where(eq(integrations.id, integration.id))
+    .catch(() => {})
+
   return new Response('OK', { status: 200 })
 }
 
@@ -172,6 +179,14 @@ async function applyPostStatusChange(
     )
     return
   }
+
+  // Refresh the display cache (WO-14) regardless of whether a status mapping
+  // exists — the remote state is still the truth for chip display.
+  await db
+    .update(postExternalLinks)
+    .set({ remoteState: result.externalStatus.slice(0, 64), remoteStateAt: new Date() })
+    .where(eq(postExternalLinks.id, link.id))
+    .catch(() => {})
 
   // Record the external move on the post's activity timeline BEFORE mapping
   // resolution: an unmapped (or same-status) move is still a real signal on a
@@ -255,6 +270,7 @@ async function applyTicketStatusChange(
 ): Promise<void> {
   const links = await db
     .select({
+      id: ticketExternalLinks.id,
       ticketId: ticketExternalLinks.ticketId,
       externalDisplayId: ticketExternalLinks.externalDisplayId,
       externalUrl: ticketExternalLinks.externalUrl,
@@ -273,6 +289,19 @@ async function applyTicketStatusChange(
     )
     return
   }
+
+  // Refresh the display cache (WO-14) on every linked ticket — one external
+  // issue can back several tickets.
+  await db
+    .update(ticketExternalLinks)
+    .set({ remoteState: result.externalStatus.slice(0, 64), remoteStateAt: new Date() })
+    .where(
+      and(
+        eq(ticketExternalLinks.integrationType, integrationType),
+        eq(ticketExternalLinks.externalId, result.externalId)
+      )
+    )
+    .catch(() => {})
 
   // Service actor carrying the integration's principal (mirrors the post
   // branch's service-principal attribution) with an explicit capability

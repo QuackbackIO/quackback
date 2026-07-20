@@ -24,6 +24,13 @@ export const postExternalLinks = pgTable(
     externalDisplayId: text('external_display_id'),
     externalUrl: text('external_url'),
     status: varchar('status', { length: 20 }).notNull().default('active'),
+    /** Cached remote presentation (WO-14) — display only, refreshed by inbound webhooks. */
+    remoteTitle: text('remote_title'),
+    remoteState: varchar('remote_state', { length: 64 }),
+    remoteStateAt: timestamp('remote_state_at', { withTimezone: true }),
+    /** Provenance (WO-14): which seam created the link — 'event' | 'push' | 'reference' | 'sidebar'. */
+    origin: varchar('origin', { length: 20 }),
+    createdByPrincipalId: text('created_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -82,6 +89,13 @@ export const ticketExternalLinks = pgTable(
     externalDisplayId: text('external_display_id'),
     externalUrl: text('external_url'),
     status: varchar('status', { length: 20 }).notNull().default('active'),
+    /** Cached remote presentation (WO-14) — display only, refreshed by inbound webhooks. */
+    remoteTitle: text('remote_title'),
+    remoteState: varchar('remote_state', { length: 64 }),
+    remoteStateAt: timestamp('remote_state_at', { withTimezone: true }),
+    /** Provenance (WO-14): which seam created the link — 'event' | 'push' | 'reference' | 'sidebar'. */
+    origin: varchar('origin', { length: 20 }),
+    createdByPrincipalId: text('created_by_principal_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

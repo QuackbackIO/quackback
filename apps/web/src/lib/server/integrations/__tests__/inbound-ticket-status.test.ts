@@ -236,6 +236,19 @@ describe.skipIf(!fixture.available)('inbound webhook ticket branch (real DB, rol
       externalStatus: 'Closed',
       transition: 'closed',
     })
+
+    // WO-14: the link's remote_state is cached and the integration's inbound
+    // health timestamp is stamped.
+    const [link] = await testDb
+      .select({ remoteState: ticketExternalLinks.remoteState })
+      .from(ticketExternalLinks)
+      .where(eq(ticketExternalLinks.ticketId, ticketId))
+    expect(link.remoteState).toBe('Closed')
+    const [integ] = await testDb
+      .select({ lastInboundAt: integrations.lastInboundAt })
+      .from(integrations)
+      .where(eq(integrations.integrationType, 'github'))
+    expect(integ.lastInboundAt).not.toBeNull()
   })
 
   it('notes and bells even when NO ticket status mapping matches (the silence case)', async () => {

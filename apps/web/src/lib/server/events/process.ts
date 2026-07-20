@@ -151,6 +151,15 @@ async function initializeQueue() {
             }
           }
 
+          // Health telemetry (WO-14): record delivery outcome on the
+          // integration, when the resolver attributed this target to one.
+          const integrationId = (hookConfig as { integrationId?: string }).integrationId
+          if (integrationId) {
+            recordIntegrationHealth(integrationId, result).catch((err) =>
+              log.error({ err }, 'failed to record integration health')
+            )
+          }
+
           if (result.success) {
             if (result.externalId) {
               persistExternalLink(job.data, result).catch((err) =>
@@ -263,8 +272,26 @@ async function persistExternalLink(data: HookJobData, result: HookResult): Promi
       externalId: result.externalId!,
       externalDisplayId: result.externalDisplayId ?? null,
       externalUrl: result.externalUrl ?? null,
+      origin: 'event', // created by an automatic event delivery (WO-14 provenance)
     })
     .onConflictDoNothing()
+}
+
+/**
+ * Record a delivery outcome on the integration for the settings health panel
+ * (WO-14). Success stamps last_outbound_at; a failure stamps last_error +
+ * last_error_at. Best-effort — never blocks or fails the delivery.
+ */
+async function recordIntegrationHealth(integrationId: string, result: HookResult): Promise<void> {
+  const { db, integrations, eq } = await import('@/lib/server/db')
+  const now = new Date()
+  const patch = result.success
+    ? { lastOutboundAt: now, lastError: null, lastErrorAt: null }
+    : { lastError: (result.error ?? 'Delivery failed').slice(0, 500), lastErrorAt: now }
+  await db
+    .update(integrations)
+    .set(patch)
+    .where(eq(integrations.id, integrationId as import('@quackback/ids').IntegrationId))
 }
 
 /**

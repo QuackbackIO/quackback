@@ -50,6 +50,12 @@ export const integrations = pgTable(
     lastErrorAt: timestamp('last_error_at', { withTimezone: true }),
     errorCount: integer('error_count').notNull().default(0),
 
+    // Health telemetry (WO-14) — feeds the settings-page health panel, since
+    // hook_deliveries carries no integration attribution. (Error state reuses
+    // the existing lastError/lastErrorAt columns above.)
+    lastOutboundAt: timestamp('last_outbound_at', { withTimezone: true }),
+    lastInboundAt: timestamp('last_inbound_at', { withTimezone: true }),
+
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
