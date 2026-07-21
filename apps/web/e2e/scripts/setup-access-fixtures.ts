@@ -90,7 +90,16 @@ async function principalIdForEmail(email: string): Promise<string> {
   return rows[0].id as string
 }
 
-async function addToSegment(principalId: string, segmentId: string): Promise<void> {
+/**
+ * Make the segment's membership exactly {principalId}. The matrix tests
+ * assert both sides (member sees, non-member doesn't), so stray members —
+ * e.g. left behind by manual testing against the same dev DB — would turn
+ * a correct deny into a false "leak" failure.
+ */
+async function setSegmentMembership(principalId: string, segmentId: string): Promise<void> {
+  await sql`
+    DELETE FROM user_segments
+    WHERE segment_id = ${segmentId} AND principal_id != ${principalId}`
   await sql`
     INSERT INTO user_segments (principal_id, segment_id, added_by, added_at)
     VALUES (${principalId}, ${segmentId}, 'manual', NOW())
@@ -142,7 +151,7 @@ async function ensurePost(
 try {
   const segment = await ensureSegment()
   const principalId = await principalIdForEmail(memberEmail)
-  await addToSegment(principalId, segment.uuid)
+  await setSegmentMembership(principalId, segment.uuid)
   const segIds = [segment.typeId]
 
   const statusId = await anyStatusId()

@@ -132,7 +132,7 @@ test.describe('view tier — board-list visibility', () => {
 async function composerState(page: Page, boardSlug: string) {
   await page.goto(`/?board=${boardSlug}`)
   await page.waitForLoadState('networkidle')
-  const composer = page.getByRole('textbox', { name: /what'?s your idea/i }).first()
+  const composer = page.getByPlaceholder(/what'?s your idea/i).first()
   await composer.click()
   await composer.fill(`E2E access probe ${Date.now()}`)
   await page.waitForTimeout(400)
@@ -173,7 +173,7 @@ async function postState(page: Page, board: { slug: string; postId: string }) {
   await page.goto(`/b/${board.slug}/posts/${board.postId}`)
   await page.waitForLoadState('networkidle')
   const body = (await page.locator('main, body').first().innerText()).toLowerCase()
-  const denied = /post not found|tripped us up|flown the pond/.test(body)
+  const denied = /post not found|page not found/.test(body)
   return {
     denied,
     renders: !denied && body.includes('e2e access probe post'),
@@ -293,7 +293,7 @@ test.describe('vote tier — vote affordance + gating', () => {
 async function submitFeedback(page: Page, boardSlug: string, title: string) {
   await page.goto(`/?board=${boardSlug}`)
   await page.waitForLoadState('networkidle')
-  const composer = page.getByRole('textbox', { name: /what'?s your idea/i }).first()
+  const composer = page.getByPlaceholder(/what'?s your idea/i).first()
   await composer.click()
   await composer.fill(title)
   const submit = page.getByRole('button', { name: /^submit/i }).first()
