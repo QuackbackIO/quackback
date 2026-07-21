@@ -277,7 +277,7 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
     vi.unstubAllGlobals()
   })
 
-  it('the footer Summarize button sends the canned summarize question as a normal turn', async () => {
+  it('the empty-state Catch me up card sends the canned summarize question as a normal turn', async () => {
     const frames = aguiRun({
       result: { text: 'Summary of the thread.', citations: [], internalSourced: false },
     })
@@ -285,7 +285,7 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Summarize' }))
+    fireEvent.click(screen.getByRole('button', { name: /catch me up/i }))
 
     // The canned question renders as the user bubble; the answer streams in
     // with the same affordances as any other ask.
@@ -313,7 +313,7 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
         )
     )
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Summarize' }))
+    fireEvent.click(screen.getByRole('button', { name: /catch me up/i }))
     await screen.findByText('Summary of the thread.')
 
     // An analysis-classified answer is read-only text: no primary insert
@@ -324,12 +324,12 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
     vi.unstubAllGlobals()
   })
 
-  it('the footer Draft reply button sends its canned question as a normal turn', async () => {
+  it('the empty-state Draft a reply card sends its canned question as a normal turn', async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockStreamingResponse(finalFrame()))
     vi.stubGlobal('fetch', fetchMock)
 
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Draft reply' }))
+    fireEvent.click(screen.getByRole('button', { name: /draft a reply/i }))
 
     expect(await screen.findByText('Draft a reply to this conversation')).toBeInTheDocument()
     await screen.findByText(DEFAULT_ANSWER)
@@ -340,14 +340,16 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
     vi.unstubAllGlobals()
   })
 
-  it('the Summarize button is disabled while a turn is streaming', async () => {
+  it('the footer Summarize pill is disabled while a turn is streaming', async () => {
     // A fetch that never settles keeps the turn in the streaming state.
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
 
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Summarize' }))
+    fireEvent.click(screen.getByRole('button', { name: /catch me up/i }))
     await screen.findByText('Summarize this conversation and highlight the key points')
 
+    // The empty-state cards are gone; the compact footer pills now show and
+    // are disabled while the turn streams.
     expect(screen.getByRole('button', { name: 'Summarize' })).toBeDisabled()
     vi.unstubAllGlobals()
   })

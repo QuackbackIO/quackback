@@ -29,7 +29,6 @@ import {
   HandThumbDownIcon,
   HandThumbUpIcon,
   LockClosedIcon,
-  MagnifyingGlassIcon,
   ShieldCheckIcon,
   SparklesIcon,
   XMarkIcon,
@@ -108,23 +107,41 @@ const MODIFY_ROWS: { transform: TransformKind; label: string }[] = [
   { transform: 'more_concise', label: 'More concise' },
 ]
 
-/** The footer quick actions: each is nothing more than a canned question
- *  submitted as an ordinary turn — the answer streams, classifies, and gains
- *  affordances exactly like a typed ask. */
+/** The quick actions: each is nothing more than a canned question submitted
+ *  as an ordinary turn — the answer streams, classifies, and gains
+ *  affordances exactly like a typed ask. Surfaced twice: as full-size cards
+ *  in the empty state (title + description), and as compact pills above the
+ *  ask box once a thread exists (label only). */
 const QUICK_ACTIONS: ReadonlyArray<{
+  /** Compact pill label (composer footer). */
   label: string
+  /** Empty-state card title. */
+  title: string
+  /** Empty-state card description. */
+  description: string
   icon: typeof ClipboardDocumentListIcon
   question: string
 }> = [
   {
+    label: 'Draft reply',
+    title: 'Draft a reply',
+    description: 'Use your knowledge base to draft a reply in your tone and style.',
+    icon: PencilSquareIcon,
+    question: 'Draft a reply to this conversation',
+  },
+  {
     label: 'Summarize',
+    title: 'Catch me up',
+    description: 'Get a quick summary of what has happened so far.',
     icon: ClipboardDocumentListIcon,
     question: 'Summarize this conversation and highlight the key points',
   },
   {
-    label: 'Draft reply',
-    icon: PencilSquareIcon,
-    question: 'Draft a reply to this conversation',
+    label: 'Next steps',
+    title: 'Suggest next steps',
+    description: 'Get guidance on how to move this conversation forward.',
+    icon: BoltIcon,
+    question: 'Suggest the next steps to resolve this conversation',
   },
 ]
 
@@ -530,7 +547,7 @@ export function CopilotPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {turns.length === 0 ? (
-          <CopilotEmptyState assistantName={assistantName} />
+          <CopilotEmptyState assistantName={assistantName} onQuickAction={submitQuestion} />
         ) : (
           <div className="space-y-4">
             {turns.map((turn) => (
@@ -590,34 +607,57 @@ export function CopilotPanel({
   )
 }
 
-function CopilotEmptyState({ assistantName }: { assistantName: string }) {
+function CopilotEmptyState({
+  assistantName,
+  onQuickAction,
+}: {
+  assistantName: string
+  /** Submit a QUICK_ACTIONS canned question as an ordinary turn. */
+  onQuickAction: (question: string) => void
+}) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-2 py-6 text-center">
-      <SparklesIcon className="h-8 w-8 text-primary/60" />
-      <p className="text-sm font-medium text-foreground">
-        Ask {assistantName} anything about this conversation.
-      </p>
-      <ul className="w-full space-y-2.5 text-left text-xs text-muted-foreground">
-        <li className="flex items-start gap-2">
-          <MagnifyingGlassIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            Reads this conversation, then finds answers in your help center, snippets, roadmap
-            posts, and this customer&apos;s past conversations.
-          </span>
-        </li>
-        <li className="flex items-start gap-2">
-          <BoltIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>Suggests what to do next using your team&apos;s internal knowledge.</span>
-        </li>
-        <li className="flex items-start gap-2">
-          <ShieldCheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>Can take actions for you, with your approval.</span>
-        </li>
-        <li className="flex items-start gap-2">
-          <LockClosedIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>Copilot chats are private to you.</span>
-        </li>
-      </ul>
+    <div className="flex h-full flex-col items-center justify-center gap-5 px-1 py-6">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10">
+          <SparklesIcon className="size-6 text-primary" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            Ask {assistantName} anything about this conversation.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Answers draw on your help center, snippets, roadmap, and this customer&apos;s history.
+          </p>
+        </div>
+      </div>
+      <div className="w-full space-y-2">
+        {QUICK_ACTIONS.map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            onClick={() => onQuickAction(action.question)}
+            className="w-full rounded-xl border border-border/60 bg-card/60 px-3.5 py-3 text-left transition-colors hover:border-border hover:bg-muted/60"
+          >
+            <span className="flex items-start gap-3">
+              <action.icon className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-medium text-foreground">{action.title}</span>
+                <span className="text-xs text-muted-foreground">{action.description}</span>
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="space-y-1 text-center text-[11px] text-muted-foreground">
+        <p className="flex items-center justify-center gap-1.5">
+          <LockClosedIcon className="size-3.5 shrink-0" />
+          Chats are private to you.
+        </p>
+        <p className="flex items-center justify-center gap-1.5">
+          <ShieldCheckIcon className="size-3.5 shrink-0" />
+          Can take actions for you, with your approval.
+        </p>
+      </div>
     </div>
   )
 }
@@ -907,23 +947,27 @@ function CopilotAskInput({
   const placeholder = hasAskedBefore ? 'Ask a follow-up question...' : 'Ask a question...'
   return (
     <div className="border-t border-border/50 p-3">
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        {QUICK_ACTIONS.map((action) => (
-          <Button
-            key={action.label}
-            type="button"
-            variant="outline"
-            size="sm"
-            shape="pill"
-            onClick={() => onQuickAction(action.question)}
-            disabled={busy}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <action.icon className="size-3.5" />
-            {action.label}
-          </Button>
-        ))}
-      </div>
+      {/* Compact quick-action pills only once a thread exists — the empty
+          state surfaces the same actions as full-size cards. */}
+      {hasAskedBefore && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {QUICK_ACTIONS.map((action) => (
+            <Button
+              key={action.label}
+              type="button"
+              variant="outline"
+              size="sm"
+              shape="pill"
+              onClick={() => onQuickAction(action.question)}
+              disabled={busy}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <action.icon className="size-3.5" />
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      )}
       <div className="relative rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-primary/20">
         <Textarea
           ref={inputRef}
