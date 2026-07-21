@@ -80,7 +80,7 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
 
   return (
     <FriendlyShell fullPage={fullPage}>
-      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong.</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         An unexpected error occurred. Try again, or return to the home page.
       </p>
@@ -111,10 +111,10 @@ export function DefaultErrorPage({ error, reset, fullPage = true }: ErrorPagePro
 export function NotFoundPage() {
   return (
     <FriendlyShell>
-      <h1 className="text-2xl font-semibold tracking-tight">That page has flown the pond.</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        We couldn't find what you were looking for. It may have been moved, or the link might be
-        wrong.
+        The page you're looking for doesn't exist. It may have been moved or deleted, or the link
+        may be incorrect.
       </p>
 
       <div className="mt-6">
