@@ -100,10 +100,56 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 605 surfaces
+### Server functions (`requireAuth`) — 596 surfaces
 
 | Surface | Enforces |
 | --- | --- |
+| `integrations/asana/server/functions.ts`::getAsanaConnectUrl | integration.manage |
+| `integrations/asana/server/functions.ts`::fetchAsanaProjectsFn | integration.manage |
+| `integrations/azure-devops/server/functions.ts`::connectAzureDevOpsFn | integration.manage |
+| `integrations/azure-devops/server/functions.ts`::fetchAzureDevOpsProjectsFn | integration.manage |
+| `integrations/azure-devops/server/functions.ts`::fetchAzureDevOpsWorkItemTypesFn | integration.manage |
+| `integrations/clickup/server/functions.ts`::getClickUpConnectUrl | integration.manage |
+| `integrations/clickup/server/functions.ts`::fetchClickUpSpacesFn | integration.manage |
+| `integrations/clickup/server/functions.ts`::fetchClickUpListsFn | integration.manage |
+| `integrations/discord/server/functions.ts`::getDiscordConnectUrl | integration.manage |
+| `integrations/discord/server/functions.ts`::fetchDiscordChannelsFn | integration.manage |
+| `integrations/freshdesk/server/functions.ts`::saveFreshdeskKeyFn | integration.manage |
+| `integrations/github/server/functions.ts`::getGitHubConnectUrl | integration.manage |
+| `integrations/github/server/functions.ts`::fetchGitHubReposFn | integration.manage |
+| `integrations/gitlab/server/functions.ts`::getGitLabConnectUrl | integration.manage |
+| `integrations/gitlab/server/functions.ts`::fetchGitLabProjectsFn | integration.manage |
+| `integrations/hubspot/server/functions.ts`::getHubSpotConnectUrl | integration.manage |
+| `integrations/hubspot/server/functions.ts`::searchHubSpotContactFn | integration.view |
+| `integrations/intercom/server/functions.ts`::getIntercomConnectUrl | integration.manage |
+| `integrations/intercom/server/functions.ts`::searchIntercomContactFn | integration.view |
+| `integrations/jira/server/functions.ts`::getJiraConnectUrl | integration.manage |
+| `integrations/jira/server/functions.ts`::fetchJiraProjectsFn | integration.manage |
+| `integrations/jira/server/functions.ts`::fetchJiraIssueTypesFn | integration.manage |
+| `integrations/linear/server/functions.ts`::getLinearConnectUrl | integration.manage |
+| `integrations/linear/server/functions.ts`::fetchLinearTeamsFn | integration.manage |
+| `integrations/make/server/functions.ts`::saveMakeWebhookFn | integration.manage |
+| `integrations/monday/server/functions.ts`::getMondayConnectUrl | integration.manage |
+| `integrations/monday/server/functions.ts`::fetchMondayBoardsFn | integration.manage |
+| `integrations/n8n/server/functions.ts`::saveN8nWebhookFn | integration.manage |
+| `integrations/notion/server/functions.ts`::getNotionConnectUrl | integration.manage |
+| `integrations/notion/server/functions.ts`::fetchNotionDatabasesFn | integration.manage |
+| `integrations/ntfy/server/functions.ts`::saveNtfyFn | integration.manage |
+| `integrations/salesforce/server/functions.ts`::getSalesforceConnectUrl | integration.manage |
+| `integrations/shortcut/server/functions.ts`::saveShortcutTokenFn | integration.manage |
+| `integrations/shortcut/server/functions.ts`::fetchShortcutProjectsFn | integration.manage |
+| `integrations/slack/server/functions.ts`::getSlackConnectUrl | integration.manage |
+| `integrations/slack/server/functions.ts`::fetchSlackChannelsFn | integration.manage |
+| `integrations/stripe/server/functions.ts`::saveStripeKeyFn | integration.manage |
+| `integrations/teams/server/functions.ts`::getTeamsConnectUrl | integration.manage |
+| `integrations/teams/server/functions.ts`::fetchTeamsTeamsFn | integration.manage |
+| `integrations/teams/server/functions.ts`::fetchTeamsChannelsFn | integration.manage |
+| `integrations/trello/server/functions.ts`::getTrelloConnectUrl | integration.manage |
+| `integrations/trello/server/functions.ts`::fetchTrelloBoardsFn | integration.manage |
+| `integrations/trello/server/functions.ts`::fetchTrelloListsFn | integration.manage |
+| `integrations/zapier/server/functions.ts`::saveZapierWebhookFn | integration.manage |
+| `integrations/zendesk/server/functions.ts`::getZendeskConnectUrl | integration.manage |
+| `integrations/zendesk/server/functions.ts`::searchZendeskUserFn | integration.view |
 | `lib/server/domains/assistant/copilot-gate.ts`::gateCopilotFn | copilot.use |
 | `lib/server/domains/assistant/copilot-gate.ts`::gateCopilotAguiRequest | copilot.use |
 | `lib/server/functions/activation.ts`::getStartingPointContextFn | settings.manage |
@@ -308,19 +354,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation.ts`::translateConversationMessagesFn | conversation.view |
 | `lib/server/functions/conversation.ts`::setInboxTranslationEnabledFn | conversation.manage |
 | `lib/server/functions/conversation.ts`::dismissInboxTranslationSuggestionFn | conversation.manage |
+| `lib/server/functions/customer-context.ts`::fetchCustomerContextFn | integration.view |
+| `lib/server/functions/external-item-search.ts`::searchExternalItemsFn | integration.manage |
 | `lib/server/functions/external-statuses.ts`::fetchExternalStatusesFn | integration.manage |
 | `lib/server/functions/feature-flags.ts`::updateFeatureFlagsFn | settings.manage |
-| `lib/server/functions/feedback.ts`::fetchSuggestions | suggestion.view |
-| `lib/server/functions/feedback.ts`::fetchIncomingSuggestionCount | suggestion.view |
-| `lib/server/functions/feedback.ts`::fetchFeedbackSources | integration.view |
 | `lib/server/functions/feedback.ts`::acceptSuggestionFn | suggestion.manage |
 | `lib/server/functions/feedback.ts`::dismissSuggestionFn | suggestion.manage |
-| `lib/server/functions/feedback.ts`::restoreSuggestionFn | suggestion.manage |
-| `lib/server/functions/feedback.ts`::retryFailedItemFn | suggestion.manage |
-| `lib/server/functions/feedback.ts`::retryAllFailedItemsFn | suggestion.manage |
-| `lib/server/functions/feedback.ts`::createFeedbackSourceFn | integration.manage |
-| `lib/server/functions/feedback.ts`::updateFeedbackSourceFn | integration.manage |
-| `lib/server/functions/feedback.ts`::deleteFeedbackSourceFn | integration.manage |
 | `lib/server/functions/help-center-domain.ts`::updateHelpCenterDomainFn | help_center.manage |
 | `lib/server/functions/help-center-domain.ts`::verifyHelpCenterDomainFn | help_center.manage |
 | `lib/server/functions/help-center-domain.ts`::getHelpCenterDomainStatusFn | help_center.manage |
@@ -360,14 +399,12 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/inbox.ts`::listInboxItemsFn | DYNAMIC (conversation.view | conversation.view_all | ticket.view | ticket.view_all) |
 | `lib/server/functions/inbox.ts`::fetchInboxCountsFn | DYNAMIC (conversation.view | conversation.view_all | ticket.view | ticket.view_all) |
 | `lib/server/functions/inbox.ts`::getConversationTicketLinkFn | conversation.view |
+| `lib/server/functions/integration-destinations.ts`::fetchIntegrationDestinationsFn | integration.manage |
 | `lib/server/functions/integrations.ts`::updateIntegrationFn | integration.manage |
 | `lib/server/functions/integrations.ts`::deleteIntegrationFn | integration.manage |
 | `lib/server/functions/integrations.ts`::addNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::updateNotificationChannelFn | integration.manage |
 | `lib/server/functions/integrations.ts`::removeNotificationChannelFn | integration.manage |
-| `lib/server/functions/integrations.ts`::addMonitoredChannelFn | integration.manage |
-| `lib/server/functions/integrations.ts`::updateMonitoredChannelFn | integration.manage |
-| `lib/server/functions/integrations.ts`::removeMonitoredChannelFn | integration.manage |
 | `lib/server/functions/link-preview.ts`::unfurlLinkFn | END_USER (any authenticated) |
 | `lib/server/functions/macros.ts`::listMacrosFn | conversation.reply |
 | `lib/server/functions/macros.ts`::createMacroFn | conversation.manage |
@@ -420,7 +457,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/posts.ts`::fetchInboxPostsForAdmin | post.view_private |
 | `lib/server/functions/posts.ts`::fetchPostWithDetails | post.view_private |
 | `lib/server/functions/posts.ts`::fetchPostVotersFn | post.view_private |
-| `lib/server/functions/posts.ts`::fetchPostFeedbackSourceFn | post.view_private |
 | `lib/server/functions/posts.ts`::createPostFn | post.create |
 | `lib/server/functions/posts.ts`::updatePostFn | post.edit |
 | `lib/server/functions/posts.ts`::setPostOwnerFn | post.set_owner |
@@ -514,6 +550,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/status-sync.ts`::disableStatusSyncFn | integration.manage |
 | `lib/server/functions/status-sync.ts`::updateStatusMappingsFn | integration.manage |
 | `lib/server/functions/status-sync.ts`::updateTicketStatusMappingsFn | integration.manage |
+| `lib/server/functions/status-sync.ts`::updatePushStatusMappingsFn | integration.manage |
 | `lib/server/functions/status.ts`::listStatusComponentsAdminFn | status_page.manage |
 | `lib/server/functions/status.ts`::createStatusComponentFn | status_page.manage |
 | `lib/server/functions/status.ts`::updateStatusComponentFn | status_page.manage |
@@ -663,54 +700,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/workflows.ts`::previewWorkflowFn | routing.manage |
 | `lib/server/functions/workflows.ts`::listRunnableWorkflowsFn | conversation.reply |
 | `lib/server/functions/workflows.ts`::runWorkflowManuallyFn | conversation.reply |
-| `lib/server/integrations/asana/functions.ts`::getAsanaConnectUrl | integration.manage |
-| `lib/server/integrations/asana/functions.ts`::fetchAsanaProjectsFn | integration.manage |
-| `lib/server/integrations/azure-devops/functions.ts`::connectAzureDevOpsFn | integration.manage |
-| `lib/server/integrations/azure-devops/functions.ts`::fetchAzureDevOpsProjectsFn | integration.manage |
-| `lib/server/integrations/azure-devops/functions.ts`::fetchAzureDevOpsWorkItemTypesFn | integration.manage |
-| `lib/server/integrations/clickup/functions.ts`::getClickUpConnectUrl | integration.manage |
-| `lib/server/integrations/clickup/functions.ts`::fetchClickUpSpacesFn | integration.manage |
-| `lib/server/integrations/clickup/functions.ts`::fetchClickUpListsFn | integration.manage |
-| `lib/server/integrations/discord/functions.ts`::getDiscordConnectUrl | integration.manage |
-| `lib/server/integrations/discord/functions.ts`::fetchDiscordChannelsFn | integration.manage |
-| `lib/server/integrations/freshdesk/functions.ts`::saveFreshdeskKeyFn | integration.manage |
-| `lib/server/integrations/github/functions.ts`::getGitHubConnectUrl | integration.manage |
-| `lib/server/integrations/github/functions.ts`::fetchGitHubReposFn | integration.manage |
-| `lib/server/integrations/gitlab/functions.ts`::getGitLabConnectUrl | integration.manage |
-| `lib/server/integrations/gitlab/functions.ts`::fetchGitLabProjectsFn | integration.manage |
-| `lib/server/integrations/hubspot/functions.ts`::getHubSpotConnectUrl | integration.manage |
-| `lib/server/integrations/hubspot/functions.ts`::searchHubSpotContactFn | integration.view |
-| `lib/server/integrations/intercom/functions.ts`::getIntercomConnectUrl | integration.manage |
-| `lib/server/integrations/intercom/functions.ts`::searchIntercomContactFn | integration.view |
-| `lib/server/integrations/jira/functions.ts`::getJiraConnectUrl | integration.manage |
-| `lib/server/integrations/jira/functions.ts`::fetchJiraProjectsFn | integration.manage |
-| `lib/server/integrations/jira/functions.ts`::fetchJiraIssueTypesFn | integration.manage |
-| `lib/server/integrations/linear/functions.ts`::getLinearConnectUrl | integration.manage |
-| `lib/server/integrations/linear/functions.ts`::fetchLinearTeamsFn | integration.manage |
-| `lib/server/integrations/make/functions.ts`::saveMakeWebhookFn | integration.manage |
-| `lib/server/integrations/monday/functions.ts`::getMondayConnectUrl | integration.manage |
-| `lib/server/integrations/monday/functions.ts`::fetchMondayBoardsFn | integration.manage |
-| `lib/server/integrations/n8n/functions.ts`::saveN8nWebhookFn | integration.manage |
-| `lib/server/integrations/notion/functions.ts`::getNotionConnectUrl | integration.manage |
-| `lib/server/integrations/notion/functions.ts`::fetchNotionDatabasesFn | integration.manage |
-| `lib/server/integrations/ntfy/functions.ts`::saveNtfyFn | integration.manage |
-| `lib/server/integrations/salesforce/functions.ts`::getSalesforceConnectUrl | integration.manage |
-| `lib/server/integrations/shortcut/functions.ts`::saveShortcutTokenFn | integration.manage |
-| `lib/server/integrations/shortcut/functions.ts`::fetchShortcutProjectsFn | integration.manage |
-| `lib/server/integrations/slack/functions.ts`::getSlackConnectUrl | integration.manage |
-| `lib/server/integrations/slack/functions.ts`::fetchSlackChannelsFn | integration.manage |
-| `lib/server/integrations/stripe/functions.ts`::saveStripeKeyFn | integration.manage |
-| `lib/server/integrations/teams/functions.ts`::getTeamsConnectUrl | integration.manage |
-| `lib/server/integrations/teams/functions.ts`::fetchTeamsTeamsFn | integration.manage |
-| `lib/server/integrations/teams/functions.ts`::fetchTeamsChannelsFn | integration.manage |
-| `lib/server/integrations/trello/functions.ts`::getTrelloConnectUrl | integration.manage |
-| `lib/server/integrations/trello/functions.ts`::fetchTrelloBoardsFn | integration.manage |
-| `lib/server/integrations/trello/functions.ts`::fetchTrelloListsFn | integration.manage |
-| `lib/server/integrations/zapier/functions.ts`::saveZapierWebhookFn | integration.manage |
-| `lib/server/integrations/zendesk/functions.ts`::getZendeskConnectUrl | integration.manage |
-| `lib/server/integrations/zendesk/functions.ts`::searchZendeskUserFn | integration.view |
 
-### Public REST API (`withApiKeyAuth`) — 123 surfaces
+### Public REST API (`withApiKeyAuth`) — 122 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -809,7 +800,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `routes/api/v1/suggestions/$suggestionId.accept.ts`::POST | suggestion.manage |
 | `routes/api/v1/suggestions/$suggestionId.dismiss.ts`::POST | suggestion.manage |
 | `routes/api/v1/suggestions/$suggestionId.restore.ts`::POST | suggestion.manage |
-| `routes/api/v1/suggestions/index.ts`::GET | suggestion.view |
 | `routes/api/v1/tags/$tagId.ts`::GET | PUBLIC (any valid key) |
 | `routes/api/v1/tags/$tagId.ts`::PATCH | tag.manage |
 | `routes/api/v1/tags/$tagId.ts`::DELETE | tag.manage |
@@ -852,7 +842,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 3. MCP tools
 
-39 tools. "Team" = requires an admin/member role in addition to the scope.
+38 tools. "Team" = requires an admin/member role in addition to the scope.
 
 | Tool | Scope(s) | Team |
 | --- | --- | :---: |
@@ -874,7 +864,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | get_ticket | read:chat | ✓ |
 | link_ticket | write:chat | ✓ |
 | list_conversations | read:chat | ✓ |
-| list_suggestions | read:feedback | ✓ |
 | list_tickets | read:chat | ✓ |
 | manage_category | write:article | ✓ |
 | merge_post | write:feedback | ✓ |
@@ -908,7 +897,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-193 of 906 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+188 of 891 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -930,8 +919,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/conversation.ts`::getMyConversationsFn | server-fn |
 | `lib/server/functions/conversation.ts`::getWidgetTeamAvatarsFn | server-fn |
 | `lib/server/functions/copilot-events.ts`::recordCopilotEventFn | server-fn |
-| `lib/server/functions/copilot-summary.ts`::summarizeConversationNowFn | server-fn |
-| `lib/server/functions/copilot-summary.ts`::summarizeTicketNowFn | server-fn |
 | `lib/server/functions/csat-email.ts`::recordCsatViaTokenFn | server-fn |
 | `lib/server/functions/csat-email.ts`::validateCsatEmailTokenFn | server-fn |
 | `lib/server/functions/embeds.ts`::getEmbedPreviewFn | server-fn |
@@ -1026,7 +1013,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/[.]well-known.openid-configuration.ts`::GET | route |
 | `routes/api/admin/assistant/copilot.ts`::POST | route |
 | `routes/api/admin/assistant/sandbox.ts`::POST | route |
-| `routes/api/admin/assistant/suggest.ts`::POST | route |
 | `routes/api/admin/assistant/transform.ts`::POST | route |
 | `routes/api/auth/$.ts`::GET | route |
 | `routes/api/auth/$.ts`::POST | route |
@@ -1050,8 +1036,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `routes/api/import/runs.ts`::GET | route |
 | `routes/api/integrations/$type/identify.ts`::POST | route |
 | `routes/api/integrations/$type/webhook.ts`::POST | route |
-| `routes/api/integrations/slack/events.ts`::POST | route |
-| `routes/api/integrations/slack/interact.ts`::POST | route |
 | `routes/api/mcp.ts`::DELETE | route |
 | `routes/api/mcp.ts`::GET | route |
 | `routes/api/mcp.ts`::POST | route |

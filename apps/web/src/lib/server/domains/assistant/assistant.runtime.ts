@@ -132,7 +132,8 @@ export interface AssistantRuntimeConfig {
  * Whether an answered turn's `text` reads as a customer-facing reply draft or
  * as internal analysis/guidance for the teammate. Only ever consumed on the
  * copilot surface (the widget always sends its text to the customer), where it
- * drives the sidebar's "Add to composer" vs "Add as note" button precedence.
+ * decides whether the sidebar offers "Add to composer" as the primary action
+ * (draft_reply) or renders the answer as read-only text (analysis).
  * Defaults to `draft_reply` wherever the model doesn't classify (see the final
  * return), so it is strictly additive to existing behaviour.
  */
@@ -163,15 +164,6 @@ interface AssistantDeliveredFields {
    * caller that never resolves a write tool to 'approval').
    */
   proposedActions: AssistantProposedAction[]
-  /**
-   * The proactive-suggestions honest-miss outcome
-   * (QUINN-PROACTIVE-SUGGESTIONS-SPEC.md): derived when Quinn calls
-   * report_inability on the suggestion intent. `text`/`citations` are then
-   * forced empty and `internalSourced` false at the return site. Always false
-   * on every other intent. This remains on the server result for the existing
-   * suggestion UI, but it is never a model output or action channel.
-   */
-  skip: boolean
   identity: AssistantIdentity
   trace: AssistantTurnTrace
   escalation?: EscalationOutcome
@@ -292,19 +284,11 @@ export type AssistantTurnInput = AssistantTurnCommonInput &
         role: 'customer_support'
         surface: Exclude<AssistantSurface, 'copilot'>
         messages: AssistantThreadMessage[]
-        destinationChannel?: never
       }
     | {
         role: 'copilot_qa'
         surface: 'copilot'
         messages: AssistantThreadMessage[]
-        destinationChannel?: never
-      }
-    | {
-        role: 'suggested_reply'
-        surface: 'copilot'
-        messages?: never
-        destinationChannel?: 'widget' | 'email' | null
       }
   )
 
@@ -639,69 +623,6 @@ export function isSubstantiveAnswer(turn: {
  * prompt, before basics/surface instructions/guidance, and only for
  * `surface: 'copilot'` (see `runAssistantTurn`).
  */
-/**
- * Frame the proactive-suggestions turn (QUINN-PROACTIVE-SUGGESTIONS-SPEC.md,
- * routes/api/admin/assistant/suggest.ts): unlike `buildCopilotFramingPrompt`
- * above, this turn answers no question at all — it drafts a ready-to-send
- * reply to the CUSTOMER's latest message, for a teammate to review and
- * insert. Reuses `surface: 'copilot'` for its retrieval ceiling and item
- * grounding (the conversation/ticket transcript, including the message being
- * answered, is injected separately by `buildConversationContextPrompt` /
- * `buildTicketContextPrompt`, exactly as for a Q&A turn), so this is the only
- * prompt block that differs between the two (see `AssistantTurnInput.copilotIntent`).
- *
- * Honest misses use the same tool protocol as every other Quinn action: call
- * report_inability rather than placing a skip decision in the final object.
- * The return site derives the existing UI's `skip` flag from that observed
- * tool call, so a custom output field can never silence a suggestion.
- */
-/**
- * Not a real customer utterance: the fixed drafting instruction a suggestion
- * turn feeds the model as its sole "message". The actual message being
- * answered (and the rest of the item's thread) is loaded separately as
- * grounding (see `buildConversationContextPrompt`/`buildTicketContextPrompt`),
- * exactly as for a Q&A turn. `sender: 'customer'` mirrors the copilot route's
- * repurposing of the vocabulary — it means "the one posing this turn to
- * Quinn", not literally the item's customer. Living on the intent profile
- * (not in the suggest route) keeps every suggestion invariant in one record;
- * it also means `respondEligible` only ever sees this single non-human_agent
- * turn, so the customer-facing silence rule can never mute a suggestion —
- * exactly the spec's intent (agent-facing assist, not an autonomous reply).
- */
-const SUGGEST_TURN_MESSAGES: AssistantThreadMessage[] = [
-  {
-    sender: 'customer',
-    content: "Draft a ready-to-send reply to the customer's latest message in this conversation.",
-  },
-]
-
-/**
- * The copilot intent fan-out, in ONE record: everything that differs between
- * a Q&A turn and a proactive-suggestion turn on the copilot surface, so a new
- * intent must decide every axis at once rather than wiring its framing in
- * one branch and forgetting its usage-log step or tool policy in another.
- * Only ever consulted when the resolved surface is 'copilot' (see
- * `runAssistantTurn` — `copilotIntent` is documented as ignored everywhere
- * else, so a stray value on a widget turn buys nothing, pipelineStep
- * included).
- *
- * - `buildFraming`: the framing block pushed right after the base prompt.
- * - `pipelineStep`: the usage-log marker; 'copilot_suggest' keeps a
- *   suggestion turn out of analytics/copilot-usage.ts's Q&A question count
- *   (which scans `pipelineStep: 'assistant'` rows), mirroring the existing
- *   'copilot_transform'/'copilot_summary' one-step-per-feature pattern.
- * - `writeToolPolicy`: when set, OVERRIDES the caller's own
- *   `input.writeToolPolicy` at the tool-context seam. 'suggest' forces
- *   'disabled' (a suggestion drafts, it never acts and never proposes — see
- *   `resolveEffectiveToolMode`'s write-policy branch, assistant.tools.ts): the
- *   invariant belongs to the intent itself, not to every caller passing it.
- * - `inabilityMeansSkip`: whether a report_inability tool call maps to the
- *   suggestion UI's server-derived skip result. True only for 'suggest'.
- * - `turnMessages`: when set, the intent owns the turn's messages outright,
- *   overriding `input.messages` (same override posture as `writeToolPolicy`).
- *   'suggest' supplies the fixed drafting instruction above, so its route
- *   passes no messages at all.
- */
 /** The ticket facts `buildTicketContextPrompt` composes into its structural line. */
 export interface TicketGroundingFacts {
   title: string
@@ -920,7 +841,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   const surface = input.surface
   const role = input.role
   const rolePolicy = resolveAssistantRolePolicy(role)
-  const messages = role === 'suggested_reply' ? SUGGEST_TURN_MESSAGES : (input.messages ?? [])
+  const messages = input.messages
 
   if (!respondEligible(messages)) {
     return { status: 'suppressed', reason: 'silence' }
@@ -965,11 +886,11 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     audience
   )
 
-  // Customer voice always resolves from the Agent's sub-config: customer-facing
-  // roles (support + the suggested-reply draft path, D9) map to `agent`, and
-  // `rolePolicy.customerVoice` gates every read below so a copilot turn (no
-  // voice, D11) never consults it. This is the one v3 resolution the runtime
-  // owns; the pure prompt module still takes a flat `{ identity, voice }`.
+  // Customer voice always resolves from the Agent's sub-config: the
+  // customer-facing support role maps to `agent`, and `rolePolicy.customerVoice`
+  // gates every read below so a copilot turn (no voice, D11) never consults it.
+  // This is the one v3 resolution the runtime owns; the pure prompt module still
+  // takes a flat `{ identity, voice }`.
   const agentVoice = runtimeConfig.config.agents.agent.voice
 
   // The current conversation's customer, for customer-scoped retrieval
@@ -1024,12 +945,9 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   // lookup above, before tool assembly, so it's ready to fold into the system
   // prompt below. Null when there's no ticket to ground on, or the lookup
   // failed (see `loadTicketGroundingContext`'s own doc).
-  // Suggested replies are customer-ready drafts. They keep the team knowledge
-  // ceiling but only receive customer-visible thread messages; Copilot Q&A may
-  // inspect internal notes and carries that provenance into its result — but
-  // only when the Copilot's `internalNotes` knowledge toggle is on (config v3).
-  // Drafts (suggested_reply → agent) never resolve to copilot_qa, so they stay
-  // notes-free unconditionally.
+  // Copilot Q&A may inspect internal notes and carries that provenance into its
+  // result — but only when the Copilot's `internalNotes` knowledge toggle is on
+  // (config v3).
   const includeInternalGrounding =
     role === 'copilot_qa' && runtimeConfig.config.agents.copilot.knowledge.internalNotes
   const ticketGrounding = ticketId
@@ -1073,19 +991,10 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     involvementId: input.involvementId,
     latestCustomerMessageId: input.latestCustomerMessageId,
     simulate: input.simulate,
-    // The intent's own policy wins over the caller's (see
-    // COPILOT_INTENT_PROFILES: 'suggest' forces 'disabled' here, so a
-    // suggestion turn is read-only whatever the route passed).
     writeToolPolicy: input.simulate === true ? 'simulate' : rolePolicy.writeToolPolicy,
   })
-  const promptChannel =
-    role === 'suggested_reply'
-      ? (input.destinationChannel ??
-        (conversationFacts ? (conversationFacts.channel === 'email' ? 'email' : 'widget') : null))
-      : surface === 'widget' || surface === 'email'
-        ? surface
-        : null
-  const guidanceChannel = role === 'suggested_reply' ? promptChannel : surface
+  const promptChannel = surface === 'widget' || surface === 'email' ? surface : null
+  const guidanceChannel = surface
   let guidanceCandidates: AssistantGuidanceRule[] = []
   try {
     guidanceCandidates = await listEnabledGuidanceCandidates({ agent: roleToAgent(role) })
@@ -1290,9 +1199,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     onActivity: input.onActivity,
     wireSink: input.wireSink,
     usageLogParams: {
-      // The intent-profiled step (see COPILOT_INTENT_PROFILES: 'suggest' logs
-      // 'copilot_suggest' to stay out of the Q&A question count); every
-      // non-copilot surface logs plain 'assistant'.
+      // Every assistant turn logs the 'assistant' pipeline step.
       pipelineStep: rolePolicy.pipelineStep,
       callType: 'chat_completion',
       model,
@@ -1422,12 +1329,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     throw new AssistantCompletionError('non_conformant_output')
   }
   const parsed = parsedResult.data
-  // A proactive suggestion's honest miss comes only from the observed
-  // report_inability tool call. Keep the existing server result shape for the
-  // suggestion UI, but never let a model-authored custom field drive it.
-  const skip =
-    rolePolicy.inabilitySemantics === 'skip' && toolContext.ledger.inabilityReport !== null
-  const citations = skip ? [] : assembleCitations(parsed.citations, toolContext.ledger.sources)
+  const citations = assembleCitations(parsed.citations, toolContext.ledger.sources)
   // Operational decisions come exclusively from tool calls. This compatibility
   // projection lets existing consumers render the handoff state; the model's
   // final object contains no action field.
@@ -1451,18 +1353,16 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       : {}),
   }
   const delivered = {
-    text: skip ? '' : relinkCitations(parsed.text, parsed.citations, citations),
+    text: relinkCitations(parsed.text, parsed.citations, citations),
     // Quinn's self-classification (copilot surface only); every other surface
     // omits it, and so does a model that didn't bother — both land on the
     // customer-safe default, so this never demotes a widget reply.
     answerType: parsed.answerType ?? (role === 'copilot_qa' ? 'analysis' : 'draft_reply'),
     citations,
     internalSourced:
-      !skip &&
-      (contextInternallySourced ||
-        [...toolContext.ledger.sources.values()].some((source) => source.internal === true)),
+      contextInternallySourced ||
+      [...toolContext.ledger.sources.values()].some((source) => source.internal === true),
     proposedActions: [...toolContext.ledger.proposedActions],
-    skip,
     identity: runtimeConfig.config.identity,
     trace,
     ...(escalation && { escalation }),

@@ -10,10 +10,9 @@ import { isAssistantFieldManaged, ManagedSettingHint } from './assistant-form'
 
 /**
  * Copilot's on/off master, driven by `agents.copilot.capabilities` rather than
- * a dedicated flag: Copilot is "on" when either capability (Q&A or suggested
- * drafts) is enabled, and the banner toggle sets both at once. The `inboxAi`
- * flag stays the availability gate — when it is off there is nowhere for
- * Copilot to run, so the toggle is hidden entirely.
+ * a dedicated flag: Copilot is "on" when its Q&A capability is enabled. The
+ * `inboxAi` flag stays the availability gate — when it is off there is nowhere
+ * for Copilot to run, so the toggle is hidden entirely.
  */
 export function CopilotDeploymentCard({ available = true }: { available?: boolean }) {
   const intl = useIntl()
@@ -24,18 +23,16 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
 
   const capabilities = settingsQuery.data?.config.agents.copilot.capabilities
   const revision = settingsQuery.data?.revision
-  const on = Boolean(capabilities && (capabilities.qa || capabilities.suggestedReplies))
-  // The banner writes both capability leaves at once, so it is locked when
-  // EITHER is deployment-managed — mirroring the per-switch handling in the
-  // capabilities card rather than failing with a generic error on confirm.
+  const on = Boolean(capabilities?.qa)
   const managedPaths = settingsQuery.data?.managedFieldPaths ?? []
-  const capabilitiesManaged =
-    isAssistantFieldManaged(managedPaths, 'agents.copilot.capabilities.qa') ||
-    isAssistantFieldManaged(managedPaths, 'agents.copilot.capabilities.suggestedReplies')
+  const capabilitiesManaged = isAssistantFieldManaged(
+    managedPaths,
+    'agents.copilot.capabilities.qa'
+  )
 
   async function confirmChange() {
     if (confirmingEnabled === null || revision === undefined) return
-    const next = { qa: confirmingEnabled, suggestedReplies: confirmingEnabled }
+    const next = { qa: confirmingEnabled }
     try {
       setMessage('')
       await update.mutateAsync({ expectedRevision: revision, capabilities: next })
@@ -166,7 +163,7 @@ export function CopilotDeploymentCard({ available = true }: { available?: boolea
             ? intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOnConfirmDescription',
                 defaultMessage:
-                  'Teammates will be able to ask Copilot and get suggested drafts in the inbox. This turns on both capabilities, including any you had switched off individually.',
+                  'Teammates will be able to ask Copilot in the inbox and accept its drafted replies.',
               })
             : intl.formatMessage({
                 id: 'automation.copilot.deployment.turnOffConfirmDescription',

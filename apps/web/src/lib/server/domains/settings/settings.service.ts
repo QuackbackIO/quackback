@@ -993,13 +993,13 @@ export async function isFeatureEnabled(flag: keyof FeatureFlags): Promise<boolea
 }
 
 /**
- * Whether a given Copilot capability (Q&A, suggested drafts) is enabled in the
- * v3 assistant config. Reads the cached tenant settings (`getTenantSettings`) —
- * the same single-Redis-GET path `isFeatureEnabled` uses — so gating the two
- * teammate-facing routes on the copilot/suggest hot paths costs no extra DB
- * round-trip; every config mutation calls `invalidateSettingsCache()`. Fails
- * OPEN to the v3 default (both on): a missing/invalid/unreadable config must not
- * silently disable a working default, mirroring how the routes already degrade.
+ * Whether the Copilot Q&A capability is enabled in the v3 assistant config.
+ * Reads the cached tenant settings (`getTenantSettings`) — the same
+ * single-Redis-GET path `isFeatureEnabled` uses — so gating the copilot route
+ * on its hot path costs no extra DB round-trip; every config mutation calls
+ * `invalidateSettingsCache()`. Fails OPEN to the v3 default (on): a
+ * missing/invalid/unreadable config must not silently disable a working
+ * default, mirroring how the route already degrades.
  */
 export async function isCopilotCapabilityEnabled(
   capability: keyof AssistantCopilotCapabilities

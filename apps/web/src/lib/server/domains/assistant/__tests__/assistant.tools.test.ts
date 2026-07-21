@@ -853,8 +853,8 @@ describe('resolveEffectiveToolMode', () => {
     ).toBe('disabled')
   })
 
-  it('the suggested-reply policy disables every static write, including set_attribute', () => {
-    const c = ctx({ role: 'suggested_reply', simulate: false, writeToolPolicy: 'disabled' })
+  it("the 'disabled' policy disables every static write, including set_attribute", () => {
+    const c = ctx({ simulate: false, writeToolPolicy: 'disabled' })
     const writes = Object.values(ASSISTANT_TOOL_SPECS).filter((spec) => spec.risk === 'write')
     for (const spec of writes) {
       expect(resolveEffectiveToolMode(spec, c), spec.name).toBe('disabled')

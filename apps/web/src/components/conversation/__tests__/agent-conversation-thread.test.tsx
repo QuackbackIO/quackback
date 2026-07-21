@@ -95,27 +95,6 @@ vi.mock('@/components/admin/inbox/inbox-detail-panel', () => ({
     <div data-testid="inbox-detail-panel" data-open-copilot-token={openCopilotToken} />
   ),
 }))
-vi.mock('../suggested-reply-card', () => ({
-  SuggestedReplyCard: ({
-    lastCustomerMessageId,
-    onAskCopilot,
-  }: {
-    lastCustomerMessageId: string
-    onAskCopilot?: () => void
-  }) => (
-    <div
-      data-testid="suggested-reply-card"
-      data-last-customer-message-id={lastCustomerMessageId}
-      data-has-ask-copilot={String(Boolean(onAskCopilot))}
-    >
-      {onAskCopilot && (
-        <button type="button" onClick={onAskCopilot}>
-          Ask Copilot (stub)
-        </button>
-      )}
-    </div>
-  ),
-}))
 vi.mock('@/components/admin/inbox/create-ticket-dialog', () => ({
   CreateTicketDialog: () => null,
 }))
@@ -494,96 +473,7 @@ function makeMessage(
   } as AgentConversationMessageDTO
 }
 
-describe('AgentConversationThread — suggested-reply card wiring', () => {
-  function renderWithMessages(
-    messages: AgentConversationMessageDTO[],
-    conversationOverrides: Partial<ConversationDTO> = {}
-  ) {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(['conv-thread', 'conversation_suggest'], {
-      hasMore: false,
-      conversation: makeConversation({
-        id: 'conversation_suggest' as ConversationDTO['id'],
-        ...conversationOverrides,
-      }),
-      messages,
-    })
-    return render(
-      <QueryClientProvider client={client}>
-        <AgentConversationThread
-          item={{ kind: 'conversation', id: 'conversation_suggest' } as never}
-          targetMessageId={null}
-          onChanged={vi.fn()}
-          onBack={vi.fn()}
-          onSelectItem={vi.fn()}
-          onOpenPost={vi.fn()}
-          isVisitorTyping={false}
-          isOtherAgentTyping={false}
-        />
-      </QueryClientProvider>
-    )
-  }
-
-  it('renders the card, keyed to the latest message, when the customer spoke last', async () => {
-    renderWithMessages([makeMessage({ id: 'conversation_msg_1' as never, senderType: 'visitor' })])
-    const card = await screen.findByTestId('suggested-reply-card')
-    expect(card).toHaveAttribute('data-last-customer-message-id', 'conversation_msg_1')
-  })
-
-  it('renders nothing when a teammate already replied last', async () => {
-    renderWithMessages([
-      makeMessage({ id: 'conversation_msg_1' as never, senderType: 'visitor' }),
-      makeMessage({ id: 'conversation_msg_2' as never, senderType: 'agent', content: 'On it!' }),
-    ])
-    await screen.findByTestId('inbox-detail-panel')
-    expect(screen.queryByTestId('suggested-reply-card')).not.toBeInTheDocument()
-  })
-
-  it("a teammate's internal note after the customer does NOT suppress the card", async () => {
-    // A note is not a reply — the customer is still waiting, so the
-    // eligibility scan skips internal notes and stays keyed to the customer's
-    // message.
-    renderWithMessages([
-      makeMessage({ id: 'conversation_msg_1' as never, senderType: 'visitor' }),
-      makeMessage({
-        id: 'conversation_msg_2' as never,
-        senderType: 'agent',
-        content: 'Looks like the SSO bug again',
-        isInternal: true,
-      }),
-    ])
-    const card = await screen.findByTestId('suggested-reply-card')
-    expect(card).toHaveAttribute('data-last-customer-message-id', 'conversation_msg_1')
-  })
-
-  it('renders nothing for a CLOSED conversation, even with the customer last', async () => {
-    renderWithMessages(
-      [makeMessage({ id: 'conversation_msg_1' as never, senderType: 'visitor' })],
-      { status: 'closed' }
-    )
-    await screen.findByTestId('inbox-detail-panel')
-    expect(screen.queryByTestId('suggested-reply-card')).not.toBeInTheDocument()
-  })
-
-  it('renders the card for an open customer ticket, but not a closed-category one', async () => {
-    // Open baseline (proves the ticket path renders the card at all)…
-    renderThread({ kind: 'ticket', id: 'ticket_1' })
-    await screen.findByTestId('suggested-reply-card')
-    cleanup()
-
-    // …then the same eligible thread under a closed-category status: no card.
-    mockTicketVariants['ticket_closed'] = {
-      status: { id: 'ticket_status_closed', name: 'Closed', color: '#666', category: 'closed' },
-    } as Partial<TicketDTO>
-    try {
-      renderThread({ kind: 'ticket', id: 'ticket_closed' })
-      await screen.findByTestId('ticket-type-badge')
-      expect(screen.queryByTestId('suggested-reply-card')).not.toBeInTheDocument()
-    } finally {
-      delete mockTicketVariants['ticket_closed']
-    }
-  })
-
+describe('AgentConversationThread — openCopilotToken forwarding', () => {
   it("the route's openCopilotToken reaches the detail panel UNTOUCHED", async () => {
     // The route owns the one open-Copilot signal; this component forwards it
     // verbatim (no local counter merged in), so the panel's 0-sentinel
@@ -614,57 +504,13 @@ describe('AgentConversationThread — suggested-reply card wiring', () => {
       '7'
     )
   })
-
-  it("the card's Ask Copilot link calls the route's requestOpenCopilot callback", async () => {
-    const requestOpenCopilot = vi.fn()
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(['conv-thread', 'conversation_suggest'], {
-      hasMore: false,
-      conversation: makeConversation({ id: 'conversation_suggest' as ConversationDTO['id'] }),
-      messages: [makeMessage({ id: 'conversation_msg_1' as never, senderType: 'visitor' })],
-    })
-    render(
-      <QueryClientProvider client={client}>
-        <AgentConversationThread
-          item={{ kind: 'conversation', id: 'conversation_suggest' } as never}
-          targetMessageId={null}
-          onChanged={vi.fn()}
-          onBack={vi.fn()}
-          onSelectItem={vi.fn()}
-          onOpenPost={vi.fn()}
-          isVisitorTyping={false}
-          isOtherAgentTyping={false}
-          openCopilotToken={0}
-          requestOpenCopilot={requestOpenCopilot}
-        />
-      </QueryClientProvider>
-    )
-    await screen.findByTestId('suggested-reply-card')
-
-    fireEvent.click(screen.getByText('Ask Copilot (stub)'))
-
-    // The bump goes UP to the route (which owns the token) — never into a
-    // thread-local counter merged with the forwarded one.
-    expect(requestOpenCopilot).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('inbox-detail-panel')).toHaveAttribute('data-open-copilot-token', '0')
-  })
-
-  it('forwards NO Ask Copilot callback when the route passed none (Copilot unavailable)', async () => {
-    // The route withholds requestOpenCopilot while Copilot can't actually
-    // open (gate off, or a viewport too narrow to render the detail panel).
-    // The thread forwards that absence verbatim — no noop stand-in — so the
-    // card can hide its link instead of rendering a dead one.
-    renderWithMessages([makeMessage({ id: 'conversation_msg_1' as never, senderType: 'visitor' })])
-    const card = await screen.findByTestId('suggested-reply-card')
-    expect(card).toHaveAttribute('data-has-ask-copilot', 'false')
-    expect(screen.queryByText('Ask Copilot (stub)')).not.toBeInTheDocument()
-  })
 })
 
 describe('AgentConversationThread — close with a linked ticket', () => {
   const openLink: LinkedTicketSummary = {
     id: 'ticket_9' as LinkedTicketSummary['id'],
     number: 1042,
+    title: 'Billing issue',
     statusName: 'Open',
     statusCategory: 'open',
   }
@@ -727,6 +573,7 @@ describe('AgentConversationThread — B24 ticket-permission gating', () => {
   const openLink: LinkedTicketSummary = {
     id: 'ticket_9' as LinkedTicketSummary['id'],
     number: 1042,
+    title: 'Billing issue',
     statusName: 'Open',
     statusCategory: 'open',
   }

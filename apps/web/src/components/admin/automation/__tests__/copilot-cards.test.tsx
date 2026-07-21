@@ -21,7 +21,7 @@ const config = {
       knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
     },
     copilot: {
-      capabilities: { qa: true, suggestedReplies: true },
+      capabilities: { qa: true },
       knowledge: {
         helpCenter: true,
         posts: true,
@@ -55,7 +55,6 @@ vi.mock('@/lib/server/functions/assistant-settings', () => ({
 }))
 
 import { AgentKnowledgeCard, CopilotKnowledgeCard } from '../assistant-knowledge-card'
-import { CopilotCapabilitiesCard } from '../copilot-capabilities-card'
 import { CopilotDeploymentCard } from '../copilot-deployment-card'
 
 afterEach(() => {
@@ -73,28 +72,6 @@ function renderWithProviders(node: React.ReactElement) {
     </IntlProvider>
   )
 }
-
-describe('CopilotCapabilitiesCard', () => {
-  it('renders both capabilities and the Agent-voice note', async () => {
-    renderWithProviders(<CopilotCapabilitiesCard />)
-    expect(await screen.findByText('Answer questions')).toBeInTheDocument()
-    expect(screen.getByText('Suggest reply drafts')).toBeInTheDocument()
-    expect(screen.getByText(/Drafts use the Agent’s voice/)).toBeInTheDocument()
-    expect(screen.getByText(/works out of the box/)).toBeInTheDocument()
-  })
-
-  it('persists a capability toggle', async () => {
-    renderWithProviders(<CopilotCapabilitiesCard />)
-    await screen.findByText('Answer questions')
-    // Toggle "Suggest reply drafts" off.
-    fireEvent.click(screen.getByLabelText('Suggest reply drafts'))
-    await waitFor(() => expect(updateCopilotCapabilities).toHaveBeenCalledTimes(1))
-    expect(updateCopilotCapabilities.mock.calls[0][0].data.capabilities).toEqual({
-      qa: true,
-      suggestedReplies: false,
-    })
-  })
-})
 
 describe('CopilotKnowledgeCard', () => {
   it('lists all seven live sources (toggles are wired into the runtime)', async () => {

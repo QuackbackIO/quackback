@@ -114,9 +114,6 @@ describe('summarizeCopilotUsage (pure)', () => {
     answersInserted: 0,
     transformsInserted: 0,
     summariesInserted: 0,
-    suggestionsShown: 0,
-    suggestionsInserted: 0,
-    suggestionsDismissed: 0,
     insertedReplies: 0,
     insertedNotes: 0,
     feedbackUp: 0,
@@ -229,26 +226,6 @@ describe('summarizeCopilotUsage (pure)', () => {
       []
     )
     expect(summary.insertRate).toBeNull()
-  })
-
-  it('passes the suggestion funnel counts through and computes suggestionAcceptanceRate', () => {
-    const summary = summarizeCopilotUsage(
-      0,
-      [],
-      0,
-      emptyBucket,
-      { ...emptyEvents, suggestionsShown: 4, suggestionsInserted: 3, suggestionsDismissed: 1 },
-      []
-    )
-    expect(summary.suggestionsShown).toBe(4)
-    expect(summary.suggestionsInserted).toBe(3)
-    expect(summary.suggestionsDismissed).toBe(1)
-    expect(summary.suggestionAcceptanceRate).toBe(75)
-  })
-
-  it('is null (never NaN) suggestionAcceptanceRate when nothing was shown', () => {
-    const summary = summarizeCopilotUsage(0, [], 0, emptyBucket, emptyEvents, [])
-    expect(summary.suggestionAcceptanceRate).toBeNull()
   })
 
   it('passes the feedback split through untouched', () => {
@@ -407,38 +384,21 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
       expect(metrics.feedbackDownWithReason).toBe(1)
     })
 
-    it('counts the suggestion_* funnel and computes suggestionAcceptanceRate as inserted/shown', async () => {
-      await seedAssistantEvent('suggestion_shown')
-      await seedAssistantEvent('suggestion_shown')
-      await seedAssistantEvent('suggestion_shown')
-      await seedAssistantEvent('suggestion_shown')
-      await seedAssistantEvent('suggestion_inserted', { destination: 'reply' })
-      await seedAssistantEvent('suggestion_inserted', { destination: 'note' })
-      await seedAssistantEvent('suggestion_inserted', { destination: 'reply' })
-      await seedAssistantEvent('suggestion_dismissed')
-
-      const metrics = await getCopilotUsageMetrics(FROM, TO)
-      expect(metrics.suggestionsShown).toBe(4)
-      expect(metrics.suggestionsInserted).toBe(3)
-      expect(metrics.suggestionsDismissed).toBe(1)
-      expect(metrics.suggestionAcceptanceRate).toBe(75)
-    })
-
-    it('folds suggestion_inserted into insertRate and the destination split, alongside the other *_inserted kinds', async () => {
+    it('folds every *_inserted kind into insertRate and the destination split', async () => {
       await seedUsageLog('assistant', { surface: 'copilot' })
       await seedUsageLog('assistant', { surface: 'copilot' })
       await seedAssistantEvent('answer_inserted', { destination: 'reply' })
-      await seedAssistantEvent('suggestion_inserted', { destination: 'reply' })
-      await seedAssistantEvent('suggestion_inserted', { destination: 'note' })
+      await seedAssistantEvent('transform_inserted', { destination: 'reply' })
+      await seedAssistantEvent('summary_inserted', { destination: 'note' })
 
       const metrics = await getCopilotUsageMetrics(FROM, TO)
-      // 1 answer + 2 suggestions inserted, over 2 questions asked = 150%
+      // 3 inserts (answer + transform + summary) over 2 questions asked = 150%
       // (trend-level, can exceed 100 — same shape as the existing insertRate note).
       expect(metrics.totalInserted).toBe(3)
       expect(metrics.insertRate).toBe(150)
-      // The destination split is a FILTER over COPILOT_EVENT_TYPES minus
-      // 'feedback', derived from the shared contract, so suggestion_inserted
-      // rows land in it automatically without any code change here.
+      // The destination split is a FILTER over the suffix-derived
+      // INSERT_EVENT_TYPES list, so every `*_inserted` kind lands in it
+      // automatically without any code change here.
       expect(metrics.insertedReplies).toBe(2)
       expect(metrics.insertedNotes).toBe(1)
     })

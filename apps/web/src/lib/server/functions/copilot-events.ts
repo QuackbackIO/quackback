@@ -12,14 +12,12 @@
  * event requires a rating and nothing else may carry one; every `*_inserted`
  * event (matched by name suffix, never hand-listed, so a future `*_inserted`
  * kind is covered automatically) requires a `destination` ('reply' | 'note' —
- * where the text landed) and every OTHER kind (`feedback`, and the
- * proactive-suggestions funnel's `suggestion_shown`/`suggestion_dismissed`,
- * QUINN-PROACTIVE-SUGGESTIONS-SPEC.md) may not carry one. An insert event's
- * other qualifiers are `answerType`/`internalSourced`, both optional (an
- * aborted turn reports neither) and stored only when present.
+ * where the text landed) and every OTHER kind (`feedback`) may not carry one.
+ * An insert event's other qualifiers are `answerType`/`internalSourced`, both
+ * optional (an aborted turn reports neither) and stored only when present.
  *
- * Gated through `gateCopilotFn` (copilot-gate.ts, shared with
- * copilot-summary.ts). The item ref is the same union the copilot SSE route
+ * Gated through `gateCopilotFn` (copilot-gate.ts). The item ref is the
+ * same union the copilot SSE route
  * parses (item-ref.schema.ts's `withAssistantItemRef`), nested under `item`
  * since this fn has its own top-level fields alongside it.
  */
@@ -72,11 +70,10 @@ const recordCopilotEventSchema = z
       })
     }
     // Destination is the `*_inserted` kinds' own axis (answer/transform/
-    // summary/suggestion_inserted): matched by name suffix, not a hand-listed
-    // set, so a future `*_inserted` kind is covered without touching this
-    // schema. Every other kind — `feedback`, and the proactive-suggestions
-    // funnel's `suggestion_shown`/`suggestion_dismissed` — carries neither a
-    // destination nor a rating (rating is feedback-only, checked above).
+    // summary): matched by name suffix, not a hand-listed set, so a future
+    // `*_inserted` kind is covered without touching this schema. Every other
+    // kind — `feedback` — carries neither a destination nor a rating (rating is
+    // feedback-only, checked above).
     const isInsertKind = value.eventType.endsWith('_inserted')
     if (isInsertKind && !value.destination) {
       ctx.addIssue({

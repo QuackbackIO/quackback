@@ -162,7 +162,7 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
         knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
       },
       copilot: {
-        capabilities: { qa: true, suggestedReplies: true },
+        capabilities: { qa: true },
         knowledge: {
           helpCenter: true,
           posts: true,
@@ -301,12 +301,6 @@ const baseInput = {
 const copilotQaInput = {
   ...baseInput,
   role: 'copilot_qa' as const,
-  surface: 'copilot' as const,
-}
-
-const suggestedReplyInput = {
-  ...baseInput,
-  role: 'suggested_reply' as const,
   surface: 'copilot' as const,
 }
 
@@ -769,7 +763,6 @@ describe('runAssistantTurn', () => {
       ],
       internalSourced: false,
       proposedActions: [],
-      skip: false,
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
       trace: {
         promptVersion: 'support-agent-v3',
@@ -1060,21 +1053,6 @@ describe('runAssistantTurn', () => {
     expect(result.status === 'answered' && result.answerType).toBe('analysis')
   })
 
-  it('isolates the suggested-reply role from the teammate-facing copilot role', async () => {
-    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
-
-    const result = await runAssistantTurn({
-      ...suggestedReplyInput,
-    })
-
-    const opts = mockChat.mock.calls.at(-1)?.[0] as { systemPrompts: string[] }
-    const prompt = opts.systemPrompts.join('\n')
-    expect(prompt).toContain('Draft a reply for a support teammate to review and send')
-    expect(prompt).toContain('Write only the reply the\ncustomer should receive')
-    expect(prompt).not.toContain('Answer the teammate directly')
-    expect(result.status !== 'suppressed' && result.trace.role).toBe('suggested_reply')
-  })
-
   it('uses the explicit Copilot Q&A role', async () => {
     mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
 
@@ -1087,118 +1065,7 @@ describe('runAssistantTurn', () => {
     const prompt = opts.systemPrompts.join('\n')
     expect(prompt).toContain('AI copilot assisting a support teammate')
     expect(prompt).toContain('Answer the teammate directly')
-    expect(prompt).not.toContain('Draft a reply for a support teammate to review and send')
     expect(result.status !== 'suppressed' && result.trace.role).toBe('copilot_qa')
-  })
-
-  it('derives a suggestion skip from report_inability, never from a custom output field', async () => {
-    mockChat.mockImplementation(
-      (opts: {
-        tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
-        context: unknown
-      }) =>
-        (async function* () {
-          const report = opts.tools.find((tool) => tool.name === 'report_inability')!
-          await report.execute(
-            { reason: 'no_relevant_sources' },
-            { context: opts.context, emitCustomEvent: () => {} }
-          )
-          yield* completeRun({
-            text: 'There is not enough grounded information to draft a reply.',
-            citations: [],
-            skip: false,
-          })
-        })()
-    )
-
-    const result = await runAssistantTurn({
-      ...suggestedReplyInput,
-    })
-
-    expect(result).toMatchObject({
-      status: 'cannot_answer',
-      cannotAnswerReason: 'no_relevant_sources',
-      skip: true,
-      text: '',
-      citations: [],
-      internalSourced: false,
-    })
-  })
-
-  it('keeps skip false for a real draft when no inability tool was called', async () => {
-    mockChat.mockImplementation(() =>
-      chunkStream(completeRun({ text: 'Here is a draft.', citations: [] }))
-    )
-
-    const result = await runAssistantTurn({
-      ...suggestedReplyInput,
-    })
-
-    expect(result.status === 'answered' && result.skip).toBe(false)
-    expect(result.status === 'answered' && result.text).toBe('Here is a draft.')
-  })
-
-  it('ignores a spurious "skip" field on every intent because it is not an action channel', async () => {
-    const object = { text: 'A real answer, not a miss.', citations: [], skip: true }
-    mockChat.mockImplementation(() => chunkStream(completeRun(object)))
-
-    const widget = await runAssistantTurn({
-      ...baseInput,
-      messages: customerAsks('how do I reset?'),
-    })
-    expect(widget).toMatchObject({
-      status: 'answered',
-      skip: false,
-      text: 'A real answer, not a miss.',
-    })
-
-    const copilotQa = await runAssistantTurn({
-      ...copilotQaInput,
-      messages: customerAsks('what is the status here?'),
-    })
-    expect(copilotQa).toMatchObject({
-      status: 'answered',
-      skip: false,
-      text: 'A real answer, not a miss.',
-    })
-
-    const suggestion = await runAssistantTurn({
-      ...suggestedReplyInput,
-    })
-    expect(suggestion).toMatchObject({
-      status: 'answered',
-      skip: false,
-      text: 'A real answer, not a miss.',
-    })
-  })
-
-  it('feeds the profile-owned drafting instruction as the sole turn message on the suggest intent (the route passes no messages at all)', async () => {
-    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'draft', citations: [] })))
-
-    await runAssistantTurn(suggestedReplyInput)
-
-    const opts = mockChat.mock.calls.at(-1)?.[0] as {
-      messages: Array<{ role: string; content: string }>
-    }
-    expect(opts.messages).toEqual([
-      {
-        role: 'user',
-        content:
-          "Draft a ready-to-send reply to the customer's latest message in this conversation.",
-      },
-    ])
-  })
-
-  it("records pipelineStep 'copilot_suggest' for a proactive-suggestions turn, keeping it out of the Q&A question count (analytics/copilot-usage.ts scans pipelineStep: 'assistant')", async () => {
-    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'ok', citations: [] })))
-
-    await runAssistantTurn({
-      ...suggestedReplyInput,
-    })
-
-    expect(mockWithUsageLogging.mock.calls.at(-1)?.[0]).toMatchObject({
-      pipelineStep: 'copilot_suggest',
-    })
   })
 
   it("uses pipelineStep 'assistant' for an explicit Q&A Copilot turn", async () => {
@@ -1334,19 +1201,6 @@ describe('runAssistantTurn', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
   })
 
-  it('also throws on total suggestion synthesis failure instead of inventing a skip response', async () => {
-    mockChat.mockImplementation(() =>
-      chunkStream([{ type: 'RUN_ERROR', message: 'provider exploded' }])
-    )
-
-    await expect(
-      runAssistantTurn({
-        ...suggestedReplyInput,
-      })
-    ).rejects.toThrow('provider exploded')
-    expect(mockChat).toHaveBeenCalledTimes(2)
-  })
-
   it('also throws on total copilot Q&A failure', async () => {
     mockChat.mockImplementation(() =>
       chunkStream([{ type: 'RUN_ERROR', message: 'provider exploded' }])
@@ -1419,17 +1273,6 @@ describe('runAssistantTurn', () => {
     await expect(runAssistantTurn({ ...baseInput, messages: customerAsks('q') })).rejects.toThrow(
       'non_conformant_output'
     )
-  })
-
-  it('throws on a non-conformant suggestion final too', async () => {
-    const nonConformant = { text: 123, citations: [] }
-    mockChat.mockImplementation(() => chunkStream(completeRun(nonConformant)))
-
-    await expect(
-      runAssistantTurn({
-        ...suggestedReplyInput,
-      })
-    ).rejects.toThrow('non_conformant_output')
   })
 
   it('logs answerKind "answered" in the usage-log metadata for a normal grounded reply', async () => {
@@ -1713,7 +1556,6 @@ describe('runAssistantTurn', () => {
       citations: [],
       internalSourced: false,
       proposedActions: [],
-      skip: false,
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
       trace: expect.objectContaining({ promptVersion: 'support-agent-v3', configRevision: 1 }),
     })
@@ -1892,20 +1734,6 @@ describe('runAssistantTurn: customer-scoped retrieval context (P2-A.4)', () => {
     })
 
     expect(capturedCtx?.writeToolPolicy).toBe('propose')
-  })
-
-  it('disables writes for the suggested-reply role', async () => {
-    mockRetrieve.mockResolvedValue([])
-    let capturedCtx: { writeToolPolicy?: unknown } | undefined
-    driveSearch((ctx) => {
-      capturedCtx = ctx as typeof capturedCtx
-    })
-
-    await runAssistantTurn({
-      ...suggestedReplyInput,
-    })
-
-    expect(capturedCtx?.writeToolPolicy).toBe('disabled')
   })
 
   it('surfaces ctx.ledger.proposedActions on the result (P2-C.4), mirroring ctx.ledger.sources for citations', async () => {
@@ -2178,35 +2006,6 @@ describe('runAssistantTurn: conversation-scoped grounding (copilot conversation 
     )
     expect(result.status).toBe('answered')
     if (result.status === 'answered') expect(result.internalSourced).toBe(true)
-  })
-
-  it('loads suggested-reply grounding without internal notes', async () => {
-    mockConversationLookupLimit.mockResolvedValue([FACTS_ROW])
-    const thread = [
-      { senderType: 'visitor', isInternal: false, content: 'When will this be fixed?' },
-      { senderType: 'agent', isInternal: true, content: 'Known bug, ETA Friday.' },
-      { senderType: 'agent', isInternal: false, content: 'We are working on it.' },
-    ]
-    mockListConversationMessagesForGrounding.mockImplementation(
-      (_conversationId: unknown, options: { includeInternal: boolean }) =>
-        Promise.resolve(
-          options.includeInternal ? thread : thread.filter((message) => !message.isInternal)
-        )
-    )
-
-    const result = await runAssistantTurn({
-      ...suggestedReplyInput,
-      conversationId: 'conversation_42' as never,
-    })
-
-    expect(mockListConversationMessagesForGrounding).toHaveBeenCalledWith(
-      'conversation_42',
-      expect.objectContaining({ includeInternal: false })
-    )
-    expect(modelMessagesFromLastCall()[0].content).toContain('Customer: When will this be fixed?')
-    expect(modelMessagesFromLastCall()[0].content).not.toContain('Known bug, ETA Friday.')
-    expect(result.status).toBe('answered')
-    if (result.status === 'answered') expect(result.internalSourced).toBe(false)
   })
 
   it('loads the whole thread (all: true) and head+tail-budgets a >budget conversation, keeping the first message and the omitted marker', async () => {

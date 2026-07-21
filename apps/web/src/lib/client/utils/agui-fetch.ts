@@ -1,13 +1,12 @@
 /**
  * Fetch wrapper for the AG-UI client surfaces that drive a `ChatClient`
- * directly (Copilot transform, the suggested-reply store). A 2xx response
- * streams through untouched. A non-2xx envelope — which the connection adapter
- * would otherwise surface as a generic "HTTP error! status:" transport throw,
- * losing the server's own message — is rewritten into a single synthetic AG-UI
- * RUN_ERROR SSE frame so the ChatClient delivers the server's coded error as a
- * normal terminal chunk. The HTTP status rides `code` as `http_<status>`, so a
- * caller can still branch on it (the suggested-reply card maps 409 staleness to
- * a silent skip).
+ * directly (e.g. Copilot transform). A 2xx response streams through untouched.
+ * A non-2xx envelope — which the connection adapter would otherwise surface as
+ * a generic "HTTP error! status:" transport throw, losing the server's own
+ * message — is rewritten into a single synthetic AG-UI RUN_ERROR SSE frame so
+ * the ChatClient delivers the server's coded error as a normal terminal chunk.
+ * The HTTP status rides `code` as `http_<status>`, so a caller can still branch
+ * on it (e.g. mapping 409 staleness to a silent skip).
  */
 import { extractHttpErrorMessage } from './http-error'
 

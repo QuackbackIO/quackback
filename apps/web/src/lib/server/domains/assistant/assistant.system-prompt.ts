@@ -75,7 +75,7 @@ export interface BuildAssistantPromptInput {
   tools: readonly AssistantPromptTool[]
   /** Platform-resolved facts, not a conversation transcript or retrieved excerpt. */
   trustedRuntimeContext?: string | null
-  /** Active customer channel, or an explicitly supplied destination for a suggested reply. */
+  /** Active customer channel. */
   channel?: string | null
   /** Already selected guidance. Role and channel eligibility are checked again here. */
   guidance?: readonly (AssistantPromptGuidance | string)[]
@@ -93,8 +93,8 @@ export interface AssistantRolePolicy {
   contentAudience: 'public' | 'team'
   /** The runtime must apply this before tool assembly. */
   writeToolPolicy: 'execute' | 'propose' | 'disabled'
-  pipelineStep: 'assistant' | 'copilot_suggest'
-  inabilitySemantics: 'cannot_answer' | 'skip'
+  pipelineStep: 'assistant'
+  inabilitySemantics: 'cannot_answer'
   textAudience: 'customer' | 'teammate'
   responseContract: string
 }
@@ -129,15 +129,6 @@ export const ASSISTANT_ROLE_POLICIES: Readonly<Record<AssistantPromptRole, Assis
     inabilitySemantics: 'cannot_answer',
     textAudience: 'teammate',
     responseContract: COPILOT_RESPONSE_CONTRACT,
-  },
-  suggested_reply: {
-    customerVoice: true,
-    contentAudience: 'team',
-    writeToolPolicy: 'disabled',
-    pipelineStep: 'copilot_suggest',
-    inabilitySemantics: 'skip',
-    textAudience: 'customer',
-    responseContract: CUSTOMER_RESPONSE_CONTRACT,
   },
 }
 
@@ -326,26 +317,6 @@ ${actions}
 
 Use answerType "draft_reply" only when text is ready for the teammate to send to the customer
 exactly as written; otherwise use "analysis".`
-    }
-    case 'suggested_reply': {
-      const searchInstruction = toolNames.has('search')
-        ? 'You may search when the available context does not answer the customer.'
-        : 'Use only the context and read capabilities actually available this turn.'
-      const inabilityInstruction = toolNames.has('report_inability')
-        ? `If the available context cannot support a useful reply, use report_inability rather than
-inventing one.`
-        : `If the available context cannot support a useful reply, return a concise honest limitation
-rather than inventing one.`
-
-      return `# Active role
-Draft a reply for a support teammate to review and send to the customer. Write only the reply the
-customer should receive; do not address the teammate or describe what you are doing.
-
-Continue the existing conversation naturally. Do not add another greeting when the conversation
-already contains one. Use team-visible information only for grounding; never copy internal-only
-text or operational notes into the customer-facing draft.
-
-${searchInstruction} You may report an honest inability, but you may not perform or propose write actions in this role. ${inabilityInstruction}`
     }
   }
 }

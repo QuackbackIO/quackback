@@ -84,7 +84,7 @@ const CONFIG: AssistantConfig = {
       knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
     },
     copilot: {
-      capabilities: { qa: true, suggestedReplies: true },
+      capabilities: { qa: true },
       knowledge: {
         helpCenter: true,
         posts: true,
@@ -482,18 +482,16 @@ describe('V2 assistant configuration writes', () => {
   it('writes a Copilot capability change under the capabilities audit event', async () => {
     const result = await updateAssistantCopilotCapabilities(
       7,
-      { ...CONFIG.agents.copilot.capabilities, suggestedReplies: false },
+      { ...CONFIG.agents.copilot.capabilities, qa: false },
       ACTOR
     )
 
-    expect(result.config.agents.copilot.capabilities.suggestedReplies).toBe(false)
+    expect(result.config.agents.copilot.capabilities.qa).toBe(false)
     const auditPayload = hoisted.recordAuditEventInTransaction.mock.calls[0]?.[1] as {
       event: string
       metadata: { changedPaths: string[] }
     }
     expect(auditPayload.event).toBe('assistant.capabilities.changed')
-    expect(auditPayload.metadata.changedPaths).toEqual([
-      'agents.copilot.capabilities.suggestedReplies',
-    ])
+    expect(auditPayload.metadata.changedPaths).toEqual(['agents.copilot.capabilities.qa'])
   })
 })

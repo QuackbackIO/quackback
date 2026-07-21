@@ -1,6 +1,6 @@
 /**
- * Shared HTTP-error text extraction for the assistant's client surfaces (the
- * Copilot panel's SSE turns and the suggested-reply store). Pulls the
+ * Shared HTTP-error text extraction for the assistant's client surfaces (e.g.
+ * the Copilot panel's SSE turns). Pulls the
  * server's `{error:{message}}` body off a failed response, falling back to
  * one generic message so the fallback copy can never drift between surfaces.
  */

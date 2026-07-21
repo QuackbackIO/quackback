@@ -1003,13 +1003,6 @@ export interface FeatureFlags {
    *  own finer-grained controls (copilot.use permission, per-conversation
    *  translation, per-attribute opt-in). */
   inboxAi: boolean
-  /** Proactive suggested replies (QUINN-PROACTIVE-SUGGESTIONS-SPEC.md): a
-   *  read-only draft-reply card generated when a teammate views a
-   *  conversation/ticket whose latest message is from the customer with no
-   *  teammate reply after it. Only takes effect alongside `inboxAi` (same
-   *  `copilot.use` permission and item-viewability gate; see
-   *  routes/api/admin/assistant/suggest.ts). */
-  assistantProactiveSuggestions: boolean
   /** What the AI assistant may DO: built-in actions such as closing
    *  conversations and creating tickets. Every action has per-action
    *  controls and approvals. */
@@ -1086,7 +1079,6 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   visitorAnalytics: false,
   visitorDeviceTracking: false,
   inboxAi: false,
-  assistantProactiveSuggestions: false,
   assistantTools: false,
   assistantCustomActions: false,
 }
@@ -1149,11 +1141,6 @@ export const FEATURE_FLAG_REGISTRY: Record<
     label: 'Custom actions',
     description:
       'Build your own actions from an HTTP request the assistant can call, define them once, and assign them to the Agent or Copilot. Scoped response access and audit logging keep them safe.',
-  },
-  assistantProactiveSuggestions: {
-    label: 'Proactive suggested replies',
-    description:
-      'Show a suggested-reply draft above the composer when a teammate opens a conversation or ticket the customer is waiting on. Requires Inbox AI.',
   },
   statusPage: {
     label: 'Status page',
@@ -1278,7 +1265,7 @@ export const LAB_SECTIONS: Array<{
       'Optional AI capabilities. Require a configured model; off by default until you opt in.',
     flags: [
       { key: 'helpCenterAiAnswers' },
-      { key: 'inboxAi', subFlags: ['assistantProactiveSuggestions'] },
+      { key: 'inboxAi' },
       { key: 'assistantTools' },
       { key: 'assistantCustomActions' },
     ],

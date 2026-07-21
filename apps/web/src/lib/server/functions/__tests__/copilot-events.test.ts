@@ -8,7 +8,7 @@
  * destination and rejects a rating), and the exact assistant_events row shape
  * — destination/rating/reason/answerType/internalSourced land in metadata,
  * item + actor in their own columns. createServerFn is stubbed to a directly-callable fn
- * (mirrors copilot-summary.test.ts) so the real zod validator runs.
+ * so the real zod validator runs.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createId, type ConversationId, type TicketId } from '@quackback/ids'
@@ -269,73 +269,6 @@ describe('recordCopilotEventFn', () => {
       })
     ).rejects.toThrow()
     expect(hoisted.requireAuth).not.toHaveBeenCalled()
-  })
-
-  it('requires a destination on suggestion_inserted, like every other *_inserted kind', async () => {
-    await expect(
-      recordCopilotEventFn({
-        data: { item: { conversationId: CONVERSATION_ID }, eventType: 'suggestion_inserted' },
-      })
-    ).rejects.toThrow()
-    expect(hoisted.requireAuth).not.toHaveBeenCalled()
-  })
-
-  it('writes a suggestion_inserted row with its destination, like any other insert kind', async () => {
-    await recordCopilotEventFn({
-      data: {
-        item: { conversationId: CONVERSATION_ID },
-        eventType: 'suggestion_inserted',
-        destination: 'reply',
-      },
-    })
-    expect(insertedRow()).toEqual({
-      eventType: 'suggestion_inserted',
-      principalId: PRINCIPAL_ID,
-      conversationId: CONVERSATION_ID,
-      ticketId: null,
-      metadata: { destination: 'reply' },
-    })
-  })
-
-  it('rejects a suggestion_shown or suggestion_dismissed event carrying a destination (the proactive-suggestions funnel is shown/inserted/dismissed, not a landing spot for the first two)', async () => {
-    for (const eventType of ['suggestion_shown', 'suggestion_dismissed'] as const) {
-      await expect(
-        recordCopilotEventFn({
-          data: {
-            item: { conversationId: CONVERSATION_ID },
-            eventType,
-            destination: 'reply' as never,
-          },
-        })
-      ).rejects.toThrow()
-    }
-    expect(hoisted.requireAuth).not.toHaveBeenCalled()
-  })
-
-  it('writes a suggestion_shown row with no destination and no rating (the acceptance-rate denominator)', async () => {
-    await recordCopilotEventFn({
-      data: { item: { conversationId: CONVERSATION_ID }, eventType: 'suggestion_shown' },
-    })
-    expect(insertedRow()).toEqual({
-      eventType: 'suggestion_shown',
-      principalId: PRINCIPAL_ID,
-      conversationId: CONVERSATION_ID,
-      ticketId: null,
-      metadata: {},
-    })
-  })
-
-  it('writes a suggestion_dismissed row with no destination and no rating', async () => {
-    await recordCopilotEventFn({
-      data: { item: { ticketId: TICKET_ID }, eventType: 'suggestion_dismissed' },
-    })
-    expect(insertedRow()).toEqual({
-      eventType: 'suggestion_dismissed',
-      principalId: PRINCIPAL_ID,
-      conversationId: null,
-      ticketId: TICKET_ID,
-      metadata: {},
-    })
   })
 
   it("omitting internalSourced stores no key (an aborted turn's insert is never coerced to false)", async () => {

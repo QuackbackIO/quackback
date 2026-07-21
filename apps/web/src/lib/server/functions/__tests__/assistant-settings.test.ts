@@ -74,7 +74,7 @@ const CONFIG: AssistantConfig = {
       knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
     },
     copilot: {
-      capabilities: { qa: true, suggestedReplies: true },
+      capabilities: { qa: true },
       knowledge: {
         helpCenter: true,
         posts: true,

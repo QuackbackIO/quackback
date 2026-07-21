@@ -58,11 +58,7 @@ export const ASSISTANT_PENDING_ACTION_STATUSES = [
 
 export type AssistantPendingActionStatus = (typeof ASSISTANT_PENDING_ACTION_STATUSES)[number]
 
-export const ASSISTANT_PENDING_ACTION_ORIGIN_ROLES = [
-  'customer_support',
-  'copilot_qa',
-  'suggested_reply',
-] as const
+export const ASSISTANT_PENDING_ACTION_ORIGIN_ROLES = ['customer_support', 'copilot_qa'] as const
 
 export const assistantPendingActions = pgTable(
   'assistant_pending_actions',

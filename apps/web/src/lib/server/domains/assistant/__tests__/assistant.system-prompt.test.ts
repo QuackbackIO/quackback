@@ -110,14 +110,6 @@ describe('assistant production system prompt', () => {
         inabilitySemantics: 'cannot_answer',
         textAudience: 'teammate',
       }),
-      suggested_reply: expect.objectContaining({
-        customerVoice: true,
-        contentAudience: 'team',
-        writeToolPolicy: 'disabled',
-        pipelineStep: 'copilot_suggest',
-        inabilitySemantics: 'skip',
-        textAudience: 'customer',
-      }),
     })
   })
 
@@ -127,10 +119,9 @@ describe('assistant production system prompt', () => {
     expect(result.systemMessages[0]).toContain('# Instruction priority')
   })
 
-  it('keeps customer support, copilot Q&A, and suggested-reply identities isolated', () => {
+  it('keeps customer support and copilot Q&A identities isolated', () => {
     const support = joined()
     const copilot = joined({ role: 'copilot_qa' })
-    const suggestion = joined({ role: 'suggested_reply' })
 
     expect(support).toContain("Nova, Acme's AI customer-support agent")
     expect(support).toContain('speaking directly\nwith a customer')
@@ -139,11 +130,6 @@ describe('assistant production system prompt', () => {
     expect(copilot).toContain('AI copilot assisting a support teammate')
     expect(copilot).toContain('Answer the teammate directly')
     expect(copilot).not.toContain("Nova, Acme's")
-
-    expect(suggestion).toContain('Write only the reply the\ncustomer should receive')
-    expect(suggestion).toContain('may not perform or propose write actions')
-    expect(suggestion).not.toContain('Answer the teammate directly')
-    expect(suggestion).not.toContain('answerType')
   })
 
   it('resolves the platform-owned response contract by role', () => {
@@ -152,24 +138,19 @@ describe('assistant production system prompt', () => {
     const copilotContract = `${customerContract.slice(0, -1)}, "answerType": "draft_reply"|"analysis"}`
 
     expect(joined()).toContain(customerContract)
-    expect(joined({ role: 'suggested_reply' })).toContain(customerContract)
     expect(joined({ role: 'copilot_qa' })).toContain(copilotContract)
-    expect(joined({ role: 'suggested_reply' })).not.toContain('"answerType"')
     expect(joined()).not.toContain('"skip"')
   })
 
   it('applies customer voice and workspace instructions only to customer-authored text roles', () => {
     const support = joined()
     const copilot = joined({ role: 'copilot_qa' })
-    const suggestion = joined({ role: 'suggested_reply' })
 
     expect(support).toContain('Use a warm, approachable tone')
     expect(support).toContain('Keep replies short: 1-3 sentences')
     expect(support).toContain('Call customers members.')
     expect(copilot).not.toContain('# Customer-facing voice')
     expect(copilot).not.toContain('Call customers members.')
-    expect(suggestion).toContain('# Customer-facing voice')
-    expect(suggestion).toContain('Call customers members.')
   })
 
   it('filters guidance by the active agent, and always includes a bare (pre-filtered) rule', () => {
@@ -315,7 +296,7 @@ describe('assistant production system prompt', () => {
   })
 
   it('forbids ending the turn on an announced-but-unperformed action (every role)', () => {
-    for (const role of ['customer_support', 'copilot_qa', 'suggested_reply'] as const) {
+    for (const role of ['customer_support', 'copilot_qa'] as const) {
       const prompt = joined({ role })
       expect(prompt).toContain('The final text ends the turn')
       expect(prompt).toContain('is a broken promise')
@@ -360,7 +341,7 @@ describe('assistant production system prompt', () => {
   })
 
   it('declares synthetic anonymous placeholder addresses non-repeatable (every role)', () => {
-    for (const role of ['customer_support', 'copilot_qa', 'suggested_reply'] as const) {
+    for (const role of ['customer_support', 'copilot_qa'] as const) {
       const prompt = joined({ role })
       expect(prompt).toContain('@anon.quackback.io are internal placeholders')
       expect(prompt).toContain('Never repeat, confirm, or quote such an address')
@@ -368,7 +349,7 @@ describe('assistant production system prompt', () => {
   })
 
   it('states that an empty citations array is the correct shape for uncitable turns', () => {
-    for (const role of ['customer_support', 'copilot_qa', 'suggested_reply'] as const) {
+    for (const role of ['customer_support', 'copilot_qa'] as const) {
       const prompt = joined({ role })
       expect(prompt).toContain('An empty citations array is correct and expected')
       expect(prompt).toContain('not\n  citable sources')

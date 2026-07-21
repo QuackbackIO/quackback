@@ -65,16 +65,12 @@ describe.skipIf(!fixture.available)('getGuidanceRuleStats (real DB)', () => {
     expect(stats.assistant_guidance_b.applied).toBe(1)
   })
 
-  it('includes suggested-reply applications', async () => {
-    await seedTurn(['assistant_guidance_suggested'], { pipelineStep: 'copilot_suggest' })
-    expect((await getGuidanceRuleStats()).assistant_guidance_suggested.applied).toBe(1)
-  })
-
   it('ignores V1 metadata, malformed metadata, failed calls, and unrelated pipeline steps', async () => {
     await seedTurn(['assistant_guidance_ignored'], { metadataKey: 'guidanceRuleIds' })
     await seedTurn('not-an-array')
     await seedTurn(['assistant_guidance_ignored'], { status: 'error' })
     await seedTurn(['assistant_guidance_ignored'], { pipelineStep: 'quality_gate' })
+    await seedTurn(['assistant_guidance_ignored'], { pipelineStep: 'copilot_suggest' })
     expect(await getGuidanceRuleStats()).toEqual({})
   })
 

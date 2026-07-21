@@ -181,7 +181,6 @@ import {
   appendTextToDraft,
   type ComposerDraft,
 } from './composer-draft'
-import { SuggestedReplyCard } from './suggested-reply-card'
 import { ComposerAiActions, type ComposerMode } from './composer-ai-actions'
 import { TypingDots } from '@/components/shared/typing-dots'
 import { EmojiPicker } from '@/components/shared/emoji-picker'
@@ -242,7 +241,6 @@ export function AgentConversationThread({
   isOtherAgentTyping,
   createTicketToken,
   openCopilotToken,
-  requestOpenCopilot,
 }: {
   /** The open item, discriminated by kind — drives both the data adapter and
    *  the derived `ThreadCapabilities`. */
@@ -267,19 +265,11 @@ export function AgentConversationThread({
    *  this thread's own create-ticket dialog (which needs the conversation
    *  data only this component has loaded). Ignored for a ticket item. */
   createTicketToken?: number
-  /** Bumped by the route's Ask Copilot action (keyboard/command bar) —
-   *  forwarded UNTOUCHED to the detail panel, which switches to its Copilot
-   *  tab and focuses the ask input (and reads 0 as "no pending bump", the
-   *  route's own reset sentinel). Both item kinds. */
+  /** Programmatic "open the Copilot tab" signal — forwarded UNTOUCHED to the
+   *  detail panel, which switches to its Copilot tab and focuses the ask input
+   *  when the value changes (and reads 0 as "no pending bump", the route's own
+   *  reset sentinel). Both item kinds. */
   openCopilotToken?: number
-  /** Ask the route to bump `openCopilotToken` — the route owns that signal,
-   *  so every opener (the suggested-reply card's quiet "Ask Copilot" link
-   *  here, the route's own keyboard/command-bar action) funnels through one
-   *  counter instead of this component merging parallel ones. The route only
-   *  passes it while Copilot is actually openable (`copilotAvailable`: tab
-   *  gate + the ≥xl viewport that renders the detail panel); absent, the
-   *  card hides its Ask Copilot link rather than rendering a dead one. */
-  requestOpenCopilot?: () => void
 }) {
   const queryClient = useQueryClient()
   const isTicket = item.kind === 'ticket'
@@ -547,24 +537,6 @@ export function AgentConversationThread({
     !!lastAgentMessage &&
     new Date(conversation.visitorLastReadAt).getTime() >=
       new Date(lastAgentMessage.createdAt).getTime()
-
-  // Quinn's proactive suggested-reply card (QUINN-PROACTIVE-SUGGESTIONS-SPEC.md)
-  // triggers when the latest customer-facing message is the customer's with no
-  // teammate reply after it — i.e. the very last meaningful message is
-  // `visitor` (senderType is overloaded across both kinds; see types.ts). The
-  // scan skips system events AND internal notes: a teammate jotting a note is
-  // not a reply, and must not suppress the card while the customer still
-  // waits. Null (no card) when a teammate/Quinn already replied last, this
-  // item can't even take a reply (a back_office/tracker ticket is note-only —
-  // nowhere for a suggestion to land), OR the item is already closed (a
-  // closed conversation / closed-category ticket owes the customer nothing;
-  // the suggest route mirrors this guard server-side).
-  const isClosedItem = isTicket ? ticket?.status.category === 'closed' : isClosedConversation
-  const lastMeaningfulMessage = messages.findLast((m) => m.senderType !== 'system' && !m.isInternal)
-  const suggestedReplyMessageId =
-    capabilities.reply && !isClosedItem && lastMeaningfulMessage?.senderType === 'visitor'
-      ? lastMeaningfulMessage.id
-      : null
 
   // Phase C conversational block layer, agent side (CF3): the same pure
   // derivation the customer-facing widget renders from (conversation-rows.ts),
@@ -1258,22 +1230,20 @@ export function AgentConversationThread({
   // Stable reply-mode text insert for the MacroPicker prop.
   const insertMacroBody = useCallback((text: string) => insertText('reply', text), [insertText])
 
-  // The Copilot "Add to composer" / "Add as note" seam (COPILOT-SIDEBAR-UX.md
-  // B.4) targets either mode and may need to flip `noteMode` first — see
-  // use-copilot-insert.ts for the mount-timing fix. It drives the editors through
-  // insertable handles; with the unified editor those handles just seed the draft
-  // (value + remount). Kept in stable refs so insertFromCopilot's identity — and
-  // therefore the detail panel — doesn't churn on every keystroke. Only reached
-  // when the conversation detail panel's Copilot tab renders (conversation-only).
+  // The Copilot "Add to composer" seam (COPILOT-SIDEBAR-UX.md B.4) targets
+  // the reply composer and may need to flip `noteMode` back first — see
+  // use-copilot-insert.ts for the mount-timing fix. It drives the editor
+  // through an insertable handle; with the unified editor that handle just
+  // seeds the draft (value + remount). Kept in a stable ref so
+  // insertFromCopilot's identity — and therefore the detail panel — doesn't
+  // churn on every keystroke. Only reached when the conversation detail
+  // panel's Copilot tab renders (conversation-only).
   const replyInsertRef = useRef<{ insertText: (text: string) => void } | null>(null)
-  const noteInsertRef = useRef<{ insertText: (text: string) => void } | null>(null)
   replyInsertRef.current = { insertText: (text: string) => insertAnswer('reply', text) }
-  noteInsertRef.current = { insertText: (text: string) => insertAnswer('note', text) }
   const insertFromCopilot = useCopilotInsert({
     noteMode,
     setNoteMode,
     replyComposerRef: replyInsertRef,
-    noteEditorRef: noteInsertRef,
   })
 
   const getComposerText = useCallback(
@@ -1281,9 +1251,6 @@ export function AgentConversationThread({
       mode === 'note' ? noteDraftRef.current.markdown : replyDraftRef.current.markdown,
     []
   )
-  // The suggested-reply card's composer gate: a teammate already mid-draft
-  // when the card's dwell elapses doesn't need (or pay for) a suggestion.
-  const composerHasText = useCallback(() => replyDraftRef.current.markdown.trim().length > 0, [])
   const replaceComposerText = useCallback((mode: ComposerMode, text: string) => {
     const previous = mode === 'note' ? noteDraftRef.current : replyDraftRef.current
     const apply = (draft: ComposerDraft) => {
@@ -1300,10 +1267,6 @@ export function AgentConversationThread({
     // Return a full-fidelity restore for the composer's persistent inline Undo.
     return () => apply(previous)
   }, [])
-  const insertSummaryNote = useCallback(
-    (text: string) => insertFromCopilot(text, 'note'),
-    [insertFromCopilot]
-  )
 
   // Track each mode's draft from the editor's onChange (json + markdown mirror).
   // The reply keystroke also drives the visitor-facing typing indicator (only
@@ -1805,20 +1768,6 @@ export function AgentConversationThread({
             padding matches the message rows' `px-5` so the composer and the
             thread above it share the same width. */}
         <div className="px-5 py-3">
-          {/* Quinn's proactive suggested-reply card — same horizontal rhythm
-              as the composer below it. Renders nothing on its own terms (flag
-              off, no eligible customer message, honest-miss skip, dismissed) —
-              the conditional here is only the eligibility precondition. */}
-          {suggestedReplyMessageId && (
-            <SuggestedReplyCard
-              key={suggestedReplyMessageId}
-              item={item}
-              lastCustomerMessageId={suggestedReplyMessageId}
-              onInsert={(text) => insertFromCopilot(text, 'reply')}
-              onAskCopilot={requestOpenCopilot}
-              shouldDeferSuggestion={composerHasText}
-            />
-          )}
           {/* Composer: the Reply/Note switcher gets its own row on top, then the
               editor, the pending attachment tray, then the actions (attach,
               emoji, saved replies) and send — one bordered box, one unified
@@ -1959,7 +1908,6 @@ export function AgentConversationThread({
                 activeDraftText={activeDraft.markdown}
                 getDraftText={getComposerText}
                 onReplaceDraftText={replaceComposerText}
-                onInsertNote={insertSummaryNote}
               />
               <div className="flex-1" />
               <button

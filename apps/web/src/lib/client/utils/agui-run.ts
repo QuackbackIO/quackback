@@ -1,7 +1,7 @@
 /**
  * One-shot AG-UI turn over a `ChatClient` (TanStack AI), for the client
  * surfaces whose turn lifetime is NOT a component's — a plain async function
- * (Copilot transform) and the module-level suggested-reply store. Constructs a
+ * (e.g. Copilot transform). Constructs a
  * fresh client per run over `fetchServerSentEvents` (the same transport the
  * shared `useAguiTurn` hook uses), sends one message, and reports every chunk
  * through `onChunk`; the caller reads its terminal state off the standard

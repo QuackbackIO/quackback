@@ -53,7 +53,7 @@ export interface StoredAssistantConfig {
       }
     }
     copilot: {
-      capabilities: { qa: boolean; suggestedReplies: boolean }
+      capabilities: { qa: boolean }
       knowledge: {
         helpCenter: boolean
         posts: boolean
@@ -343,7 +343,7 @@ export const settings = pgTable('settings', {
           knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
         },
         copilot: {
-          capabilities: { qa: true, suggestedReplies: true },
+          capabilities: { qa: true },
           knowledge: {
             helpCenter: true,
             posts: true,

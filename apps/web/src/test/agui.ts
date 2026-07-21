@@ -1,7 +1,7 @@
 /**
  * Shared fixtures for tests that exercise the assistant's AG-UI streaming
- * surfaces (the Copilot panel, the Test agent card, the suggested-reply
- * store, Ask AI): building `data: <json>` SSE frames of AG-UI StreamChunks —
+ * surfaces (the Copilot panel, the Test agent card, Ask AI): building
+ * `data: <json>` SSE frames of AG-UI StreamChunks —
  * the exact wire format `toServerSentEventsResponse` emits and
  * `fetchServerSentEvents` parses — and stubbing global `fetch` with a
  * streaming `Response`. The raw byte-stream helpers are shared with the old

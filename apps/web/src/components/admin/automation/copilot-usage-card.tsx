@@ -1,18 +1,13 @@
 /**
  * Copilot usage + outcome reporting (P2-D.2): questions asked, transforms
- * run, on-demand summaries, the insert/feedback outcomes, the proactive
- * suggestion acceptance funnel, and the propose-approve-execute actions
- * funnel, over the last 30 days. Read-only reporting; gated server-side on
- * analytics.view like the rest of the Quinn performance surface. Mounted
- * whenever inboxAi is on (see automation.assistant.tsx); only the
- * actions funnel additionally needs assistantTools — the pending-actions
- * funnel this section reports on doesn't exist otherwise — so the page
- * passes that flag as `showActionsFunnel` rather than gating the whole card
- * on it. The Suggestions group works the same way via `showSuggestions`
- * (wired from `assistantProactiveSuggestions`), except it ALSO renders when
- * the fetched range has suggestion activity even if the flag is off, so
- * turning the flag off after the fact doesn't make historical data vanish
- * from the report.
+ * run, on-demand summaries, the insert/feedback outcomes, and the
+ * propose-approve-execute actions funnel, over the last 30 days. Read-only
+ * reporting; gated server-side on analytics.view like the rest of the Quinn
+ * performance surface. Mounted whenever inboxAi is on (see
+ * automation.assistant.tsx); only the actions funnel additionally needs
+ * assistantTools — the pending-actions funnel this section reports on doesn't
+ * exist otherwise — so the page passes that flag as `showActionsFunnel`
+ * rather than gating the whole card on it.
  */
 import { useQuery } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -51,24 +46,14 @@ export interface CopilotUsageCardProps {
   /** True when the assistantTools flag is on; gates only the actions-funnel
    *  section (approval-rate tile + propose/approve/reject/expire list). */
   showActionsFunnel: boolean
-  /** True when the assistantProactiveSuggestions flag is on; gates the
-   *  Suggestions group (acceptance-rate tile + shown/inserted/dismissed
-   *  breakdown). The group also renders when `false` if the fetched range
-   *  still has suggestion activity — see this module's doc comment. */
-  showSuggestions: boolean
 }
 
-export function CopilotUsageCard({ showActionsFunnel, showSuggestions }: CopilotUsageCardProps) {
+export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
   const range = useLast30DaysRange()
   const { data } = useQuery(copilotUsageMetricsQuery(range.from, range.to))
 
   const transforms = data?.transformsByKind ?? []
   const teammates = data?.perTeammate ?? []
-  const hasSuggestionActivity = Boolean(
-    data &&
-    (data.suggestionsShown > 0 || data.suggestionsInserted > 0 || data.suggestionsDismissed > 0)
-  )
-  const renderSuggestions = showSuggestions || hasSuggestionActivity
 
   return (
     <SettingsCard
@@ -126,26 +111,6 @@ export function CopilotUsageCard({ showActionsFunnel, showSuggestions }: Copilot
               <CountRow label="Thumbs down with a reason" value={data?.feedbackDownWithReason} />
             </ul>
           </div>
-          {renderSuggestions && (
-            <div className="sm:col-span-2">
-              <MetricTile
-                label="Suggestion acceptance rate"
-                value={pct(asRate(data?.suggestionAcceptanceRate))}
-                sub={
-                  data
-                    ? `${data.suggestionsInserted} inserted from ${data.suggestionsShown} shown`
-                    : undefined
-                }
-              />
-              {/* Same shown -> inserted/dismissed funnel shape as the insert
-                  breakdown above, scoped to proactive suggestion cards. */}
-              <ul className="mt-3 space-y-1.5 text-sm">
-                <CountRow label="Suggestions shown" value={data?.suggestionsShown} />
-                <CountRow label="Suggestions inserted" value={data?.suggestionsInserted} />
-                <CountRow label="Suggestions dismissed" value={data?.suggestionsDismissed} />
-              </ul>
-            </div>
-          )}
         </div>
       </div>
 

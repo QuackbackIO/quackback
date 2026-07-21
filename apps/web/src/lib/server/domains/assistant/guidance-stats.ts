@@ -28,7 +28,7 @@ export async function getGuidanceRuleStats(
              ELSE '[]'::jsonb
         END
       ) AS rule_id
-      WHERE pipeline_step IN ('assistant', 'copilot_suggest')
+      WHERE pipeline_step = 'assistant'
         AND call_type = 'chat_completion'
         AND status = 'success'
         AND created_at >= now() - interval '${sql.raw(String(AI_USAGE_RETENTION_DAYS))} days'

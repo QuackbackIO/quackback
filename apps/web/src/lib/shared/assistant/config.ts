@@ -100,10 +100,9 @@ export const assistantCopilotKnowledgeSchema = z.object({
   status: z.boolean(),
 } satisfies Record<AssistantCopilotKnowledgeSource, z.ZodBoolean>)
 
-/** Copilot capabilities gate the two teammate-facing routes (Q&A, suggested drafts). */
+/** Copilot capabilities gate the teammate-facing Q&A route. */
 export const assistantCopilotCapabilitiesSchema = z.object({
   qa: z.boolean(),
-  suggestedReplies: z.boolean(),
 })
 
 /** Agent (customer-facing) sub-config: owns voice (D11) and its knowledge map. */
@@ -163,7 +162,6 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
     copilot: {
       capabilities: {
         qa: true,
-        suggestedReplies: true,
       },
       knowledge: {
         helpCenter: true,
@@ -249,7 +247,7 @@ export const ASSISTANT_RESPONSE_LENGTH_DIRECTIVES: Record<AssistantResponseLengt
   detailed: ASSISTANT_RESPONSE_LENGTH_CATALOGUE.detailed.directive,
 }
 
-export const ASSISTANT_ROLES = ['customer_support', 'copilot_qa', 'suggested_reply'] as const
+export const ASSISTANT_ROLES = ['customer_support', 'copilot_qa'] as const
 export const assistantRoleSchema = z.enum(ASSISTANT_ROLES)
 export type AssistantRole = z.infer<typeof assistantRoleSchema>
 
@@ -276,24 +274,18 @@ export const ASSISTANT_ROLE_CATALOGUE = {
     labelMessageId: 'assistant.role.copilotQa.label',
     descriptionMessageId: 'assistant.role.copilotQa.description',
   },
-  suggested_reply: {
-    id: 'suggested_reply',
-    labelMessageId: 'assistant.role.suggestedReply.label',
-    descriptionMessageId: 'assistant.role.suggestedReply.description',
-  },
 } as const satisfies AssistantRoleCatalogue
 
 /**
  * The sole, exhaustive mint point mapping a pipeline role onto its owning agent
- * (C3): the customer-facing roles (support + the suggested-reply draft path,
- * which uses the Agent's voice per D9) resolve to `agent`; the teammate-facing
- * Q&A role resolves to `copilot`. Runtime voice/knowledge/guidance resolution
- * all funnel through this rather than re-deriving the split from a role literal.
+ * (C3): the customer-facing support role resolves to `agent`; the
+ * teammate-facing Q&A role resolves to `copilot`. Runtime
+ * voice/knowledge/guidance resolution all funnel through this rather than
+ * re-deriving the split from a role literal.
  */
 export function roleToAgent(role: AssistantRole): AssistantAgentKind {
   switch (role) {
     case 'customer_support':
-    case 'suggested_reply':
       return 'agent'
     case 'copilot_qa':
       return 'copilot'

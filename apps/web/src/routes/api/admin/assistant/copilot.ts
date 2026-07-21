@@ -98,10 +98,9 @@ export async function handleCopilot({ request }: { request: Request }): Promise<
   if (!gate.ok) return gate.response
   const { auth, parsed, conversationId, ticketId, agui } = gate
 
-  // Copilot Q&A capability gate (v3 config). Layered past inboxAi the same way
-  // suggest.ts layers assistantProactiveSuggestions: the same 404 NOT_FOUND
-  // shape, one config knob up. A workspace can keep Copilot's identity while
-  // turning its Q&A off.
+  // Copilot Q&A capability gate (v3 config). Layered past inboxAi: a 404
+  // NOT_FOUND shape, one config knob up. A workspace can keep Copilot's
+  // identity while turning its Q&A off.
   if (!(await isCopilotCapabilityEnabled('qa'))) {
     return errorResponse('NOT_FOUND', 'Copilot Q&A is not available', 404)
   }

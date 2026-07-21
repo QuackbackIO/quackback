@@ -236,7 +236,6 @@ function delivered(extra: Partial<DeliveredFields> = {}): DeliveredFields {
     citations: [],
     internalSourced: false,
     proposedActions: [],
-    skip: false,
     identity: V2_IDENTITY,
     trace: PRIVACY_SAFE_TRACE,
     ...extra,

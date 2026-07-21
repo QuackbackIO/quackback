@@ -73,7 +73,7 @@ describe('assistantConfigSchema', () => {
           knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
         },
         copilot: {
-          capabilities: { qa: true, suggestedReplies: true },
+          capabilities: { qa: true },
           knowledge: {
             helpCenter: true,
             posts: true,
@@ -353,7 +353,6 @@ describe('assistant role catalogue', () => {
 describe('roleToAgent', () => {
   it('maps customer-facing roles to the Agent and copilot_qa to the Copilot (D9)', () => {
     expect(roleToAgent('customer_support')).toBe('agent')
-    expect(roleToAgent('suggested_reply')).toBe('agent')
     expect(roleToAgent('copilot_qa')).toBe('copilot')
   })
 
@@ -383,7 +382,6 @@ describe('v3 per-agent sub-config', () => {
     })
     expect(DEFAULT_ASSISTANT_CONFIG.agents.copilot.capabilities).toEqual({
       qa: true,
-      suggestedReplies: true,
     })
   })
 

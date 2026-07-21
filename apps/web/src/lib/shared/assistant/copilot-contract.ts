@@ -43,13 +43,14 @@ export interface CopilotCitation {
 /**
  * Which affordance a copilot answer's text is FOR — the intent signal the
  * sidebar reads to decide whether "Add to composer" (a customer-facing reply
- * draft) or "Add as note" (internal analysis/guidance for the teammate) is the
- * primary action. Quinn self-classifies it as a field on its structured output
- * (see `buildCopilotFramingPrompt`); the server defaults it to `draft_reply`
- * whenever the model omits it, so an un-classified answer keeps the historical
- * "Add to composer primary" behaviour and this can only ever improve, never
- * regress, the affordance. Making the mode machine-readable per answer is what
- * lets the button precedence follow it automatically.
+ * draft) is the primary action or the answer is read-only text (internal
+ * analysis/guidance for the teammate). Quinn self-classifies it as a field on
+ * its structured output (see `buildCopilotFramingPrompt`); the server
+ * defaults it to `draft_reply` whenever the model omits it, so an
+ * un-classified answer keeps the historical "Add to composer primary"
+ * behaviour and this can only ever improve, never regress, the affordance.
+ * Making the mode machine-readable per answer is what lets the button
+ * precedence follow it automatically.
  */
 export type CopilotAnswerType = 'draft_reply' | 'analysis'
 
@@ -61,25 +62,16 @@ export type CopilotAnswerType = 'draft_reply' | 'analysis'
  * the panel's fire-and-forget client seam, so the two can never drift.
  *
  * An event type names WHAT was inserted (an answer, a transform result, a
- * summary, a proactive suggestion); WHERE it landed is the separate
- * destination axis (`COPILOT_INSERT_DESTINATIONS`, required on every
- * `*_inserted` event and carried in metadata), so the same answer inserted as
- * a reply draft vs an internal note is one kind with two destinations, not
- * two kinds. `feedback` is the only type that carries a rating.
- *
- * The `suggestion_*` triple is the proactive-suggestion funnel: `shown` when
- * a generated suggestion card renders (the acceptance-rate denominator),
- * `inserted` when its text lands in the composer/note (destination required,
- * like every `*_inserted`), `dismissed` when the teammate explicitly waves it
- * off. Shown/dismissed carry no destination and no rating.
+ * summary); WHERE it landed is the separate destination axis
+ * (`COPILOT_INSERT_DESTINATIONS`, required on every `*_inserted` event and
+ * carried in metadata), so the same answer inserted as a reply draft vs an
+ * internal note is one kind with two destinations, not two kinds. `feedback`
+ * is the only type that carries a rating.
  */
 export const COPILOT_EVENT_TYPES = [
   'answer_inserted',
   'transform_inserted',
   'summary_inserted',
-  'suggestion_shown',
-  'suggestion_inserted',
-  'suggestion_dismissed',
   'feedback',
 ] as const
 
@@ -162,33 +154,4 @@ export type TransformKind = (typeof TRANSFORM_KINDS)[number]
 /** The completed rewrite (RUN_FINISHED.result). */
 export interface TransformFinalPayload {
   text: string
-}
-
-/**
- * Suggest: a proactive reply suggestion for the conversation's latest
- * unanswered customer message, generated when a teammate views the
- * conversation (pull-on-view, not push-per-message — the server never
- * speculates on conversations nobody is looking at). No proposed actions (a
- * suggestion turn runs its tools read-only — it drafts, it never acts).
- *
- * The card renders FINAL-ONLY: the client ignores streamed deltas entirely. A
- * suggestion turn's honest-miss (`skip: true`) is only knowable at the end of
- * the run, so rendering the text as it generates would show the teammate a
- * draft that a trailing skip then evaporates — a guess dressed up as a draft,
- * on screen the whole time.
- */
-
-/**
- * The completed suggestion (RUN_FINISHED.result). `skip: true` is the honest-miss
- * outcome — Quinn judged there is nothing grounded worth suggesting (text is
- * then empty, `internalSourced` false, and the client renders no card rather
- * than an empty one). `internalSourced` gates the same blocking confirm the
- * Copilot panel uses before internal-derived text reaches the customer
- * composer.
- */
-export interface SuggestFinalPayload {
-  text: string
-  citations: CopilotCitation[]
-  internalSourced: boolean
-  skip?: boolean
 }

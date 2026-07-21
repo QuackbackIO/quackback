@@ -8,7 +8,6 @@ import {
   AssistantDirtyStateProvider,
   useAssistantDirtyState,
 } from '@/components/admin/automation/assistant-form'
-import { CopilotCapabilitiesCard } from '@/components/admin/automation/copilot-capabilities-card'
 import { CopilotDeploymentCard } from '@/components/admin/automation/copilot-deployment-card'
 import { CopilotKnowledgeCard } from '@/components/admin/automation/assistant-knowledge-card'
 import { GuidanceRulesCard } from '@/components/admin/automation/guidance-rules-card'
@@ -23,7 +22,7 @@ import { assistantQueries } from '@/lib/client/queries/assistant'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 
-const COPILOT_TABS = ['basics', 'knowledge', 'guidance', 'actions', 'history'] as const
+const COPILOT_TABS = ['knowledge', 'guidance', 'actions', 'history'] as const
 type CopilotTab = (typeof COPILOT_TABS)[number]
 
 const searchSchema = z.object({
@@ -59,7 +58,7 @@ function AssistantCopilotSettings() {
   const intl = useIntl()
   const settingsQuery = useQuery(assistantQueries.settings())
   const { settings } = Route.useRouteContext()
-  const { tab: requestedTab = 'basics' } = Route.useSearch()
+  const { tab: requestedTab = 'knowledge' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const { dirtyTabs, hasUnsavedChanges } = useAssistantDirtyState()
   const flags = settings?.featureFlags as FeatureFlags | undefined
@@ -77,7 +76,7 @@ function AssistantCopilotSettings() {
   function setTab(value: string) {
     const next = value as CopilotTab
     void navigate({
-      search: (previous) => ({ ...previous, tab: next === 'basics' ? undefined : next }),
+      search: (previous) => ({ ...previous, tab: next === 'knowledge' ? undefined : next }),
       replace: true,
     })
   }
@@ -162,12 +161,6 @@ function AssistantCopilotSettings() {
             <Tabs value={tab} onValueChange={setTab} variant="line" className="space-y-6">
               <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
                 <TabsList className="w-max min-w-full">
-                  <TabsTrigger value="basics">
-                    {intl.formatMessage({
-                      id: 'automation.agent.tabs.basics',
-                      defaultMessage: 'Basics',
-                    })}
-                  </TabsTrigger>
                   <TabsTrigger value="knowledge">
                     {intl.formatMessage({
                       id: 'automation.agent.tabs.knowledge',
@@ -196,14 +189,6 @@ function AssistantCopilotSettings() {
                   </TabsTrigger>
                 </TabsList>
               </div>
-
-              <TabsContent
-                value="basics"
-                forceMount
-                className="space-y-6 data-[state=inactive]:hidden"
-              >
-                <CopilotCapabilitiesCard />
-              </TabsContent>
 
               <TabsContent
                 value="knowledge"
