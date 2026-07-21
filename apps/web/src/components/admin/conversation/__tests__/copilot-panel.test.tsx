@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 /**
  * <CopilotPanel>: the Quinn Copilot sidebar thread (COPILOT-SIDEBAR-UX.md
- * B.3/B.4). Covers the ask -> stream -> answer flow, the internal-source
- * leak gate on "Add to composer", the answerType button precedence (draft_reply
- * keeps "Add to composer" primary; analysis is read-only text with the
- * composer demoted to the "..." menu), the footer quick actions, the
- * Answer-sources popover (flag-gated rows, localStorage persistence,
- * sourceTypes on the request), the placeholder swap, and "New chat".
+ * B.3/B.4). Covers the ask -> stream -> answer flow, the insert eligibility
+ * rule ("Add to composer" only on a finalized, non-internal-sourced
+ * draft_reply — analysis and internal-sourced answers are read-only text,
+ * with no confirm dialog anywhere), the quick actions, the Answer-sources
+ * popover (localStorage persistence, sourceTypes on the request), the
+ * placeholder swap, and "New chat".
  */
 import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
@@ -33,9 +33,6 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 const hoisted = vi.hoisted(() => ({
-  saveCopilotAnswerAsMacroFn: vi.fn(),
-  toastSuccess: vi.fn(),
-  toastError: vi.fn(),
   getAssistantPendingActionFn: vi.fn(),
   approveAssistantActionFn: vi.fn(),
   rejectAssistantActionFn: vi.fn(),
@@ -58,18 +55,12 @@ vi.mock('@/lib/client/copilot-events', async () => ({
   itemRefBody: (await import('@/test/copilot')).mockItemRefBody,
 }))
 
-vi.mock('@/lib/server/functions/macros', () => ({
-  saveCopilotAnswerAsMacroFn: hoisted.saveCopilotAnswerAsMacroFn,
-}))
 vi.mock('@/lib/server/functions/assistant-pending-actions', () => ({
   getAssistantPendingActionFn: hoisted.getAssistantPendingActionFn,
 }))
 vi.mock('@/lib/server/functions/assistant-actions', () => ({
   approveAssistantActionFn: hoisted.approveAssistantActionFn,
   rejectAssistantActionFn: hoisted.rejectAssistantActionFn,
-}))
-vi.mock('sonner', () => ({
-  toast: { success: hoisted.toastSuccess, error: hoisted.toastError },
 }))
 
 import { CopilotPanel } from '../copilot-panel'
@@ -98,29 +89,6 @@ function renderPanel(
     </QueryClientProvider>
   )
   return { onInsert }
-}
-
-/** A full transform AG-UI run: the rewritten text on RUN_FINISHED.result
- *  ({ text }), the shape useCopilotTransform's ChatClient reads. */
-function transformRun(text: string): string {
-  return aguiRun({ result: { text } })
-}
-
-/** Route fetch by URL: the ask/copilot endpoint (useAguiTurn) and the transform
- *  endpoint (useCopilotTransform's ChatClient) stream independently in the real
- *  app, so tests that exercise both in one flow need a fetch mock that branches. */
-function stubFetchByUrl(responses: { copilot?: string; transform?: string }) {
-  const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
-    if (url.includes('/transform') && responses.transform !== undefined) {
-      return Promise.resolve(mockStreamingResponse(responses.transform))
-    }
-    if (responses.copilot !== undefined) {
-      return Promise.resolve(mockStreamingResponse(responses.copilot))
-    }
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`))
-  })
-  vi.stubGlobal('fetch', fetchMock)
-  return fetchMock
 }
 
 async function ask(question: string) {
@@ -316,10 +284,9 @@ describe('<CopilotPanel> ask -> stream -> answer', () => {
     fireEvent.click(screen.getByRole('button', { name: /catch me up/i }))
     await screen.findByText('Summary of the thread.')
 
-    // An analysis-classified answer is read-only text: no primary insert
-    // button, just the overflow menu and feedback — same as a typed ask.
+    // An analysis-classified answer is read-only text: no insert button,
+    // just feedback — same as a typed ask.
     expect(screen.queryByRole('button', { name: /add to composer/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /more answer actions/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Good answer' })).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
@@ -431,13 +398,13 @@ describe('<CopilotPanel> Cmd/Ctrl+Enter inserts the last answer', () => {
     vi.unstubAllGlobals()
   })
 
-  it('still routes an internal-sourced answer through the leak-gate confirm', async () => {
+  it('is a no-op for an internal-sourced answer (read-only, no confirm dialog)', async () => {
     const onInsert = await askAnswer({ internalSourced: true })
 
     modEnter()
 
-    expect(await screen.findByText('This answer uses internal sources')).toBeInTheDocument()
     expect(onInsert).not.toHaveBeenCalled()
+    expect(screen.queryByText('This answer uses internal sources')).not.toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 
@@ -568,7 +535,7 @@ describe('<CopilotPanel> unfinalized (aborted/truncated) turns fail closed', () 
   })
 })
 
-describe('<CopilotPanel> leak gate', () => {
+describe('<CopilotPanel> internal-sourced answers are read-only (B.4 leak boundary)', () => {
   // Final-frame overrides for an internal-sourced answer (askAnswer merges
   // them into the shared finalFrame defaults).
   const INTERNAL_FINAL = {
@@ -579,34 +546,20 @@ describe('<CopilotPanel> leak gate', () => {
     internalSourced: true,
   }
 
-  it('opens the confirm dialog on Add to composer when internalSourced is true', async () => {
+  it('offers no composer action at all — the affordance is withheld, not confirmed', async () => {
     const onInsert = await askAnswer(INTERNAL_FINAL, 'What should I do?')
 
-    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
-
-    expect(await screen.findByText('This answer uses internal sources')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /add to composer/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('This answer uses internal sources')).not.toBeInTheDocument()
     expect(onInsert).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
 
-  it('"Add to composer anyway" inserts into the reply composer', async () => {
-    const onInsert = await askAnswer(INTERNAL_FINAL, 'What should I do?')
-    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
-    await screen.findByText('This answer uses internal sources')
-
-    fireEvent.click(screen.getByRole('button', { name: /add to composer anyway/i }))
-
-    expect(onInsert).toHaveBeenCalledWith('Here is the internal-flavored answer.')
-    vi.unstubAllGlobals()
-  })
-
-  it('the confirm dialog offers no note escape — Cancel or proceed only', async () => {
+  it('keeps feedback as the only affordance on the card', async () => {
     await askAnswer(INTERNAL_FINAL, 'What should I do?')
-    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
-    await screen.findByText('This answer uses internal sources')
 
-    expect(screen.queryByRole('button', { name: 'Add as note' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Good answer' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /more answer actions/i })).not.toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 
@@ -628,111 +581,20 @@ describe('<CopilotPanel> answerType button precedence', () => {
       'What language is he speaking?'
     )
 
-  it('draft_reply keeps "Add to composer" as the primary action', async () => {
+  it('draft_reply keeps "Add to composer" as the ONLY action — no overflow menu', async () => {
     await askWithAnswerType('draft_reply')
 
-    // The visible primary button (not a menu item) is Add to composer.
     expect(screen.getByRole('button', { name: /add to composer/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /more answer actions/i })).not.toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 
-  it('analysis has no primary action — the answer is read-only text', async () => {
+  it('analysis has no action at all — the answer is read-only text with feedback', async () => {
     await askWithAnswerType('analysis')
 
     expect(screen.queryByRole('button', { name: /add to composer/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /more answer actions/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /more answer actions/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Good answer' })).toBeInTheDocument()
-    vi.unstubAllGlobals()
-  })
-
-  it('analysis demotes "Add to composer" into the "..." menu (no tone-rewrite rows)', async () => {
-    const onInsert = await askWithAnswerType('analysis')
-
-    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
-      button: 0,
-    })
-
-    // Add to composer is available as the demoted escape hatch...
-    const demoted = await screen.findByRole('menuitem', { name: /add to composer/i })
-    expect(demoted).toBeInTheDocument()
-    // ...but the customer-reply tone rewrites are gone (noise on analysis).
-    expect(screen.queryByText('Add to composer & modify')).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: 'More friendly' })).not.toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Save as macro' })).toBeInTheDocument()
-
-    fireEvent.click(demoted)
-    expect(onInsert).toHaveBeenCalledWith('The customer is writing in Swedish.')
-    vi.unstubAllGlobals()
-  })
-})
-
-describe('<CopilotPanel> "Add to composer & modify" menu', () => {
-  async function askAndOpenModifyMenu(internalSourced: boolean) {
-    const copilotFrames = aguiRun({
-      result: {
-        text: 'Here is the original answer.',
-        citations: internalSourced
-          ? [{ type: 'snippet', id: 'snippet_1', title: 'Internal note', url: '', internal: true }]
-          : [],
-        internalSourced,
-      },
-    })
-    const fetchMock = stubFetchByUrl({
-      copilot: copilotFrames,
-      transform: transformRun('Here is the FRIENDLIER answer.'),
-    })
-    const onInsert = vi.fn()
-    renderPanel({ onInsert })
-    await ask('What should I do?')
-    await screen.findByText(/Here is the original answer/)
-
-    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
-      button: 0,
-    })
-    expect(await screen.findByText('Add to composer & modify')).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'More friendly' }))
-
-    return { onInsert, fetchMock }
-  }
-
-  it('lists the tone rows under the "Add to composer & modify" header, above Save as macro (no note row)', async () => {
-    const frames = aguiRun({ result: { text: 'Answer.', citations: [], internalSourced: false } })
-    stubFetchByUrl({ copilot: frames })
-    renderPanel()
-    await ask('Question?')
-    await screen.findByText('Answer.')
-
-    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
-      button: 0,
-    })
-
-    expect(await screen.findByText('Add to composer & modify')).toBeInTheDocument()
-    for (const label of ['My tone of voice', 'More friendly', 'More formal', 'More concise']) {
-      expect(screen.getByRole('menuitem', { name: label })).toBeInTheDocument()
-    }
-    expect(screen.queryByRole('menuitem', { name: 'Add as note' })).not.toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'Save as macro' })).toBeInTheDocument()
-    vi.unstubAllGlobals()
-  })
-
-  it('streams the transform then inserts directly when the source answer is not internal', async () => {
-    const { onInsert, fetchMock } = await askAndOpenModifyMenu(false)
-
-    await waitFor(() => {
-      expect(onInsert).toHaveBeenCalledWith('Here is the FRIENDLIER answer.')
-    })
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/transform'))).toBe(true)
-    vi.unstubAllGlobals()
-  })
-
-  it('routes the TRANSFORMED text through the leak gate when the source answer is internal', async () => {
-    const { onInsert } = await askAndOpenModifyMenu(true)
-
-    expect(await screen.findByText('This answer uses internal sources')).toBeInTheDocument()
-    expect(onInsert).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: /add to composer anyway/i }))
-    expect(onInsert).toHaveBeenCalledWith('Here is the FRIENDLIER answer.')
     vi.unstubAllGlobals()
   })
 })
@@ -805,93 +667,6 @@ describe('<CopilotPanel> Answer-sources popover', () => {
   })
 })
 
-describe('<CopilotPanel> Save as macro', () => {
-  const askAndGetAnswer = (internalSourced = false) =>
-    askAnswer(
-      {
-        text: 'Refunds are processed within 30 days [1].',
-        citations: [
-          {
-            type: 'article',
-            id: 'article_1',
-            title: 'Refund policy',
-            url: 'https://help.example.com/refunds',
-          },
-        ],
-        internalSourced,
-      },
-      'What is the refund window?'
-    )
-
-  async function openSaveAsMacroDialog() {
-    // Radix DropdownMenuTrigger opens on pointerDown, not click.
-    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
-      button: 0,
-    })
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Save as macro' }))
-  }
-
-  it('opens a dialog prefilled with the question and the citation-stripped answer', async () => {
-    await askAndGetAnswer()
-    await openSaveAsMacroDialog()
-
-    expect(await screen.findByText('Save as macro')).toBeInTheDocument()
-    expect(screen.getByLabelText('Name')).toHaveValue('What is the refund window?')
-    expect(screen.getByLabelText('Body')).toHaveValue('Refunds are processed within 30 days.')
-    vi.unstubAllGlobals()
-  })
-
-  it('shows an internal-source leak note without blocking save', async () => {
-    await askAndGetAnswer(true)
-    await openSaveAsMacroDialog()
-
-    expect(await screen.findByText(/This answer used internal sources/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()
-    vi.unstubAllGlobals()
-  })
-
-  it('shows no leak note for a public answer', async () => {
-    await askAndGetAnswer(false)
-    await openSaveAsMacroDialog()
-    await screen.findByText('Save as macro')
-
-    expect(screen.queryByText(/This answer used internal sources/i)).not.toBeInTheDocument()
-    vi.unstubAllGlobals()
-  })
-
-  it('saves the (possibly edited) name and citation-stripped body, then toasts success', async () => {
-    hoisted.saveCopilotAnswerAsMacroFn.mockResolvedValue({ id: 'macro_1' })
-    await askAndGetAnswer()
-    await openSaveAsMacroDialog()
-    const nameInput = await screen.findByLabelText('Name')
-    fireEvent.change(nameInput, { target: { value: 'Refund window macro' } })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => {
-      expect(hoisted.saveCopilotAnswerAsMacroFn).toHaveBeenCalledWith({
-        data: { name: 'Refund window macro', body: 'Refunds are processed within 30 days.' },
-      })
-    })
-    expect(hoisted.toastSuccess).toHaveBeenCalledWith('Macro saved')
-    vi.unstubAllGlobals()
-  })
-
-  it('shows an error toast when saving fails', async () => {
-    hoisted.saveCopilotAnswerAsMacroFn.mockRejectedValue(new Error('Access denied'))
-    await askAndGetAnswer()
-    await openSaveAsMacroDialog()
-    await screen.findByText('Save as macro')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => {
-      expect(hoisted.toastError).toHaveBeenCalledWith('Access denied')
-    })
-    vi.unstubAllGlobals()
-  })
-})
-
 describe('<CopilotPanel> empty state', () => {
   it('teases act-on-approval with the shield-check bullet', async () => {
     vi.stubGlobal('fetch', vi.fn())
@@ -926,52 +701,6 @@ describe('<CopilotPanel> usage events', () => {
       destination: 'reply',
       answerType: 'draft_reply',
       internalSourced: false,
-    })
-    vi.unstubAllGlobals()
-  })
-
-  it('logs nothing until the leak-gate confirm, then answer_inserted on proceed', async () => {
-    await askAnswer({ internalSourced: true })
-
-    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
-    await screen.findByText('This answer uses internal sources')
-    expect(hoisted.recordCopilotEvent).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: /add to composer anyway/i }))
-
-    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
-      item: { conversationId: CONVERSATION_ID },
-      eventType: 'answer_inserted',
-      destination: 'reply',
-      answerType: 'draft_reply',
-      internalSourced: true,
-    })
-    vi.unstubAllGlobals()
-  })
-
-  it('logs transform_inserted when a modify-menu transform result inserts', async () => {
-    stubFetchByUrl({
-      copilot: finalFrame({ text: 'Here is the original answer.' }),
-      transform: transformRun('Here is the FRIENDLIER answer.'),
-    })
-    const onInsert = vi.fn()
-    renderPanel({ onInsert })
-    await ask('What should I do?')
-    await screen.findByText(/Here is the original answer/)
-
-    fireEvent.pointerDown(screen.getByRole('button', { name: /more answer actions/i }), {
-      button: 0,
-    })
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'More friendly' }))
-
-    await waitFor(() => {
-      expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith({
-        item: { conversationId: CONVERSATION_ID },
-        eventType: 'transform_inserted',
-        destination: 'reply',
-        answerType: 'draft_reply',
-        internalSourced: false,
-      })
     })
     vi.unstubAllGlobals()
   })

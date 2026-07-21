@@ -1985,8 +1985,7 @@ export function AgentConversationThread({
             onConfirm={() => blockMutation.mutate()}
           />
           {/* Close-with-open-linked-ticket guard (three actions, so not the
-              shared ConfirmDialog — the button trio follows
-              internal-sources-confirm.tsx's AlertDialog pattern). */}
+              shared ConfirmDialog — a hand-rolled AlertDialog button trio). */}
           <AlertDialog
             open={!!closeConfirmTicket}
             onOpenChange={(o) => {

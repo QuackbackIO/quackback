@@ -49,14 +49,8 @@ const listMacrosSchema = z
   .object({ surface: z.enum(['support', 'feedback']).optional() })
   .optional()
 
-// Manager-authored limits: a teammate hand-types both fields from the macro
-// manager form, so these stay tight. Copilot's save-as-macro flow (below)
-// prefills name from the full question and body from Quinn's full answer —
-// neither is manually trimmed the way a teammate composing from scratch
-// would be, so its limits are deliberately roomier rather than truncating
-// either into a rejected save. Keep both pairs as their own named constants
-// rather than unifying: they encode two different authoring shapes, not an
-// oversight.
+// A teammate hand-types both fields from the macro manager form, so these
+// stay tight.
 const MACRO_NAME_MAX = 80
 const MACRO_BODY_MAX = 4000
 
@@ -96,34 +90,6 @@ export const createMacroFn = createServerFn({ method: 'POST' })
       body: data.body,
       scope: data.scope,
       actions: data.actions,
-      createdByPrincipalId: ctx.principal.id,
-    })
-  })
-
-// Roomier than MACRO_NAME_MAX/MACRO_BODY_MAX — see the comment there.
-const COPILOT_MACRO_NAME_MAX = 120
-const COPILOT_MACRO_BODY_MAX = 8000
-
-const saveCopilotAnswerAsMacroSchema = z.object({
-  name: z.string().min(1).max(COPILOT_MACRO_NAME_MAX),
-  body: z.string().min(1).max(COPILOT_MACRO_BODY_MAX),
-})
-
-/**
- * Save a Copilot answer as a reusable macro (Copilot P2-C.2: the answer
- * card's "..." menu "Save as macro" row). Same authoring gate as the manager,
- * since macros are team content, with no bundled actions and a fixed
- * 'support' scope, as Copilot answers surface in the support inbox.
- */
-export const saveCopilotAnswerAsMacroFn = createServerFn({ method: 'POST' })
-  .validator(saveCopilotAnswerAsMacroSchema)
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
-    return createMacro({
-      name: data.name.trim(),
-      body: data.body,
-      scope: 'support',
-      actions: [],
       createdByPrincipalId: ctx.principal.id,
     })
   })

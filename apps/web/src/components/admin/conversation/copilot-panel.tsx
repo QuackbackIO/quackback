@@ -5,9 +5,12 @@
  * (inbox-detail-panel.tsx). Streams against POST /api/admin/assistant/copilot
  * over TanStack AI's AG-UI protocol (useAguiTurn: the thread is the native
  * AG-UI message history; RUN_FINISHED.result carries the post-processed
- * CopilotFinalPayload), reuses AssistantAnswer for citation
- * rendering, and gates any internal-sourced answer behind a hard confirm
- * before it can reach a customer-facing composer (B.4's leak gate).
+ * CopilotFinalPayload), and reuses AssistantAnswer for citation rendering.
+ * "Add to composer" is offered ONLY for a finalized customer-facing draft
+ * (`draft_reply`) that used no internal sources — any other answer is
+ * read-only text (B.4's leak boundary, enforced by withholding the
+ * affordance rather than by a confirm dialog), so internal content can never
+ * reach a customer-facing composer.
  */
 import {
   useCallback,
@@ -23,7 +26,6 @@ import {
   ArrowPathIcon,
   BoltIcon,
   ClipboardDocumentListIcon,
-  EllipsisHorizontalIcon,
   FunnelIcon,
   PencilSquareIcon,
   HandThumbDownIcon,
@@ -46,20 +48,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   AssistantAnswer,
   AssistantWorkingTrace,
 } from '@/components/shared/conversation/assistant-turn'
-import { InternalSourcesConfirm } from '@/components/conversation/internal-sources-confirm'
 import { CopilotProposedActionCard } from './copilot-proposed-action-card'
-import { SaveAsMacroDialog } from './copilot-save-as-macro-dialog'
 import {
   CopilotSourcesList,
   visibleSourceOptions,
@@ -67,7 +59,6 @@ import {
   type SourceType,
 } from './copilot-sources'
 import { useAguiTurn } from '@/lib/client/hooks/use-agui-turn'
-import { useCopilotTransform } from '@/lib/client/hooks/use-copilot-transform'
 import { GENERIC_ERROR } from '@/lib/client/utils/http-error'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -76,7 +67,6 @@ import {
   type CopilotCitation,
   type CopilotFinalPayload,
   type CopilotProposedAction,
-  type TransformKind,
 } from '@/lib/shared/assistant/copilot-contract'
 import {
   itemRefBody,
@@ -96,15 +86,6 @@ const MAX_QUESTION_CHARS = 4000
  */
 export const COPILOT_PANEL_SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: '⌘↵', label: 'Insert last Copilot answer (with the ask box empty)' },
-]
-
-/** The answer card's "Add to composer & modify" menu rows (P2-C.1): the tone
- *  transforms offered before inserting an answer into the composer. */
-const MODIFY_ROWS: { transform: TransformKind; label: string }[] = [
-  { transform: 'my_tone', label: 'My tone of voice' },
-  { transform: 'more_friendly', label: 'More friendly' },
-  { transform: 'more_formal', label: 'More formal' },
-  { transform: 'more_concise', label: 'More concise' },
 ]
 
 /** The quick actions: each is nothing more than a canned question submitted
@@ -145,23 +126,12 @@ const QUICK_ACTIONS: ReadonlyArray<{
   },
 ]
 
-/** The usage event to record once an insert actually happens — carried
- *  alongside the text so the leak-gate confirm logs on proceed, never on the
- *  initial (possibly cancelled) click. Names the GESTURE kind (what was
- *  inserted); the destination axis is always 'reply' now that the panel's
- *  only insert target is the reply composer. `internalSourced` doubles as
- *  the leak-gate flag itself (requestInsert gates on it); it is absent on an
- *  unfinalized turn's events (no final frame ever carried the server-derived
- *  signal). */
+/** The usage event to record when an insert happens. Names the GESTURE kind
+ *  (what was inserted); the destination axis is always 'reply', the panel's
+ *  only insert target. `internalSourced` rides along for the analytics
+ *  vocabulary — always false on an insert event here, since only a
+ *  non-internal-sourced draft ever offers an insert (see `insertableTurn`). */
 type InsertEventMeta = Pick<CopilotEventInput, 'eventType' | 'answerType' | 'internalSourced'>
-
-/** An answer (or a transform of one) awaiting the internal-source leak-gate
- *  confirm: carries the text to actually insert, since a modify transform's
- *  result differs from the turn's original `answer`. */
-interface PendingInsert {
-  text: string
-  event: InsertEventMeta
-}
 
 export interface CopilotTurn {
   id: string
@@ -176,7 +146,8 @@ export interface CopilotTurn {
   /** True only once the final SSE frame landed. `internalSourced`/`answerType`
    *  arrive ON that frame, so an aborted or truncated turn still holds their
    *  ask-time defaults — every consumer that would route text toward the
-   *  customer-facing composer must fail closed (note-only) until this is set. */
+   *  customer-facing composer must fail closed (no insert) until this is set;
+   *  insertableTurn encodes that. */
   finalized: boolean
   suppressed?: string
   /** Write-tool calls this turn proposed (P2-C.4, act-on-approval); empty
@@ -258,6 +229,16 @@ function turnMeta(turn: CopilotTurn): Pick<CopilotEventInput, 'answerType' | 'in
   }
 }
 
+/** The single composer-insert eligibility rule (B.4's leak boundary): only a
+ *  finalized, customer-facing draft that used no internal sources may route
+ *  toward the reply composer. Everything else — analysis answers,
+ *  internal-sourced drafts, and unfinalized (aborted/truncated) turns whose
+ *  final frame never delivered the server-derived flags — is read-only text,
+ *  so no confirm dialog is ever needed. */
+function insertableTurn(turn: CopilotTurn): boolean {
+  return turn.finalized && turn.answerType === 'draft_reply' && !turn.internalSourced
+}
+
 export function CopilotPanel({
   item,
   onInsert,
@@ -287,23 +268,15 @@ export function CopilotPanel({
 
   const [turns, setTurns] = useState<CopilotTurn[]>([])
   const [input, setInput] = useState('')
-  const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null)
-  const [saveMacroTurnId, setSaveMacroTurnId] = useState<string | null>(null)
   const {
     start,
     stop,
     clear: clearThread,
     rewindToTurn,
   } = useAguiTurn({ url: '/api/admin/assistant/copilot' })
-  // Answer rewrites run independently from the ask/answer stream, so changing
-  // a prior answer never aborts a follow-up question.
-  const runTransform = useCopilotTransform(item)
-  const [transformingTurnId, setTransformingTurnId] = useState<string | null>(null)
-  const transforming = transformingTurnId !== null
   const nextIdRef = useRef(0)
 
   const busy = turns.some((t) => t.status === 'streaming')
-  const saveMacroTurn = turns.find((t) => t.id === saveMacroTurnId) ?? null
 
   useEffect(() => stop, [stop])
 
@@ -317,46 +290,13 @@ export function CopilotPanel({
 
   // The single insert seam: route text into the host's reply composer AND
   // record the matching usage event, so the two can never be paired
-  // inconsistently across call sites. The event keeps its gesture kind
-  // (answer / transform); the destination is always the reply composer.
+  // inconsistently across call sites.
   const performInsert = useCallback(
     (text: string, event: InsertEventMeta) => {
       onInsert(text)
       logEvent({ ...event, destination: 'reply' })
     },
     [onInsert, logEvent]
-  )
-
-  // Route an answer (or a transform of one) toward the reply composer, gating
-  // on the leak-gate confirm when the SOURCE answer was internal-sourced (the
-  // event meta carries that flag): transforming text never launders it, so a
-  // modify result inherits the originating turn's `internalSourced` rather
-  // than re-deriving one.
-  const requestInsert = useCallback(
-    (text: string, event: InsertEventMeta) => {
-      if (event.internalSourced) {
-        setPendingInsert({ text, event })
-      } else {
-        performInsert(text, event)
-      }
-    },
-    [performInsert]
-  )
-
-  const modifyAnswer = useCallback(
-    async (turn: CopilotTurn, transform: TransformKind) => {
-      if (transforming || !turn.answer) return
-      setTransformingTurnId(turn.id)
-      try {
-        const result = await runTransform(transform, turn.answer)
-        if (result) {
-          requestInsert(result, { eventType: 'transform_inserted', ...turnMeta(turn) })
-        }
-      } finally {
-        setTransformingTurnId(null)
-      }
-    },
-    [transforming, runTransform, requestInsert]
   )
 
   const runTurn = useCallback(
@@ -393,7 +333,10 @@ export function CopilotPanel({
             // text if the final somehow arrived without any.
             patch({
               answer: final.suppressed ? '' : final.text || answer,
-              answerType: final.answerType,
+              // An un-classified answer keeps the draft_reply default — the
+              // insert eligibility rule (insertableTurn) matches on
+              // draft_reply exactly, so undefined must not overwrite it.
+              answerType: final.answerType ?? 'draft_reply',
               citations: final.citations,
               internalSourced: final.internalSourced,
               finalized: true,
@@ -409,8 +352,8 @@ export function CopilotPanel({
           },
           onStreamEnd: () => {
             // Ended without a final frame (truncation or an intentional
-            // stop): the turn stays unfinalized, so the card falls back to
-            // the note-only affordance (see CopilotTurnView).
+            // stop): the turn stays unfinalized, so the card offers no
+            // insert action (see CopilotTurnView).
             if (!finished) patch({ status: 'done', activity: null })
           },
         },
@@ -492,27 +435,22 @@ export function CopilotPanel({
 
   const handleAddToComposer = useCallback(
     (turn: CopilotTurn) =>
-      requestInsert(turn.answer, { eventType: 'answer_inserted', ...turnMeta(turn) }),
-    [requestInsert]
+      performInsert(turn.answer, { eventType: 'answer_inserted', ...turnMeta(turn) }),
+    [performInsert]
   )
 
   // Cmd/Ctrl+Enter anywhere inside the panel (COPILOT_PANEL_SHORTCUTS):
   // trigger the LAST completed answer's primary action — the same handler
-  // the button calls, so the leak-gate confirm and usage logging apply
-  // unchanged. The panel's dialogs (leak gate, save-as-macro) render in
-  // portals outside this subtree, so their keydowns never reach this handler.
+  // the button calls, so usage logging applies unchanged.
   const insertLastAnswer = useCallback(() => {
-    if (busy || transforming) return // mirrors the buttons' disabled state
+    if (busy) return // mirrors the card's affordances while streaming
     const last = turns.findLast((t) => t.status === 'done' && !!t.answer && !t.suppressed)
     if (!last) return
-    // Mirrors the card's affordances: only a finalized draft_reply answer has
-    // a primary composer action. Analysis answers are read-only text, and an
-    // unfinalized (aborted/truncated) turn fails closed — the final frame
-    // carrying the server-derived leak-gate signal never arrived, so nothing
-    // may route toward the customer-facing composer.
-    if (!last.finalized || last.answerType === 'analysis') return
+    // No-op unless the turn is insertable (see insertableTurn — the single
+    // eligibility rule).
+    if (!insertableTurn(last)) return
     handleAddToComposer(last)
-  }, [busy, transforming, turns, handleAddToComposer])
+  }, [busy, turns, handleAddToComposer])
 
   const onPanelKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -555,9 +493,7 @@ export function CopilotPanel({
                 key={turn.id}
                 turn={turn}
                 onAddToComposer={() => handleAddToComposer(turn)}
-                onSaveAsMacro={() => setSaveMacroTurnId(turn.id)}
                 onRetry={() => retry(turn.id)}
-                onModify={(transform) => void modifyAnswer(turn, transform)}
                 onFeedback={(rating, reason) =>
                   logEvent({
                     eventType: 'feedback',
@@ -566,8 +502,6 @@ export function CopilotPanel({
                     ...turnMeta(turn),
                   })
                 }
-                transformBusy={transforming}
-                isTransforming={transformingTurnId === turn.id}
               />
             ))}
           </div>
@@ -586,22 +520,6 @@ export function CopilotPanel({
         sourceOptions={sourceOptions}
         checked={checked}
         onToggleSource={toggle}
-      />
-
-      <SaveAsMacroDialog
-        turn={saveMacroTurn}
-        onOpenChange={(open) => !open && setSaveMacroTurnId(null)}
-      />
-
-      <InternalSourcesConfirm
-        open={!!pendingInsert}
-        noun="answer"
-        confirmLabel="Add to composer anyway"
-        onConfirm={() => {
-          if (pendingInsert) performInsert(pendingInsert.text, pendingInsert.event)
-          setPendingInsert(null)
-        }}
-        onCancel={() => setPendingInsert(null)}
       />
     </div>
   )
@@ -665,37 +583,23 @@ function CopilotEmptyState({
 function CopilotTurnView({
   turn,
   onAddToComposer,
-  onSaveAsMacro,
   onRetry,
-  onModify,
   onFeedback,
-  transformBusy,
-  isTransforming,
 }: {
   turn: CopilotTurn
   onAddToComposer: () => void
-  onSaveAsMacro: () => void
   onRetry: () => void
-  /** Run a modify transform on this turn's answer (P2-C.1). */
-  onModify: (transform: TransformKind) => void
   /** Record a thumbs rating (and an optional thumbs-down reason) for this
    *  turn's answer. Fire-and-forget — the latch below is purely local. */
   onFeedback: (rating: 'up' | 'down', reason?: string) => void
-  /** Any transform (this turn's or another's) is in flight: disables this
-   *  card's own entry points too, so only one transform runs at a time. */
-  transformBusy: boolean
-  /** This specific turn's answer is the one being transformed right now. */
-  isTransforming: boolean
 }) {
   const streaming = turn.status === 'streaming'
-  const actionsDisabled = streaming || transformBusy
-  // Analysis answers (guidance/reasoning about the conversation, not a reply
-  // to send) are read-only text: no primary action, with "Add to composer"
-  // demoted into the overflow menu as the escape hatch — inserting internal
-  // analysis into a customer-facing reply is the exact mismatch answerType
-  // exists to fix. A draft_reply answer (and every un-classified one, which
-  // defaults to it) keeps "Add to composer" primary.
-  const isAnalysis = turn.answerType === 'analysis'
+  // The single eligibility rule (see insertableTurn): only a finalized
+  // customer-facing draft with no internal sources gets "Add to composer" —
+  // the card's one and only action. Everything else is read-only text with
+  // feedback; withholding the affordance IS the leak boundary, so no confirm
+  // dialog exists.
+  const insertable = insertableTurn(turn)
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
@@ -719,68 +623,12 @@ function CopilotTurnView({
         ) : (
           <>
             <AssistantAnswer text={turn.answer} citations={turn.citations} caret={streaming} />
-            {!streaming && turn.answer && !turn.finalized && (
-              // Aborted/truncated turn: the final frame carrying the
-              // server-derived internalSourced/answerType never arrived, so
-              // there is nothing to gate a customer-facing insert on — fail
-              // closed: no insert action at all, feedback only.
+            {!streaming && turn.answer && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <CopilotTurnFeedback onFeedback={onFeedback} />
-              </div>
-            )}
-            {!streaming && turn.answer && turn.finalized && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {!isAnalysis && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={onAddToComposer}
-                    disabled={actionsDisabled}
-                  >
+                {insertable && (
+                  <Button type="button" size="sm" onClick={onAddToComposer}>
                     Add to composer
                   </Button>
-                )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="More answer actions"
-                      disabled={actionsDisabled}
-                      className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
-                    >
-                      <EllipsisHorizontalIcon className="h-4 w-4" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {isAnalysis ? (
-                      // The tone-rewrite rows are all about polishing a
-                      // customer reply, so they'd be noise on an analysis
-                      // answer; the menu here is just the demoted composer
-                      // escape hatch plus the shared "save as macro".
-                      <DropdownMenuItem onClick={onAddToComposer}>Add to composer</DropdownMenuItem>
-                    ) : (
-                      <>
-                        <DropdownMenuLabel>Add to composer & modify</DropdownMenuLabel>
-                        {MODIFY_ROWS.map((row) => (
-                          <DropdownMenuItem
-                            key={row.transform}
-                            onClick={() => onModify(row.transform)}
-                          >
-                            <SparklesIcon className="h-3.5 w-3.5" />
-                            {row.label}
-                          </DropdownMenuItem>
-                        ))}
-                      </>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onSaveAsMacro}>Save as macro</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {isTransforming && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                    Rewriting…
-                  </span>
                 )}
                 <CopilotTurnFeedback onFeedback={onFeedback} />
               </div>
