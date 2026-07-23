@@ -106,6 +106,7 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     autoCreateUsers: true,
     autoProvisionRole: 'user',
     attributeMapping: null,
+    profileMapping: null,
     showButton: false,
     detailsChangedAt: null,
     lastSuccessfulTestAt: null,
