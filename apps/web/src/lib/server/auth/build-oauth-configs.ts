@@ -20,6 +20,7 @@
  */
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
+import type { IdentityProviderProfileMapping } from '@/lib/server/db'
 
 /**
  * Default OIDC scopes requested when a provider has no explicit `scopes`.
@@ -27,6 +28,19 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
  * same scope request production sign-in will make.
  */
 export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile'] as const
+
+/**
+ * Profile shape returned by a custom `getUserInfo`. The mapped identity
+ * fields satisfy Better-Auth's `OAuth2UserInfo`; the raw claims are spread
+ * alongside so `mapProfileToUser` (locale) still sees them.
+ */
+export type MappedUserInfo = {
+  id: string
+  name?: string
+  email?: string
+  image?: string
+  emailVerified: boolean
+} & Record<string, unknown>
 
 /** A single entry in the genericOAuth plugin's `config` array. */
 export interface GenericOAuthConfig {
@@ -39,6 +53,16 @@ export interface GenericOAuthConfig {
   authorizationUrl?: string
   tokenUrl?: string
   scopes?: string[]
+  /**
+   * Custom user-info resolution, attached only when the provider row has a
+   * `profile_mapping`. Replaces Better-Auth's id_token/userinfo default for
+   * IdPs whose claims don't fit it (e.g. EVE Online: no id_token, no email,
+   * identity in the JWT access token).
+   */
+  getUserInfo?: (tokens: {
+    accessToken?: string
+    idToken?: string
+  }) => Promise<MappedUserInfo | null>
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   // Force the IdP account picker so admins notice when they're already
   // signed in as a different identity.
@@ -66,6 +90,121 @@ export type ProviderCredentials = {
   clientSecret?: string
   discoveryUrl?: string
 } | null
+
+/** Resolve a dotted claim path (same convention as `attributeMapping.claimPath`). */
+function resolveClaim(claims: Record<string, unknown>, path: string): unknown {
+  // Namespaced claims (e.g. "https://acme.com/roles") contain dots that are
+  // not path separators — prefer an exact key match before splitting.
+  if (path in claims) return claims[path]
+  let current: unknown = claims
+  for (const segment of path.split('.')) {
+    if (current === null || typeof current !== 'object') return undefined
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return current
+}
+
+/** Decode a JWT's payload without verification — mirrors how Better-Auth's
+ *  generic-oauth login path treats id_tokens (bare `decodeJwt`). The token
+ *  was just received first-hand from the IdP's token endpoint over TLS, so
+ *  possession is the trust anchor; there is no third-party token to verify. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'))
+    return payload !== null && typeof payload === 'object'
+      ? (payload as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Synthesize an address from the `emailFallback` template. The `{id}`
+ * placeholder is sanitized to `[a-z0-9._-]` so a structured id like EVE's
+ * `CHARACTER:EVE:2119…` becomes a valid local part (`character.eve.2119…`).
+ */
+function synthesizeEmail(template: string, id: string): string {
+  const sanitized = id
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+  return template.replaceAll('{id}', sanitized)
+}
+
+/**
+ * Build the custom `getUserInfo` for a provider with a `profile_mapping`.
+ *
+ * Claim source is either the JWT access token's payload (`accessTokenJwt`)
+ * or the provider's userinfo endpoint (`userinfo` — the row's `userInfoUrl`,
+ * else resolved from the discovery document once and cached). Identity
+ * fields resolve via the configured claim paths; a missing email falls back
+ * to the `emailFallback` template (such users are marked emailVerified —
+ * there is no real inbox to verify). Returns null (→ Better-Auth's
+ * `user_info_is_missing` redirect) when claims can't be obtained or the id
+ * claim is absent.
+ */
+export function buildProfileMappingGetUserInfo(
+  provider: Pick<IdentityProvider, 'userInfoUrl' | 'discoveryUrl'>,
+  mapping: IdentityProviderProfileMapping
+): NonNullable<GenericOAuthConfig['getUserInfo']> {
+  // Discovery resolution is once-per-auth-instance: the closure lives as
+  // long as the built config, which resetAuth() discards on config change.
+  let cachedUserInfoUrl: string | null = provider.userInfoUrl
+
+  async function fetchClaims(accessToken: string): Promise<Record<string, unknown> | null> {
+    if (!cachedUserInfoUrl && provider.discoveryUrl) {
+      const res = await fetch(provider.discoveryUrl)
+      if (!res.ok) return null
+      const doc = (await res.json()) as { userinfo_endpoint?: unknown }
+      if (typeof doc.userinfo_endpoint !== 'string') return null
+      cachedUserInfoUrl = doc.userinfo_endpoint
+    }
+    if (!cachedUserInfoUrl) return null
+    const res = await fetch(cachedUserInfoUrl, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return null
+    const claims = (await res.json()) as unknown
+    return claims !== null && typeof claims === 'object'
+      ? (claims as Record<string, unknown>)
+      : null
+  }
+
+  return async (tokens) => {
+    if (!tokens.accessToken) return null
+
+    const claims =
+      mapping.source === 'accessTokenJwt'
+        ? decodeJwtPayload(tokens.accessToken)
+        : await fetchClaims(tokens.accessToken)
+    if (!claims) return null
+
+    const id = resolveClaim(claims, mapping.idClaim ?? 'sub')
+    if (id === undefined || id === null || id === '') return null
+
+    const name = resolveClaim(claims, mapping.nameClaim ?? 'name')
+    const emailClaim = resolveClaim(claims, mapping.emailClaim ?? 'email')
+    let email = typeof emailClaim === 'string' && emailClaim !== '' ? emailClaim : undefined
+    let emailVerified = resolveClaim(claims, 'email_verified') === true
+    if (!email && mapping.emailFallback) {
+      email = synthesizeEmail(mapping.emailFallback, String(id))
+      emailVerified = true
+    }
+
+    // A still-missing email is returned as-is so Better-Auth reports the
+    // accurate `email_is_missing` (not `user_info_is_missing`).
+    return {
+      ...claims,
+      id: String(id),
+      ...(typeof name === 'string' && name !== '' ? { name } : {}),
+      ...(email ? { email } : {}),
+      emailVerified,
+    }
+  }
+}
 
 export interface BuildGenericOAuthConfigsArgs {
   providers: IdentityProvider[]
@@ -137,6 +276,11 @@ export async function buildGenericOAuthConfigs({
       // handleOAuthUserInfo before any user/session is created. Existing
       // users still link via accountLinking.trustedProviders.
       disableSignUp: provider.autoCreateUsers === false,
+      // Custom profile-claim resolution (opt-in via the profile_mapping
+      // column) for IdPs whose user info doesn't fit the OIDC defaults.
+      ...(provider.profileMapping
+        ? { getUserInfo: buildProfileMappingGetUserInfo(provider, provider.profileMapping) }
+        : {}),
       ...(mapProfileToUser ? { mapProfileToUser } : {}),
       ...(buildLoginHintParams ? { authorizationUrlParams: buildLoginHintParams } : {}),
     })

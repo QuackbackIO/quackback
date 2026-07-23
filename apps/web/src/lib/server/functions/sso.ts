@@ -160,6 +160,23 @@ const attributeMappingSchema = z.object({
   syncOnEverySignIn: z.boolean().optional(),
 })
 
+/** Profile-claim mapping mirror of `IdentityProviderProfileMapping`. */
+const profileMappingSchema = z.object({
+  source: z.enum(['userinfo', 'accessTokenJwt']).optional(),
+  idClaim: z.string().max(256).optional(),
+  nameClaim: z.string().max(256).optional(),
+  emailClaim: z.string().max(256).optional(),
+  // Must contain exactly one @ so the synthesized value is a plausible
+  // address; {id} substitution is sanitized in build-oauth-configs.
+  emailFallback: z
+    .string()
+    .max(320)
+    .refine((t) => t.split('@').length === 2 && t.split('@')[1].length > 0, {
+      message: 'emailFallback must be an email template like {id}@sso.example.com',
+    })
+    .optional(),
+})
+
 /**
  * Identity-provider registrationIds are restricted to the generated `oidc_`
  * namespace plus the two legacy ids (`sso` / `custom-oidc`). This blocks
@@ -195,6 +212,7 @@ const upsertIdentityProviderInput = z.object({
   autoCreateUsers: z.boolean().optional(),
   autoProvisionRole: idpRole.nullable().optional(),
   attributeMapping: attributeMappingSchema.nullable().optional(),
+  profileMapping: profileMappingSchema.nullable().optional(),
   showButton: z.boolean().optional(),
 })
 
