@@ -5,7 +5,7 @@
  * surfaces (incidents/maintenance, components, templates, subscribers,
  * settings) — mirrors the changelog query module's shape.
  */
-import { queryOptions, infiniteQueryOptions } from '@tanstack/react-query'
+import { queryOptions, infiniteQueryOptions, keepPreviousData } from '@tanstack/react-query'
 import type { StatusComponentId, StatusIncidentId } from '@quackback/ids'
 import {
   listStatusComponentsAdminFn,
@@ -131,7 +131,10 @@ export const statusIncidentQueries = {
         }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      // NOTE (QC-2): no `maxPages` — one-directional keyset cursor, no reverse
+      // cursor available server-side.
       staleTime: STALE_TIME_SHORT,
+      placeholderData: keepPreviousData,
     }),
 
   detail: (id: string) =>
@@ -159,7 +162,10 @@ export const statusSubscriberQueries = {
         listStatusSubscriptionsAdminFn({ data: { cursor: pageParam, limit: 30, search } }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      // NOTE (QC-2): no `maxPages` — one-directional keyset cursor, no reverse
+      // cursor available server-side.
       staleTime: STALE_TIME_MEDIUM,
+      placeholderData: keepPreviousData,
     }),
 
   counts: () =>

@@ -24,25 +24,27 @@ describe('segment mutations cache invalidation', () => {
     vi.clearAllMocks()
   })
 
-  it('invalidates admin users queries after assigning users to a segment', async () => {
+  it('invalidates the segments list after assigning users to a segment', async () => {
     const { useAssignUsersToSegment } = await import('../segments')
     const mutation = useAssignUsersToSegment() as { onSuccess?: () => void }
 
     mutation.onSuccess?.()
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['admin', 'segments'] })
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['admin', 'users'] })
   })
 
-  it('also invalidates the live usersKeys queries that back the rendered list/detail', async () => {
-    // usersKeys.all (['users']) is a sibling of ['admin', 'users'], not a
-    // descendant — invalidating only ['admin', 'users'] leaves the
-    // usePortalUsers/useUserDetail queries (keyed ['users', ...]) stale.
+  it('invalidates the single usersKeys tree that now backs the rendered list/detail', async () => {
+    // QC-1 collapsed the old ['admin', 'users', filters] route suspense query
+    // onto usersKeys.all (['users', ...]) — the same infinite definition the
+    // list renders — so one invalidation of ['users'] keeps the visible
+    // list/detail fresh. There is no longer a second ['admin', 'users'] tree
+    // to hand-invalidate.
     const { useAssignUsersToSegment } = await import('../segments')
     const mutation = useAssignUsersToSegment() as { onSuccess?: () => void }
 
     mutation.onSuccess?.()
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['users'] })
+    expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['admin', 'users'] })
   })
 })

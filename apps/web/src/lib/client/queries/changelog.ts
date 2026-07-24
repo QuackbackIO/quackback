@@ -4,7 +4,7 @@
  * Query key factories and query options for changelog data.
  */
 
-import { queryOptions, infiniteQueryOptions } from '@tanstack/react-query'
+import { queryOptions, infiniteQueryOptions, keepPreviousData } from '@tanstack/react-query'
 import type { ChangelogId } from '@quackback/ids'
 import {
   listChangelogsFn,
@@ -75,7 +75,10 @@ export const changelogQueries = {
         }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      // NOTE (QC-2): no `maxPages` — one-directional keyset cursor (last-entry
+      // id, forward-only), no reverse cursor available server-side.
       staleTime: STALE_TIME_SHORT,
+      placeholderData: keepPreviousData,
     }),
 
   detail: (id: ChangelogId) =>

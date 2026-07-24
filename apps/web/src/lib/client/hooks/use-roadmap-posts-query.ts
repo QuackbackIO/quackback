@@ -1,4 +1,4 @@
-import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'
+import { useInfiniteQuery, keepPreviousData, type InfiniteData } from '@tanstack/react-query'
 import type {
   RoadmapPost,
   RoadmapPostListResult,
@@ -77,8 +77,14 @@ export function useRoadmapPosts({ statusId, initialData }: UseRoadmapPostsOption
       }) as Promise<RoadmapPostListResult>,
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length + 1 : undefined),
+    // Page number inverts trivially (page - 1); no live consumer currently
+    // imports this hook (admin-tier cap applied for when one does).
+    getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>
+      firstPageParam > 1 ? firstPageParam - 1 : undefined,
+    maxPages: 5,
     initialData: initialData ? { pages: [initialData], pageParams: [1] } : undefined,
     refetchOnMount: !initialData,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -108,6 +114,11 @@ export function useRoadmapPostsByRoadmap({
       }) as Promise<RoadmapPostsListResult>,
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
+    // Offset inverts trivially (offset - 20, floored at 0) — admin board.
+    getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>
+      firstPageParam > 0 ? Math.max(0, firstPageParam - 20) : undefined,
+    maxPages: 5,
+    placeholderData: keepPreviousData,
     enabled,
   })
 }
@@ -140,6 +151,12 @@ export function usePublicRoadmapPosts({
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => (lastPage.hasMore ? allPages.length * 20 : undefined),
+    // Offset inverts trivially (offset - 20, floored at 0) — visitor-facing
+    // roadmap board, so the wider scroll-back cap.
+    getPreviousPageParam: (_firstPage, _allPages, firstPageParam) =>
+      firstPageParam > 0 ? Math.max(0, firstPageParam - 20) : undefined,
+    maxPages: 8,
+    placeholderData: keepPreviousData,
     enabled,
   })
 }

@@ -88,6 +88,31 @@ function rollbackDetailAndLists<T>(
   }
 }
 
+/**
+ * Narrowly invalidate every roadmap column cache that renders a given status,
+ * across all roadmaps and filter combinations, without touching columns for
+ * other statuses. The roadmap keys embed the status at a fixed slot:
+ *   list:    ['roadmapPosts', 'list', statusId]
+ *   byRoadmap: ['roadmapPosts', 'roadmap', roadmapId, statusId | bucketId, filters]
+ *   portal:  ['portal', 'roadmapPosts', roadmapId, statusId | bucketId, filters]
+ * so a predicate can match the status wherever it appears rather than blowing
+ * away `roadmapPostsKeys.all`.
+ */
+function invalidateRoadmapForStatus(
+  queryClient: ReturnType<typeof useQueryClient>,
+  statusId: PostStatusId
+): void {
+  queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = query.queryKey
+      if (!Array.isArray(key)) return false
+      const isRoadmap =
+        key[0] === 'roadmapPosts' || (key[0] === 'portal' && key[1] === 'roadmapPosts')
+      return isRoadmap && key.includes(statusId)
+    },
+  })
+}
+
 /** Update a post in all list caches */
 function updatePostInLists(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -114,7 +139,17 @@ function updatePostInLists(
 // ============================================================================
 
 /**
- * Hook to change a post's status using TypeID-based statusId
+ * Hook to change a post's status using TypeID-based statusId.
+ *
+ * Optimistic like its owner/tags/vote siblings (QC-4): patches the list + detail
+ * caches immediately and rolls back exactly from the snapshot on error, so the
+ * inbox and any post-detail spinner reflect the new status without waiting for a
+ * broad list refetch. The roadmap is a separate concern: a status change MOVES a
+ * card between roadmap columns, and the roadmap column caches are keyed by
+ * (roadmapId, statusId | bucketId, filters) — the moved post's row isn't cheaply
+ * relocatable across that filter-parameterized key space, so we keep a NARROW
+ * roadmap invalidation scoped to the two affected statuses (old + new) rather
+ * than a blanket `roadmapPostsKeys.all` refetch.
  */
 export function useChangePostStatusId() {
   const queryClient = useQueryClient()
@@ -122,10 +157,45 @@ export function useChangePostStatusId() {
   return useMutation({
     mutationFn: ({ postId, statusId }: { postId: PostId; statusId: PostStatusId }) =>
       changePostStatusFn({ data: { id: postId, statusId } }),
-    onSuccess: (_data, { postId }) => {
+    onMutate: async ({ postId, statusId }) => {
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
+
+      const previousDetail = queryClient.getQueryData<PostDetails>(inboxKeys.detail(postId))
+      const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
+        queryKey: inboxKeys.lists(),
+      })
+      // Remember the pre-change status so we can invalidate the column it left.
+      const previousStatusId = previousDetail?.statusId ?? null
+
+      if (previousDetail) {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), {
+          ...previousDetail,
+          statusId,
+        })
+      }
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, statusId }))
+
+      return { previousDetail, previousLists, previousStatusId }
+    },
+    onError: (_err, { postId }, context) => {
+      rollbackDetailAndLists(queryClient, postId, context)
+    },
+    onSuccess: (_data, { postId, statusId }) => {
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
+        old ? { ...old, statusId } : old
+      )
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, statusId }))
+    },
+    onSettled: (_data, _error, { postId, statusId }, context) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
-      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
-      queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
+      // Narrow roadmap refresh: only the source and destination status columns
+      // (across every roadmap/filter combo) rather than the whole roadmap tree.
+      const previousStatusId = context?.previousStatusId ?? null
+      if (previousStatusId && previousStatusId !== statusId) {
+        invalidateRoadmapForStatus(queryClient, previousStatusId)
+      }
+      invalidateRoadmapForStatus(queryClient, statusId)
     },
   })
 }
@@ -135,9 +205,42 @@ export function useSetPostEta() {
   return useMutation({
     mutationFn: ({ postId, eta }: { postId: PostId; eta: string | null }) =>
       setPostEtaFn({ data: { id: postId, eta } }),
-    onSuccess: (_data, { postId }) => {
+    onMutate: async ({ postId, eta }) => {
+      await queryClient.cancelQueries({ queryKey: inboxKeys.detail(postId) })
+      await queryClient.cancelQueries({ queryKey: inboxKeys.lists() })
+
+      const previousDetail = queryClient.getQueryData<PostDetails>(inboxKeys.detail(postId))
+      const previousLists = queryClient.getQueriesData<InfiniteData<InboxPostListResult>>({
+        queryKey: inboxKeys.lists(),
+      })
+
+      const etaDate = eta ? new Date(eta) : null
+      if (previousDetail) {
+        queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), {
+          ...previousDetail,
+          eta: etaDate,
+        })
+      }
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, eta: etaDate }))
+
+      return { previousDetail, previousLists }
+    },
+    onError: (_err, { postId }, context) => {
+      rollbackDetailAndLists(queryClient, postId, context)
+    },
+    onSuccess: (_data, { postId, eta }) => {
+      const etaDate = eta ? new Date(eta) : null
+      queryClient.setQueryData<PostDetails>(inboxKeys.detail(postId), (old) =>
+        old ? { ...old, eta: etaDate } : old
+      )
+      updatePostInLists(queryClient, postId, (post) => ({ ...post, eta: etaDate }))
+    },
+    onSettled: (_data, _error, { postId }) => {
       queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
-      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      // ETA changes only shuffle cards within DATE-bucketed roadmaps, whose
+      // columns are keyed by bucket rather than status — no single status column
+      // to target, so refresh the roadmap tree (still narrower work than before:
+      // no inbox list refetch).
       queryClient.invalidateQueries({ queryKey: roadmapPostsKeys.all })
     },
   })
