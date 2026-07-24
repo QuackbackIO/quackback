@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 595 surfaces
+### Server functions (`requireAuth`) — 597 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -277,6 +277,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/comments.ts`::pinCommentFn | comment.pin |
 | `lib/server/functions/comments.ts`::unpinCommentFn | comment.pin |
 | `lib/server/functions/companies.ts`::listCompaniesFn | company.view |
+| `lib/server/functions/companies.ts`::listCompaniesPageFn | company.view |
+| `lib/server/functions/companies.ts`::countCompaniesFn | company.view |
 | `lib/server/functions/companies.ts`::listCompanyMembersFn | company.view |
 | `lib/server/functions/companies.ts`::getCompanyActivityFn | company.view |
 | `lib/server/functions/companies.ts`::getCompanyFn | company.view |
@@ -896,7 +898,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-188 of 890 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+190 of 894 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -924,6 +926,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/help-center-redirect-rules.ts`::resolveHelpCenterRedirectFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicArticleBySlugFn | server-fn |
 | `lib/server/functions/help-center.ts`::getPublicCategoryBySlugFn | server-fn |
+| `lib/server/functions/help-center.ts`::getPublicCategoryPageFn | server-fn |
 | `lib/server/functions/help-center.ts`::listPopularPublicArticlesFn | server-fn |
 | `lib/server/functions/help-center.ts`::listPublicArticlesFn | server-fn |
 | `lib/server/functions/help-center.ts`::listPublicArticlesForCategoryFn | server-fn |
@@ -959,6 +962,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/portal.ts`::getCommentsSectionDataFn | server-fn |
 | `lib/server/functions/portal.ts`::getPrincipalIdForUser | server-fn |
 | `lib/server/functions/post-merge.ts`::getPostMergeInfoFn | server-fn |
+| `lib/server/functions/public-cache.ts`::setPublicDocumentCacheHeaders | server-fn |
 | `lib/server/functions/public-posts.ts`::findSimilarPostsFn | server-fn |
 | `lib/server/functions/public-posts.ts`::getPostPermissionsFn | server-fn |
 | `lib/server/functions/public-posts.ts`::getPublicRoadmapPostsFn | server-fn |
