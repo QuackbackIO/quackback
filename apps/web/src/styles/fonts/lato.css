@@ -1,0 +1,7 @@
+/* Split out of globals.css so this family's @font-face rules only ship to
+   documents that actually select Lato as the branding font. Loaded via
+   src/lib/shared/theme/font-loader.ts (dynamic import, Vite code-splits CSS
+   from dynamic imports into its own stylesheet). Keep weights in sync with
+   the FONT_OPTIONS entry in use-branding-state.ts. Lato ships 400/700 only. */
+@import "@fontsource/lato/400.css";
+@import "@fontsource/lato/700.css";

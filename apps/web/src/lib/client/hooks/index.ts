@@ -48,6 +48,9 @@ export { useSettingsLogo, useSettingsHeaderLogo } from './use-settings-queries'
 // Segment queries
 export { useSegments, useSuspenseSegments } from './use-segments-queries'
 
+// Branding font on-demand loader (portal, widget, admin preview)
+export { useBrandingFont } from './use-branding-font'
+
 // ============================================================================
 // Mutation Hooks (re-exported from lib/mutations for convenience)
 // ============================================================================

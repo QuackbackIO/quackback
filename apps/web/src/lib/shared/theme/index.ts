@@ -104,3 +104,8 @@ export {
 
 export type { ParsedCssVariables } from './css-parser'
 export { extractCssVariables } from './css-parser'
+
+export type { BrandingFontId } from './fonts'
+export { BRANDING_FONTS, fontIdForValue, resolveBrandingFontId, readFontSans } from './fonts'
+
+export { loadBrandingFont } from './font-loader'

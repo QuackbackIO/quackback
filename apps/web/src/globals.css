@@ -1,76 +1,24 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @import "tw-animate-css";
-/* Self-hosted fonts: every font referenced by the branding picker (FONT_OPTIONS in
-   use-branding-state.ts) AND the theme presets (FONTS in presets.ts) is bundled here,
-   so no fonts.googleapis.com <link> is emitted. An edge optimizer (e.g. Cloudflare
-   Fonts) rewrites such a link into inline @font-face and breaks SSR hydration — add
-   fonts here, never via a Google Fonts <link>, and keep the family name matching the
-   value those two sources store. Inter also loads variable for the default UI; Lato
-   ships 400/700 only; Geist's @fontsource family is "Geist Sans". */
+/* Self-hosted fonts: Inter (the default/UI font, used on every page) loads
+   statically here so there is zero regression for the default path. Every
+   OTHER font referenced by the branding picker (FONT_OPTIONS in
+   use-branding-state.ts) AND the theme presets (FONTS in presets.ts) lives in
+   its own module under src/styles/fonts/ instead, and is loaded on demand —
+   only the workspace's chosen family — via src/lib/shared/theme/font-loader.ts
+   (dynamic `import()`, which Vite code-splits into its own stylesheet). This
+   keeps this render-blocking stylesheet (served to every page, including the
+   third-party-embedded widget iframe) from shipping 15 unused families'
+   @font-face rules. Never emit a fonts.googleapis.com <link> — an edge
+   optimizer (e.g. Cloudflare Fonts) rewrites such a link into inline
+   @font-face and breaks SSR hydration; self-host everything instead, and keep
+   the family name matching the value FONT_OPTIONS/presets.ts store. */
 @import "@fontsource-variable/inter/index.css";
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
 @import "@fontsource/inter/700.css";
-@import "@fontsource/roboto/400.css";
-@import "@fontsource/roboto/500.css";
-@import "@fontsource/roboto/600.css";
-@import "@fontsource/roboto/700.css";
-@import "@fontsource/open-sans/400.css";
-@import "@fontsource/open-sans/500.css";
-@import "@fontsource/open-sans/600.css";
-@import "@fontsource/open-sans/700.css";
-@import "@fontsource/lato/400.css";
-@import "@fontsource/lato/700.css";
-@import "@fontsource/nunito/400.css";
-@import "@fontsource/nunito/500.css";
-@import "@fontsource/nunito/600.css";
-@import "@fontsource/nunito/700.css";
-@import "@fontsource/poppins/400.css";
-@import "@fontsource/poppins/500.css";
-@import "@fontsource/poppins/600.css";
-@import "@fontsource/poppins/700.css";
-@import "@fontsource/dm-sans/400.css";
-@import "@fontsource/dm-sans/500.css";
-@import "@fontsource/dm-sans/600.css";
-@import "@fontsource/dm-sans/700.css";
-@import "@fontsource/plus-jakarta-sans/400.css";
-@import "@fontsource/plus-jakarta-sans/500.css";
-@import "@fontsource/plus-jakarta-sans/600.css";
-@import "@fontsource/plus-jakarta-sans/700.css";
-@import "@fontsource/manrope/400.css";
-@import "@fontsource/manrope/500.css";
-@import "@fontsource/manrope/600.css";
-@import "@fontsource/manrope/700.css";
-@import "@fontsource/space-grotesk/400.css";
-@import "@fontsource/space-grotesk/500.css";
-@import "@fontsource/space-grotesk/600.css";
-@import "@fontsource/space-grotesk/700.css";
-@import "@fontsource/playfair-display/400.css";
-@import "@fontsource/playfair-display/500.css";
-@import "@fontsource/playfair-display/600.css";
-@import "@fontsource/playfair-display/700.css";
-@import "@fontsource/merriweather/400.css";
-@import "@fontsource/merriweather/500.css";
-@import "@fontsource/merriweather/600.css";
-@import "@fontsource/merriweather/700.css";
-@import "@fontsource/lora/400.css";
-@import "@fontsource/lora/500.css";
-@import "@fontsource/lora/600.css";
-@import "@fontsource/lora/700.css";
-@import "@fontsource/fira-code/400.css";
-@import "@fontsource/fira-code/500.css";
-@import "@fontsource/fira-code/600.css";
-@import "@fontsource/fira-code/700.css";
-@import "@fontsource/jetbrains-mono/400.css";
-@import "@fontsource/jetbrains-mono/500.css";
-@import "@fontsource/jetbrains-mono/600.css";
-@import "@fontsource/jetbrains-mono/700.css";
-@import "@fontsource/geist-sans/400.css";
-@import "@fontsource/geist-sans/500.css";
-@import "@fontsource/geist-sans/600.css";
-@import "@fontsource/geist-sans/700.css";
 
 @custom-variant dark (&:is(.dark *));
 

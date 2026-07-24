@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -32,11 +33,6 @@ import {
 } from '@/components/ui/select'
 import { ImageCropper } from '@/components/ui/image-cropper'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
-import CodeMirror from '@uiw/react-codemirror'
-import { css } from '@codemirror/lang-css'
-import { EditorView } from '@codemirror/view'
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { tags } from '@lezer/highlight'
 import { cn } from '@/lib/shared/utils'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
@@ -52,11 +48,11 @@ import {
   type PortalBuiltInNavType,
 } from '@/components/public/portal-header-nav'
 import type { PortalPreviewDraft } from '@/components/public/preview-draft-context'
+import { loadBrandingFont } from '@/lib/shared/theme'
 import {
   useBrandingState,
   FONT_OPTIONS,
 } from '@/components/admin/settings/branding/use-branding-state'
-import { oklchColor } from '@/components/admin/settings/branding/oklch-color-extension'
 import {
   primaryPresetIds,
   themePresets,
@@ -82,87 +78,32 @@ import type {
 } from '@/lib/shared/types/settings'
 import type { TiptapContent } from '@/lib/shared/db-types'
 
-// ==============================================
-// Custom CodeMirror theme using admin portal CSS variables
-// ==============================================
-const adminEditorTheme = EditorView.theme({
-  '&': {
-    backgroundColor: 'transparent',
-    color: 'var(--foreground)',
-  },
-  '.cm-content': {
-    caretColor: 'var(--foreground)',
-    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
-    fontSize: '0.75rem',
-    lineHeight: '1.625',
-  },
-  '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--foreground)',
-  },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 20%, transparent)',
-  },
-  '.cm-activeLine': {
-    backgroundColor: 'transparent',
-  },
-  '.cm-gutters': {
-    backgroundColor: 'transparent',
-    borderRight: 'none',
-    color: 'var(--muted-foreground)',
-  },
-  '.cm-activeLineGutter': {
-    backgroundColor: 'transparent',
-  },
-  '.cm-tooltip': {
-    backgroundColor: 'var(--popover)',
-    color: 'var(--popover-foreground)',
-    border: '1px solid var(--border)',
-    borderRadius: 'calc(var(--radius) - 2px)',
-  },
-  '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-    backgroundColor: 'var(--accent)',
-    color: 'var(--accent-foreground)',
-  },
-  '.cm-searchMatch': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 30%, transparent)',
-  },
-  '.cm-selectionMatch': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 15%, transparent)',
-  },
-  '&.cm-focused .cm-matchingBracket': {
-    backgroundColor: 'color-mix(in oklch, var(--primary) 25%, transparent)',
-    outline: 'none',
-  },
-  '.cm-placeholder': {
-    color: 'var(--muted-foreground)',
-  },
-})
-
-const adminHighlightStyle = syntaxHighlighting(
-  HighlightStyle.define([
-    { tag: tags.keyword, color: 'var(--primary)' },
-    { tag: tags.propertyName, color: 'var(--chart-1, var(--primary))' },
-    { tag: [tags.string, tags.inserted], color: 'var(--chart-5, var(--primary))' },
-    { tag: [tags.number, tags.color], color: 'var(--chart-4, var(--primary))' },
-    { tag: [tags.className, tags.tagName], color: 'var(--chart-2, var(--primary))' },
-    { tag: tags.punctuation, color: 'var(--muted-foreground)' },
-    { tag: tags.separator, color: 'var(--muted-foreground)' },
-    { tag: tags.comment, color: 'var(--muted-foreground)', fontStyle: 'italic' },
-    { tag: tags.invalid, color: 'var(--destructive)' },
-  ])
+// @uiw/react-codemirror + @codemirror/lang-css make this the largest route
+// chunk in the app, yet most visits never open the "Advanced CSS" panel —
+// defer it to its own chunk, loaded only when the <details> is expanded.
+const CustomCssEditor = lazy(() =>
+  import('@/components/admin/settings/branding/custom-css-editor').then((m) => ({
+    default: m.CustomCssEditor,
+  }))
 )
 
-const adminEditorExtensions = [css(), oklchColor, adminEditorTheme, adminHighlightStyle]
+// Fixed-height skeleton matching the editor's rendered height (280px) plus
+// its border, so the Advanced CSS panel doesn't jump while the chunk loads.
+function CustomCssEditorFallback() {
+  return (
+    <div
+      className="h-[280px] animate-pulse rounded-md border border-input bg-muted/30"
+      aria-hidden="true"
+    />
+  )
+}
 
 export const Route = createFileRoute('/admin/settings/branding')({
   loader: async ({ context }) => {
-    // Portal config reads/writes require settings.manage, which non-admin
+    // Portal config reads/writes require settings.branding, which non-admin
     // team roles lack — gate the page like the old Portal page did instead
     // of letting managers land on a shell full of 403s.
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.SETTINGS_BRANDING },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_BRANDING)
 
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
@@ -202,6 +143,13 @@ function BrandingPage() {
   // Baselines for dirty tracking — captured once from the loaded values,
   // advanced after a successful save or an explicit discard.
   const themeBaseline = useRef({ css: state.cssText, mode: state.themeMode })
+
+  // Keep the currently-selected font's stylesheet loaded in this document so
+  // the Select trigger's own font-preview span (and the "Font" summary text)
+  // render in the real typeface, not the fallback stack, while it's async.
+  useEffect(() => {
+    loadBrandingFont(state.currentFontId)
+  }, [state.currentFontId])
 
   const [welcomeEnabled, setWelcomeEnabled] = useState(config.welcomeCard?.enabled ?? false)
   const [welcomeTitle, setWelcomeTitle] = useState(
@@ -427,6 +375,14 @@ function BrandingPage() {
                     const selectedFont = FONT_OPTIONS.find((f) => f.id === id)
                     if (selectedFont) state.setFont(selectedFont.value)
                   }}
+                  onOpenChange={(open) => {
+                    // Every option previews its own name in its own font, all
+                    // rendered at once — load every family the first time the
+                    // menu opens rather than trying to lazily match hover.
+                    if (open) {
+                      for (const f of FONT_OPTIONS) loadBrandingFont(f.id)
+                    }
+                  }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue>
@@ -482,28 +438,9 @@ function BrandingPage() {
                   </span>
                 </summary>
                 <div className="px-3 pb-3">
-                  <CodeMirror
-                    value={state.cssText}
-                    onChange={state.setCssText}
-                    height="280px"
-                    theme="none"
-                    extensions={adminEditorExtensions}
-                    basicSetup={{
-                      lineNumbers: false,
-                      foldGutter: false,
-                      highlightActiveLine: false,
-                      bracketMatching: true,
-                      closeBrackets: true,
-                      autocompletion: true,
-                      tabSize: 2,
-                    }}
-                    className={cn(
-                      'overflow-hidden rounded-md border border-input bg-background',
-                      '[&_.cm-editor]:!outline-none',
-                      '[&_.cm-editor.cm-focused]:ring-1 [&_.cm-editor.cm-focused]:ring-ring',
-                      '[&_.cm-scroller]:overflow-auto'
-                    )}
-                  />
+                  <Suspense fallback={<CustomCssEditorFallback />}>
+                    <CustomCssEditor value={state.cssText} onChange={state.setCssText} />
+                  </Suspense>
                 </div>
               </details>
             </div>

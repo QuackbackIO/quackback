@@ -1,0 +1,9 @@
+/* Split out of globals.css so this family's @font-face rules only ship to
+   documents that actually select Plus Jakarta Sans as the branding font.
+   Loaded via src/lib/shared/theme/font-loader.ts (dynamic import, Vite
+   code-splits CSS from dynamic imports into its own stylesheet). Keep
+   weights in sync with the FONT_OPTIONS entry in use-branding-state.ts. */
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
