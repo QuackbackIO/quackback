@@ -86,9 +86,9 @@ export function GitHubConfig({
     updateMutation.mutate({ id: integrationId, enabled: checked })
   }
 
-  const handleRepoChange = (repoId: string) => {
-    setSelectedRepo(repoId)
-    updateMutation.mutate({ id: integrationId, config: { channelId: repoId } })
+  const handleRepoChange = (repoFullName: string) => {
+    setSelectedRepo(repoFullName)
+    updateMutation.mutate({ id: integrationId, config: { channelId: repoFullName } })
   }
 
   const handleEventToggle = (eventId: string, checked: boolean) => {
@@ -158,7 +158,7 @@ export function GitHubConfig({
             </SelectTrigger>
             <SelectContent>
               {repos.map((repo) => (
-                <SelectItem key={repo.id} value={repo.id.toString()}>
+                <SelectItem key={repo.id} value={repo.fullName}>
                   <div className="flex items-center gap-2">
                     <FolderIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{repo.fullName}</span>
