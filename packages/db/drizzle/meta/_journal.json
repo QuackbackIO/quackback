@@ -1422,6 +1422,13 @@
       "when": 1784773920000,
       "tag": "0219_search_and_unread_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "7",
+      "when": 1784900314886,
+      "tag": "0220_drop_assistant_custom_actions",
+      "breakpoints": true
     }
   ]
 }
