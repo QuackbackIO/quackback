@@ -7,6 +7,10 @@ export const Route = createFileRoute('/oauth/$integration/callback')({
         const { handleOAuthCallback } = await import('@/lib/server/integrations/oauth-handlers')
         return handleOAuthCallback(request, params.integration)
       },
+      POST: async ({ request, params }) => {
+        const { handleOAuthCallback } = await import('@/lib/server/integrations/oauth-handlers')
+        return handleOAuthCallback(request, params.integration)
+      },
     },
   },
 })
