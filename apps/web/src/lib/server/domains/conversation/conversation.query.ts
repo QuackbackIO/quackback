@@ -365,7 +365,9 @@ export async function listFlaggedMessages(actor: Actor): Promise<FlaggedMessageD
  * clock the teammate already answered. Old stamps (no nextResponseDueAt yet)
  * simply show no next-response clock until the next customer message arms one.
  */
-export function slaDtoFor(conversation: Conversation): ConversationSlaDTO | null {
+export function slaDtoFor(
+  conversation: Pick<Conversation, 'slaApplied'>
+): ConversationSlaDTO | null {
   const stamp = conversation.slaApplied as SlaApplied | null
   if (!stamp) return null
   return {
@@ -383,7 +385,7 @@ export function slaDtoFor(conversation: Conversation): ConversationSlaDTO | null
 
 /** The nearest unmet SLA deadline for the 'sla' sort's keyset cursor — the JS
  *  twin of `slaDueExpr` (the two MUST agree or pages dupe/skip). */
-export function slaDueAtFor(conversation: Conversation): Date | null {
+export function slaDueAtFor(conversation: Pick<Conversation, 'slaApplied'>): Date | null {
   const dto = slaDtoFor(conversation)
   return dto ? (nextSlaDue(dto)?.dueAt ?? null) : null
 }
@@ -395,7 +397,12 @@ export function slaDueAtFor(conversation: Conversation): Date | null {
  * `conversationToDTO` from this module without a circular import —
  * conversation-translation.service.ts re-exports this for convenience.
  */
-export function translationStateFrom(conversation: Conversation): ConversationTranslationStateDTO {
+export function translationStateFrom(
+  conversation: Pick<
+    Conversation,
+    'translationEnabled' | 'detectedCustomerLanguage' | 'translationDismissedAt'
+  >
+): ConversationTranslationStateDTO {
   return {
     enabled: conversation.translationEnabled ?? false,
     detectedCustomerLanguage: conversation.detectedCustomerLanguage ?? null,
@@ -404,7 +411,22 @@ export function translationStateFrom(conversation: Conversation): ConversationTr
 }
 
 export function toConversationDTO(
-  conversation: Conversation,
+  conversation: Pick<
+    Conversation,
+    | 'id'
+    | 'status'
+    | 'priority'
+    | 'channel'
+    | 'subject'
+    | 'lastMessagePreview'
+    | 'lastMessageAt'
+    | 'createdAt'
+    | 'visitorLastReadAt'
+    | 'agentLastReadAt'
+    | 'csatRating'
+    | 'resolvedAt'
+    | 'endReason'
+  >,
   visitor: ConversationAuthorDTO,
   assignedAgent: ConversationAuthorDTO | null,
   unreadCount: number,
@@ -1405,7 +1427,37 @@ export async function listConversationsForAgent(
     : undefined
 
   const rows = await db
-    .select()
+    // Explicit projection of only the columns the list DTO consumes
+    // (toConversationDTO + slaDtoFor + translationStateFrom + the author/
+    // unread/email lookups). Skips the wide/JSONB columns the list never reads
+    // — customAttributes, csatComment/csatSubmittedAt, source, channelAccountId,
+    // waitingSince, updatedAt — so the inbox page doesn't haul unused payload
+    // (esp. the customAttributes JSONB) over every fetch.
+    .select({
+      id: conversations.id,
+      status: conversations.status,
+      priority: conversations.priority,
+      channel: conversations.channel,
+      subject: conversations.subject,
+      lastMessagePreview: conversations.lastMessagePreview,
+      lastMessageAt: conversations.lastMessageAt,
+      createdAt: conversations.createdAt,
+      visitorPrincipalId: conversations.visitorPrincipalId,
+      assignedAgentPrincipalId: conversations.assignedAgentPrincipalId,
+      assignedTeamId: conversations.assignedTeamId,
+      visitorLastReadAt: conversations.visitorLastReadAt,
+      agentLastReadAt: conversations.agentLastReadAt,
+      csatRating: conversations.csatRating,
+      resolvedAt: conversations.resolvedAt,
+      endReason: conversations.endReason,
+      endNote: conversations.endNote,
+      snoozedUntil: conversations.snoozedUntil,
+      visitorEmail: conversations.visitorEmail,
+      slaApplied: conversations.slaApplied,
+      translationEnabled: conversations.translationEnabled,
+      detectedCustomerLanguage: conversations.detectedCustomerLanguage,
+      translationDismissedAt: conversations.translationDismissedAt,
+    })
     .from(conversations)
     .where(
       and(
