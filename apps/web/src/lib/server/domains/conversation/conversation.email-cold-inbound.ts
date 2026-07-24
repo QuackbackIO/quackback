@@ -28,7 +28,8 @@ import {
 } from '@/lib/server/domains/principals/principal.factory'
 import { evaluateInboundAuth, type InboundAuthResult } from './email-auth'
 import type { ParsedInboundEmail } from './conversation.email-inbound'
-import { emitConversationCreated } from './conversation.webhooks'
+import type { ConversationAuthorInput } from './conversation.types'
+import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
 
 export type ColdInboundResolution =
   | { action: 'drop'; verdict: InboundAuthResult }
@@ -83,9 +84,11 @@ export async function resolveColdInboundSender(
  * Create a fresh email conversation from a cold inbound message: the conversation
  * (channel='email', source='email', pinned to the inbound route, waiting on a
  * reply, unverified-sender badge when the auth was weak) + its first visitor
- * message, then fire conversation.created so workflows + notifications run. Direct
- * inserts (the visitor-message create path hardcodes channel='messenger'); the
- * emit bridge is error-isolated.
+ * message, then fire conversation.created and message.created (first message) —
+ * the second being what the team bell, message-triggered workflows and the
+ * next-response SLA clock all ride, so an emailed-in thread raises the same
+ * signals a widget-started one does. Direct inserts (the visitor-message create
+ * path hardcodes channel='messenger'); the emit bridge is error-isolated.
  */
 export async function createEmailConversation(input: {
   parsed: ParsedInboundEmail
@@ -109,7 +112,7 @@ export async function createEmailConversation(input: {
     : null
   const attachments = validateAttachments(input.attachments)
   const now = new Date()
-  const conversation = await db.transaction(async (tx) => {
+  const { conversation, message } = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(conversations)
       .values({
@@ -128,16 +131,21 @@ export async function createEmailConversation(input: {
       })
       .returning()
 
-    await tx.insert(conversationMessages).values({
-      conversationId: created.id,
-      principalId,
-      senderType: 'visitor',
-      content,
-      contentJson: safeContentJson,
-      attachments: attachments.length > 0 ? attachments : null,
-      metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
-    })
-    return created
+    // Returned so message.created below can carry the real row — the event
+    // bridge reads its id, senderType, principalId, content and createdAt.
+    const [inserted] = await tx
+      .insert(conversationMessages)
+      .values({
+        conversationId: created.id,
+        principalId,
+        senderType: 'visitor',
+        content,
+        contentJson: safeContentJson,
+        attachments: attachments.length > 0 ? attachments : null,
+        metadata: { source: 'email', emailMessageId: parsed.messageId ?? undefined },
+      })
+      .returning()
+    return { conversation: created, message: inserted }
   })
 
   // A customer-initiated event: the visitor is the actor so it counts as human.
@@ -147,7 +155,12 @@ export async function createEmailConversation(input: {
     principalType: 'anonymous',
     segmentIds: new Set(),
   }
-  await emitConversationCreated(actor, { principalId, displayName: null }, conversation)
+  const author: ConversationAuthorInput = { principalId, displayName: null }
+  await emitConversationCreated(actor, author, conversation)
+  // `true` is not decoration: the notification hook's anti-spam gate skips the
+  // team bell entirely when the message is NOT the first one and any agent is
+  // online, so passing false here would leave this defect half-fixed.
+  await emitMessageCreated(actor, author, message, conversation, true)
 
   return conversation.id
 }

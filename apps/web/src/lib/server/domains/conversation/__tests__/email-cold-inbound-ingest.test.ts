@@ -32,10 +32,12 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
-// The created-event emit dispatches to the bus (needs runtime config); stub it.
+// Both emits dispatch to the bus (needs runtime config); stub them. Leaving
+// emitMessageCreated real would run dispatchEvent inside the rolled-back fixture.
 vi.mock('../conversation.webhooks', async (orig) => ({
   ...(await orig<typeof import('../conversation.webhooks')>()),
   emitConversationCreated: vi.fn().mockResolvedValue(undefined),
+  emitMessageCreated: vi.fn().mockResolvedValue(undefined),
 }))
 // Storage is mocked so media rehosting never touches real S3; the mock returns
 // own-storage URLs (config.baseUrl + /api/storage/...) so they pass the trusted-
@@ -53,6 +55,7 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
 })
 
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
+import { emitMessageCreated } from '../conversation.webhooks'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -97,6 +100,10 @@ const coldEmail = (over: Partial<ParsedInboundEmail> = {}): ParsedInboundEmail =
 
 describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
+  // Four cases below ingest a cold email, so the emit mocks accumulate calls
+  // across them; without this reset the call-count assertions would silently
+  // depend on this file's test order. clearAllMocks keeps implementations.
+  beforeEach(() => vi.clearAllMocks())
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
@@ -132,6 +139,16 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
       .where(eq(principal.id, conv.visitorPrincipalId))
     expect(visitor.type).toBe('anonymous')
     expect(visitor.contactEmail).toBe('customer@acme.com')
+
+    // message.created is what the team bell, message-triggered workflows and the
+    // next-response SLA clock ride. Without it an emailed-in thread notifies
+    // nobody. `true` is the first-message flag the bell's anti-spam gate reads.
+    expect(vi.mocked(emitMessageCreated)).toHaveBeenCalledTimes(1)
+    const [, , emittedMessage, emittedConversation, isFirstMessage] =
+      vi.mocked(emitMessageCreated).mock.calls[0]
+    expect(emittedMessage.id).toBe(msgs[0].id)
+    expect(emittedConversation.id).toBe(res.conversationId)
+    expect(isFirstMessage).toBe(true)
   })
 
   it('stores converted content + contentJson for an HTML-only cold inbound', async () => {
