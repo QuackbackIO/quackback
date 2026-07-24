@@ -605,8 +605,9 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
           </div>
         )}
 
-        {/* Attribution below the bubble, matching VisitorMessageBubble: name,
-            optional AI/Internal-note badge, via-email icon, time, and the
+        {/* Attribution below the bubble, matching VisitorMessageBubble: name
+            (assistant messages get a subtle sparkle + "AI" suffix as one
+            cohesive label), Internal-note badge, via-email icon, time, and the
             flagged bookmark glyph — flag state is a meta-line glyph now, not
             a row tint. */}
         <div
@@ -615,12 +616,13 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
             self && 'flex-row-reverse'
           )}
         >
-          <span className="truncate">{authorName}</span>
-          {message.isAssistant && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
-              <SparklesIcon className="h-3 w-3" /> AI
+          <span className="flex min-w-0 items-center gap-1">
+            {message.isAssistant && <SparklesIcon className="h-3 w-3 shrink-0" aria-hidden />}
+            <span className="truncate">
+              {authorName}
+              {message.isAssistant ? ' AI' : ''}
             </span>
-          )}
+          </span>
           {isNote && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
               <PencilSquareIcon className="h-3 w-3" /> Internal note
@@ -656,9 +658,10 @@ export const AgentMessageBubble = memo(function AgentMessageBubble({
 
 /**
  * A single visitor-facing message: a rounded bubble — muted on the left for the
- * team and assistant with a small attribution line below ("Name · AI Agent ·
- * time"), brand-colored on the right for the visitor — matching the modern
- * messenger bubble language. Lone-emoji messages render large without a bubble.
+ * team and assistant with a small attribution line below ("Name · time", or
+ * "✨ Name AI · time" for the assistant), brand-colored on the right for the
+ * visitor — matching the modern messenger bubble language. Lone-emoji messages
+ * render large without a bubble.
  */
 export function VisitorMessageBubble({
   content,
@@ -717,14 +720,17 @@ export function VisitorMessageBubble({
           />
         )}
       </div>
-      {/* Attribution below the bubble. Peer (team/assistant) shows name · time
-          plus an AI badge; self (the visitor) shows "You · time" only when a
+      {/* Attribution below the bubble. Peer (team/assistant) shows name · time;
+          the assistant's name gets a subtle sparkle + "AI" suffix as one
+          cohesive label. Self (the visitor) shows "You · time" only when a
           `selfLabel` is supplied (ticket surfaces opt in; the live messenger
           leaves its own bubbles bare). */}
       {!self && (authorName || time) && (
-        <div className="mt-1 px-1 flex items-center gap-1">
-          <p className="text-[11px] text-muted-foreground/70">
+        <div className="mt-1 px-1">
+          <p className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
+            {isAssistant && <SparklesIcon className="h-3 w-3 shrink-0" aria-hidden />}
             {authorName}
+            {isAssistant ? ' AI' : ''}
             {time && (
               <>
                 {' · '}
@@ -732,11 +738,6 @@ export function VisitorMessageBubble({
               </>
             )}
           </p>
-          {isAssistant && (
-            <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
-              AI
-            </span>
-          )}
         </div>
       )}
       {self && selfLabel && (

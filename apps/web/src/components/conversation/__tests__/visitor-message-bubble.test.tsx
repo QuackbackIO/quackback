@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 /**
- * Test for VisitorMessageBubble: the "AI" chip always renders for assistant
- * (isAssistant=true) messages and never renders for non-assistant messages.
+ * Test for VisitorMessageBubble: assistant (isAssistant=true) messages render
+ * the name as one cohesive "✨ Name AI" label (no separate badge chip); the
+ * "AI" suffix never renders for non-assistant messages.
  */
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
@@ -19,7 +20,7 @@ function renderBubble(props: Parameters<typeof VisitorMessageBubble>[0]) {
 }
 
 describe('VisitorMessageBubble', () => {
-  it('renders the AI chip for assistant messages', () => {
+  it('renders the name as "Quinn AI" for assistant messages, without a badge chip', () => {
     renderBubble({
       side: 'peer',
       content: 'Hello there',
@@ -28,13 +29,16 @@ describe('VisitorMessageBubble', () => {
       time: '10:30 AM',
     })
 
-    expect(screen.getByText(/Quinn/)).toBeInTheDocument()
-    const aiBadge = screen.getByText('AI')
-    expect(aiBadge).toBeInTheDocument()
-    expect(aiBadge.closest('span')).toHaveClass('rounded')
+    const attribution = screen.getByText(
+      (_, el) => el?.tagName === 'P' && el.textContent === 'Quinn AI · 10:30 AM'
+    )
+    expect(attribution).toBeInTheDocument()
+    expect(attribution).toHaveClass('text-muted-foreground/70')
+    expect(attribution.querySelector('svg')).not.toBeNull()
+    expect(attribution.querySelector('.rounded')).toBeNull()
   })
 
-  it('does not render the AI chip for non-assistant peer messages', () => {
+  it('does not render the AI suffix for non-assistant peer messages', () => {
     renderBubble({
       side: 'peer',
       content: 'Hello',
@@ -43,8 +47,7 @@ describe('VisitorMessageBubble', () => {
       time: '10:30 AM',
     })
 
-    const aiBadge = screen.queryByText('AI')
-    expect(aiBadge).not.toBeInTheDocument()
+    expect(screen.queryByText(/AI/)).not.toBeInTheDocument()
   })
 
   it('renders visitor (self) messages without any assistant labels', () => {
@@ -54,7 +57,6 @@ describe('VisitorMessageBubble', () => {
       isAssistant: false,
     })
 
-    const aiBadge = screen.queryByText('AI')
-    expect(aiBadge).not.toBeInTheDocument()
+    expect(screen.queryByText(/AI/)).not.toBeInTheDocument()
   })
 })

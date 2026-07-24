@@ -65,8 +65,9 @@ describe('TestAgentCard', () => {
     stubAguiFetch('')
     renderCard(['widget'])
 
-    expect(await screen.findByText('Ada')).toBeInTheDocument()
-    expect(screen.getByText('AI')).toBeInTheDocument()
+    expect(
+      await screen.findByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'Ada AI')
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ask a product question' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Report a problem' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Ask for a refund' })).toBeInTheDocument()

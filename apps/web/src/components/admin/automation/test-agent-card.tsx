@@ -8,6 +8,7 @@ import {
   ClipboardDocumentIcon,
   PaperAirplaneIcon,
   ShieldCheckIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Avatar } from '@/components/ui/avatar'
@@ -391,10 +392,11 @@ export function TestAgentCard({
                 name={identity.name}
                 className="size-7 text-[11px]"
               />
-              <span className="text-[13px] font-medium">{identity.name}</span>
-              <Badge size="sm" variant="secondary" shape="pill">
+              <span className="flex items-center gap-1.5 text-[13px] font-medium">
+                <SparklesIcon className="size-3.5" aria-hidden />
+                {identity.name}{' '}
                 {intl.formatMessage({ id: 'automation.test.aiLabel', defaultMessage: 'AI' })}
-              </Badge>
+              </span>
             </div>
             <p className="mt-3 max-w-md text-sm text-muted-foreground">
               {intl.formatMessage({
@@ -536,10 +538,11 @@ function TestMessage({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Avatar src={identity.avatarUrl} name={identity.name} className="size-7 text-[11px]" />
-        <span className="text-[13px] font-medium">{identity.name}</span>
-        <Badge size="sm" variant="secondary" shape="pill">
+        <span className="flex items-center gap-1.5 text-[13px] font-medium">
+          <SparklesIcon className="size-3.5" aria-hidden />
+          {identity.name}{' '}
           {intl.formatMessage({ id: 'automation.test.aiLabel', defaultMessage: 'AI' })}
-        </Badge>
+        </span>
       </div>
       <div className="max-w-[92%] rounded-2xl rounded-es-md bg-muted px-3.5 py-2.5 text-foreground sm:max-w-[82%]">
         {message.content ? (
