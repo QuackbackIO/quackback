@@ -112,25 +112,6 @@ export interface SeedAttribute {
   options?: { id: string; label: string }[]
 }
 
-/**
- * A custom-action definition (QUINN-TWO-AGENT-SPEC Phase 5). Seeds a row in
- * `assistant_actions`; whether it registers into an agent's toolset is decided
- * by `enabled`, `assignments`, and the `assistantCustomActions` flag
- * (`config.customActions`). The URL is a stand-in — Phase 5 evals assert on the
- * assembled tool set (present/absent), never executing the request, so no
- * external host is ever contacted.
- */
-export interface SeedCustomAction {
-  name: string
-  whenToUse?: string
-  /** Placeholder URL; never fetched in the toolset-presence scenarios. */
-  url?: string
-  assignments: { agent: boolean; copilot: boolean }
-  enabled?: boolean
-  variables?: { name: string; description: string }[]
-  responseAllowlist?: string[]
-}
-
 /** Per-scenario workspace config the harness writes to the settings row. */
 export interface ScenarioConfig {
   tone?: AssistantTone
@@ -138,8 +119,6 @@ export interface ScenarioConfig {
   additionalInstructions?: string
   /** settings.feature_flags.assistantTools — gates write-tool assembly. */
   assistantTools?: boolean
-  /** settings.feature_flags.assistantCustomActions — gates custom-action registration (Phase 5). */
-  customActions?: boolean
   /**
    * Per-agent knowledge-source overrides merged onto the default config v3
    * `agents.<agent>.knowledge` maps. Replaces the retired `assistantKnowledge`
@@ -163,8 +142,6 @@ export interface Fixtures {
   statusIncident?: SeedStatusIncident
   guidance?: SeedGuidance[]
   attributes?: SeedAttribute[]
-  /** Custom-action definitions (Phase 5): registered per assignment + flag. */
-  customActions?: SeedCustomAction[]
   /** Feedback boards for the capture_feedback catalogue. */
   boards?: SeedBoard[]
   /** Published feedback posts (public board + embedding) for share_post. */

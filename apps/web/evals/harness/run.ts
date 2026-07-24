@@ -16,7 +16,6 @@ import {
 } from '@/lib/server/domains/assistant/assistant.runtime'
 import { makeAssistantToolContext } from '@/lib/server/domains/assistant/assistant.toolspec'
 import { assembleAssistantToolset } from '@/lib/server/domains/assistant/assistant.tools'
-import { listActionSpecsForAgent } from '@/lib/server/domains/assistant/custom-actions.service'
 import { resolveAssistantRolePolicy } from '@/lib/server/domains/assistant/assistant.system-prompt'
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { resolveAssistantKnowledgeSnapshot } from '@/lib/server/domains/assistant/retrieval-sources'
@@ -249,20 +248,10 @@ export async function runToolsetScenario(
     simulate: conversationId === null,
     writeToolPolicy: conversationId === null ? 'simulate' : rolePolicy.writeToolPolicy,
   })
-  // Mirror the runtime's custom-action registration: when the
-  // `assistantCustomActions` flag is on, resolve every enabled definition
-  // assigned to this turn's agent into a dynamic spec and pass it to assembly,
-  // so a toolset scenario can assert an action is present for its assigned
-  // agent and absent for the other (Phase 5 gate).
-  const customActionSpecs =
-    scenario.config?.customActions === true
-      ? await listActionSpecsForAgent(roleToAgent(role), testDb)
-      : []
   const { tools } = await assembleAssistantToolset(
     ctx,
     undefined,
-    scenario.config?.assistantTools === true,
-    customActionSpecs
+    scenario.config?.assistantTools === true
   )
   const toolNames = tools.map((t) => t.name)
   const failures = gradeStructural(scenario.structural, { kind: 'toolset', toolNames })
