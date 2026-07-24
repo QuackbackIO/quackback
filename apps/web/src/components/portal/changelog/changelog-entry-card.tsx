@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { LinkIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
-import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { ChangelogId, PostId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'

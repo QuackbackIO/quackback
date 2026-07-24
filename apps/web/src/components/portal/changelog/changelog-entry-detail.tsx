@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { BackLink } from '@/components/ui/back-link'

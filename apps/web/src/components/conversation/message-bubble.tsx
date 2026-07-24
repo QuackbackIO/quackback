@@ -34,7 +34,7 @@ import { ConversationAttachmentList } from '@/components/shared/conversation-att
 import { ReactionChip } from '@/components/shared/reaction-chip'
 import { NoteContent } from '@/components/admin/conversation/note-content'
 import { isJumboEmojiMessage, JUMBO_EMOJI_CLASS } from '@/lib/shared/conversation/jumbo-emoji'
-import { RichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent } from '@/components/ui/rich-text-content'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import type { EmbedOpenMode } from '@/components/shared/quackback-embed-card'
 import { LinkPreviews } from '@/components/shared/link-preview-card'

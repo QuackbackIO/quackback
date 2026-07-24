@@ -238,6 +238,15 @@ describe('submitOnEnter (onSubmit)', () => {
     expect(result).toBe(true)
   })
 
+  it('Alt+Enter inserts a hardBreak and does not submit', () => {
+    const onSubmit = vi.fn()
+    const { editor, setHardBreak } = makeMockEditor()
+    const result = handlersFor(editor, onSubmit)['Alt-Enter']()
+    expect(setHardBreak).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(result).toBe(true)
+  })
+
   it('yields Enter to an active suggestion popover instead of submitting', () => {
     const onSubmit = vi.fn()
     const { editor } = makeMockEditor({ suggestion: true })
@@ -249,7 +258,10 @@ describe('submitOnEnter (onSubmit)', () => {
   it('wins over enterAsHardBreak via a higher extension priority', () => {
     // TipTap tries same-key bindings in descending priority order and stops at
     // the first returning true, so submitOnEnter must outrank enterAsHardBreak.
-    const exts = buildExtensions({ enterAsHardBreak: true }, { placeholder: '', onSubmit: () => {} })
+    const exts = buildExtensions(
+      { enterAsHardBreak: true },
+      { placeholder: '', onSubmit: () => {} }
+    )
     const byName = new Map(
       exts.map((e) => [(e as { name: string }).name, e as unknown as KeymapExtension])
     )

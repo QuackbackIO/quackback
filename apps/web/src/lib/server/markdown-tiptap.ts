@@ -21,7 +21,7 @@ import TableHeader from '@tiptap/extension-table-header'
 import type { TiptapContent } from '@/lib/server/db'
 import type { JSONContent } from '@tiptap/core'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
-import { lookupEmoji } from '@/lib/shared/content-html'
+import { lookupEmoji } from '@/lib/shared/content-emoji'
 
 /**
  * Server-safe extensions for markdown conversion.

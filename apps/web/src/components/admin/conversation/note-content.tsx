@@ -1,4 +1,4 @@
-import { RichTextContent } from '@/components/ui/rich-text-editor'
+import { RichTextContent } from '@/components/ui/rich-text-content'
 import { MentionHoverCardOverlay } from '@/components/ui/mention-hover-card-overlay'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { cn } from '@/lib/shared/utils'

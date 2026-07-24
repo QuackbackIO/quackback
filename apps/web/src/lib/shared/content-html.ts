@@ -12,7 +12,6 @@
  * `RichTextContent`), which requires a DOM and so stays in the editor module.
  */
 import type { JSONContent } from '@tiptap/core'
-import { emojis as defaultEmojis, type EmojiItem } from '@tiptap/extension-emoji'
 import {
   escapeHtmlAttr,
   sanitizeUrl,
@@ -21,14 +20,14 @@ import {
   extractYoutubeId,
 } from '@/lib/shared/utils/sanitize'
 
-/**
- * Resolve a bundled emoji by shortcode (e.g. `smile`). Shared with the editor's
- * `:`-picker and the emoji-node serializer below. `@tiptap/extension-emoji`
- * ships pure data (no browser globals), so this is safe to import server-side.
- */
-export function lookupEmoji(shortcode: string): EmojiItem | undefined {
-  return defaultEmojis.find((e) => e.emoji && e.shortcodes.includes(shortcode))
-}
+// NOTE: this module is deliberately free of `@tiptap/extension-emoji` — its
+// ~700 KB shortcode dataset would otherwise land in every read-only portal
+// chunk that reaches `generateContentHTML`. Emoji nodes are serialized from
+// `attrs.emoji` (the Unicode char the picker stores at write time); a legacy
+// `name`-only node degrades to its `:shortcode:` placeholder here, and the
+// client renderer (`RichTextContent`) upgrades it on demand via a dynamic
+// import of `@/lib/shared/content-emoji`. Server-side callers that need the
+// legacy lookup import `lookupEmoji` from that module directly.
 
 // Generate HTML from TipTap JSON content for SSR / email.
 export function generateContentHTML(content: JSONContent): string {
@@ -165,6 +164,18 @@ export function generateContentHTML(content: JSONContent): string {
         // Only render image if src is valid after sanitization
         if (!src) return ''
         const imgWidth = node.attrs?.width !== undefined ? safePositiveInt(node.attrs.width, 0) : 0
+        // Both width AND height present (and valid, non-zero) → emit numeric
+        // width/height attributes plus an aspect-ratio hint so the browser can
+        // reserve the correct box before the image loads (avoids CLS). Falls
+        // back to the width-only behavior below for nodes that only carry a
+        // legacy width (or no dimensions at all), which is still the common
+        // case for historical content authored before dimensions were tracked.
+        const imgHeight =
+          node.attrs?.height !== undefined ? safePositiveInt(node.attrs.height, 0) : 0
+        if (imgWidth && imgHeight) {
+          const style = `style="aspect-ratio: ${imgWidth} / ${imgHeight};"`
+          return `<img src="${src}" alt="${alt}" width="${imgWidth}" height="${imgHeight}" class="max-w-full h-auto rounded-lg" ${style} />`
+        }
         // Only apply width (not height) so h-auto preserves aspect ratio
         const style = imgWidth ? `style="width:${imgWidth}px;"` : ''
         return `<img src="${src}" alt="${alt}" class="max-w-full h-auto rounded-lg" ${style} />`
@@ -207,12 +218,15 @@ export function generateContentHTML(content: JSONContent): string {
       }
 
       case 'emoji': {
-        // @tiptap/extension-emoji persists `{ name }` only — the Unicode char
-        // is re-derived at render time from the bundled set. Sanitize-tiptap
-        // keeps `emoji` if it was supplied, so we still prefer attrs.emoji
-        // when present and HTML-escape for defence-in-depth.
+        // Prefer the Unicode char the picker persists in `attrs.emoji`. A legacy
+        // `name`-only node (older @tiptap/extension-emoji stored just the
+        // shortcode) has no char here — rather than statically pull in the
+        // ~700 KB emoji dataset, we emit the `:shortcode:` placeholder and let
+        // the client renderer swap in the real glyph on demand (see
+        // RichTextContent's emoji upgrade). HTML-escape for defence-in-depth.
         const rawName = String(node.attrs?.name ?? '')
-        const ch = String(node.attrs?.emoji ?? lookupEmoji(rawName)?.emoji ?? '')
+        const rawChar = String(node.attrs?.emoji ?? '')
+        const ch = rawChar || (rawName ? `:${rawName}:` : '')
         const escaped = ch.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         const name = escapeHtmlAttr(rawName)
         const dataNameAttr = name ? ` data-name="${name}"` : ''

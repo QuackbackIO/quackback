@@ -20,7 +20,7 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import Youtube from '@tiptap/extension-youtube'
-import { Emoji, emojis as defaultEmojis, type EmojiItem } from '@tiptap/extension-emoji'
+import { Emoji } from '@tiptap/extension-emoji'
 import { MentionExtension } from './mention-extension'
 import { QuackbackEmbed } from './quackback-embed-extension'
 import { ConversationImage } from './conversation-image-node'
@@ -58,12 +58,19 @@ import {
   useRef,
 } from 'react'
 import { computePosition, flip, shift, offset } from '@floating-ui/dom'
-import DOMPurify from 'dompurify'
 import { cn } from '@/lib/shared/utils'
 // The read-only JSON→HTML serializer now lives in a browser-free shared module
 // so server-side consumers (e.g. outbound conversation email) can import it
 // without pulling in React/tiptap-react. Re-exported below for existing callers.
-import { generateContentHTML, lookupEmoji } from '@/lib/shared/content-html'
+import { generateContentHTML } from '@/lib/shared/content-html'
+// The emoji dataset + shortcode lookup live in their own module so read-only
+// surfaces don't statically bundle it; the editor's `:` picker is fine to pay
+// the cost since the editor chunk is already lazy-loaded on compose surfaces.
+import { defaultEmojis, lookupEmoji, type EmojiItem } from '@/lib/shared/content-emoji'
+// Read-only rendering (RichTextContent / isRichTextContent) lives in a sibling
+// module with only light deps. Re-exported below for backward compatibility;
+// read-only consumers should import from '@/components/ui/rich-text-content'.
+import { RichTextContent, isRichTextContent } from './rich-text-content'
 import {
   Bold,
   Italic,
@@ -310,13 +317,14 @@ function createEnterAsHardBreak() {
   })
 }
 
-// Enter submits (chat-send); Shift+Enter inserts a line break. Registered at a
-// priority above createEnterAsHardBreak and StarterKit (default 100) so, when a
-// preset sets enterAsHardBreak while a consumer also passes onSubmit, Enter still
-// submits rather than inserting a break. TipTap tries same-key bindings in
-// descending priority order and stops at the first that returns true. ProseMirror
-// runs keymap handlers before a suggestion popover's handleKeyDown, so an open
-// slash/mention/emoji menu keeps Enter — we yield by returning false.
+// Enter submits (chat-send); Shift+Enter and Alt+Enter insert a line break.
+// Registered at a priority above createEnterAsHardBreak and StarterKit (default
+// 100) so, when a preset sets enterAsHardBreak while a consumer also passes
+// onSubmit, Enter still submits rather than inserting a break. TipTap tries
+// same-key bindings in descending priority order and stops at the first that
+// returns true. ProseMirror runs keymap handlers before a suggestion popover's
+// handleKeyDown, so an open slash/mention/emoji menu keeps Enter — we yield by
+// returning false.
 function createSubmitOnEnter(onSubmit: () => void) {
   return Extension.create({
     name: 'submitOnEnter',
@@ -329,6 +337,7 @@ function createSubmitOnEnter(onSubmit: () => void) {
           return true
         },
         'Shift-Enter': () => this.editor.commands.setHardBreak(),
+        'Alt-Enter': () => this.editor.commands.setHardBreak(),
       }
     },
   })
@@ -1175,8 +1184,11 @@ interface RichTextEditorProps {
   /** Callback for uploading images. Returns the public URL of the uploaded image. */
   onImageUpload?: (file: File) => Promise<string>
   /** When set, Enter submits (chat-send) instead of splitting the block and
-   * Shift+Enter inserts a line break. Yields to an open slash/mention/emoji
-   * popover. Pass a stable (memoized) callback so extensions aren't rebuilt. */
+   * Shift+Enter / Alt+Enter insert a line break. Yields to an open
+   * slash/mention/emoji popover. MUST be a stable callback (wrap churning state
+   * in a ref): the keymap closure is baked in at editor creation and is NOT
+   * refreshed by setOptions, so an unstable callback leaves Enter firing the
+   * first render's stale closure forever. */
   onSubmit?: () => void
 }
 
@@ -2341,127 +2353,15 @@ function MenuBar({
 }
 
 // ============================================================================
-// Read-Only Content Renderer (SSR Compatible)
+// Read-only rendering (re-exports)
 // ============================================================================
 
-interface RichTextContentProps {
-  content: JSONContent | string
-  className?: string
-}
-
-// ============================================================================
-// Read-only rendering
-// ============================================================================
-
-// `generateContentHTML` (the JSON→HTML serializer) and `lookupEmoji` are defined
-// in the browser-free shared module `@/lib/shared/content-html` and imported at
-// the top of this file. Re-export the serializer here so existing importers of
-// this module (RichTextContent consumers, tests) keep working unchanged.
+// The read-only renderer now lives in a sibling module with only light deps so
+// portal reading surfaces don't pull in this editor chunk. These re-exports keep
+// existing importers of this module working; NEW read-only consumers should
+// import from '@/components/ui/rich-text-content' directly.
+//
+// `generateContentHTML` (the JSON→HTML serializer) is defined in the browser-free
+// shared module `@/lib/shared/content-html`; re-exported here for existing callers.
 export { generateContentHTML }
-
-// DOMPurify config for sanitizing rendered TipTap HTML (defense-in-depth)
-const DOMPURIFY_CONFIG = {
-  ALLOWED_TAGS: [
-    'p',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'strong',
-    'em',
-    'u',
-    's',
-    'code',
-    'pre',
-    'a',
-    'ul',
-    'ol',
-    'li',
-    'blockquote',
-    'hr',
-    'br',
-    'img',
-    'iframe',
-    'div',
-    'table',
-    'tr',
-    'th',
-    'td',
-    'input',
-    'span',
-  ],
-  ALLOWED_ATTR: [
-    'id',
-    'href',
-    'src',
-    'alt',
-    'class',
-    'style',
-    'target',
-    'rel',
-    'width',
-    'height',
-    'frameborder',
-    'allow',
-    'allowfullscreen',
-    'type',
-    'checked',
-    'disabled',
-    'data-type',
-    'data-name',
-    'data-principal-id',
-    'data-display-name',
-    'data-quackback-embed',
-    'data-kind',
-    'data-id',
-  ],
-  ALLOW_DATA_ATTR: false,
-  ADD_TAGS: ['iframe'],
-  ADD_ATTR: ['allowfullscreen', 'frameborder', 'allow'],
-}
-
-export function RichTextContent({ content, className }: RichTextContentProps) {
-  // Generate HTML from JSON content, with DOMPurify defense-in-depth on client
-  if (typeof content === 'object' && content.type === 'doc') {
-    const rawHtml = generateContentHTML(content)
-    // DOMPurify requires a DOM — on the server, generateContentHTML already produces
-    // controlled HTML from validated JSON (content is sanitized at ingestion time)
-    // DOMPurify deliberately refuses unsupported DOM implementations. Happy
-    // DOM is used only by unit tests; production browsers still sanitize.
-    const canSanitize = typeof window !== 'undefined' && !('happyDOM' in window)
-    const html = canSanitize ? DOMPurify.sanitize(rawHtml, DOMPURIFY_CONFIG) : rawHtml
-    return (
-      <div
-        className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    )
-  }
-
-  // For string content (HTML or plain text)
-  if (typeof content === 'string') {
-    return (
-      <div className={cn('prose prose-neutral dark:prose-invert max-w-none', className)}>
-        <p className="whitespace-pre-wrap">{content}</p>
-      </div>
-    )
-  }
-
-  return null
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-// Helper to check if content is TipTap JSON
-export function isRichTextContent(content: unknown): content is JSONContent {
-  return (
-    typeof content === 'object' &&
-    content !== null &&
-    'type' in content &&
-    (content as JSONContent).type === 'doc'
-  )
-}
+export { RichTextContent, isRichTextContent }
