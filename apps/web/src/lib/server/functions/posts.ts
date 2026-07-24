@@ -24,7 +24,10 @@ import { createActivity } from '@/lib/server/domains/activity/activity.service'
 import { getMemberById } from '@/lib/server/domains/principals/principal.service'
 import { createPost, updatePost } from '@/lib/server/domains/posts/post.service'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
-import { getPostWithDetails, getCommentsWithReplies } from '@/lib/server/domains/posts/post.query'
+import {
+  getPostWithDetails,
+  getPaginatedCommentsWithReplies,
+} from '@/lib/server/domains/posts/post.query'
 import { changeStatus } from '@/lib/server/domains/posts/post.status'
 import { changeBoard } from '@/lib/server/domains/posts/post.board'
 import { softDeletePost, restorePost } from '@/lib/server/domains/posts/post.user-actions'
@@ -228,7 +231,14 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
  * Get a single post with full details including comments
  */
 export const fetchPostWithDetails = createServerFn({ method: 'GET' })
-  .validator(getPostSchema)
+  .validator(
+    getPostSchema.extend({
+      // Comment keyset-page controls. First-page callers omit them (default
+      // page size); "show more" fetches pass the prior page's nextCursor.
+      commentsCursor: z.string().nullish(),
+      commentsLimit: z.number().int().positive().max(100).optional(),
+    })
+  )
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post with details')
     try {
@@ -236,11 +246,16 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
 
       const postId = data.id as PostId
 
-      const [result, comments, voted] = await Promise.all([
+      const [result, commentsPage, voted] = await Promise.all([
         getPostWithDetails(postId),
-        getCommentsWithReplies(postId, auth.principal.id),
+        getPaginatedCommentsWithReplies(postId, {
+          principalId: auth.principal.id,
+          cursor: data.commentsCursor ?? null,
+          limit: data.commentsLimit,
+        }),
         hasUserVoted(postId, auth.principal.id),
       ])
+      const comments = commentsPage.comments
       log.debug(
         { post_id: data.id, found: !!result, comment_count: comments.length, has_voted: voted },
         'fetched post with details'
@@ -291,6 +306,9 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         summaryUpdatedAt: toIsoStringOrNull(result.summaryUpdatedAt),
         hasVoted: voted,
         comments: comments.map(serializeComment),
+        commentsHasMore: commentsPage.hasMore,
+        commentsNextCursor: commentsPage.nextCursor,
+        commentsTotalRootCount: commentsPage.totalRootCount,
         pinnedComment: serializedPinnedComment,
         canonicalPostId: result.canonicalPostId,
         mergedAt: toIsoStringOrNull(result.mergedAt),

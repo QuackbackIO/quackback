@@ -68,6 +68,7 @@ import {
   type PrincipalId,
 } from '@quackback/ids'
 import { useDeleteComment, useRestoreComment } from '@/lib/client/mutations/portal-comments'
+import { useLoadMoreAdminComments } from '@/lib/client/mutations/load-more-comments'
 import type { PostDetails, CurrentUser } from '@/lib/shared/types'
 import {
   toPortalComments,
@@ -110,6 +111,14 @@ function PostModalContent({
   })
 
   const post = postQuery.data as PostDetails
+
+  // "Show more comments" — appends the next keyset page into the same
+  // ['inbox','detail',postId] cache the admin comment mutations patch.
+  const {
+    loadMore: loadMoreComments,
+    isLoading: isLoadingMoreComments,
+    hasMore: hasMoreComments,
+  } = useLoadMoreAdminComments(postId, inboxKeys.detail(postId))
 
   // Image upload
   const { upload: uploadImage } = usePostImageUpload()
@@ -478,6 +487,14 @@ function PostModalContent({
                       restoreCommentMutation.isPending
                         ? (restoreCommentMutation.variables as PostCommentId)
                         : null
+                    }
+                    hasMoreComments={hasMoreComments}
+                    onLoadMoreComments={loadMoreComments}
+                    isLoadingMoreComments={isLoadingMoreComments}
+                    remainingCommentCount={
+                      post.commentsTotalRootCount != null
+                        ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
+                        : undefined
                     }
                   />
                 </Suspense>

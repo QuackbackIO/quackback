@@ -1173,5 +1173,10 @@
   "widget.tickets.new.emailHint": "Te enviaremos las respuestas y novedades de este ticket por correo.",
   "widget.tickets.new.emailPlaceholder": "tu@ejemplo.com",
   "widget.tickets.new.detailsTooLong": "Los detalles son demasiado largos (máx. {max} caracteres).",
-  "widget.tickets.new.selectPlaceholder": "Seleccionar…"
+  "widget.tickets.new.selectPlaceholder": "Seleccionar…",
+  "portal.postDetail.comments.loadingMore": "Loading...",
+  "portal.postDetail.comments.showMore": "Show more comments",
+  "portal.postDetail.comments.showMoreCount": "Show {count, plural, one {# more comment} other {# more comments}}",
+  "widget.commentList.loadingMore": "Loading...",
+  "widget.commentList.showMore": "Show more comments"
 }

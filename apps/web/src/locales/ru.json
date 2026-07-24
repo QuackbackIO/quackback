@@ -1173,5 +1173,10 @@
   "widget.tickets.new.emailHint": "Мы будем присылать ответы и обновления по этому тикету на электронную почту.",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.new.detailsTooLong": "Слишком длинные подробности (макс. {max} символов).",
-  "widget.tickets.new.selectPlaceholder": "Выбрать…"
+  "widget.tickets.new.selectPlaceholder": "Выбрать…",
+  "portal.postDetail.comments.loadingMore": "Loading...",
+  "portal.postDetail.comments.showMore": "Show more comments",
+  "portal.postDetail.comments.showMoreCount": "Show {count, plural, one {# more comment} other {# more comments}}",
+  "widget.commentList.loadingMore": "Loading...",
+  "widget.commentList.showMore": "Show more comments"
 }

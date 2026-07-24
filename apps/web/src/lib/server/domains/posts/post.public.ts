@@ -239,27 +239,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       boardId: boards.id,
       boardName: boards.name,
       boardSlug: boards.slug,
-      tagsJson: sql<string>`COALESCE(
-        (SELECT json_agg(json_build_object('id', t.id, 'name', t.name, 'color', t.color))
-         FROM ${postTagAssignments} pt
-         INNER JOIN ${postTags} t ON t.id = pt.tag_id
-         WHERE pt.post_id = ${posts.id}),
-        '[]'
-      )`.as('tags_json'),
       hasVoted: voteExistsSubquery,
-      authorName: sql<string | null>`(
-        SELECT m.display_name FROM ${principalTable} m
-        WHERE m.id = ${posts.principalId}
-      )`.as('author_name'),
-      avatarData: sql<string | null>`(
-        SELECT CASE
-          WHEN m.avatar_key IS NOT NULL
-          THEN json_build_object('key', m.avatar_key)
-          ELSE json_build_object('url', m.avatar_url)
-        END
-        FROM ${principalTable} m
-        WHERE m.id = ${posts.principalId}
-      )`.as('avatar_data'),
     })
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
@@ -271,23 +251,71 @@ export async function listPublicPostsWithVotesAndAvatars(
   const hasMore = postsResult.length > limit
   const trimmedResults = hasMore ? postsResult.slice(0, limit) : postsResult
 
-  const items = trimmedResults.map(
-    (post): PostWithVotesAndAvatars => ({
+  // Batch-load tags and author identities for the page instead of running a
+  // correlated subquery per row: one query over the page's post ids for tags,
+  // one over the page's author principal ids for display name + avatar. Both
+  // are keyed into maps and merged in JS below, preserving the response shape.
+  const pagePostIds = trimmedResults.map((p) => p.id)
+  const pageAuthorIds = [...new Set(trimmedResults.map((p) => p.principalId))]
+
+  const [tagRows, authorRows] = await Promise.all([
+    pagePostIds.length > 0
+      ? db
+          .select({
+            postId: postTagAssignments.postId,
+            id: postTags.id,
+            name: postTags.name,
+            color: postTags.color,
+          })
+          .from(postTagAssignments)
+          .innerJoin(postTags, eq(postTags.id, postTagAssignments.tagId))
+          .where(inArray(postTagAssignments.postId, pagePostIds))
+      : Promise.resolve([]),
+    pageAuthorIds.length > 0
+      ? db
+          .select({
+            id: principalTable.id,
+            displayName: principalTable.displayName,
+            avatarKey: principalTable.avatarKey,
+            avatarUrl: principalTable.avatarUrl,
+          })
+          .from(principalTable)
+          .where(inArray(principalTable.id, pageAuthorIds))
+      : Promise.resolve([]),
+  ])
+
+  const tagsByPost = new Map<string, Array<{ id: PostTagId; name: string; color: string }>>()
+  for (const row of tagRows) {
+    const list = tagsByPost.get(row.postId) ?? []
+    list.push({ id: row.id, name: row.name, color: row.color })
+    tagsByPost.set(row.postId, list)
+  }
+  const authorById = new Map(authorRows.map((a) => [a.id, a]))
+
+  const items = trimmedResults.map((post): PostWithVotesAndAvatars => {
+    const author = authorById.get(post.principalId)
+    // Mirror the previous correlated subquery's avatar precedence exactly: the
+    // stored key (resolved to its S3 URL) wins, with the raw avatar_url only
+    // used when no key is present.
+    const avatarUrl = author?.avatarKey
+      ? getPublicUrlOrNull(author.avatarKey)
+      : (author?.avatarUrl ?? null)
+    return {
       id: post.id,
       title: post.title,
       content: post.content,
       statusId: post.statusId,
       voteCount: post.voteCount,
       commentCount: post.commentCount,
-      authorName: post.authorName,
+      authorName: author?.displayName ?? null,
       principalId: post.principalId,
       createdAt: post.createdAt,
-      tags: parseJson<Array<{ id: PostTagId; name: string; color: string }>>(post.tagsJson),
+      tags: tagsByPost.get(post.id) ?? [],
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
       hasVoted: post.hasVoted ?? false,
-      avatarUrl: parseAvatarData(post.avatarData),
-    })
-  )
+      avatarUrl,
+    }
+  })
 
   return { items, hasMore }
 }

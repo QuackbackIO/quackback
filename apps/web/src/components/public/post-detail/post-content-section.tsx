@@ -1,13 +1,27 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import type { JSONContent } from '@tiptap/react'
 import { PostContent } from '@/components/public/post-content'
 import { Button } from '@/components/ui/button'
-import { RichTextEditor, type EditorFeatures } from '@/components/ui/rich-text-editor'
+import type { EditorFeatures } from '@/components/ui/rich-text-editor'
 import { Skeleton } from '@/components/ui/skeleton'
+
+// The full rich-text editor drags in a heavy chunk (ProseMirror + lowlight
+// syntax grammars) that the portal post-detail READ view never needs — the
+// author composer only mounts when `isEditing` flips true. Deferring it via
+// React.lazy keeps that chunk out of the post-detail route's initial closure.
+const LazyRichTextEditor = lazy(() =>
+  import('@/components/ui/rich-text-editor').then((m) => ({ default: m.RichTextEditor }))
+)
+
+/** Placeholder matching the editor's minHeight so the composer layout stays
+ *  stable while the editor chunk streams in. */
+function EditorPlaceholder(): React.ReactElement {
+  return <Skeleton className="w-full rounded-md" style={{ minHeight: '150px' }} />
+}
 import { StatusBadge } from '@/components/ui/status-badge'
 import type { EditPostInput } from '@/lib/client/mutations'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
@@ -176,21 +190,24 @@ export function PostContentSection({
             className="w-full bg-transparent border-0 outline-none text-xl sm:text-2xl font-semibold text-foreground placeholder:text-muted-foreground/60 placeholder:font-normal caret-primary mb-4 focus-visible:ring-2 focus-visible:ring-ring/50"
           />
 
-          {/* Rich text editor */}
-          <RichTextEditor
-            value={editContentJson || ''}
-            onChange={handleContentChange}
-            placeholder={intl.formatMessage({
-              id: 'portal.postDetail.edit.detailsPlaceholder',
-              defaultMessage: 'Add more details... Type / for commands',
-            })}
-            minHeight="150px"
-            disabled={isSaving}
-            borderless
-            toolbarPosition="bottom"
-            features={editorFeatures}
-            onImageUpload={onImageUpload}
-          />
+          {/* Rich text editor — lazy-loaded so its chunk never lands in the
+              read-view bundle. Only mounts here inside the isEditing branch. */}
+          <Suspense fallback={<EditorPlaceholder />}>
+            <LazyRichTextEditor
+              value={editContentJson || ''}
+              onChange={handleContentChange}
+              placeholder={intl.formatMessage({
+                id: 'portal.postDetail.edit.detailsPlaceholder',
+                defaultMessage: 'Add more details... Type / for commands',
+              })}
+              minHeight="150px"
+              disabled={isSaving}
+              borderless
+              toolbarPosition="bottom"
+              features={editorFeatures}
+              onImageUpload={onImageUpload}
+            />
+          </Suspense>
         </div>
 
         {/* Footer with actions */}

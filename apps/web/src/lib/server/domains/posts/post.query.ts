@@ -15,13 +15,17 @@ import {
   postComments,
   eq,
   and,
+  or,
+  lt,
   inArray,
   asc,
+  desc,
   isNull,
+  count,
 } from '@/lib/server/db'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { realEmail } from '@/lib/shared/anonymous-email'
-import { type PostId, type PrincipalId } from '@quackback/ids'
+import { type PostId, type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError } from '@/lib/shared/errors'
 import { buildCommentTree, toStatusChange, type CommentTreeNode } from '@/lib/shared'
 import type { PostWithDetails, PinnedComment } from './post.types'
@@ -190,28 +194,7 @@ export async function getCommentsWithReplies(
   postId: PostId,
   principalId?: PrincipalId
 ): Promise<CommentTreeNode[]> {
-  // Verify post exists and belongs to organization
-  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
-  if (!post) {
-    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
-  }
-
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
-  if (!board) {
-    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
-  }
-
-  // Collect post IDs: this post + any posts merged into it. Exclude
-  // sources whose own board has been soft-deleted — otherwise comments
-  // from a deleted board's posts surface here via the merge tree.
-  const mergedPosts = await db
-    .select({ id: posts.id })
-    .from(posts)
-    .innerJoin(boards, eq(posts.boardId, boards.id))
-    .where(
-      and(eq(posts.canonicalPostId, postId), isNull(posts.deletedAt), isNull(boards.deletedAt))
-    )
-  const postIds = [postId, ...mergedPosts.map((p) => p.id)] as PostId[]
+  const postIds = await resolveCommentPostIds(postId)
 
   // Get all comments with reactions, author info, and status changes (including from merged posts)
   const allComments = await db.query.postComments.findMany({
@@ -242,4 +225,149 @@ export async function getCommentsWithReplies(
   }))
 
   return buildCommentTree(commentsWithAuthor, principalId)
+}
+
+/**
+ * Resolve the set of post ids whose comments belong to this post's thread:
+ * the post itself plus any posts merged into it (excluding sources on a
+ * soft-deleted board). Shared by the unbounded and paginated comment reads.
+ */
+async function resolveCommentPostIds(postId: PostId): Promise<PostId[]> {
+  // Verify post exists and belongs to organization
+  const post = await db.query.posts.findFirst({ where: eq(posts.id, postId) })
+  if (!post) {
+    throw new NotFoundError('POST_NOT_FOUND', `Post with ID ${postId} not found`)
+  }
+
+  const board = await db.query.boards.findFirst({ where: eq(boards.id, post.boardId) })
+  if (!board) {
+    throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${post.boardId} not found`)
+  }
+
+  const mergedPosts = await db
+    .select({ id: posts.id })
+    .from(posts)
+    .innerJoin(boards, eq(posts.boardId, boards.id))
+    .where(
+      and(eq(posts.canonicalPostId, postId), isNull(posts.deletedAt), isNull(boards.deletedAt))
+    )
+  return [postId, ...mergedPosts.map((p) => p.id)] as PostId[]
+}
+
+/**
+ * Paginated variant of {@link getCommentsWithReplies} for the admin post
+ * detail. Keyset-paginates by ROOT comment on `(created_at, id)` ascending so
+ * a heavily-commented post no longer ships every rich-text doc in one payload.
+ * Each returned root carries its full reply subtree.
+ *
+ * The unbounded `getCommentsWithReplies` is kept for the REST/MCP contract
+ * (which promises the full list) and the merge path — this is opt-in.
+ */
+export async function getPaginatedCommentsWithReplies(
+  postId: PostId,
+  opts: { principalId?: PrincipalId; limit?: number; cursor?: string | null } = {}
+): Promise<{
+  comments: CommentTreeNode[]
+  hasMore: boolean
+  nextCursor: string | null
+  totalRootCount: number
+}> {
+  const { encodeCommentCursor, decodeCommentCursor, DEFAULT_COMMENT_PAGE_SIZE } =
+    await import('./comment-page')
+  const rootLimit = Math.max(1, opts.limit ?? DEFAULT_COMMENT_PAGE_SIZE)
+  const cursor = decodeCommentCursor(opts.cursor)
+
+  const postIds = await resolveCommentPostIds(postId)
+  const postFilter =
+    postIds.length === 1 ? eq(postComments.postId, postId) : inArray(postComments.postId, postIds)
+
+  // Page of root comments (parent_id IS NULL), keyset on (created_at, id)
+  // DESCENDING so page 1 is the newest roots (matching the newest-first UI);
+  // "show more" walks toward older roots via the strict `<` compare.
+  const rootConditions = [postFilter, isNull(postComments.parentId)]
+  if (cursor) {
+    rootConditions.push(
+      or(
+        lt(postComments.createdAt, new Date(cursor.createdAt)),
+        and(
+          eq(postComments.createdAt, new Date(cursor.createdAt)),
+          lt(postComments.id, cursor.id as PostCommentId)
+        )
+      )!
+    )
+  }
+  const rootRows = await db.query.postComments.findMany({
+    where: and(...rootConditions),
+    columns: { id: true, createdAt: true },
+    orderBy: [desc(postComments.createdAt), desc(postComments.id)],
+    limit: rootLimit + 1,
+  })
+  const hasMore = rootRows.length > rootLimit
+  const pageRoots = hasMore ? rootRows.slice(0, rootLimit) : rootRows
+  const rootIds = pageRoots.map((r) => r.id)
+
+  const [totalRootRow] = await db
+    .select({ count: count() })
+    .from(postComments)
+    .where(and(postFilter, isNull(postComments.parentId)))
+  const totalRootCount = Number(totalRootRow?.count ?? 0)
+
+  const nextCursor =
+    hasMore && pageRoots.length > 0
+      ? encodeCommentCursor(
+          pageRoots[pageRoots.length - 1].createdAt,
+          pageRoots[pageRoots.length - 1].id
+        )
+      : null
+
+  if (rootIds.length === 0) {
+    return { comments: [], hasMore, nextCursor, totalRootCount }
+  }
+
+  // Fetch the roots + all their descendants (arbitrary depth) via a recursive
+  // walk, then hydrate reactions/author/status and build the tree.
+  const descendantIds = await collectDescendantIds(rootIds as PostCommentId[])
+  const allIds = [...rootIds, ...descendantIds] as PostCommentId[]
+
+  const allComments = await db.query.postComments.findMany({
+    where: inArray(postComments.id, allIds),
+    with: {
+      reactions: true,
+      author: { columns: { displayName: true } },
+      statusChangeFrom: { columns: { name: true, color: true } },
+      statusChangeTo: { columns: { name: true, color: true } },
+    },
+    orderBy: asc(postComments.createdAt),
+  })
+
+  const commentsWithAuthor = allComments.map((c) => ({
+    ...c,
+    authorName: c.author?.displayName ?? null,
+    statusChange: toStatusChange(c.statusChangeFrom, c.statusChangeTo),
+  }))
+
+  return {
+    comments: buildCommentTree(commentsWithAuthor, opts.principalId),
+    hasMore,
+    nextCursor,
+    totalRootCount,
+  }
+}
+
+/** Breadth-first collect all descendant comment ids under the given roots. */
+async function collectDescendantIds(rootIds: PostCommentId[]): Promise<PostCommentId[]> {
+  const collected: PostCommentId[] = []
+  let frontier = rootIds
+  // Reply chains are shallow in practice; this loop terminates quickly.
+  while (frontier.length > 0) {
+    const children = await db.query.postComments.findMany({
+      where: inArray(postComments.parentId, frontier),
+      columns: { id: true },
+    })
+    const childIds = children.map((c) => c.id)
+    if (childIds.length === 0) break
+    collected.push(...childIds)
+    frontier = childIds
+  }
+  return collected
 }

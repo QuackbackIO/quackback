@@ -16,6 +16,7 @@ import {
 import { toUuid, fromUuid, type PostId, type PostCommentId, type PrincipalId } from '@quackback/ids'
 import { buildCommentTree, toStatusChange } from '@/lib/shared'
 import type { PublicPostDetail, PublicComment, PinnedComment } from './post.types'
+import { DEFAULT_COMMENT_PAGE_SIZE, encodeCommentCursor, decodeCommentCursor } from './comment-page'
 import { resolveAvatarUrl, parseJson, parseAvatarData } from './post.public'
 import { getExecuteRows } from '@/lib/server/utils'
 import {
@@ -80,13 +81,24 @@ export async function listViewableMergedSourceIds(
   return rows.map((r) => String(r.id))
 }
 
+export interface CommentPageParams {
+  /** Root comments per page (default {@link DEFAULT_COMMENT_PAGE_SIZE}). */
+  limit?: number
+  /** Opaque keyset cursor from a prior page's `commentsNextCursor`. */
+  cursor?: string | null
+}
+
 export async function getPublicPostDetail(
   postId: PostId,
-  actor: Actor = ANONYMOUS_ACTOR
+  actor: Actor = ANONYMOUS_ACTOR,
+  commentsPage: CommentPageParams = {}
 ): Promise<PublicPostDetail | null> {
   const postUuid = toUuid(postId)
   const principalId = (actor.principalId ?? undefined) as PrincipalId | undefined
   const includePrivateComments = isTeamActor(actor)
+
+  const rootLimit = Math.max(1, commentsPage.limit ?? DEFAULT_COMMENT_PAGE_SIZE)
+  const cursor = decodeCommentCursor(commentsPage.cursor)
 
   // Comment moderation visibility:
   //   - team actors see every moderation state (queue + published)
@@ -110,7 +122,7 @@ export async function getPublicPostDetail(
   // extra round-trip. Team actors trivially get every id. Without this
   // filter, the canonical's public detail would leak comments posted on
   // team-only or segment-restricted boards that were later merged in.
-  const [postResults, commentsWithReactions, viewableMergedSourceIds] = await Promise.all([
+  const [postResults, viewableMergedSourceIds] = await Promise.all([
     // Query 1: Post with embedded tags and author avatar
     db
       .select({
@@ -161,132 +173,13 @@ export async function getPublicPostDetail(
       .where(and(eq(posts.id, postId), isNull(posts.deletedAt), isNull(boards.deletedAt)))
       .limit(1),
 
-    // Query 2: Comments with avatars, reactions, and status changes (single query using GROUP BY + json_agg)
-    // Note: Raw SQL may return dates as strings depending on driver (neon-http vs postgres-js)
-    db.execute<{
-      id: string
-      post_id: string
-      parent_id: string | null
-      principal_id: string
-      author_name: string | null
-      content: string
-      content_json: unknown
-      is_team_member: boolean
-      is_private: boolean
-      created_at: Date | string
-      updated_at: Date | string | null
-      deleted_at: Date | string | null
-      deleted_by_principal_id: string | null
-      avatar_key: string | null
-      avatar_url: string | null
-      reactions_json: string
-      sc_from_name: string | null
-      sc_from_color: string | null
-      sc_to_name: string | null
-      sc_to_color: string | null
-    }>(sql`
-      SELECT
-        c.id,
-        c.post_id,
-        c.parent_id,
-        c.principal_id,
-        m.display_name as author_name,
-        c.content,
-        c.content_json,
-        c.is_team_member,
-        c.is_private,
-        c.created_at,
-        c.updated_at,
-        c.deleted_at,
-        c.deleted_by_principal_id,
-        m.avatar_key,
-        m.avatar_url,
-        COALESCE(
-          json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
-          FILTER (WHERE cr.id IS NOT NULL),
-          '[]'
-        ) as reactions_json,
-        scf.name as sc_from_name,
-        scf.color as sc_from_color,
-        sct.name as sc_to_name,
-        sct.color as sc_to_color
-      FROM ${postComments} c
-      INNER JOIN ${principalTable} m ON c.principal_id = m.id
-      LEFT JOIN ${postCommentReactions} cr ON cr.comment_id = c.id
-      LEFT JOIN ${postStatuses} scf ON scf.id = c.status_change_from_id
-      LEFT JOIN ${postStatuses} sct ON sct.id = c.status_change_to_id
-      WHERE c.post_id = ${postUuid}::uuid
-      ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
-      ${moderationFilterSql}
-      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
-      ORDER BY c.created_at ASC
-    `),
-
-    // Query 3: Per-actor merged-source allowlist. Computed in parallel so
-    // we don't pay an extra round-trip; results are unioned into the
-    // comments set after the awaits resolve. Returns [] when this isn't
-    // a canonical or no sources survive the audience check.
+    // Query 2: Per-actor merged-source allowlist. Computed in parallel with
+    // the post fetch so we don't pay an extra round-trip. The comment set is
+    // the UNION of the canonical post plus every merged source the actor may
+    // see — paginating over that union (below) keeps merged threads correct.
+    // Returns [] when this isn't a canonical or no sources survive the check.
     listViewableMergedSourceIds(postId, actor),
   ])
-
-  // Union merged-source comments into the canonical's set. We re-query in
-  // the rare case there are any allowed sources — typical detail views
-  // have none, and the canonical-only query above is by far the common
-  // case. Splitting the two avoids paying for a UNION-ALL subquery on
-  // every detail load.
-  let mergedCommentsRows: typeof commentsWithReactions | null = null
-  if (viewableMergedSourceIds.length > 0) {
-    const sourceUuids = viewableMergedSourceIds.map((id) => toUuid(id as PostId))
-    mergedCommentsRows = await db.execute<{
-      id: string
-      post_id: string
-      parent_id: string | null
-      principal_id: string
-      author_name: string | null
-      content: string
-      content_json: unknown
-      is_team_member: boolean
-      is_private: boolean
-      created_at: Date | string
-      updated_at: Date | string | null
-      deleted_at: Date | string | null
-      deleted_by_principal_id: string | null
-      avatar_key: string | null
-      avatar_url: string | null
-      reactions_json: string
-      sc_from_name: string | null
-      sc_from_color: string | null
-      sc_to_name: string | null
-      sc_to_color: string | null
-    }>(sql`
-      SELECT
-        c.id, c.post_id, c.parent_id, c.principal_id,
-        m.display_name as author_name,
-        c.content, c.content_json, c.is_team_member, c.is_private,
-        c.created_at, c.updated_at, c.deleted_at, c.deleted_by_principal_id,
-        m.avatar_key, m.avatar_url,
-        COALESCE(
-          json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
-          FILTER (WHERE cr.id IS NOT NULL),
-          '[]'
-        ) as reactions_json,
-        scf.name as sc_from_name, scf.color as sc_from_color,
-        sct.name as sc_to_name, sct.color as sc_to_color
-      FROM ${postComments} c
-      INNER JOIN ${principalTable} m ON c.principal_id = m.id
-      LEFT JOIN ${postCommentReactions} cr ON cr.comment_id = c.id
-      LEFT JOIN ${postStatuses} scf ON scf.id = c.status_change_from_id
-      LEFT JOIN ${postStatuses} sct ON sct.id = c.status_change_to_id
-      WHERE c.post_id IN (${sql.join(
-        sourceUuids.map((u) => sql`${u}::uuid`),
-        sql`, `
-      )})
-      ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
-      ${moderationFilterSql}
-      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
-      ORDER BY c.created_at ASC
-    `)
-  }
 
   const postResult = postResults[0]
   if (!postResult) {
@@ -312,10 +205,6 @@ export async function getPublicPostDetail(
   >(postResult.tagsJson)
   const authorAvatarUrl = parseAvatarData(postResult.authorAvatarData)
 
-  // Extract rows from execute result (handles both postgres-js and neon-http formats)
-  // Combine canonical-post comments with merged-source comments the actor
-  // is entitled to see. Re-sort by created_at to preserve the chronological
-  // tree the buildCommentTree pass expects.
   type CommentRow = {
     id: string
     post_id: string
@@ -338,16 +227,115 @@ export async function getPublicPostDetail(
     sc_to_name: string | null
     sc_to_color: string | null
   }
-  const canonicalCommentsRaw = getExecuteRows<CommentRow>(commentsWithReactions)
-  const mergedCommentsRaw = mergedCommentsRows ? getExecuteRows<CommentRow>(mergedCommentsRows) : []
-  const commentsRaw =
-    mergedCommentsRaw.length === 0
-      ? canonicalCommentsRaw
-      : [...canonicalCommentsRaw, ...mergedCommentsRaw].sort((a, b) => {
-          const at = a.created_at instanceof Date ? a.created_at : new Date(a.created_at)
-          const bt = b.created_at instanceof Date ? b.created_at : new Date(b.created_at)
-          return at.getTime() - bt.getTime()
-        })
+
+  // The comment set is the UNION of this post + every merged source the actor
+  // may view. All comment queries below range over that same id list so the
+  // keyset cursor is coherent across merged threads.
+  const commentPostUuids = [postUuid, ...viewableMergedSourceIds.map((id) => toUuid(id as PostId))]
+  const postIdInList = sql.join(
+    commentPostUuids.map((u) => sql`${u}::uuid`),
+    sql`, `
+  )
+
+  // Shared SELECT for a hydrated comment row (author, reactions, status change).
+  // `whereExtra` narrows to roots-for-this-page vs replies-for-those-roots.
+  const commentSelect = (whereExtra: ReturnType<typeof sql>, orderLimit: ReturnType<typeof sql>) =>
+    db.execute<CommentRow>(sql`
+      SELECT
+        c.id, c.post_id, c.parent_id, c.principal_id,
+        m.display_name as author_name,
+        c.content, c.content_json, c.is_team_member, c.is_private,
+        c.created_at, c.updated_at, c.deleted_at, c.deleted_by_principal_id,
+        m.avatar_key, m.avatar_url,
+        COALESCE(
+          json_agg(json_build_object('emoji', cr.emoji, 'principalId', cr.principal_id))
+          FILTER (WHERE cr.id IS NOT NULL),
+          '[]'
+        ) as reactions_json,
+        scf.name as sc_from_name, scf.color as sc_from_color,
+        sct.name as sc_to_name, sct.color as sc_to_color
+      FROM ${postComments} c
+      INNER JOIN ${principalTable} m ON c.principal_id = m.id
+      LEFT JOIN ${postCommentReactions} cr ON cr.comment_id = c.id
+      LEFT JOIN ${postStatuses} scf ON scf.id = c.status_change_from_id
+      LEFT JOIN ${postStatuses} sct ON sct.id = c.status_change_to_id
+      WHERE c.post_id IN (${postIdInList})
+      ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
+      ${moderationFilterSql}
+      ${whereExtra}
+      GROUP BY c.id, m.display_name, m.avatar_key, m.avatar_url, scf.name, scf.color, sct.name, sct.color
+      ${orderLimit}
+    `)
+
+  // Keyset over ROOT comments on (created_at, id) DESCENDING — page 1 is the
+  // NEWEST roots, matching the newest-first thread UI; "show more" walks toward
+  // older roots. Fetch limit+1 to detect a further page without a second count.
+  // The cursor row itself is excluded via the strict `<` tuple compare.
+  const cursorSql = cursor
+    ? sql`AND (c.created_at, c.id) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+    : sql``
+  const rootRowsResult = await commentSelect(
+    sql`AND c.parent_id IS NULL ${cursorSql}`,
+    sql`ORDER BY c.created_at DESC, c.id DESC LIMIT ${rootLimit + 1}`
+  )
+  const rootRowsRaw = getExecuteRows<CommentRow>(rootRowsResult)
+  const commentsHasMore = rootRowsRaw.length > rootLimit
+  const pageRootRows = commentsHasMore ? rootRowsRaw.slice(0, rootLimit) : rootRowsRaw
+
+  // Replies for exactly the roots on this page. Reply chains are shallow, so a
+  // single descendants-of-these-roots pass (recursive CTE) is bounded by the
+  // page's fan-out and keeps arbitrarily-deep chains attached.
+  const rootUuids = pageRootRows.map((r) => r.id)
+  let replyRowsRaw: CommentRow[] = []
+  if (rootUuids.length > 0) {
+    const rootIdInList = sql.join(
+      rootUuids.map((u) => sql`${u}::uuid`),
+      sql`, `
+    )
+    const replyRowsResult = await commentSelect(
+      sql`AND c.parent_id IS NOT NULL AND c.id IN (
+        WITH RECURSIVE descendants AS (
+          SELECT id FROM ${postComments} WHERE parent_id IN (${rootIdInList})
+          UNION
+          SELECT ch.id FROM ${postComments} ch
+          INNER JOIN descendants d ON ch.parent_id = d.id
+        )
+        SELECT id FROM descendants
+      )`,
+      sql`ORDER BY c.created_at ASC, c.id ASC`
+    )
+    replyRowsRaw = getExecuteRows<CommentRow>(replyRowsResult)
+  }
+
+  // Total live root count for the "show N more" label. Deleted roots that the
+  // portal prunes are excluded so the count matches what the viewer can act on.
+  const totalRootResult = await db.execute<{ count: string | number }>(sql`
+    SELECT COUNT(*)::int as count
+    FROM ${postComments} c
+    WHERE c.post_id IN (${postIdInList})
+      AND c.parent_id IS NULL
+      ${includePrivateComments ? sql`` : sql`AND c.is_private = false`}
+      ${includePrivateComments ? sql`` : sql`AND c.deleted_at IS NULL`}
+      ${moderationFilterSql}
+  `)
+  const totalRootRows = getExecuteRows<{ count: string | number }>(totalRootResult)
+  const commentsTotalRootCount = Number(totalRootRows[0]?.count ?? 0)
+
+  const commentsNextCursor =
+    commentsHasMore && pageRootRows.length > 0
+      ? encodeCommentCursor(
+          pageRootRows[pageRootRows.length - 1].created_at,
+          pageRootRows[pageRootRows.length - 1].id
+        )
+      : null
+
+  // Roots for this page + their descendants, ordered chronologically so
+  // buildCommentTree nests them correctly.
+  const commentsRaw = [...pageRootRows, ...replyRowsRaw].sort((a, b) => {
+    const at = a.created_at instanceof Date ? a.created_at : new Date(a.created_at)
+    const bt = b.created_at instanceof Date ? b.created_at : new Date(b.created_at)
+    return at.getTime() - bt.getTime()
+  })
 
   // Helper to ensure Date objects (raw SQL may return strings depending on driver)
   const ensureDate = (value: Date | string): Date =>
@@ -439,31 +427,35 @@ export async function getPublicPostDetail(
 
   let pinnedComment: PinnedComment | null = null
   if (postResult.pinnedCommentId) {
-    // Look up against the normalized list — `postResult.pinnedCommentId`
-    // is a TypeID and `commentsResult[].id` is now also a TypeID, so the
-    // strict-equals comparison finally matches.
-    const pinnedCommentData = commentsResult.find((c) => c.id === postResult.pinnedCommentId)
-    if (pinnedCommentData && !pinnedCommentData.deletedAt) {
-      // Re-derive avatar from the original raw row so we keep the same
-      // resolveAvatarUrl(avatarKey, avatarUrl) behavior the public API
-      // expects. The mapped node only carries the resolved URL.
-      const rawRow = commentsRaw.find((c) => c.id === toUuid(postResult.pinnedCommentId!))
-      const pinnedRaw =
-        (pinnedCommentData.contentJson as PinnedComment['contentJson'] | null | undefined) ?? null
-      const pinnedHydrated = pinnedRaw
-        ? ((await hydrateMentions(pinnedRaw as JSONContent)) as PinnedComment['contentJson'])
+    // The pinned comment must render regardless of which page it falls on, so
+    // resolve it independently of the paginated set. Prefer the already-loaded
+    // page row (common: pins are usually recent/top), else fetch it directly.
+    const pinnedUuid = toUuid(postResult.pinnedCommentId)
+    let pinnedRow = commentsRaw.find((c) => c.id === pinnedUuid) ?? null
+    if (!pinnedRow) {
+      const pinnedResult = await commentSelect(sql`AND c.id = ${pinnedUuid}::uuid`, sql``)
+      pinnedRow = getExecuteRows<CommentRow>(pinnedResult)[0] ?? null
+    }
+    if (pinnedRow && !pinnedRow.deleted_at) {
+      const pinnedContentJson =
+        (pinnedRow.content_json as PinnedComment['contentJson'] | null | undefined) ?? null
+      const pinnedHydrated = pinnedContentJson
+        ? ((await hydrateMentions(
+            pinnedContentJson as JSONContent
+          )) as PinnedComment['contentJson'])
         : null
       pinnedComment = {
-        id: pinnedCommentData.id,
-        content: pinnedCommentData.content,
+        id: fromUuid('post_comment', pinnedRow.id) as PostCommentId,
+        content: pinnedRow.content,
         contentJson: pinnedHydrated,
-        authorName: pinnedCommentData.authorName,
-        principalId: pinnedCommentData.principalId,
-        avatarUrl: rawRow
-          ? resolveAvatarUrl({ avatarKey: rawRow.avatar_key, avatarUrl: rawRow.avatar_url })
-          : (pinnedCommentData.avatarUrl ?? null),
-        createdAt: pinnedCommentData.createdAt,
-        isTeamMember: pinnedCommentData.isTeamMember,
+        authorName: pinnedRow.author_name,
+        principalId: fromUuid('principal', pinnedRow.principal_id) as PrincipalId,
+        avatarUrl: resolveAvatarUrl({
+          avatarKey: pinnedRow.avatar_key,
+          avatarUrl: pinnedRow.avatar_url,
+        }),
+        createdAt: ensureDate(pinnedRow.created_at),
+        isTeamMember: pinnedRow.is_team_member,
       }
     }
   }
@@ -490,6 +482,9 @@ export async function getPublicPostDetail(
     boardAccess: postResult.boardAccess,
     tags: tagsResult,
     comments: hydratedRootComments,
+    commentsHasMore,
+    commentsNextCursor,
+    commentsTotalRootCount,
     pinnedComment,
     pinnedCommentId: pinnedComment ? (postResult.pinnedCommentId as PostCommentId) : null,
     isCommentsLocked: postResult.isCommentsLocked,

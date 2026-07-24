@@ -29,6 +29,7 @@ import {
   useUnpinComment,
   useRestoreComment,
 } from '@/lib/client/mutations/portal-comments'
+import { useLoadMorePortalComments } from '@/lib/client/mutations/load-more-comments'
 import { toast } from 'sonner'
 import { PortalMergeBanner } from '@/components/public/post-detail/merge-banner'
 import { similarPostsQuery } from '@/components/public/post-detail/similar-posts-section'
@@ -191,6 +192,14 @@ function PostDetailPage() {
     onError: (error) => toast.error(error.message || 'Failed to restore comment'),
   })
 
+  // "Show more comments" — appends the next keyset page of root comments into
+  // the same ['portal','post',postId] detail cache the mutations patch.
+  const {
+    loadMore: loadMoreComments,
+    isLoading: isLoadingMoreComments,
+    hasMore: hasMoreComments,
+  } = useLoadMorePortalComments(postId)
+
   const post = postQuery.data
   // Use board data from post (already JOINed in the query)
   const board = post?.board
@@ -341,7 +350,7 @@ function PostDetailPage() {
 
       {/* Comments card */}
       <div className="bg-card border border-border/40 rounded-lg overflow-hidden mt-4">
-        <Suspense fallback={<CommentsSectionSkeleton />}>
+        <Suspense fallback={<CommentsSectionSkeleton count={post.commentsTotalRootCount} />}>
           <CommentsSection
             postId={postId}
             comments={post.comments}
@@ -367,6 +376,14 @@ function PostDetailPage() {
             onRestoreComment={(commentId: PostCommentId) => restoreComment.mutate(commentId)}
             restoringCommentId={
               restoreComment.isPending ? (restoreComment.variables as PostCommentId) : null
+            }
+            hasMoreComments={hasMoreComments}
+            onLoadMoreComments={loadMoreComments}
+            isLoadingMoreComments={isLoadingMoreComments}
+            remainingCommentCount={
+              post.commentsTotalRootCount != null
+                ? Math.max(0, post.commentsTotalRootCount - post.comments.length)
+                : undefined
             }
           />
         </Suspense>

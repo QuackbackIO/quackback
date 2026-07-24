@@ -63,7 +63,19 @@ export interface PublicPostDetailView {
   eta?: Date | string | null
   board: { id: string; name: string; slug: string }
   tags: Array<{ id: string; name: string; color: string }>
+  /**
+   * Root comments loaded so far. The server keyset-paginates by top-level
+   * comment; "show more" fetches append further roots into this same array
+   * (see `useLoadMoreComments`), so every comment mutation keeps operating on
+   * one coherent tree.
+   */
   comments: PublicCommentView[]
+  /** Whether more root comments exist beyond what's loaded. */
+  commentsHasMore?: boolean
+  /** Keyset cursor for the next page of roots, or null when exhausted. */
+  commentsNextCursor?: string | null
+  /** Total live root-comment count (for the "show N more" label). */
+  commentsTotalRootCount?: number
   pinnedComment: PinnedCommentView | null
   pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */

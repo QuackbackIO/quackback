@@ -1173,5 +1173,10 @@
   "widget.tickets.new.emailHint": "我們會透過電子郵件向你傳送此工單的回覆和更新。",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.new.detailsTooLong": "詳情過長（最多 {max} 個字元）。",
-  "widget.tickets.new.selectPlaceholder": "選擇…"
+  "widget.tickets.new.selectPlaceholder": "選擇…",
+  "portal.postDetail.comments.loadingMore": "Loading...",
+  "portal.postDetail.comments.showMore": "Show more comments",
+  "portal.postDetail.comments.showMoreCount": "Show {count, plural, one {# more comment} other {# more comments}}",
+  "widget.commentList.loadingMore": "Loading...",
+  "widget.commentList.showMore": "Show more comments"
 }

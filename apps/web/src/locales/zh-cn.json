@@ -1173,5 +1173,10 @@
   "widget.tickets.new.emailHint": "我们会通过电子邮件向你发送此工单的回复和更新。",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.new.detailsTooLong": "详情过长（最多 {max} 个字符）。",
-  "widget.tickets.new.selectPlaceholder": "选择…"
+  "widget.tickets.new.selectPlaceholder": "选择…",
+  "portal.postDetail.comments.loadingMore": "Loading...",
+  "portal.postDetail.comments.showMore": "Show more comments",
+  "portal.postDetail.comments.showMoreCount": "Show {count, plural, one {# more comment} other {# more comments}}",
+  "widget.commentList.loadingMore": "Loading...",
+  "widget.commentList.showMore": "Show more comments"
 }

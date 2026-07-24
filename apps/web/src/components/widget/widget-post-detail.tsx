@@ -13,6 +13,10 @@ import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
 import type { PublicPostDetailView } from '@/lib/client/queries/portal-detail'
 import { WidgetVoteButton } from './widget-vote-button'
 import { WidgetCommentList } from './widget-comment-list'
+import { useLoadMoreWidgetComments } from '@/lib/client/mutations/load-more-comments'
+
+/** First-page root-comment count for the constrained widget viewport. */
+const WIDGET_COMMENT_PAGE_SIZE = 15
 import { useWidgetAuth } from './widget-auth-provider'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { WidgetCommentForm } from './widget-comment-form'
@@ -40,15 +44,18 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
   // Widget-specific post detail query that injects Bearer headers so the server
   // can resolve principalId for reaction hasReacted highlights.
   // Re-keyed on sessionVersion so it refetches after identify.
+  const detailKey = widgetQueryKeys.postDetail.byId(postId, sessionVersion)
   const {
     data: post,
     isLoading,
     error,
   } = useQuery({
-    queryKey: widgetQueryKeys.postDetail.byId(postId, sessionVersion),
+    queryKey: detailKey,
     queryFn: async (): Promise<PublicPostDetailView> => {
       const result = await fetchPublicPostDetail({
-        data: { postId },
+        // Smaller first page for the constrained widget viewport; further roots
+        // load via "show more".
+        data: { postId, commentsLimit: WIDGET_COMMENT_PAGE_SIZE },
         headers: getWidgetAuthHeaders(),
       })
       if (!result) throw new Error('Post not found')
@@ -56,6 +63,13 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
     },
     staleTime: 30 * 1000,
   })
+
+  // "Show more comments" appends the next page into the same widget detail cache.
+  const {
+    loadMore: loadMoreComments,
+    isLoading: isLoadingMoreComments,
+    hasMore: hasMoreComments,
+  } = useLoadMoreWidgetComments(postId as PostId, detailKey, WIDGET_COMMENT_PAGE_SIZE)
 
   const status = post?.statusId ? (statuses.find((s) => s.id === post.statusId) ?? null) : null
 
@@ -310,6 +324,29 @@ export function WidgetPostDetail({ postId, statuses }: WidgetPostDetailProps) {
             canComment={canComment && !post.isCommentsLocked}
             onSubmitComment={handleSubmitReply}
           />
+
+          {hasMoreComments && (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                disabled={isLoadingMoreComments}
+                onClick={() => void loadMoreComments()}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                {isLoadingMoreComments ? (
+                  <FormattedMessage
+                    id="widget.commentList.loadingMore"
+                    defaultMessage="Loading..."
+                  />
+                ) : (
+                  <FormattedMessage
+                    id="widget.commentList.showMore"
+                    defaultMessage="Show more comments"
+                  />
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </ScrollArea>

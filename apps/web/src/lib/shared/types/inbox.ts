@@ -52,6 +52,12 @@ export interface PostDetails {
   board: Pick<Board, 'id' | 'name' | 'slug'>
   tags: Pick<PostTag, 'id' | 'name' | 'color'>[]
   comments: CommentWithReplies[]
+  /** Whether more root comments exist beyond what's loaded (keyset pagination). */
+  commentsHasMore?: boolean
+  /** Keyset cursor for the next page of root comments, or null when exhausted. */
+  commentsNextCursor?: string | null
+  /** Total live root-comment count (for the "show N more" label). */
+  commentsTotalRootCount?: number
   /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */

@@ -44,10 +44,10 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { VISITOR_CONVERSATION_FEATURES } from '@/components/conversation/conversation-editor-features'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { isEmptyTiptapDoc } from '@/lib/shared/utils/is-empty-tiptap-doc'
-import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { BackLink } from '@/components/ui/back-link'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TicketIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 
@@ -67,6 +67,95 @@ function formatMessageTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+/** One skeleton message row — mirrors VisitorMessageBubble's geometry
+ *  (`max-w-[85%]` bubble, right-aligned for the requester's own messages,
+ *  left-aligned for the team's) so the thread doesn't reflow when the real
+ *  messages replace it. `bubbleWidth` varies per row so the thread doesn't
+ *  read as a uniform stack of identical blocks. */
+function SkeletonMessageRow({
+  side,
+  bubbleWidth,
+  lines = 1,
+}: {
+  side: 'self' | 'peer'
+  bubbleWidth: string
+  lines?: number
+}) {
+  const self = side === 'self'
+  return (
+    <div className={cn('flex flex-col', self ? 'items-end' : 'items-start')}>
+      <div
+        className={cn(
+          'max-w-[85%] space-y-1.5 rounded-2xl px-3.5 py-2.5',
+          self ? 'bg-primary/10' : 'bg-muted'
+        )}
+        style={{ width: bubbleWidth }}
+      >
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton key={i} className="h-3.5 w-full bg-foreground/10" />
+        ))}
+      </div>
+      {!self && <Skeleton className="mt-1 ms-1 h-2.5 w-20 bg-foreground/10" />}
+    </div>
+  )
+}
+
+/** Pending state for the ticket detail page, shaped like the loaded layout
+ *  (title + stage tracker + message thread + composer, with the details rail
+ *  on desktop) so data arriving doesn't cause a visible layout jump — the
+ *  skeleton reserves the same outer structure `PortalTicketPage` renders once
+ *  `ticket`/`thread` resolve. */
+function TicketPageSkeleton() {
+  return (
+    <div className="lg:flex lg:items-start lg:gap-8">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <Skeleton className="h-7 w-64" />
+          <Skeleton className="size-8 shrink-0 rounded-md" />
+        </div>
+
+        {/* Stage tracker */}
+        <div className="mt-5 flex items-center gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex flex-1 items-center gap-2">
+              <Skeleton className="size-6 shrink-0 rounded-full" />
+              {i < 3 && <Skeleton className="h-1 flex-1" />}
+            </div>
+          ))}
+        </div>
+
+        {/* Message thread */}
+        <div className="mt-6 flex flex-col gap-3">
+          <SkeletonMessageRow side="peer" bubbleWidth="70%" lines={2} />
+          <SkeletonMessageRow side="self" bubbleWidth="45%" />
+          <SkeletonMessageRow side="peer" bubbleWidth="85%" lines={3} />
+          <SkeletonMessageRow side="self" bubbleWidth="55%" lines={2} />
+        </div>
+
+        {/* Composer */}
+        <div className="mt-4 rounded-lg border border-border bg-background p-2">
+          <Skeleton className="h-[72px] w-full rounded-md" />
+          <div className="flex justify-end pt-1">
+            <Skeleton className="h-8 w-20 rounded-md" />
+          </div>
+        </div>
+      </div>
+
+      {/* Details rail (desktop only, matches TicketDetailsRail) */}
+      <aside className="mt-8 hidden lg:mt-0 lg:block lg:w-72 lg:shrink-0">
+        <div className="space-y-4 rounded-xl border border-border/20 bg-card p-4 shadow-sm">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between gap-2">
+              <Skeleton className="h-3.5 w-20" />
+              <Skeleton className="h-3.5 w-16" />
+            </div>
+          ))}
+        </div>
+      </aside>
+    </div>
+  )
 }
 
 function PortalTicketPage() {
@@ -219,9 +308,7 @@ function PortalTicketPage() {
           }
         />
       ) : isLoading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
+        <TicketPageSkeleton />
       ) : isError || !ticket ? (
         <EmptyState
           icon={TicketIcon}

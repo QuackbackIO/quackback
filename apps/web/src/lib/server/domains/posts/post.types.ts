@@ -260,13 +260,36 @@ export interface PublicPostDetail {
    */
   boardAccess: BoardAccess
   tags: Array<{ id: string; name: string; color: string }>
+  /**
+   * First page of root comments (each carrying its full reply subtree).
+   * Comments are keyset-paginated by TOP-LEVEL comment on `(created_at, id)`
+   * ascending — bounding the number of roots bounds the payload, since reply
+   * chains are shallow. `commentsHasMore` / `commentsNextCursor` drive the
+   * portal/widget "show more comments" affordance.
+   */
   comments: PublicComment[]
+  /** Whether more root comments exist beyond this page. */
+  commentsHasMore: boolean
+  /** Opaque keyset cursor for the next page of roots, or null when exhausted. */
+  commentsNextCursor: string | null
+  /** Total live root-comment count (drives the "show N more" label). */
+  commentsTotalRootCount: number
   /** Pinned comment as official response */
   pinnedComment: PinnedComment | null
   /** ID of the pinned comment (for UI to identify which comment is pinned) */
   pinnedCommentId: PostCommentId | null
   /** Whether comments are locked (portal users can't comment) */
   isCommentsLocked: boolean
+}
+
+/**
+ * Keyset cursor over root comments, encoded as `<createdAtISO>|<uuid>`.
+ * `createdAt` breaks ties deterministically with the comment id so pages
+ * never overlap or skip under the `(created_at, id)` ordering.
+ */
+export interface CommentCursor {
+  createdAt: string
+  id: string
 }
 
 /**

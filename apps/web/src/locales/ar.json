@@ -1173,5 +1173,10 @@
   "widget.tickets.new.emailHint": "سنرسل إليك الردود والتحديثات المتعلقة بهذه التذكرة عبر البريد الإلكتروني.",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
   "widget.tickets.new.detailsTooLong": "التفاصيل طويلة جدًا (بحد أقصى {max} حرفًا).",
-  "widget.tickets.new.selectPlaceholder": "اختر…"
+  "widget.tickets.new.selectPlaceholder": "اختر…",
+  "portal.postDetail.comments.loadingMore": "Loading...",
+  "portal.postDetail.comments.showMore": "Show more comments",
+  "portal.postDetail.comments.showMoreCount": "Show {count, plural, one {# more comment} other {# more comments}}",
+  "widget.commentList.loadingMore": "Loading...",
+  "widget.commentList.showMore": "Show more comments"
 }

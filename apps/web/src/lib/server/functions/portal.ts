@@ -319,7 +319,15 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
   })
 
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
-  .validator(z.object({ postId: z.string() }))
+  .validator(
+    z.object({
+      postId: z.string(),
+      // Optional comment-page controls. Omitted by first-page callers so the
+      // default page size applies; supplied by "show more" fetches.
+      commentsCursor: z.string().nullish(),
+      commentsLimit: z.number().int().positive().max(100).optional(),
+    })
+  )
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'fetch public post detail')
 
@@ -338,7 +346,10 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
     // isTeamActor). Same resolution path as list reads.
     const auth = hasAuthCredentials() ? await getOptionalAuth() : null
     const actor = await policyActorFromAuth(auth)
-    const result = await getPublicPostDetail(data.postId as PostId, actor)
+    const result = await getPublicPostDetail(data.postId as PostId, actor, {
+      cursor: data.commentsCursor ?? null,
+      limit: data.commentsLimit,
+    })
 
     if (!result) return null
 
@@ -399,6 +410,11 @@ export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
       createdAt: toISOString(result.createdAt),
       eta: result.eta ? toISOString(result.eta) : null,
       comments: result.comments.map(serializeComment),
+      // Pass through the comment keyset-page metadata so the client can drive
+      // the infinite "show more comments" affordance.
+      commentsHasMore: result.commentsHasMore,
+      commentsNextCursor: result.commentsNextCursor,
+      commentsTotalRootCount: result.commentsTotalRootCount,
       mergeInfo,
       mergedPostCount: mergedPostsList.length > 0 ? mergedPostsList.length : undefined,
       canVote,
