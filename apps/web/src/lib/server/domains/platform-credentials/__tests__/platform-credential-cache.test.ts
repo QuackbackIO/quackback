@@ -21,6 +21,7 @@ vi.mock('@/lib/server/redis', () => ({
   CACHE_KEYS: {
     TENANT_SETTINGS: 'settings:tenant',
     PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
+    REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
   },
 }))
 
@@ -102,13 +103,21 @@ describe('platform credential cache invalidation', () => {
       principalId: 'principal_1' as PrincipalId,
     })
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'platform-cred:configured-types')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:tenant',
+      'platform-cred:configured-types',
+      'auth:registered-providers'
+    )
   })
 
   it('deletePlatformCredentials invalidates TENANT_SETTINGS + PLATFORM_INTEGRATION_TYPES caches', async () => {
     await deletePlatformCredentials('slack')
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'platform-cred:configured-types')
+    expect(mockCacheDel).toHaveBeenCalledWith(
+      'settings:tenant',
+      'platform-cred:configured-types',
+      'auth:registered-providers'
+    )
   })
 })
 
