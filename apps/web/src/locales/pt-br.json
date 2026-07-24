@@ -573,7 +573,7 @@
   "portal.tickets.watch.watch": "Acompanhar este ticket",
   "portal.tickets.watch.unwatch": "Parar de acompanhar",
   "portal.tickets.stage.closed": "Fechado",
-  "tickets.header.details": "Detalhes",
+  "portal.tickets.details.toggle": "Detalhes",
   "portal.tickets.details.opened": "Aberto",
   "portal.tickets.details.yes": "Sim",
   "portal.tickets.details.no": "Não",

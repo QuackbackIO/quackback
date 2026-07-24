@@ -573,7 +573,7 @@
   "portal.tickets.watch.watch": "متابعة هذه التذكرة",
   "portal.tickets.watch.unwatch": "إيقاف المتابعة",
   "portal.tickets.stage.closed": "مغلقة",
-  "tickets.header.details": "التفاصيل",
+  "portal.tickets.details.toggle": "التفاصيل",
   "portal.tickets.details.opened": "تاريخ الفتح",
   "portal.tickets.details.yes": "نعم",
   "portal.tickets.details.no": "لا",

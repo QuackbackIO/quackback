@@ -573,7 +573,7 @@
   "portal.tickets.watch.watch": "追蹤這張工單",
   "portal.tickets.watch.unwatch": "取消追蹤",
   "portal.tickets.stage.closed": "已關閉",
-  "tickets.header.details": "詳情",
+  "portal.tickets.details.toggle": "詳情",
   "portal.tickets.details.opened": "建立時間",
   "portal.tickets.details.yes": "是",
   "portal.tickets.details.no": "否",

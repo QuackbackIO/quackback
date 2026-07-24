@@ -573,7 +573,7 @@
   "portal.tickets.watch.watch": "Отслеживать этот тикет",
   "portal.tickets.watch.unwatch": "Перестать отслеживать",
   "portal.tickets.stage.closed": "Закрыт",
-  "tickets.header.details": "Подробности",
+  "portal.tickets.details.toggle": "Подробности",
   "portal.tickets.details.opened": "Открыт",
   "portal.tickets.details.yes": "Да",
   "portal.tickets.details.no": "Нет",

@@ -175,7 +175,7 @@ export function TicketHeaderCard({
             expanded && 'rotate-90 rtl:rotate-90'
           )}
         />
-        <FormattedMessage id="tickets.header.details" defaultMessage="Details" />
+        <FormattedMessage id="portal.tickets.details.toggle" defaultMessage="Details" />
         {ticket.ticketType && (
           <span className="text-muted-foreground/60">· {ticket.ticketType.name}</span>
         )}
