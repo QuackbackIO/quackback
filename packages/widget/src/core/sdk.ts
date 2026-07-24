@@ -150,6 +150,39 @@ export function createSDK(): SDK {
     }
   }
 
+  // Pending idle-time panel preload (see the init case). Cancelled on
+  // destroy and made moot by an early open(), which creates the panel itself.
+  let panelPreload: { kind: 'idle' | 'timeout'; id: number } | null = null
+
+  function schedulePanelPreload(): void {
+    if (panel || panelPreload) return
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+    }
+    const run = () => {
+      panelPreload = null
+      if (config && !panel) ensurePanel()
+    }
+    if (typeof w.requestIdleCallback === 'function') {
+      panelPreload = { kind: 'idle', id: w.requestIdleCallback(run, { timeout: 2500 }) }
+    } else {
+      // No requestIdleCallback (Safari): a short beat past the current task
+      // keeps the iframe from racing the host page's own startup work.
+      panelPreload = { kind: 'timeout', id: window.setTimeout(run, 200) }
+    }
+  }
+
+  function cancelPanelPreload(): void {
+    if (!panelPreload) return
+    const w = window as Window & { cancelIdleCallback?: (id: number) => void }
+    if (panelPreload.kind === 'idle' && typeof w.cancelIdleCallback === 'function') {
+      w.cancelIdleCallback(panelPreload.id)
+    } else if (panelPreload.kind === 'timeout') {
+      window.clearTimeout(panelPreload.id)
+    }
+    panelPreload = null
+  }
+
   function ensurePanel(): PanelHandle {
     if (panel) return panel
     panel = createPanel({
@@ -194,11 +227,9 @@ export function createSDK(): SDK {
     launcher.setColors({ backgroundColor, foregroundColor })
   }
 
-  // Reveal the launcher after colors are set (or as a fallback if the fetch
-  // is slow/fails), so users never see the default indigo flash before the
-  // brand color lands. A small post-fetch delay lets the host page settle
-  // before the launcher fades in.
-  const LAUNCHER_REVEAL_DELAY_MS = 600
+  // Reveal the launcher only after brand colors are set (or via the fallback
+  // if the config fetch is slow/fails), so users never see the default color
+  // flash before the brand color lands.
   const LAUNCHER_REVEAL_FALLBACK_MS = 1800
   function revealLauncherOnce(): () => void {
     let revealed = false
@@ -206,6 +237,28 @@ export function createSDK(): SDK {
       if (revealed) return
       revealed = true
       launcher?.reveal()
+    }
+  }
+
+  /** Theme + greeting + analytics from a resolved server config. `initToken`
+   *  guards the tracker against a stale async apply after a re-init. */
+  function applyServerConfig(serverConfig: ServerConfig, initToken: InitOptions): void {
+    applyServerTheme(serverConfig)
+    launcher?.setGreeting(serverConfig.launcherGreeting)
+    // Host-page pageview tracking is instance-controlled: it starts only when
+    // the server config enables visitor analytics, and only if this init is
+    // still the live one. The durable device id is a separate opt-in on top.
+    if (serverConfig.visitorAnalytics && config === initToken) {
+      tracker?.stop()
+      const deviceId = serverConfig.visitorDeviceTracking ? getOrCreateDeviceId() : null
+      tracker = createTracker(initToken.instanceUrl, deviceId)
+      tracker.start()
+      // The iframe links the device to the session's principal; queue
+      // until the panel reports ready if it hasn't yet.
+      if (deviceId) {
+        if (ready && bridge) bridge.send('quackback:device', deviceId)
+        else pendingDevice = deviceId
+      }
     }
   }
 
@@ -231,38 +284,35 @@ export function createSDK(): SDK {
         if (config) dispatch('destroy')
         config = next
         createLauncherIfNeeded()
-        ensurePanel()
+        // Preload the hidden panel iframe off the host page's critical path:
+        // init typically runs while the host is still loading, and the iframe
+        // immediately competes for its bandwidth. An open() before the idle
+        // slot fires still creates the panel on the spot.
+        schedulePanelPreload()
         const initialIdentity: Identity | { anonymous: true } = config.identity ?? {
           anonymous: true,
         }
         sendIdentity(initialIdentity)
         const reveal = revealLauncherOnce()
-        const fallback = window.setTimeout(reveal, LAUNCHER_REVEAL_FALLBACK_MS)
-        void fetchServerConfig(config.instanceUrl)
-          .then((serverConfig) => {
-            applyServerTheme(serverConfig)
-            launcher?.setGreeting(serverConfig.launcherGreeting)
-            // Host-page pageview tracking is instance-controlled: it starts
-            // only when the server config enables visitor analytics, and only
-            // if this init is still the live one. The durable device id is a
-            // separate opt-in on top.
-            if (serverConfig.visitorAnalytics && config === next) {
-              tracker?.stop()
-              const deviceId = serverConfig.visitorDeviceTracking ? getOrCreateDeviceId() : null
-              tracker = createTracker(next.instanceUrl, deviceId)
-              tracker.start()
-              // The iframe links the device to the session's principal; queue
-              // until the panel reports ready if it hasn't yet.
-              if (deviceId) {
-                if (ready && bridge) bridge.send('quackback:device', deviceId)
-                else pendingDevice = deviceId
-              }
-            }
-          })
-          .finally(() => {
-            window.clearTimeout(fallback)
-            window.setTimeout(reveal, LAUNCHER_REVEAL_DELAY_MS)
-          })
+        // Script-tag installs get the server config baked into sdk.js, so the
+        // launcher paints in brand colors and reveals with zero network round
+        // trips. npm installs fall back to the config fetch.
+        const baked =
+          typeof window !== 'undefined'
+            ? (window as { __QUACKBACK_CONFIG__?: ServerConfig }).__QUACKBACK_CONFIG__
+            : undefined
+        if (baked) {
+          applyServerConfig(baked, next)
+          reveal()
+        } else {
+          const fallback = window.setTimeout(reveal, LAUNCHER_REVEAL_FALLBACK_MS)
+          void fetchServerConfig(config.instanceUrl)
+            .then((serverConfig) => applyServerConfig(serverConfig, next))
+            .finally(() => {
+              window.clearTimeout(fallback)
+              reveal()
+            })
+        }
         return
       }
       case 'identify':
@@ -280,10 +330,12 @@ export function createSDK(): SDK {
         }
         return
       case 'open': {
+        if (!config) return // open before init is a no-op, matching close/hide
         const opts = (a as OpenOptions) ?? {}
         if (ready && bridge) bridge.send('quackback:open', opts)
         else pendingOpen = opts
-        panel?.show()
+        // The idle preload may not have fired yet — create the panel now.
+        ensurePanel().show()
         launcher?.setOpen(true)
         panelOpen = true
         const ctx = opts as {
@@ -330,6 +382,7 @@ export function createSDK(): SDK {
         return
       }
       case 'destroy':
+        cancelPanelPreload()
         panel?.destroy()
         launcher?.remove()
         bridge?.dispose()

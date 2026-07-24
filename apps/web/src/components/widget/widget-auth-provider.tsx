@@ -73,6 +73,10 @@ interface WidgetAuthProviderProps {
    *  SSR and triggers React hydration error #418 — see issue #133. An SDK
    *  postMessage (quackback:locale) still overrides it after mount. */
   initialLocale?: SupportedLocale
+  /** Catalog slice for `initialLocale`, loaded server-side in the widget
+   *  layout loader so the first render is translated without a client
+   *  catalog fetch. A runtime locale change still fetches the new catalog. */
+  initialMessages?: Record<string, string>
   children: ReactNode
 }
 
@@ -81,6 +85,7 @@ export function WidgetAuthProvider({
   portalSessionToken,
   hmacRequired,
   initialLocale,
+  initialMessages,
   children,
 }: WidgetAuthProviderProps) {
   const queryClient = useQueryClient()
@@ -115,7 +120,7 @@ export function WidgetAuthProvider({
   // i18n locale state — seeded from the SSR-resolved prop only, so the
   // first client render matches the server (see issue #133).
   const [locale, setLocale] = useState<SupportedLocale>(initialLocale ?? DEFAULT_LOCALE)
-  const messages = useIntlSetup(locale)
+  const messages = useIntlSetup(locale, initialMessages)
 
   // The widget is its own iframe document, and its locale can change at runtime
   // (the `quackback:locale` postMessage below). Unlike the portal, the root

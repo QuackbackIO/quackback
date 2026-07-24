@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { z } from 'zod'
-import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { FormattedMessage } from 'react-intl'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
@@ -21,18 +21,7 @@ import {
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
-import { WidgetPostDetail } from '@/components/widget/widget-post-detail'
-import { WidgetChangelog } from '@/components/widget/widget-changelog'
-import { WidgetChangelogDetail } from '@/components/widget/widget-changelog-detail'
-import { WidgetHelp } from '@/components/widget/widget-help'
-import { WidgetHelpCategory } from '@/components/widget/widget-help-category'
-import { WidgetHelpDetail } from '@/components/widget/widget-help-detail'
-import { WidgetMessenger } from '@/components/widget/widget-messenger'
 import type { ConversationId, TicketId } from '@quackback/ids'
-import { WidgetMessages } from '@/components/widget/widget-messages'
-import { WidgetTickets } from '@/components/widget/widget-tickets'
-import { WidgetTicketNew } from '@/components/widget/widget-ticket-new'
-import { WidgetTicketDetail } from '@/components/widget/widget-ticket-detail'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
@@ -49,7 +38,57 @@ import {
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
 import { ConversationPresenceBadge } from '@/components/shared/conversation/conversation-presence-badge'
 import { Avatar } from '@/components/ui/avatar'
+import { Spinner } from '@/components/shared/spinner'
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
+
+// Secondary views load behind lazy() boundaries so the iframe's first paint
+// only needs the shell + Home/feedback — the detail/ticket views carry the
+// rich-text editor (tiptap) and the messenger carries the conversation thread.
+// The shared import thunks below also feed an idle-time prefetch after mount,
+// so by the time a visitor clicks a tab the chunk is already cached.
+const loadPostDetail = () => import('@/components/widget/widget-post-detail')
+const loadChangelog = () => import('@/components/widget/widget-changelog')
+const loadChangelogDetail = () => import('@/components/widget/widget-changelog-detail')
+const loadHelp = () => import('@/components/widget/widget-help')
+const loadHelpCategory = () => import('@/components/widget/widget-help-category')
+const loadHelpDetail = () => import('@/components/widget/widget-help-detail')
+const loadMessenger = () => import('@/components/widget/widget-messenger')
+const loadMessagesView = () => import('@/components/widget/widget-messages')
+const loadTickets = () => import('@/components/widget/widget-tickets')
+const loadTicketNew = () => import('@/components/widget/widget-ticket-new')
+const loadTicketDetail = () => import('@/components/widget/widget-ticket-detail')
+
+const WidgetPostDetail = lazy(() => loadPostDetail().then((m) => ({ default: m.WidgetPostDetail })))
+const WidgetChangelog = lazy(() => loadChangelog().then((m) => ({ default: m.WidgetChangelog })))
+const WidgetChangelogDetail = lazy(() =>
+  loadChangelogDetail().then((m) => ({ default: m.WidgetChangelogDetail }))
+)
+const WidgetHelp = lazy(() => loadHelp().then((m) => ({ default: m.WidgetHelp })))
+const WidgetHelpCategory = lazy(() =>
+  loadHelpCategory().then((m) => ({ default: m.WidgetHelpCategory }))
+)
+const WidgetHelpDetail = lazy(() => loadHelpDetail().then((m) => ({ default: m.WidgetHelpDetail })))
+const WidgetMessenger = lazy(() => loadMessenger().then((m) => ({ default: m.WidgetMessenger })))
+const WidgetMessages = lazy(() => loadMessagesView().then((m) => ({ default: m.WidgetMessages })))
+const WidgetTickets = lazy(() => loadTickets().then((m) => ({ default: m.WidgetTickets })))
+const WidgetTicketNew = lazy(() => loadTicketNew().then((m) => ({ default: m.WidgetTicketNew })))
+const WidgetTicketDetail = lazy(() =>
+  loadTicketDetail().then((m) => ({ default: m.WidgetTicketDetail }))
+)
+
+const LAZY_VIEW_LOADERS = [
+  loadPostDetail,
+  loadChangelog,
+  loadChangelogDetail,
+  loadHelp,
+  loadHelpCategory,
+  loadHelpDetail,
+  loadMessenger,
+  loadMessagesView,
+  loadTickets,
+  loadTicketNew,
+  loadTicketDetail,
+]
 
 const searchSchema = z.object({
   board: z.string().optional(),
@@ -65,29 +104,6 @@ export const Route = createFileRoute('/widget/')({
     const search = location.search as z.infer<typeof searchSchema>
     const feedbackProductEnabled = settings?.featureFlags?.feedback ?? true
     const changelogProductEnabled = settings?.featureFlags?.changelog ?? true
-
-    const portalData = feedbackProductEnabled
-      ? await queryClient.ensureQueryData(
-          portalQueries.portalData({
-            boardSlug: search.board,
-            sort: 'top',
-            userId: session?.user?.id,
-          })
-        )
-      : {
-          boards: [],
-          posts: { items: [], hasMore: false },
-          statuses: [],
-          votedPostIds: [],
-          boardPermissions: {} as Record<string, { canSubmit: boolean; canVote: boolean }>,
-        }
-
-    queryClient.setQueryData(
-      widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
-      new Set(portalData.votedPostIds)
-    )
-
-    const { getBaseUrl } = await import('@/lib/server/config')
 
     // Same triple-gate as the `messages` tab below: Support Inbox flag +
     // Messenger enabled + tab on. Hoisted so we only compute presence when
@@ -105,41 +121,6 @@ export const Route = createFileRoute('/widget/')({
         false) &&
       (settings?.publicWidgetConfig?.tabs?.tickets ?? false)
 
-    // Presence is tenant-global (not visitor-specific), so the anonymous SSR
-    // baseline value is exactly correct for every visitor — seed the shared
-    // presence query so the Messenger online/offline strip paints right immediately
-    // instead of flashing "away" until the first client poll. The seed is
-    // dehydrated to the client just like the votedPosts seed below. Skipped when
-    // Messenger isn't shown.
-    if (messengerTabEnabled) {
-      try {
-        // Call the server fn (not an unwrapped helper): its handler — and the
-        // ioredis-reaching presence import inside it — is stripped from the
-        // client bundle. Server-side it runs inline and returns the verdict.
-        const { getConversationPresenceFn } = await import('@/lib/server/functions/conversation')
-        queryClient.setQueryData(CONVERSATION_PRESENCE_QUERY_KEY, await getConversationPresenceFn())
-      } catch {
-        // A presence read failure must never break the whole widget load — leave
-        // the seed empty and let the client query fetch presence on mount.
-      }
-    }
-
-    // Teammate-avatar cluster for the Home header. Tenant-global and public-safe
-    // (name + image only), so the anonymous SSR baseline is correct for everyone.
-    let team: { name: string; avatarUrl: string | null }[] = []
-    if (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true) {
-      try {
-        const { getWidgetTeamAvatarsFn } = await import('@/lib/server/functions/conversation')
-        team = await getWidgetTeamAvatarsFn()
-      } catch {
-        // Never break the widget load over a decorative header cluster.
-      }
-    }
-
-    // SSR-complete Home: seed everything its sections read so the first paint
-    // never pops content in after render. All of these are public/tenant-global
-    // except the conversation summary, which is correct for cookie-authed
-    // visitors here; Bearer-token visitors refetch it client-side on mount.
     const helpTabEnabled =
       ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
       (settings?.helpCenterConfig?.enabled ?? false) &&
@@ -147,8 +128,62 @@ export const Route = createFileRoute('/widget/')({
     const changelogTabEnabled =
       changelogProductEnabled && (settings?.publicWidgetConfig?.tabs?.changelog ?? false)
 
+    // Every branch below is independent, so the whole SSR seed runs as ONE
+    // parallel batch — document TTFB is the slowest branch, not the sum.
+    //
+    // SSR-complete Home: seed everything its sections read so the first paint
+    // never pops content in after render. All of these are public/tenant-global
+    // except the conversation summary, which is correct for cookie-authed
+    // visitors here; Bearer-token visitors refetch it client-side on mount.
+    const emptyPortalData = {
+      boards: [],
+      posts: { items: [], hasMore: false },
+      statuses: [],
+      votedPostIds: [],
+      boardPermissions: {} as Record<string, { canSubmit: boolean; canVote: boolean }>,
+    }
     let topArticles: { slug: string; title: string }[] = []
-    await Promise.all([
+    // Teammate-avatar cluster for the Home header. Tenant-global and public-safe
+    // (name + image only), so the anonymous SSR baseline is correct for everyone.
+    let team: { name: string; avatarUrl: string | null }[] = []
+    const [portalData, { getBaseUrl }] = await Promise.all([
+      feedbackProductEnabled
+        ? queryClient.ensureQueryData(
+            portalQueries.portalData({
+              boardSlug: search.board,
+              sort: 'top',
+              userId: session?.user?.id,
+            })
+          )
+        : Promise.resolve(emptyPortalData),
+      import('@/lib/server/config'),
+      // Presence is tenant-global (not visitor-specific), so the anonymous SSR
+      // baseline value is exactly correct for every visitor — seed the shared
+      // presence query so the Messenger online/offline strip paints right
+      // immediately instead of flashing "away" until the first client poll.
+      // The seed is dehydrated to the client just like the votedPosts seed
+      // below. Skipped when Messenger isn't shown. A presence read failure must
+      // never break the whole widget load — leave the seed empty and let the
+      // client query fetch presence on mount. Call the server fn (not an
+      // unwrapped helper): its handler — and the ioredis-reaching presence
+      // import inside it — is stripped from the client bundle.
+      messengerTabEnabled
+        ? import('@/lib/server/functions/conversation')
+            .then(({ getConversationPresenceFn }) => getConversationPresenceFn())
+            .then((presence) => {
+              queryClient.setQueryData(CONVERSATION_PRESENCE_QUERY_KEY, presence)
+            })
+            .catch(() => {})
+        : Promise.resolve(),
+      // Never break the widget load over the decorative header avatar cluster.
+      (settings?.publicWidgetConfig?.home?.showTeamAvatars ?? true)
+        ? import('@/lib/server/functions/conversation')
+            .then(({ getWidgetTeamAvatarsFn }) => getWidgetTeamAvatarsFn())
+            .then((avatars) => {
+              team = avatars
+            })
+            .catch(() => {})
+        : Promise.resolve(),
       changelogTabEnabled
         ? queryClient.ensureInfiniteQueryData(publicChangelogQueries.list()).catch(() => {})
         : Promise.resolve(),
@@ -174,6 +209,11 @@ export const Route = createFileRoute('/widget/')({
             .catch(() => {})
         : Promise.resolve(),
     ])
+
+    queryClient.setQueryData(
+      widgetQueryKeys.votedPosts.bySession(INITIAL_SESSION_VERSION),
+      new Set(portalData.votedPostIds)
+    )
 
     return {
       posts: portalData.posts.items.map((p) => ({
@@ -281,6 +321,11 @@ interface SuccessPost {
  * side like a navigation push. Entry-only by design: exits are instant, so the
  * keep-mounted feedback view and back-navigation stay snappy, matching the
  * feel of polished in-product messengers. Honors prefers-reduced-motion.
+ *
+ * Every view here is a lazy() component, so each transition carries its own
+ * Suspense boundary — a suspended view shows a centered spinner in place
+ * without disturbing the kept-mounted feedback view outside the boundary.
+ * The idle-time prefetch makes the fallback a cold-cache-only sight.
  */
 function ViewTransition({
   id,
@@ -302,7 +347,15 @@ function ViewTransition({
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
       className="h-full"
     >
-      {children}
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <Spinner size="lg" />
+          </div>
+        }
+      >
+        {children}
+      </Suspense>
     </motion.div>
   )
 }
@@ -391,6 +444,21 @@ function WidgetPage() {
   // Host viewport class, reported by the SDK (quackback:mobile). On mobile the
   // panel is always full-screen, so the manual size control is meaningless.
   const [hostIsMobile, setHostIsMobile] = useState(false)
+
+  // Warm the lazy view chunks once the first paint has settled, so tab
+  // clicks resolve from cache instead of hitting the network. Idle-time only:
+  // first paint must never compete with these fetches.
+  useEffect(() => {
+    const prefetch = () => {
+      for (const load of LAZY_VIEW_LOADERS) void load().catch(() => {})
+    }
+    if (typeof window.requestIdleCallback === 'function') {
+      const handle = window.requestIdleCallback(prefetch, { timeout: 3000 })
+      return () => window.cancelIdleCallback(handle)
+    }
+    const timer = window.setTimeout(prefetch, 1500)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   // Where a cross-navigation came from (e.g. Home's "Search for help" jumping
   // to the Help tab). While set, even a ROOT view shows a back chevron that

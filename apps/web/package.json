@@ -14,6 +14,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
+    "check:widget-bundle": "bun scripts/check-widget-bundle.ts",
     "intl:extract": "formatjs extract 'src/**/*.{ts,tsx}' --out-file src/locales/en.json --id-interpolation-pattern '[sha512:contenthash:base64:6]' --flatten",
     "intl:compile": "formatjs compile src/locales/en.json --out-file src/locales/compiled/en.json"
   },

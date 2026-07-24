@@ -12,8 +12,21 @@ beforeEach(() => {
     'fetch',
     vi.fn(async () => ({ ok: true, json: async () => ({}) }))
   )
+  // Flush the SDK's idle-time panel preload synchronously so assertions can
+  // check the iframe right after init.
+  vi.stubGlobal(
+    'requestIdleCallback',
+    vi.fn((cb: () => void) => {
+      cb()
+      return 1
+    })
+  )
+  vi.stubGlobal('cancelIdleCallback', vi.fn())
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('useQuackbackInit', () => {
   it('inits the widget on mount and destroys on unmount', () => {
@@ -67,6 +80,15 @@ describe('useQuackbackInit', () => {
 
   it('respects initializeDelay', () => {
     vi.useFakeTimers()
+    // Fake timers replace the sync requestIdleCallback stub — restore it so
+    // the panel preload still flushes inline once init fires.
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: () => void) => {
+        cb()
+        return 1
+      })
+    )
     function C() {
       useQuackbackInit({ instanceUrl: ORIGIN, initializeDelay: 500 })
       return null

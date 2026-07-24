@@ -82,64 +82,16 @@ export default defineConfig(({ mode }) => {
         // that end up in the client bundle. Mark node: imports as external since they're
         // SSR-only code paths that never execute in the browser.
         external: [/^node:/],
-        output: {
-          // TanStack Router auto-splits each route file into its own chunk.
-          // For a page like the public portal that's ~120 modulepreload links
-          // per render — each tiny, each costing a parse + HTTP round-trip.
-          // Collapse routes (and their per-section component trees) into one
-          // chunk per top-level segment so a single portal render fetches a
-          // handful of larger chunks instead of dozens of micro-ones. Browser
-          // cache benefits stay intact (the per-segment chunk is invalidated
-          // only when something inside it changes), but cold-page modulepreload
-          // count drops sharply.
-          manualChunks: (id: string) => {
-            // Only apply to first-party code under src/. node_modules vendor
-            // splitting (react, react-dom, etc.) is left to the default heuristics.
-            if (!id.includes('/src/')) return undefined
-
-            // Files dynamically imported via React.lazy() to defer heavy
-            // client-only deps (framer-motion, recharts) MUST stay in their
-            // own auto-split chunks. Otherwise manualChunks coalesces them
-            // back into the parent route bundle and the lazy() boundary is
-            // lost — the heavy lib gets statically imported by the SSR
-            // entry chunk again. Returning undefined here lets Rollup
-            // honour the dynamic-import boundary.
-            if (
-              id.endsWith('-animated.tsx') ||
-              id.endsWith('/analytics-activity-chart.tsx') ||
-              id.endsWith('/analytics-status-chart.tsx') ||
-              id.endsWith('/components/ui/chart.tsx') ||
-              id.endsWith('/components/public/similar-posts-card.tsx')
-            ) {
-              return undefined
-            }
-
-            // Lowercase-only on purpose — fail fast if a route/component dir
-            // is renamed to something with capitals so the chunk name doesn't
-            // silently diverge.
-            const routeMatch = id.match(/\/src\/routes\/(_?[a-z][a-z0-9-]*)/)
-            if (routeMatch) {
-              // Strip leading underscore so '_portal' and 'portal' bundle together.
-              return `route-${routeMatch[1].replace(/^_/, '')}`
-            }
-
-            // Sub-group components/admin/* by second segment so the admin
-            // tree (~1.6 MB of source) splits per-section — admin/settings,
-            // admin/feedback, admin/help-center, admin/users — instead of
-            // shipping as one monolithic chunk that all admin routes parse.
-            const adminMatch = id.match(/\/src\/components\/admin\/([a-z][a-z0-9-]*)/)
-            if (adminMatch) {
-              return `components-admin-${adminMatch[1]}`
-            }
-
-            const componentMatch = id.match(/\/src\/components\/([a-z][a-z0-9-]*)/)
-            if (componentMatch) {
-              return `components-${componentMatch[1]}`
-            }
-
-            return undefined
-          },
-        },
+        // NO manualChunks pinning — deliberately. Directory-pinned chunks
+        // (route-<segment>, components-admin-<section>) looked tidy but broke
+        // code-splitting app-wide: rolldown places modules shared between a
+        // pinned chunk and the entry INSIDE the pinned chunk, so the entry
+        // imported router-core/error-page helpers *from* route-admin and every
+        // page — the portal and the embeddable /widget iframe on third-party
+        // sites — eagerly downloaded the entire admin app (~1.7 MB gzipped).
+        // Usage-based splitting keeps the eager set honest (~400-500 KB gz)
+        // at the cost of more, smaller chunks (fine over HTTP/2).
+        // scripts/check-widget-bundle.ts guards the widget's eager graph in CI.
       },
     },
     resolve: {
