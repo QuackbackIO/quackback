@@ -28,6 +28,7 @@ async function ensureConcurrentIndexes(sql: ReturnType<typeof postgres>): Promis
     'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_summaries_embedding_hnsw_idx ON conversation_summaries USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL',
     'CREATE INDEX CONCURRENTLY IF NOT EXISTS principal_display_name_trgm_idx ON principal USING gin (display_name gin_trgm_ops) WHERE display_name IS NOT NULL',
     'CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_messages_content_trgm_idx ON conversation_messages USING gin (content gin_trgm_ops) WHERE deleted_at IS NULL',
+    'CREATE INDEX CONCURRENTLY IF NOT EXISTS user_name_trgm_idx ON "user" USING gin (name gin_trgm_ops)',
   ]
   for (const statement of statements) await sql.unsafe(statement)
 

@@ -173,6 +173,20 @@ const EXEMPTIONS: { reason: string; pattern: RegExp }[] = [
     pattern: /^DROP INDEX "principal_display_name_trgm_idx"/,
   },
   {
+    // GIN pg_trgm index on user.name for the admin people-search ILIKE match.
+    // Same gin_trgm_ops introspection limitation as the two indexes above.
+    reason:
+      'pg_trgm GIN index on user.name for admin people search; gin_trgm_ops opclass is not introspectable, so drizzle-kit re-emits the CREATE',
+    pattern: /^CREATE INDEX "user_name_trgm_idx" ON "user" USING gin /,
+  },
+  {
+    // Drop half of the same spurious pair — drizzle-kit reads the gin_trgm_ops
+    // index as unmatched and wants to drop it. The migration owns the real DDL.
+    reason:
+      'pg_trgm GIN index on user.name for admin people search; drizzle-kit cannot round-trip the gin_trgm index, so it re-emits the DROP',
+    pattern: /^DROP INDEX "user_name_trgm_idx"/,
+  },
+  {
     // Case-insensitive unique index on lower(name) (0156). drizzle-kit cannot
     // express a functional/expression index, so it reads the index as undeclared
     // and wants to drop it. The plain unique on name is declared in TS separately.

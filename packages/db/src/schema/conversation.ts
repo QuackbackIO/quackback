@@ -330,6 +330,17 @@ export const conversationMessages = pgTable(
         sql`${table.senderType} = 'agent' AND ${table.isInternal} = false AND ${table.deletedAt} IS NULL`
       ),
     index('conversation_messages_created_at_idx').on(table.createdAt),
+    // Backs the inbox list's batched unread-count query (conversation.query.ts):
+    // count visitor-authored, non-internal, live messages per conversation with
+    // created_at compared against the agent's last-read watermark. The partial
+    // predicate matches the query's fixed filters exactly, so only the relevant
+    // sliver of messages is indexed; (conversation_id, created_at) serves both
+    // the IN grouping and the watermark range check.
+    index('conversation_messages_unread_count_idx')
+      .on(table.conversationId, table.createdAt)
+      .where(
+        sql`${table.senderType} = 'visitor' AND ${table.deletedAt} IS NULL AND ${table.isInternal} = false`
+      ),
     index('conversation_messages_search_vector_idx').using('gin', table.searchVector),
     index('conversation_messages_content_trgm_idx')
       .using('gin', sql`${table.content} gin_trgm_ops`)

@@ -140,6 +140,11 @@ export const user = pgTable(
     index('user_locale_idx')
       .on(table.locale)
       .where(sql`locale IS NOT NULL`),
+    // Trigram GIN index backing the admin people-search substring match:
+    //   WHERE name ILIKE '%term%'  (users/user.service.ts, principal.service.ts).
+    // A leading-wildcard ILIKE cannot use a btree, so mirror the
+    // principal_display_name_trgm_idx approach with a gin_trgm_ops index.
+    index('user_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
   ]
 )
 
