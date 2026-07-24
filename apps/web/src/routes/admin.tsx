@@ -43,6 +43,7 @@ export const Route = createFileRoute('/admin')({
         user: null,
         initialUserData: null,
         latestVersion: null,
+        updateBannerDismissedVersion: null,
         currentUser: null,
         planNotice: null,
         locale: DEFAULT_LOCALE,
@@ -80,6 +81,7 @@ export const Route = createFileRoute('/admin')({
       user,
       initialUserData,
       latestVersion,
+      updateBannerDismissedVersion: context.updateBannerDismissedVersion ?? null,
       planNotice,
       locale,
       messages,
@@ -90,6 +92,11 @@ export const Route = createFileRoute('/admin')({
       },
     }
   },
+  // The layout loader (avatar/version/plan-notice/messages) is stable across
+  // intra-admin navigation, so cache it for 5 min instead of re-running the
+  // Promise.all on every child route change. beforeLoad still runs each nav to
+  // re-assert the auth guard.
+  staleTime: 5 * 60 * 1000,
   component: AdminLayout,
 })
 
@@ -103,8 +110,15 @@ function usePostIdFromUrl(): string | undefined {
 }
 
 function AdminLayout() {
-  const { initialUserData, latestVersion, planNotice, currentUser, locale, messages } =
-    Route.useLoaderData()
+  const {
+    initialUserData,
+    latestVersion,
+    updateBannerDismissedVersion,
+    planNotice,
+    currentUser,
+    locale,
+    messages,
+  } = Route.useLoaderData()
   const postId = usePostIdFromUrl()
 
   // Mark team members online for conversation routing across the whole admin (not just
@@ -129,7 +143,10 @@ function AdminLayout() {
             {/* Mobile: Add padding for fixed header */}
             <div className="h-full sm:pt-0 pt-14 sm:rounded-lg sm:border sm:border-border overflow-hidden flex flex-col">
               <PlanNoticeBanner notice={planNotice} />
-              <UpdateBanner latestVersion={latestVersion} />
+              <UpdateBanner
+                latestVersion={latestVersion}
+                dismissedVersion={updateBannerDismissedVersion}
+              />
               <div className="flex-1 min-h-0 overflow-hidden">
                 <Outlet />
               </div>
