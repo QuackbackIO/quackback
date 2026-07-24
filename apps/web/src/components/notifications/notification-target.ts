@@ -60,11 +60,12 @@ export function getNotificationTarget(
   }
 
   // Ticket-stage changes and replies reach two audiences since watchers: the
-  // requester (portal thread — an agent inbox link would strand them) and
-  // agent watchers (admin inbox — the portal thread is requester-only and
-  // would 404 for them). The per-recipient `audience` metadata stamped by
-  // buildNotifications disambiguates; rows created before that field existed
-  // default to portal, matching their requester-only recipient set.
+  // requester (their thread on the converged Messages surface — an agent inbox
+  // link would strand them) and agent watchers (admin inbox — the requester
+  // thread is ownership-gated and would 404 for them). The per-recipient
+  // `audience` metadata stamped by buildNotifications disambiguates. The
+  // requester deep link is the PAIR's conversation (there is no standalone
+  // ticket page), carried as conversationId by the target builders.
   if (
     (notification.type === 'ticket_status_changed' || notification.type === 'ticket_replied') &&
     notification.ticketId
@@ -72,7 +73,13 @@ export function getNotificationTarget(
     if (notification.audience === 'admin') {
       return { to: '/admin/inbox', search: { i: notification.ticketId } }
     }
-    return { to: '/support/ticket/$ticketId', params: { ticketId: notification.ticketId } }
+    if (notification.conversationId) {
+      return {
+        to: '/support/$conversationId',
+        params: { conversationId: notification.conversationId },
+      }
+    }
+    return { to: '/support' }
   }
 
   // Internal-note and linked-issue bells only ever reach agents (role-filtered

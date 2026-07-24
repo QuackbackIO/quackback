@@ -306,6 +306,7 @@ const TICKET_ROW: TicketEmbedRow = {
   type: 'customer',
   requesterPrincipalId: REQUESTER,
   deletedAt: null,
+  conversationId: 'conversation_01pair',
   statusLabel: 'In progress',
   statusColor: '#3b82f6',
   priority: 'high',
@@ -331,13 +332,16 @@ describe('projectTicketPreview', () => {
     expect(projectTicketPreview(TICKET_ROW, BASE)).toEqual({
       kind: 'ticket',
       ticketId: 'ticket_01ktjwt5tyf6br9mw521h13n6n',
+      conversationId: 'conversation_01pair',
       reference: '#142',
       title: 'Cannot log in',
       statusLabel: 'In progress',
       statusColor: '#3b82f6',
       priority: 'high',
       createdAt: '2026-01-02T03:04:05.000Z',
-      url: 'https://feedback.example.com/support/ticket/ticket_01ktjwt5tyf6br9mw521h13n6n',
+      // Converged Messages: the requester-facing ticket URL is the pair's
+      // conversation thread.
+      url: 'https://feedback.example.com/support/conversation_01pair',
     })
   })
   it('tolerates a null stage label and createdAt', () => {
@@ -345,11 +349,16 @@ describe('projectTicketPreview', () => {
     expect(r.statusLabel).toBeNull()
     expect(r.createdAt).toBeNull()
   })
+  it('links an internal ticket (no pair conversation) to the admin inbox', () => {
+    const r = projectTicketPreview(
+      { ...TICKET_ROW, type: 'back_office', conversationId: null },
+      BASE
+    )
+    expect(r.url).toBe(`https://feedback.example.com/admin/inbox?i=${TICKET_ROW.id}`)
+  })
   it('joins the ticket url cleanly when the base has a trailing slash', () => {
     const r = projectTicketPreview(TICKET_ROW, 'https://feedback.example.com/')
-    expect(r.url).toBe(
-      'https://feedback.example.com/support/ticket/ticket_01ktjwt5tyf6br9mw521h13n6n'
-    )
+    expect(r.url).toBe('https://feedback.example.com/support/conversation_01pair')
   })
 })
 
@@ -396,7 +405,7 @@ describe('resolveEmbed — ticket', () => {
       kind: 'ticket',
       reference: '#142',
       title: 'Cannot log in',
-      url: 'https://feedback.example.com/support/ticket/ticket_01ktjwt5tyf6br9mw521h13n6n',
+      url: 'https://feedback.example.com/support/conversation_01pair',
     })
   })
 

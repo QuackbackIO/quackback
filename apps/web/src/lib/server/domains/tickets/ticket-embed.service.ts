@@ -7,7 +7,7 @@
  * different visitor or a soft-deleted ticket — returns null, which the embed
  * resolver degrades to "unavailable" without leaking existence.
  */
-import { db, eq, tickets, ticketStatuses } from '@/lib/server/db'
+import { db, eq, and, tickets, ticketStatuses, ticketConversations } from '@/lib/server/db'
 import type { TicketId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
 import { scopeTicketEmbed, type TicketEmbedRow } from '@/lib/server/functions/embeds'
@@ -34,9 +34,19 @@ export async function getTicketEmbedForViewer(
       createdAt: tickets.createdAt,
       statusColor: ticketStatuses.color,
       publicStage: ticketStatuses.publicStage,
+      // The pair's conversation: the requester-facing card links there
+      // (converged Messages — there is no standalone ticket page).
+      conversationId: ticketConversations.conversationId,
     })
     .from(tickets)
     .leftJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+    .leftJoin(
+      ticketConversations,
+      and(
+        eq(ticketConversations.ticketId, tickets.id),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
     .where(eq(tickets.id, id))
     .limit(1)
   if (!row) return null
@@ -50,6 +60,7 @@ export async function getTicketEmbedForViewer(
     type: row.type,
     requesterPrincipalId: row.requesterPrincipalId,
     deletedAt: row.deletedAt,
+    conversationId: row.conversationId ?? null,
     statusLabel: stage ? stageLabels[stage] : null,
     statusColor: row.statusColor ?? '#6b7280',
     priority: row.priority,

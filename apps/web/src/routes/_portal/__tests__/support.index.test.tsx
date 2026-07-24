@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
 /**
- * Portal support index — the convergence Phase 2 TWO-SPACE nav (Messages +
- * Tickets, scratchpad/convergence-design.md "Portal keeps two spaces";
- * convergence-ui-spec §8). With both support surfaces enabled the page tabs
- * between the Messages space (the conversation list — a pair lists here
- * natively, badge off the shared watermark) and the Tickets space (the
- * default); a tickets-only workspace keeps the standalone Tickets surface
- * with no tab bar; an inbox-only workspace keeps the conversations list.
+ * Portal support index — the converged Messages surface (one list for chat-
+ * and ticket-backed threads alike; the two-space Messages/Tickets nav is
+ * gone). Paired rows carry their ticket's StageChip + reference and key their
+ * displayed state off the TICKET stage (the pair-state rule); unpaired rows
+ * keep the plain Open/Closed status. The chat-start button gates on the
+ * messenger, so an email-first (tickets-only) workspace still lists threads
+ * but offers no "New conversation".
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ReactNode } from 'react'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 
@@ -21,23 +21,21 @@ const routeCtx = vi.hoisted(() => ({
     portalConfig: { support: { enabled: true } },
   },
 }))
+const navigateSpy = vi.hoisted(() => vi.fn())
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute:
     () =>
     <T extends object>(options: T) => ({ ...options }),
   useRouteContext: () => routeCtx,
-  Navigate: () => null,
+  Navigate: (props: { to: string }) => {
+    navigateSpy(props.to)
+    return null
+  },
   Link: ({ children, ...props }: { children: ReactNode }) => <a {...props}>{children}</a>,
   useNavigate: () => vi.fn(),
 }))
 vi.mock('@/components/auth/auth-popover-context', () => ({
   useAuthPopoverSafe: () => null,
-}))
-
-// The Tickets surface is stubbed — the tab routing is under test here, not
-// the list itself (portal-tickets-list has its own coverage).
-vi.mock('@/components/portal/portal-tickets-list', () => ({
-  PortalTicketsList: () => <div data-testid="tickets-surface" />,
 }))
 
 const getMyConversationsFn = vi.hoisted(() => vi.fn())
@@ -58,58 +56,113 @@ function wrapper() {
 
 const Page = (Route as unknown as { component: React.ComponentType }).component
 
+const NOW = new Date().toISOString()
+
+function conversationRow(overrides: Record<string, unknown>) {
+  return {
+    id: 'conversation_1',
+    status: 'open',
+    subject: null,
+    lastMessagePreview: 'hello',
+    lastMessageAt: NOW,
+    unreadCount: 0,
+    ...overrides,
+  }
+}
+
 beforeEach(() => {
   routeCtx.session = { user: { principalType: 'user' } }
   routeCtx.settings = {
     featureFlags: { supportTickets: true, supportInbox: true },
     portalConfig: { support: { enabled: true } },
   }
+  navigateSpy.mockReset()
   getMyConversationsFn.mockReset()
-  getMyConversationsFn.mockResolvedValue({ conversations: [] })
+  getMyConversationsFn.mockResolvedValue({ conversations: [], linkedTickets: {} })
 })
 
 afterEach(cleanup)
 
-describe('portal support index — two-space nav', () => {
-  it('both surfaces on: tab bar shows, Tickets is the default space, Messages tabs in', async () => {
+describe('portal support index — converged Messages surface', () => {
+  it('renders ONE list with no space tabs; paired rows show the ticket chip + reference', async () => {
+    getMyConversationsFn.mockResolvedValue({
+      conversations: [
+        conversationRow({ id: 'conversation_pair', subject: 'Export bug' }),
+        conversationRow({ id: 'conversation_chat', subject: 'Quick question' }),
+      ],
+      linkedTickets: {
+        conversation_pair: {
+          ticketId: 'ticket_1',
+          reference: '#42',
+          title: 'CSV export drops filter columns',
+          stage: { slot: 'in_progress', label: 'In progress', closed: false },
+        },
+      },
+    })
     render(<Page />, { wrapper: wrapper() })
 
-    // Default space is Tickets (today's default surface is preserved).
-    expect(screen.getByTestId('tickets-surface')).toBeTruthy()
-    const messagesTab = screen.getByRole('tab', { name: 'Messages' })
-    const ticketsTab = screen.getByRole('tab', { name: 'Tickets' })
-    expect(ticketsTab.getAttribute('aria-selected')).toBe('true')
-    expect(messagesTab.getAttribute('aria-selected')).toBe('false')
-    // The Messages space's query stays idle until the tab is opened.
-    expect(getMyConversationsFn).not.toHaveBeenCalled()
-
-    fireEvent.click(messagesTab)
-    expect(screen.queryByTestId('tickets-surface')).toBeNull()
-    expect(messagesTab.getAttribute('aria-selected')).toBe('true')
-    expect(await screen.findByText('No conversations yet')).toBeTruthy()
-    expect(getMyConversationsFn).toHaveBeenCalled()
+    expect(screen.queryByRole('tab')).toBeNull()
+    // Paired row: ticket title wins, chip + reference decorate.
+    expect(await screen.findByText('CSV export drops filter columns')).toBeTruthy()
+    expect(screen.getByText('In progress')).toBeTruthy()
+    expect(screen.getByText('#42')).toBeTruthy()
+    // Unpaired row keeps the plain conversation status.
+    expect(screen.getByText('Quick question')).toBeTruthy()
+    expect(screen.getByText('Open')).toBeTruthy()
   })
 
-  it('tickets-only workspace: the standalone Tickets surface, no tab bar', () => {
+  it('pair-state rule: a closed conversation with an open ticket shows the TICKET stage, never "Closed"', async () => {
+    getMyConversationsFn.mockResolvedValue({
+      conversations: [
+        conversationRow({ id: 'conversation_pair', status: 'closed', subject: 'Pair' }),
+      ],
+      linkedTickets: {
+        conversation_pair: {
+          ticketId: 'ticket_1',
+          reference: '#7',
+          title: 'Still tracked',
+          stage: { slot: 'in_progress', label: 'In progress', closed: false },
+        },
+      },
+    })
+    render(<Page />, { wrapper: wrapper() })
+
+    expect(await screen.findByText('In progress')).toBeTruthy()
+    expect(screen.queryByText('Closed')).toBeNull()
+  })
+
+  it('tickets-only workspace (messenger off): the list renders, the chat-start button hides', async () => {
     routeCtx.settings = {
       featureFlags: { supportTickets: true, supportInbox: false },
       portalConfig: { support: { enabled: true } },
     }
+    getMyConversationsFn.mockResolvedValue({
+      conversations: [conversationRow({ id: 'conversation_pair', subject: 'Ticket thread' })],
+      linkedTickets: {},
+    })
     render(<Page />, { wrapper: wrapper() })
 
-    expect(screen.getByTestId('tickets-surface')).toBeTruthy()
-    expect(screen.queryByRole('tab')).toBeNull()
+    expect(await screen.findByText('Ticket thread')).toBeTruthy()
+    expect(screen.queryByText('New conversation')).toBeNull()
   })
 
-  it('inbox-only workspace: the conversations list, no tab bar', async () => {
+  it('messenger-only workspace: the list renders with the chat-start button', async () => {
     routeCtx.settings = {
       featureFlags: { supportTickets: false, supportInbox: true },
       portalConfig: { support: { enabled: true } },
     }
     render(<Page />, { wrapper: wrapper() })
 
-    expect(screen.queryByTestId('tickets-surface')).toBeNull()
-    expect(screen.queryByRole('tab')).toBeNull()
     expect(await screen.findByText('No conversations yet')).toBeTruthy()
+    expect(screen.getAllByText('New conversation').length).toBeGreaterThan(0)
+  })
+
+  it('neither surface enabled: navigates home', () => {
+    routeCtx.settings = {
+      featureFlags: { supportTickets: false, supportInbox: false },
+      portalConfig: { support: { enabled: false } },
+    }
+    render(<Page />, { wrapper: wrapper() })
+    expect(navigateSpy).toHaveBeenCalledWith('/')
   })
 })

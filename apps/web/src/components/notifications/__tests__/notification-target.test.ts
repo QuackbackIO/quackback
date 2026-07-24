@@ -107,14 +107,19 @@ describe('getNotificationTarget', () => {
     })
   })
 
-  it('routes ticket_status_changed (requester) with a ticketId to the portal ticket thread', () => {
-    const notification = buildNotification({
-      type: 'ticket_status_changed',
-      ticketId: 'ticket_1',
-    })
-    expect(getNotificationTarget(notification)).toEqual({
-      to: '/support/ticket/$ticketId',
-      params: { ticketId: 'ticket_1' },
+  it('routes ticket_status_changed (requester) to the pair conversation', () => {
+    // With the pair's conversationId stamped: deep-link the converged thread.
+    expect(
+      getNotificationTarget(
+        buildNotification({
+          type: 'ticket_status_changed',
+          ticketId: 'ticket_1',
+          conversationId: 'conversation_9',
+        })
+      )
+    ).toEqual({
+      to: '/support/$conversationId',
+      params: { conversationId: 'conversation_9' },
     })
   })
 
@@ -130,20 +135,22 @@ describe('getNotificationTarget', () => {
     })
   })
 
-  it('routes ticket_replied per audience: portal for the requester, admin for agent watchers, portal for legacy rows', () => {
+  it('routes ticket_replied per audience: pair conversation for the requester, admin inbox for agent watchers', () => {
     expect(
       getNotificationTarget(
-        buildNotification({ type: 'ticket_replied', ticketId: 'ticket_2', audience: 'portal' })
+        buildNotification({
+          type: 'ticket_replied',
+          ticketId: 'ticket_2',
+          conversationId: 'conversation_2',
+          audience: 'portal',
+        })
       )
-    ).toEqual({ to: '/support/ticket/$ticketId', params: { ticketId: 'ticket_2' } })
+    ).toEqual({ to: '/support/$conversationId', params: { conversationId: 'conversation_2' } })
     expect(
       getNotificationTarget(
         buildNotification({ type: 'ticket_replied', ticketId: 'ticket_2', audience: 'admin' })
       )
     ).toEqual({ to: '/admin/inbox', search: { i: 'ticket_2' } })
-    expect(
-      getNotificationTarget(buildNotification({ type: 'ticket_replied', ticketId: 'ticket_2' }))
-    ).toEqual({ to: '/support/ticket/$ticketId', params: { ticketId: 'ticket_2' } })
   })
 
   it('routes ticket_note_added to the admin inbox unconditionally (agents-only bell)', () => {

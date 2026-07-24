@@ -39,8 +39,12 @@ function SupportThreadPage() {
   const authPopover = useAuthPopoverSafe()
   const { upload } = usePortalImageUpload()
 
-  const supportEnabled =
+  // Converged Messages: ticket pairs open here too, so a tickets-enabled
+  // workspace keeps this route alive even with the messenger/portal-support
+  // toggle off (email-first workspaces reply to their ticket threads here).
+  const messengerEnabled =
     !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+  const supportEnabled = messengerEnabled || !!settings?.featureFlags?.supportTickets
 
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'

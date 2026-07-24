@@ -299,7 +299,14 @@ function buildNotifications(
   }
 
   if (event.type === 'ticket.status_changed') {
-    const { ticketId, title, stageLabel, previousStageLabel, requesterPrincipalId } = config
+    const {
+      ticketId,
+      conversationId,
+      title,
+      stageLabel,
+      previousStageLabel,
+      requesterPrincipalId,
+    } = config
     const body = previousStageLabel
       ? `Moved from ${previousStageLabel} to ${stageLabel}`
       : 'Open the ticket to see the latest update.'
@@ -308,16 +315,18 @@ function buildNotifications(
       type: 'ticket_status_changed' as NotificationType,
       title: `${title} is now ${stageLabel}`,
       body,
-      // audience routes the deep link: the requester's row opens the portal
-      // thread, an agent watcher's row opens the admin inbox. A config with no
+      // audience routes the deep link: the requester's row opens the pair's
+      // conversation thread (converged Messages — carried as conversationId),
+      // an agent watcher's row opens the admin inbox. A config with no
       // requesterPrincipalId at all is a pre-watchers outbox row being
       // redrained — omit audience so the client's portal default preserves its
       // requester-only behavior.
       metadata:
         requesterPrincipalId === undefined
-          ? { ticketId }
+          ? { ticketId, conversationId }
           : {
               ticketId,
+              conversationId,
               audience:
                 requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
             },
@@ -325,7 +334,7 @@ function buildNotifications(
   }
 
   if (event.type === 'ticket.replied') {
-    const { ticketId, title, authorName, preview, requesterPrincipalId } = config
+    const { ticketId, conversationId, title, authorName, preview, requesterPrincipalId } = config
     return principalIds.map((principalId) => ({
       principalId,
       type: 'ticket_replied' as NotificationType,
@@ -333,6 +342,7 @@ function buildNotifications(
       body: preview,
       metadata: {
         ticketId,
+        conversationId,
         actorName: authorName,
         audience: requesterPrincipalId && principalId === requesterPrincipalId ? 'portal' : 'admin',
       },

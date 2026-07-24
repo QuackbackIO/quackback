@@ -1,23 +1,21 @@
 import { createFileRoute, Link, Navigate, useRouteContext } from '@tanstack/react-router'
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { ChatBubbleLeftRightIcon, ChevronRightIcon, PlusIcon } from '@heroicons/react/24/outline'
-import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
+import { StageChip } from '@/components/shared/ticket-stage'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
 import { PORTAL_MY_CONVERSATIONS_QUERY_KEY } from '@/lib/client/queries/portal-support'
-import { PortalTicketsList } from '@/components/portal/portal-tickets-list'
 
 export const Route = createFileRoute('/_portal/support/')({
   component: SupportListPage,
 })
 
-/** Status chip copy, localized per status (mirrors the widget's history list). */
+/** Status chip copy for an unpaired conversation, localized per status. */
 function StatusLabel({ status }: { status: string }) {
   switch (status) {
     // Snooze is internal queue discipline; customers see a snoozed thread as open.
@@ -31,9 +29,9 @@ function StatusLabel({ status }: { status: string }) {
   }
 }
 
-/** Pending state for the Messages space's conversation list — mirrors the
- *  loaded `<li>` row (title + status/time line, in a bordered card) so the
- *  list doesn't reflow height when the real rows arrive. */
+/** Pending state for the Messages list — mirrors the loaded `<li>` row (title +
+ *  status/time line, in a bordered card) so the list doesn't reflow height when
+ *  the real rows arrive. */
 function ConversationListSkeleton() {
   return (
     <ul className="flex flex-col gap-2">
@@ -53,22 +51,24 @@ function ConversationListSkeleton() {
   )
 }
 
+/**
+ * The portal Messages surface — ONE list for every thread the requester has
+ * with the team, chat- and ticket-backed alike (converged Messages: a customer
+ * ticket IS a conversation pair). Paired rows carry their ticket's StageChip +
+ * reference and key their displayed state off the TICKET stage (the pair-state
+ * rule); unpaired rows keep the plain Open/Closed status. The chat-start
+ * button gates on the messenger being enabled — an email-first (tickets-only)
+ * workspace still lists and opens its threads here.
+ */
 function SupportListPage() {
   const intl = useIntl()
   const { session, settings } = useRouteContext({ from: '__root__' })
   const authPopover = useAuthPopoverSafe()
 
-  // CONVERGENCE (scratchpad/convergence-design.md): the portal keeps TWO
-  // spaces — Messages (the conversation list) + Tickets (status cards) —
-  // Intercom's exact model. A conversation↔ticket pair dual-lists in BOTH
-  // with ONE shared watermark and read-through (reading either marks both
-  // read; the Tickets rows' badges read the linked conversation's visitor
-  // watermark). The Tickets surface is the default space when it's on.
   const supportTicketsEnabled = !!settings?.featureFlags?.supportTickets
-  const supportEnabled =
+  const messengerEnabled =
     !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
-  const twoSpaces = supportTicketsEnabled && supportEnabled
-  const [space, setSpace] = useState<'messages' | 'tickets'>('tickets')
+  const surfaceEnabled = messengerEnabled || supportTicketsEnabled
 
   const user = session?.user
   const isLoggedIn = !!user && user.principalType !== 'anonymous'
@@ -76,23 +76,18 @@ function SupportListPage() {
   const { data, isLoading } = useQuery({
     queryKey: PORTAL_MY_CONVERSATIONS_QUERY_KEY,
     queryFn: () => getMyConversationsFn(),
-    enabled: supportEnabled && isLoggedIn && (!supportTicketsEnabled || space === 'messages'),
+    enabled: surfaceEnabled && isLoggedIn,
     staleTime: 30_000,
   })
 
-  // Tickets-only workspace (supportTickets on, supportInbox/portal-support
-  // off): the Tickets surface stands alone — no Messages space to tab to.
-  if (supportTicketsEnabled && !twoSpaces) {
-    return <PortalTicketsList isLoggedIn={isLoggedIn} />
-  }
-
-  if (!supportEnabled) {
+  if (!surfaceEnabled) {
     return <Navigate to="/" />
   }
 
   const conversations = data?.conversations ?? []
+  const linkedTickets = data?.linkedTickets ?? {}
 
-  const messagesSpace = (
+  return (
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
@@ -106,7 +101,7 @@ function SupportListPage() {
             />
           </p>
         </div>
-        {isLoggedIn && (
+        {isLoggedIn && messengerEnabled && (
           <Button asChild size="sm">
             <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
               <PlusIcon className="me-1.5 h-4 w-4" />
@@ -152,97 +147,77 @@ function SupportListPage() {
             defaultMessage: "Start a conversation and we'll get back to you.",
           })}
           action={
-            <Button asChild>
-              <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
-                <PlusIcon className="me-1.5 h-4 w-4" />
-                <FormattedMessage
-                  id="portal.support.newConversation"
-                  defaultMessage="New conversation"
-                />
-              </Link>
-            </Button>
+            messengerEnabled ? (
+              <Button asChild>
+                <Link to="/support/$conversationId" params={{ conversationId: 'new' }}>
+                  <PlusIcon className="me-1.5 h-4 w-4" />
+                  <FormattedMessage
+                    id="portal.support.newConversation"
+                    defaultMessage="New conversation"
+                  />
+                </Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : (
         <ul className="flex flex-col gap-2">
-          {conversations.map((c) => (
-            <li key={c.id}>
-              <Link
-                to="/support/$conversationId"
-                params={{ conversationId: c.id }}
-                className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:bg-muted/40"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-foreground">
-                      {c.subject ||
-                        c.lastMessagePreview ||
-                        intl.formatMessage({
-                          id: 'portal.support.untitled',
-                          defaultMessage: 'Conversation',
-                        })}
-                    </span>
-                    {(c.unreadCount ?? 0) > 0 && (
-                      <span className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground">
-                        {c.unreadCount}
+          {conversations.map((c) => {
+            const ticket = linkedTickets[c.id]
+            return (
+              <li key={c.id}>
+                <Link
+                  to="/support/$conversationId"
+                  params={{ conversationId: c.id }}
+                  className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3 transition-colors hover:bg-muted/40"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {ticket?.title ||
+                          c.subject ||
+                          c.lastMessagePreview ||
+                          intl.formatMessage({
+                            id: 'portal.support.untitled',
+                            defaultMessage: 'Conversation',
+                          })}
                       </span>
-                    )}
+                      {(c.unreadCount ?? 0) > 0 && (
+                        <span className="inline-flex min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-[18px] text-primary-foreground">
+                          {c.unreadCount}
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {ticket ? (
+                        // Pair-state rule: the ticket's stage is the row's
+                        // displayed truth (a closed conversation with an open
+                        // ticket must not read "Closed").
+                        <>
+                          <StageChip
+                            slot={ticket.stage.slot}
+                            label={ticket.stage.label}
+                            closed={ticket.stage.closed}
+                            closedLabelId="portal.tickets.stage.closed"
+                          />
+                          <span className="font-mono text-[11px] text-muted-foreground/70">
+                            {ticket.reference}
+                          </span>
+                        </>
+                      ) : (
+                        <StatusLabel status={c.status} />
+                      )}
+                      <span>·</span>
+                      <TimeAgo date={c.lastMessageAt} />
+                    </span>
                   </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    <StatusLabel status={c.status} /> · <TimeAgo date={c.lastMessageAt} />
-                  </span>
-                </span>
-                <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 rtl:rotate-180" />
-              </Link>
-            </li>
-          ))}
+                  <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50 rtl:rotate-180" />
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       )}
-    </div>
-  )
-
-  if (!twoSpaces) {
-    return messagesSpace
-  }
-
-  // The two-space nav (Messages + Tickets). A pair lists in both: Messages
-  // shows the conversation (native unread off the shared watermark), Tickets
-  // shows the ticket card (badge via the link) — reading either marks both.
-  return (
-    <div>
-      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <div className="flex gap-1 border-b border-border/60 pt-4" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={space === 'messages'}
-            onClick={() => setSpace('messages')}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              space === 'messages'
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <FormattedMessage id="portal.support.tabs.messages" defaultMessage="Messages" />
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={space === 'tickets'}
-            onClick={() => setSpace('tickets')}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              space === 'tickets'
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <FormattedMessage id="portal.support.tabs.tickets" defaultMessage="Tickets" />
-          </button>
-        </div>
-      </div>
-      {space === 'tickets' ? <PortalTicketsList isLoggedIn={isLoggedIn} /> : messagesSpace}
     </div>
   )
 }

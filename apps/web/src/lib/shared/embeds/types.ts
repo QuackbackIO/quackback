@@ -67,6 +67,10 @@ export interface EmbedArticlePreview {
 export interface EmbedTicketPreview {
   kind: 'ticket'
   ticketId: string
+  /** The pair's conversation id — a customer ticket's destination on the
+   *  converged Messages surface. Null for internal ticket types (never
+   *  conversation-linked; their `url` targets the admin inbox). */
+  conversationId: string | null
   /** Formatted sequential reference, e.g. "#142". */
   reference: string
   title: string

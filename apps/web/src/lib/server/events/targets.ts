@@ -25,6 +25,7 @@ import {
   userSegments,
   conversations,
   tickets,
+  ticketConversations,
 } from '@/lib/server/db'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { formatTicketNumber } from '@/lib/shared/tickets'
@@ -866,6 +867,9 @@ export async function getTicketStatusChangedTargets(event: EventData): Promise<H
     target: { principalIds: [...recipients] },
     config: {
       ticketId: ticket.id,
+      // The requester's row deep-links into the pair's conversation thread
+      // (the converged Messages surface — no standalone ticket page).
+      conversationId: await pairConversationId(ticket.id as TicketId),
       title,
       stageLabel,
       previousStageLabel,
@@ -896,6 +900,9 @@ export async function getTicketRepliedTargets(event: EventData): Promise<HookTar
     target: { principalIds: recipients },
     config: {
       ticketId: ticket.id,
+      // The requester's row deep-links into the pair's conversation thread
+      // (the converged Messages surface — no standalone ticket page).
+      conversationId: await pairConversationId(ticket.id as TicketId),
       title,
       authorName: authorName ?? (senderType === 'visitor' ? 'The requester' : 'A teammate'),
       preview: truncate(content, 140),
@@ -1041,9 +1048,33 @@ export async function getMessageCreatedTargets(event: EventData): Promise<HookTa
 // subsumes the global emailMuted kill switch). See scratchpad plan D3/D4/D6/D8.
 // ============================================================================
 
-/** Portal thread deep link for a requester-facing ticket email. */
-function ticketPortalUrl(portalBaseUrl: string, ticketId: string): string {
-  return `${portalBaseUrl}/support/ticket/${ticketId}`
+/**
+ * The pair's conversation id for a customer ticket. Every requester-holding
+ * customer ticket is a pair (intake creates the backing conversation), so the
+ * requester-facing paths below always resolve one.
+ */
+async function pairConversationId(ticketId: TicketId): Promise<string | null> {
+  const [row] = await db
+    .select({ conversationId: ticketConversations.conversationId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.ticketId, ticketId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  return row?.conversationId ?? null
+}
+
+/**
+ * Requester deep link for a ticket email: the pair's conversation thread on
+ * the converged Messages surface (there is no standalone requester ticket
+ * page).
+ */
+async function requesterTicketUrl(portalBaseUrl: string, ticketId: TicketId): Promise<string> {
+  const conversationId = await pairConversationId(ticketId)
+  return conversationId ? `${portalBaseUrl}/support/${conversationId}` : `${portalBaseUrl}/support`
 }
 
 /** Agent inbox deep link (tickets + conversations both select by `?i=`). */
@@ -1230,7 +1261,7 @@ async function buildRequesterOrAgentTargets(params: {
       requesterPrincipalId != null && id === requesterPrincipalId
         ? await requesterFacingConfig({
             ...facts,
-            ctaUrl: ticketPortalUrl(context.portalBaseUrl, params.ticketId),
+            ctaUrl: await requesterTicketUrl(context.portalBaseUrl, params.ticketId),
             assignedTeamId: params.assignedTeamId,
             context,
           })
@@ -1291,7 +1322,7 @@ export async function getTicketCreatedEmailTargets(
     ticketId,
     ticketLabel: formatTicketNumber(t.number),
     title,
-    ctaUrl: ticketPortalUrl(context.portalBaseUrl, ticketId),
+    ctaUrl: await requesterTicketUrl(context.portalBaseUrl, ticketId),
     assignedTeamId: (assignedTeamId as TeamId | null) ?? null,
     context,
   })

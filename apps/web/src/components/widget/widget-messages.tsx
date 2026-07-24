@@ -18,6 +18,10 @@ interface WidgetMessagesProps {
   teamName: string | null
   /** AI-assistant display identity; fronts unassigned conversations when set. */
   assistant: { name: string; avatarUrl: string | null } | null
+  /** Whether the messenger proper is on. False for tickets-only (email-first)
+   *  workspaces: the list still shows their threads, but the "Ask a question"
+   *  chat-start pill hides — agents and email initiate there. */
+  canStartConversation?: boolean
   /** Open a conversation: an id opens that thread, 'new' starts a fresh one. */
   onOpenMessenger: (target?: ConversationId | 'new') => void
 }
@@ -29,7 +33,12 @@ interface WidgetMessagesProps {
  * always start a new thread. Deliberately makes no online/offline promise here;
  * availability copy lives in the thread once a conversation is underway.
  */
-export function WidgetMessages({ teamName, assistant, onOpenMessenger }: WidgetMessagesProps) {
+export function WidgetMessages({
+  teamName,
+  assistant,
+  canStartConversation = true,
+  onOpenMessenger,
+}: WidgetMessagesProps) {
   const intl = useIntl()
   const reduceMotion = useReducedMotion()
   const { sessionVersion } = useWidgetAuth()
@@ -156,20 +165,23 @@ export function WidgetMessages({ teamName, assistant, onOpenMessenger }: WidgetM
         )}
       </ScrollArea>
 
-      {/* Pinned pill — always available, floating above the list. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-        <motion.button
-          type="button"
-          onClick={() => onOpenMessenger('new')}
-          initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.92 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1], delay: 0.08 }}
-          className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.98]"
-        >
-          <FormattedMessage id="widget.messages.ask" defaultMessage="Ask a question" />
-          <ChatBubbleOvalLeftEllipsisIcon className="w-4 h-4" />
-        </motion.button>
-      </div>
+      {/* Pinned chat-start pill — hidden when the messenger is off (tickets-only
+          workspaces list threads here but don't start chats). */}
+      {canStartConversation && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+          <motion.button
+            type="button"
+            onClick={() => onOpenMessenger('new')}
+            initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1], delay: 0.08 }}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-transform hover:scale-[1.03] active:scale-[0.98]"
+          >
+            <FormattedMessage id="widget.messages.ask" defaultMessage="Ask a question" />
+            <ChatBubbleOvalLeftEllipsisIcon className="w-4 h-4" />
+          </motion.button>
+        </div>
+      )}
     </div>
   )
 }

@@ -17,14 +17,22 @@ export async function isPortalSupportEnabled(): Promise<boolean> {
 }
 
 /**
- * Whether conversations are reachable from ANY visitor surface (widget messenger or
- * portal Support tab). The shared visitor-facing conversation paths gate on this, so
- * disabling the widget no longer kills the portal surface and vice versa.
+ * Whether conversations are reachable from ANY visitor surface (widget
+ * messenger, portal Support tab, or the converged Messages surface of a
+ * tickets-enabled workspace). The shared visitor-facing conversation paths
+ * gate on this, so disabling the widget no longer kills the portal surface and
+ * vice versa. Tickets count because every customer ticket IS a conversation
+ * pair — an email-first workspace with the messenger off still lists and
+ * replies to its ticket threads through Messages.
  */
 export async function isConversationsEnabled(): Promise<boolean> {
   const { isMessengerEnabled } = await import('./settings.widget')
-  const [widget, portal] = await Promise.all([isMessengerEnabled(), isPortalSupportEnabled()])
-  return widget || portal
+  const [widget, portal, tickets] = await Promise.all([
+    isMessengerEnabled(),
+    isPortalSupportEnabled(),
+    isSupportTicketsEnabled(),
+  ])
+  return widget || portal || tickets
 }
 
 /**

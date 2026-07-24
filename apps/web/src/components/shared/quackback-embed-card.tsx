@@ -339,9 +339,16 @@ export function QuackbackEmbedCard({
     )
     if (!interactive) return <div className={shellCls}>{ticketInner}</div>
     // A ticket has no in-place modal in the conversation surfaces, so modal
-    // callers open the portal ticket page in a new tab (like article/changelog).
+    // callers open its thread in a new tab (like article/changelog). The
+    // destination is the pair's conversation on the converged Messages
+    // surface; an internal ticket (no pair) keeps the server-built admin URL.
     const tkOpenMode = openMode === 'modal' ? 'newTab' : openMode
-    const tkHref = tkOpenMode === 'newTab' ? data.url : `/support/ticket/${data.ticketId}`
+    const tkHref =
+      tkOpenMode === 'newTab'
+        ? data.url
+        : data.conversationId
+          ? `/support/${data.conversationId}`
+          : data.url
     return (
       <EmbedShell href={tkHref} openMode={tkOpenMode}>
         {ticketInner}

@@ -10,6 +10,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { EventData } from '../types'
 
+// --- db: the pair lookup (pairConversationId) resolves the converged
+// Messages deep link; every select here returns the pair row. ---
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
+  db: {
+    select: () => {
+      const chain: Record<string, unknown> = {}
+      for (const m of ['from', 'innerJoin', 'leftJoin', 'where', 'limit', 'orderBy']) {
+        chain[m] = () => chain
+      }
+      chain.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+        Promise.resolve([{ conversationId: 'conversation_1' }]).then(res, rej)
+      return chain
+    },
+  },
+}))
+
 const getStageLabels = vi.fn<() => Promise<Record<string, string>>>()
 vi.mock('@/lib/server/domains/settings/settings.tickets', () => ({
   getStageLabels: () => getStageLabels(),
@@ -167,6 +184,7 @@ describe('getTicketRepliedTargets', () => {
       target: { principalIds: ['principal_requester', 'principal_agent_1'] },
       config: {
         ticketId: 'ticket_1',
+        conversationId: 'conversation_1',
         title: 'Cannot log in',
         authorName: 'Sarah',
         preview: 'Thanks for the repro — fix is queued.',

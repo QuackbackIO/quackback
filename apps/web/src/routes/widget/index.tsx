@@ -21,7 +21,7 @@ import {
 import { WidgetHome } from '@/components/widget/widget-home'
 import { WidgetOverview } from '@/components/widget/widget-overview'
 import { WidgetHeroBackdrop } from '@/components/widget/widget-hero-backdrop'
-import type { ConversationId, TicketId } from '@quackback/ids'
+import type { ConversationId } from '@quackback/ids'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
@@ -42,7 +42,7 @@ import { Spinner } from '@/components/shared/spinner'
 import { conversationSummaryKey } from '@/components/widget/use-messenger-summary'
 
 // Secondary views load behind lazy() boundaries so the iframe's first paint
-// only needs the shell + Home/feedback — the detail/ticket views carry the
+// only needs the shell + Home/feedback — the detail views carry the
 // rich-text editor (tiptap) and the messenger carries the conversation thread.
 // The shared import thunks below also feed an idle-time prefetch after mount,
 // so by the time a visitor clicks a tab the chunk is already cached.
@@ -54,9 +54,6 @@ const loadHelpCategory = () => import('@/components/widget/widget-help-category'
 const loadHelpDetail = () => import('@/components/widget/widget-help-detail')
 const loadMessenger = () => import('@/components/widget/widget-messenger')
 const loadMessagesView = () => import('@/components/widget/widget-messages')
-const loadTickets = () => import('@/components/widget/widget-tickets')
-const loadTicketNew = () => import('@/components/widget/widget-ticket-new')
-const loadTicketDetail = () => import('@/components/widget/widget-ticket-detail')
 
 const WidgetPostDetail = lazy(() => loadPostDetail().then((m) => ({ default: m.WidgetPostDetail })))
 const WidgetChangelog = lazy(() => loadChangelog().then((m) => ({ default: m.WidgetChangelog })))
@@ -70,11 +67,6 @@ const WidgetHelpCategory = lazy(() =>
 const WidgetHelpDetail = lazy(() => loadHelpDetail().then((m) => ({ default: m.WidgetHelpDetail })))
 const WidgetMessenger = lazy(() => loadMessenger().then((m) => ({ default: m.WidgetMessenger })))
 const WidgetMessages = lazy(() => loadMessagesView().then((m) => ({ default: m.WidgetMessages })))
-const WidgetTickets = lazy(() => loadTickets().then((m) => ({ default: m.WidgetTickets })))
-const WidgetTicketNew = lazy(() => loadTicketNew().then((m) => ({ default: m.WidgetTicketNew })))
-const WidgetTicketDetail = lazy(() =>
-  loadTicketDetail().then((m) => ({ default: m.WidgetTicketDetail }))
-)
 
 const LAZY_VIEW_LOADERS = [
   loadPostDetail,
@@ -85,9 +77,6 @@ const LAZY_VIEW_LOADERS = [
   loadHelpDetail,
   loadMessenger,
   loadMessagesView,
-  loadTickets,
-  loadTicketNew,
-  loadTicketDetail,
 ]
 
 const searchSchema = z.object({
@@ -113,10 +102,11 @@ export const Route = createFileRoute('/widget/')({
       (settings?.publicWidgetConfig?.messenger?.enabled ?? false) &&
       (settings?.publicWidgetConfig?.tabs?.messenger ?? false)
 
-    // Tickets triple-gate: the experimental supportTickets flag + the tab
-    // toggle. The public projection already ANDs the flag into tabs.tickets, but
-    // the loader recomputes it defensively (mirrors messengerTabEnabled).
-    const ticketsTabEnabled =
+    // Converged Messages surface: a tickets-enabled workspace surfaces its
+    // ticket pairs through the Messages tab even with the messenger off
+    // (email-first workspaces) — the chat-start affordance stays gated on the
+    // messenger via `messengerEnabled` below.
+    const ticketsEnabled =
       ((settings?.featureFlags as { supportTickets?: boolean } | undefined)?.supportTickets ??
         false) &&
       (settings?.publicWidgetConfig?.tabs?.tickets ?? false)
@@ -254,11 +244,11 @@ export const Route = createFileRoute('/widget/')({
           ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
           (settings?.helpCenterConfig?.enabled ?? false) &&
           (settings?.publicWidgetConfig?.tabs?.help ?? false),
-        // Support Inbox flag + Messenger enabled + tab on (computed above). The
-        // persisted config names this `messenger`; the widget speaks `messages`.
-        messages: messengerTabEnabled,
-        // Support Tickets flag + tab on (computed above).
-        tickets: ticketsTabEnabled,
+        // Support Inbox flag + Messenger enabled + tab on (computed above), OR
+        // tickets on (the converged surface lists ticket pairs here). The
+        // persisted config names the messenger surface `messenger`; the widget
+        // speaks `messages`.
+        messages: messengerTabEnabled || ticketsEnabled,
         // Admin opt-out for the aggregated Home tab (defaults to shown).
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
       },
@@ -292,6 +282,10 @@ export const Route = createFileRoute('/widget/')({
         isPrivate: settings?.publicPortalConfig?.portalAccess?.isPrivate ?? false,
         widgetSignIn: settings?.publicPortalConfig?.portalAccess?.widgetSignIn ?? false,
       },
+      // Whether the visitor can START a conversation (the messenger proper).
+      // False for tickets-only workspaces: Messages lists their threads, but
+      // the chat-start affordances hide (agents/email initiate).
+      messengerEnabled: messengerTabEnabled,
       // The portal's own origin (BASE_URL env), resolved server-side so the
       // widget handoff URL always points at the portal host — not at the widget
       // iframe origin, which may differ in self-hosted deployments.
@@ -380,6 +374,7 @@ function WidgetPage() {
     teamName,
     assistant,
     team,
+    messengerEnabled,
   } = Route.useLoaderData()
   const { ensureSession, sessionVersion } = useWidgetAuth()
 
@@ -466,7 +461,6 @@ function WidgetPage() {
   const [backTarget, setBackTarget] = useState<{ tab: WidgetTab; view: WidgetView } | null>(null)
 
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
-  const [selectedTicketId, setSelectedTicketId] = useState<TicketId | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
   const [selectedHelpSlug, setSelectedHelpSlug] = useState<string | null>(null)
@@ -486,18 +480,6 @@ function WidgetPage() {
     setConversationTarget(target ?? null)
     setActiveTab('messages')
     setView('messenger')
-  }, [])
-
-  // Open a ticket: an id opens its thread, 'new' opens the create form. Both
-  // are pushed on top of the Tickets list (like the messenger thread).
-  const openTicket = useCallback((target: TicketId | 'new') => {
-    setActiveTab('tickets')
-    if (target === 'new') {
-      setView('ticket-new')
-    } else {
-      setSelectedTicketId(target)
-      setView('ticket-detail')
-    }
   }, [])
 
   // Long-form content reads better wide: ask the host SDK to grow the panel
@@ -536,9 +518,10 @@ function WidgetPage() {
         tabs.messages
       ) {
         openMessenger()
-      } else if (opts.view === 'tickets' && tabs.tickets) {
-        setActiveTab('tickets')
-        setView('tickets')
+      } else if (opts.view === 'tickets' && tabs.messages) {
+        // Legacy SDK target: ticket threads now live in the Messages list.
+        setActiveTab('messages')
+        setView('messages')
       } else if ((opts.view === 'home' || opts.view === 'overview') && homeEnabled(tabs)) {
         setActiveTab('home')
         setView('overview')
@@ -594,12 +577,6 @@ function WidgetPage() {
       setView('messages')
       return
     }
-    if (view === 'ticket-detail' || view === 'ticket-new') {
-      // Ticket views open from the Tickets tab; back returns to the ticket list.
-      setSelectedTicketId(null)
-      setView('tickets')
-      return
-    }
     // Root views only show a back arrow after a cross-navigation (e.g. a Home
     // card jumped here); back returns to that origin and consumes it.
     if (
@@ -626,9 +603,6 @@ function WidgetPage() {
     } else if (tab === 'messages') {
       setConversationTarget(null)
       setView('messages')
-    } else if (tab === 'tickets') {
-      setSelectedTicketId(null)
-      setView('tickets')
     } else if (tab === 'feedback') {
       setSelectedPostId(null)
       setView('feedback')
@@ -693,14 +667,13 @@ function WidgetPage() {
     view === 'feedback' ||
     view === 'changelog' ||
     view === 'help' ||
-    view === 'messages' ||
-    view === 'tickets'
+    view === 'messages'
   const shellOnBack = !isRootView || backTarget ? handleBack : undefined
 
   // Messenger thread header lives in the SHELL's top bar (single header row):
   // the assistant identity when enabled — always available, no presence — or
   // the live presence badge for assistant-less workspaces.
-  const presence = useConversationPresence(!!tabs.messages && !assistant)
+  const presence = useConversationPresence(messengerEnabled && !assistant)
   const messengerHeader =
     view === 'messenger' ? (
       assistant ? (
@@ -741,15 +714,9 @@ function WidgetPage() {
       headerContent={messengerHeader}
       // The hero backdrop belongs to Home only; detail views keep a plain panel.
       backdrop={view === 'overview' ? <WidgetHeroBackdrop home={home} /> : undefined}
-      // Immersive views: the conversation thread, the ticket thread/create form,
-      // and single-item reading views (post/article/changelog) drop the tab bar;
-      // the back chevron handles exit.
-      hideTabBar={
-        view === 'messenger' ||
-        view === 'ticket-detail' ||
-        view === 'ticket-new' ||
-        isExpandedView(view)
-      }
+      // Immersive views: the conversation thread and single-item reading views
+      // (post/article/changelog) drop the tab bar; the back chevron handles exit.
+      hideTabBar={view === 'messenger' || isExpandedView(view)}
       panelExpanded={panelExpanded}
       expandControl={
         isExpandedView(view) && !hostIsMobile
@@ -766,6 +733,7 @@ function WidgetPage() {
             assistant={assistant}
             team={team}
             topArticles={topArticles}
+            canStartConversation={messengerEnabled}
             onLeaveFeedback={() => crossNavigate('feedback')}
             onOpenHelp={() => crossNavigate('help')}
             onOpenHelpArticle={(slug) => {
@@ -814,26 +782,9 @@ function WidgetPage() {
           <WidgetMessages
             teamName={teamName}
             assistant={assistant}
+            canStartConversation={messengerEnabled}
             onOpenMessenger={openMessenger}
           />
-        </ViewTransition>
-      )}
-
-      {view === 'tickets' && (
-        <ViewTransition id="tickets" kind="root">
-          <WidgetTickets onOpenTicket={openTicket} />
-        </ViewTransition>
-      )}
-
-      {view === 'ticket-new' && (
-        <ViewTransition id="ticket-new" kind="push">
-          <WidgetTicketNew onCreated={(id) => openTicket(id)} />
-        </ViewTransition>
-      )}
-
-      {view === 'ticket-detail' && selectedTicketId && (
-        <ViewTransition id={`ticket-${selectedTicketId}`} kind="push">
-          <WidgetTicketDetail ticketId={selectedTicketId} />
         </ViewTransition>
       )}
 

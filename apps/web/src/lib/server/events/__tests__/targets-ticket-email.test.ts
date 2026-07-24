@@ -140,6 +140,7 @@ function createdEvent(ticketOverrides: Record<string, unknown> = {}): EventData 
 describe('getTicketCreatedEmailTargets', () => {
   it('emails the requester even when the requester is the actor (no actor exclusion)', async () => {
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    queueSelect([{ conversationId: 'conversation_1' }]) // the pair (requester CTA target)
     const targets = await getTicketCreatedEmailTargets(createdEvent(), context)
     expect(targets).toHaveLength(1)
     expect(targets[0].type).toBe('email')
@@ -148,7 +149,8 @@ describe('getTicketCreatedEmailTargets', () => {
       kind: 'created',
       ticketLabel: '#1',
       title: 'Cannot log in',
-      ctaUrl: 'https://p/support/ticket/ticket_1',
+      // Converged Messages: the requester CTA is the pair's conversation.
+      ctaUrl: 'https://p/support/conversation_1',
       ticketId: 'ticket_1',
       workspaceName: 'W',
     })
@@ -251,6 +253,7 @@ describe('getTicketRepliedEmailTargets', () => {
       { id: 'principal_requester', email: 'req@example.com', contactEmail: null },
       { id: 'principal_agent_1', email: 'agent1@example.com', contactEmail: null },
     ])
+    queueSelect([{ conversationId: 'conversation_1' }]) // the pair (requester CTA target)
     const targets = await getTicketRepliedEmailTargets(repliedEvent(), context)
     expect(targets).toHaveLength(2)
     const byEmail = Object.fromEntries(
@@ -258,7 +261,7 @@ describe('getTicketRepliedEmailTargets', () => {
     )
     expect(byEmail['req@example.com']).toMatchObject({
       kind: 'reply',
-      ctaUrl: 'https://p/support/ticket/ticket_1',
+      ctaUrl: 'https://p/support/conversation_1',
       messageBody: 'Fix is queued.',
       authorName: 'Sarah',
     })
@@ -321,11 +324,12 @@ describe('getTicketResolvedEmailTargets', () => {
   it('fires on open→closed and emails the watching requester with stage labels', async () => {
     getTicketWatchersForEvent.mockResolvedValue(['principal_requester'])
     queueSelect([{ id: 'principal_requester', email: 'req@example.com', contactEmail: null }])
+    queueSelect([{ conversationId: 'conversation_1' }]) // the pair (requester CTA target)
     const targets = await getTicketResolvedEmailTargets(statusEvent(), context)
     expect(targets).toHaveLength(1)
     expect(targets[0].config).toMatchObject({
       kind: 'status_resolved',
-      ctaUrl: 'https://p/support/ticket/ticket_1',
+      ctaUrl: 'https://p/support/conversation_1',
       statusChange: { previousLabel: 'Received', newLabel: 'Resolved' },
     })
     // A staged (resolved) close is not the generic-close copy branch.

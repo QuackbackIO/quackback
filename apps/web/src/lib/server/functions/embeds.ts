@@ -75,6 +75,10 @@ export interface TicketEmbedRow {
   type: TicketType
   requesterPrincipalId: PrincipalId | null
   deletedAt: Date | string | null
+  /** The pair's conversation id (converged Messages: a customer ticket's URL
+   *  IS its conversation thread). Null for internal ticket types
+   *  (back_office/tracker are never conversation-linked). */
+  conversationId: string | null
   /** Public stage label (Received / In progress / …), or null when the status
    *  maps to no public stage. Never the internal status name. */
   statusLabel: string | null
@@ -195,13 +199,20 @@ export function projectTicketPreview(ticket: TicketEmbedRow, baseUrl: string): E
   return {
     kind: 'ticket',
     ticketId: ticket.id,
+    conversationId: ticket.conversationId,
     reference: formatTicketNumber(ticket.number),
     title: ticket.title,
     statusLabel: ticket.statusLabel,
     statusColor: ticket.statusColor,
     priority: ticket.priority,
     createdAt: toIsoStringOrNull(ticket.createdAt),
-    url: joinBase(baseUrl, `/support/ticket/${ticket.id}`),
+    // Converged Messages: a customer ticket's URL is the pair's conversation
+    // thread. Internal ticket types (no conversation; teammate-only viewers
+    // per scopeTicketEmbed) link the admin inbox instead.
+    url: joinBase(
+      baseUrl,
+      ticket.conversationId ? `/support/${ticket.conversationId}` : `/admin/inbox?i=${ticket.id}`
+    ),
   }
 }
 

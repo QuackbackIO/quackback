@@ -48,6 +48,10 @@ interface WidgetOverviewProps {
   onOpenHelp: () => void
   /** Open a single help article from the search card. */
   onOpenHelpArticle: (slug: string) => void
+  /** Whether the visitor can START a conversation (the messenger proper).
+   *  False for tickets-only workspaces: the Messages tab lists their threads
+   *  but the ask-a-question card hides. */
+  canStartConversation?: boolean
   /** Start a brand-new conversation (opens the messenger composer). */
   onStartConversation: () => void
   /** Resume an in-flight conversation (opens the messenger thread directly). */
@@ -87,6 +91,7 @@ export function WidgetOverview({
   onLeaveFeedback,
   onOpenHelp,
   onOpenHelpArticle,
+  canStartConversation = true,
   onStartConversation,
   onResumeMessenger,
   onSeeChangelog,
@@ -151,7 +156,7 @@ export function WidgetOverview({
           />
         )
       case 'new_conversation': {
-        if (!tabs.messages) return null
+        if (!tabs.messages || !canStartConversation) return null
         // Facepile: the assistant fronting, flanked by real teammates.
         const faces: { name: string; avatarUrl: string | null }[] = [
           ...(assistant ? [{ name: assistant.name, avatarUrl: assistant.avatarUrl }] : []),
