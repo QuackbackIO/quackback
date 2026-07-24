@@ -68,8 +68,8 @@ export const Route = createFileRoute('/onboarding/_layout/boards')({
     const startingPoint = await getStartingPointContextFn()
     return {
       ...startingPoint,
-      workspaceName: context.settings?.name ?? context.settings?.settings?.name ?? 'Your workspace',
-      workspaceSlug: context.settings?.slug ?? context.settings?.settings?.slug ?? '',
+      workspaceName: context.settings?.name ?? 'Your workspace',
+      workspaceSlug: context.settings?.slug ?? '',
     }
   },
   component: StartingPointStep,

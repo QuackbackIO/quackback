@@ -32,8 +32,8 @@ export const Route = createFileRoute('/onboarding/_layout/workspace')({
     // this lets admins correct either field without creating a duplicate artifact.
     if (state.setupState?.steps.startingPoint) throw redirect({ to: target })
     return {
-      existingWorkspaceName: context.settings?.settings?.name ?? '',
-      existingSlug: context.settings?.settings?.slug ?? '',
+      existingWorkspaceName: context.settings?.name ?? '',
+      existingSlug: context.settings?.slug ?? '',
       existingUseCase: state.setupState?.useCase,
     }
   },
