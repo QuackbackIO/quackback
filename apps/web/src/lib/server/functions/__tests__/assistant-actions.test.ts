@@ -38,7 +38,6 @@ const hoisted = vi.hoisted(() => ({
   markPendingActionExecuted: vi.fn(),
   markPendingActionFailed: vi.fn(),
   resolveToolSpecs: vi.fn(),
-  getActionSpecByToolName: vi.fn(),
   getAssistantRuntimeConfig: vi.fn(),
   executeApprovedPendingAction: vi.fn(),
   ensureAssistantPrincipal: vi.fn(),
@@ -111,10 +110,6 @@ vi.mock('@/lib/server/domains/assistant/assistant.toolspec', () => ({
 
 vi.mock('@/lib/server/domains/assistant/assistant.tools', () => ({
   executeApprovedPendingAction: hoisted.executeApprovedPendingAction,
-}))
-
-vi.mock('@/lib/server/domains/assistant/custom-actions.service', () => ({
-  getActionSpecByToolName: hoisted.getActionSpecByToolName,
 }))
 
 vi.mock('@/lib/server/domains/settings/settings.assistant', () => ({
@@ -191,10 +186,6 @@ beforeEach(() => {
   hoisted.requireAuth.mockResolvedValue(AUTH)
   hoisted.policyActorFromAuth.mockResolvedValue(actorWith([PERMISSIONS.CONVERSATION_SET_STATUS]))
   hoisted.resolveToolSpecs.mockReturnValue([CLOSE_SPEC])
-  // Custom-action resolver defaults: no dynamic spec, flag on. Built-in tests
-  // (toolName without an `action_` prefix) never touch either.
-  hoisted.getActionSpecByToolName.mockResolvedValue(null)
-  hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: true })
   hoisted.ensureAssistantPrincipal.mockResolvedValue({ id: 'principal_quinn' })
   hoisted.assertConversationViewable.mockResolvedValue(undefined)
   hoisted.assertTicketVisible.mockResolvedValue(undefined)
@@ -359,63 +350,6 @@ describe('approveAssistantActionFn', () => {
     hoisted.getPendingActionById.mockResolvedValue(null)
 
     await expect(approve({ pendingActionId: 'nope' })).rejects.toMatchObject({ statusCode: 404 })
-  })
-
-  describe('custom actions (Phase 5)', () => {
-    it('410s and never decides when the custom action was deleted since the proposal', async () => {
-      // A persisted `action_<slug>` toolName whose definition is gone resolves
-      // to NOTHING (built-in registry misses it, and the dynamic resolver
-      // returns null) — the approve path surfaces it as gone, same as a stale
-      // built-in, and executes nothing.
-      hoisted.getPendingActionById.mockResolvedValue(pendingRow({ toolName: 'action_deleted' }))
-      hoisted.resolveToolSpecs.mockReturnValue([])
-      hoisted.getActionSpecByToolName.mockResolvedValue(null)
-
-      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toMatchObject({
-        statusCode: 410,
-      })
-      expect(hoisted.decidePendingAction).not.toHaveBeenCalled()
-      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
-    })
-
-    it('settles failed (never executing) when the custom-actions flag is off — the in-flight kill switch', async () => {
-      const pending = pendingRow({ toolName: 'action_lookup_order' })
-      hoisted.getPendingActionById.mockResolvedValue(pending)
-      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: false })
-      const decided = { ...pending, status: 'approved', decidedById: 'principal_agent1' }
-      hoisted.decidePendingAction.mockResolvedValue(decided)
-      const settled = {
-        ...decided,
-        status: 'failed',
-        result: { error: 'Custom actions are disabled.' },
-      }
-      hoisted.markPendingActionFailed.mockResolvedValue(settled)
-
-      const out = await approve({ pendingActionId: 'assistant_action_1' })
-
-      expect(hoisted.markPendingActionFailed).toHaveBeenCalledWith(
-        'assistant_action_1',
-        'Custom actions are disabled.'
-      )
-      // Short-circuits before ever resolving or executing the spec.
-      expect(hoisted.getActionSpecByToolName).not.toHaveBeenCalled()
-      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
-      expect(out).toEqual(expect.objectContaining(expectDTOFrom(settled)))
-    })
-
-    it('conflicts (never executing) when a flag-off custom action was already decided', async () => {
-      hoisted.getPendingActionById.mockResolvedValue(
-        pendingRow({ toolName: 'action_lookup_order' })
-      )
-      hoisted.getAssistantRuntimeConfig.mockResolvedValue({ customActionsEnabled: false })
-      hoisted.decidePendingAction.mockResolvedValue(null)
-
-      await expect(approve({ pendingActionId: 'assistant_action_1' })).rejects.toThrow(
-        /already decided or has expired/
-      )
-      expect(hoisted.markPendingActionFailed).not.toHaveBeenCalled()
-      expect(hoisted.executeApprovedPendingAction).not.toHaveBeenCalled()
-    })
   })
 
   describe('row-level parent authz (unified inbox §3.3)', () => {

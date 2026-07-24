@@ -479,8 +479,6 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'guidance rule authors are team members, never anonymous',
   'assistant_snippets.created_by_id':
     'snippet authors are team members with assistant.manage, never anonymous',
-  'assistant_actions.created_by_id':
-    'custom-action authors are team members with assistant.manage, never anonymous',
   'assistant_pending_actions.decided_by_id':
     'the agent who approves/rejects a pending action is a team member, never anonymous',
   'assistant_tool_calls.principal_id':

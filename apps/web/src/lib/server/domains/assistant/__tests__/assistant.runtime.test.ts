@@ -173,7 +173,6 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
   revision: 1,
   workspaceName: 'Quackback',
   actionsEnabled: false,
-  customActionsEnabled: false,
 }
 
 const mockGetAssistantRuntimeConfig = vi.fn()
@@ -1020,12 +1019,7 @@ describe('runAssistantTurn', () => {
     expect(mockChat).toHaveBeenCalledTimes(2)
     expect(mockGetAssistantRuntimeConfig).toHaveBeenCalledTimes(1)
     expect(mockAssembleAssistantToolset).toHaveBeenCalledTimes(1)
-    expect(mockAssembleAssistantToolset).toHaveBeenCalledWith(
-      expect.any(Object),
-      undefined,
-      true,
-      []
-    )
+    expect(mockAssembleAssistantToolset).toHaveBeenCalledWith(expect.any(Object), undefined, true)
     expect(result.status !== 'suppressed' && result.trace.configRevision).toBe(37)
     expect(lastLoggedMetadata?.configRevision).toBe(37)
   })
@@ -2065,8 +2059,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
         knowledge: { sources: new Set(['article']), status: false },
       }),
       undefined,
-      false,
-      []
+      false
     )
   })
 
