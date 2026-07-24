@@ -771,6 +771,7 @@ export async function sendAgentMessage(
     contentJson: safeContentJson,
     agentName: agent.displayName ?? 'Support',
     capturedEmail: txResult.conversation.visitorEmail,
+    channel: txResult.conversation.channel,
   })
 
   // isFirstMessage only matters for a VISITOR message — this is an agent

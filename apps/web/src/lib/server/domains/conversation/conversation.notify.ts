@@ -6,9 +6,11 @@
  *    live stream (offline coverage). The in-app team bell for the same
  *    event rides the message.created event/hook pipeline instead (WO-3
  *    slice 5) — see notifyVisitorMessage's own doc.
- *  - Agent reply      -> email the visitor only when they're offline AND
- *    identified (anonymous visitors have no deliverable address; the widget's
- *    unread badge covers the online case).
+ *  - Agent reply      -> email the visitor when they're reachable AND either
+ *    offline OR on an EMAIL conversation. Presence gates the messenger surface
+ *    only: on an email thread the mailbox IS the thread, so a live stream
+ *    elsewhere is no evidence the reply was seen (see notifyAgentReply). An
+ *    anonymous visitor with no captured address stays unreachable either way.
  */
 import { db, eq, inArray, principal, user, conversations } from '@/lib/server/db'
 import { resolveSendingAddress } from '@/lib/server/domains/channel-accounts/channel-account.service'
@@ -291,9 +293,21 @@ export async function notifyAgentReply(opts: {
   agentName: string
   /** Pre-chat email captured on the conversation, if any. */
   capturedEmail?: string | null
+  /** The channel this conversation is currently conducted on. REQUIRED, not
+   *  optional-with-a-default: a future caller that forgets it must fail to
+   *  compile rather than silently default to 'messenger' and reinstate the
+   *  presence-suppression bug this parameter exists to fix. */
+  channel: Conversation['channel']
 }): Promise<void> {
   try {
-    if (await isPrincipalOnline(opts.visitorPrincipalId)) return
+    // Presence gates the MESSENGER surface only. On an email conversation the
+    // visitor's mailbox IS the thread, so a live SSE stream elsewhere (a portal
+    // tab, the widget open on another page) is no evidence they will see this
+    // reply — there the gate is an anti-spam optimisation, and here it simply
+    // does not apply. Worst case an online email visitor gets the in-app copy
+    // AND the mail, which is the right way round to be wrong: a duplicate beats
+    // a silent drop.
+    if (opts.channel !== 'email' && (await isPrincipalOnline(opts.visitorPrincipalId))) return
 
     const [visitor] = await db
       .select({ type: principal.type, email: user.email, contactEmail: principal.contactEmail })
@@ -304,9 +318,14 @@ export async function notifyAgentReply(opts: {
 
     const recipient = resolveReplyRecipient(visitor, visitor?.contactEmail, opts.capturedEmail)
     if (!recipient) {
-      // The visitor is offline and unreachable — surface it instead of dropping
-      // silently (the inbox can flag conversations with no reply-to address).
-      log.warn({ conversation_id: opts.conversationId }, 'agent reply undeliverable (no email)')
+      // The visitor is unreachable — surface it instead of dropping silently
+      // (the inbox can flag conversations with no reply-to address). `channel`
+      // discriminates the two severities: on messenger the widget's unread
+      // badge still carries the reply, on email nothing does and it is lost.
+      log.warn(
+        { conversation_id: opts.conversationId, channel: opts.channel },
+        'agent reply undeliverable (no email)'
+      )
       return
     }
 

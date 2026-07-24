@@ -232,7 +232,7 @@ describe('notifyVisitorMessage', () => {
 describe('notifyAgentReply', () => {
   const visitorPrincipalId = 'principal_visitor' as PrincipalId
 
-  it('returns early without emailing when the visitor is online', async () => {
+  it('returns early without emailing an online visitor on a MESSENGER conversation', async () => {
     isPrincipalOnline.mockResolvedValue(true)
     visitorRows = [{ type: 'user', email: 'v@x.com' }]
 
@@ -241,9 +241,35 @@ describe('notifyAgentReply', () => {
       visitorPrincipalId,
       content: 'thanks for waiting',
       agentName: 'Agent',
+      channel: 'messenger',
     })
 
     expect(sendConversationMessageEmail).not.toHaveBeenCalled()
+  })
+
+  // The regression pin for the presence-suppression defect: on an email
+  // conversation the visitor's mailbox IS the thread, so a live stream
+  // elsewhere must not swallow the reply. Contrast with the case above —
+  // identical input except the channel.
+  it('emails an ONLINE visitor when the conversation is on the email channel', async () => {
+    isPrincipalOnline.mockResolvedValue(true)
+    visitorRows = [{ type: 'user', email: 'v@x.com' }]
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'thanks for waiting',
+      agentName: 'Agent',
+      channel: 'email',
+    })
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationMessageEmail.mock.calls[0][0]).toMatchObject({
+      to: 'v@x.com',
+      direction: 'agent_reply',
+    })
+    // Presence is not even consulted on an email conversation.
+    expect(isPrincipalOnline).not.toHaveBeenCalled()
   })
 
   it('prefers an identified visitor account email', async () => {
@@ -255,6 +281,7 @@ describe('notifyAgentReply', () => {
       visitorPrincipalId,
       content: 'here is your answer',
       agentName: 'Agent',
+      channel: 'messenger',
       capturedEmail: 'prechat@x.com',
     })
 
@@ -279,6 +306,7 @@ describe('notifyAgentReply', () => {
       visitorPrincipalId,
       content: 'answer',
       agentName: 'Agent',
+      channel: 'messenger',
       capturedEmail: 'prechat@x.com',
     })
 
@@ -295,6 +323,7 @@ describe('notifyAgentReply', () => {
       visitorPrincipalId,
       content: 'answer',
       agentName: 'Agent',
+      channel: 'messenger',
       capturedEmail: null,
     })
 
@@ -310,6 +339,7 @@ describe('notifyAgentReply', () => {
         visitorPrincipalId,
         content: 'answer',
         agentName: 'Agent',
+        channel: 'messenger',
         capturedEmail: 'prechat@x.com',
       })
     ).resolves.toBeUndefined()
@@ -338,6 +368,7 @@ describe('notifyAgentReply', () => {
         visitorPrincipalId,
         content: 'here is your answer',
         agentName: 'Agent',
+        channel: 'messenger',
       })
 
       // Signed plus-address: reply+<id-suffix>.<hmac>@domain (unforgeable; the
@@ -359,6 +390,7 @@ describe('notifyAgentReply', () => {
         visitorPrincipalId,
         content: 'here is your answer',
         agentName: 'Agent',
+        channel: 'messenger',
       })
 
       expect(sendConversationMessageEmail.mock.calls[0][0].replyTo).toBeUndefined()
@@ -467,6 +499,7 @@ describe('conversation email body (P4.5)', () => {
       content: 'Here is bold',
       contentJson,
       agentName: 'Agent',
+      channel: 'messenger',
     })
 
     const call = sendConversationMessageEmail.mock.calls[0][0]
@@ -498,6 +531,7 @@ describe('conversation email body (P4.5)', () => {
       content: 'see:',
       contentJson,
       agentName: 'Agent',
+      channel: 'messenger',
     })
 
     const call = sendConversationMessageEmail.mock.calls[0][0]
@@ -517,6 +551,7 @@ describe('conversation email body (P4.5)', () => {
       visitorPrincipalId,
       content: body,
       agentName: 'Agent',
+      channel: 'messenger',
     })
 
     const call = sendConversationMessageEmail.mock.calls[0][0]
@@ -545,6 +580,7 @@ describe('threading headers (P4.6 regression guard)', () => {
       visitorPrincipalId,
       content: 'hello',
       agentName: 'Agent',
+      channel: 'messenger',
     })
 
     const call = sendConversationMessageEmail.mock.calls[0][0]
@@ -580,6 +616,7 @@ describe('threading headers (P4.6 regression guard)', () => {
         visitorPrincipalId,
         content: 'answer',
         agentName: 'Agent',
+        channel: 'messenger',
       })
 
       const call = sendConversationMessageEmail.mock.calls[0][0]
@@ -604,6 +641,7 @@ describe('threading headers (P4.6 regression guard)', () => {
         visitorPrincipalId,
         content: 'answer',
         agentName: 'Agent',
+        channel: 'messenger',
       })
 
       const call = sendConversationMessageEmail.mock.calls[0][0]
