@@ -1163,6 +1163,9 @@ export async function assignConversation(
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
   const existing = await loadConversationOr404(conversationId)
+  // Re-selecting the current assignee (or unassigning an unassigned thread) is
+  // a no-op: no system message, no events, no triage-wake.
+  if ((existing.assignedAgentPrincipalId ?? null) === agentPrincipalId) return existing
   // Only a team member can be the assignee (any agent, not just the caller).
   if (agentPrincipalId) {
     const [target] = await db
@@ -1224,6 +1227,9 @@ export async function assignTeam(
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
   const existing = await loadConversationOr404(conversationId)
+  // Re-selecting the current team (or clearing an already-clear one) is a
+  // no-op — it does not re-distribute to a member or repeat the system message.
+  if ((existing.assignedTeamId ?? null) === teamId) return existing
 
   // Validate the target (throws NotFound if missing/deleted) and pick a member
   // when the team routes automatically.
