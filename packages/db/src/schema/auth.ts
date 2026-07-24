@@ -344,6 +344,43 @@ export type IdentityProviderAttributeMapping = {
 }
 
 /**
+ * Per-provider profile-claim mapping for IdPs whose user info doesn't fit
+ * the OIDC defaults (`sub`/`name`/`email` from the id_token or userinfo
+ * endpoint). When set, the auth builder attaches a custom `getUserInfo`
+ * to the provider's generic-oauth config. Declared here (like
+ * `IdentityProviderAttributeMapping`) so the jsonb column is typed
+ * without coupling the db package to the app layer.
+ *
+ * Example: EVE Online SSO returns no id_token and no email; its JWT
+ * access token carries `sub`/`name`, so
+ * `{ source: 'accessTokenJwt', emailFallback: '{id}@eve.example.com' }`
+ * makes sign-in work.
+ */
+export type IdentityProviderProfileMapping = {
+  /**
+   * Where profile claims come from. `userinfo` fetches the provider's
+   * userinfo endpoint (mapping applied on top); `accessTokenJwt` decodes
+   * the JWT access token's payload. Default `userinfo`.
+   */
+  source?: 'userinfo' | 'accessTokenJwt'
+  /** Claim path for the account id. Default `sub`. */
+  idClaim?: string
+  /** Claim path for the display name. Default `name`. */
+  nameClaim?: string
+  /** Claim path for the email. Default `email`. */
+  emailClaim?: string
+  /**
+   * Template used when the email claim is absent, e.g.
+   * `"{id}@sso.example.com"`. `{id}` is the resolved id-claim value
+   * sanitized to `[a-z0-9._-]`. Presence of this field is the opt-in for
+   * synthesized emails; such users are marked emailVerified (there is no
+   * real inbox to verify) and can never receive notifications or magic
+   * links.
+   */
+  emailFallback?: string
+}
+
+/**
  * Identity provider — the single source of truth for an OIDC IdP.
  *
  * Consolidates the two legacy OIDC config models. `id` is the internal
@@ -390,6 +427,8 @@ export const identityProvider = pgTable(
     autoCreateUsers: boolean('auto_create_users').notNull().default(true),
     autoProvisionRole: text('auto_provision_role').$type<'admin' | 'member' | 'user'>(),
     attributeMapping: jsonb('attribute_mapping').$type<IdentityProviderAttributeMapping>(),
+    /** Non-null opts this provider into custom profile-claim resolution. */
+    profileMapping: jsonb('profile_mapping').$type<IdentityProviderProfileMapping>(),
     showButton: boolean('show_button').notNull().default(false),
     /** Bumped when redirect-affecting details change; freshness baseline. */
     detailsChangedAt: timestamp('details_changed_at', { withTimezone: true }),
