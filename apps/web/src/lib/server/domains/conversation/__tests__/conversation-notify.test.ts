@@ -104,6 +104,7 @@ import {
   notifyVisitorMessage,
   notifyAgentReply,
   notifyCsatRequestEmail,
+  EMAIL_SEND_RETRY_DELAYS_MS,
 } from '../conversation.notify'
 import { generateContentHTML } from '@/lib/shared/content-html'
 
@@ -395,6 +396,74 @@ describe('notifyAgentReply', () => {
 
       expect(sendConversationMessageEmail.mock.calls[0][0].replyTo).toBeUndefined()
     })
+  })
+})
+
+// The send path is fire-and-forget behind a `void` call, so a throw from the
+// provider has no caller to surface it: the message row is already committed and
+// the thread already shows the reply as sent. A bounded retry is what stops a
+// brief provider outage from silently losing it.
+describe('conversation email send retry', () => {
+  const visitorPrincipalId = 'principal_visitor' as PrincipalId
+  const realDelays = [...EMAIL_SEND_RETRY_DELAYS_MS]
+
+  beforeEach(() => {
+    // Keep the suite fast: same attempt budget, no real waiting.
+    EMAIL_SEND_RETRY_DELAYS_MS.splice(0, EMAIL_SEND_RETRY_DELAYS_MS.length, 0, 0)
+  })
+  afterEach(() => {
+    EMAIL_SEND_RETRY_DELAYS_MS.splice(0, EMAIL_SEND_RETRY_DELAYS_MS.length, ...realDelays)
+  })
+
+  it('retries a throwing provider and records the outbound id exactly once on success', async () => {
+    process.env.EMAIL_INBOUND_DOMAIN = 'tenaevexeo.resend.app'
+    process.env.EMAIL_INBOUND_SIGNING_SECRET = 'whsec_test'
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    sendConversationMessageEmail
+      .mockRejectedValueOnce(new Error('provider 503'))
+      .mockResolvedValueOnce({ sent: true })
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'answer',
+      agentName: 'Agent',
+      channel: 'messenger',
+    })
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(2)
+    // Threading is minted ONCE above the retry: a fresh Message-ID per attempt
+    // would deliver two mails that neither dedupe nor thread together.
+    const [first, second] = sendConversationMessageEmail.mock.calls
+    expect(second[0].messageId).toBe(first[0].messageId)
+    expect(recordOutboundEmail).toHaveBeenCalledTimes(1)
+
+    delete process.env.EMAIL_INBOUND_DOMAIN
+    delete process.env.EMAIL_INBOUND_SIGNING_SECRET
+  })
+
+  it('gives up after the retry budget without rejecting or recording the send', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'account@x.com' }]
+    sendConversationMessageEmail.mockRejectedValue(new Error('provider down'))
+
+    await expect(
+      notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'answer',
+        agentName: 'Agent',
+        channel: 'email',
+      })
+    ).resolves.toBeUndefined()
+
+    // Two delays configured = three attempts total.
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(3)
+    // Nothing is recorded for a mail that never left: an id in the threading map
+    // would corrupt the References chain and the inbound Message-ID match.
+    expect(recordOutboundEmail).not.toHaveBeenCalled()
+    expect(recordEmailIdentity).not.toHaveBeenCalled()
   })
 })
 

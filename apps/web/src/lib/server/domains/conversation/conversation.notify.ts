@@ -2,6 +2,12 @@
  * Offline notifications for support-inbox conversations. Fire-and-forget from the service after a
  * write commits — a delivery failure must never break sending a message.
  *
+ * Because it is fire-and-forget, a failed send has no caller to surface it: the
+ * message row is already committed and the thread already renders it as sent. So
+ * visitor-facing sends go through a small bounded retry (see sendWithRetry) to
+ * convert the common transient provider failure into a success rather than a log
+ * line nobody reads. A send that exhausts the retries is still only logged.
+ *
  *  - Visitor message  -> email the team only when no agent currently has a
  *    live stream (offline coverage). The in-app team bell for the same
  *    event rides the message.created event/hook pipeline instead (WO-3
@@ -218,6 +224,51 @@ export async function notifyVisitorMessage(opts: {
 }
 
 /**
+ * Backoff before each RETRY of a conversation-email send, in milliseconds — so a
+ * two-entry list means up to three attempts. Exported so tests can shrink it;
+ * nothing else should read it.
+ */
+export const EMAIL_SEND_RETRY_DELAYS_MS = [2000, 4000]
+
+/**
+ * Send with a small bounded retry. The email dispatch layer THROWS on any
+ * provider error, and this whole path is fire-and-forget behind a `void` call
+ * whose catch only logs — so without a retry a thirty-second provider blip
+ * silently loses an agent's reply, while the message row is committed and the
+ * thread renders it as sent.
+ *
+ * Deliberately retries every thrown error rather than classifying which are
+ * transient. A per-provider error taxonomy has to be hand-maintained and fails
+ * CLOSED: the day the provider adds an error name, an allow-list quietly stops
+ * retrying it. Two wasted calls on a genuinely terminal failure is by far the
+ * cheaper mistake.
+ *
+ * The caller mints the threading headers ONCE, above this — a Message-ID minted
+ * per attempt would make a provider that errors after accepting deliver two
+ * mails that neither dedupe in the client nor thread together.
+ */
+async function sendWithRetry<T>(
+  conversationId: ConversationId,
+  send: () => Promise<T>
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await send()
+    } catch (err) {
+      const delay = EMAIL_SEND_RETRY_DELAYS_MS[attempt]
+      // Out of budget: rethrow so the caller's own catch logs it as a failed
+      // notification, exactly as it did before retries existed.
+      if (delay === undefined) throw err
+      log.warn(
+        { err, conversation_id: conversationId, attempt: attempt + 1 },
+        'conversation email send failed; retrying'
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+}
+
+/**
  * Send one visitor-facing conversation email (an agent reply or an agent-started
  * thread) and record its threading id + the recipient's channel identity, so a
  * future email reply routes back and cold inbound resolves the address to the
@@ -250,21 +301,23 @@ async function sendVisitorConversationEmail(opts: {
     .limit(1)
   const from = (await resolveSendingAddress(conv?.assignedTeamId ?? null)) ?? undefined
   const { sendConversationMessageEmail } = await import('@quackback/email')
-  const result = await sendConversationMessageEmail({
-    to: opts.recipient,
-    direction: opts.direction,
-    senderName: opts.senderName,
-    // The truncated preview backs the subject/preheader; the full body is
-    // carried by bodyHtml so the recipient reads the whole reply inline.
-    messagePreview: previewOf(opts.content),
-    bodyHtml: messageBodyHtml(opts.content, opts.contentJson),
-    ctaUrl: opts.ctaUrl,
-    workspaceName: opts.ctx.workspaceName,
-    logoUrl: opts.ctx.logoUrl ?? undefined,
-    replyTo,
-    from,
-    ...threading,
-  })
+  const result = await sendWithRetry(opts.conversationId, () =>
+    sendConversationMessageEmail({
+      to: opts.recipient,
+      direction: opts.direction,
+      senderName: opts.senderName,
+      // The truncated preview backs the subject/preheader; the full body is
+      // carried by bodyHtml so the recipient reads the whole reply inline.
+      messagePreview: previewOf(opts.content),
+      bodyHtml: messageBodyHtml(opts.content, opts.contentJson),
+      ctaUrl: opts.ctaUrl,
+      workspaceName: opts.ctx.workspaceName,
+      logoUrl: opts.ctx.logoUrl ?? undefined,
+      replyTo,
+      from,
+      ...threading,
+    })
+  )
   if (result && result.sent === false) {
     log.warn(
       { conversation_id: opts.conversationId, direction: opts.direction },
