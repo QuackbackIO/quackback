@@ -90,6 +90,18 @@ const SLACK_EVENT_CONFIG = [
     shortLabel: 'Changelog',
     description: 'When a changelog entry is published',
   },
+  {
+    id: 'conversation.created' as const,
+    label: 'New support conversation',
+    shortLabel: 'Conversation',
+    description: 'When a visitor starts a support conversation',
+  },
+  {
+    id: 'message.created' as const,
+    label: 'New support message',
+    shortLabel: 'Support msg',
+    description: 'When a visitor sends a support message (agent replies are not sent)',
+  },
 ]
 
 // ============================================

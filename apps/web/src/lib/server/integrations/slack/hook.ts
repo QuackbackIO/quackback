@@ -103,8 +103,13 @@ export const slackHook: HookHandler = {
 
     log.debug({ event_type: event.type, channel_id: channelId }, 'processing hook event')
 
-    const client = new WebClient(accessToken)
     const message = buildSlackMessage(event, rootUrl)
+    if (!message) {
+      log.debug({ event_type: event.type }, 'event produces no slack message, skipping')
+      return { success: true }
+    }
+
+    const client = new WebClient(accessToken)
 
     try {
       const result = await postMessage(client, channelId, message)

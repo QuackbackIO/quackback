@@ -37,10 +37,12 @@ function quoteText(text: string): string {
 
 /**
  * Build a Slack message for an event.
+ * Returns null when the event should not produce a Slack message
+ * (e.g. agent-sent support messages — notifying on your own replies is noise).
  * @param event - The event data
  * @param rootUrl - Portal base URL for constructing post links
  */
-export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessage {
+export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessage | null {
   switch (event.type) {
     case 'post.created': {
       const { post } = event.data
@@ -225,6 +227,67 @@ export function buildSlackMessage(event: EventData, rootUrl: string): SlackMessa
             text: {
               type: 'mrkdwn',
               text: `> *<${changelogUrl}|${escapeSlackMrkdwn(changelog.title)}>*\n${quoteText(escapeSlackMrkdwn(content))}`,
+            },
+          },
+        ],
+      }
+    }
+
+    case 'conversation.created': {
+      const { conversation } = event.data
+      const inboxUrl = `${rootUrl}/admin/inbox?c=${conversation.id}`
+      const visitor = conversation.visitorEmail || 'Anonymous visitor'
+      const subject = conversation.subject?.trim() || 'New conversation'
+
+      return {
+        text: `New support conversation from ${visitor}`,
+        blocks: [
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `🛟 New support conversation from *${escapeSlackMrkdwn(visitor)}* via ${conversation.channel}`,
+              },
+            ],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `> *<${inboxUrl}|${escapeSlackMrkdwn(subject)}>*`,
+            },
+          },
+        ],
+      }
+    }
+
+    case 'message.created': {
+      const { message, conversation } = event.data
+      // Agent replies would notify the team about its own messages — skip them.
+      if (message.senderType !== 'visitor') return null
+
+      const inboxUrl = `${rootUrl}/admin/inbox?c=${conversation.id}`
+      const author = message.authorName || message.authorEmail || 'Visitor'
+      const content = truncate(stripHtml(message.content), 300)
+
+      return {
+        text: `New support message from ${author}`,
+        blocks: [
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `💬 New support message from *${escapeSlackMrkdwn(author)}*`,
+              },
+            ],
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `> *<${inboxUrl}|Open in inbox>*\n${quoteText(escapeSlackMrkdwn(content))}`,
             },
           },
         ],
