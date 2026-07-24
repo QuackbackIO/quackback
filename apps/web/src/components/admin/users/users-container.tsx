@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query'
 import { UsersLayout } from '@/components/admin/users/users-layout'
 import { UsersSegmentNav } from '@/components/admin/users/users-segment-nav'
 import { UsersList } from '@/components/admin/users/users-list'
@@ -35,18 +35,16 @@ import {
   deserializeCondition,
 } from '@/components/admin/segments/segment-utils'
 import { parseCompanyFilterParts } from '@/lib/shared/company-filters'
-import { listCompaniesFn } from '@/lib/server/functions/companies'
+import { listCompaniesPageFn, countCompaniesFn } from '@/lib/server/functions/companies'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import type { PortalUserListResultView } from '@/lib/shared/types'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
 import type { SegmentCondition } from '@/lib/shared/db-types'
 
 interface UsersContainerProps {
-  initialUsers: PortalUserListResultView
   currentMemberRole: string
 }
 
-export function UsersContainer({ initialUsers, currentMemberRole }: UsersContainerProps) {
+export function UsersContainer({ currentMemberRole }: UsersContainerProps) {
   // URL-based filter state
   const {
     filters,
@@ -75,17 +73,17 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
     enabled: currentMemberRole === 'admin',
   })
 
-  // Server state - Users list (with infinite query for pagination)
+  // Server state - Users list (with infinite query for pagination). The route
+  // loader prefetches the default/unfiltered dataset into this same infinite
+  // cache (QC-1: one shared query definition), so the first paint reads warm
+  // data and mutations that invalidate usersKeys reach what the list renders.
   const {
     data: usersData,
     isLoading,
     isFetchingNextPage: isLoadingMore,
     hasNextPage: hasMore,
     fetchNextPage,
-  } = usePortalUsers({
-    filters,
-    initialData: initialUsers,
-  })
+  } = usePortalUsers({ filters })
 
   const users = flattenUsers(usersData)
 
@@ -103,30 +101,46 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
   // Companies directory (the Companies lifecycle tab). Fetched only for team
   // roles — the server fn is gated on company.view, which both presets hold.
   const companyFilterParts = parseCompanyFilterParts(filters.companyAttrs)
-  const { data: companies, isLoading: isLoadingCompanies } = useQuery({
+  const companiesEnabled = currentMemberRole === 'admin' || currentMemberRole === 'member'
+  // Keyset-paginated companies list (capped at 5 pages, like the People list),
+  // fetched a page at a time instead of hauling the whole directory at once.
+  const companyFilterData = {
+    search: filters.search,
+    plan: companyFilterParts.plan,
+    mrr: companyFilterParts.mrr,
+    fields: companyFilterParts.fields,
+    attrs: companyFilterParts.attrs,
+  }
+  const {
+    data: companyPages,
+    isLoading: isLoadingCompanies,
+    isFetchingNextPage: isLoadingMoreCompanies,
+    hasNextPage: hasMoreCompanies,
+    fetchNextPage: fetchMoreCompanies,
+  } = useInfiniteQuery({
     queryKey: [
       'admin',
       'companies',
       { search: filters.search, companyAttrs: filters.companyAttrs },
     ],
-    queryFn: () =>
-      listCompaniesFn({
-        data: {
-          search: filters.search,
-          plan: companyFilterParts.plan,
-          mrr: companyFilterParts.mrr,
-          fields: companyFilterParts.fields,
-          attrs: companyFilterParts.attrs,
-        },
+    queryFn: ({ pageParam }) =>
+      listCompaniesPageFn({
+        data: { ...companyFilterData, cursor: pageParam ?? undefined },
       }),
-    enabled: currentMemberRole === 'admin' || currentMemberRole === 'member',
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : undefined),
+    maxPages: 5,
+    enabled: companiesEnabled,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   })
-  // Unfiltered total for the nav badge (cheap: companies lists are small).
-  const { data: allCompanies } = useQuery({
-    queryKey: ['admin', 'companies'],
-    queryFn: () => listCompaniesFn(),
-    enabled: currentMemberRole === 'admin' || currentMemberRole === 'member',
+  const companies = companyPages?.pages.flatMap((p) => p.items)
+  // Unfiltered total for the nav badge — a cheap dedicated count query rather
+  // than a second full-list fetch.
+  const { data: companyCount } = useQuery({
+    queryKey: ['admin', 'companies', 'count'],
+    queryFn: () => countCompaniesFn(),
+    enabled: companiesEnabled,
     staleTime: 60_000,
   })
 
@@ -279,7 +293,7 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             inLeadsMode={inLeadsMode}
             totalLeadCount={totalLeadCount}
             inCompaniesMode={inCompaniesMode}
-            totalCompanyCount={allCompanies?.length}
+            totalCompanyCount={companyCount}
           />
         }
       >
@@ -296,6 +310,10 @@ export function UsersContainer({ initialUsers, currentMemberRole }: UsersContain
             <CompaniesView
               companies={companies}
               isLoading={isLoadingCompanies}
+              hasMore={!!hasMoreCompanies}
+              isLoadingMore={isLoadingMoreCompanies}
+              onLoadMore={() => fetchMoreCompanies()}
+              totalCount={companyCount}
               search={filters.search}
               onSearchChange={(value) => setFilters({ search: value })}
               companyAttrs={filters.companyAttrs}

@@ -1,7 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { BoardId, PostTagId, PrincipalId, PostId, RoadmapId } from '@quackback/ids'
+import type { PostId, RoadmapId } from '@quackback/ids'
 import {
-  fetchInboxPosts,
   fetchBoardsList,
   fetchBoardsForSettings,
   fetchTagsList,
@@ -34,54 +33,16 @@ import { fetchPublicStatuses } from '@/lib/server/functions/portal'
 import type { PortalUserListParams } from '@/lib/shared/types'
 
 /**
- * Inbox/Feedback filter params
- */
-export interface InboxPostListParams {
-  boardIds?: BoardId[]
-  statusSlugs?: string[]
-  tagIds?: PostTagId[]
-  ownerId?: PrincipalId | null | undefined
-  search?: string
-  dateFrom?: string
-  dateTo?: string
-  minVotes?: number
-  minComments?: number
-  responded?: 'all' | 'responded' | 'unresponded'
-  updatedBefore?: string
-  sort?: 'newest' | 'oldest' | 'votes'
-  showDeleted?: boolean
-  cursor?: string
-  limit?: number
-}
-
-/**
  * Query options factory for admin routes.
  * Uses server functions (createServerFn) to keep database code server-only.
  * These are used with ensureQueryData() in loaders and useSuspenseQuery() in components.
+ *
+ * NOTE (QC-1): the inbox posts list is no longer defined here. Its loader
+ * prefetch and its renderer now share ONE infinite-query definition —
+ * `inboxPostsInfiniteOptions` in lib/client/hooks/use-inbox-query.ts — so post
+ * mutations that invalidate `inboxKeys.lists()` reach the cache the UI renders.
  */
 export const adminQueries = {
-  /**
-   * List inbox posts with filtering
-   */
-  inboxPosts: (filters: InboxPostListParams) =>
-    queryOptions({
-      queryKey: ['admin', 'inbox', 'posts', filters],
-      queryFn: async () => {
-        const data = await fetchInboxPosts({ data: filters })
-        // Deserialize date strings from server response
-        return {
-          ...data,
-          items: (data?.items ?? []).map((p) => ({
-            ...p,
-            createdAt: new Date(p.createdAt),
-            updatedAt: new Date(p.updatedAt),
-            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-          })),
-        }
-      },
-      staleTime: 30 * 1000, // 30s - frequently updated
-    }),
-
   /**
    * List all boards
    */

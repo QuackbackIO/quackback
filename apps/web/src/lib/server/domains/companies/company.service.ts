@@ -20,7 +20,7 @@ import {
   conversations,
   tickets,
 } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import { toUuid, type PrincipalId } from '@quackback/ids'
 import { emitBestEffort } from '@/lib/server/events/emit'
 import { companyCreated, companyDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
@@ -32,6 +32,7 @@ import type {
   CompanyId,
   CompanyWithMemberCount,
   CompanyListFilter,
+  CompanyListPage,
   CompanyAttrFilter,
   CompanyMember,
   CompanyActivityCounts,
@@ -222,10 +223,12 @@ function columnConditionSql(field: CompanyAttrFilter): ReturnType<typeof sql> | 
   }
 }
 
-/** List companies with their linked-people counts, ordered by name. */
-export async function listCompanies(
-  filter: CompanyListFilter = {}
-): Promise<CompanyWithMemberCount[]> {
+/** Default keyset page size for the companies directory list. */
+export const DEFAULT_COMPANY_PAGE_SIZE = 50
+
+/** Translate the directory filters into WHERE predicates (shared by the list
+ *  and count paths so both scope to exactly the same set). */
+function companyFilterConditions(filter: CompanyListFilter): ReturnType<typeof sql>[] {
   const conditions: ReturnType<typeof sql>[] = []
 
   const search = filter.search?.trim()
@@ -253,6 +256,19 @@ export async function listCompanies(
     if (cond) conditions.push(cond)
   }
 
+  return conditions
+}
+
+/**
+ * List companies with their linked-people counts, ordered by name. Unpaginated:
+ * returns the full matching set. Used by the CSV exporters and the inbox company
+ * picker, which need every row. The interactive directory list uses the keyset-
+ * paginated {@link listCompaniesPage} instead.
+ */
+export async function listCompanies(
+  filter: CompanyListFilter = {}
+): Promise<CompanyWithMemberCount[]> {
+  const conditions = companyFilterConditions(filter)
   const rows = await db
     .select({
       company: companies,
@@ -262,8 +278,68 @@ export async function listCompanies(
     .leftJoin(principal, eq(principal.companyId, companies.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .groupBy(companies.id)
-    .orderBy(companies.name)
+    .orderBy(companies.name, companies.id)
   return rows.map((r) => ({ ...r.company, memberCount: r.memberCount }))
+}
+
+/**
+ * Keyset-paginated companies list for the interactive directory: `limit` rows
+ * per page (default DEFAULT_COMPANY_PAGE_SIZE), with an opaque `cursor` (the
+ * previous page's last company id) re-resolved from the DB so the (name, id)
+ * ordering + ties page deterministically.
+ */
+export async function listCompaniesPage(filter: CompanyListFilter = {}): Promise<CompanyListPage> {
+  const limit = Math.min(filter.limit ?? DEFAULT_COMPANY_PAGE_SIZE, 200)
+  const conditions = companyFilterConditions(filter)
+
+  if (filter.cursor) {
+    const [cursorRow] = await db
+      .select({ name: companies.name, id: companies.id })
+      .from(companies)
+      .where(eq(companies.id, filter.cursor as CompanyId))
+      .limit(1)
+    if (cursorRow) {
+      // (name ASC, id ASC): the next page is rows whose name sorts after the
+      // cursor's, or the same name with a larger id. The id column is a uuid, so
+      // the branded TypeID cursor must be cast before the raw comparison.
+      const cursorUuid = toUuid(cursorRow.id)
+      conditions.push(
+        sql`(${companies.name} > ${cursorRow.name} OR (${companies.name} = ${cursorRow.name} AND ${companies.id} > ${cursorUuid}))`
+      )
+    }
+  }
+
+  const rows = await db
+    .select({
+      company: companies,
+      memberCount: sql<number>`count(${principal.id})::int`.as('member_count'),
+    })
+    .from(companies)
+    .leftJoin(principal, eq(principal.companyId, companies.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .groupBy(companies.id)
+    .orderBy(companies.name, companies.id)
+    .limit(limit + 1)
+
+  const hasMore = rows.length > limit
+  const page = hasMore ? rows.slice(0, limit) : rows
+  const items = page.map((r) => ({ ...r.company, memberCount: r.memberCount }))
+  return {
+    items,
+    hasMore,
+    nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+  }
+}
+
+/** Cheap total-company count for the directory nav badge (no member-count join
+ *  or pagination). Honors the same filters as listCompanies. */
+export async function countCompanies(filter: CompanyListFilter = {}): Promise<number> {
+  const conditions = companyFilterConditions(filter)
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int`.as('count') })
+    .from(companies)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+  return row?.count ?? 0
 }
 
 /** The people attached to a company, oldest first (directory profile roster). */

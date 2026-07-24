@@ -68,6 +68,17 @@ export interface CompanyListFilter {
   fields?: CompanyAttrFilter[]
   /** Custom attribute predicates over the jsonb blob. */
   attrs?: CompanyAttrFilter[]
+  /** Max rows to return (keyset page size). Defaults to DEFAULT_COMPANY_PAGE_SIZE. */
+  limit?: number
+  /** Keyset cursor: the previous page's last company id. */
+  cursor?: string
+}
+
+/** One keyset page of companies plus the cursor for the next page. */
+export interface CompanyListPage {
+  items: CompanyWithMemberCount[]
+  hasMore: boolean
+  nextCursor: string | null
 }
 
 /** A person on a company's roster (directory profile members list). */

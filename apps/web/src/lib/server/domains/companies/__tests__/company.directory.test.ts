@@ -19,6 +19,8 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
 import {
   createCompany,
   listCompanies,
+  listCompaniesPage,
+  countCompanies,
   listMembers,
   getActivityCounts,
   attachPrincipal,
@@ -145,6 +147,54 @@ describe.skipIf(!fixture.available)('company directory queries (real DB, rolled 
 
       const hits = await listCompanies({ search: `Counted ${tag}` })
       expect(hits.find((c) => c.id === company.id)?.memberCount).toBe(1)
+    })
+  })
+
+  describe('listCompaniesPage keyset pagination', () => {
+    it('returns one page with hasMore + a cursor, then the rest via the cursor', async () => {
+      const tag = suffix()
+      // Distinct name prefix so the search scopes to just this test's rows,
+      // and deterministic ordering (name asc) across the two pages.
+      const names = ['Alpha', 'Bravo', 'Charlie', 'Delta']
+      for (const n of names) await createCompany({ name: `${n} ${tag}` })
+
+      const first = await listCompaniesPage({ search: tag, limit: 3 })
+      expect(first.items).toHaveLength(3)
+      expect(first.hasMore).toBe(true)
+      expect(first.nextCursor).toBe(first.items[2].id)
+      expect(first.items.map((c) => c.name)).toEqual([
+        `Alpha ${tag}`,
+        `Bravo ${tag}`,
+        `Charlie ${tag}`,
+      ])
+
+      const second = await listCompaniesPage({ search: tag, limit: 3, cursor: first.nextCursor! })
+      expect(second.items).toHaveLength(1)
+      expect(second.hasMore).toBe(false)
+      expect(second.nextCursor).toBeNull()
+      expect(second.items[0].name).toBe(`Delta ${tag}`)
+    })
+
+    it('does not overlap rows between pages', async () => {
+      const tag = suffix()
+      for (const n of ['One', 'Two', 'Three', 'Four']) await createCompany({ name: `${n} ${tag}` })
+      const first = await listCompaniesPage({ search: tag, limit: 2 })
+      const second = await listCompaniesPage({ search: tag, limit: 2, cursor: first.nextCursor! })
+      const firstIds = new Set(first.items.map((c) => c.id))
+      expect(second.items.some((c) => firstIds.has(c.id))).toBe(false)
+    })
+  })
+
+  describe('countCompanies', () => {
+    it('counts the filtered set without paging', async () => {
+      const tag = suffix()
+      for (const n of ['X', 'Y', 'Z']) await createCompany({ name: `${n} ${tag}` })
+      expect(await countCompanies({ search: tag })).toBe(3)
+      // A page-limited list of the same filter still counts the full set.
+      const page = await listCompaniesPage({ search: tag, limit: 1 })
+      expect(page.items).toHaveLength(1)
+      expect(page.hasMore).toBe(true)
+      expect(await countCompanies({ search: tag })).toBe(3)
     })
   })
 

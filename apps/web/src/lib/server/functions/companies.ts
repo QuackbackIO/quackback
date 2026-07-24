@@ -18,6 +18,8 @@ import {
   deleteCompany,
   getCompany,
   listCompanies,
+  listCompaniesPage,
+  countCompanies,
   listMembers,
   getActivityCounts,
   getForPrincipal,
@@ -80,6 +82,13 @@ function serializeCompanyWithCount(company: CompanyWithMemberCount): CompanyWith
   return { ...serializeCompany(company), memberCount: company.memberCount }
 }
 
+/** One keyset page of companies for the directory list. */
+export interface CompanyListPageDTO {
+  items: CompanyWithMemberCountDTO[]
+  hasMore: boolean
+  nextCursor: string | null
+}
+
 const companyInputSchema = z.object({
   name: z.string().min(1).max(200),
   domain: z.string().max(255).nullable().optional(),
@@ -110,9 +119,7 @@ const listCompaniesSchema = z
   .object({
     search: z.string().max(200).optional(),
     plan: z.string().max(100).optional(),
-    mrr: z
-      .object({ op: z.enum(['gt', 'gte', 'lt', 'lte', 'eq']), value: z.number() })
-      .optional(),
+    mrr: z.object({ op: z.enum(['gt', 'gte', 'lt', 'lte', 'eq']), value: z.number() }).optional(),
     fields: z
       .array(
         z.object({ key: z.string().max(64), op: z.string().max(16), value: z.string().max(200) })
@@ -125,15 +132,41 @@ const listCompaniesSchema = z
       )
       .max(10)
       .optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+    cursor: z.string().optional(),
   })
   .optional()
 
+/** Full unpaginated list — used where every row is needed (inbox company
+ *  picker, CSV export). The interactive directory uses listCompaniesPageFn. */
 export const listCompaniesFn = createServerFn({ method: 'GET' })
   .validator(listCompaniesSchema)
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.COMPANY_VIEW })
     const companies = await listCompanies(data ?? {})
     return companies.map(serializeCompanyWithCount)
+  })
+
+/** One keyset page of companies for the interactive directory list. */
+export const listCompaniesPageFn = createServerFn({ method: 'GET' })
+  .validator(listCompaniesSchema)
+  .handler(async ({ data }): Promise<CompanyListPageDTO> => {
+    await requireAuth({ permission: PERMISSIONS.COMPANY_VIEW })
+    const page = await listCompaniesPage(data ?? {})
+    return {
+      items: page.items.map(serializeCompanyWithCount),
+      hasMore: page.hasMore,
+      nextCursor: page.nextCursor,
+    }
+  })
+
+/** Cheap total-company count for the directory nav badge. Honors the same
+ *  filters as listCompaniesFn (the badge shows the unfiltered total). */
+export const countCompaniesFn = createServerFn({ method: 'GET' })
+  .validator(listCompaniesSchema)
+  .handler(async ({ data }): Promise<number> => {
+    await requireAuth({ permission: PERMISSIONS.COMPANY_VIEW })
+    return countCompanies(data ?? {})
   })
 
 /** The people attached to a company (directory profile roster). */

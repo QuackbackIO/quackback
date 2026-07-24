@@ -33,6 +33,8 @@ import {
 } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
+import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { Spinner } from '@/components/shared/spinner'
 import { useCompanyAttributes } from '@/lib/client/hooks/use-company-attributes-queries'
 import { buildCompaniesExportUrl } from '@/lib/shared/company-filters'
 import { createCompanyFn, type CompanyWithMemberCountDTO } from '@/lib/server/functions/companies'
@@ -469,6 +471,15 @@ function NewCompanyDialog({
 interface CompaniesViewProps {
   companies: CompanyWithMemberCountDTO[] | undefined
   isLoading: boolean
+  /** More pages available beyond what's currently loaded. */
+  hasMore?: boolean
+  /** A next-page fetch is in flight. */
+  isLoadingMore?: boolean
+  /** Load the next keyset page. */
+  onLoadMore?: () => void
+  /** Directory-wide company total for the count line (independent of the
+   *  loaded page count). Falls back to the loaded count when unset. */
+  totalCount?: number
   search?: string
   onSearchChange: (value: string | undefined) => void
   companyAttrs?: string
@@ -480,6 +491,10 @@ interface CompaniesViewProps {
 export function CompaniesView({
   companies,
   isLoading,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
+  totalCount,
   search,
   onSearchChange,
   companyAttrs,
@@ -492,8 +507,16 @@ export function CompaniesView({
     externalValue: search,
     onChange: (value) => onSearchChange(value),
   })
+  const loadMoreRef = useInfiniteScroll({
+    hasMore,
+    isFetching: isLoading || isLoadingMore,
+    onLoadMore: () => onLoadMore?.(),
+    rootMargin: '0px',
+    threshold: 0.1,
+  })
 
-  const total = companies?.length ?? 0
+  // Count line prefers the directory-wide total; without it, the loaded count.
+  const total = totalCount ?? companies?.length ?? 0
   const hasActiveFilters = !!(search || companyAttrs)
 
   return (
@@ -617,6 +640,23 @@ export function CompaniesView({
                 </span>
               </button>
             ))}
+          </div>
+        )}
+
+        {hasMore && (
+          <div ref={loadMoreRef} className="pt-3 flex justify-center">
+            {isLoadingMore ? (
+              <Spinner />
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onLoadMore?.()}
+                className="text-muted-foreground"
+              >
+                Load more
+              </Button>
+            )}
           </div>
         )}
       </div>

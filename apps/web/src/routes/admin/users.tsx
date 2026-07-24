@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
-import type { SegmentId } from '@quackback/ids'
-import { useSuspenseQuery } from '@tanstack/react-query'
 import { adminQueries } from '@/lib/client/queries/admin'
+import {
+  portalUsersInfiniteOptions,
+  defaultUsersFilters,
+} from '@/lib/client/hooks/use-users-queries'
 import { UsersContainer } from '@/components/admin/users/users-container'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
@@ -48,90 +50,15 @@ const searchSchema = z.object({
   invites: z.enum(['pending', 'accepted', 'expired', 'all']).optional(),
 })
 
-type SearchParams = z.infer<typeof searchSchema>
-
-function parseSearchToQueryParams(deps: SearchParams) {
-  let verified: boolean | undefined
-  if (deps.verified === 'true') verified = true
-  else if (deps.verified === 'false') verified = false
-
-  const segmentIds = deps.segments
-    ? (deps.segments.split(',').filter(Boolean) as SegmentId[])
-    : undefined
-
-  // Parse activity count filter "op:value" format
-  function parseActivityFilter(raw?: string) {
-    if (!raw) return undefined
-    const [op, val] = raw.split(':')
-    if (!op || val === undefined) return undefined
-    return { op: op as 'gt' | 'gte' | 'lt' | 'lte' | 'eq', value: Number(val) }
-  }
-
-  // Parse custom attrs "key:op:value,key2:op:value2" format
-  function parseCustomAttrs(raw?: string) {
-    if (!raw) return undefined
-    return raw
-      .split(',')
-      .map((part) => {
-        const [key, op, ...rest] = part.split(':')
-        return key && op ? { key, op, value: rest.join(':') } : null
-      })
-      .filter(Boolean) as { key: string; op: string; value: string }[]
-  }
-
-  return {
-    search: deps.search,
-    verified,
-    dateFrom: deps.dateFrom ? new Date(deps.dateFrom) : undefined,
-    dateTo: deps.dateTo ? new Date(deps.dateTo) : undefined,
-    emailDomain: deps.emailDomain,
-    postCount: parseActivityFilter(deps.postCount),
-    voteCount: parseActivityFilter(deps.voteCount),
-    commentCount: parseActivityFilter(deps.commentCount),
-    customAttrs: parseCustomAttrs(deps.customAttrs),
-    sort: deps.sort,
-    page: 1,
-    limit: 20,
-    segmentIds,
-    // 'companies' swaps the whole pane to the companies directory — the
-    // people query underneath falls back to the default users population.
-    lifecycle: deps.lifecycle === 'companies' ? undefined : deps.lifecycle,
-  }
-}
-
 export const Route = createFileRoute('/admin/users')({
   validateSearch: searchSchema,
-  loaderDeps: ({
-    search: {
-      search,
-      verified,
-      dateFrom,
-      dateTo,
-      emailDomain,
-      postCount,
-      voteCount,
-      commentCount,
-      customAttrs,
-      lifecycle,
-      sort,
-      segments,
-    },
-  }) => ({
-    search,
-    verified,
-    dateFrom,
-    dateTo,
-    emailDomain,
-    postCount,
-    voteCount,
-    commentCount,
-    customAttrs,
-    lifecycle,
-    sort,
-    segments,
-  }),
+  // Note: No loaderDeps for the filter fields - the loader only runs on
+  // initial route load for SSR (prefetching the default/unfiltered dataset).
+  // Client-side filter changes are handled by UsersContainer's usePortalUsers
+  // (combined with its placeholderData) instead of re-running this loader —
+  // mirrors the documented pattern in src/routes/_portal/index.tsx.
   errorComponent: UsersErrorComponent,
-  loader: async ({ deps, context }) => {
+  loader: async ({ context }) => {
     // Protected route - principal is guaranteed by parent's beforeLoad auth check
     const { principal, queryClient } = context as {
       principal: NonNullable<typeof context.principal>
@@ -139,7 +66,9 @@ export const Route = createFileRoute('/admin/users')({
     }
 
     await Promise.all([
-      queryClient.ensureQueryData(adminQueries.portalUsers(parseSearchToQueryParams(deps))),
+      // Warm the SAME infinite cache the Users list renders (QC-1), so a
+      // segment membership change (invalidating usersKeys.all) reaches it.
+      queryClient.ensureInfiniteQueryData(portalUsersInfiniteOptions(defaultUsersFilters)),
       queryClient.ensureQueryData(adminQueries.segments()),
     ])
 
@@ -169,8 +98,9 @@ function UsersErrorComponent({ error, reset }: { error: Error; reset: () => void
 
 function UsersPage() {
   const { currentMemberRole } = Route.useLoaderData()
-  const search = Route.useSearch()
-  const usersQuery = useSuspenseQuery(adminQueries.portalUsers(parseSearchToQueryParams(search)))
 
-  return <UsersContainer initialUsers={usersQuery.data} currentMemberRole={currentMemberRole} />
+  // The Users list is read by UsersContainer's own infinite `usePortalUsers`
+  // hook, which shares its query definition with the loader's prefetch (QC-1) —
+  // no separate suspense query here.
+  return <UsersContainer currentMemberRole={currentMemberRole} />
 }
