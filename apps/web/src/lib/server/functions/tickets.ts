@@ -1066,6 +1066,30 @@ export const getMyTicketWatchStatusFn = createServerFn({ method: 'GET' })
     return getMyTicketWatchStatus(actor, data.ticketId as TicketId)
   })
 
+/**
+ * The requester's ticket linked to one of their conversations (the converged
+ * Messages thread's header card). Distinct from getMyConversationFn's inline
+ * `linkedTicket` so the thread can refresh just the header when a ticket
+ * system event (creation, stage crossing) lands on the stream. Null when no
+ * pair exists — callers render no header, so this is a value, not an error.
+ */
+export const getConversationLinkedTicketFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ conversationId: z.string() }))
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    // Graceful null (not Forbidden) when tickets are off: the caller is
+    // refreshing a header that may simply no longer apply.
+    const { isSupportTicketsEnabled } =
+      await import('@/lib/server/domains/settings/settings.support')
+    if (!(await isSupportTicketsEnabled())) return null
+    const { getRequesterTicketForConversation } =
+      await import('@/lib/server/domains/tickets/requester.service')
+    return getRequesterTicketForConversation(
+      data.conversationId as ConversationId,
+      ctx.principal.id
+    )
+  })
+
 export const watchMyTicketFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {

@@ -25,3 +25,4 @@ export type {
   BulkTicketResult,
 } from './ticket.types'
 export type { TicketActivityType, TicketActivityRow } from './ticket-activity.service'
+export type { ConversationTicketSummary } from './requester.service'

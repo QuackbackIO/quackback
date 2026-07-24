@@ -590,6 +590,7 @@
   "portal.tickets.details.reference": "Ссылка",
   "portal.tickets.details.status": "Статус",
   "portal.tickets.details.type": "Тип",
+  "ticket.header.details": "Подробности",
   "portal.tickets.details.opened": "Открыт",
   "portal.tickets.details.lastActivity": "Последняя активность",
   "portal.tickets.details.yes": "Да",

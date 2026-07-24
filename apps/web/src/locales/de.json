@@ -590,6 +590,7 @@
   "portal.tickets.details.reference": "Referenz",
   "portal.tickets.details.status": "Status",
   "portal.tickets.details.type": "Typ",
+  "ticket.header.details": "Details",
   "portal.tickets.details.opened": "Geöffnet",
   "portal.tickets.details.lastActivity": "Letzte Aktivität",
   "portal.tickets.details.yes": "Ja",

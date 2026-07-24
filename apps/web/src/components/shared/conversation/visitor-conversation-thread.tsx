@@ -63,7 +63,10 @@ import {
   mintConversationStreamTokenFn,
   submitCsatFn,
 } from '@/lib/server/functions/conversation'
+import { getConversationLinkedTicketFn } from '@/lib/server/functions/tickets'
 import { getWidgetCapabilitiesFn } from '@/lib/server/functions/widget-capabilities'
+import { TicketHeaderCard } from './ticket-header-card'
+import type { RequesterTicketDTO } from '@/lib/server/domains/tickets'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -197,6 +200,10 @@ export function VisitorConversationThread({
   const createdConversationIdRef = useRef<ConversationId | null>(null)
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null)
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null)
+  // The pair's ticket (converged Messages surface): set from the thread load,
+  // refreshed when a ticket system event lands on the stream. Null = no pair,
+  // no header card — a plain chat is completely untouched by ticket-ness.
+  const [linkedTicket, setLinkedTicket] = useState<RequesterTicketDTO | null>(null)
   const [teamName, setTeamName] = useState<string | null>(null)
   // AI-assistant display identity (fronts new conversations); null when disabled.
   const [assistant, setAssistant] = useState<{
@@ -386,6 +393,7 @@ export function VisitorConversationThread({
         setTeamName(res.teamName)
         setAssistant(res.assistant ?? null)
         setCanEmailReply(res.canEmailVisitor)
+        setLinkedTicket(res.linkedTicket ?? null)
         const conv = res.conversation
         if (conv) {
           // Snapshot the thread into the query cache; stream events and sends
@@ -437,6 +445,19 @@ export function VisitorConversationThread({
     }
   }, [conversationId, getAuthHeaders, queryClient])
 
+  // Re-read the pair's ticket when a ticket system event lands (creation,
+  // stage crossing) so the header card's chip/tracker track the thread's own
+  // narration. Fire-and-forget: a failed refresh keeps the current header.
+  const refreshLinkedTicket = useCallback(() => {
+    if (!conversationId) return
+    void getConversationLinkedTicketFn({
+      data: { conversationId },
+      headers: getAuthHeaders(),
+    })
+      .then((ticket) => setLinkedTicket(ticket ?? null))
+      .catch(() => {})
+  }, [conversationId, getAuthHeaders])
+
   // Prepend an older page (keyset cursor = oldest loaded message id).
   const { loadingOlder, loadOlder } = useOlderMessages({
     conversationId,
@@ -485,6 +506,14 @@ export function VisitorConversationThread({
         clearRemoteTyping()
         clearAssistantTurn() // the persisted reply replaces the live trace/stream
         onAgentActivity?.() // an agent is clearly here right now
+      } else if (
+        evt.kind === 'message' &&
+        (evt.message.systemEvent?.kind === 'ticket_created' ||
+          evt.message.systemEvent?.kind === 'ticket_status_changed')
+      ) {
+        // A ticket was created from (or changed on) this thread — the header
+        // card appears/updates in place, no navigation.
+        refreshLinkedTicket()
       } else if (evt.kind === 'typing' && evt.side === 'agent') {
         onRemoteTyping()
         onAgentActivity?.()
@@ -1121,6 +1150,11 @@ export function VisitorConversationThread({
           <ConversationPresenceBadge available={available} />
         </div>
       ) : null}
+
+      {/* The pair's ticket header (converged Messages): stage chip + tracker +
+          watch bell + collapsed details. Only when a linked ticket exists —
+          plain chats render nothing here. */}
+      {linkedTicket && <TicketHeaderCard ticket={linkedTicket} getAuthHeaders={getAuthHeaders} />}
 
       <div className="relative flex-1 min-h-0">
         <ThreadViewport

@@ -590,6 +590,7 @@
   "portal.tickets.details.reference": "編號",
   "portal.tickets.details.status": "狀態",
   "portal.tickets.details.type": "類型",
+  "ticket.header.details": "詳情",
   "portal.tickets.details.opened": "建立時間",
   "portal.tickets.details.lastActivity": "最近動態",
   "portal.tickets.details.yes": "是",

@@ -590,6 +590,7 @@
   "portal.tickets.details.reference": "Référence",
   "portal.tickets.details.status": "Statut",
   "portal.tickets.details.type": "Type",
+  "ticket.header.details": "Détails",
   "portal.tickets.details.opened": "Ouvert",
   "portal.tickets.details.lastActivity": "Dernière activité",
   "portal.tickets.details.yes": "Oui",

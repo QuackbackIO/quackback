@@ -590,6 +590,7 @@
   "portal.tickets.details.reference": "编号",
   "portal.tickets.details.status": "状态",
   "portal.tickets.details.type": "类型",
+  "ticket.header.details": "详情",
   "portal.tickets.details.opened": "创建时间",
   "portal.tickets.details.lastActivity": "最近动态",
   "portal.tickets.details.yes": "是",

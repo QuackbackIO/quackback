@@ -5,8 +5,20 @@
  * permissions. Internal notes are stripped from the requester's thread, and a
  * requester reply posts as a customer-visible visitor message.
  */
-import { db, tickets, principal, eq, and, isNull, desc, type Ticket } from '@/lib/server/db'
-import type { TicketId, TicketTypeId, PrincipalId } from '@quackback/ids'
+import {
+  db,
+  tickets,
+  ticketConversations,
+  ticketStatuses,
+  principal,
+  eq,
+  and,
+  inArray,
+  isNull,
+  desc,
+  type Ticket,
+} from '@/lib/server/db'
+import type { ConversationId, TicketId, TicketTypeId, PrincipalId } from '@quackback/ids'
 import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import type { TiptapContent, ConversationAttachment } from '@/lib/shared/db-types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -21,7 +33,10 @@ import {
   type SendTicketMessageInput,
   type TicketMessagePage,
 } from './ticket-message.service'
-import type { RequesterTicketDTO } from './ticket.types'
+import type { RequesterTicketDTO, TicketStageRef } from './ticket.types'
+import { resolveStage } from './ticket.lifecycle'
+import { getStageLabels } from '../settings/settings.tickets'
+import { formatTicketNumber } from '@/lib/shared/tickets'
 
 const LIST_LIMIT = 100
 
@@ -135,6 +150,98 @@ export async function listMyTickets(actor: Actor): Promise<RequesterTicketDTO[]>
     ...ticketToDTO(r, ctx, 'requester'),
     unreadCount: unreadMap.get(r.id) ?? 0,
   }))
+}
+
+/**
+ * The requester's customer ticket linked to `conversationId` (the converged
+ * Messages surface's ticket header), or null when no pair exists or the ticket
+ * isn't theirs. Scoped by BOTH the pair link and requester ownership, so a
+ * mislinked row can never leak — post-1b the pair's requester IS the
+ * conversation's visitor, so the ownership arm is defense in depth.
+ */
+export async function getRequesterTicketForConversation(
+  conversationId: ConversationId,
+  requesterPrincipalId: PrincipalId
+): Promise<RequesterTicketDTO | null> {
+  const [row] = await db
+    .select({ ticket: tickets })
+    .from(ticketConversations)
+    .innerJoin(tickets, eq(ticketConversations.ticketId, tickets.id))
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversationId),
+        eq(ticketConversations.ticketType, 'customer'),
+        eq(tickets.requesterPrincipalId, requesterPrincipalId),
+        isNull(tickets.deletedAt)
+      )
+    )
+    .limit(1)
+  if (!row) return null
+  const ctx = await buildTicketContext([row.ticket])
+  return ticketToDTO(row.ticket, ctx, 'requester')
+}
+
+/** A Messages-list row's linked-ticket decoration: stage chip + reference. */
+export interface ConversationTicketSummary {
+  ticketId: TicketId
+  reference: string
+  title: string
+  stage: TicketStageRef
+}
+
+/**
+ * Batch the linked-ticket summaries for a page of the requester's conversation
+ * list — one query for the pairs, one for their statuses. The row's displayed
+ * state keys off the TICKET's stage (the pair-state rule: a closed
+ * conversation whose ticket is still open must not read "Closed"), which is
+ * exactly what this summary carries.
+ */
+export async function getRequesterTicketSummaries(
+  conversationIds: ConversationId[],
+  requesterPrincipalId: PrincipalId
+): Promise<Map<ConversationId, ConversationTicketSummary>> {
+  const map = new Map<ConversationId, ConversationTicketSummary>()
+  if (conversationIds.length === 0) return map
+  const rows = await db
+    .select({
+      conversationId: ticketConversations.conversationId,
+      ticketId: tickets.id,
+      number: tickets.number,
+      title: tickets.title,
+      statusId: tickets.statusId,
+    })
+    .from(ticketConversations)
+    .innerJoin(tickets, eq(ticketConversations.ticketId, tickets.id))
+    .where(
+      and(
+        inArray(ticketConversations.conversationId, conversationIds),
+        eq(ticketConversations.ticketType, 'customer'),
+        eq(tickets.requesterPrincipalId, requesterPrincipalId),
+        isNull(tickets.deletedAt)
+      )
+    )
+  if (rows.length === 0) return map
+  const statusIds = [...new Set(rows.map((r) => r.statusId))]
+  const [statusRows, stageLabels] = await Promise.all([
+    db.select().from(ticketStatuses).where(inArray(ticketStatuses.id, statusIds)),
+    getStageLabels(),
+  ])
+  const statuses = new Map(statusRows.map((s) => [s.id, s]))
+  for (const r of rows) {
+    const status = statuses.get(r.statusId)
+    const slot = status ? resolveStage(status) : null
+    map.set(r.conversationId, {
+      ticketId: r.ticketId,
+      reference: formatTicketNumber(r.number),
+      title: r.title,
+      stage: {
+        slot,
+        label: slot ? stageLabels[slot] : null,
+        closed: status?.category === 'closed',
+      },
+    })
+  }
+  return map
 }
 
 /** A single ticket the actor owns as requester. */

@@ -590,6 +590,7 @@
   "portal.tickets.details.reference": "المرجع",
   "portal.tickets.details.status": "الحالة",
   "portal.tickets.details.type": "النوع",
+  "ticket.header.details": "التفاصيل",
   "portal.tickets.details.opened": "تاريخ الفتح",
   "portal.tickets.details.lastActivity": "آخر نشاط",
   "portal.tickets.details.yes": "نعم",

@@ -49,11 +49,34 @@ import {
 } from './auth-helpers'
 import { isTeamMember } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import type { RequesterTicketDTO, ConversationTicketSummary } from '@/lib/server/domains/tickets'
 import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
 import { ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'conversation' })
+
+/**
+ * The pair's requester-audience ticket for the converged Messages thread
+ * header — null when tickets are off, no pair exists, or the ticket isn't the
+ * caller's. Never throws: header enrichment must not break the thread load.
+ */
+async function loadLinkedTicketForVisitor(
+  conversationId: ConversationId,
+  principalId: PrincipalId
+): Promise<RequesterTicketDTO | null> {
+  try {
+    const { isSupportTicketsEnabled } =
+      await import('@/lib/server/domains/settings/settings.support')
+    if (!(await isSupportTicketsEnabled())) return null
+    const { getRequesterTicketForConversation } =
+      await import('@/lib/server/domains/tickets/requester.service')
+    return await getRequesterTicketForConversation(conversationId, principalId)
+  } catch (error) {
+    log.warn({ err: error, conversation_id: conversationId }, 'linked-ticket enrichment failed')
+    return null
+  }
+}
 
 const attachmentSchema = z.object({
   url: z.string().min(1),
@@ -495,6 +518,9 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         // Whether the surfaced conversation is closed (read-only) — the widget
         // then offers "start a new conversation" instead of a composer (P1.9).
         isReadOnly: false,
+        // The pair's ticket (converged Messages surface): the thread header
+        // card renders when this is set. Overridden on the loaded-thread path.
+        linkedTicket: null as RequesterTicketDTO | null,
       }
 
       if (!enabled || !hasAuthCredentials()) {
@@ -560,9 +586,10 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         }
       }
 
-      const [dto, page] = await Promise.all([
+      const [dto, page, linkedTicket] = await Promise.all([
         conversationToDTO(conversation, 'visitor'),
         listMessages(conversation.id),
+        loadLinkedTicketForVisitor(conversation.id, ctx.principal.id),
       ])
       return {
         ...base,
@@ -572,6 +599,7 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         conversation: dto,
         messages: page.messages,
         hasMore: page.hasMore,
+        linkedTicket,
       }
     } catch (error) {
       log.error({ err: error }, 'get my conversation failed')
@@ -586,24 +614,51 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
  * fields). Returns an empty list rather than throwing on the bootstrap path.
  */
 export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const empty = {
+    conversations: [],
+    linkedTickets: {} as Record<string, ConversationTicketSummary>,
+  }
   try {
     const { isConversationsEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
-    if (!(await isConversationsEnabled()) || !hasAuthCredentials()) return { conversations: [] }
+    if (!(await isConversationsEnabled()) || !hasAuthCredentials()) return empty
 
     const ctx = await getOptionalAuth()
-    if (!ctx?.principal) return { conversations: [] }
+    if (!ctx?.principal) return empty
 
     // Non-team callers must hold portal access (mirrors getMyConversationFn gating).
     if (!isTeamMember(ctx.principal.role)) {
       const { resolvePortalAccessForRequest } = await import('./portal-access')
       const access = await resolvePortalAccessForRequest()
-      if (!access.granted) return { conversations: [] }
+      if (!access.granted) return empty
     }
 
     const { listConversationsForVisitor } =
       await import('@/lib/server/domains/conversation/conversation.query')
-    return { conversations: await listConversationsForVisitor(ctx.principal.id, 50, 'visitor') }
+    const conversations = await listConversationsForVisitor(ctx.principal.id, 50, 'visitor')
+
+    // Converged Messages surface: decorate paired rows with their ticket's
+    // stage chip + reference. The row's displayed state keys off the TICKET
+    // stage (pair-state rule) — clients read this map by conversation id.
+    // Best-effort like the thread header: enrichment must not break the list.
+    let linkedTickets: Record<string, ConversationTicketSummary> = {}
+    try {
+      const { isSupportTicketsEnabled } =
+        await import('@/lib/server/domains/settings/settings.support')
+      if (conversations.length > 0 && (await isSupportTicketsEnabled())) {
+        const { getRequesterTicketSummaries } =
+          await import('@/lib/server/domains/tickets/requester.service')
+        const map = await getRequesterTicketSummaries(
+          conversations.map((c) => c.id),
+          ctx.principal.id
+        )
+        linkedTickets = Object.fromEntries(map)
+      }
+    } catch (error) {
+      log.warn({ err: error }, 'linked-ticket list enrichment failed')
+    }
+
+    return { conversations, linkedTickets }
   } catch (error) {
     log.error({ err: error }, 'get my conversations failed')
     throw error

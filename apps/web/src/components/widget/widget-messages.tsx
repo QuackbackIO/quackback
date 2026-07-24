@@ -10,6 +10,7 @@ import { useWidgetAuth } from './widget-auth-provider'
 import { Avatar } from '@/components/ui/avatar'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { StageChip } from '@/components/shared/ticket-stage'
 import { cn } from '@/lib/shared/utils'
 
 interface WidgetMessagesProps {
@@ -43,6 +44,9 @@ export function WidgetMessages({ teamName, assistant, onOpenMessenger }: WidgetM
   })
 
   const conversations = data?.conversations ?? []
+  // Converged Messages: paired rows carry their ticket's stage chip +
+  // reference (the row state keys off the TICKET, not the conversation).
+  const linkedTickets = data?.linkedTickets ?? {}
   // Unassigned conversations are fronted by the assistant identity (AI-first),
   // falling back to the team label.
   const fallbackName =
@@ -59,6 +63,7 @@ export function WidgetMessages({ teamName, assistant, onOpenMessenger }: WidgetM
             {conversations.map((c) => {
               const name = c.assignedAgent?.displayName ?? fallbackName
               const unread = c.unreadCount > 0
+              const ticket = linkedTickets[c.id]
               return (
                 <li key={c.id} className="border-b border-border/40 last:border-b-0">
                   <button
@@ -106,6 +111,19 @@ export function WidgetMessages({ teamName, assistant, onOpenMessenger }: WidgetM
                           />
                         )}
                       </span>
+                      {ticket && (
+                        <span className="mt-1 flex items-center gap-1.5">
+                          <StageChip
+                            slot={ticket.stage.slot}
+                            label={ticket.stage.label}
+                            closed={ticket.stage.closed}
+                            closedLabelId="portal.tickets.stage.closed"
+                          />
+                          <span className="font-mono text-[11px] text-muted-foreground/60">
+                            {ticket.reference}
+                          </span>
+                        </span>
+                      )}
                     </span>
                     {unread && (
                       <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
