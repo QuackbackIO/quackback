@@ -281,4 +281,59 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
     expect(res.status).toBe('from_mismatch')
     expect(vi.mocked(incrementBucket)).not.toHaveBeenCalled()
   })
+
+  // Without reuse, every mail mints a fresh principal, so a block can never bite
+  // and the junk is unreclaimable (the anon sweep skips anything owning a
+  // conversation). The display-name variant pins that normalization is what
+  // makes the match work — a raw From header would key a second lead.
+  it('reuses the lead a previous mail from the same address created', async () => {
+    await seedInboundRoute('support@quackback.io')
+
+    const first = await ingestParsedEmail(coldEmail())
+    expect(first.status).toBe('ingested')
+    if (first.status !== 'ingested') return
+    const [{ count: afterFirst }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+
+    const second = await ingestParsedEmail(coldEmail({ from: '"Jane Doe" <customer@acme.com>' }))
+    expect(second.status).toBe('ingested')
+    if (second.status !== 'ingested') return
+
+    const [convA] = await testDb
+      .select({ visitor: conversations.visitorPrincipalId, email: conversations.visitorEmail })
+      .from(conversations)
+      .where(eq(conversations.id, first.conversationId))
+    const [convB] = await testDb
+      .select({ visitor: conversations.visitorPrincipalId, email: conversations.visitorEmail })
+      .from(conversations)
+      .where(eq(conversations.id, second.conversationId))
+
+    expect(convB.visitor).toBe(convA.visitor)
+    // The bare address is stored either way — never the raw header.
+    expect(convB.email).toBe('customer@acme.com')
+    const [{ count: afterSecond }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+    expect(afterSecond).toBe(afterFirst)
+  })
+
+  it('suppresses a blocked sender without opening a conversation', async () => {
+    await seedInboundRoute('support@quackback.io')
+    // A lead an earlier mail created, since blocked. createdAt is set explicitly
+    // because the column's default lives in the factory, not in the schema.
+    await testDb.insert(principal).values({
+      role: 'user',
+      type: 'anonymous',
+      contactEmail: 'customer@acme.com',
+      createdAt: new Date(),
+      blockedAt: new Date(),
+    })
+
+    const res = await ingestParsedEmail(coldEmail())
+
+    expect(res.status).toBe('suppressed')
+    const convs = await testDb.select({ id: conversations.id }).from(conversations)
+    expect(convs).toHaveLength(0)
+  })
 })

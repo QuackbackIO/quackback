@@ -7,19 +7,30 @@
  * lead; a hard reject is dropped.
  *
  *   - drop   → hard DMARC reject; the caller creates nothing.
- *   - attach → DMARC pass AND the From matches an existing user → reuse that
- *              identity's principal (a verified lead adopting a known contact).
+ *   - attach → an existing principal already owns this address: either a DMARC
+ *              pass matching a known user account (a verified lead adopting a
+ *              known contact), or a lead we minted from an earlier mail. Reusing
+ *              the lead is what lets a block on a cold sender actually hold.
  *   - create → a new anonymous principal carrying the (verified-or-not) contact
  *              email; `unverified` drives the agent-facing "unverified sender"
  *              badge and blocks silent attachment to a known identity.
  *
  * Resolution only touches identity; the caller owns creating the conversation.
  */
-import { db, sql, eq, user, principal, conversations, conversationMessages } from '@/lib/server/db'
+import {
+  db,
+  sql,
+  eq,
+  and,
+  isNull,
+  user,
+  principal,
+  conversations,
+  conversationMessages,
+} from '@/lib/server/db'
 import type { TiptapContent, ConversationAttachment } from '@/lib/server/db'
 import type { PrincipalId, ChannelAccountId, ConversationId } from '@quackback/ids'
 import type { Actor } from '@/lib/server/policy/types'
-import { realEmail } from '@/lib/shared/anonymous-email'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { validateAttachments } from '@/lib/server/messages/message-core'
 import {
@@ -27,7 +38,7 @@ import {
   ensurePrincipalForUser,
 } from '@/lib/server/domains/principals/principal.factory'
 import { evaluateInboundAuth, type InboundAuthResult } from './email-auth'
-import type { ParsedInboundEmail } from './conversation.email-inbound'
+import { normalizeSenderAddress, type ParsedInboundEmail } from './conversation.email-inbound'
 import type { ConversationAuthorInput } from './conversation.types'
 import { emitConversationCreated, emitMessageCreated } from './conversation.webhooks'
 
@@ -52,7 +63,10 @@ export async function resolveColdInboundSender(
   const verdict = evaluateInboundAuth(authResultsHeader)
   if (verdict.verdict === 'reject') return { action: 'drop', verdict }
 
-  const email = realEmail(fromEmail)?.toLowerCase() ?? null
+  // The bare address, not the raw header: `"Jane" <jane@acme.com>` must resolve
+  // to the same person as `jane@acme.com`, or every distinct display name mints
+  // its own lead and the reuse below never matches.
+  const email = normalizeSenderAddress(fromEmail)
 
   // Attach only under a DMARC pass to an existing user (the trust gate is the
   // only path that adopts a known identity by address).
@@ -65,6 +79,43 @@ export async function resolveColdInboundSender(
     if (existing) {
       const { principal } = await ensurePrincipalForUser({ userId: existing.id, role: 'user' })
       return { action: 'attach', principalId: principal.id, unverified: false, verdict }
+    }
+  }
+
+  // A lead we minted for this address on an earlier mail: reuse it instead of
+  // minting a second one. This is what makes blocking a cold sender STICK — a
+  // principal created fresh on every message can never be blocked, because the
+  // block lands on a row the next message will not look at.
+  //
+  // `userId IS NULL` is a security clause, not an optimisation: anonymous WIDGET
+  // visitors also carry a contactEmail (pre-chat capture) but DO have an auth
+  // user row, so matching on type+address alone would let a weak-DMARC stranger
+  // attach to a live visitor's principal and impersonate them to an agent —
+  // exactly what the trust gate above exists to prevent. Cold leads are the only
+  // anonymous principals created without a user, which makes this an exact
+  // fingerprint for "a lead WE minted from an email".
+  if (email) {
+    const [existingLead] = await db
+      .select({ id: principal.id })
+      .from(principal)
+      .where(
+        and(
+          eq(principal.type, 'anonymous'),
+          isNull(principal.userId),
+          eq(principal.contactEmail, email)
+        )
+      )
+      .limit(1)
+    // 'attach', never 'create': the caller's compensating cleanup only fires on
+    // 'create', and running it against a pre-existing lead would try to delete a
+    // principal that already owns conversations.
+    if (existingLead) {
+      return {
+        action: 'attach',
+        principalId: existingLead.id,
+        unverified: verdict.verdict !== 'pass',
+        verdict,
+      }
     }
   }
 
@@ -126,7 +177,7 @@ export async function createEmailConversation(input: {
         lastMessageAt: now,
         // The customer is waiting on the first reply from the moment it lands.
         waitingSince: now,
-        visitorEmail: realEmail(parsed.from)?.toLowerCase() ?? null,
+        visitorEmail: normalizeSenderAddress(parsed.from),
         customAttributes: unverified ? { unverifiedSender: true } : {},
       })
       .returning()
