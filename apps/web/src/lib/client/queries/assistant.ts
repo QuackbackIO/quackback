@@ -6,7 +6,6 @@ import {
 } from '@/lib/server/functions/assistant-guidance'
 import { getGuidanceRuleStatsFn } from '@/lib/server/functions/assistant-guidance-stats'
 import { getAssistantConfigChangelogFn } from '@/lib/server/functions/assistant-config-changelog'
-import { listCustomActionsFn } from '@/lib/server/functions/assistant-custom-actions'
 
 const STALE_TIME = 30 * 1000
 // The tool catalogue is static, so it can sit stale far longer than settings
@@ -18,7 +17,6 @@ export const assistantKeys = {
   guidanceRules: () => ['assistant', 'guidanceRules'] as const,
   guidanceRuleStats: () => ['assistant', 'guidanceRuleStats'] as const,
   tools: () => ['assistant', 'tools'] as const,
-  customActions: () => ['assistant', 'customActions'] as const,
   configChangelog: () => ['assistant', 'configChangelog'] as const,
 }
 
@@ -51,14 +49,6 @@ export const assistantQueries = {
       queryKey: assistantKeys.tools(),
       queryFn: listAssistantToolsFn,
       staleTime: TOOLS_STALE_TIME,
-    }),
-
-  /** The custom-action library (QUINN-TWO-AGENT-SPEC D6/Phase 5). */
-  customActions: () =>
-    queryOptions({
-      queryKey: assistantKeys.customActions(),
-      queryFn: listCustomActionsFn,
-      staleTime: STALE_TIME,
     }),
 
   /** Privacy-minimal AI agent configuration change history. */
