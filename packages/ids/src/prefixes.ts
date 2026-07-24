@@ -72,11 +72,6 @@ export const ID_PREFIXES = {
   assistant_involvement: 'assistant_involvement',
   assistant_guidance: 'assistant_guidance',
   assistant_action: 'assistant_action',
-  // Custom action DEFINITIONS (the shared library, QUINN-TWO-AGENT-SPEC D6).
-  // Distinct from `assistant_action` above, which is the pending-action row a
-  // write-tool proposal mints (AssistantPendingActionId) — an unfortunate but
-  // load-bearing name collision, so the definition table gets its own prefix.
-  assistant_custom_action: 'assistant_custom_action',
   assistant_tool_call: 'assistant_tool_call',
   assistant_snippet: 'assistant_snippet',
   assistant_event: 'assistant_event',

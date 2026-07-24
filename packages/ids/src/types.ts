@@ -193,9 +193,6 @@ export type AssistantGuidanceRuleId = TypeId<'assistant_guidance'>
 /** Assistant pending action ID - e.g., assistant_action_01h455vb4pex5vsknk084sn02q */
 export type AssistantPendingActionId = TypeId<'assistant_action'>
 
-/** Assistant custom-action definition ID - e.g., assistant_custom_action_01h455vb4pex5vsknk084sn02q */
-export type AssistantCustomActionId = TypeId<'assistant_custom_action'>
-
 /** Assistant tool-call audit ID - e.g., assistant_tool_call_01h455vb4pex5vsknk084sn02q */
 export type AssistantToolCallId = TypeId<'assistant_tool_call'>
 
@@ -408,7 +405,6 @@ export interface EntityIdMap {
   assistant_involvement: AssistantInvolvementId
   assistant_guidance: AssistantGuidanceRuleId
   assistant_action: AssistantPendingActionId
-  assistant_custom_action: AssistantCustomActionId
   assistant_tool_call: AssistantToolCallId
   assistant_snippet: AssistantSnippetId
   assistant_event: AssistantEventId
