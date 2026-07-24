@@ -16,6 +16,7 @@ import {
   PHPIcon,
 } from '@/components/admin/settings/lang-icons'
 import { cn } from '@/lib/shared/utils'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 
 // ——————————————————————————————————————————————————
 // Language definitions
@@ -176,23 +177,19 @@ interface ApiUsageGuideProps {
 
 export function ApiUsageGuide({ apiBaseUrl }: ApiUsageGuideProps) {
   const [selectedLang, setSelectedLang] = useState('curl')
-  const [copiedCode, setCopiedCode] = useState(false)
-  const [copiedUrl, setCopiedUrl] = useState(false)
+  const { copied: copiedCode, copy: copyCode } = useCopyToClipboard()
+  const { copied: copiedUrl, copy: copyUrl } = useCopyToClipboard()
 
   const lang = LANGUAGES.find((l) => l.id === selectedLang) ?? LANGUAGES[0]
 
   const codeOutput = useMemo(() => lang.code(apiBaseUrl), [lang, apiBaseUrl])
 
   async function handleCopyCode() {
-    await navigator.clipboard.writeText(codeOutput)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
+    await copyCode(codeOutput)
   }
 
   async function handleCopyUrl() {
-    await navigator.clipboard.writeText(apiBaseUrl)
-    setCopiedUrl(true)
-    setTimeout(() => setCopiedUrl(false), 2000)
+    await copyUrl(apiBaseUrl)
   }
 
   return (

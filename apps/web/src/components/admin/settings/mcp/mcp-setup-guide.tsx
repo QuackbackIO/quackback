@@ -10,6 +10,7 @@ import {
   type SyntaxLang,
 } from '@/components/admin/settings/widget/highlighted-code'
 import { cn } from '@/lib/shared/utils'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 
 // ——————————————————————————————————————————————————
 // Client icons (Simple Icons, 24x24 viewBox)
@@ -269,8 +270,8 @@ const MCP_TOOLS = [
 export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
   const [selectedClient, setSelectedClient] = useState('claude-code')
   const [selectedVariant, setSelectedVariant] = useState('oauth')
-  const [copiedCode, setCopiedCode] = useState(false)
-  const [copiedEndpoint, setCopiedEndpoint] = useState(false)
+  const { copied: copiedCode, copy: copyCode } = useCopyToClipboard()
+  const { copied: copiedEndpoint, copy: copyEndpoint } = useCopyToClipboard()
 
   const client = CLIENTS.find((c) => c.id === selectedClient) ?? CLIENTS[0]
 
@@ -292,15 +293,11 @@ export function McpSetupGuide({ endpointUrl }: McpSetupGuideProps) {
   }, [client, selectedVariant])
 
   async function handleCopyCode() {
-    await navigator.clipboard.writeText(codeOutput)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
+    await copyCode(codeOutput)
   }
 
   async function handleCopyEndpoint() {
-    await navigator.clipboard.writeText(endpointUrl)
-    setCopiedEndpoint(true)
-    setTimeout(() => setCopiedEndpoint(false), 2000)
+    await copyEndpoint(endpointUrl)
   }
 
   return (

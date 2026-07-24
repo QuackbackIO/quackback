@@ -5,7 +5,6 @@
  * filter popover (copilot-panel.tsx's `CopilotAskInput`) and the per-citation
  * hovercard row below, plus the citation list + row themselves.
  */
-import { useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
   BookOpenIcon,
@@ -18,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/shared/utils'
 import { CitationFreshness } from '@/components/shared/conversation/assistant-turn'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 import type { CopilotCitation } from '@/lib/shared/assistant/copilot-contract'
 
 export type SourceType = CopilotCitation['type']
@@ -115,15 +115,13 @@ function CopilotSourceRow({ citation }: { citation: CopilotCitation }) {
   const Icon = meta.icon
   const isInternal = citation.internal === true
   const hasUrl = !!citation.url
-  const [copied, setCopied] = useState(false)
+  const { copied, copy } = useCopyToClipboard(1500)
 
   const copyLink = (e: ReactMouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (!citation.url) return
-    void navigator.clipboard?.writeText(citation.url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+    void copy(citation.url)
   }
 
   const row = (

@@ -12,6 +12,7 @@ import {
   PHPIcon,
 } from '@/components/admin/settings/lang-icons'
 import { cn } from '@/lib/shared/utils'
+import { useCopyToClipboard } from '@/lib/client/hooks/use-copy-to-clipboard'
 
 // ——————————————————————————————————————————————————
 // Framework definitions
@@ -217,16 +218,14 @@ const WEBHOOK_HEADERS = [
 
 export function WebhookVerificationGuide() {
   const [selectedFramework, setSelectedFramework] = useState('node')
-  const [copiedCode, setCopiedCode] = useState(false)
+  const { copied: copiedCode, copy: copyCode } = useCopyToClipboard()
 
   const framework = FRAMEWORKS.find((f) => f.id === selectedFramework) ?? FRAMEWORKS[0]
 
   const codeOutput = useMemo(() => framework.code, [framework])
 
   async function handleCopyCode() {
-    await navigator.clipboard.writeText(codeOutput)
-    setCopiedCode(true)
-    setTimeout(() => setCopiedCode(false), 2000)
+    await copyCode(codeOutput)
   }
 
   return (
