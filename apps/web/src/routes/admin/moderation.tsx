@@ -18,11 +18,8 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { PageHeader } from '@/components/shared/page-header'
 
 export const Route = createFileRoute('/admin/moderation')({
-  loader: async () => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
-    return {}
-  },
+  // Auth is enforced by the parent `/admin` guard (admin/member wall) plus each
+  // moderation server function's own authz — no per-route RPC guard needed.
   component: ModerationPage,
 })
 

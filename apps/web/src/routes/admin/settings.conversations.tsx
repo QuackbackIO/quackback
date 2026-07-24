@@ -1,5 +1,6 @@
 import { useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useRouter, Navigate } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { ChatBubbleLeftRightIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
@@ -18,10 +19,7 @@ import { Label } from '@/components/ui/label'
 
 export const Route = createFileRoute('/admin/settings/conversations')({
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.SETTINGS_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),

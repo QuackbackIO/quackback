@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { MegaphoneIcon } from '@heroicons/react/24/solid'
@@ -20,10 +21,7 @@ export const Route = createFileRoute('/admin/settings/changelog')({
     }
   },
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.CHANGELOG_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.CHANGELOG_MANAGE)
     await Promise.all([
       context.queryClient.ensureQueryData(changelogSettingsQueries.get()),
       context.queryClient.ensureQueryData(changelogCategoryQueries.list()),

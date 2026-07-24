@@ -25,11 +25,7 @@ export const Route = createFileRoute('/admin/tickets')({
   validateSearch: (search: Record<string, unknown>): TicketsRedirectSearch => ({
     t: typeof search.t === 'string' && isValidTypeId(search.t, 'ticket') ? search.t : undefined,
   }),
-  loader: async () => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
-    return {}
-  },
+  // Auth is enforced by the parent `/admin` guard; this route only redirects.
   component: TicketsRedirectRoute,
 })
 

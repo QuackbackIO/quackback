@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, useRouteContext } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { KeyIcon, BoltIcon, CommandLineIcon } from '@heroicons/react/24/solid'
@@ -25,10 +26,7 @@ type ApiTab = 'keys' | 'webhooks' | 'mcp'
 export const Route = createFileRoute('/admin/settings/developers')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.API_KEY_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.API_KEY_MANAGE)
 
     const { queryClient } = context
     // All three tabs are preloaded so switching tabs never round-trips

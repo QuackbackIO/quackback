@@ -1,5 +1,6 @@
 import { useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
@@ -23,10 +24,7 @@ export const Route = createFileRoute('/admin/settings/moderation')({
     }
   },
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.SETTINGS_MODERATION },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MODERATION)
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.portalConfig())

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient, useSuspenseQuery, queryOptions } from '@tanstack/react-query'
 import { ClockIcon } from '@heroicons/react/24/solid'
@@ -46,10 +47,7 @@ const officeHoursQuery = queryOptions({
 
 export const Route = createFileRoute('/admin/settings/office-hours')({
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.OFFICE_HOURS_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.OFFICE_HOURS_MANAGE)
     await context.queryClient.ensureQueryData(officeHoursQuery)
     return {}
   },

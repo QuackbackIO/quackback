@@ -6,13 +6,9 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { NotificationMatrixForm } from '@/components/settings/notification-matrix-form'
 
 export const Route = createFileRoute('/admin/settings/notifications')({
-  loader: async () => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    // Per-member page (each team member manages their own notification
-    // preferences), so any team member may view it - not admin-gated.
-    await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
-    return {}
-  },
+  // Per-member page (each team member manages their own notification
+  // preferences) with no extra permission gate — the parent `/admin` guard's
+  // admin/member wall is the only requirement, so no per-route RPC guard.
   component: NotificationsPage,
 })
 

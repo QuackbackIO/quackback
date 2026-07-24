@@ -1,5 +1,6 @@
 import { createFileRoute, useRouter, useRouteContext, Link } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useState, useTransition, useMemo, useEffect, type ReactNode } from 'react'
 import { useTheme } from 'next-themes'
@@ -84,10 +85,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 
 export const Route = createFileRoute('/admin/settings/widget')({
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.SETTINGS_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
 
     const { queryClient } = context
     await Promise.all([

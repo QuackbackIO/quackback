@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useNavigate, Navigate } from '@tanstack/react-router'
 import { CircleStackIcon } from '@heroicons/react/24/solid'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -18,10 +19,7 @@ type ConversationDataTab = 'attributes' | 'tags'
 export const Route = createFileRoute('/admin/settings/conversation-data')({
   validateSearch: searchSchema,
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.CONVERSATION_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.CONVERSATION_MANAGE)
     await context.queryClient.ensureQueryData(conversationAttributeQueries.registry())
     return {}
   },

@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { ImportsHubPage } from '@/components/admin/settings/imports/imports-hub-page'
 
 /**
@@ -8,12 +9,8 @@ import { ImportsHubPage } from '@/components/admin/settings/imports/imports-hub-
  * experimental surface.
  */
 export const Route = createFileRoute('/admin/settings/imports')({
-  loader: async () => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.SETTINGS_MANAGE },
-    })
-    return {}
+  loader: ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
   },
   component: ImportsHubPage,
 })

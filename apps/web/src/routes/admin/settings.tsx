@@ -5,19 +5,8 @@ import { Cog6ToothIcon } from '@heroicons/react/24/solid'
 import { SettingsNav } from '@/components/admin/settings/settings-nav'
 import { PageHeader } from '@/components/shared/page-header'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { settingsQueries } from '@/lib/client/queries/settings'
 
 export const Route = createFileRoute('/admin/settings')({
-  // Prefetch the queries consumed by the SSO callout on /authentication.
-  // Both feeds drive the callout's adaptive copy; cheap — settings-cache
-  // hits that are reused downstream by the /sso route loader too.
-  loader: async ({ context }) => {
-    await Promise.all([
-      context.queryClient.ensureQueryData(settingsQueries.authConfig()),
-      context.queryClient.ensureQueryData(settingsQueries.verifiedDomains()),
-    ])
-    return {}
-  },
   component: SettingsLayout,
 })
 

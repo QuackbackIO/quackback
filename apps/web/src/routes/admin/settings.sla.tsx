@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, Navigate } from '@tanstack/react-router'
 import {
   queryOptions,
@@ -70,10 +71,7 @@ const slaOfficeHoursQuery = queryOptions({
 
 export const Route = createFileRoute('/admin/settings/sla')({
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.SLA_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.SLA_MANAGE)
     await context.queryClient.ensureQueryData(slaPoliciesQuery)
     return {}
   },

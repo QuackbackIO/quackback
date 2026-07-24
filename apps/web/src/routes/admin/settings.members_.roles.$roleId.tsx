@@ -1,16 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { RoleEditor } from '@/components/admin/settings/team/role-editor'
 
 export const Route = createFileRoute('/admin/settings/members_/roles/$roleId')({
   // Viewable by anyone who can see the roster; the page renders read-only
   // without role.manage (and always for presets). Editing is enforced by the
   // server on save.
-  beforeLoad: async () => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.MEMBER_VIEW },
-    })
+  beforeLoad: ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.MEMBER_VIEW)
   },
   component: RoleEditorPage,
 })

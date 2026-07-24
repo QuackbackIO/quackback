@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Cog6ToothIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
@@ -11,6 +12,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { updateWorkspaceNameFn } from '@/lib/server/functions/settings'
 import { updateFeatureFlagsFn } from '@/lib/server/functions/feature-flags'
+import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { isPathManagedFromBootstrap, MANAGED_PATHS } from '@/lib/client/config-file'
 import {
   DEFAULT_FEATURE_FLAGS,
@@ -23,12 +25,8 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 export const Route = createFileRoute('/admin/settings/general')({
-  loader: async () => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.SETTINGS_MANAGE },
-    })
-    return {}
+  loader: ({ context }) => {
+    assertRoutePermission(context.permissions, PERMISSIONS.SETTINGS_MANAGE)
   },
   component: GeneralSettingsPage,
 })
@@ -42,11 +40,11 @@ function GeneralSettingsPage() {
 
   const [workspaceName, setWorkspaceName] = useState(settings?.name || '')
   const [isSavingName, setIsSavingName] = useState(false)
-  const nameTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [localFlags, setLocalFlags] = useState<FeatureFlags>(
     (settings?.featureFlags as FeatureFlags | undefined) ?? DEFAULT_FEATURE_FLAGS
   )
   const queryClient = useQueryClient()
+  const router = useRouter()
 
   const productMutation = useMutation({
     mutationFn: (update: Partial<FeatureFlags>) => updateFeatureFlagsFn({ data: update }),
@@ -59,8 +57,14 @@ function GeneralSettingsPage() {
       return { previous }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries()
-      window.location.reload()
+      // A product toggle flips feature-flag-driven nav entries and routes. Those
+      // flags live in the root route context (getBootstrapData → settings.
+      // featureFlags), which the admin sidebar reads via useRouteContext, so a
+      // router.invalidate() re-runs the root beforeLoad and refreshes the flags —
+      // the nav updates without a full page reload. Also refresh the portalConfig
+      // query, the one settings query whose payload reflects product flags.
+      void router.invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['settings', 'portalConfig'] })
     },
     onError: (error, _update, context) => {
       if (context?.previous) setLocalFlags(context.previous)
@@ -68,31 +72,24 @@ function GeneralSettingsPage() {
     },
   })
 
-  // Timer cleanup on unmount to prevent state updates after unmount
-  useEffect(() => {
-    return () => {
-      if (nameTimeoutRef.current) clearTimeout(nameTimeoutRef.current)
+  // Debounced workspace name save. `useDebouncedSave` flushes any pending
+  // value on unmount, so navigating away mid-debounce no longer drops it.
+  const { queue: queueNameSave } = useDebouncedSave<string>(async (value) => {
+    if (value.trim() && value !== settings?.name) {
+      setIsSavingName(true)
+      try {
+        await updateWorkspaceNameFn({ data: { name: value.trim() } })
+      } catch {
+        toast.error('Failed to update workspace name')
+      } finally {
+        setIsSavingName(false)
+      }
     }
-  }, [])
+  }, 800)
 
-  // Debounced workspace name save
   const handleNameChange = (value: string) => {
     setWorkspaceName(value)
-    if (nameTimeoutRef.current) {
-      clearTimeout(nameTimeoutRef.current)
-    }
-    nameTimeoutRef.current = setTimeout(async () => {
-      if (value.trim() && value !== settings?.name) {
-        setIsSavingName(true)
-        try {
-          await updateWorkspaceNameFn({ data: { name: value.trim() } })
-        } catch {
-          toast.error('Failed to update workspace name')
-        } finally {
-          setIsSavingName(false)
-        }
-      }
-    }, 800)
+    queueNameSave(value)
   }
 
   const handleProductToggle = (productId: ProductId, enabled: boolean) => {
