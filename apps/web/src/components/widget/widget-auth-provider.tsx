@@ -17,6 +17,9 @@ import {
   persistAnonymousToken,
   readPersistedToken,
   clearPersistedToken,
+  persistIdentifiedToken,
+  readPersistedIdentifiedToken,
+  clearIdentifiedToken,
 } from '@/lib/client/widget-auth'
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { widgetQueryKeys } from '@/lib/client/hooks/use-widget-vote'
@@ -142,6 +145,31 @@ export function WidgetAuthProvider({
 
       const p = (async (): Promise<boolean> => {
         try {
+          // 0. Try a persisted identified token first — it may have survived a
+          //    page interaction (tab switch, focus loss, browser memory pressure)
+          //    that cleared the in-memory token but not localStorage.
+          const persistedIdent = readPersistedIdentifiedToken()
+          if (persistedIdent) {
+            try {
+              const res = await fetch('/api/widget/session', {
+                headers: { Authorization: `Bearer ${persistedIdent}` },
+              })
+              if (res.ok) {
+                const body = await res.json()
+                if (body.data?.user) {
+                  storeToken(persistedIdent)
+                  persistIdentifiedToken(persistedIdent)
+                  setUser(body.data.user)
+                  return true
+                }
+                // Identified token is stale or demoted — drop it.
+                clearIdentifiedToken()
+              }
+            } catch {
+              // Server unreachable — fall through.
+            }
+          }
+
           // 1. Prefer a persisted anonymous token — validate it server-side
           //    before adopting (it may have expired or been merged away).
           const persisted = readPersistedToken()
@@ -214,9 +242,11 @@ export function WidgetAuthProvider({
     (result: { sessionToken: string; user: WidgetUser; votedPostIds?: string[] }) => {
       storeToken(result.sessionToken)
       // Any anonymous session was merged into this identified user server-side,
-      // so drop its persisted token. Identified tokens are never persisted —
-      // they're re-established via SDK identify / portal passthrough on load.
+      // so drop its persisted token. Persist the identified token so it survives
+      // page interactions (e.g. the user navigates away and returns to the
+      // widget tab) — the server validates it as a Bearer on next use.
       clearPersistedToken()
+      persistIdentifiedToken(result.sessionToken)
       setUser(result.user)
       if (result.votedPostIds) {
         queryClient.setQueryData(
@@ -287,17 +317,17 @@ export function WidgetAuthProvider({
     }
   }, [portalSessionToken, portalUser, storeToken])
 
-  // Restore a persisted anonymous session on mount so a returning visitor's
-  // conversation is visible immediately, without waiting for a write. Skipped
-  // when a portal session is present (it takes precedence) or one is already
-  // ready. Restore-only: never mints — the first write lazily mints if nothing
-  // valid was restored.
+  // Restore a persisted session (anonymous or identified) on mount so a
+  // returning visitor's conversation is visible immediately, without waiting
+  // for a write. Skipped when a portal session is present (it takes
+  // precedence) or one is already ready. Restore-only: never mints — the
+  // first write lazily mints if nothing valid was restored.
   const restoreAttemptedRef = useRef(false)
   useEffect(() => {
     if (restoreAttemptedRef.current) return
     if (portalSessionToken || sessionReadyRef.current) return
     restoreAttemptedRef.current = true
-    if (!readPersistedToken()) return
+    if (!readPersistedToken() && !readPersistedIdentifiedToken()) return
     void acquireSession(false)
   }, [portalSessionToken, acquireSession])
 
@@ -354,6 +384,12 @@ export function WidgetAuthProvider({
     async function handleAnonymousIdentify() {
       // Don't eagerly create anonymous session — it will be created lazily
       // on first write action (vote, comment, post) via ensureSessionThen.
+      // Clear both the in-memory token and any persisted identified token so
+      // a previously-identified visitor who now loads the host app logged
+      // out cannot have their old identity restored by an in-flight or
+      // completed token restore and continue writing as the prior user.
+      clearWidgetToken()
+      sessionReadyRef.current = false
       setUser(null)
       sendToHost({ type: 'quackback:identify-result', success: true, user: null })
       sendToHost({ type: 'quackback:auth-change', user: null })

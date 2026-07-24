@@ -469,6 +469,54 @@ export function WidgetHomeAnimated({
         setIsSubmitting(false)
         return
       } else if (!isIdentified) {
+        // Before falling back to an anonymous session (which will fail
+        // submission on workspaces that require identified users), try to
+        // restore a previously-persisted identified token. This recovers
+        // from tab switches, focus loss, or browser memory pressure that
+        // cleared the in-memory token but left localStorage intact.
+        const { readPersistedIdentifiedToken } = await import(
+          '@/lib/client/widget-auth'
+        )
+        const identToken = readPersistedIdentifiedToken()
+        if (identToken) {
+          try {
+            const res = await fetch('/api/widget/session', {
+              headers: { Authorization: `Bearer ${identToken}` },
+            })
+            if (res.ok) {
+              const body = await res.json()
+              if (body.data?.user) {
+                const { setWidgetToken, persistIdentifiedToken } =
+                  await import('@/lib/client/widget-auth')
+                setWidgetToken(identToken)
+                persistIdentifiedToken(identToken)
+                // Re-resolve board permissions with the restored identity
+                const [{ getWidgetAuthHeaders }, { fetchBoardCapabilitiesFn }] =
+                  await Promise.all([
+                    import('@/lib/client/widget-auth'),
+                    import('@/lib/server/functions/portal'),
+                  ])
+                const freshPermissions = await fetchBoardCapabilitiesFn({
+                  headers: getWidgetAuthHeaders(),
+                })
+                if (!freshPermissions?.[selectedBoardId]?.canSubmit) {
+                  setError(
+                    intl.formatMessage({
+                      id: 'widget.home.form.noAccess',
+                      defaultMessage:
+                        "You don't have access to post on this board",
+                    })
+                  )
+                  setIsSubmitting(false)
+                  return
+                }
+              }
+            }
+          } catch {
+            // Server unreachable — fall through to ensureSession.
+          }
+        }
+
         const ok = await ensureSession()
         if (!ok) {
           setError(
@@ -513,13 +561,25 @@ export function WidgetHomeAnimated({
       })
 
       collapseForm()
-    } catch {
-      setError(
-        intl.formatMessage({
-          id: 'widget.home.form.errorNetwork',
-          defaultMessage: 'Network error. Please try again.',
-        })
-      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('Anonymous interaction is not enabled') ||
+          msg.includes('Authentication required')) {
+        setError(
+          intl.formatMessage({
+            id: 'widget.home.form.errorReauthRequired',
+            defaultMessage:
+              'Your session has expired. Please sign in again to submit feedback.',
+          })
+        )
+      } else {
+        setError(
+          intl.formatMessage({
+            id: 'widget.home.form.errorNetwork',
+            defaultMessage: 'Network error. Please try again.',
+          })
+        )
+      }
     } finally {
       setIsSubmitting(false)
     }
