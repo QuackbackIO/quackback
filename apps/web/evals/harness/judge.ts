@@ -45,6 +45,10 @@ async function callJudge(system: string, user: string): Promise<JudgeVerdict> {
   const completion = await openai.chat.completions.create({
     model: judgeModel(),
     temperature: 0,
+    // json_object (not json_schema): universally supported, and the prompt
+    // already says "JSON" as the mode requires. Salvage in parseVerdict stays
+    // as the fallback for providers that ignore the parameter.
+    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -64,7 +68,8 @@ const JUDGE_SYSTEM =
   'You are a strict evaluation judge for a customer-support AI assistant. You grade one ' +
   'dimension against a rubric. Be conservative: only pass when the rubric is clearly met. ' +
   'Respond with ONLY a JSON object: {"pass": boolean, "score": number (1-5), "reasoning": string}. ' +
-  'No prose outside the JSON.'
+  'No prose outside the JSON. Example output: ' +
+  '{"pass": false, "score": 2, "reasoning": "The reply invents a settings path not present in the sources."}'
 
 /** Judge a single turn's output against a rubric (groundedness, writing style). */
 export async function judgeSingle(

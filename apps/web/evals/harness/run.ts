@@ -77,9 +77,6 @@ function buildTurnInput(
     involvementId: conversation?.involvementId ?? null,
     latestCustomerMessageId: conversation?.latestCustomerMessageId ?? null,
   }
-  if (role === 'suggested_reply') {
-    return { ...common, role, surface: 'copilot', destinationChannel: 'widget' }
-  }
   if (role === 'copilot_qa') {
     return { ...common, role, surface: 'copilot', messages }
   }

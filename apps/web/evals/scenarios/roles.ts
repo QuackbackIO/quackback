@@ -1,8 +1,8 @@
 /**
- * §7.3 Roles & actions (scenarios 20–23), all structural, no judge. These
- * encode the D14 write-tool contract: suggested_reply never writes;
- * customer_support with the flag on executes autonomously; copilot_qa proposes;
- * flag off removes write tools from the assembled set entirely.
+ * §7.3 Roles & actions, all structural, no judge. These encode the D14
+ * write-tool contract: customer_support with the flag on executes
+ * autonomously; copilot_qa proposes; flag off removes write tools from the
+ * assembled set entirely.
  */
 import type { Scenario } from '../types'
 
@@ -11,18 +11,6 @@ const PLAN_TIER_ATTR = { key: 'plan_tier', label: 'Plan tier', fieldType: 'text'
 const WRITE_TOOLS = ['set_attribute', 'end_conversation', 'create_ticket', 'capture_feedback']
 
 export const roleScenarios: Scenario[] = [
-  {
-    id: '20',
-    title: 'suggested_reply never writes — write tools absent from its tool set',
-    kind: 'toolset',
-    roles: ['suggested_reply'],
-    config: { assistantTools: true },
-    fixtures: { withConversation: true },
-    structural: [
-      { type: 'toolPresent', name: 'search' },
-      ...WRITE_TOOLS.map((name) => ({ type: 'toolAbsent' as const, name })),
-    ],
-  },
   {
     id: '21',
     title: 'customer_support with assistantTools on executes set_attribute directly (D14)',
@@ -86,57 +74,6 @@ export const roleScenarios: Scenario[] = [
     structural: [
       { type: 'toolPresent', name: 'search' },
       ...WRITE_TOOLS.map((name) => ({ type: 'toolAbsent' as const, name })),
-    ],
-  },
-  {
-    id: '39',
-    title: 'suggested_reply drafts a grounded, cited reply from the KB',
-    roles: ['suggested_reply'],
-    fixtures: {
-      withConversation: true,
-      conversationMessages: [
-        'How do I export my workspace data? I need a backup before we migrate.',
-      ],
-      kbArticles: [
-        {
-          title: 'Exporting workspace data',
-          content:
-            'Workspace admins can export all data from Settings > Data > Export. The export is emailed as a CSV bundle within 15 minutes and includes posts, conversations, and attachments metadata.',
-        },
-      ],
-    },
-    structural: [
-      { type: 'status', oneOf: ['answered'] },
-      { type: 'citesType', citationType: 'article' },
-      { type: 'noWrites' },
-      { type: 'noProposals' },
-    ],
-  },
-  {
-    id: '40',
-    title: 'suggested_reply honest miss — never invents contract terms it cannot know',
-    roles: ['suggested_reply'],
-    fixtures: {
-      withConversation: true,
-      // A workspace-specific ask with nothing seeded to ground it. TWO honest
-      // outcomes exist: report_inability (the role maps it to skip — no card)
-      // or an explicit deferral draft ("I can't access your contract; ask
-      // your account manager"). What must NEVER appear is an invented figure:
-      // a fabricated price here reaches a teammate one click away from the
-      // customer. Any currency symbol in the reply means an invented number —
-      // nothing seeded or asked supplies a legitimate one.
-      conversationMessages: [
-        'Can you confirm the exact per-seat price my company negotiated in our custom contract last year?',
-      ],
-    },
-    structural: [
-      { type: 'status', oneOf: ['answered', 'cannot_answer'] },
-      { type: 'noCitations' },
-      { type: 'noWrites' },
-      {
-        type: 'textExcludesAll',
-        values: ['$', '€', '£', 'per seat price of', 'per-seat price of'],
-      },
     ],
   },
   {

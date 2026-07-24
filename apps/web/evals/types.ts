@@ -265,6 +265,6 @@ export type Scenario = TurnScenario | ToolsetScenario | ContrastScenario
 
 /** Resolve the surface a given role runs on. */
 export function surfaceForRole(scenario: BaseScenario, role: AssistantRole): AssistantSurface {
-  if (role === 'copilot_qa' || role === 'suggested_reply') return 'copilot'
+  if (role === 'copilot_qa') return 'copilot'
   return scenario.surface ?? 'widget'
 }
