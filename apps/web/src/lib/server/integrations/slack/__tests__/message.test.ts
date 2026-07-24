@@ -10,7 +10,7 @@ const ROOT_URL = 'https://feedback.example.com'
 
 const envelope = {
   id: 'evt_1',
-  occurredAt: '2026-07-21T12:00:00.000Z',
+  timestamp: '2026-07-21T12:00:00.000Z',
   actor: { type: 'user' as const, id: 'principal_1', name: 'Test User' },
 }
 
