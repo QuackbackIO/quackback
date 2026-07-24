@@ -3,6 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { cn } from '@/lib/shared/utils'
 import { publicStatusIncidentQueries } from '@/lib/client/queries/status'
+import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 import {
   StatusIncidentTimeline,
   StatusSubscribeButton,
@@ -16,6 +17,7 @@ import type { StatusIncidentId } from '@quackback/ids'
 
 export const Route = createFileRoute('/_portal/status/$incidentId')({
   loader: async ({ context, params }) => {
+    if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
     const incidentId = params.incidentId as StatusIncidentId
 
     let incident

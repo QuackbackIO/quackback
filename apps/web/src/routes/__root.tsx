@@ -35,6 +35,7 @@ export interface RouterContext {
   managedFieldPaths?: string[]
   registeredAuthProviders?: string[]
   acceptLanguageLocale?: SupportedLocale
+  updateBannerDismissedVersion?: BootstrapData['updateBannerDismissedVersion']
 }
 
 // Paths that are allowed before onboarding is complete
@@ -66,6 +67,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       managedFieldPaths,
       registeredAuthProviders,
       acceptLanguageLocale,
+      updateBannerDismissedVersion,
     } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
@@ -75,35 +77,32 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       }
     }
 
-    // Redact allowedDomains and widgetSignIn from the portalConfig placed
-    // into the router context. Both fields are server-only policy: the
-    // domain gate now runs server-side via evaluateMyPortalAccessFn.
-    // Nothing on the client legitimately reads them from context —
-    // the admin Security → Portal tab fetches the full config via its own
-    // settingsQueries.portalConfig() query, which is unaffected.
-    //
-    // Two locations are redacted:
-    //   1. settings.portalConfig (parsed PortalConfig object on TenantSettings).
-    //   2. settings.settings.portalConfig (raw DB row JSON string) — child loaders
-    //      that pass `settings` or `settings.settings` into their SSR payload would
-    //      otherwise carry the full access config in the dehydrated context.
+    // Redact server-only material from the settings placed into the router
+    // context — everything returned here is dehydrated into the SSR HTML.
+    // redactSettingsForClient strips the widgetSecret/tier/setup columns from
+    // the raw row and the access policy fields (allowedDomains, widgetSignIn,
+    // allowedSegmentIds) from portalConfig, recursively covering both the
+    // parsed TenantSettings shape and the raw DB row riding on `.settings`.
+    // Nothing on the client legitimately reads any of it — the admin
+    // Security → Portal tab fetches the full config via its own
+    // settingsQueries.portalConfig() query, which is unaffected, and the
+    // domain gate runs server-side via evaluateMyPortalAccessFn.
     const redactedSettings: TenantSettings | null = settings
-      ? ({
-          ...settings,
-          // 1. Parsed config on TenantSettings
-          portalConfig: settings.portalConfig?.access
-            ? {
-                ...settings.portalConfig,
-                access: {
-                  // Only expose visibility — keep allowedDomains and widgetSignIn off the wire.
-                  visibility: settings.portalConfig.access.visibility,
-                },
-              }
-            : settings.portalConfig,
-          // 2. Raw DB row — portalConfig column is a JSON string; redact inline.
-          settings: redactSettingsForClient(settings.settings as Record<string, unknown>),
-        } as TenantSettings)
+      ? (redactSettingsForClient(settings) as TenantSettings)
       : settings
+
+    // Drop the raw DB row entirely from the client-bound context. Redaction
+    // already stripped its secrets, but the row is a full duplicate of the
+    // parsed TenantSettings fields (name, slug, portalConfig, brandingConfig,
+    // …) that no client code reads — every consumer reads the parsed top-level
+    // fields instead. Emptying it removes one whole settings copy per SSR
+    // document. The only server-side readers of `settings.settings.*` are the
+    // onboarding routes (name/slug), which now read the parsed top-level
+    // `settings.name`/`settings.slug`, and the pre-redaction setupState read at
+    // line 72 above, which runs on the un-emptied `settings` and is unaffected.
+    if (redactedSettings) {
+      redactedSettings.settings = {}
+    }
 
     return {
       baseUrl,
@@ -115,6 +114,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       managedFieldPaths,
       registeredAuthProviders,
       acceptLanguageLocale,
+      updateBannerDismissedVersion,
     }
   },
   head: () => ({

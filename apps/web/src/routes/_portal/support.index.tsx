@@ -6,7 +6,7 @@ import { ChatBubbleLeftRightIcon, ChevronRightIcon, PlusIcon } from '@heroicons/
 import { cn } from '@/lib/shared/utils'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/shared/empty-state'
-import { Spinner } from '@/components/shared/spinner'
+import { Skeleton } from '@/components/ui/skeleton'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { getMyConversationsFn } from '@/lib/server/functions/conversation'
@@ -29,6 +29,28 @@ function StatusLabel({ status }: { status: string }) {
     default:
       return <>{status}</>
   }
+}
+
+/** Pending state for the Messages space's conversation list — mirrors the
+ *  loaded `<li>` row (title + status/time line, in a bordered card) so the
+ *  list doesn't reflow height when the real rows arrive. */
+function ConversationListSkeleton() {
+  return (
+    <ul className="flex flex-col gap-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <li
+          key={i}
+          className="flex w-full items-center gap-3 rounded-lg border border-border/60 bg-card px-4 py-3"
+        >
+          <span className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3 w-1/4" />
+          </span>
+          <Skeleton className="size-4 shrink-0 rounded-full" />
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 function SupportListPage() {
@@ -117,9 +139,7 @@ function SupportListPage() {
           }
         />
       ) : isLoading ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
+        <ConversationListSkeleton />
       ) : conversations.length === 0 ? (
         <EmptyState
           icon={ChatBubbleLeftRightIcon}

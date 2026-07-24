@@ -146,3 +146,75 @@ export function loadMessages(locale: SupportedLocale): Promise<Record<string, st
   messageCache.set(locale, promise)
   return promise
 }
+
+/**
+ * Key prefixes the widget surface renders (widget views plus the shared
+ * Ask-AI / ui / common strings they embed). Everything else in the catalog is
+ * portal/admin copy the iframe never shows.
+ */
+const WIDGET_MESSAGE_PREFIXES = ['widget.', 'helpAskAi.', 'ui.', 'common.']
+
+/**
+ * The widget's slice of the message catalog. Loaded in the widget layout
+ * loader (server-side) and serialized into loader data so the iframe's first
+ * client render is already translated — the widget route is `ssr:
+ * 'data-only'`, so without this seed the IntlProvider mounts empty, flashes
+ * English defaults, and pays a post-mount catalog-chunk fetch. Filtering
+ * keeps the serialized payload to the ~200 keys the widget can actually show.
+ */
+export async function loadWidgetMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (WIDGET_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
+  }
+  return subset
+}
+
+/**
+ * Key prefixes the portal surfaces render. Derived from the transitive import
+ * closure of the `_portal` route tree plus the standalone `/auth/*` pages and
+ * the portal access gate — every react-intl id reachable from those pages
+ * lives under one of these prefixes:
+ *
+ * - `portal.` — the bulk of portal/feedback/roadmap/tickets/help-center copy;
+ * - `widget.` — the shared conversation-thread components (messenger/CSAT/
+ *   assistant strings) reused on the portal support & ticket pages;
+ * - `helpAskAi.` — the help-center Ask-AI search surface under `_portal/hc`;
+ * - `ui.` — shared UI primitives (e.g. combobox) embedded in portal forms;
+ * - `common.` — cross-surface strings (e.g. common.cancel) used on auth pages;
+ * - `tickets.` — ticket-form field placeholders.
+ *
+ * Everything else in the catalog is admin/inbox copy the portal never renders.
+ * A unit test (portal-message-coverage.test.ts) statically re-derives the ids
+ * referenced by the portal source and fails CI if any fall outside this list,
+ * so a future key can't silently render its English fallback in production.
+ */
+const PORTAL_MESSAGE_PREFIXES = [
+  'portal.',
+  'widget.',
+  'helpAskAi.',
+  'ui.',
+  'common.',
+  'tickets.',
+] as const
+
+/** The prefix allowlist as a plain string[], for tests and iteration. */
+export const PORTAL_MESSAGE_PREFIX_LIST: readonly string[] = PORTAL_MESSAGE_PREFIXES
+
+/**
+ * The portal's slice of the message catalog. Loaded in the portal layout loader
+ * (server-side) and serialized into loader data so the portal's first render is
+ * already translated during SSR. Mirrors {@link loadWidgetMessages}: filtering
+ * to the portal prefixes keeps the serialized payload to the strings the portal
+ * can actually show, instead of the whole (admin-inclusive) catalog — a large
+ * chunk of the portal SSR HTML. See {@link PORTAL_MESSAGE_PREFIXES}.
+ */
+export async function loadPortalMessages(locale: SupportedLocale): Promise<Record<string, string>> {
+  const all = await loadMessages(locale)
+  const subset: Record<string, string> = {}
+  for (const [key, value] of Object.entries(all)) {
+    if (PORTAL_MESSAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) subset[key] = value
+  }
+  return subset
+}

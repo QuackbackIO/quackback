@@ -6,6 +6,7 @@ import { RssIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/shared/page-header'
 import { publicStatusPageQueries, publicStatusHistoryQueries } from '@/lib/client/queries/status'
+import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 import {
   StatusHero,
   StatusComponentsList,
@@ -19,6 +20,7 @@ import type { StatusUptimeDay } from '@/components/portal/status'
 
 export const Route = createFileRoute('/_portal/status/')({
   loader: async ({ context }) => {
+    if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
     try {
       await context.queryClient.ensureQueryData(publicStatusPageQueries.get())
     } catch {

@@ -24,15 +24,21 @@ vi.mock('@/lib/server/functions/portal-access', () => ({
 }))
 
 // Stub enough of the portal route's other dependencies to avoid import errors
-vi.mock('@/lib/server/functions/portal', () => ({ fetchUserAvatar: vi.fn() }))
+vi.mock('@/lib/server/functions/portal', () => ({
+  fetchUserAvatar: vi.fn(async () => ({ avatarUrl: null, hasCustomAvatar: false })),
+}))
 vi.mock('@/lib/server/domains/settings/redact', () => ({
   redactSettingsForClient: vi.fn((x: unknown) => x),
 }))
 vi.mock('@/lib/shared/theme', () => ({
   generateThemeCSS: vi.fn(() => ''),
+  readFontSans: vi.fn(() => null),
 }))
 vi.mock('@/lib/shared/i18n', () => ({
   resolveLocale: vi.fn(async () => 'en'),
+  loadMessages: vi.fn(async () => ({})),
+  loadPortalMessages: vi.fn(async () => ({})),
+  DEFAULT_LOCALE: 'en',
   SUPPORTED_LOCALES: ['en', 'de', 'fr', 'es', 'ar', 'ru', 'pt-br', 'zh-cn', 'zh-tw'],
 }))
 vi.mock('@/lib/shared/types/settings', () => ({

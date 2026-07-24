@@ -6,7 +6,6 @@ import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { Spinner } from '@/components/shared/spinner'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
 import { FeedbackHeader } from '@/components/public/feedback/feedback-header'
-import { PortalWelcomeCard } from '@/components/public/feedback/portal-welcome-card'
 import { FeedbackSidebar } from '@/components/public/feedback/feedback-sidebar'
 import { FeedbackToolbar } from '@/components/public/feedback/feedback-toolbar'
 import {
@@ -17,7 +16,6 @@ import { usePublicFilters } from '@/components/public/feedback/use-public-filter
 import { PortalModerationSection } from '@/components/public/feedback/portal-moderation-section'
 import { PostCard } from '@/components/public/post-card'
 import type { PublicBoardWithStats } from '@/lib/shared/types'
-import type { PortalWelcomeCard as PortalWelcomeCardData } from '@/lib/shared/types/settings'
 import type { PostStatusEntity, PostTag } from '@/lib/shared/db-types'
 import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import {
@@ -54,8 +52,6 @@ interface FeedbackContainerProps {
    * every card — including infinite-scroll pages — and the submit CTA.
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
-  /** Welcome card to render above the post list. Undefined / disabled = hidden. */
-  welcomeCard?: PortalWelcomeCardData
 }
 
 export function FeedbackContainer({
@@ -73,7 +69,6 @@ export function FeedbackContainer({
   defaultBoardId,
   user,
   boardPermissions,
-  welcomeCard,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -163,6 +158,8 @@ export function FeedbackContainer({
     data: postsData,
     isFetching,
     isFetchingNextPage,
+    isPending,
+    isPlaceholderData,
     hasNextPage,
     fetchNextPage,
   } = usePublicPosts({
@@ -177,8 +174,12 @@ export function FeedbackContainer({
   })
 
   const posts = flattenPublicPosts(postsData)
-  // Show subtle loading indicator when fetching new filter results (not for pagination)
-  const isLoading = isFetching && !isFetchingNextPage
+  // Dim the list only during an actual filter transition (placeholderData is
+  // still showing the previous filter's results while the new ones load) —
+  // NOT on every background refetch (e.g. the SSE-adjacent/interval refetches
+  // that happen with fresh data already in cache), which used to dim the feed
+  // on any isFetching tick.
+  const isLoading = isFetching && isPlaceholderData && !isFetchingNextPage
 
   // Update list key only when loading completes to trigger animations
   // This ensures we animate the new data, not stale data during loading
@@ -317,8 +318,6 @@ export function FeedbackContainer({
     <div className="py-6">
       <div className="flex gap-8">
         <div className="flex-1 min-w-0">
-          <PortalWelcomeCard welcomeCard={welcomeCard} />
-
           <FeedbackHeader
             workspaceName={workspaceName}
             boards={boards}
@@ -358,7 +357,7 @@ export function FeedbackContainer({
           <PortalModerationSection enabled={canApprove} />
 
           <div className="mt-5">
-            {posts.length === 0 && !isLoading ? (
+            {posts.length === 0 && !isPending ? (
               activeSearch || activeFilterCount > 0 ? (
                 <p className="text-muted-foreground text-center py-8">
                   {intl.formatMessage({

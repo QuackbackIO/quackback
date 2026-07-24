@@ -10,6 +10,14 @@ import type { PortalNavConfig, PortalWelcomeCard } from '@/lib/shared/types/sett
 export interface PortalPreviewDraft {
   nav?: PortalNavConfig
   welcomeCard?: PortalWelcomeCard
+  /**
+   * The theme editor's live draft stylesheet (raw `:root { --font-sans: ...
+   * }` text, same shape as saved customCss). Exposed so useBrandingFont can
+   * dynamically load the family the admin is previewing — without this, the
+   * live preview would only ever load the last *saved* font, not the one
+   * currently being tried in the picker.
+   */
+  css?: string
 }
 
 const PreviewDraftContext = createContext<PortalPreviewDraft | null>(null)

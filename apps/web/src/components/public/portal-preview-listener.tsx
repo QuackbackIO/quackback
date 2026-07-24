@@ -50,8 +50,13 @@ export function PortalPreviewProvider({
 
   if (!enabled) return <>{children}</>
 
+  // Merge the raw draft css into the same context payload draft-aware
+  // components already read (see PortalPreviewDraft.css) — one channel for
+  // the branding page's live edits instead of a second context.
+  const draftWithCss: PortalPreviewDraft | null = draft || css ? { ...draft, css } : null
+
   return (
-    <PreviewDraftProvider value={draft}>
+    <PreviewDraftProvider value={draftWithCss}>
       {children}
       {css ? <style data-preview-override="">{css}</style> : null}
     </PreviewDraftProvider>
