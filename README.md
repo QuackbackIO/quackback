@@ -82,6 +82,19 @@ docker run -p 3000:3000 --env-file .env quackback
 
 Requires PostgreSQL and a Redis-compatible store. Set `DATABASE_URL` and `REDIS_URL` in `.env`. Migrations run automatically on startup.
 
+### Kubernetes
+
+```bash
+helm install quackback ./deploy/kubernetes/quackback \
+  --namespace quackback --create-namespace \
+  --set secretKey="$(openssl rand -base64 32)" \
+  --set baseUrl=https://feedback.example.com \
+  --set ingress.host=feedback.example.com \
+  --set ingress.tls.secretName=feedback-tls
+```
+
+See the [Helm chart guide](deploy/kubernetes/quackback/README.md) for full configuration, including running against an external database and object storage.
+
 ## Contributing
 
 See the [Contributing Guide](CONTRIBUTING.md) to get started.
