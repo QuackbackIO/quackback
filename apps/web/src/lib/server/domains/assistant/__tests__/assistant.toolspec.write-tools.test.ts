@@ -104,8 +104,30 @@ describe('set_attribute', () => {
     expect(spec.parents).toEqual(['conversation'])
   })
 
-  it('summarizes with the attribute key', () => {
-    expect(spec.summarize({ key: 'plan_tier', value: 'pro' })).toBe('Set attribute "plan_tier"')
+  it('summarizes with the attribute key and value', () => {
+    expect(spec.summarize({ key: 'plan_tier', value: 'pro' })).toBe('Set plan_tier to "pro"')
+    expect(spec.summarize({ key: 'seats', value: 5 })).toBe('Set seats to 5')
+    expect(spec.summarize({ key: 'tags', value: ['a', 'b'] })).toBe('Set tags to "a", "b"')
+  })
+
+  it('summarizes with the catalogue label and option labels when a context carries them', () => {
+    const ctx = {
+      attributeCatalogue: [
+        {
+          key: 'issue_type',
+          label: 'Issue type',
+          fieldType: 'select',
+          options: [{ id: 'bug', label: 'Bug' }],
+        },
+        { key: 'notes', label: 'Notes', fieldType: 'text' },
+      ],
+    } as unknown as Parameters<typeof spec.summarize>[1]
+    expect(spec.summarize({ key: 'issue_type', value: 'bug' }, ctx)).toBe('Set Issue type to Bug')
+    // Unknown option id and key-less-of-catalogue fall back to raw rendering.
+    expect(spec.summarize({ key: 'issue_type', value: 'other' }, ctx)).toBe(
+      'Set Issue type to "other"'
+    )
+    expect(spec.summarize({ key: 'notes', value: null }, ctx)).toBe('Clear Notes')
   })
 
   it('rejects a key over 100 characters', () => {

@@ -37,6 +37,7 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import { type ContentAudience } from './audience'
+import type { AssistantAttributeCatalogueEntry } from './prompt-catalogues'
 import {
   retrieveKnowledge,
   type RetrievedItem,
@@ -291,6 +292,14 @@ export interface AssistantToolContext {
    * on-behalf-of-teammate actor without touching the pipeline or executors.
    */
   actor: Actor
+  /**
+   * Live attribute definitions for this turn (the same catalogue the system
+   * prompt enumerates), so `summarize` can render set_attribute proposals with
+   * the workspace's friendly label and option labels instead of the raw
+   * key/ids. Undefined outside a real turn (e.g. the approved-action
+   * executor) — the summary then falls back to the raw key.
+   */
+  attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
 }
 
 /**
@@ -315,6 +324,7 @@ export function makeAssistantToolContext(init: {
   simulate?: boolean
   writeToolPolicy?: AssistantWriteToolPolicy
   actor?: Actor
+  attributeCatalogue?: readonly AssistantAttributeCatalogueEntry[]
 }): AssistantToolContext {
   return {
     db: init.db,
@@ -339,6 +349,7 @@ export function makeAssistantToolContext(init: {
     involvementId: init.involvementId ?? null,
     latestCustomerMessageId: init.latestCustomerMessageId ?? null,
     actor: init.actor ?? quinnActor(init.assistantPrincipalId),
+    attributeCatalogue: init.attributeCatalogue,
   }
 }
 
@@ -445,8 +456,10 @@ export interface AssistantToolSpec<In = unknown, Out = unknown> {
   /** The TanStack tool definition: model-facing name, description, and zod schemas. */
   definition: ToolDefinition<any, any, string>
   execute(args: In, ctx: AssistantToolContext): Promise<Out>
-  /** Human-readable one-liner for approval cards and the audit log. */
-  summarize(args: In): string
+  /** Human-readable one-liner for approval cards and the audit log. `ctx` lets
+   *  a summary resolve workspace-facing names (set_attribute's catalogue
+   *  labels); older call sites/tests may omit it — summaries must still work. */
+  summarize(args: In, ctx?: AssistantToolContext): string
   idempotencyKey?(args: In, ctx: AssistantToolContext): string
 }
 
@@ -1209,7 +1222,7 @@ function defineToolSpec<TDef extends ToolDefinition<any, any, string>>(spec: {
     args: InferToolInput<TDef>,
     ctx: AssistantToolContext
   ) => Promise<ToolSuccessOutput<TDef>>
-  summarize: (args: InferToolInput<TDef>) => string
+  summarize: (args: InferToolInput<TDef>, ctx?: AssistantToolContext) => string
   idempotencyKey?: (args: InferToolInput<TDef>, ctx: AssistantToolContext) => string
 }): AssistantToolSpec {
   return {
@@ -1297,7 +1310,26 @@ const SPECS: readonly AssistantToolSpec[] = [
     permissions: [PERMISSIONS.CONVERSATION_SET_ATTRIBUTES],
     definition: setAttributeTool,
     execute: executeSetAttribute,
-    summarize: (args) => `Set attribute "${args.key}"`,
+    // Friendly rendering: the definition's display label for the key, option
+    // labels for select/multi_select ids (the model passes ids, per the
+    // catalogue prompt), "Clear" for a null value. Falls back to the raw
+    // key/JSON when the turn has no catalogue (tests, approved-action replay).
+    summarize: (args, ctx) => {
+      const definition = ctx?.attributeCatalogue?.find((d) => d.key === args.key)
+      const name = definition?.label ?? args.key
+      if (args.value === null) return `Clear ${name}`
+      const renderValue = (value: unknown): string => {
+        if (typeof value === 'string' && definition?.options) {
+          const option = definition.options.find((o) => o.id === value)
+          if (option) return option.label
+        }
+        return JSON.stringify(value) ?? 'null'
+      }
+      const rendered = Array.isArray(args.value)
+        ? args.value.map(renderValue).join(', ')
+        : renderValue(args.value)
+      return `Set ${name} to ${rendered}`
+    },
     // No idempotencyKey override: the value is part of what makes a retry
     // distinct (a reformulated value must not dedupe against an earlier one),
     // and the default {conversationId}:{messageId}:{toolName}:{sha256(args)}

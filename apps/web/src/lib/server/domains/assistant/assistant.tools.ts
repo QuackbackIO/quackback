@@ -186,11 +186,11 @@ async function runWithPipeline(
     // anyway because a teammate asking Quinn a question about the
     // conversation must never let Quinn act in it (policy says preview).
     ctx.ledger.toolOutcomes.push({ name: spec.name, outcome: 'simulated' })
-    return { simulated: true, summary: spec.summarize(args) }
+    return { simulated: true, summary: spec.summarize(args, ctx) }
   }
 
   if (mode === 'propose') {
-    const summary = spec.summarize(args)
+    const summary = spec.summarize(args, ctx)
     // Polymorphic parent (unified inbox §3.3): whichever item this turn is
     // grounded on. `ctx.conversationId` wins when both happen to be set (never
     // true today — a turn grounds on exactly one item), matching every
@@ -305,7 +305,7 @@ async function executeAndFinalize(
     if (claimed) {
       await finalizeToolCall(claimed.id, {
         status: 'succeeded',
-        resultSummary: spec.summarize(args),
+        resultSummary: spec.summarize(args, ctx),
         latencyMs: Date.now() - startedAt,
       })
     }

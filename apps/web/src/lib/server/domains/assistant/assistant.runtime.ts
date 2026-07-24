@@ -1003,6 +1003,9 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   if (toolNames.has('set_attribute')) {
     try {
       attributeDefinitions = await listConversationAttributes()
+      // Same catalogue the prompt enumerates — lets set_attribute summaries
+      // render friendly labels on proposal cards instead of raw keys/ids.
+      toolContext.attributeCatalogue = attributeDefinitions
     } catch (error) {
       log.warn({ err: error }, 'attribute catalogue load failed; omitting set_attribute')
       const keep = activeSpecs.map((spec) => spec.name !== 'set_attribute')
