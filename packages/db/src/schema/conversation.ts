@@ -83,10 +83,13 @@ export const conversations = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    // The inbound channel this conversation arrived on. Required and set
-    // explicitly by every create path; no default, so a conversation on a new
-    // channel ('email' today) can never be silently labeled
-    // messenger by an omitted insert (the NOT NULL makes an omission fail loud).
+    // The channel this conversation is CURRENTLY conducted on — set by every
+    // create path and then promoted as the customer moves surfaces (a widget
+    // thread answered from a mailbox becomes 'email'). For the channel it
+    // ARRIVED on, which never changes, read `source` instead; anything asking a
+    // provenance question must use that column, not this one. No default, so a
+    // conversation on a new channel can never be silently labeled messenger by
+    // an omitted insert (the NOT NULL makes an omission fail loud).
     channel: text('channel', { enum: CHANNELS }).notNull(),
     // Agent-set triage priority. 'none' = unset (the default for every row).
     priority: text('priority', { enum: CONVERSATION_PRIORITIES }).notNull().default('none'),

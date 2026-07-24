@@ -40,7 +40,9 @@ export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 export type MessageSenderType = 'visitor' | 'agent' | 'system'
 /** A human side of a conversation — who acts (types, reads); 'system' is neither. */
 export type ConversationSide = Exclude<MessageSenderType, 'system'>
-/** How a conversation arrived — mirrors the conversations.channel column enum. */
+/** The surface a conversation is currently conducted on — mirrors the
+ *  conversations.channel column enum. It follows the customer between surfaces;
+ *  for how the thread originally arrived, read `source`. */
 export type Channel = 'messenger' | 'email'
 
 /**

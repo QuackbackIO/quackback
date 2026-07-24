@@ -9,6 +9,9 @@ import { ValidationError, ForbiddenError } from '@/lib/shared/errors'
 
 const insertedConversations: Record<string, unknown>[] = []
 const insertedMessages: Record<string, unknown>[] = []
+// The `.set()` payload of the post-insert conversation UPDATE — where the
+// active-channel promotion is written.
+const updatedConversations: Record<string, unknown>[] = []
 
 // vi.mock factories are hoisted above imports, so build the spy bag via
 // vi.hoisted so the factory below can close over it.
@@ -87,7 +90,10 @@ vi.mock('@/lib/server/db', () => {
       if (label === 'conversation_messages') insertedMessages.push(row)
       return c
     })
-    c.set = vi.fn(() => c)
+    c.set = vi.fn((row: Record<string, unknown>) => {
+      if (label === 'conversations') updatedConversations.push(row)
+      return c
+    })
     c.where = vi.fn(() => c)
     c.limit = vi.fn(async () => [])
     c.orderBy = vi.fn(() => c)
@@ -153,7 +159,43 @@ const visitorActor: Actor = {
 beforeEach(() => {
   insertedConversations.length = 0
   insertedMessages.length = 0
+  updatedConversations.length = 0
   vi.clearAllMocks()
+})
+
+// `conversations.channel` is the surface the thread is CURRENTLY on, not the one
+// it arrived on. It follows the customer, because every channel-dependent
+// delivery decision reads it — most importantly the presence gate in
+// notifyAgentReply, which must not treat an email customer's mailbox as a side
+// channel it can skip.
+describe('sendVisitorMessage active-channel promotion', () => {
+  // The send also issues a second conversation UPDATE for auto-routing, so match
+  // on the payload that actually carries a channel rather than on call order.
+  const channelWrites = () => updatedConversations.filter((u) => 'channel' in u)
+
+  it('promotes the conversation to the email channel for a message sent over email', async () => {
+    await sendVisitorMessage(
+      { content: 'Replying from my inbox', metadata: { source: 'email' } },
+      { principalId: visitor },
+      visitorActor
+    )
+
+    expect(channelWrites()).toHaveLength(1)
+    expect(channelWrites()[0].channel).toBe('email')
+  })
+
+  it('restores the messenger channel when the same customer answers in-product', async () => {
+    await sendVisitorMessage(
+      { content: 'back in the widget' },
+      { principalId: visitor },
+      visitorActor
+    )
+
+    // Deliberately bidirectional: a one-way latch would keep mailing someone who
+    // has moved back into the widget, on top of the in-app message they can see.
+    expect(channelWrites()).toHaveLength(1)
+    expect(channelWrites()[0].channel).toBe('messenger')
+  })
 })
 
 describe('sendVisitorMessage validation', () => {

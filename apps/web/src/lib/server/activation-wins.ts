@@ -63,7 +63,12 @@ export async function detectFirstWin(state: SetupState | null): Promise<FirstWin
       .from(conversations)
       .where(
         and(
-          eq(conversations.channel, 'messenger'),
+          // Keyed on `source` alone, deliberately. `channel` is now current
+          // state (a thread promotes to 'email' when the customer replies by
+          // mail), and this is evaluated at read time — so filtering on it would
+          // silently UN-REACH a genuine first win the moment that customer
+          // answered from their inbox. `source` is immutable provenance, which
+          // is the question this actually asks.
           eq(conversations.source, 'widget'),
           isNotNull(conversations.visitorPrincipalId),
           sql`coalesce(${conversations.customAttributes}->>'onboardingGenerated', 'false') <> 'true'`,

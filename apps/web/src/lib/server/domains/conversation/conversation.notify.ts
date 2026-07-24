@@ -407,8 +407,9 @@ export async function notifyConversationStarted(opts: {
  * Email a dedicated CSAT rating-request when a workflow's `request_csat`
  * block posts on a conversation whose active channel is EMAIL
  * (`conversations.channel === 'email'` — set only for a cold-inbound email
- * conversation, conversation.email-cold-inbound.ts; the widget/messenger
- * channels never set it). The in-app emoji row is inert in an email client,
+ * conversation, conversation.email-cold-inbound.ts, and PROMOTED onto any thread
+ * whose customer replies by mail — see sendVisitorMessage's channel write). The
+ * in-app emoji row is inert in an email client,
  * so this sends a parallel email with real, one-click emoji links
  * (packages/email's csat-request template) — action.executor.ts's send_block
  * csat case calls this (via a dynamic import, to keep the rarely-hit path out

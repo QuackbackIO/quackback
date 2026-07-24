@@ -411,6 +411,15 @@ export async function sendVisitorMessage(
             : resolvedAtForStatus(visitorNextStatus, message.createdAt),
         updatedAt: message.createdAt,
         ...(captureEmail ? { visitorEmail: captureEmail } : {}),
+        // `channel` is the surface this conversation is CURRENTLY conducted on,
+        // not the one it arrived on (that is `source`, which stays immutable
+        // provenance). A widget thread whose customer replies by email must
+        // become an email thread, or every channel-dependent decision downstream
+        // — notably the presence gate in notifyAgentReply — keeps treating their
+        // mailbox as a side channel and silently drops replies. Bidirectional on
+        // purpose: moving back into the widget must restore the presence gate,
+        // otherwise they would get an in-app message AND a redundant email.
+        channel: messageMetadata?.source === 'email' ? 'email' : 'messenger',
       })
       .where(eq(conversations.id, conversation.id))
       .returning()
