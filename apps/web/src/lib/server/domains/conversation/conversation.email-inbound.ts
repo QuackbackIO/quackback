@@ -6,6 +6,7 @@
  * path needs and strip quoted reply history so the stored message is only what
  * the visitor actually wrote.
  */
+import { realEmail } from '@/lib/shared/anonymous-email'
 
 /**
  * One decoded MIME attachment part (inline image or a discrete file). Produced
@@ -129,6 +130,22 @@ export function extractEmailAddress(raw: string | null): string | null {
   const at = candidate.indexOf('@')
   if (at <= 0 || at !== candidate.lastIndexOf('@') || at === candidate.length - 1) return null
   return candidate
+}
+
+/**
+ * The canonical form of an inbound sender: the bare lower-cased address, with
+ * synthetic anonymous placeholders screened out. Both halves are load-bearing —
+ * `extractEmailAddress` pulls the addr-spec out of a `Name <addr>` header, and
+ * `realEmail` rejects the never-deliverable `temp-<id>@anon.…` domain. Skipping
+ * either produces a DIFFERENT rate-limit key, a different stored contact and a
+ * different `visitorEmail` per display name, which is exactly how a throttle
+ * keyed on the sender becomes evadable by retyping your own name.
+ *
+ * The one place cold inbound answers "who is this from", so every caller that
+ * needs a sender address derives it here rather than re-composing the pair.
+ */
+export function normalizeSenderAddress(raw: string | null): string | null {
+  return realEmail(extractEmailAddress(raw))
 }
 
 /** Strip a single surrounding pair of angle brackets from a Message-ID token,

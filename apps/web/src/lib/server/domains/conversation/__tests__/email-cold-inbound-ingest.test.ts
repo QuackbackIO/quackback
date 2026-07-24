@@ -25,6 +25,7 @@ import {
   conversationMessages,
   principal,
   eq,
+  sql,
 } from '@/lib/server/db'
 import type { ParsedInboundEmail } from '../conversation.email-inbound'
 
@@ -38,6 +39,16 @@ vi.mock('../conversation.webhooks', async (orig) => ({
   ...(await orig<typeof import('../conversation.webhooks')>()),
   emitConversationCreated: vi.fn().mockResolvedValue(undefined),
   emitMessageCreated: vi.fn().mockResolvedValue(undefined),
+}))
+// The cold-inbound throttle is a real Redis bucket keyed on the sender address,
+// which this file's fixture hardcodes. Left live, the cases below would burn a
+// shared 10-per-hour budget and start failing as 'rate_limited' on repeated
+// local runs — a red suite that points nowhere near its cause. Count the calls
+// instead; the bucket arithmetic is pinned in conversation-ratelimit.test.ts.
+vi.mock('@/lib/server/utils/redis-rate-bucket', () => ({
+  incrementBucket: vi.fn().mockResolvedValue({ count: 1 }),
+  incrementBuckets: vi.fn().mockResolvedValue([1]),
+  bucketRetryAfter: vi.fn().mockResolvedValue(60),
 }))
 // Storage is mocked so media rehosting never touches real S3; the mock returns
 // own-storage URLs (config.baseUrl + /api/storage/...) so they pass the trusted-
@@ -56,6 +67,7 @@ vi.mock('@/lib/server/storage/s3', async (importOriginal) => {
 
 import { ingestParsedEmail } from '../conversation.email-inbound.service'
 import { emitMessageCreated } from '../conversation.webhooks'
+import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -235,5 +247,38 @@ describe.skipIf(!fixture.available)('cold-inbound ingest (real DB, rolled back)'
       coldEmail({ authenticationResults: 'mx; dmarc=fail (p=reject) header.from=acme.com' })
     )
     expect(res.status).toBe('suppressed')
+  })
+
+  // Cold inbound is the only ingress that mints a principal for an
+  // unauthenticated stranger, so the throttle has to bite BEFORE resolution —
+  // a gate placed after it has already let the row be created.
+  it('rate-limits a flooding sender without creating a principal or conversation', async () => {
+    await seedInboundRoute('support@quackback.io')
+    const [{ count: principalsBefore }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+    // Over the 10-per-hour cold budget.
+    vi.mocked(incrementBucket).mockResolvedValueOnce({ count: 11 })
+
+    const res = await ingestParsedEmail(coldEmail())
+
+    expect(res.status).toBe('rate_limited')
+    const [{ count: principalsAfter }] = await testDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(principal)
+    expect(principalsAfter).toBe(principalsBefore)
+    const convs = await testDb.select({ id: conversations.id }).from(conversations)
+    expect(convs).toHaveLength(0)
+  })
+
+  // An unparseable From has no key to throttle on, and used to mint a lead with
+  // a null contact email on a thread nobody could ever reply to.
+  it('drops an unparseable From before spending a rate-limit token', async () => {
+    await seedInboundRoute('support@quackback.io')
+
+    const res = await ingestParsedEmail(coldEmail({ from: 'not an address' }))
+
+    expect(res.status).toBe('from_mismatch')
+    expect(vi.mocked(incrementBucket)).not.toHaveBeenCalled()
   })
 })

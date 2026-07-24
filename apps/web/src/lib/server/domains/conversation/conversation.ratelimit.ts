@@ -34,3 +34,33 @@ export async function assertConversationSendRate(principalId: PrincipalId): Prom
     throw new ConversationRateLimitError(await bucketRetryAfter(spec))
   }
 }
+
+// Cold inbound is the one ingress with no principal to key on yet — the sender
+// is a stranger and the throttle's whole job is to bound how many strangers can
+// mint themselves. So it gets its own, far tighter budget: the send limit above
+// is a TYPING throttle (20 per 30s is generous for a person mid-conversation),
+// which as a ceiling on creating new people and new conversations is no limit
+// at all. Ten new threads an hour from one address is already well past what a
+// real customer does.
+const COLD_WINDOW_SECONDS = 3600
+const COLD_MAX = 10
+
+/**
+ * Throttle cold inbound email by SENDER ADDRESS — the gate on the only path
+ * that creates a principal and a conversation for an unauthenticated stranger.
+ * Without it, mailing the support address is an unbounded way to mint rows that
+ * nothing reclaims (the anonymous sweep deliberately skips anything owning a
+ * conversation, and every cold lead owns one).
+ *
+ * `senderEmail` must be the normalized bare address, not a raw From header:
+ * keying on the header would make the limit evadable by varying the display
+ * name. Throws the same ConversationRateLimitError the reply path throws, so
+ * the caller's existing catch handles it unchanged.
+ */
+export async function assertColdInboundRate(senderEmail: string): Promise<void> {
+  const spec = { key: `conversation:cold:${senderEmail}`, windowSeconds: COLD_WINDOW_SECONDS }
+  const { count } = await incrementBucket(spec)
+  if (count !== null && count > COLD_MAX) {
+    throw new ConversationRateLimitError(await bucketRetryAfter(spec))
+  }
+}

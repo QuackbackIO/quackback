@@ -16,6 +16,7 @@ const REPLY_TO = inboundReplyToAddress('conversation_abc')!
 
 const sendVisitorMessage = vi.fn()
 const assertConversationSendRate = vi.fn()
+const assertColdInboundRate = vi.fn()
 const getReceivedEmail =
   vi.fn<(...a: unknown[]) => Promise<{ text: string | null; html: string | null } | null>>()
 const resolveConversationByMessageIds = vi.fn<(...a: unknown[]) => Promise<string | null>>()
@@ -48,8 +49,11 @@ vi.mock('@quackback/email', async (importOriginal) => ({
   getReceivedEmail: (...a: unknown[]) => getReceivedEmail(...a),
 }))
 
+// No importOriginal spread: this factory REPLACES the module, so every export
+// the ingest path calls has to be listed here or it is undefined at call time.
 vi.mock('../conversation.ratelimit', () => ({
   assertConversationSendRate: (...a: unknown[]) => assertConversationSendRate(...a),
+  assertColdInboundRate: (...a: unknown[]) => assertColdInboundRate(...a),
   ConversationRateLimitError: class ConversationRateLimitError extends Error {
     readonly code = 'RATE_LIMITED'
     readonly retryAfter = 5
