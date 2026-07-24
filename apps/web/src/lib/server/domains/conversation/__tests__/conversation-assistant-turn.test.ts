@@ -298,6 +298,15 @@ describe('shouldConsiderAssistant', () => {
     )
   })
 
+  it('skips a ticket-intake backing conversation (source ticket_form, channel messenger)', () => {
+    expect(
+      shouldConsiderAssistant(
+        conversationRow({ channel: 'messenger', source: 'ticket_form' }) as never,
+        'open'
+      )
+    ).toBe(false)
+  })
+
   it('skips a thread a human deliberately closed', () => {
     expect(shouldConsiderAssistant(conversationRow() as never, 'closed')).toBe(false)
   })

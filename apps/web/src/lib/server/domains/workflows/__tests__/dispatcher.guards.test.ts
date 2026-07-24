@@ -121,7 +121,7 @@ describe('channelAllows', () => {
     const wf = workflowWithChannels(['messenger', 'email'])
     expect(channelAllows(wf, 'messenger')).toBe(true)
     expect(channelAllows(wf, 'email')).toBe(true)
-    expect(channelAllows(wf, 'web_form')).toBe(false)
+    expect(channelAllows(wf, 'sms')).toBe(false)
   })
 })
 

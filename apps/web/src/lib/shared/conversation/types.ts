@@ -41,7 +41,7 @@ export type MessageSenderType = 'visitor' | 'agent' | 'system'
 /** A human side of a conversation — who acts (types, reads); 'system' is neither. */
 export type ConversationSide = Exclude<MessageSenderType, 'system'>
 /** How a conversation arrived — mirrors the conversations.channel column enum. */
-export type Channel = 'messenger' | 'email' | 'web_form'
+export type Channel = 'messenger' | 'email'
 
 /**
  * @deprecated Migration-only shape. One weekday's availability window in the

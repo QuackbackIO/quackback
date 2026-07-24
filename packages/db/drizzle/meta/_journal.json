@@ -1429,6 +1429,13 @@
       "when": 1784900314886,
       "tag": "0220_drop_assistant_custom_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "7",
+      "when": 1784902535956,
+      "tag": "0221_remove_web_form_channel",
+      "breakpoints": true
     }
   ]
 }

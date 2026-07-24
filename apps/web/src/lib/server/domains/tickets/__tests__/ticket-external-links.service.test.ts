@@ -483,7 +483,7 @@ describe.skipIf(!fixture.available)('ticket-external-links.service (real DB, rol
       id: conversationId,
       // Seeded actors always resolve a principal (seedActor inserts one).
       visitorPrincipalId: actor.principalId!,
-      channel: 'web_form',
+      channel: 'messenger',
     })
     await testDb
       .insert(ticketConversations)

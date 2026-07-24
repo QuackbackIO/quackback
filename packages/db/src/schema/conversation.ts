@@ -85,7 +85,7 @@ export const conversations = pgTable(
       .default({}),
     // The inbound channel this conversation arrived on. Required and set
     // explicitly by every create path; no default, so a conversation on a new
-    // channel ('email' / 'web_form' / ...) can never be silently labeled
+    // channel ('email' today) can never be silently labeled
     // messenger by an omitted insert (the NOT NULL makes an omission fail loud).
     channel: text('channel', { enum: CHANNELS }).notNull(),
     // Agent-set triage priority. 'none' = unset (the default for every row).
@@ -117,7 +117,7 @@ export const conversations = pgTable(
     // follow-up. Agent-only; the principal itself stays anonymous.
     visitorEmail: text('visitor_email'),
     // The email inbound route this conversation arrived on (§4.8/§4.9). Null for
-    // messenger/web_form; set to the workspace's inbound channel_account for
+    // messenger; set to the workspace's inbound channel_account for
     // email. `set null` so a removed inbox leaves history rather than orphaning it.
     channelAccountId: typeIdColumnNullable('channel_account')('channel_account_id'),
     // The one active SLA applied to this conversation (§4.6 reserved seam), or

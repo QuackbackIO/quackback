@@ -130,8 +130,8 @@ export async function claimFrequencyCapSlot(
 
 /**
  * Whether the workflow's `triggerSettings.channels` allows `channel`. The
- * builder writes a non-empty array of channel values (messenger/email/
- * web_form) to scope a trigger to specific channels; empty means "all
+ * builder writes a non-empty array of channel values (messenger/email)
+ * to scope a trigger to specific channels; empty means "all
  * channels". Defensive by construction: a missing, non-array, or empty
  * `channels` (or an unresolvable `channel`) always allows.
  */

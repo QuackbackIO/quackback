@@ -332,7 +332,7 @@ describe('evaluateCondition — groups', () => {
     no({
       any: [
         { field: 'conversation.channel', op: 'eq', value: 'email' },
-        { field: 'conversation.channel', op: 'eq', value: 'web_form' },
+        { field: 'conversation.channel', op: 'eq', value: 'sms' },
       ],
     })
     ok({ any: [] }) // no constraint

@@ -7,7 +7,6 @@ import type { Channel } from '@/lib/shared/conversation/types'
 export const CHANNEL_LABEL: Record<Channel, string> = {
   messenger: 'Messenger',
   email: 'Email',
-  web_form: 'Web form',
 }
 
 /** Badge showing a non-default arrival channel; renders nothing for messenger. */

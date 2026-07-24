@@ -1708,7 +1708,7 @@ function assistantActor(principalId: PrincipalId): Actor {
  * CONVERGENCE PHASE 1b: a conversation PAIRED with a customer ticket (a
  * "backing conversation") is additionally gated out at the dispatch site via
  * `isPairedWithCustomerTicket` — an async probe, so it can't live in this sync
- * gate. Intake-created backing conversations also carry source 'web_form',
+ * gate. Intake-created backing conversations also carry source 'ticket_form',
  * which fails the check above on its own; the pair probe is what covers LEGACY
  * widget-source pairs (a messenger conversation linked after the fact).
  */

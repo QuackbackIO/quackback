@@ -88,8 +88,8 @@ export async function publishTicketUpdated(row: Ticket): Promise<TicketDTO> {
  * portal `createMyTicket`, the widget fn, API v1, MCP `create_ticket`), the
  * create transaction becomes:
  *
- *   ONE transaction: create the backing conversation (channel 'web_form',
- *   status 'open', `visitorPrincipalId` = the ticket's requester — the pair
+ *   ONE transaction: create the backing conversation (channel 'messenger',
+ *   source 'ticket_form', status 'open', `visitorPrincipalId` = the ticket's requester — the pair
  *   is identity-consistent by construction, so the Phase 1a delegates'
  *   ownership gates pass and requester replies land cleanly) → create the
  *   ticket → insert `ticket_conversations` (ticket_type 'customer'). A
@@ -198,11 +198,11 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
     // identity-consistent by construction — visitorPrincipalId IS the ticket's
     // requester. (Legacy edge, NOT this phase: a pre-1a pair can have
     // conversation.visitor ≠ ticket.requester; reconciling those is a
-    // documented follow-up.) Channel + source are 'web_form': the row arrived
-    // on a ticket intake form, not the messenger — the accurate origin also
-    // keeps shouldConsiderAssistant's widget-source gate from matching, a
-    // defense-in-depth layer under the primary pair-link Quinn gate
-    // (conversation.service.ts). waitingSince/visitorLastReadAt start at the
+    // documented follow-up.) Channel is 'messenger' with source
+    // 'ticket_form': the row arrived on a ticket intake form — the
+    // non-widget source keeps shouldConsiderAssistant's widget-source gate
+    // from matching, a defense-in-depth layer under the primary pair-link
+    // Quinn gate (conversation.service.ts). waitingSince/visitorLastReadAt start at the
     // intake instant — the requester just acted and is waiting on the team;
     // the opening-message pipeline below overwrites both with its own
     // message-time stamps when there is one.
@@ -213,8 +213,8 @@ export async function createTicketCore(input: CreateTicketInput, actor: Actor): 
         .insert(conversations)
         .values({
           visitorPrincipalId: input.requesterPrincipalId,
-          channel: 'web_form',
-          source: 'web_form',
+          channel: 'messenger',
+          source: 'ticket_form',
           status: 'open',
           subject: hasOpeningMessage
             ? preview(resolvedDescription || fallbackLabel, openingAttachments)

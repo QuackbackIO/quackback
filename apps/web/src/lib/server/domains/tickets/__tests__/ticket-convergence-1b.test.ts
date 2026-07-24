@@ -6,7 +6,8 @@
  *  - THE INTAKE TRANSACTION: every flagged customer-intake create (the
  *    portal/widget funnel `createMyTicket`, and the API v1 / MCP shape via
  *    `createTicket` with `withBackingConversation`) creates the backing
- *    conversation (web_form, open, visitor = requester) + ticket +
+ *    conversation (channel messenger / source ticket_form, open, visitor =
+ *    requester) + ticket +
  *    `ticket_conversations` link in ONE transaction — a mid-transaction
  *    failure persists nothing — and the opening message lands
  *    conversation-parented via the Phase 1a redirect.
@@ -269,8 +270,8 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(link).not.toBeNull()
       const conversation = await readConversation(link!.conversationId)
       expect(conversation.visitorPrincipalId).toBe(requesterP)
-      expect(conversation.channel).toBe('web_form')
-      expect(conversation.source).toBe('web_form')
+      expect(conversation.channel).toBe('messenger')
+      expect(conversation.source).toBe('ticket_form')
       expect(conversation.status).toBe('open')
       // Born waiting on the team; the requester's own read side is stamped.
       expect(conversation.waitingSince).not.toBeNull()
@@ -439,7 +440,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       const [, , emittedConversation] = convEmit.emitConversationCreated.mock.calls[0]
       const link = await readPairLink(dto.id as TicketId)
       expect(emittedConversation.id).toBe(link!.conversationId)
-      expect(emittedConversation.channel).toBe('web_form')
+      expect(emittedConversation.channel).toBe('messenger')
       // Native-flow parity: a conversation.created handler finds the full
       // opening context, not an empty thread.
       expect(messageVisibleAtDispatch).toBe(true)
@@ -610,7 +611,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(link).not.toBeNull()
       const conversation = await readConversation(link!.conversationId)
       expect(conversation.visitorPrincipalId).toBe(requesterP)
-      expect(conversation.channel).toBe('web_form')
+      expect(conversation.channel).toBe('messenger')
 
       // The opening message is the agent's summary, conversation-parented;
       // the pipeline claims the conversation for the filing principal — the

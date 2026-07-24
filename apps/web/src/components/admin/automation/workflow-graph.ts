@@ -309,7 +309,6 @@ export const CONDITION_FIELD_META: Record<ConditionField, ConditionFieldMeta> = 
     options: [
       { value: 'messenger', label: 'Messenger' },
       { value: 'email', label: 'Email' },
-      { value: 'web_form', label: 'Web form' },
     ],
   },
   'conversation.priority': { label: 'Priority', kind: 'choice', options: PRIORITY_OPTIONS },

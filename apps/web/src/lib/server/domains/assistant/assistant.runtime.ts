@@ -641,7 +641,7 @@ export interface ConversationGroundingFacts {
   subject: string | null
   /** open/snoozed/closed/... */
   status: string
-  /** messenger/email/web_form, or null when unknown. */
+  /** messenger/email, or null when unknown. */
   channel: string | null
 }
 

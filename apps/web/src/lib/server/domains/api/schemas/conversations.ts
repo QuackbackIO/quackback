@@ -27,7 +27,7 @@ export const ConversationSchema = z.object({
     description: 'Current conversation status',
     example: 'open',
   }),
-  channel: z.enum(['messenger', 'email', 'web_form']).meta({
+  channel: z.enum(['messenger', 'email']).meta({
     description: 'Channel the conversation arrived on',
     example: 'messenger',
   }),

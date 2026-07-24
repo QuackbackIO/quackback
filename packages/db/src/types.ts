@@ -575,10 +575,12 @@ export const AGENT_AVAILABILITY_VALUES = ['online', 'away'] as const
 export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 
 // The inbound channel a conversation arrived on — kept in sync with the
-// conversations.channel column enum. Pre-rename widget threads default to
-// 'messenger'; 'email' and 'web_form' are wired up in later phases. This keeps
-// one polymorphic conversation object with a channel field, not a per-channel table.
-export const CHANNELS = ['messenger', 'email', 'web_form'] as const
+// conversations.channel column enum. Widget threads are 'messenger' (ticket
+// intake forms mint messenger-channel backing conversations with source
+// 'ticket_form'); 'email' threads point at their inbound channel account.
+// This keeps one polymorphic conversation object with a channel field, not
+// a per-channel table.
+export const CHANNELS = ['messenger', 'email'] as const
 export type Channel = (typeof CHANNELS)[number]
 
 // Agent-set conversation priority for inbox triage — kept in sync with the
