@@ -57,7 +57,10 @@ const SENTIMENT_PROMPT = `Classify the sentiment of this customer feedback as po
 - neutral: Factual request, question, neutral information
 - negative: Frustrated, complaining, reporting issues
 
-Respond with only JSON: {"sentiment": "positive" | "neutral" | "negative", "confidence": 0.0-1.0}`
+Respond with ONLY a single JSON object, no preamble or code fence: {"sentiment": "positive" | "neutral" | "negative", "confidence": 0.0-1.0}
+
+Example output:
+{"sentiment": "negative", "confidence": 0.85}`
 
 const MAX_CONTENT_LENGTH = 3000
 

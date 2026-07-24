@@ -57,7 +57,10 @@ Rules for "summary" (2-4 sentences):
 - Note how it was resolved, or that it was not.
 - Write for a future AI agent that needs just enough context to avoid asking the customer to repeat themselves, not a full transcript replay.
 - BAD: "The customer had a billing question."
-- GOOD: "Customer was double-charged for their March invoice after a plan upgrade; refunded $40 and confirmed by the customer."`
+- GOOD: "Customer was double-charged for their March invoice after a plan upgrade; refunded $40 and confirmed by the customer."
+
+Example output:
+{"summary": "Customer was double-charged for their March invoice after a plan upgrade; refunded $40 and confirmed by the customer."}`
 
 const ConversationSummarySchema = z.object({ summary: z.string() })
 

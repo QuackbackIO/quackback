@@ -83,7 +83,14 @@ Rules for "keyQuotes" (0-2):
 Rules for "nextSteps" (0-2):
 - Start each with a verb: "Investigate...", "Reproduce...", "Respond to..."
 - Only include when the discussion has enough specificity for a real action.
-- Never include generic advice like "Consider user feedback."`
+- Never include generic advice like "Consider user feedback."
+
+Example output:
+{
+  "summary": "CSV exports silently drop columns with special characters, affecting 3 users. Team acknowledged but no fix timeline given.",
+  "keyQuotes": ["Half our accounting columns just vanish from the export..."],
+  "nextSteps": ["Reproduce the export with non-ASCII column headers"]
+}`
 
 interface PostSummaryJson {
   summary: string

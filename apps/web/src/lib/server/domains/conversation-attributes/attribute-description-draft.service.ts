@@ -37,7 +37,15 @@ const DRAFT_SYSTEM_PROMPT = `You help an admin write descriptions for a customer
 Write ONE short description for the attribute itself, explaining what it captures.
 For EACH option, write a short description following this template: when it applies, when it does NOT apply, and 1-2 phrases a customer might typically use that indicate it. Keep each description under 300 characters.
 
-Respond with ONLY a single JSON object of this exact shape, and nothing else: {"attributeDescription": string, "options": [{"label": string, "description": string}]}. Include exactly one entry per option label given, using the exact label text given, in any order.`
+Respond with ONLY a single JSON object of this exact shape, and nothing else: {"attributeDescription": string, "options": [{"label": string, "description": string}]}. Include exactly one entry per option label given, using the exact label text given, in any order.
+
+Example output:
+{
+  "attributeDescription": "The area of the product the conversation is about.",
+  "options": [
+    {"label": "Billing", "description": "Applies to invoices, charges, refunds, or plan changes. Does NOT apply to questions about product features. Typical phrases: \\"I was charged twice\\", \\"update my card\\"."}
+  ]
+}`
 
 export interface DraftAttributeDescriptionsInput {
   label: string

@@ -132,6 +132,8 @@ export function buildTransformSystemPrompts(
     '- Keep any inline formatting already present (citation markers like [1], bullet or numbered lists, **bold**) unless the task above specifically requires removing it.',
     '- Reply with the rewritten text only: no preamble, no commentary, no surrounding quotation marks.',
     'Respond with ONLY a single JSON object of this exact shape: {"text": string}. Put the rewritten text inside "text".',
+    'Example output:',
+    '{"text": "Thanks for flagging this! I\'ve refunded the duplicate charge, and you\'ll see it back on your card within 3-5 business days."}',
   ].join('\n')
 
   const blocks = [instructions]

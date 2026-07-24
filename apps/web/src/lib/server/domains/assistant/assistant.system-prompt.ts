@@ -97,6 +97,8 @@ export interface AssistantRolePolicy {
   inabilitySemantics: 'cannot_answer'
   textAudience: 'customer' | 'teammate'
   responseContract: string
+  /** A concrete instance of the contract, shown to the model as a few-shot example. */
+  responseExample: string
 }
 
 export interface AssistantPromptBuildResult {
@@ -107,8 +109,14 @@ export interface AssistantPromptBuildResult {
 const CUSTOMER_RESPONSE_CONTRACT =
   '{"text": string, "citations": [{"type": "article"|"post"|"snippet"|"summary", "id": string}]}'
 
+const CUSTOMER_RESPONSE_EXAMPLE =
+  '{"text": "You can export your workspace data from Settings under Data Export [1]. The export arrives by email as a ZIP within a few minutes.", "citations": [{"type": "article", "id": "art_01h4kxt2e8z9y3b1n72k9q5m8p"}]}'
+
 const COPILOT_RESPONSE_CONTRACT =
   '{"text": string, "citations": [{"type": "article"|"post"|"snippet"|"summary", "id": string}], "answerType": "draft_reply"|"analysis"}'
+
+const COPILOT_RESPONSE_EXAMPLE =
+  '{"text": "Hi! Data export lives in Settings under Data Export [1]. You\'ll get a ZIP by email within a few minutes.", "citations": [{"type": "article", "id": "art_01h4kxt2e8z9y3b1n72k9q5m8p"}], "answerType": "draft_reply"}'
 
 /** Every role must decide every behavioral axis in one compiler-checked record. */
 export const ASSISTANT_ROLE_POLICIES: Readonly<Record<AssistantPromptRole, AssistantRolePolicy>> = {
@@ -120,6 +128,7 @@ export const ASSISTANT_ROLE_POLICIES: Readonly<Record<AssistantPromptRole, Assis
     inabilitySemantics: 'cannot_answer',
     textAudience: 'customer',
     responseContract: CUSTOMER_RESPONSE_CONTRACT,
+    responseExample: CUSTOMER_RESPONSE_EXAMPLE,
   },
   copilot_qa: {
     customerVoice: false,
@@ -129,6 +138,7 @@ export const ASSISTANT_ROLE_POLICIES: Readonly<Record<AssistantPromptRole, Assis
     inabilitySemantics: 'cannot_answer',
     textAudience: 'teammate',
     responseContract: COPILOT_RESPONSE_CONTRACT,
+    responseExample: COPILOT_RESPONSE_EXAMPLE,
   },
 }
 
@@ -152,7 +162,7 @@ function normalizeSystemValue(value: string, fallback: string, maxLength: number
   return escapeElementContent(bounded)
 }
 
-function buildPlatformPolicyMessage(responseContract: string): string {
+function buildPlatformPolicyMessage(responseContract: string, responseExample: string): string {
   return `# Instruction priority
 Follow instructions in this order:
 1. This platform policy and the final response contract.
@@ -241,6 +251,9 @@ preamble, commentary, or markdown code fence.
 
 Use exactly the response-content shape resolved for your active role:
 ${responseContract}
+
+Example output (illustrative content; ids always come from real tool results):
+${responseExample}
 
 Put the entire person-facing reply in text. Actions never belong in this object; perform every
 action through a tool before the final response.
@@ -394,7 +407,7 @@ function composeAssistantSystemMessages(
   rolePolicy: AssistantRolePolicy
 ): string[] {
   const messages = [
-    buildPlatformPolicyMessage(rolePolicy.responseContract),
+    buildPlatformPolicyMessage(rolePolicy.responseContract, rolePolicy.responseExample),
     buildAssistantRoleProfile(input.role, input),
     buildToolGuidanceMessage(input.role, input.tools),
   ]

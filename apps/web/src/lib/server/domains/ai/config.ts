@@ -105,11 +105,17 @@ export function stripCodeFences(text: string): string {
  * one the upstream providers advertise. Cap output with `max_tokens`, not
  * `max_completion_tokens` — no OpenRouter provider lists the latter, so pairing
  * it with this option routes to zero endpoints (a 404 "no endpoints found").
+ *
+ * `AI_REQUIRE_PARAMETERS=false` disables the gate. Escape hatch for models
+ * whose providers don't advertise `response_format` at all — with the gate on,
+ * every structured request to such a model 404s; with it off, the request goes
+ * through unconstrained and output quality rests on prompt hardening and the
+ * salvage parsers. Leave unset unless a model has no schema-capable provider.
  */
 export function structuredOutputProviderOptions(): {
   provider?: { require_parameters: true }
 } {
-  return config.openaiBaseUrl?.includes('openrouter.ai')
+  return config.openaiBaseUrl?.includes('openrouter.ai') && config.aiRequireParameters !== false
     ? { provider: { require_parameters: true } }
     : {}
 }

@@ -63,7 +63,19 @@ Rules:
 - "reasoning" is a 1-sentence summary shown to product managers. Describe the shared customer need — e.g. "Both request the ability to export data as PDF." NEVER use labels like "source post", "candidate post", "Post A", "Post B", or "reference post". Just describe what the posts have in common.
 - Be VERY conservative: when in doubt, mark isDuplicate as false.
 - NOT duplicates: posts about the same product/area but different features, posts with overlapping keywords but different actual requests, posts that are merely related or in the same category.
-- Example: "Add dark mode to the dashboard" and "Support dark theme across the app" ARE duplicates (same request). "Add dark mode" and "Improve dashboard loading speed" are NOT (same area, different requests).`
+- Example: "Add dark mode to the dashboard" and "Support dark theme across the app" ARE duplicates (same request). "Add dark mode" and "Improve dashboard loading speed" are NOT (same area, different requests).
+
+Example output (one entry per comparison post, "candidatePostId" copied verbatim from its listed id):
+{
+  "results": [
+    {
+      "candidatePostId": "post_01h4kxt2e8z9y3b1n72k9q5m8p",
+      "isDuplicate": true,
+      "confidence": 0.9,
+      "reasoning": "Both request the ability to export data as PDF."
+    }
+  ]
+}`
 
 interface PostInfo {
   id: PostId

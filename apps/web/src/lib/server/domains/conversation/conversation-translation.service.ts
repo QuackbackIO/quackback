@@ -138,7 +138,9 @@ export function sameLanguage(a: string | null | undefined, b: string | null | un
 export function buildLanguageDetectionPrompt(text: string): { system: string; user: string } {
   const system = `You identify the primary language of customer support messages.
 Respond with strict JSON only: {"language": "<BCP-47 tag or null>"}.
-Use a short tag (e.g. "en", "fr", "pt"). If you genuinely cannot tell, respond {"language": null}.`
+Use a short tag (e.g. "en", "fr", "pt"). If you genuinely cannot tell, respond {"language": null}.
+Example output:
+{"language": "fr"}`
   // The customer's own message is untrusted input, not instructions — wrap it
   // the same way copilot-transform.ts quotes a teammate's text (injection-guard.ts).
   const user = wrapUntrustedText('Customer message', text.slice(0, DETECTION_TEXT_CHAR_LIMIT))
@@ -152,7 +154,9 @@ export function buildInboxTranslationPrompt(input: { text: string; targetLocale:
   const system = `You are a professional translator for live customer-support conversations.
 Translate the given text into the locale "${input.targetLocale}". Preserve tone and meaning;
 do not add commentary, greetings, or explanations that are not present in the source text.
-Return strict JSON only: {"content": "string"}`
+Return strict JSON only: {"content": "string"}
+Example output:
+{"content": "Merci de nous avoir signalé ce problème. Nous avons remboursé le double prélèvement."}`
   // Both directions feed genuinely untrusted text through this one builder
   // (a customer's message on the incoming path, a teammate's own text on the
   // outgoing one) — wrap it the same way copilot-transform.ts quotes text to

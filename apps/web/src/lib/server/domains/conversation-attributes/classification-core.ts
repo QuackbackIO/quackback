@@ -39,7 +39,15 @@ Rules:
 - Give one short sentence of reasoning per attribute, naming what in the transcript supports (or fails to support) your decision.
 - Include exactly one result per attribute key you were given, in any order.
 
-Respond with ONLY a single JSON object of this exact shape, and nothing else: {"results": [{"key": string, "optionId": string | null, "reasoning": string}]}`
+Respond with ONLY a single JSON object of this exact shape, and nothing else: {"results": [{"key": string, "optionId": string | null, "reasoning": string}]}
+
+Example output (keys and option ids copied verbatim from the supplied definitions):
+{
+  "results": [
+    {"key": "issue_type", "optionId": "opt_billing", "reasoning": "The customer reports a double charge on their invoice."},
+    {"key": "urgency", "optionId": null, "reasoning": "Nothing in the transcript indicates how time-sensitive this is."}
+  ]
+}`
 
 export interface ClassificationOptionInput {
   id: string

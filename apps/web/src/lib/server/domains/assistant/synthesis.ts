@@ -112,7 +112,11 @@ export function buildAskAiSystemPrompts(articles: RetrievedKbArticle[]): string[
     '- Plain sentences. You may use "- " bullet lists or "1. " numbered lists for steps, and **bold** for key UI labels. No headings, no tables, no HTML, and no links other than the [n] citation markers.',
     'Security:',
     `- ${ASK_AI_USER_MESSAGE_GUARD}`,
-    'Respond with JSON of the shape {"kind": "grounded" | "no_answer", "answer": string, "sources": [{"articleId": string}]}, where "answer" is the prose (with inline [n] markers when grounded) and "sources" is the ordered citation list.',
+    'Respond with ONLY a single JSON object and nothing else — no preamble, commentary, or markdown code fence — of the shape {"kind": "grounded" | "no_answer", "answer": string, "sources": [{"articleId": string}]}, where "answer" is the prose (with inline [n] markers when grounded) and "sources" is the ordered citation list.',
+    'Example output, grounded (articleId copied verbatim from a source article):',
+    '{"kind": "grounded", "answer": "You can export your data from **Settings** [1]. The export arrives by email as a ZIP [1].", "sources": [{"articleId": "art_01h4kxt2e8z9y3b1n72k9q5m8p"}]}',
+    'Example output, no answer:',
+    '{"kind": "no_answer", "answer": "I could not find anything about SSO certificate rotation in our help articles. Try rephrasing your question, or reach out to the team for a hand.", "sources": []}',
   ].join('\n')
 
   const sources = articles

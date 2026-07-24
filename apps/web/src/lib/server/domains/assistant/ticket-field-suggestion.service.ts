@@ -84,7 +84,15 @@ Rules:
 - Checkbox fields: answer true only when the transcript clearly says the condition holds; otherwise omit the field.
 - The title is one short line naming the customer's problem or request, written as a label, not a full-sentence quote.
 
-Respond with ONLY a single JSON object of this exact shape, and nothing else: {"title": string (optional), "<field key>": value, ...}`
+Respond with ONLY a single JSON object of this exact shape, and nothing else: {"title": string (optional), "<field key>": value, ...}
+
+Example output (field keys copied verbatim from the supplied definitions; unsupported fields omitted):
+{
+  "title": "Double charge on March invoice",
+  "category": "Billing",
+  "occurred_on": "2026-03-14",
+  "is_blocking": true
+}`
 
 /** A suggested value is always one of the field schema's canonical stored
  *  types (string for text/long_text/select/date + the title, number, boolean)

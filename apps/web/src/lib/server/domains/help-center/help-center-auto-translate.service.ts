@@ -60,6 +60,13 @@ Return strict JSON only:
   "title": "string",
   "description": "string",
   "content": "string"
+}
+
+Example output:
+{
+  "title": "Exporter vos données",
+  "description": "Comment exporter les données de votre espace de travail.",
+  "content": "# Exporter vos données\\n\\nOuvrez **Paramètres** et choisissez *Exporter*."
 }`
 
   const user = JSON.stringify({

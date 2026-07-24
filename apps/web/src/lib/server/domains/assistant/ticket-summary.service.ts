@@ -62,7 +62,10 @@ Rules for "summary" (2-4 sentences):
 - Note how it was resolved: the fix, the workaround, or that it was closed without one.
 - Write for a future AI copilot that needs just enough context to reuse the resolution, not a full transcript replay.
 - BAD: "The customer had a login issue."
-- GOOD: "SSO login failed with a 'redirect_uri mismatch' after the customer changed their Okta domain; resolved by re-adding the new callback URL in the SSO settings."`
+- GOOD: "SSO login failed with a 'redirect_uri mismatch' after the customer changed their Okta domain; resolved by re-adding the new callback URL in the SSO settings."
+
+Example output:
+{"summary": "SSO login failed with a 'redirect_uri mismatch' after the customer changed their Okta domain; resolved by re-adding the new callback URL in the SSO settings."}`
 
 const TicketSummarySchema = z.object({ summary: z.string() })
 
