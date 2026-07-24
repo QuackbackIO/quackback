@@ -10,8 +10,16 @@
  * (`appendAssistantReply`, `executeAssistantHandoff`). That direction of the
  * assistant<->conversation cycle is adjudicated and recorded in GRAPH.md.
  */
-import { db, and, eq, isNull, desc, conversationMessages } from '@/lib/server/db'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import {
+  db,
+  and,
+  eq,
+  isNull,
+  desc,
+  conversationMessages,
+  type AssistantHandoffReason,
+} from '@/lib/server/db'
+import type { AssistantInvolvementId, ConversationId, PrincipalId } from '@quackback/ids'
 import type { ConversationMessageCitation } from '@/lib/shared/conversation/types'
 import type { ConversationAuthorInput } from '@/lib/server/domains/conversation/conversation.types'
 import {
@@ -34,7 +42,6 @@ import {
   getAssistantPrincipal,
   loadConversationThread,
   mapRowsToThreadMessages,
-  getActiveInvolvement,
   getLatestInvolvement,
   openInvolvement,
   voidAssumedResolutionForConversation,
@@ -154,8 +161,20 @@ export async function runAssistantTurnForConversation(
 
   // A returning customer revives an assumed-resolved involvement rather than
   // opening a new one; reuse the revived row as the active one when present.
+  // One latest-row read answers both involvement questions below: a
+  // conversation has at most one active involvement and it is always the most
+  // recently created row (openInvolvement only inserts when none is active;
+  // every other transition updates in place), so `latest.status` alone says
+  // whether Quinn is engaged ('active') and whether it bowed out ('handed_off').
   const revived = await voidAssumedResolutionForConversation(conversationId)
-  const active = revived ?? (await getActiveInvolvement(conversationId))
+  const latest = revived ?? (await getLatestInvolvement(conversationId))
+  const active = latest?.status === 'active' ? latest : null
+
+  // Handoff silence: once Quinn hands a conversation to the team, the team
+  // owns it — including the window before a teammate's first reply, which the
+  // message-based silence rule above cannot see. Quinn never re-enters on its
+  // own; a workflow step is the explicit re-engagement path and bypasses this.
+  if ((opts?.surface ?? 'widget') === 'widget' && latest?.status === 'handed_off') return
 
   // The customer message this turn answers, for the write-tool idempotency
   // key: a retried turn over the same message must key the same way. In-memory
@@ -173,13 +192,14 @@ export async function runAssistantTurnForConversation(
   // carries the FULL clean answer so far, reset per attempt via the `thinking`
   // activity, so a retry or a dropped frame self-heals.
   let streamed = ''
-  // The live preview is OPTIMISTIC: completion validation only runs once an
-  // attempt finishes, so a streamed answer can still be rejected server-side.
-  // Once that happens the customer has already watched one answer get
-  // retracted — streaming a second candidate that could ALSO be retracted
-  // reads as the bot answering twice. From the first invalidation on, the
-  // turn goes preview-silent: activity statuses keep the typing indicator
-  // alive and the retry's answer arrives once, as the validated final reply.
+  // The live preview is OPTIMISTIC: an attempt can still fail after its text
+  // streamed (a structural rejection of the decoded output, or a transport
+  // error that forces a re-dial). Once that happens the customer has already
+  // watched one answer get retracted — streaming a second candidate that could
+  // ALSO be retracted reads as the bot answering twice. From the first
+  // invalidation on, the turn goes preview-silent: activity statuses keep the
+  // typing indicator alive and the retry's answer arrives once, as the final
+  // reply.
   let previewSilent = false
   // Coalesce delta publishes: each carries the FULL answer so far, so publishing
   // on every fragment is O(N^2) bytes + one Redis publish per token. Throttle to
@@ -201,8 +221,8 @@ export async function runAssistantTurnForConversation(
   }
 
   // The finally is the single place the snapshot is cleared: every exit —
-  // suppressed, hand-off, answered, or a throw from any of the persistence
-  // writes — must leave no stale trace for a later subscriber to replay.
+  // suppressed, hand-off, answered, or the failure floor below — must leave
+  // no stale trace for a later subscriber to replay.
   try {
     const result = await runAssistantTurn({
       messages,
@@ -258,7 +278,7 @@ export async function runAssistantTurnForConversation(
     // citations. Retrieval should prevent this upstream; persistence also
     // fails closed so a future source cannot silently weaken the boundary.
     if (result.internalSourced) {
-      throw new Error('refusing to persist an internal-sourced customer reply')
+      throw new InternalSourcedReplyError()
     }
 
     // A substantive answer or escalation engages Quinn and needs an
@@ -299,11 +319,13 @@ export async function runAssistantTurnForConversation(
       // handoff_to_human was called during the agentic cycle. The model's own
       // final text is already persisted above; apply the requested operation
       // and its internal audit note without replacing that text server-side.
-      await Promise.all([
-        recordHandoff(involvement.id, result.escalation.reason),
-        appendAssistantHandoffNote(conversationId, result.escalation, author),
-        executeAssistantHandoff(conversationId, result.escalation.reason, author),
-      ])
+      await escalateToHuman(
+        conversationId,
+        involvement.id,
+        result.escalation.reason,
+        author,
+        result.escalation
+      )
       return
     }
 
@@ -322,9 +344,96 @@ export async function runAssistantTurnForConversation(
         })),
       })
     }
+  } catch (err) {
+    // An abort is a cancellation, not a failure, and must not escalate.
+    if (err instanceof Error && err.name === 'AbortError') throw err
+    // The leak guard gets its own log line: an internal-content near-miss is a
+    // different operational event than a provider failure, even though both
+    // resolve the same way for the customer (a human takes over).
+    if (err instanceof InternalSourcedReplyError) {
+      log.error({ conversationId }, 'internal-sourced reply blocked; escalating to a human')
+    } else {
+      log.error({ err, conversationId }, 'assistant turn failed; escalating to a human')
+    }
+    try {
+      await runAssistantFailureFloor(conversationId, assistantPrincipalId)
+    } catch (floorErr) {
+      // A broken floor must stay observable: log it and surface the ORIGINAL
+      // failure to the caller's catch instead of masking it with the floor's.
+      log.error({ err: floorErr, conversationId }, 'assistant failure floor could not hand off')
+      throw err
+    }
   } finally {
     await clearActivitySnapshot(conversationId)
   }
+}
+
+/** The defense-in-depth leak guard's own error type, so the failure floor can
+ *  log it distinctly from an ordinary provider failure. */
+class InternalSourcedReplyError extends Error {
+  constructor() {
+    super('refusing to persist an internal-sourced customer reply')
+  }
+}
+
+/**
+ * Failure floor: a hard turn failure must not strand the customer with a
+ * vanished typing indicator and no reply. There is no model-authored text to
+ * persist — and the server never authors words as Quinn — so the honest
+ * terminal outcome is a human handoff: executeAssistantHandoff opens and
+ * routes the conversation, and its system message ("Connecting you to the
+ * team") is what the customer sees. Deliberately NOT surface-scoped: a
+ * workflow-step turn serves the same waiting customer, so its failure
+ * escalates identically.
+ */
+async function runAssistantFailureFloor(
+  conversationId: ConversationId,
+  assistantPrincipalId: PrincipalId
+): Promise<void> {
+  // Re-check ownership at floor time with FRESH reads (never state from the
+  // failed turn): a human may have replied and another turn may have handed
+  // off while this one was failing. Either way the conversation is in human
+  // hands and the floor must stay out.
+  const rowsNow = await loadConversationThread(conversationId)
+  const messagesNow = mapRowsToThreadMessages(rowsNow, assistantPrincipalId)
+  if (!respondEligible(messagesNow)) return
+  // One latest-row read answers both involvement questions — same invariant
+  // as the pre-turn gate.
+  const latest = await getLatestInvolvement(conversationId)
+  if (latest?.status === 'handed_off') return
+  const involvement =
+    latest?.status === 'active'
+      ? latest
+      : await openInvolvement({ conversationId, triggeredBy: 'first_touch' })
+  await escalateToHuman(conversationId, involvement.id, 'system_error', {
+    principalId: assistantPrincipalId,
+  })
+}
+
+/**
+ * Terminal escalation shared by the model-led handoff and the failure floor.
+ * recordHandoff is the compare-and-set gate: when it loses (a concurrent turn
+ * already ended the involvement), every conversation-side effect is skipped,
+ * so the customer can never see a second "Connecting you to the team".
+ */
+async function escalateToHuman(
+  conversationId: ConversationId,
+  involvementId: AssistantInvolvementId,
+  reason: AssistantHandoffReason,
+  author: ConversationAuthorInput,
+  note?: {
+    reason: string
+    customerNeed: string
+    attempted: string[]
+    recommendedNextStep: string
+  }
+): Promise<void> {
+  const handed = await recordHandoff(involvementId, reason)
+  if (!handed) return
+  await Promise.all([
+    ...(note ? [appendAssistantHandoffNote(conversationId, note, author)] : []),
+    executeAssistantHandoff(conversationId, reason, author),
+  ])
 }
 
 /**

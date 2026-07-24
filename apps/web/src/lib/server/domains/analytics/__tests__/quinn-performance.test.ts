@@ -11,6 +11,7 @@ describe('summarizeQuinnPerformance', () => {
       resolvedAssumed: 0,
       resolutionRate: 0,
       handedOff: 0,
+      systemErrors: 0,
       escalationRate: 0,
       actionsTaken: 0,
       dailyTrend: [],
@@ -19,10 +20,22 @@ describe('summarizeQuinnPerformance', () => {
 
   it('computes the resolution rate as (confirmed + assumed) / involvements', () => {
     const rows = [
-      { status: 'resolved_confirmed' as const, createdAt: '2026-06-01T10:00:00Z' },
-      { status: 'resolved_assumed' as const, createdAt: '2026-06-01T11:00:00Z' },
-      { status: 'active' as const, createdAt: '2026-06-01T12:00:00Z' },
-      { status: 'handed_off' as const, createdAt: '2026-06-01T13:00:00Z' },
+      {
+        status: 'resolved_confirmed' as const,
+        handoffReason: null,
+        createdAt: '2026-06-01T10:00:00Z',
+      },
+      {
+        status: 'resolved_assumed' as const,
+        handoffReason: null,
+        createdAt: '2026-06-01T11:00:00Z',
+      },
+      { status: 'active' as const, handoffReason: null, createdAt: '2026-06-01T12:00:00Z' },
+      {
+        status: 'handed_off' as const,
+        handoffReason: 'low_confidence',
+        createdAt: '2026-06-01T13:00:00Z',
+      },
     ]
     const s = summarizeQuinnPerformance(rows, 4, 0)
     expect(s.involvements).toBe(4)
@@ -36,6 +49,7 @@ describe('summarizeQuinnPerformance', () => {
   it('computes the involvement rate against total conversations in range', () => {
     const rows = Array.from({ length: 4 }, () => ({
       status: 'active' as const,
+      handoffReason: null,
       createdAt: '2026-06-01T10:00:00Z',
     }))
     const s = summarizeQuinnPerformance(rows, 10, 0)
@@ -55,8 +69,12 @@ describe('summarizeQuinnPerformance', () => {
 
   it('ignores abandoned involvements in the resolution/escalation numerators', () => {
     const rows = [
-      { status: 'abandoned' as const, createdAt: '2026-06-01T10:00:00Z' },
-      { status: 'resolved_confirmed' as const, createdAt: '2026-06-01T11:00:00Z' },
+      { status: 'abandoned' as const, handoffReason: null, createdAt: '2026-06-01T10:00:00Z' },
+      {
+        status: 'resolved_confirmed' as const,
+        handoffReason: null,
+        createdAt: '2026-06-01T11:00:00Z',
+      },
     ]
     const s = summarizeQuinnPerformance(rows, 2, 0)
     expect(s.resolvedConfirmed).toBe(1)
@@ -65,11 +83,44 @@ describe('summarizeQuinnPerformance', () => {
     expect(s.escalationRate).toBe(0)
   })
 
+  it('keeps failure-floor handoffs out of the quality-facing escalation rate', () => {
+    const rows = [
+      {
+        status: 'handed_off' as const,
+        handoffReason: 'low_confidence',
+        createdAt: '2026-06-01T10:00:00Z',
+      },
+      {
+        status: 'handed_off' as const,
+        handoffReason: 'system_error',
+        createdAt: '2026-06-01T11:00:00Z',
+      },
+      {
+        status: 'resolved_confirmed' as const,
+        handoffReason: null,
+        createdAt: '2026-06-01T12:00:00Z',
+      },
+      { status: 'active' as const, handoffReason: null, createdAt: '2026-06-01T13:00:00Z' },
+    ]
+    const s = summarizeQuinnPerformance(rows, 4, 0)
+    expect(s.handedOff).toBe(1)
+    expect(s.systemErrors).toBe(1)
+    expect(s.escalationRate).toBe(25) // 1 judgment handoff of 4, infra failure excluded
+  })
+
   it('groups the daily trend by UTC date, ascending, with per-day involvements + resolved', () => {
     const rows = [
-      { status: 'active' as const, createdAt: '2026-06-02T09:00:00Z' },
-      { status: 'resolved_confirmed' as const, createdAt: '2026-06-01T10:00:00Z' },
-      { status: 'handed_off' as const, createdAt: '2026-06-01T23:30:00Z' },
+      { status: 'active' as const, handoffReason: null, createdAt: '2026-06-02T09:00:00Z' },
+      {
+        status: 'resolved_confirmed' as const,
+        handoffReason: null,
+        createdAt: '2026-06-01T10:00:00Z',
+      },
+      {
+        status: 'handed_off' as const,
+        handoffReason: 'low_confidence',
+        createdAt: '2026-06-01T23:30:00Z',
+      },
     ]
     const s = summarizeQuinnPerformance(rows, 3, 0)
     expect(s.dailyTrend).toEqual([
@@ -80,7 +131,13 @@ describe('summarizeQuinnPerformance', () => {
 
   it('accepts Date objects as well as ISO strings for createdAt', () => {
     const s = summarizeQuinnPerformance(
-      [{ status: 'active' as const, createdAt: new Date('2026-06-03T12:00:00Z') }],
+      [
+        {
+          status: 'active' as const,
+          handoffReason: null,
+          createdAt: new Date('2026-06-03T12:00:00Z'),
+        },
+      ],
       1,
       0
     )

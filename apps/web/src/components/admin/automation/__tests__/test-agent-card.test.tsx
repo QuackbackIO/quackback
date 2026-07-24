@@ -31,7 +31,7 @@ vi.mock('@/lib/server/functions/assistant-settings', () => ({
 import { TestAgentCard } from '../test-agent-card'
 
 const trace = {
-  promptVersion: 'support-agent-v3',
+  promptVersion: 'support-agent-v4',
   configRevision: 9,
   role: 'customer_support' as const,
   tone: 'balanced' as const,
@@ -137,7 +137,7 @@ describe('TestAgentCard', () => {
     expect(screen.queryByText('private reasoning')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Technical details'))
-    expect(screen.getByText('support-agent-v3')).toBeInTheDocument()
+    expect(screen.getByText('support-agent-v4')).toBeInTheDocument()
     expect(screen.getByText('9')).toBeInTheDocument()
   })
 

@@ -24,6 +24,7 @@ import { ratePctOrNull } from '@/lib/shared/percent'
 
 export interface QuinnInvolvementRow {
   status: AssistantInvolvementStatus
+  handoffReason: string | null
   createdAt: string | Date
 }
 
@@ -40,8 +41,11 @@ export interface QuinnPerformanceSummary {
   resolvedAssumed: number
   /** (resolvedConfirmed + resolvedAssumed) / involvements, 0-100. */
   resolutionRate: number
-  /** Handed off to a human. */
+  /** Handed off to a human by Quinn's own judgment (excludes system errors). */
   handedOff: number
+  /** Handed off by the failure floor after a hard turn failure — an infra
+   *  reliability signal, kept out of the quality-facing escalation rate. */
+  systemErrors: number
   /** handedOff / involvements, 0-100. */
   escalationRate: number
   /** Successful assistant_tool_calls in the range. */
@@ -70,11 +74,16 @@ export function summarizeQuinnPerformance(
   let resolvedConfirmed = 0
   let resolvedAssumed = 0
   let handedOff = 0
+  let systemErrors = 0
   const byDay = new Map<string, { involvements: number; resolved: number }>()
 
   for (const row of involvementRows) {
     if (row.status === 'resolved_confirmed') resolvedConfirmed++
     else if (row.status === 'resolved_assumed') resolvedAssumed++
+    // A failure-floor handoff measures the platform, not Quinn's judgment:
+    // counted separately so a provider outage cannot masquerade as Quinn
+    // getting worse at answering.
+    else if (isHandedOff(row.status) && row.handoffReason === 'system_error') systemErrors++
     else if (isHandedOff(row.status)) handedOff++
 
     const date = new Date(row.createdAt).toISOString().slice(0, 10)
@@ -99,6 +108,7 @@ export function summarizeQuinnPerformance(
     resolvedAssumed,
     resolutionRate: pct(resolved, involvements),
     handedOff,
+    systemErrors,
     escalationRate: pct(handedOff, involvements),
     actionsTaken,
     dailyTrend,
@@ -114,7 +124,11 @@ export function summarizeQuinnPerformance(
 export async function getQuinnPerformance(from: Date, to: Date): Promise<QuinnPerformanceSummary> {
   const [involvementRows, conversationCountRows, actionRows] = await Promise.all([
     db
-      .select({ status: assistantInvolvements.status, createdAt: assistantInvolvements.createdAt })
+      .select({
+        status: assistantInvolvements.status,
+        handoffReason: assistantInvolvements.handoffReason,
+        createdAt: assistantInvolvements.createdAt,
+      })
       .from(assistantInvolvements)
       .where(
         and(gte(assistantInvolvements.createdAt, from), lt(assistantInvolvements.createdAt, to))

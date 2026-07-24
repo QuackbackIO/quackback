@@ -37,7 +37,7 @@ function occurrences(value: string, needle: string): number {
 
 describe('assistant production system prompt', () => {
   it('uses the production prompt version', () => {
-    expect(ASSISTANT_PROMPT_VERSION).toBe('support-agent-v3')
+    expect(ASSISTANT_PROMPT_VERSION).toBe('support-agent-v4')
   })
 
   it('returns every optional block in the normative order', () => {

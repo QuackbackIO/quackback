@@ -373,6 +373,7 @@ export {
   ASSISTANT_INVOLVEMENT_TRIGGERS,
   ASSISTANT_INVOLVEMENT_STATUSES,
   ASSISTANT_HANDOFF_REASONS,
+  ASSISTANT_MODEL_HANDOFF_REASONS,
   // Schema tables - assistant guidance rules
   assistantGuidanceRules,
   // Schema tables - assistant custom actions (Phase 5 library)

@@ -22,7 +22,9 @@ const assistantMock = vi.hoisted(() => ({
   openInvolvement: vi.fn(async () => ({ id: 'assistant_involvement_1' })),
   getLatestInvolvement: vi.fn(async () => null),
   runAssistantTurn: vi.fn(),
-  recordHandoff: vi.fn(async () => {}),
+  // CAS shape: a won handoff returns the updated row; tests that need a lost
+  // CAS override this per-case.
+  recordHandoff: vi.fn(async () => ({ id: 'assistant_involvement_1', status: 'handed_off' })),
   recordAssistantAnswer: vi.fn(async () => {}),
   setInvolvementRating: vi.fn(async () => {}),
   // Mirrors the real assistant.runtime.ts mapping (thinking -> thinking; any
@@ -213,7 +215,7 @@ const V2_IDENTITY: DeliveredFields['identity'] = {
 // Durable trace fixtures contain only bounded config metadata and tool names/outcomes,
 // never prompts, customer text, tool arguments, or tool results.
 const PRIVACY_SAFE_TRACE: DeliveredFields['trace'] = {
-  promptVersion: 'support-agent-v3',
+  promptVersion: 'support-agent-v4',
   configRevision: 12,
   role: 'customer_support',
   tone: 'balanced',
@@ -246,6 +248,12 @@ function answered(extra: Partial<DeliveredFields> = {}): AnsweredTurn {
   return { status: 'answered', ...delivered(extra) }
 }
 
+/** Latest-involvement fixture: the orchestrator derives engaged ('active') vs
+ *  bowed-out ('handed_off') from this single row's status. */
+function involvementRow(status: 'active' | 'handed_off') {
+  return { id: 'assistant_involvement_1', status, escalationOfferedAt: new Date() } as never
+}
+
 function cannotAnswer(
   extra: Partial<DeliveredFields> & {
     cannotAnswerReason?: CannotAnswerTurn['cannotAnswerReason']
@@ -269,6 +277,7 @@ beforeEach(() => {
   assistantMock.mapRowsToThreadMessages.mockReturnValue([{ sender: 'customer', content: 'hi' }])
   assistantMock.respondEligible.mockReturnValue(true)
   assistantMock.getActiveInvolvement.mockResolvedValue(null)
+  assistantMock.getLatestInvolvement.mockResolvedValue(null)
   assistantMock.openInvolvement.mockResolvedValue({ id: 'assistant_involvement_1' })
   getMessengerConfig.mockResolvedValue({ assistant: { respond: true, name: 'Quinn' } })
   mockEnforceAiTokenBudget.mockResolvedValue(undefined)
@@ -306,6 +315,29 @@ describe('runAssistantTurnForConversation gate', () => {
     assistantMock.isAssistantConfigured.mockReturnValue(false)
     await runAssistantTurnForConversation(CONV)
     expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
+  })
+
+  it('stays silent after a handoff even before the first teammate reply', async () => {
+    // The customer writes again after "Connecting you to the team" but before
+    // a human replies: the message-based silence rule cannot see the handoff,
+    // so the involvement state must mute Quinn.
+    assistantMock.getLatestInvolvement.mockResolvedValue(involvementRow('handed_off'))
+
+    await runAssistantTurnForConversation(CONV)
+
+    expect(assistantMock.runAssistantTurn).not.toHaveBeenCalled()
+    expect(insertedMessages).toHaveLength(0)
+    // The turn never started, so no activity snapshot was written or cleared.
+    expect(mockClearActivitySnapshot).not.toHaveBeenCalled()
+  })
+
+  it('a workflow step explicitly re-engages Quinn on a handed-off conversation', async () => {
+    assistantMock.getLatestInvolvement.mockResolvedValue(involvementRow('handed_off'))
+    assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
+
+    await runAssistantTurnForConversation(CONV, { surface: 'workflow_step' })
+
+    expect(assistantMock.runAssistantTurn).toHaveBeenCalled()
   })
 
   it('persists nothing when the engine suppresses on the silence rule', async () => {
@@ -366,7 +398,7 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
     expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
   })
 
-  it('refuses an internal-sourced public result before persisting anything', async () => {
+  it('refuses an internal-sourced public result: the reply never persists, the floor hands off', async () => {
     assistantMock.runAssistantTurn.mockResolvedValue(
       answered({
         text: 'Here is the internal-sourced answer.',
@@ -375,23 +407,24 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
       })
     )
 
-    await expect(runAssistantTurnForConversation(CONV)).rejects.toThrow(
-      'refusing to persist an internal-sourced customer reply'
-    )
+    // The leak guard rejects the reply; the failure floor then escalates to a
+    // human rather than stranding the customer with no response at all.
+    await expect(runAssistantTurnForConversation(CONV)).resolves.toBeUndefined()
 
-    expect(insertedMessages).toHaveLength(0)
-    expect(updateSets).toHaveLength(0)
-    expect(assistantMock.openInvolvement).not.toHaveBeenCalled()
+    // The tainted model reply itself is never persisted — only the handoff
+    // system message lands.
+    expect(insertedMessages).toHaveLength(1)
+    expect(insertedMessages[0].content).toBe('Connecting you to the team')
     expect(assistantMock.recordAssistantAnswer).not.toHaveBeenCalled()
-    expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
+    expect(assistantMock.recordHandoff).toHaveBeenCalledWith(
+      'assistant_involvement_1',
+      'system_error'
+    )
     expect(mockAppendAssistantHandoffNote).not.toHaveBeenCalled()
   })
 
   it('passes the structured handoff packet to the note while preserving the model-authored reply', async () => {
-    assistantMock.getActiveInvolvement.mockResolvedValue({
-      id: 'assistant_involvement_1',
-      escalationOfferedAt: new Date(),
-    })
+    assistantMock.getLatestInvolvement.mockResolvedValue(involvementRow('active'))
     assistantMock.runAssistantTurn.mockResolvedValue(
       answered({
         text: 'I am connecting you with a teammate now.',
@@ -431,10 +464,7 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
   })
 
   it('threads the active involvement id and the latest customer message id into the engine', async () => {
-    assistantMock.getActiveInvolvement.mockResolvedValue({
-      id: 'assistant_involvement_1',
-      escalationOfferedAt: new Date(),
-    })
+    assistantMock.getLatestInvolvement.mockResolvedValue(involvementRow('active'))
     assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
     await runAssistantTurnForConversation(CONV)
     expect(assistantMock.runAssistantTurn).toHaveBeenCalledWith(
@@ -446,7 +476,7 @@ describe('runAssistantTurnForConversation escalation dispatch', () => {
   })
 
   it('passes involvementId null before the first involvement opens', async () => {
-    assistantMock.getActiveInvolvement.mockResolvedValue(null)
+    assistantMock.getLatestInvolvement.mockResolvedValue(null)
     assistantMock.runAssistantTurn.mockResolvedValue(answered({}))
     await runAssistantTurnForConversation(CONV)
     expect(assistantMock.runAssistantTurn).toHaveBeenCalledWith(
@@ -488,9 +518,9 @@ describe('runAssistantTurnForConversation preview retraction (invalidated attemp
   it('retracts a streamed answer on retry and stays preview-silent for the rest of the turn', async () => {
     assistantMock.runAssistantTurn.mockImplementation(
       async (input: { onActivity: (a: unknown) => void; onTextDelta: (d: string) => void }) => {
-        // Attempt 1: streams a full answer, then gets invalidated post-hoc
-        // (e.g. fabricated_citation) — the retry starts with a fresh
-        // 'thinking'.
+        // Attempt 1: streams a full answer, then the attempt fails after the
+        // fact (a structural rejection or a transport re-dial) — the retry
+        // starts with a fresh 'thinking'.
         input.onActivity({ kind: 'thinking' })
         input.onTextDelta('All systems are ')
         input.onTextDelta('operational right now.')
@@ -553,10 +583,7 @@ describe('runAssistantTurnForConversation activity snapshot (Redis mirror)', () 
   })
 
   it('clears the snapshot on the hand-off path', async () => {
-    assistantMock.getActiveInvolvement.mockResolvedValue({
-      id: 'assistant_involvement_1',
-      escalationOfferedAt: new Date(),
-    })
+    assistantMock.getLatestInvolvement.mockResolvedValue(involvementRow('active'))
     assistantMock.runAssistantTurn.mockResolvedValue(
       answered({ escalation: { ...HANDOFF_PACKET, mode: 'handoff' } })
     )
@@ -570,11 +597,58 @@ describe('runAssistantTurnForConversation activity snapshot (Redis mirror)', () 
     expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
   })
 
-  it('propagates a model failure, persists no canned reply, and clears the snapshot', async () => {
+  it('fails over to a human handoff on a model failure: no Quinn reply, system message only', async () => {
     assistantMock.runAssistantTurn.mockRejectedValue(new Error('provider exhausted'))
 
-    await expect(runAssistantTurnForConversation(CONV)).rejects.toThrow('provider exhausted')
+    // The floor is the terminal outcome, so the orchestrator resolves rather
+    // than rejecting into the caller's fire-and-forget catch.
+    await expect(runAssistantTurnForConversation(CONV)).resolves.toBeUndefined()
 
+    // The only persisted message is the visitor-visible transition marker from
+    // executeAssistantHandoff — never a server-authored Quinn reply.
+    expect(insertedMessages).toHaveLength(1)
+    expect(insertedMessages[0].content).toBe('Connecting you to the team')
+    expect(assistantMock.recordHandoff).toHaveBeenCalledWith(
+      'assistant_involvement_1',
+      'system_error'
+    )
+    expect(mockAppendAssistantHandoffNote).not.toHaveBeenCalled()
+    expect(
+      updateSets.some(
+        (s) =>
+          (s.customAttributes as Record<string, unknown> | undefined)
+            ?.assistant_escalation_reason === 'system_error'
+      )
+    ).toBe(true)
+    expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
+  })
+
+  it('skips the failure-floor handoff when a human took over mid-turn', async () => {
+    assistantMock.runAssistantTurn.mockRejectedValue(new Error('provider exhausted'))
+    // Eligible when the turn starts, ineligible at floor time (a human replied
+    // while the turn was failing).
+    assistantMock.respondEligible.mockReturnValueOnce(true).mockReturnValue(false)
+
+    await expect(runAssistantTurnForConversation(CONV)).resolves.toBeUndefined()
+
+    expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
+    expect(insertedMessages).toHaveLength(0)
+    expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
+  })
+
+  it('skips the failure-floor handoff when the conversation is already handed off', async () => {
+    assistantMock.runAssistantTurn.mockRejectedValue(new Error('provider exhausted'))
+    // Not handed off when the turn starts (the pre-turn handoff gate must let
+    // it through), handed off by the time the floor re-checks — e.g. a
+    // concurrent turn escalated while this one was failing.
+    assistantMock.getLatestInvolvement
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(involvementRow('handed_off'))
+
+    await expect(runAssistantTurnForConversation(CONV)).resolves.toBeUndefined()
+
+    expect(assistantMock.recordHandoff).not.toHaveBeenCalled()
+    expect(assistantMock.openInvolvement).not.toHaveBeenCalled()
     expect(insertedMessages).toHaveLength(0)
     expect(mockClearActivitySnapshot).toHaveBeenCalledWith(CONV)
   })
@@ -636,10 +710,7 @@ describe('runAssistantTurnForConversation Phase 2 live attribute re-check', () =
   it('still fires on a hand-off turn (independent of this turn resolving as a hand-off)', async () => {
     mockIsFeatureEnabled.mockResolvedValue(true)
     mockGetLiveWorkflowReferencedAttributeKeys.mockResolvedValue(new Set(['issue_type']))
-    assistantMock.getActiveInvolvement.mockResolvedValue({
-      id: 'assistant_involvement_1',
-      escalationOfferedAt: new Date(),
-    })
+    assistantMock.getLatestInvolvement.mockResolvedValue(involvementRow('active'))
     assistantMock.runAssistantTurn.mockResolvedValue(
       answered({ escalation: { ...HANDOFF_PACKET, mode: 'handoff' } })
     )

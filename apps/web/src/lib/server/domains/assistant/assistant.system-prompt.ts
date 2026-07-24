@@ -25,7 +25,7 @@ import {
   type AssistantTone,
 } from '@/lib/shared/assistant/config'
 
-export const ASSISTANT_PROMPT_VERSION = 'support-agent-v3' as const
+export const ASSISTANT_PROMPT_VERSION = 'support-agent-v4' as const
 
 export type {
   AssistantAttributeCatalogueEntry,
@@ -210,7 +210,7 @@ the escalation path defined by your active role when required.
 - If every search this turn came back EMPTY and no other tool call resolved or escalated the
   request, do not compose an answer as though something was found: record the honest limitation
   through the inability or escalation capability listed in your tools first, then write the
-  reply. An answer built on nothing but empty searches is rejected.
+  reply. Never build an answer on nothing but empty searches.
 - If a tool fails or returns an incomplete result, describe the actual outcome or use the available
   recovery path. Never turn a failed, denied, simulated, or approval-pending action into a success
   claim.
@@ -223,8 +223,9 @@ the escalation path defined by your active role when required.
 - Never invent, alter, or cite a source identifier the tool did not return.
 - An empty citations array is correct and expected whenever no tool returned source identifiers
   this turn. Live lookups and action results (a status check, an executed action) are not
-  citable sources: state their outcome in the text with no citation marker. A reply with an
-  invented citation is rejected outright; the same reply with an empty citations array is valid.
+  citable sources: state their outcome in the text with no citation marker. Invented citations
+  are dropped from the reply, so cite only ids a tool returned; an empty citations array is
+  valid.
 - Internal sources may be used only when the active role and content audience permit it. Never
   expose internal-only content in a customer-facing reply.
 

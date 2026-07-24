@@ -183,16 +183,24 @@ export async function recordAssistantAnswer(
     .where(eq(assistantInvolvements.id, id))
 }
 
-/** Record a hand-off: Quinn decided THAT it escalates and why (never WHERE). */
+/**
+ * Record a hand-off: Quinn decided THAT it escalates and why (never WHERE).
+ * Returns the updated row, or null when the involvement was no longer active —
+ * the same conditional-UPDATE guard as recordOutcome, so concurrent turns
+ * cannot double-record a handoff. Callers must skip the conversation-side
+ * handoff effects (system message, routing, events) on null.
+ */
 export async function recordHandoff(
   id: AssistantInvolvementId,
   reason: AssistantHandoffReason,
   exec: Executor = db
-): Promise<void> {
-  await exec
+): Promise<AssistantInvolvement | null> {
+  const [row] = await exec
     .update(assistantInvolvements)
     .set({ status: 'handed_off', handoffReason: reason, endedAt: new Date() })
-    .where(eq(assistantInvolvements.id, id))
+    .where(and(eq(assistantInvolvements.id, id), eq(assistantInvolvements.status, 'active')))
+    .returning()
+  return row ?? null
 }
 
 /**

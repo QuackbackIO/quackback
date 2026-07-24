@@ -27,11 +27,6 @@ vi.mock('@tanstack/ai-openai/compatible', () => ({
   openaiCompatibleText: () => ({ kind: 'text' }),
 }))
 
-const mockEvaluateZeroToolCompletion = vi.fn()
-vi.mock('../assistant.completion-evaluator', () => ({
-  evaluateZeroToolCompletion: (...args: unknown[]) => mockEvaluateZeroToolCompletion(...args),
-}))
-
 const mockRetrieve = vi.fn()
 vi.mock('../retrieval', () => ({
   retrieveKbArticles: (...args: unknown[]) => mockRetrieve(...args),
@@ -310,11 +305,6 @@ beforeEach(() => {
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
   mockConfig.aiChatModel = 'test-model'
   mockConfig.aiHelpCenterModel = undefined
-  mockConfig.aiQualityGateModel = undefined
-  mockEvaluateZeroToolCompletion.mockResolvedValue({
-    decision: 'accept',
-    reason: 'complete_response',
-  })
   mockConversationLookupLimit.mockResolvedValue([])
   mockListMessages.mockResolvedValue({ messages: [], hasMore: false, nextCursor: null })
   mockListConversationMessagesForGrounding.mockResolvedValue([])
@@ -544,138 +534,26 @@ describe('isSubstantiveAnswer', () => {
   })
 })
 
-describe('terminal completion protocol', () => {
-  const source = {
-    type: 'article' as const,
-    id: 'kb_article_1',
-    title: 'Reset password',
-    url: '/hc/articles/reset-password',
-  }
-
-  it('requires a grounded citation after a successful search', () => {
+describe('structural completion check', () => {
+  it('accepts a parseable output with non-empty text', () => {
     expect(() =>
-      validateAssistantCompletion(
-        { text: 'Use the reset link.', citations: [] },
-        {
-          searchCalls: 1,
-          sources: new Map([[source.id, source]]),
-          toolCalls: ['search'],
-          inabilityReported: false,
-          handoffRequested: false,
-          hasAdminGuidance: false,
-        }
-      )
-    ).toThrowError(new AssistantCompletionError('uncited_retrieved_answer'))
-
-    expect(() =>
-      validateAssistantCompletion(
-        {
-          text: 'Use the reset link. [1]',
-          citations: [{ type: 'article', id: source.id }],
-        },
-        {
-          searchCalls: 1,
-          sources: new Map([[source.id, source]]),
-          toolCalls: ['search'],
-          inabilityReported: false,
-          handoffRequested: false,
-          hasAdminGuidance: false,
-        }
-      )
+      validateAssistantCompletion({
+        text: 'Use the reset link. [1]',
+        citations: [{ type: 'article', id: 'kb_article_1' }],
+      })
     ).not.toThrow()
   })
 
-  it('requires report_inability after an empty search, then accepts model-authored text', () => {
-    expect(() =>
-      validateAssistantCompletion(
-        {
-          text: 'I could not find anything relevant. I can connect you with a teammate.',
-          citations: [],
-        },
-        {
-          searchCalls: 1,
-          sources: new Map(),
-          toolCalls: ['search'],
-          inabilityReported: false,
-          handoffRequested: false,
-          hasAdminGuidance: false,
-        }
-      )
-    ).toThrowError(new AssistantCompletionError('empty_search_without_resolution_tool'))
-
-    expect(() =>
-      validateAssistantCompletion(
-        {
-          text: 'I could not find anything relevant. I can connect you with a teammate.',
-          citations: [],
-        },
-        {
-          searchCalls: 1,
-          sources: new Map(),
-          toolCalls: ['search', 'report_inability'],
-          inabilityReported: true,
-          handoffRequested: false,
-          hasAdminGuidance: false,
-        }
-      )
-    ).not.toThrow()
+  it('rejects a non-conformant output shape', () => {
+    expect(() => validateAssistantCompletion({ answer: 'wrong shape' })).toThrowError(
+      new AssistantCompletionError('non_conformant_output')
+    )
   })
 
-  it('accepts an answered turn after empty searches when admin guidance was injected (guidance is grounding)', () => {
-    // A guidance rule may state the fact the KB never had (e.g. a money-back
-    // guarantee); rejecting the answer would punish exactly the behavior the
-    // guidance asked for. The fabricated-citation gate still applies.
-    expect(() =>
-      validateAssistantCompletion(
-        { text: 'Yes — our 30-day money-back guarantee covers your purchase.', citations: [] },
-        {
-          searchCalls: 2,
-          sources: new Map(),
-          toolCalls: ['search', 'search'],
-          inabilityReported: false,
-          handoffRequested: false,
-          hasAdminGuidance: true,
-        }
-      )
-    ).not.toThrow()
-  })
-
-  it('accepts a get_status-grounded answer: the tool result is the resolution basis, zero search citations', () => {
-    // A status answer grounds on the live get_status tool result, not on
-    // retrieval — no citation is minted. The tool call is a non-search
-    // resolution tool, so the completion validator must accept it.
-    expect(() =>
-      validateAssistantCompletion(
-        {
-          text: 'The API is currently experiencing a major outage. See the status page.',
-          citations: [],
-        },
-        {
-          searchCalls: 0,
-          sources: new Map(),
-          toolCalls: ['get_status'],
-          inabilityReported: false,
-          handoffRequested: false,
-          hasAdminGuidance: false,
-        }
-      )
-    ).not.toThrow()
-
-    // Even if the model also searched and found nothing, get_status is an
-    // alternative tool result that resolves the turn.
-    expect(() =>
-      validateAssistantCompletion(
-        { text: 'The API is down right now; here is the status page.', citations: [] },
-        {
-          searchCalls: 1,
-          sources: new Map(),
-          toolCalls: ['search', 'get_status'],
-          inabilityReported: false,
-          handoffRequested: false,
-          hasAdminGuidance: false,
-        }
-      )
-    ).not.toThrow()
+  it('rejects an empty terminal reply', () => {
+    expect(() => validateAssistantCompletion({ text: '   ', citations: [] })).toThrowError(
+      new AssistantCompletionError('empty_terminal_reply')
+    )
   })
 })
 
@@ -765,7 +643,7 @@ describe('runAssistantTurn', () => {
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
       trace: {
-        promptVersion: 'support-agent-v3',
+        promptVersion: 'support-agent-v4',
         configRevision: 1,
         role: 'customer_support',
         tone: 'balanced',
@@ -973,6 +851,52 @@ describe('runAssistantTurn', () => {
     })
   })
 
+  it('strips citations and their markers from an inability reply', async () => {
+    // A grounded source in the ledger plus report_inability: an honest "I
+    // can't help" must not dress itself in sources, so the cited id is dropped
+    // and its inline marker stripped.
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
+    mockChat.mockImplementation(
+      (opts: {
+        tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
+        context: unknown
+      }) =>
+        (async function* () {
+          const search = opts.tools.find((t) => t.name === 'search')!
+          const report = opts.tools.find((t) => t.name === 'report_inability')!
+          await search.execute(
+            { query: 'partial topic' },
+            { context: opts.context, emitCustomEvent: () => {} }
+          )
+          await report.execute(
+            { reason: 'insufficient_context' },
+            { context: opts.context, emitCustomEvent: () => {} }
+          )
+          const object = {
+            text: 'The docs only cover part of this. [1] I cannot answer fully.',
+            citations: [{ type: 'article', id: 'kb_article_1' }],
+          }
+          yield { type: 'CUSTOM', name: 'structured-output.complete', value: { object } }
+          yield { type: 'RUN_FINISHED', usage: undefined }
+        })()
+    )
+
+    const result = await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('a partially documented topic'),
+    })
+    expect(result).toMatchObject({
+      status: 'cannot_answer',
+      cannotAnswerReason: 'insufficient_context',
+      citations: [],
+    })
+    // relinkCitations strips the marker itself (the leftover interior space is
+    // its long-standing behavior for mid-text markers).
+    expect(result.status === 'cannot_answer' && result.text).toBe(
+      'The docs only cover part of this.  I cannot answer fully.'
+    )
+  })
+
   it('derives handoff only from the handoff_to_human tool call, never the final object', async () => {
     mockConversationLookupLimit.mockResolvedValue([
       { visitorPrincipalId: 'principal_visitor', visitorDisplayName: 'Pat' },
@@ -1106,69 +1030,7 @@ describe('runAssistantTurn', () => {
     expect(lastLoggedMetadata?.configRevision).toBe(37)
   })
 
-  it('rejects an incomplete zero-tool product reply and lets Quinn retry with search', async () => {
-    mockConversationLookupLimit.mockResolvedValue([
-      { visitorPrincipalId: 'principal_visitor', visitorDisplayName: 'Pat' },
-    ])
-    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1')])
-    mockEvaluateZeroToolCompletion.mockResolvedValueOnce({
-      decision: 'retry',
-      reason: 'incomplete_sentence',
-    })
-
-    const promptsByAttempt: string[][] = []
-    let attempt = 0
-    mockChat.mockImplementation(
-      (opts: {
-        systemPrompts: string[]
-        tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
-        context: unknown
-      }) => {
-        promptsByAttempt.push([...opts.systemPrompts])
-        attempt += 1
-        if (attempt === 1) {
-          return chunkStream(
-            completeRun({ text: "I'm not familiar with anything called", citations: [] })
-          )
-        }
-        return (async function* () {
-          const search = opts.tools.find((tool) => tool.name === 'search')!
-          await search.execute(
-            { query: 'What is Quackback?' },
-            { context: opts.context, emitCustomEvent: () => {} }
-          )
-          yield* completeRun({
-            text: 'Quackback is a customer feedback platform. [1]',
-            citations: [{ type: 'article', id: 'kb_article_1' }],
-          })
-        })()
-      }
-    )
-
-    const result = await runAssistantTurn({
-      ...baseInput,
-      conversationId: 'conversation_1' as never,
-      messages: customerAsks('ok tell me about quackback'),
-    })
-
-    expect(mockEvaluateZeroToolCompletion).toHaveBeenCalledWith(
-      expect.objectContaining({
-        candidate: "I'm not familiar with anything called",
-        availableTools: expect.arrayContaining(['search']),
-      })
-    )
-    expect(mockChat).toHaveBeenCalledTimes(2)
-    expect(promptsByAttempt[1]?.join('\n')).toContain(
-      'Your previous final response was not a complete resolution'
-    )
-    expect(result).toMatchObject({
-      status: 'answered',
-      text: 'Quackback is a customer feedback platform. [1]',
-      citations: [{ id: 'kb_article_1' }],
-    })
-  })
-
-  it('accepts a complete casual zero-tool reply without forcing a tool call', async () => {
+  it('accepts a casual zero-tool reply in a single attempt', async () => {
     mockConversationLookupLimit.mockResolvedValue([
       { visitorPrincipalId: 'principal_visitor', visitorDisplayName: 'Pat' },
     ])
@@ -1182,7 +1044,6 @@ describe('runAssistantTurn', () => {
       messages: customerAsks('What is your favourite pizza?'),
     })
 
-    expect(mockEvaluateZeroToolCompletion).toHaveBeenCalledTimes(1)
     expect(mockChat).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({
       status: 'answered',
@@ -1468,7 +1329,7 @@ describe('runAssistantTurn', () => {
       ticketId: null,
       surface: 'widget',
       role: 'customer_support',
-      promptVersion: 'support-agent-v3',
+      promptVersion: 'support-agent-v4',
       configRevision: 1,
       tone: 'balanced',
       responseLength: 'balanced',
@@ -1557,7 +1418,7 @@ describe('runAssistantTurn', () => {
       internalSourced: false,
       proposedActions: [],
       identity: DEFAULT_RUNTIME_CONFIG.config.identity,
-      trace: expect.objectContaining({ promptVersion: 'support-agent-v3', configRevision: 1 }),
+      trace: expect.objectContaining({ promptVersion: 'support-agent-v4', configRevision: 1 }),
     })
     // Salvaged on the first attempt; no retry needed.
     expect(mockChat).toHaveBeenCalledTimes(1)
@@ -2181,7 +2042,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
     expect(result).toMatchObject({
       identity,
       trace: {
-        promptVersion: 'support-agent-v3',
+        promptVersion: 'support-agent-v4',
         configRevision: 12,
         role: 'customer_support',
         tone: 'warm',
@@ -2190,7 +2051,7 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
       },
     })
     expect(lastLoggedMetadata).toMatchObject({
-      promptVersion: 'support-agent-v3',
+      promptVersion: 'support-agent-v4',
       configRevision: 12,
       role: 'customer_support',
       tone: 'warm',

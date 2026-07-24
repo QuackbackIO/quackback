@@ -379,7 +379,9 @@ export const HANDOFF_REASON_LABELS: Record<string, string> = {
   frustration: 'customer seemed frustrated',
   repetition: 'customer repeated the issue',
   low_confidence: "Quinn wasn't confident",
+  capability_limit: 'outside what Quinn can do',
   safety: 'safety topic',
+  system_error: 'Quinn hit an error',
 }
 
 /** Quinn's activity on one conversation, for the agent details panel. Null when

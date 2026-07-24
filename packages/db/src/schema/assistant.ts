@@ -39,14 +39,24 @@ export const ASSISTANT_INVOLVEMENT_STATUSES = [
   'abandoned',
 ] as const
 
-/** Structured reason the assistant decided to hand off (it decides THAT, never WHERE). */
-export const ASSISTANT_HANDOFF_REASONS = [
+/** Structured reasons the MODEL may hand off with (it decides THAT, never WHERE).
+ *  This is the canonical model-pickable list; the handoff tool schema derives
+ *  from it, so a reason added here reaches the model automatically. */
+export const ASSISTANT_MODEL_HANDOFF_REASONS = [
   'explicit_request',
   'frustration',
   'repetition',
   'low_confidence',
   'capability_limit',
   'safety',
+] as const
+
+/** Full storage union: the model-pickable reasons plus `system_error`, which is
+ *  server-assigned only — the failure floor's reason when a turn dies before
+ *  the model produced anything. Never offered to the model. */
+export const ASSISTANT_HANDOFF_REASONS = [
+  ...ASSISTANT_MODEL_HANDOFF_REASONS,
+  'system_error',
 ] as const
 
 export type AssistantInvolvementTrigger = (typeof ASSISTANT_INVOLVEMENT_TRIGGERS)[number]

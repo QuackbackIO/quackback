@@ -24,7 +24,7 @@ import {
   and,
   tickets,
   ticketConversations,
-  ASSISTANT_HANDOFF_REASONS,
+  ASSISTANT_MODEL_HANDOFF_REASONS,
   type AssistantHandoffReason,
 } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
@@ -572,8 +572,9 @@ async function executeSearchKnowledge(
     // An empty result instead restates the resolution contract at the exact
     // moment weak models drop it: post-miss, the tool result is the most
     // recent thing the model reads, and without the reminder it either
-    // answers ungrounded (the completion gate rejects that) or forgets that
-    // admin-stated facts never needed the search in the first place.
+    // answers ungrounded (nothing rejects that anymore — only this prompt
+    // contract holds the line) or forgets that admin-stated facts never
+    // needed the search in the first place.
     ...(items.length > 0 ? { note: RETRIEVED_CONTENT_NOTE } : { note: EMPTY_SEARCH_NOTE }),
   }
 }
@@ -702,7 +703,9 @@ async function executeGetStatus(
 
 const handoffToHumanOutputSchema = z.object({
   accepted: z.boolean(),
-  reason: z.enum(ASSISTANT_HANDOFF_REASONS).optional(),
+  // The model-pickable subset only: `system_error` (in the full storage union)
+  // is reserved for the server-side failure floor.
+  reason: z.enum(ASSISTANT_MODEL_HANDOFF_REASONS).optional(),
   note: z.string().optional(),
 })
 
@@ -712,7 +715,7 @@ export const handoffToHumanTool = toolDefinition({
     'Hand the current customer conversation to a human teammate. Call this when the customer explicitly asks for a person, when safety requires human judgment, or when you have determined a teammate must take over. After it succeeds, write the customer-facing handoff message yourself in the final response.',
   inputSchema: z.object({
     reason: z
-      .enum(ASSISTANT_HANDOFF_REASONS)
+      .enum(ASSISTANT_MODEL_HANDOFF_REASONS)
       .describe('The concrete reason a human teammate must take over.'),
     customerNeed: z
       .string()

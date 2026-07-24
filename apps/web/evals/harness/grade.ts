@@ -92,10 +92,10 @@ function gradeOne(a: Structural, cap: Capture): string | null {
         : `expected no "${a.citationType}" citations, got ${ofType.length}`
     }
     case 'citationsSubsetOfLedger': {
-      // The runtime drops any cited id not in the run ledger (assembleCitations)
-      // and throws `fabricated_citation` if the model insists — so a returned
-      // result already satisfies the subset property. Assert well-formedness so
-      // a malformed/empty id surfaces here rather than silently.
+      // The runtime silently drops any cited id not in the run ledger
+      // (assembleCitations), so a returned result already satisfies the subset
+      // property. Assert well-formedness so a malformed/empty id surfaces here
+      // rather than silently.
       const bad = citations.filter((c) => !c.id || !c.type)
       return bad.length === 0
         ? null

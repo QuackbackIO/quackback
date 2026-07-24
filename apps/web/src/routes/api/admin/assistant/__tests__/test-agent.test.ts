@@ -72,7 +72,7 @@ function parseAguiSse(text: string): Array<Record<string, unknown> & { type: str
 }
 
 const safeTrace = {
-  promptVersion: 'support-agent-v3',
+  promptVersion: 'support-agent-v4',
   configRevision: 7,
   role: 'customer_support',
   tone: 'balanced',
@@ -224,7 +224,7 @@ describe('POST /api/admin/assistant/test', () => {
       citations: [],
       escalation: undefined,
       trace: {
-        promptVersion: 'support-agent-v3',
+        promptVersion: 'support-agent-v4',
         configRevision: 7,
         role: 'copilot_qa',
         appliedGuidance: [],

@@ -139,8 +139,7 @@ export const knowledgeScenarios: Scenario[] = [
       // model must call get_status rather than search the knowledge base.
       { type: 'calledTool', name: 'get_status' },
       // get_status returns no citable ids: a citation here is by definition
-      // fabricated (the exact live failure that used to trip the completion
-      // gate into a customer-visible retry).
+      // fabricated and would be dropped by assembleCitations.
       { type: 'noCitations' },
     ],
   },

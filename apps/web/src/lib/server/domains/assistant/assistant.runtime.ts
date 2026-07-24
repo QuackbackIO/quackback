@@ -60,10 +60,6 @@ import {
 } from './assistant.system-prompt'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { runSynthesis, safeJsonRepair, type AttemptOutcome } from './synthesis-core'
-import {
-  evaluateZeroToolCompletion,
-  type ZeroToolCompletionEvaluation,
-} from './assistant.completion-evaluator'
 import { wrapUntrustedText } from './injection-guard'
 // Read-only reach into the tickets domain (an existing edge — assistant.toolspec.ts's
 // create_ticket tool already imports from it) for the ticket copilot's grounding
@@ -334,15 +330,7 @@ const assistantOutputSchema = z.object({
 
 type AssistantOutput = z.infer<typeof assistantOutputSchema>
 
-export type AssistantCompletionIssueCode =
-  | 'non_conformant_output'
-  | 'empty_terminal_reply'
-  | 'inability_with_citations'
-  | 'empty_search_without_resolution_tool'
-  | 'uncited_retrieved_answer'
-  | 'fabricated_citation'
-  | 'incomplete_zero_tool_response'
-  | 'zero_tool_evaluation_failed'
+export type AssistantCompletionIssueCode = 'non_conformant_output' | 'empty_terminal_reply'
 
 export class AssistantCompletionError extends Error {
   readonly name = 'AssistantCompletionError'
@@ -352,82 +340,27 @@ export class AssistantCompletionError extends Error {
   }
 }
 
-export interface AssistantCompletionTrace {
-  searchCalls: number
-  sources: ReadonlyMap<string, AssistantCitation>
-  toolCalls: readonly string[]
-  inabilityReported: boolean
-  handoffRequested: boolean
-  /** Whether admin-authored guidance was injected this turn. Guidance facts
-   *  (policies, guarantees) are legitimate grounding, so an answered turn
-   *  whose searches all came back empty is not automatically a fabrication. */
-  hasAdminGuidance: boolean
-}
-
 /**
- * Enforce Quinn's terminal-outcome protocol after the model-controlled tool
- * loop. Tool choice remains agentic; only the claim that work is complete is
- * checked against the request-local tool ledger.
+ * Structural conformance check on the model's final output: a parseable
+ * `{text, citations}` object with non-empty text. Semantic grounding (cite
+ * what you retrieved, act instead of promising, honest inability) is carried
+ * by the system prompt and the tools' own authority, not re-checked here;
+ * citation ids the tools never returned are silently dropped downstream by
+ * `assembleCitations`/`relinkCitations`.
  */
-export function validateAssistantCompletion(
-  final: unknown,
-  trace: AssistantCompletionTrace
-): asserts final is AssistantOutput {
+export function validateAssistantCompletion(final: unknown): asserts final is AssistantOutput {
   const parsedResult = assistantOutputSchema.safeParse(final)
   if (!parsedResult.success) throw new AssistantCompletionError('non_conformant_output')
-  const output = parsedResult.data
 
-  const text = output.text.trim()
-  if (text.length === 0) throw new AssistantCompletionError('empty_terminal_reply')
-
-  const groundedCitations = output.citations.filter((citation) => trace.sources.has(citation.id))
-  if (groundedCitations.length !== output.citations.length) {
-    throw new AssistantCompletionError('fabricated_citation')
-  }
-
-  if (trace.inabilityReported) {
-    if (output.citations.length > 0) {
-      throw new AssistantCompletionError('inability_with_citations')
-    }
-    return
-  }
-
-  // A different tool result may itself be the complete basis for the final
-  // response (for example a handoff or ticket creation after an empty search).
-  // Admin guidance also legitimately grounds an answer no search could find
-  // (e.g. a money-back guarantee stated only in a guidance rule), so its
-  // presence exempts the turn from the empty-search rejection — the
-  // fabricated-citation gate above still applies unconditionally.
-  const hasAlternativeToolResult = trace.toolCalls.some((name) => name !== 'search')
-  if (
-    trace.searchCalls > 0 &&
-    trace.sources.size === 0 &&
-    !trace.handoffRequested &&
-    !hasAlternativeToolResult &&
-    !trace.hasAdminGuidance
-  ) {
-    throw new AssistantCompletionError('empty_search_without_resolution_tool')
-  }
-  // get_status legitimately resolves an EMPTY search (live state, no
-  // retrieval), but it must not excuse paraphrasing retrieved sources
-  // without citing them — only a write/control tool result can do that.
-  const hasNonReadResolutionTool = trace.toolCalls.some(
-    (name) => name !== 'search' && name !== 'get_status'
-  )
-  if (
-    trace.searchCalls > 0 &&
-    trace.sources.size > 0 &&
-    groundedCitations.length === 0 &&
-    !trace.handoffRequested &&
-    !hasNonReadResolutionTool
-  ) {
-    throw new AssistantCompletionError('uncited_retrieved_answer')
+  if (parsedResult.data.text.trim().length === 0) {
+    throw new AssistantCompletionError('empty_terminal_reply')
   }
 }
 
-/** Feedback added only after a semantic completion failure. */
-export const ASSISTANT_COMPLETION_REPAIR_PROMPT =
-  'Your previous final response was not a complete resolution of the latest request. Reconsider the request and continue the agentic cycle. You may make zero or more tool calls: use none only when you can already give a useful response or must ask one necessary clarification. When a tool can perform a needed lookup, check, action, or handoff, call it now and inspect its result instead of promising future work. The final JSON is response content, not an action channel.'
+/** Appended once when an attempt fails structurally, so the retry is not a
+ *  blind identical re-dial: the model is told its output shape was the problem. */
+export const ASSISTANT_STRUCTURAL_REPAIR_PROMPT =
+  'Your previous final output was rejected: it was not a single valid JSON object of the required {"text", "citations"} shape with non-empty text. Respond again with only that JSON object.'
 
 /**
  * Extract the first balanced `{...}` object from a string, respecting quoted
@@ -1150,15 +1083,6 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     boardCatalogue,
   })
 
-  // Tool-backed turns have an objective execution ledger. A zero-tool public
-  // reply is the only ambiguous terminal path: it can be valid small talk or a
-  // missed support request. Check only that narrow path, using the configured
-  // quality-gate model when present and otherwise Quinn's own model. The check
-  // cannot call tools or author customer text; a rejection simply gives Quinn
-  // another agentic iteration in which it again chooses zero or more tools.
-  const completionEvaluatorModel = getChatModel('qualityGate') ?? model
-  let zeroToolEvaluation: ZeroToolCompletionEvaluation | null = null
-
   // Instrumentation-only OTel tracing (one span per turn, child spans per tool
   // call). Attributes stay privacy-minimal — the same non-textual vocabulary as
   // the ai_usage_log metadata below (role, surface, versions, finish reason,
@@ -1179,7 +1103,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     middleware: [tracingMiddleware],
     // The user-interactive agentic turn re-dials a pristine transport RUN_ERROR
     // (nothing streamed, no tool ran) up to twice; a committed failure never
-    // re-dials. Inline callers (evaluator/guidance) keep the default 0.
+    // re-dials. Inline callers (guidance) keep the default 0.
     transportRetries: 2,
     tools: {
       specs: tools,
@@ -1251,56 +1175,11 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       ...(toolContext.ledger.inabilityReport
         ? { inabilityReason: toolContext.ledger.inabilityReport.reason }
         : {}),
-      ...(zeroToolEvaluation
-        ? {
-            zeroToolCompletionDecision: zeroToolEvaluation.decision,
-            zeroToolCompletionReason: zeroToolEvaluation.reason,
-          }
-        : {}),
     }),
-    validateFinal: async (final) => {
-      validateAssistantCompletion(final, {
-        searchCalls: toolContext.ledger.searchCalls,
-        sources: toolContext.ledger.sources,
-        toolCalls: toolContext.ledger.toolCalls,
-        inabilityReported: toolContext.ledger.inabilityReport !== null,
-        handoffRequested: toolContext.ledger.handoffRequest !== null,
-        hasAdminGuidance: selectedGuidance.length > 0,
-      })
-
-      if (
-        audience !== 'public' ||
-        conversationId === null ||
-        toolContext.ledger.toolCalls.length > 0
-      ) {
-        return
-      }
-
-      const parsed = assistantOutputSchema.parse(final)
-      try {
-        zeroToolEvaluation = await evaluateZeroToolCompletion({
-          model: completionEvaluatorModel,
-          messages,
-          candidate: parsed.text,
-          availableTools: [...toolNames],
-          surface,
-          conversationId,
-          promptVersion: ASSISTANT_PROMPT_VERSION,
-          configRevision: runtimeConfig.revision,
-          role,
-          tone: agentVoice.tone,
-          responseLength: agentVoice.responseLength,
-          configFallbackReason: runtimeConfig.configFallbackReason,
-          signal: input.signal,
-        })
-      } catch (error) {
-        log.warn({ err: error }, 'zero-tool completion evaluation failed')
-        throw new AssistantCompletionError('zero_tool_evaluation_failed')
-      }
-
-      if (zeroToolEvaluation.decision === 'retry') {
-        throw new AssistantCompletionError('incomplete_zero_tool_response')
-      }
+    // Structural conformance only. Semantic grounding lives in the system
+    // prompt and the tools' in-loop authority; there is no post-hoc judge.
+    validateFinal: (final) => {
+      validateAssistantCompletion(final)
     },
     onAttemptStart: () => {
       // Fresh ledger per attempt so a retry starts clean. A whole-object swap,
@@ -1309,14 +1188,13 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       // attempts anyway (both return sites below snapshot via spread at return
       // time instead).
       toolContext.ledger = makeAssistantToolLedger()
-      zeroToolEvaluation = null
     },
     onRetry: (_attempt, error) => {
       if (
         error instanceof AssistantCompletionError &&
-        !systemPrompts.includes(ASSISTANT_COMPLETION_REPAIR_PROMPT)
+        !systemPrompts.includes(ASSISTANT_STRUCTURAL_REPAIR_PROMPT)
       ) {
-        systemPrompts.push(ASSISTANT_COMPLETION_REPAIR_PROMPT)
+        systemPrompts.push(ASSISTANT_STRUCTURAL_REPAIR_PROMPT)
       }
       log.warn({ err: error }, 'assistant turn attempt failed, retrying once')
     },
@@ -1329,7 +1207,12 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     throw new AssistantCompletionError('non_conformant_output')
   }
   const parsed = parsedResult.data
-  const citations = assembleCitations(parsed.citations, toolContext.ledger.sources)
+  // Honest inability never dresses itself in sources: dropping the cited ids
+  // up front also makes relinkCitations strip their inline markers, so an
+  // "I can't help" reply renders without source chips.
+  const citations = toolContext.ledger.inabilityReport
+    ? []
+    : assembleCitations(parsed.citations, toolContext.ledger.sources)
   // Operational decisions come exclusively from tool calls. This compatibility
   // projection lets existing consumers render the handoff state; the model's
   // final object contains no action field.
