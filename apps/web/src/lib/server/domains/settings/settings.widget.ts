@@ -131,6 +131,7 @@ export function publicMessengerConfig(
 }
 import {
   requireSettings,
+  requireSettingsCached,
   wrapDbError,
   parseJsonConfig,
   deepMerge,
@@ -139,7 +140,8 @@ import {
 
 export async function getWidgetConfig(): Promise<WidgetConfig> {
   try {
-    const org = await requireSettings()
+    // Read-only + on public hot paths (sdk.js, identify): cached row.
+    const org = await requireSettingsCached()
     return parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
   } catch (error) {
     log.error({ err: error }, 'get widget config failed')
@@ -214,7 +216,8 @@ export async function updateWidgetAssistantDeployment(
 
 export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
   try {
-    const org = await requireSettings()
+    // Read-only + on public hot paths (config.json, widget SSR): cached row.
+    const org = await requireSettingsCached()
     const config = parseJsonConfig(org.widgetConfig, DEFAULT_WIDGET_CONFIG)
     const assistantConfig = assistantConfigSchema.safeParse(org.assistantConfig)
     const identity = assistantConfig.success

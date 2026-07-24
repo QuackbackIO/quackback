@@ -28,6 +28,16 @@ import {
 } from '@/lib/server/domains/settings/identity-providers.service'
 import { AUTH_CREDENTIAL_PREFIX, getAllAuthProviders } from './auth-providers'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
+import { cacheGet, cacheSet, CACHE_KEYS } from '@/lib/server/redis'
+
+/**
+ * TTL for the cached registered-provider list. A generous backstop: every
+ * write that could change the list (identity_provider / sso_verified_domain
+ * mutations, platform-credential save/delete, authConfig.oauth toggles)
+ * already invalidates the key eagerly, so this only bounds the window for a
+ * missed invalidation.
+ */
+const REGISTERED_AUTH_PROVIDERS_TTL_SECONDS = 300
 
 /**
  * The set of OIDC provider `registrationId`s the auth runtime registers
@@ -64,7 +74,28 @@ export async function getRegisteredOidcProviderIds(
   return ids
 }
 
+/**
+ * The registered-provider id list surfaced to the login UI on every app
+ * bootstrap. Cached in Redis (~5min TTL) because it runs on a hot bootstrap
+ * path and otherwise issues DB reads against identity_provider +
+ * sso_verified_domain on every request. Invalidated eagerly by every write
+ * that can change the list (via `invalidateSettingsCache()` and the
+ * platform-credential save/delete flows), so a stale list can only survive the
+ * TTL window if an invalidation is ever missed.
+ *
+ * Redis outages degrade gracefully: `cacheGet` returns null on failure, so we
+ * fall through to a fresh compute, and `cacheSet` swallows its own errors.
+ */
 export async function getRegisteredAuthProviders(): Promise<string[]> {
+  const cached = await cacheGet<string[]>(CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
+  if (cached) return cached
+
+  const ids = await computeRegisteredAuthProviders()
+  await cacheSet(CACHE_KEYS.REGISTERED_AUTH_PROVIDERS, ids, REGISTERED_AUTH_PROVIDERS_TTL_SECONDS)
+  return ids
+}
+
+async function computeRegisteredAuthProviders(): Promise<string[]> {
   const [tenantSettings, configuredTypes, identityProviders] = await Promise.all([
     getTenantSettings(),
     getConfiguredIntegrationTypes(),

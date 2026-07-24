@@ -6,6 +6,7 @@ import { logger } from '@/lib/server/logger'
 import type { BrandingConfig } from './settings.types'
 import {
   requireSettings,
+  requireSettingsCached,
   wrapDbError,
   parseJsonOrNull,
   invalidateSettingsCache,
@@ -19,7 +20,8 @@ const log = logger.child({ component: 'settings-media' })
 
 export async function getBrandingConfig(): Promise<BrandingConfig> {
   try {
-    const org = await requireSettings()
+    // Read-only + on public hot paths (config.json, portal SSR): cached row.
+    const org = await requireSettingsCached()
     return parseJsonOrNull<BrandingConfig>(org.brandingConfig) ?? {}
   } catch (error) {
     log.error({ err: error }, 'get branding config failed')
@@ -58,7 +60,8 @@ export async function updateBrandingConfig(config: BrandingConfig): Promise<Bran
 
 export async function getCustomCss(): Promise<string> {
   try {
-    const org = await requireSettings()
+    // Read-only + on public hot paths (config.json, portal SSR): cached row.
+    const org = await requireSettingsCached()
     return org.customCss ?? ''
   } catch (error) {
     log.error({ err: error }, 'get custom css failed')

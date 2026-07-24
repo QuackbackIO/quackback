@@ -69,6 +69,27 @@ export async function requireSettings(): Promise<SettingsRecord> {
   return org
 }
 
+/**
+ * The raw settings row for READ-ONLY paths, served through the Redis-cached
+ * tenant-settings blob (a single Redis GET when warm; the miss path is the
+ * same DB read as {@link requireSettings}). Every settings mutation calls
+ * invalidateSettingsCache(), so reads here are effectively fresh.
+ *
+ * Two caveats: date columns arrive as ISO strings after the JSON round trip,
+ * and read-modify-write paths MUST keep using {@link requireSettings} so a
+ * write is never based on a cached row.
+ *
+ * @internal
+ */
+export async function requireSettingsCached(): Promise<SettingsRecord> {
+  // Dynamic import: settings.service imports these helpers at module scope,
+  // so a static import here would be a load-time cycle.
+  const { getTenantSettings } = await import('./settings.service')
+  const tenant = await getTenantSettings()
+  if (!tenant?.settings) throw new NotFoundError('SETTINGS_NOT_FOUND', 'Settings not found')
+  return tenant.settings as SettingsRecord
+}
+
 /** @internal */
 export function wrapDbError(operation: string, error: unknown): never {
   if (error instanceof NotFoundError || error instanceof ValidationError) throw error
@@ -79,7 +100,10 @@ export function wrapDbError(operation: string, error: unknown): never {
 /** @internal */
 export async function invalidateSettingsCache(): Promise<void> {
   log.info('invalidating settings cache')
-  await cacheDel(CACHE_KEYS.TENANT_SETTINGS)
+  // REGISTERED_AUTH_PROVIDERS is derived from authConfig.oauth (part of tenant
+  // settings) and the identity_provider list; every identity-provider write
+  // funnels through here, so drop it alongside the settings row.
+  await cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.REGISTERED_AUTH_PROVIDERS)
 }
 
 /**

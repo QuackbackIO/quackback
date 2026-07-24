@@ -9,11 +9,13 @@ import {
 } from '../settings.types'
 
 // Partial-mock the helpers so getPublicWidgetConfig reads a fixture settings row
-// while deepMerge/parseJsonConfig (used by the tests below) stay real.
+// while deepMerge/parseJsonConfig (used by the tests below) stay real. Both the
+// fresh and the cached read paths serve the fixture.
 const settingsRow = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }))
 vi.mock('../settings.helpers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../settings.helpers')>()),
   requireSettings: async () => settingsRow.current,
+  requireSettingsCached: async () => settingsRow.current,
 }))
 
 import {

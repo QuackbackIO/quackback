@@ -25,6 +25,7 @@ vi.mock('@/lib/server/redis', () => ({
     INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
     SLACK_CHANNELS: 'slack:channels',
+    REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
   },
 }))
 
@@ -224,7 +225,7 @@ describe('updateHelpCenterConfig', () => {
 
     await updateHelpCenterConfig({ enabled: true })
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('can update nested seo config', async () => {
@@ -311,7 +312,11 @@ describe('enableHelpCenterLocale', () => {
 
     const result = await enableHelpCenterLocale({
       locale: 'de',
-      chrome: { homepageTitle: 'Wie können wir helfen?', homepageDescription: '', searchPlaceholder: '' },
+      chrome: {
+        homepageTitle: 'Wie können wir helfen?',
+        homepageDescription: '',
+        searchPlaceholder: '',
+      },
     })
 
     expect(result.additional).toEqual(['de'])
@@ -366,7 +371,9 @@ describe('updateHelpCenterLocaleChrome', () => {
       locales: {
         default: 'en',
         additional: ['de'],
-        chrome: { de: { homepageTitle: 'Hallo', homepageDescription: 'x', searchPlaceholder: 'y' } },
+        chrome: {
+          de: { homepageTitle: 'Hallo', homepageDescription: 'x', searchPlaceholder: 'y' },
+        },
       },
     })
     mockFindFirst.mockResolvedValue(makeSettingsRow({ helpCenterConfig: stored }))

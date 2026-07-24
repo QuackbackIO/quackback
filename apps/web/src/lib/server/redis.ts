@@ -41,6 +41,11 @@ export const CACHE_KEYS = {
   // Hot dependency of getTenantSettings; invalidated by save/delete in
   // platform-credential.service.ts.
   PLATFORM_INTEGRATION_TYPES: 'platform-cred:configured-types',
+  // The registered-auth-provider id list surfaced to the login UI on every
+  // app bootstrap. Derived from identity_provider + sso_verified_domain +
+  // authConfig.oauth; invalidated by invalidateSettingsCache() and by the
+  // platform-credential save/delete flows. 5min TTL backstops anything missed.
+  REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
   // Per-user principal type/role lookup hit on every authenticated SSR
   // render. Invalidated by role/type mutations; 5min TTL backstops anything
   // we miss.

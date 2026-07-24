@@ -21,10 +21,13 @@ export interface SessionUser {
 }
 
 export interface Session {
+  // No `token` field: the Session shape flows into client-bound bootstrap
+  // payloads that are dehydrated into SSR HTML, and embedding the raw token
+  // there would defeat the HttpOnly cookie. Paths that need it (widget
+  // iframe handoff) read the cookie directly.
   session: {
     id: SessionId
     expiresAt: string
-    token: string
     createdAt: string
     updatedAt: string
     userId: UserId
@@ -54,7 +57,6 @@ export async function getSession(): Promise<Session | null> {
       session: {
         id: session.session.id as SessionId,
         expiresAt: session.session.expiresAt.toISOString(),
-        token: session.session.token,
         createdAt: session.session.createdAt.toISOString(),
         updatedAt: session.session.updatedAt.toISOString(),
         userId,

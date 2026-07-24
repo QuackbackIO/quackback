@@ -23,6 +23,7 @@ vi.mock('@/lib/server/redis', () => ({
     INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
     ACTIVE_WEBHOOKS: 'hooks:webhooks-active',
     SLACK_CHANNELS: 'slack:channels',
+    REGISTERED_AUTH_PROVIDERS: 'auth:registered-providers',
   },
 }))
 
@@ -204,7 +205,7 @@ describe('invalidateSettingsCache', () => {
   it('deletes the tenant settings cache key', async () => {
     await invalidateSettingsCache()
 
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 })
 
@@ -220,81 +221,81 @@ describe('settings write functions invalidate cache', () => {
 
   it('updateAuthConfig invalidates cache', async () => {
     await updateAuthConfig({ oauth: { password: true } })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updatePortalConfig invalidates cache', async () => {
     await updatePortalConfig({ features: {} })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updateBrandingConfig invalidates cache', async () => {
     await updateBrandingConfig({ preset: 'custom' })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updateCustomCss invalidates cache', async () => {
     await updateCustomCss('.test { color: red; }')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updateDeveloperConfig invalidates cache', async () => {
     await updateDeveloperConfig({ mcpEnabled: true })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updateWidgetConfig invalidates cache', async () => {
     await updateWidgetConfig({ enabled: true })
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updateWorkspaceName invalidates cache', async () => {
     await updateWorkspaceName('New Name')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updateHeaderDisplayMode invalidates cache', async () => {
     await updateHeaderDisplayMode('logo_only')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('updateHeaderDisplayName invalidates cache', async () => {
     await updateHeaderDisplayName('Custom Name')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('saveLogoKey invalidates cache', async () => {
     await saveLogoKey('logos/new.png')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('deleteLogoKey invalidates cache', async () => {
     await deleteLogoKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('saveFaviconKey invalidates cache', async () => {
     await saveFaviconKey('favicons/new.ico')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('deleteFaviconKey invalidates cache', async () => {
     await deleteFaviconKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('saveHeaderLogoKey invalidates cache', async () => {
     await saveHeaderLogoKey('headers/new.png')
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('deleteHeaderLogoKey invalidates cache', async () => {
     await deleteHeaderLogoKey()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 
   it('regenerateWidgetSecret invalidates cache', async () => {
     await regenerateWidgetSecret()
-    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant')
+    expect(mockCacheDel).toHaveBeenCalledWith('settings:tenant', 'auth:registered-providers')
   })
 })
