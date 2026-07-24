@@ -236,6 +236,53 @@ describe('contentJsonToMarkdown', () => {
     expect(result).toContain('![S](https://cdn.example.com/s.png)')
   })
 
+  test('keeps emoji (as the Unicode character) when restoring an image', () => {
+    // The reported bug: a post written with the `:` emoji picker made the whole
+    // document non-reserializable, so the API fell back to stored markdown —
+    // which has the shortcodes but not the images. Both must survive.
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'We shipped it ' },
+            { type: 'emoji', attrs: { name: 'tada' } },
+          ],
+        },
+        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
+      ],
+    }
+    const result = contentJsonToMarkdown(doc, 'We shipped it :tada:')
+    expect(result).toContain('We shipped it 🎉')
+    expect(result).not.toContain(':tada:')
+    expect(result).toContain('![S](https://cdn.example.com/s.png)')
+  })
+
+  test('prefers an emoji node’s stored character over the shortcode table', () => {
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        { type: 'paragraph', content: [{ type: 'emoji', attrs: { name: 'tada', emoji: '🎊' } }] },
+        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
+      ],
+    }
+    expect(contentJsonToMarkdown(doc, 'stored')).toContain('🎊')
+  })
+
+  test('keeps a custom emoji as its shortcode when it has no Unicode character', () => {
+    // Workspace-uploaded emoji are image-backed and have no character to emit;
+    // `:name:` is what the editor round-trips them as.
+    const doc = {
+      type: 'doc' as const,
+      content: [
+        { type: 'paragraph', content: [{ type: 'emoji', attrs: { name: 'quackback_logo' } }] },
+        { type: 'image', attrs: { src: 'https://cdn.example.com/s.png', alt: 'S', title: null } },
+      ],
+    }
+    expect(contentJsonToMarkdown(doc, 'stored')).toContain(':quackback_logo:')
+  })
+
   test('keeps stored markdown when an image coexists with an unsupported node', () => {
     // A youtube embed has no server renderer; re-serializing would drop it, so
     // the whole document keeps its stored markdown (image not re-derived) rather

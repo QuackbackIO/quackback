@@ -12,6 +12,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import Image from '@tiptap/extension-image'
+import { emojis as defaultEmojis } from '@tiptap/extension-emoji'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { Table } from '@tiptap/extension-table'
@@ -81,11 +82,11 @@ const IMAGE_NODE_TYPES = new Set(['image', 'resizableImage'])
 
 /**
  * Node types this module can faithfully turn into markdown: the server
- * manager's own nodes (see SERVER_EXTENSIONS) plus the two we normalize below
- * (`resizableImage` -> `image`, `mention` -> text). Anything else — `youtube`,
- * `quackbackEmbed`, `emoji`, future custom nodes — would be silently dropped by
- * the narrower server manager, so a document containing one keeps its stored
- * markdown (which the client serialized with full coverage) instead.
+ * manager's own nodes (see SERVER_EXTENSIONS) plus the three we normalize below
+ * (`resizableImage` -> `image`, `mention` -> text, `emoji` -> text). Anything
+ * else — `youtube`, `quackbackEmbed`, future custom nodes — would be silently
+ * dropped by the narrower server manager, so a document containing one keeps
+ * its stored markdown (which the client serialized with full coverage) instead.
  */
 const RESERIALIZABLE_NODE_TYPES = new Set([
   'doc',
@@ -108,6 +109,7 @@ const RESERIALIZABLE_NODE_TYPES = new Set([
   'image',
   'resizableImage',
   'mention',
+  'emoji',
 ])
 
 /**
@@ -165,9 +167,10 @@ function isReserializable(node: JSONContent): boolean {
 
 /**
  * Rewrite the editor's custom nodes into ones @tiptap/markdown can serialize:
- * `resizableImage` -> `image` (shares src/alt but has no markdown spec) and
- * `mention` -> the `@label` text the directive would otherwise hide. Only
- * called once {@link isReserializable} has cleared the tree.
+ * `resizableImage` -> `image` (shares src/alt but has no markdown spec),
+ * `mention` -> the `@label` text the directive would otherwise hide, and
+ * `emoji` -> its Unicode character. Only called once {@link isReserializable}
+ * has cleared the tree.
  */
 function normalizeForMarkdown(node: JSONContent): JSONContent {
   if (node.type === 'mention') {
@@ -175,9 +178,27 @@ function normalizeForMarkdown(node: JSONContent): JSONContent {
     const label = (attrs.label as string) || (attrs.id as string) || 'mention'
     return { type: 'text', text: `@${label}` }
   }
+  if (node.type === 'emoji') {
+    return { type: 'text', text: emojiNodeToText(node) }
+  }
   const next = node.type === 'resizableImage' ? { ...node, type: 'image' } : node
   if (!Array.isArray(next.content)) return next
   return { ...next, content: next.content.map(normalizeForMarkdown) }
+}
+
+/**
+ * The text an `emoji` node serializes to. `@tiptap/extension-emoji` persists
+ * `{ name }` and only sometimes the character itself, so fall back to the
+ * shortcode table, and to `:name:` for a custom emoji that has no Unicode
+ * equivalent — the same text the editor round-trips it as.
+ */
+function emojiNodeToText(node: JSONContent): string {
+  const attrs = node.attrs ?? {}
+  const stored = attrs.emoji
+  if (typeof stored === 'string' && stored) return stored
+  const name = typeof attrs.name === 'string' ? attrs.name : ''
+  if (!name) return ''
+  return defaultEmojis.find((e) => e.emoji && e.shortcodes.includes(name))?.emoji ?? `:${name}:`
 }
 
 /**
