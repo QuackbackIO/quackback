@@ -148,18 +148,19 @@ export async function getNotificationsForMember(
     .limit(limit)
     .offset(offset)
 
-  // Count total (for pagination)
-  const totalResult = await db
-    .select({ count: sql<number>`count(*)::int`.as('count') })
-    .from(inAppNotifications)
-    .where(where)
+  // Total (for pagination) and unread counts are independent of each other and
+  // of the list query above, so fire them in parallel rather than serially.
+  const [totalResult, unreadResult] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int`.as('count') })
+      .from(inAppNotifications)
+      .where(where),
+    db
+      .select({ count: sql<number>`count(*)::int`.as('count') })
+      .from(inAppNotifications)
+      .where(and(baseWhere, isNull(inAppNotifications.readAt))),
+  ])
   const total = totalResult[0]?.count ?? 0
-
-  // Count unread
-  const unreadResult = await db
-    .select({ count: sql<number>`count(*)::int`.as('count') })
-    .from(inAppNotifications)
-    .where(and(baseWhere, isNull(inAppNotifications.readAt)))
   const unreadCount = unreadResult[0]?.count ?? 0
 
   const notifications: NotificationWithPost[] = rows.map((row) => {
