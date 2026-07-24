@@ -5,7 +5,13 @@
  * Mutations are in lib/mutations/posts.ts and lib/mutations/comments.ts
  */
 
-import { useQuery, useInfiniteQuery, type InfiniteData } from '@tanstack/react-query'
+import {
+  useQuery,
+  useInfiniteQuery,
+  infiniteQueryOptions,
+  keepPreviousData,
+  type InfiniteData,
+} from '@tanstack/react-query'
 import { fetchInboxPostsForAdmin, fetchPostWithDetails } from '@/lib/server/functions/posts'
 import type { InboxFilters, PostDetails } from '@/lib/shared/types'
 import type { PostListItem, InboxPostListResult } from '@/lib/shared/db-types'
@@ -17,7 +23,6 @@ import type { BoardId, PrincipalId, PostId, PostTagId, SegmentId } from '@quackb
 
 interface UseInboxPostsOptions {
   filters: InboxFilters
-  initialData?: InboxPostListResult
 }
 
 interface UsePostDetailOptions {
@@ -76,22 +81,48 @@ async function fetchPostDetail(postId: PostId): Promise<PostDetails> {
 }
 
 // ============================================================================
-// Query Hooks
+// Shared Query Options (QC-1)
 // ============================================================================
 
-export function useInboxPosts({ filters, initialData }: UseInboxPostsOptions) {
-  return useInfiniteQuery({
+/**
+ * The unfiltered inbox filter set. The route loader warms the infinite cache
+ * with exactly this shape so the renderer's `useInboxPosts` reads the same
+ * cache entry on first paint (React Query hashes `undefined` fields away, so
+ * this hashes identically to the empty-search filters the hook builds).
+ */
+export const defaultInboxFilters: InboxFilters = {}
+
+/**
+ * ONE canonical definition of the inbox infinite query, shared by the route
+ * loader (via `ensureInfiniteQueryData`) and the renderer's `useInboxPosts`
+ * hook. Collapsing the previously-split `adminQueries.inboxPosts` namespace and
+ * this infinite query into a single key/queryFn (QC-1) means post mutations
+ * that invalidate `inboxKeys.lists()` reach the cache the UI actually renders,
+ * so navigating back no longer serves stale data.
+ */
+export function inboxPostsInfiniteOptions(filters: InboxFilters) {
+  return infiniteQueryOptions({
     queryKey: inboxKeys.list(filters),
     queryFn: ({ pageParam }) => fetchInboxPosts(filters, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialData: initialData
-      ? {
-          pages: [initialData],
-          pageParams: [undefined],
-        }
-      : undefined,
-    refetchOnMount: !initialData,
+    // NOTE (QC-2): no `maxPages` here. This cursor is a one-directional keyset
+    // (last-item id, forward-only `<` comparison server-side — see
+    // post.inbox.ts) with no reverse cursor returned, so there's no clean
+    // `getPreviousPageParam` to pair it with; capping pages would silently
+    // drop the scrolled-past head with no way back. Skipped per QC-2's escape
+    // hatch — would need a server-side reverse-cursor query to support this.
+  })
+}
+
+// ============================================================================
+// Query Hooks
+// ============================================================================
+
+export function useInboxPosts({ filters }: UseInboxPostsOptions) {
+  return useInfiniteQuery({
+    ...inboxPostsInfiniteOptions(filters),
+    placeholderData: keepPreviousData,
   })
 }
 

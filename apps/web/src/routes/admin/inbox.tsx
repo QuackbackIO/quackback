@@ -269,8 +269,8 @@ export const Route = createFileRoute('/admin/inbox')({
     company: search.company,
   }),
   loader: async ({ deps, context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({ data: { allowedRoles: ['admin', 'member'] } })
+    // Auth is enforced by the parent `/admin` guard (admin/member wall) plus
+    // each inbox server function's own authz — no per-route RPC guard needed.
     const flags = context.settings?.featureFlags as FeatureFlags | undefined
     // The component redirects when neither flag is on — don't pay for a
     // prefetch. A tickets-only workspace (supportTickets on, supportInbox off)
@@ -610,6 +610,115 @@ function InboxPage() {
     }
   }, [urlCompany, companies, updateSearch])
 
+  // Targeted cache refresh, split so each surface only pays for what actually
+  // moved (a broad invalidate-everything on every SSE event/solo mutation was
+  // measurably wasteful — see the perf review). `refreshInboxList` covers
+  // both list surfaces (the legacy per-scope conversation list + the unified
+  // item list); `refreshInboxCounts` is the separate nav-badge counts. A solo
+  // mutation (assign/priority/snooze/close/reopen/create-ticket) always
+  // touches both — the actor just made exactly that kind of change, and a
+  // ticket mutation already seeds its own detail/list caches directly (see
+  // the `assignTicketMutation`/etc comment below) — so `refreshInbox` below
+  // stays their one call. The SSE handler is pickier: it reuses the reducer's
+  // own predicates to invalidate only when an event could actually have
+  // moved that surface, and patches `ticket_updated` directly instead of
+  // invalidating at all (see `patchTicketInInboxLists`).
+  const refreshInboxList = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: conversationKeys.agentConversations() })
+    void queryClient.invalidateQueries({ queryKey: inboxKeys.items() })
+  }, [queryClient])
+  const refreshInboxCounts = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: inboxKeys.counts() })
+  }, [queryClient])
+  const refreshInbox = useCallback(() => {
+    refreshInboxList()
+    refreshInboxCounts()
+  }, [refreshInboxList, refreshInboxCounts])
+
+  // Track whether the visitor of the selected conversation is currently typing.
+  const {
+    remoteTyping: visitorTyping,
+    onRemoteTyping,
+    clearRemoteTyping,
+  } = useConversationTyping(() => {})
+  // Collision detection: another agent typing in the same thread (self-echo is
+  // filtered server-side, so any agent-typing here is a different agent).
+  const {
+    remoteTyping: otherAgentTyping,
+    onRemoteTyping: onOtherAgentTyping,
+    clearRemoteTyping: clearOtherAgentTyping,
+  } = useConversationTyping(() => {})
+
+  // The open conversation/ticket id, or null when the other kind (or nothing)
+  // is selected.
+  const activeConversationId = selectedRef?.kind === 'conversation' ? selectedRef.id : null
+  const activeTicketId = selectedRef?.kind === 'ticket' ? selectedRef.id : null
+
+  // Hoisted above `useInboxListSource` (below) so its connection state can
+  // gate that hook's polling-fallback `refetchInterval`s — while the stream
+  // is connected, it already keeps both list surfaces current (via
+  // `refreshInboxList`/the ticket row-patch below), making a parallel poll
+  // redundant load (QC-3).
+  const { connected: streamConnected } = useConversationStream({
+    enabled: true,
+    buildUrl: async () => '/api/chat/stream?scope=inbox',
+    onReconnect: refreshInbox,
+    onEvent: (evt) => {
+      // A ticket's live properties (status/assignee/priority/stage/type) name
+      // their own cache keys precisely, so this patches them directly instead
+      // of invalidating anything: the detail cache any open thread/panel
+      // reads (`inboxQueries.ticketDetail`, keyed under `ticketKeys.detail`,
+      // regardless of whether THIS ticket is the active item — it may be the
+      // active conversation's linked ticket instead), and the matching row(s)
+      // in every cached item-list page (`patchTicketInInboxLists`). No
+      // membership/order invalidation follows for this event — the patch IS
+      // the up-to-date row.
+      if (evt.kind === 'ticket_updated') {
+        queryClient.setQueryData(ticketKeys.detail(evt.ticket.id), evt.ticket)
+        patchTicketInInboxLists(queryClient, evt.ticket)
+      } else if (agentEventChangesInboxList(evt)) {
+        // Every other membership/order/preview-changing event (a new message,
+        // a conversation's status/assignee/tags, an agent-side read move) —
+        // the reducer's own predicate decides, so this can't drift from what
+        // the thread-cache reducers already treat as list-affecting.
+        refreshInboxList()
+      }
+      // Nav-badge counts only move on an assignment/status/type change, never
+      // on a message/reaction/flag/typing/read event — see the predicate's
+      // own doc comment for why it's a separate check from the list one above.
+      if (agentEventChangesInboxCounts(evt)) refreshInboxCounts()
+
+      // Typing indicators are component state, not cache: a visitor message
+      // clears the visitor dots; agent activity clears the collision notice
+      // (self-echo is dropped server-side, so it's always another agent).
+      // Ticket threads carry no typing capability (§2.5), so there's no
+      // ticket-side equivalent to wire up here.
+      if (evt.kind === 'message' && evt.conversationId === activeConversationId) {
+        if (evt.message.senderType === 'visitor') clearRemoteTyping()
+        if (evt.message.senderType === 'agent') clearOtherAgentTyping()
+      } else if (evt.kind === 'typing' && evt.conversationId === activeConversationId) {
+        if (evt.side === 'visitor') onRemoteTyping()
+        else if (evt.side === 'agent') onOtherAgentTyping()
+      }
+
+      // Everything cache-shaped (message/read/updated/deleted/conversation)
+      // routes through the pure reducer against the open thread's cache — one
+      // branch per kind, since each has its own cache key + reducer.
+      if (activeConversationId) {
+        queryClient.setQueryData(
+          conversationKeys.agentThread(activeConversationId),
+          (prev: AgentThreadCache | undefined) =>
+            applyAgentThreadEvent(prev, evt, activeConversationId)
+        )
+      } else if (activeTicketId) {
+        queryClient.setQueryData(
+          ticketKeys.thread(activeTicketId),
+          (prev: TicketThreadCache | undefined) => applyTicketThreadEvent(prev, evt, activeTicketId)
+        )
+      }
+    },
+  })
+
   // The unified endpoint (mine/unassigned/all, a team scope, a Tickets-section
   // scope, or a custom view carrying a ticket-only rule — §2.8) vs the legacy
   // conversation-only endpoint (mentions/quinn/saved, tag/segment, and a
@@ -628,6 +737,7 @@ function InboxPage() {
     activeViewFilters: activeView?.filters,
     aiBucket: nav.kind === 'view' && nav.view === 'quinn' ? urlAi : undefined,
     isSaved,
+    streamConnected,
   })
 
   // Quinn-view sub-filter counts (only fetched while that view is open).
@@ -711,110 +821,6 @@ function InboxPage() {
       updateSearch({ viewId: undefined })
     }
   }, [nav, navTags, navSegments, navTeams, navViews, updateSearch])
-
-  // Targeted cache refresh, split so each surface only pays for what actually
-  // moved (a broad invalidate-everything on every SSE event/solo mutation was
-  // measurably wasteful — see the perf review). `refreshInboxList` covers
-  // both list surfaces (the legacy per-scope conversation list + the unified
-  // item list); `refreshInboxCounts` is the separate nav-badge counts. A solo
-  // mutation (assign/priority/snooze/close/reopen/create-ticket) always
-  // touches both — the actor just made exactly that kind of change, and a
-  // ticket mutation already seeds its own detail/list caches directly (see
-  // the `assignTicketMutation`/etc comment below) — so `refreshInbox` below
-  // stays their one call. The SSE handler is pickier: it reuses the reducer's
-  // own predicates to invalidate only when an event could actually have
-  // moved that surface, and patches `ticket_updated` directly instead of
-  // invalidating at all (see `patchTicketInInboxLists`).
-  const refreshInboxList = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: conversationKeys.agentConversations() })
-    void queryClient.invalidateQueries({ queryKey: inboxKeys.items() })
-  }, [queryClient])
-  const refreshInboxCounts = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: inboxKeys.counts() })
-  }, [queryClient])
-  const refreshInbox = useCallback(() => {
-    refreshInboxList()
-    refreshInboxCounts()
-  }, [refreshInboxList, refreshInboxCounts])
-
-  // Track whether the visitor of the selected conversation is currently typing.
-  const {
-    remoteTyping: visitorTyping,
-    onRemoteTyping,
-    clearRemoteTyping,
-  } = useConversationTyping(() => {})
-  // Collision detection: another agent typing in the same thread (self-echo is
-  // filtered server-side, so any agent-typing here is a different agent).
-  const {
-    remoteTyping: otherAgentTyping,
-    onRemoteTyping: onOtherAgentTyping,
-    clearRemoteTyping: clearOtherAgentTyping,
-  } = useConversationTyping(() => {})
-
-  // The open conversation/ticket id, or null when the other kind (or nothing)
-  // is selected.
-  const activeConversationId = selectedRef?.kind === 'conversation' ? selectedRef.id : null
-  const activeTicketId = selectedRef?.kind === 'ticket' ? selectedRef.id : null
-
-  useConversationStream({
-    enabled: true,
-    buildUrl: async () => '/api/chat/stream?scope=inbox',
-    onReconnect: refreshInbox,
-    onEvent: (evt) => {
-      // A ticket's live properties (status/assignee/priority/stage/type) name
-      // their own cache keys precisely, so this patches them directly instead
-      // of invalidating anything: the detail cache any open thread/panel
-      // reads (`inboxQueries.ticketDetail`, keyed under `ticketKeys.detail`,
-      // regardless of whether THIS ticket is the active item — it may be the
-      // active conversation's linked ticket instead), and the matching row(s)
-      // in every cached item-list page (`patchTicketInInboxLists`). No
-      // membership/order invalidation follows for this event — the patch IS
-      // the up-to-date row.
-      if (evt.kind === 'ticket_updated') {
-        queryClient.setQueryData(ticketKeys.detail(evt.ticket.id), evt.ticket)
-        patchTicketInInboxLists(queryClient, evt.ticket)
-      } else if (agentEventChangesInboxList(evt)) {
-        // Every other membership/order/preview-changing event (a new message,
-        // a conversation's status/assignee/tags, an agent-side read move) —
-        // the reducer's own predicate decides, so this can't drift from what
-        // the thread-cache reducers already treat as list-affecting.
-        refreshInboxList()
-      }
-      // Nav-badge counts only move on an assignment/status/type change, never
-      // on a message/reaction/flag/typing/read event — see the predicate's
-      // own doc comment for why it's a separate check from the list one above.
-      if (agentEventChangesInboxCounts(evt)) refreshInboxCounts()
-
-      // Typing indicators are component state, not cache: a visitor message
-      // clears the visitor dots; agent activity clears the collision notice
-      // (self-echo is dropped server-side, so it's always another agent).
-      // Ticket threads carry no typing capability (§2.5), so there's no
-      // ticket-side equivalent to wire up here.
-      if (evt.kind === 'message' && evt.conversationId === activeConversationId) {
-        if (evt.message.senderType === 'visitor') clearRemoteTyping()
-        if (evt.message.senderType === 'agent') clearOtherAgentTyping()
-      } else if (evt.kind === 'typing' && evt.conversationId === activeConversationId) {
-        if (evt.side === 'visitor') onRemoteTyping()
-        else if (evt.side === 'agent') onOtherAgentTyping()
-      }
-
-      // Everything cache-shaped (message/read/updated/deleted/conversation)
-      // routes through the pure reducer against the open thread's cache — one
-      // branch per kind, since each has its own cache key + reducer.
-      if (activeConversationId) {
-        queryClient.setQueryData(
-          conversationKeys.agentThread(activeConversationId),
-          (prev: AgentThreadCache | undefined) =>
-            applyAgentThreadEvent(prev, evt, activeConversationId)
-        )
-      } else if (activeTicketId) {
-        queryClient.setQueryData(
-          ticketKeys.thread(activeTicketId),
-          (prev: TicketThreadCache | undefined) => applyTicketThreadEvent(prev, evt, activeTicketId)
-        )
-      }
-    },
-  })
 
   // ── Keyboard-first layer + bulk selection (support platform §4.6) ────────
   // Multi-select set (bulk actions) — TypeIDs of either kind. Cleared whenever

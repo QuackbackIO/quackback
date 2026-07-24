@@ -9,7 +9,7 @@
  * hooks available there), but reads the exact same predicate this hook does.
  */
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import type { CompanyId } from '@quackback/ids'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import {
@@ -47,6 +47,12 @@ export interface UseInboxListSourceParams {
   /** The "Saved for later" scope shows flagged MESSAGES, not a list — both
    *  queries stay idle there (the route renders `SavedMessagesColumn` instead). */
   isSaved: boolean
+  /** Whether the inbox SSE stream is currently connected (see
+   *  `useConversationStream`'s `connected` return). While true, the stream
+   *  itself keeps these lists current via row patches/invalidation, so the
+   *  polling fallback below is unnecessary extra load; it re-arms the moment
+   *  the stream drops or hasn't connected yet. */
+  streamConnected: boolean
 }
 
 export interface UseInboxListSourceResult {
@@ -70,6 +76,7 @@ export function useInboxListSource({
   activeViewFilters,
   aiBucket,
   isSaved,
+  streamConnected,
 }: UseInboxListSourceParams): UseInboxListSourceResult {
   const useUnified = usesUnifiedInboxList(nav, activeViewFilters)
   // A custom view's legacy-path rules are pre-translated to the conversation
@@ -96,7 +103,10 @@ export function useInboxListSource({
     // Ticket SSE has landed (M3) and drives real-time updates via
     // `patchTicketInInboxLists` — this is now just the safety-net cadence for
     // a dropped/reconnecting stream, so it can be slower than a live poll.
-    refetchInterval: 60_000,
+    // Skipped entirely while the stream is connected (it already keeps this
+    // list current); re-arms the moment it disconnects.
+    refetchInterval: () => (streamConnected ? false : 60_000),
+    placeholderData: keepPreviousData,
     enabled: useUnified && !isSaved,
   })
   const { data: legacyData, isLoading: legacyLoading } = useQuery({
@@ -110,7 +120,10 @@ export function useInboxListSource({
       customParams,
       aiBucket
     ),
-    refetchInterval: 30_000, // polling fallback if the stream drops
+    // Polling fallback if the stream drops; skipped while connected (same
+    // reasoning as the unified query above).
+    refetchInterval: () => (streamConnected ? false : 30_000),
+    placeholderData: keepPreviousData,
     // A custom view can't run until its rule set has loaded from the views
     // list — hold the query until then.
     enabled: !useUnified && !isSaved && (nav.kind !== 'custom' || activeViewFilters !== undefined),

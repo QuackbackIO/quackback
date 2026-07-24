@@ -734,10 +734,22 @@ export function AgentConversationThread({
 
   // Merge a freshly-sent message into the open thread's cache (dedup by id).
   // `res.conversation` is only present on the conversation path's response.
-  const appendToThread = (res: {
-    conversation?: ConversationDTO
-    message: ConversationMessageDTO
-  }) => {
+  //
+  // `notifyChanged` defaults to true (the note-add path relies on it — notes
+  // never echo back over SSE, so `onChanged` → `refreshInbox` is the only
+  // reconciliation for them). The reply path (`sendMutation`, below) passes
+  // `false`: replying already writes straight into this cache above, AND the
+  // SSE echo of the agent's own message fires `agentEventChangesInboxList` →
+  // `refreshInboxList` (see inbox.tsx's stream handler) — so calling
+  // `onChanged` here too was a redundant second broad invalidation racing the
+  // SSE one (QC-3).
+  const appendToThread = (
+    res: {
+      conversation?: ConversationDTO
+      message: ConversationMessageDTO
+    },
+    notifyChanged = true
+  ) => {
     if (isTicket) {
       queryClient.setQueryData(ticketThreadKey, (prev: TicketThreadCache | undefined) =>
         appendSentTicketMessage(prev, { message: res.message })
@@ -750,7 +762,7 @@ export function AgentConversationThread({
         })
       )
     }
-    onChanged()
+    if (notifyChanged) onChanged()
   }
 
   const sendMutation = useMutation({
@@ -762,6 +774,11 @@ export function AgentConversationThread({
       // TRANSLATION_FAILED error — bypasses translation for this one send.
       // Conversation-only; the ticket send path never throws these errors.
       skipTranslation?: boolean
+      // PP-6: restores the composer to the exact draft snapshotted at send time.
+      // The composer clears optimistically on mutate; on any failure this puts
+      // the typed reply back so a failed send never loses the draft. Not sent to
+      // the server — consumed purely by onError.
+      restoreDraft?: () => void
     }) =>
       isTicket
         ? sendTicketMessageFn({
@@ -786,9 +803,18 @@ export function AgentConversationThread({
       // Our own send always lands at the bottom (followOnAppend only follows
       // when already at end); the layout effect scrolls once the row exists.
       pendingOwnSendScroll.current = true
-      appendToThread(res)
+      // notifyChanged: false — the SSE echo of this send is the single
+      // reconciliation path for the inbox list (see appendToThread's doc
+      // comment); calling onChanged here too raced it with a redundant
+      // broad invalidation.
+      appendToThread(res, false)
     },
     onError: (error, vars) => {
+      // Restore the composer to the exact draft cleared at send time so a failed
+      // send never loses the typed reply — regardless of which branch below
+      // handles the error. The translation-fallback toasts re-send `vars` (which
+      // still carries the content), so a subsequent retry re-clears optimistically.
+      vars.restoreDraft?.()
       // The reply carried an inline image/embed that a translated send cannot
       // preserve — BLOCKED before the model ever ran (see
       // resolveOutgoingReplyTranslation), never silently dropped. Same choice
@@ -799,7 +825,12 @@ export function AgentConversationThread({
             'Translation cannot carry images or embeds. Send untranslated to keep them, or remove them and try again.',
           action: {
             label: 'Send untranslated',
-            onClick: () => sendMutation.mutate({ ...vars, skipTranslation: true }),
+            onClick: () => {
+              // Re-clear the composer we restored above, then resend.
+              setReplyDraft(EMPTY_DRAFT)
+              setReplyKey((k) => k + 1)
+              sendMutation.mutate({ ...vars, skipTranslation: true })
+            },
           },
         })
         return
@@ -811,7 +842,12 @@ export function AgentConversationThread({
           description: 'Send it in your own language instead, or try again.',
           action: {
             label: 'Send untranslated',
-            onClick: () => sendMutation.mutate({ ...vars, skipTranslation: true }),
+            onClick: () => {
+              // Re-clear the composer we restored above, then resend.
+              setReplyDraft(EMPTY_DRAFT)
+              setReplyKey((k) => k + 1)
+              sendMutation.mutate({ ...vars, skipTranslation: true })
+            },
           },
         })
         return
@@ -825,6 +861,8 @@ export function AgentConversationThread({
       content: string
       contentJson: JSONContent | null
       attachments?: ConversationAttachment[]
+      // PP-6: restores the composer draft on failure (see sendMutation).
+      restoreDraft?: () => void
     }) =>
       isTicket
         ? addTicketNoteFn({
@@ -848,7 +886,10 @@ export function AgentConversationThread({
       pendingOwnSendScroll.current = true
       appendToThread(res)
     },
-    onError: () => toast.error('Failed to add note'),
+    onError: (_error, vars) => {
+      vars.restoreDraft?.()
+      toast.error('Failed to add note')
+    },
   })
 
   // Re-fetch the thread (priority/assignee/tags live on the conversation row)
@@ -1303,10 +1344,23 @@ export function AgentConversationThread({
     const hasAttachments = pendingAttachments.length > 0
     const mutation = useNote ? noteMutation : sendMutation
     if ((empty && !hasAttachments) || mutation.isPending || uploading) return
+    // Snapshot the draft being cleared so onError can put it back verbatim
+    // (remounting the editor via a key bump) — a failed send never loses it.
+    const snapshot = draft
+    const restoreDraft = () => {
+      if (useNote) {
+        setNoteDraft(snapshot)
+        setNoteKey((k) => k + 1)
+      } else {
+        setReplyDraft(snapshot)
+        setReplyKey((k) => k + 1)
+      }
+    }
     mutation.mutate({
       content: draft.markdown.trim(),
       contentJson: empty ? null : draft.json,
       attachments: hasAttachments ? pendingAttachments : undefined,
+      restoreDraft,
     })
     if (useNote) {
       setNoteDraft(EMPTY_DRAFT)

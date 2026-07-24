@@ -18,10 +18,10 @@ import {
   type InboxNavItem,
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
-import { Spinner } from '@/components/shared/spinner'
 import { Avatar } from '@/components/ui/avatar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -414,9 +414,7 @@ export function ConversationListColumn({
       )}
       <ScrollArea className="min-h-0 flex-1">
         {loading ? (
-          <div className="flex justify-center py-10">
-            <Spinner />
-          </div>
+          <ConversationListSkeleton />
         ) : items.length === 0 ? (
           (() => {
             const isMainConversationQueue =
@@ -511,6 +509,47 @@ export function ConversationListColumn({
           })
         )}
       </ScrollArea>
+    </div>
+  )
+}
+
+/** One skeleton row — mirrors ConversationRow/TicketRow's fixed anatomy
+ *  (avatar circle, name line, preview + time line) at the same `py-3` height
+ *  and border so the list doesn't reflow when real rows replace it. */
+function SkeletonRow() {
+  return (
+    <div className="flex w-full items-start border-b border-border/30">
+      {/* Matches RowShell's checkbox gutter (pl-3 + size-4 + pr-0.5), kept
+          empty/invisible since the real gutter is opacity-0 until hover or an
+          active selection. */}
+      <div className="flex items-center self-stretch pl-3 pr-0.5">
+        <div className="size-4 shrink-0" />
+      </div>
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 py-3 pl-1.5 pr-3">
+        <Skeleton className="size-8 shrink-0 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-3.5 w-1/3" />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-3 w-2/5" />
+            <Skeleton className="h-3 w-6 shrink-0" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Pending state for the inbox list column — ~8 rows shaped like the real
+ *  conversation/ticket rows so the column doesn't visibly jank once `items`
+ *  arrives and swaps in. */
+function ConversationListSkeleton() {
+  return (
+    <div>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <SkeletonRow key={i} />
+      ))}
     </div>
   )
 }

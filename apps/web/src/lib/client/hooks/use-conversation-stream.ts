@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ConversationStreamEvent } from '@/lib/shared/conversation/types'
 
 interface UseConversationStreamOptions {
@@ -61,6 +61,17 @@ const NAMED_EVENTS = [
 const MAX_SSE_FAILURES = 4
 const DEFAULT_POLL_INTERVAL_MS = 10_000
 
+export interface UseConversationStreamResult {
+  /** True once the EventSource has successfully opened and stays true until
+   *  it errors/closes (a reconnect attempt or a switch to the polling
+   *  fallback both flip it back to false). Callers that also run a polling-
+   *  fallback query of their own (e.g. the inbox list) can skip that poll
+   *  entirely while this is true — the stream is already keeping them
+   *  current — and let it re-arm the moment the connection drops. Always
+   *  false in poll mode / SSR, since there is no live connection to report. */
+  connected: boolean
+}
+
 /**
  * Subscribe to the conversation SSE stream with automatic, token-refreshing
  * reconnect, degrading to a polling fallback when live streaming is unavailable.
@@ -75,7 +86,8 @@ export function useConversationStream({
   mode = 'live',
   poll,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
-}: UseConversationStreamOptions): void {
+}: UseConversationStreamOptions): UseConversationStreamResult {
+  const [connected, setConnected] = useState(false)
   const onEventRef = useRef(onEvent)
   onEventRef.current = onEvent
   const onReconnectRef = useRef(onReconnect)
@@ -86,7 +98,10 @@ export function useConversationStream({
   pollRef.current = poll
 
   useEffect(() => {
-    if (!enabled || typeof window === 'undefined') return
+    if (!enabled || typeof window === 'undefined') {
+      setConnected(false)
+      return
+    }
 
     let es: EventSource | null = null
     let stopped = false
@@ -111,6 +126,7 @@ export function useConversationStream({
     const startPolling = () => {
       if (stopped || polling || !pollRef.current) return
       polling = true
+      setConnected(false)
       const tick = async () => {
         if (stopped) return
         try {
@@ -151,6 +167,7 @@ export function useConversationStream({
       es.onopen = () => {
         retry = 0
         sseFailures = 0
+        setConnected(true)
         if (openedOnce) onReconnectRef.current?.()
         openedOnce = true
       }
@@ -159,6 +176,7 @@ export function useConversationStream({
         es?.close()
         es = null
         sseFailures++
+        setConnected(false)
         // Once reconnecting is clearly futile and a poll fallback exists, stop
         // hammering SSE and switch to polling for the rest of this connection.
         if (sseFailures >= MAX_SSE_FAILURES && pollRef.current) {
@@ -185,8 +203,11 @@ export function useConversationStream({
       if (pollTimer) clearTimeout(pollTimer)
       es?.close()
       es = null
+      setConnected(false)
     }
     // buildUrl/onEvent/onReconnect/poll are captured via refs above, so the
     // connection only rebuilds on enabled/resetKey/mode/interval changes.
   }, [enabled, resetKey, mode, pollIntervalMs])
+
+  return { connected }
 }

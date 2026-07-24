@@ -873,6 +873,15 @@ export function VisitorConversationThread({
     composerLock.disabled,
   ])
 
+  // Enter-to-send routes through the editor's keymap, whose closure is baked in
+  // at editor creation and never refreshed (TipTap doesn't rebuild extensions on
+  // setOptions). Passing `send` directly would freeze its first-render closure —
+  // empty composer text — so Enter would no-op forever. Read the latest `send`
+  // through a ref refreshed each render, same pattern as the agent thread.
+  const sendRef = useRef(send)
+  sendRef.current = send
+  const onComposerSubmit = useCallback(() => void sendRef.current(), [])
+
   const renderRow = (row: ConversationRow) => {
     switch (row.type) {
       case 'load-older':
@@ -1210,7 +1219,7 @@ export function VisitorConversationThread({
       <div className="border-t border-border/40 p-2 shrink-0">
         {/* Composer: a rich editor on top (the / menu inserts code blocks etc.,
               and post links become embed cards), actions (attach / send) on the
-              row below. Enter sends; Shift+Enter inserts a newline and the
+              row below. Enter sends; Shift+Enter or Alt+Enter inserts a newline and the
               editor auto-grows to fit (capped, then scrolls). Images stay
               tray-only here (paste/drop routes to the tray below, same as the
               attach button) — the editor itself gets no onImageUpload, so it
@@ -1277,7 +1286,7 @@ export function VisitorConversationThread({
                   features={VISITOR_CONVERSATION_FEATURES}
                   autofocus={composer.resetSignal > 0 ? 'end' : false}
                   onChange={handleEditorChange}
-                  onSubmit={send}
+                  onSubmit={onComposerSubmit}
                 />
               </Suspense>
             )}
