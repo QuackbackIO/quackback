@@ -114,7 +114,6 @@ function WidgetSettingsPage() {
   const helpCenterFlagEnabled = flags?.helpCenter ?? false
   const helpCenterEnabled = helpCenterConfig?.enabled ?? false
   const supportInboxFlagEnabled = flags?.supportInbox ?? false
-  const supportTicketsFlagEnabled = flags?.supportTickets ?? false
   const messengerEnabled = config.messenger?.enabled ?? false
 
   // Lifted editor state: position drives the preview's launcher chrome.
@@ -166,7 +165,6 @@ function WidgetSettingsPage() {
             helpCenterFlagEnabled={helpCenterFlagEnabled}
             helpCenterEnabled={helpCenterEnabled}
             supportInboxFlagEnabled={supportInboxFlagEnabled}
-            supportTicketsFlagEnabled={supportTicketsFlagEnabled}
             messengerEnabled={messengerEnabled}
           />
 
@@ -278,7 +276,6 @@ function ModulesCard({
   helpCenterFlagEnabled,
   helpCenterEnabled,
   supportInboxFlagEnabled,
-  supportTicketsFlagEnabled,
   messengerEnabled,
 }: {
   config: {
@@ -289,7 +286,6 @@ function ModulesCard({
       changelog?: boolean
       help?: boolean
       messenger?: boolean
-      tickets?: boolean
       home?: boolean
     }
   }
@@ -299,7 +295,6 @@ function ModulesCard({
   helpCenterFlagEnabled: boolean
   helpCenterEnabled: boolean
   supportInboxFlagEnabled: boolean
-  supportTicketsFlagEnabled: boolean
   messengerEnabled: boolean
 }) {
   const router = useRouter()
@@ -310,7 +305,6 @@ function ModulesCard({
   const [tabs, setTabs] = useState({
     home: config.tabs?.home ?? true,
     messenger: config.tabs?.messenger ?? false,
-    tickets: config.tabs?.tickets ?? false,
     feedback: config.tabs?.feedback ?? true,
     changelog: config.tabs?.changelog ?? false,
     help: config.tabs?.help ?? false,
@@ -384,18 +378,6 @@ function ModulesCard({
               to add a Messages tab.
             </p>
           </div>
-        )}
-
-        {supportTicketsFlagEnabled && (
-          <TabRow
-            id="tab-tickets"
-            label="Tickets"
-            description="Long-lived support requests customers can track"
-            checked={tabs.tickets}
-            disabled={isBusy}
-            saving={saving}
-            onChange={(checked) => void saveTab('tickets', checked)}
-          />
         )}
 
         <TabRow

@@ -51,17 +51,23 @@ describe('isPortalSupportEnabled', () => {
 describe('isConversationsEnabled', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    hoisted.mockIsFeatureEnabled.mockResolvedValue(true)
   })
 
+  // Converged Messages: tickets count as a conversation surface — every
+  // customer ticket is a conversation pair, so an email-first workspace with
+  // the messenger off still lists and replies to its threads.
   it.each([
-    { widget: true, portalSupport: false, expected: true },
-    { widget: false, portalSupport: true, expected: true },
-    { widget: true, portalSupport: true, expected: true },
-    { widget: false, portalSupport: false, expected: false },
+    { widget: true, portalSupport: false, tickets: false, expected: true },
+    { widget: false, portalSupport: true, tickets: false, expected: true },
+    { widget: true, portalSupport: true, tickets: false, expected: true },
+    { widget: false, portalSupport: false, tickets: true, expected: true },
+    { widget: false, portalSupport: false, tickets: false, expected: false },
   ])(
-    'widget=$widget portalSupport=$portalSupport → $expected',
-    async ({ widget, portalSupport, expected }) => {
+    'widget=$widget portalSupport=$portalSupport tickets=$tickets → $expected',
+    async ({ widget, portalSupport, tickets, expected }) => {
+      hoisted.mockIsFeatureEnabled.mockImplementation(async (flag: string) =>
+        flag === 'supportTickets' ? tickets : true
+      )
       hoisted.mockIsMessengerEnabled.mockResolvedValue(widget)
       hoisted.mockGetPortalConfig.mockResolvedValue({ support: { enabled: portalSupport } })
       expect(await isConversationsEnabled()).toBe(expected)

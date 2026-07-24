@@ -336,9 +336,12 @@ export async function listTickets(filter: TicketListFilter, actor: Actor): Promi
  * flow), else to the creating agent — an explicit `input.assigneePrincipalId`
  * always wins and is validated like an `assignTicket` target. The company
  * propagates from the requester's own `principal.companyId` when the ticket
- * has a requester and no explicit company. The requester intake
- * (`createMyTicket`) calls `createTicketCore` directly and gets NONE of this —
- * it stays born-unassigned and company-less by design.
+ * has a requester and no explicit company.
+ *
+ * Converged Messages (agent-only creation): a customer ticket opened FOR a
+ * requester without a source conversation is born as its conversation pair
+ * (`withBackingConversation`), so it appears on the requester's Messages
+ * surface — otherwise the ticket would be invisible to its own requester.
  */
 export async function createTicket(input: CreateTicketInput, actor: Actor): Promise<TicketDTO> {
   assertCan(actor, PERMISSIONS.TICKET_CREATE, 'create a ticket')
@@ -387,7 +390,21 @@ export async function createTicket(input: CreateTicketInput, actor: Actor): Prom
     companyId = requester?.companyId ?? null
   }
 
-  return createTicketCore({ ...input, assigneePrincipalId, companyId }, actor)
+  return createTicketCore(
+    {
+      ...input,
+      assigneePrincipalId,
+      companyId,
+      // The create-from-a-conversation flow stays standalone here — it links
+      // its SOURCE conversation right after this call, and the pair unique
+      // would reject that second link if a backing conversation were minted
+      // first. An explicit withBackingConversation (API v1 / MCP) always wins.
+      withBackingConversation:
+        input.withBackingConversation ??
+        (input.type === 'customer' && !!input.requesterPrincipalId && !input.sourceConversationId),
+    },
+    actor
+  )
 }
 
 /**

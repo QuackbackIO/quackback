@@ -107,9 +107,7 @@ export const Route = createFileRoute('/widget/')({
     // (email-first workspaces) — the chat-start affordance stays gated on the
     // messenger via `messengerEnabled` below.
     const ticketsEnabled =
-      ((settings?.featureFlags as { supportTickets?: boolean } | undefined)?.supportTickets ??
-        false) &&
-      (settings?.publicWidgetConfig?.tabs?.tickets ?? false)
+      (settings?.featureFlags as { supportTickets?: boolean } | undefined)?.supportTickets ?? false
 
     const helpTabEnabled =
       ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&

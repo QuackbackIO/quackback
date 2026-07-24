@@ -119,9 +119,30 @@ import {
   eq,
 } from '@/lib/server/db'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
-import { createMyTicket, replyToMyTicket } from '../requester.service'
+import { appendInboundTicketReply } from '../requester.service'
 import { createTicket, createTicketCore } from '../ticket.service'
 import { sendVisitorMessage } from '../../conversation/conversation.service'
+
+/** The intake transaction shape (API v1 / MCP / agent-on-behalf): a customer
+ *  ticket born with its backing conversation. Replaces the deleted
+ *  customer-self-file wrapper as this suite's driver — the transaction under
+ *  test is createTicketCore's, unchanged. */
+function intakeCreate(
+  requesterP: PrincipalId,
+  input: { title: string; description?: string },
+  actor?: Actor
+) {
+  return createTicketCore(
+    {
+      type: 'customer',
+      title: input.title,
+      description: input.description,
+      requesterPrincipalId: requesterP,
+      withBackingConversation: true,
+    },
+    actor ?? requesterActor(requesterP)
+  )
+}
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -232,12 +253,12 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
-  describe('the intake transaction (createMyTicket — the portal + widget funnel)', () => {
+  describe('the intake transaction (createTicketCore withBackingConversation)', () => {
     it('creates conversation + ticket + link in one transaction, opening message conversation-parented', async () => {
       await seedDefaultStatus()
       const requesterP = await seedPrincipal({})
 
-      const dto = await createMyTicket(requesterActor(requesterP), {
+      const dto = await intakeCreate(requesterP, {
         title: 'Cannot export my data',
         description: 'The export button spins forever.',
       })
@@ -297,9 +318,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       // violation must roll everything back.
       const bogusP = createId('principal') as PrincipalId
 
-      await expect(
-        createMyTicket(requesterActor(bogusP), { title: 'doomed', description: 'x' })
-      ).rejects.toThrow()
+      await expect(intakeCreate(bogusP, { title: 'doomed', description: 'x' })).rejects.toThrow()
 
       expect(
         await testDb.select().from(tickets).where(eq(tickets.requesterPrincipalId, bogusP))
@@ -352,9 +371,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       await seedDefaultStatus()
       const requesterP = await seedPrincipal({})
 
-      const dto = await createMyTicket(requesterActor(requesterP), {
-        title: 'Billing question about invoice 42',
-      })
+      const dto = await intakeCreate(requesterP, { title: 'Billing question about invoice 42' })
 
       const link = await readPairLink(dto.id as TicketId)
       expect(link).not.toBeNull()
@@ -378,9 +395,10 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       await seedDefaultStatus()
       const anonP = await seedPrincipal({ type: 'anonymous', contactEmail: 'visitor@example.com' })
 
-      const dto = await createMyTicket(
-        { ...ANONYMOUS_ACTOR, principalId: anonP, principalType: 'anonymous' },
-        { title: 'Widget intake', description: 'filed from the messenger' }
+      const dto = await intakeCreate(
+        anonP,
+        { title: 'Widget intake', description: 'filed from the messenger' },
+        { ...ANONYMOUS_ACTOR, principalId: anonP, principalType: 'anonymous' }
       )
 
       const link = await readPairLink(dto.id as TicketId)
@@ -412,7 +430,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
         }
       )
 
-      const dto = await createMyTicket(requesterActor(requesterP), {
+      const dto = await intakeCreate(requesterP, {
         title: 'gated effects',
         description: 'opening context',
       })
@@ -431,7 +449,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       await seedDefaultStatus()
       const requesterP = await seedPrincipal({})
 
-      const dto = await createMyTicket(requesterActor(requesterP), {
+      const dto = await intakeCreate(requesterP, {
         title: 'quiet intake',
         description: 'no noise please',
       })
@@ -462,10 +480,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
         }
       )
 
-      await createMyTicket(requesterActor(requesterP), {
-        title: 'race-free created',
-        description: 'x',
-      })
+      await intakeCreate(requesterP, { title: 'race-free created', description: 'x' })
 
       expect(ticketEmit.emitTicketCreated).toHaveBeenCalledTimes(1)
       expect(linkVisibleAtDispatch).toBe(true)
@@ -475,10 +490,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       await seedDefaultStatus()
       const requesterP = await seedPrincipal({})
 
-      const dto = await createMyTicket(requesterActor(requesterP), {
-        title: 'sla-free birth',
-        description: 'x',
-      })
+      const dto = await intakeCreate(requesterP, { title: 'sla-free birth', description: 'x' })
 
       const link = await readPairLink(dto.id as TicketId)
       expect(link).not.toBeNull()
@@ -493,14 +505,10 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
     it('a follow-up requester reply lands conversation-parented and still does not summon Quinn', async () => {
       await seedDefaultStatus()
       const requesterP = await seedPrincipal({})
-      const dto = await createMyTicket(requesterActor(requesterP), {
-        title: 'intake pair',
-        description: 'opening',
-      })
+      const dto = await intakeCreate(requesterP, { title: 'intake pair', description: 'opening' })
       assistant.runAssistantTurnForConversation.mockClear()
 
-      const { message } = await replyToMyTicket(requesterActor(requesterP), {
-        ticketId: dto.id as TicketId,
+      const { message } = await appendInboundTicketReply(dto.id as TicketId, requesterP, {
         content: 'any update?',
       })
       await flushAssistantChain()
@@ -672,7 +680,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       expect(convEmit.emitConversationCreated).not.toHaveBeenCalled()
     })
 
-    it('customer + requester WITHOUT the flag stays standalone (admin dialog / convert_to_ticket shape)', async () => {
+    it('customer + requester DEFAULTS to the pair (agent-only creation: the admin dialog is intake now)', async () => {
       await seedDefaultStatus()
       const requesterP = await seedPrincipal({})
       const agentP = await seedPrincipal({ role: 'member' })
@@ -680,22 +688,48 @@ describe.skipIf(!fixture.available)('convergence Phase 1b (real DB, rolled back)
       const dto = await createTicket(
         {
           type: 'customer',
-          title: 'agent create, old shape',
+          title: 'agent create, on behalf',
           description: 'x',
           requesterPrincipalId: requesterP,
         },
         serviceActor(agentP)
       )
 
+      // Born as its conversation pair, so the requester's Messages surface
+      // shows it — a standalone requester-holding customer ticket would be
+      // invisible to its own requester.
+      const link = await readPairLink(dto.id as TicketId)
+      expect(link).not.toBeNull()
+      expect(convEmit.emitConversationCreated).toHaveBeenCalledTimes(1)
+    })
+
+    it('customer + requester + a SOURCE conversation stays standalone (convert flow links its source right after)', async () => {
+      await seedDefaultStatus()
+      const requesterP = await seedPrincipal({})
+      const agentP = await seedPrincipal({ role: 'member' })
+      const sourceConversationId = createId('conversation') as ConversationId
+      await testDb.insert(conversations).values({
+        id: sourceConversationId,
+        visitorPrincipalId: requesterP,
+        channel: 'messenger',
+      })
+
+      const dto = await createTicket(
+        {
+          type: 'customer',
+          title: 'convert shape',
+          description: 'x',
+          requesterPrincipalId: requesterP,
+          sourceConversationId,
+        },
+        serviceActor(agentP)
+      )
+
+      // No backing conversation minted — linkTicketToConversation attaches the
+      // SOURCE conversation as the pair immediately after this create, and the
+      // pair unique would reject that link if one existed already.
       expect(await readPairLink(dto.id as TicketId)).toBeNull()
-      expect(await testDb.select().from(conversations)).toHaveLength(0)
       expect(convEmit.emitConversationCreated).not.toHaveBeenCalled()
-      const rows = await testDb
-        .select()
-        .from(conversationMessages)
-        .where(eq(conversationMessages.ticketId, dto.id as TicketId))
-      expect(rows).toHaveLength(1)
-      expect(rows[0].senderType).toBe('agent')
     })
   })
 })

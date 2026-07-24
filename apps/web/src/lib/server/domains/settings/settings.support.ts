@@ -26,13 +26,14 @@ export async function isPortalSupportEnabled(): Promise<boolean> {
  * replies to its ticket threads through Messages.
  */
 export async function isConversationsEnabled(): Promise<boolean> {
+  // Sequential short-circuit, deliberately not Promise.all: the flags read
+  // from one per-request-cached settings row, so there is nothing to win by
+  // racing — and concurrent dynamic imports of the same module resolve
+  // unreliably under the test runner's mock interceptor.
   const { isMessengerEnabled } = await import('./settings.widget')
-  const [widget, portal, tickets] = await Promise.all([
-    isMessengerEnabled(),
-    isPortalSupportEnabled(),
-    isSupportTicketsEnabled(),
-  ])
-  return widget || portal || tickets
+  if (await isMessengerEnabled()) return true
+  if (await isPortalSupportEnabled()) return true
+  return isSupportTicketsEnabled()
 }
 
 /**
@@ -42,21 +43,4 @@ export async function isConversationsEnabled(): Promise<boolean> {
 export async function isSupportTicketsEnabled(): Promise<boolean> {
   const { isFeatureEnabled } = await import('./settings.service')
   return isFeatureEnabled('supportTickets')
-}
-
-/**
- * Whether the widget Tickets tab is enabled: the experimental `supportTickets`
- * feature flag AND the widget master switch AND the explicit `tabs.tickets`
- * toggle. Fail-closed. This is the single choke point every widget-facing
- * ticket path consults (list, read, create, reply), so flipping the flag or the
- * toggle off fails them all closed — the messenger `isMessengerEnabled` analog.
- */
-export async function isWidgetTicketsEnabled(): Promise<boolean> {
-  const { isFeatureEnabled } = await import('./settings.service')
-  const { getWidgetConfig } = await import('./settings.widget')
-  const [flagOn, widget] = await Promise.all([
-    isFeatureEnabled('supportTickets'),
-    getWidgetConfig(),
-  ])
-  return Boolean(flagOn && widget.enabled && widget.tabs?.tickets)
 }

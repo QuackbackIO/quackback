@@ -777,26 +777,12 @@ export const exportTicketTranscriptFn = createServerFn({ method: 'GET' })
   })
 
 // ---------------------------------------------------------------------------
-// Requester-facing (portal) — a customer reads + replies on their OWN customer
-// tickets. No `ticket.*` permission: the domain gates on ownership. Any signed-in
-// user may call these; they only ever reach tickets they filed.
+// Requester-facing — converged Messages surface support reads (the ticket
+// header card on the shared thread) + the watch bell below. No `ticket.*`
+// permission: everything requester-reachable gates on ownership in
+// requester.service. Customer ticket CREATION is agent-only — there is no
+// requester create/reply/list here; replies ride the conversation send path.
 // ---------------------------------------------------------------------------
-
-export const listMyTicketsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  const ctx = await requireAuth()
-  const actor = await policyActorFromAuth(ctx)
-  const { listMyTickets } = await import('@/lib/server/domains/tickets/requester.service')
-  return listMyTickets(actor)
-})
-
-export const getMyTicketFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ ticketId: z.string() }))
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth()
-    const actor = await policyActorFromAuth(ctx)
-    const { getMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
-    return getMyTicket(actor, data.ticketId as TicketId)
-  })
 
 /**
  * The workspace's requester-facing stage labels (customized via ticket
@@ -814,51 +800,11 @@ export const getMyTicketStageLabelsFn = createServerFn({ method: 'GET' }).handle
   return getStageLabels()
 })
 
-export const getMyTicketThreadFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ ticketId: z.string(), before: z.string().optional() }))
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth()
-    const actor = await policyActorFromAuth(ctx)
-    const { getMyTicketThread } = await import('@/lib/server/domains/tickets/requester.service')
-    return getMyTicketThread(actor, data.ticketId as TicketId, { before: data.before })
-  })
-
-/** The requester marks their own ticket read (opening its portal ticket page).
- *  Ownership-gated in requester.service. CONVERGENCE PHASE 2 (read-through):
- *  on a linked pair this writes the CONVERSATION's visitor watermark, so the
- *  Messages-space row + badge for the pair clear too — one shared watermark,
- *  reading either surface marks both read. */
-export const markMyTicketReadFn = createServerFn({ method: 'POST' })
-  .validator(z.object({ ticketId: z.string() }))
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth()
-    const actor = await policyActorFromAuth(ctx)
-    const { markMyTicketRead } = await import('@/lib/server/domains/tickets/requester.service')
-    await markMyTicketRead(actor, data.ticketId as TicketId)
-    return { ok: true }
-  })
-
-export const replyToMyTicketFn = createServerFn({ method: 'POST' })
-  .validator(sendTicketMessageSchema)
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth()
-    const actor = await policyActorFromAuth(ctx)
-    const { replyToMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
-    return replyToMyTicket(actor, {
-      ticketId: data.ticketId as TicketId,
-      content: data.content,
-      contentJson: data.contentJson ?? null,
-      attachments: data.attachments as ConversationAttachment[] | undefined,
-    })
-  })
-
 /**
- * The portal New-Ticket form's intake shape (convergence Phase 4): the live,
- * intake-visible customer types, each carrying its customer-visible fields.
- * The dialog shows a type picker when more than one type is offered; a
- * single-type workspace behaves exactly like the legacy fixed form. Read
- * shape only — same audience as `createMyTicketFn` (any signed-in requester
- * while the support-tickets flag is on).
+ * The intake types + their customer-visible fields (convergence Phase 4's
+ * registry read). The ticket header card resolves a ticket's stored intake
+ * answers back to their field labels through this. Read shape only — any
+ * signed-in requester while the support-tickets flag is on.
  */
 export const getMyTicketFormFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth()
@@ -870,45 +816,6 @@ export const getMyTicketFormFn = createServerFn({ method: 'GET' }).handler(async
   const types = await svc.listIntakeTypes()
   return { types: types.map((t) => svc.ticketTypeToIntakeDTO(t)) }
 })
-
-export const createMyTicketFn = createServerFn({ method: 'POST' })
-  .validator(
-    z.object({
-      title: z.string().min(1).max(300),
-      description: z.string().max(4000).optional(),
-      // Empty is valid for an image/embed-only opening message; the service re-validates.
-      descriptionJson: z.any().nullable().optional(),
-      attachments: z.array(ticketAttachmentSchema).optional(),
-      // The registry type filed under (Phase 4); absent = the customer-category
-      // default type. Must be live + intake-visible (enforced server-side).
-      ticketTypeId: z.string().optional(),
-      // Custom intake-form answers; validated against the chosen type's form.
-      fieldValues: z.record(z.string(), z.unknown()).optional(),
-    })
-  )
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth()
-    // Self-creation is opt-in: gate on the support-tickets flag being enabled.
-    const { isSupportTicketsEnabled } =
-      await import('@/lib/server/domains/settings/settings.support')
-    if (!(await isSupportTicketsEnabled())) {
-      throw new ForbiddenError('FORBIDDEN', 'Ticket creation is not available')
-    }
-    const actor = await policyActorFromAuth(ctx)
-    // Resolve the type + validate the answers against its customer form (the
-    // same helper the widget create runs, so portal and Messenger can't drift).
-    const svc = await import('@/lib/server/domains/tickets/ticket-type-intake.service')
-    const intake = await svc.resolveIntakeCreate(data.ticketTypeId, data.fieldValues)
-    const { createMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
-    return createMyTicket(actor, {
-      title: data.title,
-      description: data.description,
-      descriptionJson: data.descriptionJson ?? null,
-      attachments: data.attachments as ConversationAttachment[] | undefined,
-      ticketTypeId: intake.ticketTypeId,
-      customAttributes: intake.customAttributes,
-    })
-  })
 
 const searchSchema = z.object({
   query: z.string(),
@@ -923,16 +830,6 @@ export const searchTicketsFn = createServerFn({ method: 'GET' })
     const actor = await policyActorFromAuth(ctx)
     const { searchTickets } = await import('@/lib/server/domains/tickets/ticket-search.service')
     return searchTickets(actor, { query: data.query, audience: 'agent', limit: data.limit })
-  })
-
-/** Portal ticket search (requester audience: own customer tickets, no internals). */
-export const searchMyTicketsFn = createServerFn({ method: 'GET' })
-  .validator(searchSchema)
-  .handler(async ({ data }) => {
-    const ctx = await requireAuth()
-    const actor = await policyActorFromAuth(ctx)
-    const { searchTickets } = await import('@/lib/server/domains/tickets/ticket-search.service')
-    return searchTickets(actor, { query: data.query, audience: 'requester', limit: data.limit })
   })
 
 // ---------------------------------------------------------------------------

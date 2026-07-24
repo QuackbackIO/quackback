@@ -233,9 +233,9 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
         (config.tabs?.messenger ?? false) &&
         flags.supportInbox &&
         (config.messenger?.enabled ?? false),
-      // Tickets: the tab toggle IS the module toggle (no sub-config master
-      // switch, unlike messenger), ANDed with the experimental supportTickets flag.
-      tickets: (config.tabs?.tickets ?? false) && flags.supportTickets,
+      // Converged Messages: ticket pairs surface through the messenger tab,
+      // gated by the supportTickets flag alone (there is no Tickets tab).
+      tickets: flags.supportTickets,
       home: config.tabs?.home,
     }
     return {

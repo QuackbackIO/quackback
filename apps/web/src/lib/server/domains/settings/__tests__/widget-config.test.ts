@@ -185,30 +185,24 @@ describe('Widget Config Types', () => {
   })
 })
 
-describe('getPublicWidgetConfig — tickets projection', () => {
-  it('projects tabs.tickets true only when the toggle AND the flag are on', async () => {
-    settingsRow.current = fixtureRow({ enabled: true, tabs: { feedback: false, tickets: true } })
+describe('getPublicWidgetConfig — tickets projection (converged Messages)', () => {
+  it('projects tabs.tickets from the supportTickets flag alone — no per-tab toggle', async () => {
+    settingsRow.current = fixtureRow({ enabled: true, tabs: { feedback: false } })
     const projected = await getPublicWidgetConfig()
-    // supportTickets defaults on, so the toggle alone is enough here.
+    // supportTickets defaults on; ticket pairs surface through Messages.
     expect(projected.tabs?.tickets).toBe(true)
-    // Tickets can be the sole enabled surface.
+    // Tickets can be the sole enabled surface (email-first workspaces).
     expect(projected.enabled).toBe(true)
   })
 
-  it('projects tabs.tickets false when the flag is off, even with the toggle on', async () => {
+  it('projects tabs.tickets false when the flag is off', async () => {
     settingsRow.current = fixtureRow(
-      { enabled: true, tabs: { feedback: false, tickets: true } },
+      { enabled: true, tabs: { feedback: false } },
       { supportTickets: false }
     )
     const projected = await getPublicWidgetConfig()
     expect(projected.tabs?.tickets).toBe(false)
     expect(projected.enabled).toBe(false)
-  })
-
-  it('projects tabs.tickets false for the default config (toggle absent)', async () => {
-    settingsRow.current = fixtureRow(DEFAULT_WIDGET_CONFIG)
-    const projected = await getPublicWidgetConfig()
-    expect(projected.tabs?.tickets).toBe(false)
   })
 })
 

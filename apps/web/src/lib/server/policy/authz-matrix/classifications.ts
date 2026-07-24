@@ -141,27 +141,17 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'author deletes their own conversation message'
   ),
 
-  // Requester tickets (portal): a signed-in requester reads + replies on their
-  // OWN customer tickets; ownership is enforced in the requester service.
-  'lib/server/functions/tickets.ts::listMyTicketsFn': END_USER('requester lists their own tickets'),
-  'lib/server/functions/tickets.ts::getMyTicketFn': END_USER('requester reads their own ticket'),
-  'lib/server/functions/tickets.ts::getMyTicketThreadFn': END_USER(
-    'requester reads their own ticket thread'
-  ),
-  'lib/server/functions/tickets.ts::markMyTicketReadFn': END_USER(
-    'requester marks their own ticket read (pair read-through: the shared conversation watermark)'
-  ),
-  'lib/server/functions/tickets.ts::replyToMyTicketFn': END_USER(
-    'requester replies on their own ticket'
-  ),
-  'lib/server/functions/tickets.ts::createMyTicketFn': END_USER(
-    'requester opens their own customer ticket (gated on the support-tickets flag)'
+  // Requester tickets (converged Messages surface): a signed-in requester's
+  // ticket surface is their conversation pair; these fns feed the shared
+  // thread's ticket header (linked-ticket read, stage labels, intake-form
+  // labels) and the watch bell. Ownership is enforced in the requester
+  // service. Customer ticket creation is agent-only — there is no requester
+  // create/reply/list entry point.
+  'lib/server/functions/tickets.ts::getConversationLinkedTicketFn': END_USER(
+    "requester reads their own conversation's linked ticket (flag-gated; pair + ownership scoped)"
   ),
   'lib/server/functions/tickets.ts::getMyTicketFormFn': END_USER(
-    'requester reads the customer intake type/form shape (gated on the support-tickets flag)'
-  ),
-  'lib/server/functions/tickets.ts::searchMyTicketsFn': END_USER(
-    'requester searches their own customer tickets'
+    'requester reads the intake type/form shape to label their stored answers (flag-gated)'
   ),
   'lib/server/functions/tickets.ts::getMyTicketWatchStatusFn': END_USER(
     'requester reads the watch state of their own ticket (flag-gated)'
@@ -174,20 +164,6 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   ),
   'lib/server/functions/tickets.ts::unwatchMyTicketFn': END_USER(
     'requester unwatches their own ticket (flag-gated)'
-  ),
-
-  // Widget tickets: the same ownership-gated requester surface reached from the
-  // embed widget over a Bearer session; each fn additionally consults the
-  // isWidgetTicketsEnabled() choke point and the two-tier identity guard.
-  'lib/server/functions/widget-tickets.ts::getWidgetTicketFormFn': END_USER(
-    'widget visitor reads the customer intake form shape (choke-point-gated)'
-  ),
-  // list/get/thread/reply/create all authenticate through this shared helper
-  // (the scanner attributes the gate to the call site, not the five callers):
-  // choke point + requireAuth + two-tier identity check + ownership in the
-  // requester service.
-  'lib/server/functions/widget-tickets.ts::requireWidgetTicketActor': END_USER(
-    'widget visitor acts on their own tickets (choke-point + identity-tier gated; ownership in requester.service)'
   ),
 
   // Comments / reactions: end-user create + own-edit/delete.

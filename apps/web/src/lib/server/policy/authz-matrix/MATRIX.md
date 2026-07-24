@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 597 surfaces
+### Server functions (`requireAuth`) — 589 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -648,16 +648,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::markTicketReadFn | ticket.view |
 | `lib/server/functions/tickets.ts`::exportTicketTranscriptFn | ticket.view |
 | `lib/server/functions/tickets.ts`::exportTicketTranscriptFn | TEAM-ONLY (~ticket.view) |
-| `lib/server/functions/tickets.ts`::listMyTicketsFn | END_USER (any authenticated) |
-| `lib/server/functions/tickets.ts`::getMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::getMyTicketStageLabelsFn | END_USER (any authenticated) |
-| `lib/server/functions/tickets.ts`::getMyTicketThreadFn | END_USER (any authenticated) |
-| `lib/server/functions/tickets.ts`::markMyTicketReadFn | END_USER (any authenticated) |
-| `lib/server/functions/tickets.ts`::replyToMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::getMyTicketFormFn | END_USER (any authenticated) |
-| `lib/server/functions/tickets.ts`::createMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::searchTicketsFn | ticket.view |
-| `lib/server/functions/tickets.ts`::searchMyTicketsFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::getTicketWatchStatusFn | ticket.view |
 | `lib/server/functions/tickets.ts`::watchTicketFn | ticket.view |
 | `lib/server/functions/tickets.ts`::unwatchTicketFn | ticket.view |
@@ -667,6 +660,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::adminAddTicketWatcherFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::adminRemoveTicketWatcherFn | ticket.assign |
 | `lib/server/functions/tickets.ts`::getMyTicketWatchStatusFn | END_USER (any authenticated) |
+| `lib/server/functions/tickets.ts`::getConversationLinkedTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::watchMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::unwatchMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getPresignedUploadUrlFn | post.create |
@@ -685,8 +679,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/webhooks.ts`::updateWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::deleteWebhookFn | webhook.manage |
 | `lib/server/functions/webhooks.ts`::rotateWebhookSecretFn | webhook.manage |
-| `lib/server/functions/widget-tickets.ts`::requireWidgetTicketActor | END_USER (any authenticated) |
-| `lib/server/functions/widget-tickets.ts`::getWidgetTicketFormFn | END_USER (any authenticated) |
 | `lib/server/functions/workflow-reporting.ts`::workflowEffectivenessFn | routing.manage |
 | `lib/server/functions/workflow-reporting.ts`::workflowRunsFn | routing.manage |
 | `lib/server/functions/workflow-reporting.ts`::workflowRunTimelineFn | routing.manage |
@@ -898,7 +890,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-190 of 894 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+183 of 880 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -999,13 +991,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/user.ts`::updateProfileNameFn | server-fn |
 | `lib/server/functions/version.ts`::getLatestVersion | server-fn |
 | `lib/server/functions/widget-capabilities.ts`::getWidgetCapabilitiesFn | server-fn |
-| `lib/server/functions/widget-tickets.ts`::createMyWidgetTicketFn | server-fn |
-| `lib/server/functions/widget-tickets.ts`::getMyWidgetTicketFn | server-fn |
-| `lib/server/functions/widget-tickets.ts`::getMyWidgetTicketStageLabelsFn | server-fn |
-| `lib/server/functions/widget-tickets.ts`::getMyWidgetTicketThreadFn | server-fn |
-| `lib/server/functions/widget-tickets.ts`::listMyWidgetTicketsFn | server-fn |
-| `lib/server/functions/widget-tickets.ts`::markMyWidgetTicketReadFn | server-fn |
-| `lib/server/functions/widget-tickets.ts`::replyToMyWidgetTicketFn | server-fn |
 | `lib/server/functions/workspace-utils.ts`::requireWorkspaceRole | server-fn |
 | `lib/server/functions/workspace.ts`::getCurrentUserRole | server-fn |
 | `lib/server/functions/workspace.ts`::getSettings | server-fn |

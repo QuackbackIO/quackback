@@ -124,7 +124,7 @@ import {
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import type { EventData } from '@/lib/server/events/types'
 import { sendTicketMessage, addTicketNote } from '../ticket-message.service'
-import { replyToMyTicket } from '../requester.service'
+import { appendInboundTicketReply } from '../requester.service'
 import { setTicketStatus } from '../ticket.service'
 import { autoReopenPairTicketFromEvent } from '../ticket.event-hooks'
 import { markTicketUnreadFromMessage } from '../ticket-unread.service'
@@ -165,10 +165,6 @@ function agentActor(principalId: PrincipalId, extra: PermissionKey[] = []): Acto
       ...extra,
     ]),
   }
-}
-
-function requesterActor(principalId: PrincipalId): Actor {
-  return { ...ANONYMOUS_ACTOR, principalId, principalType: 'user' }
 }
 
 interface SeededStatuses {
@@ -450,8 +446,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       const conversationId = await seedConversation(requesterP)
       await linkPair(ticketId, conversationId)
 
-      const { message } = await replyToMyTicket(requesterActor(requesterP), {
-        ticketId,
+      const { message } = await appendInboundTicketReply(ticketId, requesterP, {
         content: 'still broken',
       })
 

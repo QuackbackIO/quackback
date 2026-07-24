@@ -447,7 +447,9 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
   it('a public_stage crossing enriches the hook with previousStage + requester', async () => {
     await seedSettings()
     const { closed } = await seedStatuses()
-    const actor = adminActor()
+    // Backed actor: a customer+requester create now mints the backing
+    // conversation pair, whose link row FKs on the creating principal.
+    const actor = await messageAuthorActor()
     const requester = await seedTeammate()
     const created = await createTicket(
       { type: 'customer', title: 'Notify me', requesterPrincipalId: requester },
@@ -492,7 +494,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
         publicStage: 'resolved',
       })
       .returning()
-    const actor = adminActor()
+    const actor = await messageAuthorActor()
     const requester = await seedTeammate()
     const created = await createTicket(
       { type: 'customer', title: 'No prior stage', requesterPrincipalId: requester },
@@ -634,11 +636,15 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
 
       const withRequester = await createTicket(
         { type: 'customer', title: 'Watched from birth', requesterPrincipalId: requester },
-        adminActor()
+        await messageAuthorActor()
       )
+      // Two rows from birth: the requester, and (B14 born-owned) the backed
+      // creating agent.
       const rows = await subsFor(withRequester.id)
-      expect(rows).toHaveLength(1)
-      expect(rows[0]).toMatchObject({ principalId: requester, reason: 'requester' })
+      expect(rows.find((r) => r.principalId === requester)).toMatchObject({
+        principalId: requester,
+        reason: 'requester',
+      })
 
       const withoutRequester = await createTicket(
         { type: 'back_office', title: 'Nobody asked' },
@@ -793,7 +799,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     it('emits ticket.status_changed, publishes ticket_updated, and posts the thread stage event — the same signals as setTicketStatus', async () => {
       await seedSettings()
       const { awaiting } = await seedReopenWorld()
-      const actor = adminActor()
+      const actor = await messageAuthorActor()
       const requester = await seedTeammate()
       const created = await createTicket(
         { type: 'customer', title: 'Reopen me', requesterPrincipalId: requester },
@@ -838,7 +844,7 @@ describe.skipIf(!fixture.available)('ticket.service (real DB, rolled back)', () 
     it('a closed ticket reopen reports the closed -> open category crossing', async () => {
       await seedSettings()
       const { closed } = await seedReopenWorld()
-      const actor = adminActor()
+      const actor = await messageAuthorActor()
       const requester = await seedTeammate()
       const created = await createTicket(
         { type: 'customer', title: 'Reopen from closed', requesterPrincipalId: requester },
