@@ -1077,6 +1077,11 @@ async function executeCreateTicket(
       description: args.description,
       priority: args.priority,
       requesterPrincipalId: row.visitorPrincipalId,
+      // The ticket originates from THIS conversation — pass it so
+      // createTicket skips minting a synthetic backing conversation and
+      // inherits this conversation's assignee; the link + card share below
+      // then operate on the real thread.
+      sourceConversationId: conversationId,
     },
     ctx.actor
   )

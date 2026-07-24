@@ -390,6 +390,9 @@ describe('create_ticket', () => {
         type: 'customer',
         title: 'Cannot log in',
         requesterPrincipalId: 'principal_visitor',
+        // The ticket originates from THIS conversation: createTicket must not
+        // mint a synthetic backing conversation (#499).
+        sourceConversationId: 'conversation_1',
       }),
       expect.objectContaining({ principalType: 'service' })
     )
