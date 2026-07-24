@@ -6,6 +6,7 @@ import { HelpCenterLocaleSwitcher } from '@/components/help-center/help-center-l
 import { parseHcLocalePath } from '@/lib/shared/help-center-url'
 import { isRtlLocale } from '@/lib/shared/i18n'
 import type { FeatureFlags, HelpCenterConfig } from '@/lib/shared/types/settings'
+import { setPublicDocumentCacheHeaders } from '@/lib/server/functions/public-cache'
 
 /**
  * Only meaningful during SSR -- request headers aren't available on the
@@ -50,6 +51,7 @@ export const Route = createFileRoute('/_portal/hc')({
   loader: async ({ context }) => {
     const { settings } = context
     const helpCenterConfig = (settings?.helpCenterConfig as HelpCenterConfig | null) ?? null
+    if (typeof window === 'undefined') await setPublicDocumentCacheHeaders()
     return { helpCenterConfig }
   },
   head: ({ loaderData }) => {

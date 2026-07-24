@@ -30,7 +30,11 @@ import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { NotFoundError } from '@/lib/shared/errors'
 import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { listPublicCategories, getPublicCategoryBySlug } from './help-center.category.service'
-import { listPublicArticlesForCategory } from './help-center.article.query'
+import {
+  listPublicArticlesForCategory,
+  listPublicArticlesForCategories,
+  type PublicCategoryArticle,
+} from './help-center.article.query'
 import { getPublicArticleBySlug } from './help-center.article.service'
 import {
   getPublishedArticleTranslation,
@@ -136,6 +140,50 @@ export async function listPublicArticlesForCategoryLocale(
       const translation = byArticle.get(a.id)!
       return { ...a, title: translation.title, description: translation.description }
     })
+}
+
+/**
+ * Batched, locale-aware multi-category article load. Wraps
+ * {@link listPublicArticlesForCategories} (one query for all categories) and,
+ * for a non-default locale, applies published translations in one further query
+ * across every article — instead of the previous per-category round trip. Keeps
+ * the per-category grouping and the same translation semantics as
+ * {@link listPublicArticlesForCategoryLocale} (untranslated articles drop out).
+ */
+export async function listPublicArticlesForCategoriesLocale(
+  categoryIds: string[],
+  locale: string,
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<Map<string, PublicCategoryArticle[]>> {
+  const grouped = await listPublicArticlesForCategories(categoryIds, viewer)
+  if (locale === DEFAULT_LOCALE || grouped.size === 0) return grouped
+
+  const allArticleIds: string[] = []
+  for (const list of grouped.values()) for (const a of list) allArticleIds.push(a.id)
+  if (allArticleIds.length === 0) return grouped
+
+  const translations = await db.query.helpCenterArticleTranslations.findMany({
+    where: and(
+      inArray(helpCenterArticleTranslations.articleId, allArticleIds as KbArticleId[]),
+      eq(helpCenterArticleTranslations.locale, locale),
+      eq(helpCenterArticleTranslations.status, 'published')
+    ),
+  })
+  const byArticle = new Map(translations.map((t) => [t.articleId, t]))
+
+  const translated = new Map<string, PublicCategoryArticle[]>()
+  for (const [categoryId, list] of grouped) {
+    translated.set(
+      categoryId,
+      list
+        .filter((a) => byArticle.has(a.id))
+        .map((a) => {
+          const t = byArticle.get(a.id)!
+          return { ...a, title: t.title, description: t.description }
+        })
+    )
+  }
+  return translated
 }
 
 export async function getPublicArticleBySlugForLocale(

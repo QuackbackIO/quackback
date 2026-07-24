@@ -326,6 +326,92 @@ export async function listPublicArticlesForCategory(
     .orderBy(asc(helpCenterArticles.position), asc(helpCenterArticles.publishedAt))
 }
 
+/** Per-category cap for the batched category-articles load. Category pages
+ *  render a bounded list, so this keeps a pathological category from dragging
+ *  the whole page down. */
+export const CATEGORY_ARTICLES_CAP = 200
+
+/** One article row as returned by {@link listPublicArticlesForCategory}. */
+export type PublicCategoryArticle = Awaited<
+  ReturnType<typeof listPublicArticlesForCategory>
+>[number]
+
+/**
+ * Batched multi-category variant of {@link listPublicArticlesForCategory}:
+ * loads the published, publicly-visible articles for every given category in a
+ * single query and returns them grouped by category id, each list ordered as
+ * the category page expects (position asc, published_at asc) and capped at
+ * {@link CATEGORY_ARTICLES_CAP}. Collapses the previous one-RPC-per-subcategory
+ * waterfall on the help-center category page.
+ */
+export async function listPublicArticlesForCategories(
+  categoryIds: string[],
+  viewer: Actor = ANONYMOUS_ACTOR
+): Promise<Map<string, PublicCategoryArticle[]>> {
+  const grouped = new Map<string, PublicCategoryArticle[]>()
+  if (categoryIds.length === 0) return grouped
+
+  // Rank within each category by the page's ordering, then keep only the first
+  // CATEGORY_ARTICLES_CAP per category. Same select shape + visibility gate as
+  // the single-category query so both stay in lockstep.
+  const ranked = db
+    .select({
+      categoryId: helpCenterArticles.categoryId,
+      id: helpCenterArticles.id,
+      slug: helpCenterArticles.slug,
+      title: helpCenterArticles.title,
+      description: helpCenterArticles.description,
+      position: helpCenterArticles.position,
+      publishedAt: helpCenterArticles.publishedAt,
+      readingTimeMinutes:
+        sql<number>`GREATEST(1, ROUND(length(${helpCenterArticles.content}) / 1200.0))`.as(
+          'reading_time_minutes'
+        ),
+      authorName: principal.displayName,
+      authorAvatarUrl: principal.avatarUrl,
+      rn: sql<number>`ROW_NUMBER() OVER (
+        PARTITION BY ${helpCenterArticles.categoryId}
+        ORDER BY ${helpCenterArticles.position} ASC, ${helpCenterArticles.publishedAt} ASC
+      )`.as('rn'),
+    })
+    .from(helpCenterArticles)
+    .innerJoin(helpCenterCategories, eq(helpCenterCategories.id, helpCenterArticles.categoryId))
+    .leftJoin(principal, eq(principal.id, helpCenterArticles.principalId))
+    .where(
+      and(
+        inArray(helpCenterArticles.categoryId, categoryIds as KbCategoryId[]),
+        ...helpCenterVisibilityConditions('public', viewer)
+      )
+    )
+    .as('ranked')
+
+  const rows = await db
+    .select({
+      categoryId: ranked.categoryId,
+      id: ranked.id,
+      slug: ranked.slug,
+      title: ranked.title,
+      description: ranked.description,
+      position: ranked.position,
+      publishedAt: ranked.publishedAt,
+      readingTimeMinutes: ranked.readingTimeMinutes,
+      authorName: ranked.authorName,
+      authorAvatarUrl: ranked.authorAvatarUrl,
+    })
+    .from(ranked)
+    .where(sql`${ranked.rn} <= ${CATEGORY_ARTICLES_CAP}`)
+    .orderBy(asc(ranked.categoryId), asc(ranked.position), asc(ranked.publishedAt))
+
+  for (const row of rows) {
+    const { categoryId, ...article } = row
+    if (!categoryId) continue
+    const list = grouped.get(categoryId) ?? []
+    list.push(article as PublicCategoryArticle)
+    grouped.set(categoryId, list)
+  }
+  return grouped
+}
+
 /**
  * Top published articles across all public categories, ranked by view count.
  * Powers the help-center homepage "Popular articles" list. Falls back to most

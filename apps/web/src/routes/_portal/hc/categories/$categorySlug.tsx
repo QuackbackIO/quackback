@@ -1,37 +1,17 @@
 import { createFileRoute, notFound, Outlet } from '@tanstack/react-router'
-import {
-  getPublicCategoryBySlugFn,
-  listPublicArticlesForCategoryFn,
-  listPublicCategoriesFn,
-} from '@/lib/server/functions/help-center'
-import { getSubcategories } from '@/components/help-center/help-center-utils'
+import { getPublicCategoryPageFn } from '@/lib/server/functions/help-center'
 import { HelpCenterHero } from '@/components/help-center/help-center-hero'
 import { HelpCenterHeroSearch } from '@/components/help-center/help-center-search'
 
 export const Route = createFileRoute('/_portal/hc/categories/$categorySlug')({
   loader: async ({ params }) => {
-    let category: Awaited<ReturnType<typeof getPublicCategoryBySlugFn>>
+    // One composed call replaces the prior category + categories + N-subcategory
+    // article-fetch waterfall; it returns the same loader-data shape.
     try {
-      category = await getPublicCategoryBySlugFn({ data: { slug: params.categorySlug } })
+      return await getPublicCategoryPageFn({ data: { slug: params.categorySlug } })
     } catch {
       throw notFound()
     }
-
-    const [articles, allCategories] = await Promise.all([
-      listPublicArticlesForCategoryFn({ data: { categoryId: category.id } }),
-      listPublicCategoriesFn({ data: {} }),
-    ])
-
-    const subcategories = getSubcategories(allCategories, category.id)
-
-    const subcategoryArticles = await Promise.all(
-      subcategories.map(async (sub) => ({
-        ...sub,
-        articles: await listPublicArticlesForCategoryFn({ data: { categoryId: sub.id } }),
-      }))
-    )
-
-    return { category, articles, subcategories: subcategoryArticles, allCategories }
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {}

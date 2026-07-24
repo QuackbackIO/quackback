@@ -246,6 +246,55 @@ export const listPublicArticlesForCategoryFn = createServerFn({ method: 'GET' })
     }))
   })
 
+/**
+ * Composed category-page load: fetches the category (by slug), every public
+ * category (for breadcrumbs + subcategory discovery), the category's own
+ * articles, and each subcategory's articles — using a SINGLE batched articles
+ * query for the parent + all subcategories instead of one RPC per subcategory.
+ * Returns the exact shape the category page consumes
+ * ({ category, articles, subcategories: [...with articles], allCategories }),
+ * so it collapses the route loader's prior 1 + 2 + N-call waterfall to one call.
+ */
+export const getPublicCategoryPageFn = createServerFn({ method: 'GET' })
+  .validator(getCategoryBySlugSchema)
+  .handler(async ({ data }) => {
+    const {
+      getPublicCategoryBySlugForLocale,
+      listPublicCategoriesForLocale,
+      listPublicArticlesForCategoriesLocale,
+    } = await import('@/lib/server/domains/help-center/help-center-locale.query')
+    const { DEFAULT_LOCALE } = await import('@/lib/shared/i18n')
+    const locale = data.locale ?? DEFAULT_LOCALE
+    const viewer = await publicViewer()
+
+    const category = await getPublicCategoryBySlugForLocale(data.slug, locale, viewer)
+    const allCategories = await listPublicCategoriesForLocale(locale, viewer)
+    const subcategories = allCategories.filter((c) => c.parentId === category.id)
+
+    // One batched query for the parent + all subcategory ids, grouped by
+    // category, then split back out per category below.
+    const articlesByCategory = await listPublicArticlesForCategoriesLocale(
+      [category.id, ...subcategories.map((s) => s.id)],
+      locale,
+      viewer
+    )
+    const serializeArticles = (categoryId: string) =>
+      (articlesByCategory.get(categoryId) ?? []).map((a) => ({
+        ...a,
+        publishedAt: toIsoStringOrNull(a.publishedAt),
+      }))
+
+    return {
+      category: serializeCategory(category),
+      articles: serializeArticles(category.id),
+      subcategories: subcategories.map((sub) => ({
+        ...serializeCategory(sub),
+        articles: serializeArticles(sub.id),
+      })),
+      allCategories: allCategories.map(serializeCategory),
+    }
+  })
+
 export const listPublicCategoryEditorsFn = createServerFn({ method: 'GET' })
   .validator(z.object({}))
   .handler(async () => {

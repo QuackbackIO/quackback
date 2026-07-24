@@ -4,7 +4,7 @@
  * Query key factories and query options for help center data.
  */
 
-import { queryOptions, infiniteQueryOptions } from '@tanstack/react-query'
+import { queryOptions, infiniteQueryOptions, keepPreviousData } from '@tanstack/react-query'
 import type { KbArticleId } from '@quackback/ids'
 import {
   listCategoriesFn,
@@ -76,7 +76,10 @@ export const helpCenterQueries = {
         }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      // NOTE (QC-2): no `maxPages` — one-directional keyset cursor, no reverse
+      // cursor available server-side (see help-center.article.query.ts).
       staleTime: STALE_TIME_SHORT,
+      placeholderData: keepPreviousData,
     }),
 
   articleDetail: (id: KbArticleId) =>

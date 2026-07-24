@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { assertRoutePermission } from '@/lib/shared/route-permission'
 import { createFileRoute, useRouter, useNavigate, redirect } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -15,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DomainsLanguagesTab } from '@/components/admin/settings/help-center/domains-languages-tab'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateHelpCenterConfig } from '@/lib/client/mutations/settings'
+import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
 import { isProductEnabled, type HelpCenterConfig } from '@/lib/shared/types/settings'
 
 /**
@@ -35,10 +37,7 @@ export const Route = createFileRoute('/admin/settings/help-center')({
     }
   },
   loader: async ({ context }) => {
-    const { requireWorkspaceRole } = await import('@/lib/server/functions/workspace-utils')
-    await requireWorkspaceRole({
-      data: { allowedRoles: ['admin', 'member'], permission: PERMISSIONS.HELP_CENTER_MANAGE },
-    })
+    assertRoutePermission(context.permissions, PERMISSIONS.HELP_CENTER_MANAGE)
 
     const { queryClient } = context
     await queryClient.ensureQueryData(settingsQueries.helpCenterConfig())
@@ -66,16 +65,6 @@ function HelpCenterSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  const titleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const descTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
-      if (descTimeoutRef.current) clearTimeout(descTimeoutRef.current)
-    }
-  }, [])
-
   const isBusy = saving || isPending
 
   async function saveField(data: Record<string, unknown>) {
@@ -90,6 +79,19 @@ function HelpCenterSettingsPage() {
     }
   }
 
+  // Debounced homepage title/description saves. `useDebouncedSave` flushes
+  // any pending value on unmount, so navigating away mid-debounce no longer
+  // drops it.
+  const { queue: queueTitleSave } = useDebouncedSave<string>((value) => {
+    if (value.trim()) {
+      saveField({ homepageTitle: value.trim() })
+    }
+  }, 800)
+
+  const { queue: queueDescriptionSave } = useDebouncedSave<string>((value) => {
+    saveField({ homepageDescription: value })
+  }, 800)
+
   function handleEnabledToggle(checked: boolean) {
     setEnabled(checked)
     saveField({ enabled: checked })
@@ -97,20 +99,12 @@ function HelpCenterSettingsPage() {
 
   function handleTitleChange(value: string) {
     setHomepageTitle(value)
-    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current)
-    titleTimeoutRef.current = setTimeout(() => {
-      if (value.trim()) {
-        saveField({ homepageTitle: value.trim() })
-      }
-    }, 800)
+    queueTitleSave(value)
   }
 
   function handleDescriptionChange(value: string) {
     setHomepageDescription(value)
-    if (descTimeoutRef.current) clearTimeout(descTimeoutRef.current)
-    descTimeoutRef.current = setTimeout(() => {
-      saveField({ homepageDescription: value })
-    }, 800)
+    queueDescriptionSave(value)
   }
 
   return (

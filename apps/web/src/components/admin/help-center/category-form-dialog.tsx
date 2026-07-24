@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { CategoryIcon, ICON_LOOKUP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
+import { CategoryIcon, ICON_MAP, ALL_ICON_KEYS } from '@/components/help-center/category-icon'
 import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
 import { cn } from '@/lib/shared/utils'
 import { listSegmentsFn } from '@/lib/server/functions/admin'
@@ -340,7 +340,7 @@ export function CategoryFormDialog({
                   />
                   <div className="grid grid-cols-8 gap-1 max-h-[288px] overflow-y-auto">
                     {filteredIcons.map((key) => {
-                      const Icon = ICON_LOOKUP[key]
+                      const Icon = ICON_MAP[key]
                       return (
                         <button
                           key={key}
