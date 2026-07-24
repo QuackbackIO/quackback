@@ -7,10 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: "Commit SHA or ref to build (e.g. a release tag's commit). Lets you re-release a signed image from an exact source commit without moving the git tag."
-        required: true
+        description: "Commit SHA or ref to build (e.g. a release tag's commit). Lets you re-release a signed image from an exact source commit without moving the git tag. Leave blank to build the branch you dispatched from."
+        required: false
+        default: ''
       image_tag:
-        description: 'Image tag to publish as (e.g. 0.10.5). Leave blank to tag sha-<short>.'
+        description: 'Image tag to publish as (e.g. 0.10.5). Leave blank to tag with the branch name (or sha-<short> when a sha is given).'
         required: false
         default: ''
 
@@ -123,12 +124,14 @@ jobs:
         id: meta
         with:
           images: ${{ env.IMAGE }}
+          # The branch-name tag covers branch pushes AND manual dispatches that
+          # build the dispatched branch itself (no sha/image_tag override).
           tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'workflow_dispatch' }}
+            type=ref,event=branch,enable=${{ github.event.inputs.sha == '' && github.event.inputs.image_tag == '' }}
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=${{ github.event.inputs.image_tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag != '' }}
-            type=sha,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag == '' }}
+            type=sha,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image_tag == '' && github.event.inputs.sha != '' }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests

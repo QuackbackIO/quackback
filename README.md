@@ -45,7 +45,7 @@ Most feedback tools are expensive, closed-source, and lock you in. Quackback giv
 - **Self-host for free.** Run on your own infrastructure. No per-seat pricing.
 - **Own your data.** Your feedback lives in your own database. No vendor lock-in.
 - **AI-powered.** Automatic duplicate detection, AI summaries, feedback extraction from external sources, and an [MCP server](https://quackback.io/docs/mcp) that lets AI agents search, triage, and act on feedback directly.
-- **24 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and [more](#integrations) out of the box.
+- **25 integrations.** Slack, Linear, Jira, GitHub, Intercom, Zendesk, and [more](#integrations) out of the box.
 
 ## Features
 
@@ -54,7 +54,7 @@ Most feedback tools are expensive, closed-source, and lock you in. Quackback giv
 - **Embeddable widget.** Collect feedback right inside your app with a [drop-in widget](https://quackback.io/docs/widget/installation). Works on desktop and mobile, with native SDKs for [iOS](https://github.com/QuackbackIO/quackback-ios) and [Android](https://github.com/QuackbackIO/quackback-android).
 - **Admin inbox.** Triage incoming feedback in one place. Filter, group, dismiss, and restore deleted posts.
 - **Roadmap & changelog.** Show users what's planned, in progress, and shipped. Publish updates and schedule posts for later.
-- **Integrations.** [24 integrations](#integrations) including Slack, Linear, Jira, GitHub, Intercom, Zendesk, and two-way issue tracker sync.
+- **Integrations.** [25 integrations](#integrations) including Slack, Linear, Jira, GitHub, Intercom, Zendesk, and two-way issue tracker sync.
 - **API, webhooks & MCP.** Automate workflows with the REST API, outbound webhooks, and a 23-tool [MCP server](https://quackback.io/docs/mcp) for AI agents.
 - **Internationalization.** Portal and widget available in English, French, German, Spanish, and Arabic with full RTL support. Auto-detects browser language.
 - **Flexible auth.** Password, email OTP, Google, GitHub, and SSO with providers like Okta and Auth0.
