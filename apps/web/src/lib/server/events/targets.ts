@@ -317,7 +317,10 @@ async function getIntegrationTargets(
         const secrets = decryptSecrets<{ accessToken?: string }>(m.secrets)
         accessToken = secrets.accessToken
       } catch (error) {
-        log.error({ err: error, integration_type: m.integrationType }, 'failed to decrypt integration secrets')
+        log.error(
+          { err: error, integration_type: m.integrationType },
+          'failed to decrypt integration secrets'
+        )
         continue
       }
     }
@@ -325,7 +328,7 @@ async function getIntegrationTargets(
     targets.push({
       type: m.integrationType,
       target: { channelId },
-      config: { accessToken, rootUrl: context.portalBaseUrl },
+      config: { ...integrationConfig, accessToken, rootUrl: context.portalBaseUrl },
     })
   }
 

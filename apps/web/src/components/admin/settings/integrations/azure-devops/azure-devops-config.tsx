@@ -40,9 +40,10 @@ interface AzureDevOpsConfigProps {
 
 const EVENT_CONFIG = [
   {
-    id: 'post.created' as const,
-    label: 'Create work item from new feedback',
-    description: 'Automatically create an Azure DevOps work item when new feedback is submitted',
+    id: 'post.status_changed' as const,
+    label: 'Create work item when feedback is Planned',
+    description:
+      "Automatically create an Azure DevOps work item when a post's status changes to Planned",
   },
 ]
 

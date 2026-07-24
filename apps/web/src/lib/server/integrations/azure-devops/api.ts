@@ -36,11 +36,12 @@ async function azureDevOpsApi(
 
   if (!response.ok) {
     const status = response.status
-    if (status === 401) throw Object.assign(new Error('Unauthorized'), { status })
-    if (status === 403) throw Object.assign(new Error('Forbidden'), { status })
-    if (status === 429) throw Object.assign(new Error('Rate limited'), { status })
-    if (status >= 500) throw Object.assign(new Error(`Server error ${status}`), { status })
-    throw Object.assign(new Error(`HTTP ${status}`), { status })
+    const detail = await response.text().catch(() => '')
+    if (status === 401) throw Object.assign(new Error('Unauthorized'), { status, detail })
+    if (status === 403) throw Object.assign(new Error('Forbidden'), { status, detail })
+    if (status === 429) throw Object.assign(new Error('Rate limited'), { status, detail })
+    if (status >= 500) throw Object.assign(new Error(`Server error ${status}`), { status, detail })
+    throw Object.assign(new Error(`HTTP ${status}: ${detail}`), { status, detail })
   }
 
   return response

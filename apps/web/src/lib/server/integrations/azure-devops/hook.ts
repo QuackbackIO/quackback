@@ -1,6 +1,6 @@
 /**
  * Azure DevOps hook handler.
- * Creates work items when feedback events occur.
+ * Creates a work item when a post's status changes to "Planned".
  */
 
 import type { HookHandler, HookResult } from '../../events/hook-types'
@@ -11,6 +11,9 @@ import { buildAzureDevOpsWorkItemBody } from './message'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'azure-devops' })
+
+/** Slug of the status that triggers work item creation (stable across renames of "Planned"). */
+const TARGET_STATUS_SLUG = 'planned'
 
 export interface AzureDevOpsTarget {
   channelId: string // "projectName:workItemType"
@@ -28,7 +31,7 @@ export const azureDevOpsHook: HookHandler = {
     const { channelId } = target as AzureDevOpsTarget
     const { accessToken, organizationName, rootUrl } = config as AzureDevOpsConfig
 
-    if (event.type !== 'post.created') {
+    if (event.type !== 'post.status_changed' || event.data.newStatusSlug !== TARGET_STATUS_SLUG) {
       return { success: true }
     }
 
