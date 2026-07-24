@@ -58,6 +58,11 @@ export function useComposerDoc() {
   return { text, docRef, hasContentNode, resetSignal, onChange, clear }
 }
 
+/** Near-end slack for the tail-follow effect below: within ~a row and a half
+ *  of the bottom the viewport counts as "following"; further up the user is
+ *  reading history and is left alone. */
+const FOLLOW_END_THRESHOLD_PX = 96
+
 /**
  * The thread virtualizer (shared config: anchored to the newest message,
  * following appends, keyed rows so prepends hold the viewport) plus the
@@ -99,6 +104,25 @@ export function useThreadVirtualizer<Row extends { key: string }>({
     if (skipRef.current?.()) return
     virtualizer.scrollToEnd()
   }, [loading, rows.length, virtualizer])
+
+  // followOnAppend only snaps to the end when the row COUNT grows, but this
+  // thread also swaps tail-row keys in place with an unchanged count: typing →
+  // assistant-activity → assistant-stream → the persisted message (and the
+  // seen caption coming and going). A swap fires no follow, and the new row
+  // starts at the estimate while the old one was measured, stranding the
+  // viewport ~a row-height above the end — at which point the library's
+  // keep-pinned measure adjustments disengage too (they only engage within
+  // scrollEndThreshold of the end), so assistant replies stop auto-scrolling
+  // entirely. Snap to the end on any tail change while the viewport is near
+  // it; a reader scrolled up beyond the threshold is left alone.
+  const lastRowKey = rows.length > 0 ? rows[rows.length - 1].key : null
+  useLayoutEffect(() => {
+    if (!didInitialScroll.current || rows.length === 0) return
+    if (skipRef.current?.()) return
+    if (virtualizer.getDistanceFromEnd() <= FOLLOW_END_THRESHOLD_PX) {
+      virtualizer.scrollToEnd()
+    }
+  }, [rows.length, lastRowKey, virtualizer])
 
   return virtualizer
 }
