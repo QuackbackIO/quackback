@@ -28,7 +28,6 @@ import { tickets, ticketStatuses, conversationMessages, principal, user, eq } fr
 import {
   ticketUnreadMapForAgent,
   markTicketReadForAgent,
-  markTicketReadForRequester,
   markTicketUnreadFromMessage,
 } from '../ticket-unread.service'
 
@@ -47,19 +46,6 @@ function agentActor(overrides: Partial<Actor> = {}): Actor {
     principalType: 'user',
     segmentIds: new Set(),
     permissions: new Set([PERMISSIONS.TICKET_VIEW_ALL, PERMISSIONS.CONVERSATION_REPLY]),
-    ...overrides,
-  }
-}
-
-/** A non-team requester actor — the portal/widget ticket-page mark-read passes
- *  one through; the legacy (unlinked) path never reads it, the pair path
- *  derives the conversation side from it. */
-function requesterActor(overrides: Partial<Actor> = {}): Actor {
-  return {
-    principalId: createId('principal') as PrincipalId,
-    role: 'user',
-    principalType: 'user',
-    segmentIds: new Set(),
     ...overrides,
   }
 }
@@ -173,7 +159,7 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
     })
   })
 
-  describe('markTicketReadForAgent / markTicketReadForRequester', () => {
+  describe('markTicketReadForAgent', () => {
     it('sets assignee_last_read_at to now by default (standalone ticket)', async () => {
       const ticketId = await seedTicket()
       const before = await ticketReadWatermarks(ticketId)
@@ -186,17 +172,7 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
       expect(after.requesterLastReadAt).toBeNull()
     })
 
-    it('sets requester_last_read_at to now by default (standalone ticket)', async () => {
-      const ticketId = await seedTicket()
-
-      await markTicketReadForRequester(ticketId, requesterActor())
-
-      const after = await ticketReadWatermarks(ticketId)
-      expect(after.requesterLastReadAt).not.toBeNull()
-      expect(after.assigneeLastReadAt).toBeNull()
-    })
-
-    it('publishes a ticket_read realtime event for each side (unified inbox §3.2, M3)', async () => {
+    it('publishes a ticket_read realtime event (unified inbox §3.2, M3)', async () => {
       const ticketId = await seedTicket()
 
       await markTicketReadForAgent(ticketId, agentActor())
@@ -204,14 +180,6 @@ describe.skipIf(!fixture.available)('ticket unread service (real DB, rolled back
         kind: 'ticket_read',
         ticketId,
         side: 'agent',
-        at: expect.any(String),
-      })
-
-      await markTicketReadForRequester(ticketId, requesterActor())
-      expect(realtime.publishTicketEvent).toHaveBeenCalledWith(ticketId, {
-        kind: 'ticket_read',
-        ticketId,
-        side: 'visitor',
         at: expect.any(String),
       })
     })

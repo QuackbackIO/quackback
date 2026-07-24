@@ -582,6 +582,42 @@ describe('applyAction', () => {
       })
     })
 
+    // CSAT once per pair: conversation.status_changed and
+    // ticket.status_changed are independent triggers with no cross-dedup, so
+    // a workspace authoring CSAT on both axes reaches send_block twice for
+    // one pair — the guard skips the second ask instead of double-prompting.
+    describe('csat once per pair (the guard)', () => {
+      const csatAction = {
+        type: 'send_block' as const,
+        nodeId: 'n9',
+        block: { kind: 'csat' as const, body, allowTypingInterrupt: true, commentPrompt: '' },
+      }
+
+      it('skips (without parking) when the conversation already has a rating on file', async () => {
+        mockDbSelect.mockImplementationOnce(() => selectChainOnce([{ csatRating: 4 }]))
+        const res = await applyAction(csatAction, ctx)
+        expect(res.label).toContain('skipped')
+        expect(res.blockMessageId).toBeUndefined()
+        expect(appendAssistantReply).not.toHaveBeenCalled()
+      })
+
+      it('skips when an earlier csat block is already pending on the thread', async () => {
+        mockDbSelect
+          .mockImplementationOnce(() => selectChainOnce([{ csatRating: null }]))
+          .mockImplementationOnce(() => selectChainOnce([{ id: 'conversation_message_prior' }]))
+        const res = await applyAction(csatAction, ctx)
+        expect(res.label).toContain('skipped')
+        expect(appendAssistantReply).not.toHaveBeenCalled()
+      })
+
+      it('asks normally when the conversation has neither a rating nor a pending ask', async () => {
+        // The default select stub resolves [] for both guard reads.
+        const res = await applyAction(csatAction, ctx)
+        expect(res.blockMessageId).toBe('conversation_message_block_1')
+        expect(appendAssistantReply).toHaveBeenCalledTimes(1)
+      })
+    })
+
     it('marks collect and collectReply blocks as waiting with their attributeKey', async () => {
       await applyAction(
         {

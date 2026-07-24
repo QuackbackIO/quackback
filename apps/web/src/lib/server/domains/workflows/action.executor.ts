@@ -93,6 +93,7 @@ import {
   and,
   asc,
   isNull,
+  sql,
   conversations,
   conversationMessages,
   INTERACTIVE_BLOCK_KINDS,
@@ -264,6 +265,36 @@ export interface ActionResult {
 }
 
 const label = (label: string | null): ActionResult => ({ label })
+
+/**
+ * CSAT once per pair (converged Messages): whether this conversation already
+ * carries a CSAT ask — answered (a rating on file) or pending (an earlier
+ * csat block in the thread). `conversation.status_changed` and
+ * `ticket.status_changed` are independent workflow triggers with no
+ * cross-dedup, so a workspace authoring "closed → request CSAT" on both axes
+ * would otherwise ask the same customer twice on one pair; the send_block
+ * case below skips the second ask instead.
+ */
+async function conversationAlreadyAskedCsat(conversationId: ConversationId): Promise<boolean> {
+  const [conversation] = await db
+    .select({ csatRating: conversations.csatRating })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1)
+  if (conversation?.csatRating != null) return true
+  const [asked] = await db
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        isNull(conversationMessages.deletedAt),
+        sql`${conversationMessages.metadata} -> 'block' ->> 'kind' = 'csat'`
+      )
+    )
+    .limit(1)
+  return asked !== undefined
+}
 
 /** The honest plain-text fallback for a resolved block body, per kind — what
  *  `content` stores (transcript/email/notifications/FTS read this, never the
@@ -522,6 +553,12 @@ export async function applyAction(
         // Structurally unreachable (only the engine, which always has a run,
         // produces this action) — defensive rather than a silent no-op.
         throw new Error('send_block requires a workflow run context')
+      }
+      // CSAT once per pair: skip (don't park) when this conversation was
+      // already asked — the conversation- and ticket-axis triggers carry no
+      // cross-dedup, so both firing on one pair reaches here twice.
+      if (action.block.kind === 'csat' && (await conversationAlreadyAskedCsat(conversationId))) {
+        return label('csat skipped — already asked on this thread')
       }
       const messageId = await sendBlock(
         conversationId,

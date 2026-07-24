@@ -259,21 +259,13 @@ export interface TicketDTO {
  * leak, per the ticket_statuses contract) and `sla` (policy name + resolve
  * deadline — internal commitments, stripped from conversation visitor DTOs
  * for the same reason, see conversation.query.ts's `side` split) are nulled.
- * The requester-facing projection remains `stage`.
- *
- * `unreadCount` is the requester-side unread badge (agent-authored messages
- * newer than the pair's shared watermark). CONVERGENCE PHASE 6 (0218): every
- * requester-holding customer ticket is a pair, so the count always reads the
- * CONVERSATION's `visitorLastReadAt` (one shared watermark — Messages and
- * Tickets dual-list with read-through). Set by the list/detail reads
- * (`requesterTicketUnreadMap`); `toRequesterTicketDTO`
- * defaults it to 0 for the create path (a just-filed ticket has nothing
- * unread).
+ * The requester-facing projection remains `stage`. (No unread field: the
+ * requester reads their pair through the conversation surface, whose own
+ * unread counts are the complete truth by construction.)
  */
 export type RequesterTicketDTO = Omit<TicketDTO, 'status' | 'sla'> & {
   status: null
   sla: null
-  unreadCount: number
 }
 
 /** A page of `listTickets`: the rows plus whether an older page follows. */

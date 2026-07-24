@@ -9,19 +9,10 @@
  *    CONVERSATION's `agentLastReadAt` (via the conversation domain's own
  *    mark-read) and leaves the legacy `tickets.assignee_last_read_at` column
  *    untouched; a standalone ticket keeps the legacy write + `ticket_read`.
- *  - REQUESTER SIDE: `markTicketReadForRequester` on a linked pair writes the
- *    conversation's `visitorLastReadAt` (the portal/widget ticket-page view's
- *    mark-read delegates here), leaving `tickets.requester_last_read_at`
- *    untouched.
- *  - THE REQUESTER LIST BADGE (`requesterTicketUnreadMap`): a linked pair
- *    counts agent messages on the CONVERSATION parent against the
- *    conversation's visitor watermark (legacy ticket-parented rows on the
- *    pair no longer count — the accepted cutover glitch); post-0218 an
- *    unpaired ticket (the inert no-requester edge) contributes no unread.
- *  - END-TO-END READ-THROUGH: an agent reply on the pair makes the ticket
- *    row unread for the requester; the requester opening the ticket page
- *    (markTicketReadForRequester) clears it — and the same watermark is what
- *    the Messages space reads, so both spaces clear on one read.
+ *  (The requester-side wrappers and their list badge retired with the
+ *  converged Messages surface: the requester reads their pair through the
+ *  conversation surface directly, so conversation mark-read IS the requester
+ *  truth with no ticket-side delegation left to characterize.)
  *
  * The conversation domain's mark-read runs for real (dynamic import — the
  * same delegation markTicketUnreadFromMessage's 1a fallback uses); realtime
@@ -74,11 +65,7 @@ import {
 } from '@/lib/server/db'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
-import {
-  markTicketReadForAgent,
-  markTicketReadForRequester,
-  requesterTicketUnreadMap,
-} from '../ticket-unread.service'
+import { markTicketReadForAgent } from '../ticket-unread.service'
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -114,10 +101,6 @@ function agentActor(principalId: PrincipalId, extra: PermissionKey[] = []): Acto
   }
 }
 
-function requesterActor(principalId: PrincipalId): Actor {
-  return { ...ANONYMOUS_ACTOR, principalId, principalType: 'user', role: 'user' }
-}
-
 async function seedTicket(opts: { requesterPrincipalId?: PrincipalId } = {}): Promise<TicketId> {
   const statusId = createId('ticket_status') as TicketStatusId
   await testDb.insert(ticketStatuses).values({ id: statusId, name: 'New', slug: `p2_${suffix()}` })
@@ -144,27 +127,6 @@ async function linkPair(ticketId: TicketId, conversationId: ConversationId): Pro
   await testDb
     .insert(ticketConversations)
     .values({ ticketId, conversationId, ticketType: 'customer' })
-}
-
-/** Insert a message on one parent; senderType drives the side it counts for. */
-async function post(
-  parent: { ticketId: TicketId } | { conversationId: ConversationId },
-  opts: {
-    senderType: 'agent' | 'visitor'
-    isInternal?: boolean
-    principalId?: PrincipalId | null
-    createdAt?: Date
-  }
-): Promise<void> {
-  await testDb.insert(conversationMessages).values({
-    ...('ticketId' in parent ? { ticketId: parent.ticketId } : {}),
-    ...('conversationId' in parent ? { conversationId: parent.conversationId } : {}),
-    principalId: opts.principalId ?? null,
-    senderType: opts.senderType,
-    content: 'hi',
-    isInternal: opts.isInternal ?? false,
-    createdAt: opts.createdAt,
-  })
 }
 
 async function ticketWatermarks(
@@ -247,134 +209,6 @@ describe.skipIf(!fixture.available)(
           at: expect.any(String),
         })
         expect(realtime.publishConversationEvent).not.toHaveBeenCalled()
-      })
-    })
-
-    describe('markTicketReadForRequester', () => {
-      it('a linked pair marks the CONVERSATION visitor watermark, never the legacy ticket column', async () => {
-        const visitorP = await seedPrincipal('user')
-        const ticketId = await seedTicket({ requesterPrincipalId: visitorP })
-        const conversationId = await seedConversation(visitorP)
-        await linkPair(ticketId, conversationId)
-
-        await markTicketReadForRequester(ticketId, requesterActor(visitorP))
-
-        const conv = await conversationWatermarks(conversationId)
-        expect(conv.visitorLastReadAt).not.toBeNull()
-        expect(conv.agentLastReadAt).toBeNull()
-        const ticket = await ticketWatermarks(ticketId)
-        expect(ticket.requesterLastReadAt).toBeNull()
-        expect(ticket.assigneeLastReadAt).toBeNull()
-        expect(realtime.publishTicketEvent).not.toHaveBeenCalled()
-      })
-
-      it('a standalone ticket keeps the legacy ticket-column write', async () => {
-        const visitorP = await seedPrincipal('user')
-        const ticketId = await seedTicket({ requesterPrincipalId: visitorP })
-
-        await markTicketReadForRequester(ticketId, requesterActor(visitorP))
-
-        const ticket = await ticketWatermarks(ticketId)
-        expect(ticket.requesterLastReadAt).not.toBeNull()
-      })
-    })
-
-    describe('requesterTicketUnreadMap (the Tickets-space row badge)', () => {
-      it('a linked pair counts agent messages on the CONVERSATION parent against its visitor watermark', async () => {
-        const visitorP = await seedPrincipal('user')
-        const agentP = await seedPrincipal()
-        const ticketId = await seedTicket({ requesterPrincipalId: visitorP })
-        const conversationId = await seedConversation(visitorP)
-        await linkPair(ticketId, conversationId)
-
-        // Two agent replies on the shared (conversation) thread.
-        await post({ conversationId }, { senderType: 'agent', principalId: agentP })
-        await post({ conversationId }, { senderType: 'agent', principalId: agentP })
-        // The requester's own message never counts.
-        await post({ conversationId }, { senderType: 'visitor', principalId: visitorP })
-        // A legacy TICKET-parented agent row on the pair: NOT counted (the
-        // accepted cutover glitch — conversation watermark truth wins).
-        await post({ ticketId }, { senderType: 'agent', principalId: agentP })
-        // An internal note on the conversation never counts for the requester.
-        await post(
-          { conversationId },
-          { senderType: 'agent', principalId: agentP, isInternal: true }
-        )
-
-        const map = await requesterTicketUnreadMap([ticketId])
-        expect(map.get(ticketId)).toBe(2)
-      })
-
-      it('a linked pair respects the conversation visitor watermark (only newer counts)', async () => {
-        const visitorP = await seedPrincipal('user')
-        const agentP = await seedPrincipal()
-        const ticketId = await seedTicket({ requesterPrincipalId: visitorP })
-        const conversationId = await seedConversation(visitorP)
-        await linkPair(ticketId, conversationId)
-
-        await post(
-          { conversationId },
-          { senderType: 'agent', principalId: agentP, createdAt: new Date(Date.now() - 60_000) }
-        )
-        await testDb
-          .update(conversations)
-          .set({ visitorLastReadAt: new Date(Date.now() - 30_000) })
-          .where(eq(conversations.id, conversationId))
-        await post({ conversationId }, { senderType: 'agent', principalId: agentP })
-
-        const map = await requesterTicketUnreadMap([ticketId])
-        expect(map.get(ticketId)).toBe(1)
-      })
-
-      it('an unpaired ticket (the post-0218 no-requester edge) contributes no unread', async () => {
-        // Migration 0218 backfilled a pair for every requester-holding customer
-        // ticket, so the legacy standalone ticket-parented count is gone from
-        // this map: the only unpaired customer tickets left are the inert
-        // no-requester legacy edge, which has no requester to badge. Seeded
-        // here with a requester anyway to prove the count reads 0, not the
-        // legacy ticket-parented rows.
-        const visitorP = await seedPrincipal('user')
-        const agentP = await seedPrincipal()
-        const ticketId = await seedTicket({ requesterPrincipalId: visitorP })
-
-        await post(
-          { ticketId },
-          { senderType: 'agent', principalId: agentP, createdAt: new Date(Date.now() - 60_000) }
-        )
-        await testDb
-          .update(tickets)
-          .set({ requesterLastReadAt: new Date(Date.now() - 30_000) })
-          .where(eq(tickets.id, ticketId))
-        await post({ ticketId }, { senderType: 'agent', principalId: agentP })
-
-        const map = await requesterTicketUnreadMap([ticketId])
-        expect(map.get(ticketId)).toBeUndefined()
-      })
-    })
-
-    describe('end-to-end read-through (requester)', () => {
-      it('an agent reply makes the pair unread; opening the ticket page clears it via the shared watermark', async () => {
-        const visitorP = await seedPrincipal('user')
-        const agentP = await seedPrincipal()
-        const ticketId = await seedTicket({ requesterPrincipalId: visitorP })
-        const conversationId = await seedConversation(visitorP)
-        await linkPair(ticketId, conversationId)
-
-        // The agent's reply lands on the shared thread (post-1a writes are
-        // conversation-parented; seeded directly here).
-        await post({ conversationId }, { senderType: 'agent', principalId: agentP })
-        expect((await requesterTicketUnreadMap([ticketId])).get(ticketId)).toBe(1)
-
-        // The requester opens the ticket page (what the portal/widget view
-        // effect calls).
-        await markTicketReadForRequester(ticketId, requesterActor(visitorP))
-
-        // The Tickets-space badge clears…
-        expect((await requesterTicketUnreadMap([ticketId])).get(ticketId)).toBeUndefined()
-        // …and the SAME watermark is the one the Messages space reads
-        // (conversations.visitorLastReadAt), so both spaces clear on one read.
-        const conv = await conversationWatermarks(conversationId)
-        expect(conv.visitorLastReadAt).not.toBeNull()
       })
     })
   }

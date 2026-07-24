@@ -669,9 +669,11 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
  * Total unread across ALL of the caller's conversations — the messenger badge
  * aggregate (the launcher/tab shows one number, not the most-recent thread's).
  * Same gating as getMyConversationsFn: portal access for non-team callers;
- * returns 0 when conversations are off or the caller is unauthenticated. `total`
- * is a separate field so ticket/other unread can fold in later without a shape
- * change.
+ * returns 0 when conversations are off or the caller is unauthenticated.
+ * Converged Messages: this IS the complete customer unread truth — every
+ * customer-visible message (ticket pairs included) is conversation-parented,
+ * so there is nothing left to fold in; `total` survives only as wire-shape
+ * stability.
  */
 export const getMessengerUnreadFn = createServerFn({ method: 'GET' }).handler(async () => {
   const zero = { conversations: 0, total: 0 }
