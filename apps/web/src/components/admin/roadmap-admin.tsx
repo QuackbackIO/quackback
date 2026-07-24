@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from '@tanstack/react-router'
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import {
   DndContext,
   DragOverlay,
@@ -12,6 +12,7 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { MapIcon } from '@heroicons/react/24/solid'
+import { toast } from 'sonner'
 import { RoadmapSidebar } from './roadmap-sidebar'
 import { RoadmapColumn } from './roadmap-column'
 import { RoadmapCardOverlay } from './roadmap-card'
@@ -24,8 +25,9 @@ import { useRoadmapFilters } from './roadmap/use-roadmap-filters'
 import { useChangePostStatusId, useSetPostEta } from '@/lib/client/mutations/posts'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { adminQueries } from '@/lib/client/queries/admin'
+import { roadmapPostsKeys } from '@/lib/client/hooks/use-roadmap-posts-query'
 import { Route } from '@/routes/admin/roadmap'
-import type { RoadmapViewPost } from '@/lib/shared/types'
+import type { RoadmapViewPost, RoadmapPostsListResult } from '@/lib/shared/types'
 import type { PostStatusId, PostId, RoadmapId } from '@quackback/ids'
 
 export function RoadmapAdmin() {
@@ -44,6 +46,7 @@ export function RoadmapAdmin() {
   const { data: roadmaps } = useRoadmaps()
   const changeStatus = useChangePostStatusId()
   const setEta = useSetPostEta()
+  const queryClient = useQueryClient()
 
   const handleCardClick = (postId: string) => {
     navigate({ search: { ...search, post: postId } })
@@ -82,7 +85,7 @@ export function RoadmapAdmin() {
     }
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
+  function handleDragEnd(event: DragEndEvent) {
     setActivePost(null)
 
     const { active, over } = event
@@ -92,20 +95,78 @@ export function RoadmapAdmin() {
     const targetStatusId = over.data.current.statusId as PostStatusId | undefined
     const targetBucketId = over.data.current.bucketId as string | undefined
 
+    // Optimistically move the dragged card between the two roadmap columns so it
+    // stays where it was dropped instead of snapping back to its source column
+    // while the mutation is in flight. The mutation's own narrow roadmap
+    // invalidation reconciles against server truth on settle; on error we restore
+    // the two column caches from the snapshot taken here (paired with the
+    // mutation's own detail/inbox rollback).
     if (
       selectedRoadmap?.type === 'column' &&
       targetStatusId &&
-      draggedPost?.statusId !== targetStatusId
+      draggedPost &&
+      draggedPost.statusId !== targetStatusId
     ) {
-      await changeStatus.mutateAsync({
-        postId: active.id as PostId,
-        statusId: targetStatusId,
+      const postId = active.id as PostId
+      const roadmapId = selectedRoadmapId as RoadmapId
+      const sourceKey = roadmapPostsKeys.byRoadmap(
+        roadmapId,
+        draggedPost.statusId ?? undefined,
+        undefined,
+        filters
+      )
+      const targetKey = roadmapPostsKeys.byRoadmap(roadmapId, targetStatusId, undefined, filters)
+      const previousSource =
+        queryClient.getQueryData<InfiniteData<RoadmapPostsListResult>>(sourceKey)
+      const previousTarget =
+        queryClient.getQueryData<InfiniteData<RoadmapPostsListResult>>(targetKey)
+
+      // Remove from the source column.
+      queryClient.setQueryData<InfiniteData<RoadmapPostsListResult>>(sourceKey, (old) =>
+        old
+          ? {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                items: page.items.filter((p) => p.id !== postId),
+                total: Math.max(0, page.total - (page.items.some((p) => p.id === postId) ? 1 : 0)),
+              })),
+            }
+          : old
+      )
+      // Insert at the head of the target column (if that column is cached).
+      queryClient.setQueryData<InfiniteData<RoadmapPostsListResult>>(targetKey, (old) => {
+        if (!old || old.pages.length === 0) return old
+        const movedPost: RoadmapViewPost = { ...draggedPost, statusId: targetStatusId }
+        return {
+          ...old,
+          pages: old.pages.map((page, index) =>
+            index === 0
+              ? { ...page, items: [movedPost, ...page.items], total: page.total + 1 }
+              : page
+          ),
+        }
       })
+
+      changeStatus.mutate(
+        { postId, statusId: targetStatusId },
+        {
+          onError: () => {
+            // Restore the two column caches we hand-moved above.
+            if (previousSource) queryClient.setQueryData(sourceKey, previousSource)
+            if (previousTarget) queryClient.setQueryData(targetKey, previousTarget)
+            toast.error('Could not move the post. Try again.')
+          },
+        }
+      )
     } else if (selectedRoadmap?.type === 'date' && targetBucketId) {
       const bucket = dateBuckets.find((item) => item.id === targetBucketId)
       const currentEta = draggedPost?.eta ? new Date(draggedPost.eta).toISOString() : null
       if (bucket && (bucket.targetMonth ?? null) !== currentEta) {
-        await setEta.mutateAsync({ postId: active.id as PostId, eta: bucket.targetMonth })
+        setEta.mutate(
+          { postId: active.id as PostId, eta: bucket.targetMonth },
+          { onError: () => toast.error('Could not update the ETA. Try again.') }
+        )
       }
     }
   }
