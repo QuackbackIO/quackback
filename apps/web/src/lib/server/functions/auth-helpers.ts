@@ -122,63 +122,61 @@ export interface AuthContext {
  */
 export async function requireAuth(options?: { permission?: PermissionKey }): Promise<AuthContext> {
   log.debug({ permission: options?.permission }, 'require auth')
-  return withErrorLog(log, 'require auth', async () => {
-    const session = await getSessionDirect()
-    if (!session?.user) {
-      throw new Error('Authentication required')
-    }
-    const userId = session.user.id as UserId
+  const session = await getSessionDirect()
+  if (!session?.user) {
+    throw new Error('Authentication required')
+  }
+  const userId = session.user.id as UserId
 
-    const appSettings = await getAuthSettings()
-    if (!appSettings) {
-      throw new Error('Workspace not configured')
-    }
+  const appSettings = await getAuthSettings()
+  if (!appSettings) {
+    throw new Error('Workspace not configured')
+  }
 
-    // Memoized per request keyed on user: the principal read + permission join
-    // is identical for every requireAuth call in the request.
-    const { principalRecord, resolvedPermissions } = await memoizePerRequest(
-      `principal:${userId}`,
-      async () => {
-        const record = await db.query.principal.findFirst({
-          where: eq(principal.userId, userId),
-        })
-        if (!record) {
-          throw new Error('Access denied: Not a team member')
-        }
-        const perms = await permissionsForPrincipal(record.id, record.role as Role)
-        return { principalRecord: record, resolvedPermissions: perms }
+  // Memoized per request keyed on user: the principal read + permission join
+  // is identical for every requireAuth call in the request.
+  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
+    `principal:${userId}`,
+    async () => {
+      const record = await db.query.principal.findFirst({
+        where: eq(principal.userId, userId),
+      })
+      if (!record) {
+        throw new Error('Access denied: Not a team member')
       }
+      const perms = await permissionsForPrincipal(record.id, record.role as Role)
+      return { principalRecord: record, resolvedPermissions: perms }
+    }
+  )
+
+  const role = principalRecord.role as Role
+
+  if (options?.permission && !resolvedPermissions.has(options.permission)) {
+    throw new Error(
+      `Access denied: Requires permission '${options.permission}', role ${role} lacks it`
     )
+  }
 
-    const role = principalRecord.role as Role
-
-    if (options?.permission && !resolvedPermissions.has(options.permission)) {
-      throw new Error(
-        `Access denied: Requires permission '${options.permission}', role ${role} lacks it`
-      )
-    }
-
-    return {
-      settings: {
-        id: appSettings.id as WorkspaceId,
-        slug: appSettings.slug,
-        name: appSettings.name,
-        logoKey: appSettings.logoKey ?? null,
-      },
-      user: {
-        id: userId,
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image ?? null,
-      },
-      principal: {
-        id: principalRecord.id as PrincipalId,
-        role: principalRecord.role as Role,
-        type: principalRecord.type,
-      },
-      permissions: [...resolvedPermissions],
-    }
-  })
+  return {
+    settings: {
+      id: appSettings.id as WorkspaceId,
+      slug: appSettings.slug,
+      name: appSettings.name,
+      logoKey: appSettings.logoKey ?? null,
+    },
+    user: {
+      id: userId,
+      email: session.user.email,
+      name: session.user.name,
+      image: session.user.image ?? null,
+    },
+    principal: {
+      id: principalRecord.id as PrincipalId,
+      role: principalRecord.role as Role,
+      type: principalRecord.type,
+    },
+    permissions: [...resolvedPermissions],
+  }
 }
 
 // The denial-vocabulary matcher for the throws above lives in the pure leaf
@@ -216,66 +214,64 @@ export function assertPermission(
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
   log.debug('get optional auth')
-  return withErrorLog(log, 'get optional auth', async () => {
-    const session = await getSessionDirect()
-    if (!session?.user) {
-      return null
+  const session = await getSessionDirect()
+  if (!session?.user) {
+    return null
+  }
+  const userId = session.user.id as UserId
+
+  const appSettings = await getAuthSettings()
+  if (!appSettings) {
+    return null
+  }
+
+  // Memoized per request (distinct key from requireAuth: this path lazily
+  // creates the principal and skips the permission join for end users).
+  const { principalRecord, resolvedPermissions } = await memoizePerRequest(
+    `optionalPrincipal:${userId}`,
+    async () => {
+      // Resolve (or lazily create) the caller's principal. The factory is
+      // read-first and race-safe against a concurrent first-touch.
+      const { principal: record } = await ensurePrincipalForUser({
+        userId,
+        role: 'user',
+        displayName: session.user.name,
+        avatarUrl: session.user.image ?? null,
+      })
+
+      // Same assignment-derived resolution as requireAuth, so portal/public
+      // surfaces that gate on the optional context honour custom roles too.
+      // End users (role 'user') never carry workspace assignments — the role
+      // reconcile and seed heal enforce that — so the dominant portal case
+      // skips the join instead of paying a guaranteed-empty DB read.
+      const perms =
+        record.role === 'user'
+          ? new Set<PermissionKey>()
+          : await permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
+      return { principalRecord: record, resolvedPermissions: perms }
     }
-    const userId = session.user.id as UserId
+  )
 
-    const appSettings = await getAuthSettings()
-    if (!appSettings) {
-      return null
-    }
-
-    // Memoized per request (distinct key from requireAuth: this path lazily
-    // creates the principal and skips the permission join for end users).
-    const { principalRecord, resolvedPermissions } = await memoizePerRequest(
-      `optionalPrincipal:${userId}`,
-      async () => {
-        // Resolve (or lazily create) the caller's principal. The factory is
-        // read-first and race-safe against a concurrent first-touch.
-        const { principal: record } = await ensurePrincipalForUser({
-          userId,
-          role: 'user',
-          displayName: session.user.name,
-          avatarUrl: session.user.image ?? null,
-        })
-
-        // Same assignment-derived resolution as requireAuth, so portal/public
-        // surfaces that gate on the optional context honour custom roles too.
-        // End users (role 'user') never carry workspace assignments — the role
-        // reconcile and seed heal enforce that — so the dominant portal case
-        // skips the join instead of paying a guaranteed-empty DB read.
-        const perms =
-          record.role === 'user'
-            ? new Set<PermissionKey>()
-            : await permissionsForPrincipal(record.id as PrincipalId, record.role as Role)
-        return { principalRecord: record, resolvedPermissions: perms }
-      }
-    )
-
-    return {
-      settings: {
-        id: appSettings.id as WorkspaceId,
-        slug: appSettings.slug,
-        name: appSettings.name,
-        logoKey: appSettings.logoKey ?? null,
-      },
-      user: {
-        id: userId,
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image ?? null,
-      },
-      principal: {
-        id: principalRecord.id as PrincipalId,
-        role: principalRecord.role as Role,
-        type: principalRecord.type,
-      },
-      permissions: [...resolvedPermissions],
-    }
-  })
+  return {
+    settings: {
+      id: appSettings.id as WorkspaceId,
+      slug: appSettings.slug,
+      name: appSettings.name,
+      logoKey: appSettings.logoKey ?? null,
+    },
+    user: {
+      id: userId,
+      email: session.user.email,
+      name: session.user.name,
+      image: session.user.image ?? null,
+    },
+    principal: {
+      id: principalRecord.id as PrincipalId,
+      role: principalRecord.role as Role,
+      type: principalRecord.type,
+    },
+    permissions: [...resolvedPermissions],
+  }
 }
 
 // ============================================================================
@@ -285,7 +281,6 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
 import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
-import { withErrorLog } from './with-error-log'
 
 /**
  * Preserve all three principal types. Collapsing 'anonymous' onto 'user'

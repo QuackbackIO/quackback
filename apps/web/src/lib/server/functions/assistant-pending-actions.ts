@@ -15,9 +15,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { AssistantPendingActionId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { NotFoundError } from '@/lib/shared/errors'
-import { logger } from '@/lib/server/logger'
 import {
   getPendingActionById,
   type AssistantPendingAction,
@@ -25,8 +23,6 @@ import {
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import type { AssistantPendingActionDTO } from './assistant-actions'
-
-const log = logger.child({ component: 'assistant-pending-actions-fn' })
 
 const PendingActionInput = z.object({ pendingActionId: z.string() })
 
@@ -57,19 +53,17 @@ function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
 export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
   .validator(PendingActionInput)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'fetch assistant pending action', async () => {
-      // Base gate: any inbox teammate may open the approval queue.
-      const auth = await requireAuth()
-      const row = await getPendingActionById(data.pendingActionId as AssistantPendingActionId)
-      if (!row) throw new NotFoundError('PENDING_ACTION_NOT_FOUND', 'Pending action not found')
-      // Row-level authz (unified inbox §3.3): see this file's doc comment —
-      // the base gate above only confirms conversation.view SOMEWHERE.
-      const actor = await policyActorFromAuth(auth)
-      if (row.conversationId) {
-        await assertConversationViewable(row.conversationId, actor)
-      } else if (row.ticketId) {
-        await assertTicketVisible(row.ticketId, actor)
-      }
-      return toDTO(row)
-    })
+    // Base gate: any inbox teammate may open the approval queue.
+    const auth = await requireAuth()
+    const row = await getPendingActionById(data.pendingActionId as AssistantPendingActionId)
+    if (!row) throw new NotFoundError('PENDING_ACTION_NOT_FOUND', 'Pending action not found')
+    // Row-level authz (unified inbox §3.3): see this file's doc comment —
+    // the base gate above only confirms conversation.view SOMEWHERE.
+    const actor = await policyActorFromAuth(auth)
+    if (row.conversationId) {
+      await assertConversationViewable(row.conversationId, actor)
+    } else if (row.ticketId) {
+      await assertTicketVisible(row.ticketId, actor)
+    }
+    return toDTO(row)
   })

@@ -12,7 +12,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
 import type { ConversationAttributeId, ConversationId, TicketId } from '@quackback/ids'
 import { requireAuth, assertPermission } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ValidationError } from '@/lib/shared/errors'
 import {
@@ -29,9 +28,6 @@ import {
 import { previewAttributeDetection } from '@/lib/server/domains/conversation-attributes/attribute-preview.service'
 import { draftAttributeDescriptions } from '@/lib/server/domains/conversation-attributes/attribute-description-draft.service'
 import { attributeValueCounts } from '@/lib/server/domains/conversation-attributes/attribute-value-counts.service'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'conversation-attributes-fns' })
 
 const fieldTypeSchema = z.enum(['text', 'number', 'select', 'multi_select', 'checkbox', 'date'])
 const sourceHintSchema = z.enum(['ai', 'workflow', 'agent'])
@@ -90,47 +86,37 @@ const setAttributeValueSchema = z
 export const listConversationAttributesFn = createServerFn({ method: 'GET' })
   .validator(listAttributesSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'list conversation attributes', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-      return listConversationAttributes({ includeArchived: data?.includeArchived })
-    })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    return listConversationAttributes({ includeArchived: data?.includeArchived })
   })
 
 export const createConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(createAttributeSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'create conversation attribute', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
-      return createConversationAttribute(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    return createConversationAttribute(data)
   })
 
 export const updateConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(updateAttributeSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'update conversation attribute', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
-      const { id, ...input } = data
-      return updateConversationAttribute(id as ConversationAttributeId, input)
-    })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    const { id, ...input } = data
+    return updateConversationAttribute(id as ConversationAttributeId, input)
   })
 
 export const archiveConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(attributeIdSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'archive conversation attribute', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
-      return archiveConversationAttribute(data.id as ConversationAttributeId)
-    })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    return archiveConversationAttribute(data.id as ConversationAttributeId)
   })
 
 export const restoreConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(attributeIdSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'restore conversation attribute', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
-      return restoreConversationAttribute(data.id as ConversationAttributeId)
-    })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    return restoreConversationAttribute(data.id as ConversationAttributeId)
   })
 
 /**
@@ -147,31 +133,29 @@ export const restoreConversationAttributeFn = createServerFn({ method: 'POST' })
 export const setConversationAttributeValueFn = createServerFn({ method: 'POST' })
   .validator(setAttributeValueSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'set conversation attribute value', async () => {
-      const ctx = await requireAuth()
-      let target: SetAttributeTarget
-      if (data.conversationId) {
-        if (!isValidTypeId(data.conversationId, 'conversation')) {
-          throw new ValidationError('VALIDATION_ERROR', 'Invalid conversation id')
-        }
-        assertPermission(ctx, PERMISSIONS.CONVERSATION_SET_ATTRIBUTES)
-        target = { conversationId: data.conversationId as ConversationId }
-      } else {
-        if (!data.ticketId || !isValidTypeId(data.ticketId, 'ticket')) {
-          throw new ValidationError('VALIDATION_ERROR', 'Invalid ticket id')
-        }
-        assertPermission(ctx, PERMISSIONS.TICKET_SET_STATUS)
-        target = { ticketId: data.ticketId as TicketId }
+    const ctx = await requireAuth()
+    let target: SetAttributeTarget
+    if (data.conversationId) {
+      if (!isValidTypeId(data.conversationId, 'conversation')) {
+        throw new ValidationError('VALIDATION_ERROR', 'Invalid conversation id')
       }
+      assertPermission(ctx, PERMISSIONS.CONVERSATION_SET_ATTRIBUTES)
+      target = { conversationId: data.conversationId as ConversationId }
+    } else {
+      if (!data.ticketId || !isValidTypeId(data.ticketId, 'ticket')) {
+        throw new ValidationError('VALIDATION_ERROR', 'Invalid ticket id')
+      }
+      assertPermission(ctx, PERMISSIONS.TICKET_SET_STATUS)
+      target = { ticketId: data.ticketId as TicketId }
+    }
 
-      const customAttributes = await setConversationAttribute(
-        target,
-        data.key,
-        data.value ?? null,
-        'teammate'
-      )
-      return { customAttributes }
-    })
+    const customAttributes = await setConversationAttribute(
+      target,
+      data.key,
+      data.value ?? null,
+      'teammate'
+    )
+    return { customAttributes }
   })
 
 const previewOptionSchema = z.object({
@@ -202,25 +186,23 @@ const previewAttributeDetectionSchema = z.object({
 export const previewAttributeDetectionFn = createServerFn({ method: 'POST' })
   .validator(previewAttributeDetectionSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'preview attribute detection', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
-      // New (not-yet-saved) options have no id; a positional placeholder is
-      // fine here since it's only ever used within this one ephemeral call,
-      // never persisted or compared across requests.
-      const options = data.definition.options.map((o, i) => ({
-        id: o.id ?? `preview_opt_${i}`,
-        label: o.label,
-        description: o.description ?? null,
-      }))
-      return await previewAttributeDetection({
-        definition: {
-          key: data.definition.key,
-          label: data.definition.label,
-          description: data.definition.description ?? null,
-          options,
-        },
-        sampleMessage: data.sampleMessage,
-      })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    // New (not-yet-saved) options have no id; a positional placeholder is
+    // fine here since it's only ever used within this one ephemeral call,
+    // never persisted or compared across requests.
+    const options = data.definition.options.map((o, i) => ({
+      id: o.id ?? `preview_opt_${i}`,
+      label: o.label,
+      description: o.description ?? null,
+    }))
+    return await previewAttributeDetection({
+      definition: {
+        key: data.definition.key,
+        label: data.definition.label,
+        description: data.definition.description ?? null,
+        options,
+      },
+      sampleMessage: data.sampleMessage,
     })
   })
 
@@ -237,10 +219,8 @@ const draftAttributeDescriptionsSchema = z.object({
 export const draftAttributeDescriptionsFn = createServerFn({ method: 'POST' })
   .validator(draftAttributeDescriptionsSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'draft attribute descriptions', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
-      return await draftAttributeDescriptions(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
+    return await draftAttributeDescriptions(data)
   })
 
 const attributeValueCountsSchema = z.object({
@@ -257,8 +237,6 @@ const attributeValueCountsSchema = z.object({
 export const attributeValueCountsFn = createServerFn({ method: 'GET' })
   .validator(attributeValueCountsSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'attribute value counts', async () => {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-      return await attributeValueCounts(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    return await attributeValueCounts(data)
   })

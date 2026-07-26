@@ -9,7 +9,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { IntegrationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { db, integrations, eq } from '@/lib/server/db'
 import type { RemoteItemMatch } from '@/lib/server/integrations/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -28,23 +27,21 @@ export const searchExternalItemsFn = createServerFn({ method: 'POST' })
   .validator(searchSchema)
   .handler(async ({ data }): Promise<RemoteItemMatch[]> => {
     log.debug({ integration_type: data.integrationType }, 'search external items')
-    return withErrorLog(log, 'search external items', async () => {
-      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const search = getIntegration(data.integrationType)?.externalLinks?.search
-      if (!search) return []
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const search = getIntegration(data.integrationType)?.externalLinks?.search
+    if (!search) return []
 
-      const integration = await db.query.integrations.findFirst({
-        where: eq(integrations.integrationType, data.integrationType),
-      })
-      if (!integration?.secrets || integration.status !== 'active') return []
-
-      const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
-      const accessToken = await getValidAccessToken(integration.id as IntegrationId)
-      if (!accessToken) return []
-
-      const config = (integration.config ?? {}) as Record<string, unknown>
-      return search({ accessToken, config, query: data.query })
+    const integration = await db.query.integrations.findFirst({
+      where: eq(integrations.integrationType, data.integrationType),
     })
+    if (!integration?.secrets || integration.status !== 'active') return []
+
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
+    const accessToken = await getValidAccessToken(integration.id as IntegrationId)
+    if (!accessToken) return []
+
+    const config = (integration.config ?? {}) as Record<string, unknown>
+    return search({ accessToken, config, query: data.query })
   })

@@ -8,9 +8,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { MacroId, ConversationId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { logger } from '@/lib/server/logger'
 import {
   listMacros,
   getMacro,
@@ -21,8 +19,6 @@ import {
   renderMacro,
   applyMacroActions,
 } from '@/lib/server/domains/macros'
-
-const log = logger.child({ component: 'macros-fn' })
 
 const macroScopeSchema = z.enum(['support', 'feedback', 'both'])
 
@@ -123,17 +119,15 @@ export const deleteMacroFn = createServerFn({ method: 'POST' })
 export const applyMacroFn = createServerFn({ method: 'POST' })
   .validator(applyMacroSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'apply macro', async () => {
-      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
-      const actor = await policyActorFromAuth(ctx)
-      const conversationId = data.conversationId as ConversationId
-      // Independent reads: fetch the macro and build the render context together.
-      const [macro, context] = await Promise.all([
-        getMacro(data.macroId as MacroId),
-        buildMacroContext(conversationId),
-      ])
-      const body = renderMacro(macro.body, context)
-      const applied = await applyMacroActions(conversationId, macro.actions, actor)
-      return { body, applied }
-    })
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const actor = await policyActorFromAuth(ctx)
+    const conversationId = data.conversationId as ConversationId
+    // Independent reads: fetch the macro and build the render context together.
+    const [macro, context] = await Promise.all([
+      getMacro(data.macroId as MacroId),
+      buildMacroContext(conversationId),
+    ])
+    const body = renderMacro(macro.body, context)
+    const applied = await applyMacroActions(conversationId, macro.actions, actor)
+    return { body, applied }
   })

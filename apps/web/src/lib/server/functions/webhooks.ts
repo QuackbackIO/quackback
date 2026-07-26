@@ -7,7 +7,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { WEBHOOK_EVENTS } from '@/lib/server/events/integrations/webhook/constants'
 import type { WebhookId } from '@quackback/ids'
@@ -59,15 +58,13 @@ export type RotateWebhookSecretInput = z.infer<typeof rotateWebhookSecretSchema>
  */
 export const fetchWebhooks = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'fetch webhooks')
-  return withErrorLog(log, 'fetch webhooks', async () => {
-    await requireAuth({ permission: PERMISSIONS.WEBHOOK_VIEW })
+  await requireAuth({ permission: PERMISSIONS.WEBHOOK_VIEW })
 
-    const { listWebhooks } = await import('@/lib/server/domains/webhooks/webhook.service')
-    const webhooks = await listWebhooks()
+  const { listWebhooks } = await import('@/lib/server/domains/webhooks/webhook.service')
+  const webhooks = await listWebhooks()
 
-    log.debug({ count: webhooks.length }, 'fetch webhooks')
-    return webhooks
-  })
+  log.debug({ count: webhooks.length }, 'fetch webhooks')
+  return webhooks
 })
 
 // ============================================
@@ -82,22 +79,20 @@ export const createWebhookFn = createServerFn({ method: 'POST' })
   .validator(createWebhookSchema)
   .handler(async ({ data }) => {
     log.debug({ url: data.url }, 'create webhook')
-    return withErrorLog(log, 'create webhook', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
 
-      const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
-      const result = await createWebhook(
-        {
-          url: data.url,
-          events: data.events,
-          boardIds: data.boardIds,
-        },
-        auth.principal.id
-      )
+    const { createWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
+    const result = await createWebhook(
+      {
+        url: data.url,
+        events: data.events,
+        boardIds: data.boardIds,
+      },
+      auth.principal.id
+    )
 
-      log.info({ webhook_id: result.webhook.id }, 'webhook created')
-      return result
-    })
+    log.info({ webhook_id: result.webhook.id }, 'webhook created')
+    return result
   })
 
 /**
@@ -107,20 +102,18 @@ export const updateWebhookFn = createServerFn({ method: 'POST' })
   .validator(updateWebhookSchema)
   .handler(async ({ data }) => {
     log.debug({ webhook_id: data.webhookId }, 'update webhook')
-    return withErrorLog(log, 'update webhook', async () => {
-      await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
 
-      const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
-      const webhook = await updateWebhook(data.webhookId as WebhookId, {
-        url: data.url,
-        events: data.events,
-        boardIds: data.boardIds,
-        status: data.status,
-      })
-
-      log.info({ webhook_id: webhook.id }, 'webhook updated')
-      return webhook
+    const { updateWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
+    const webhook = await updateWebhook(data.webhookId as WebhookId, {
+      url: data.url,
+      events: data.events,
+      boardIds: data.boardIds,
+      status: data.status,
     })
+
+    log.info({ webhook_id: webhook.id }, 'webhook updated')
+    return webhook
   })
 
 /**
@@ -130,15 +123,13 @@ export const deleteWebhookFn = createServerFn({ method: 'POST' })
   .validator(deleteWebhookSchema)
   .handler(async ({ data }) => {
     log.debug({ webhook_id: data.webhookId }, 'delete webhook')
-    return withErrorLog(log, 'delete webhook', async () => {
-      await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
 
-      const { deleteWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
-      await deleteWebhook(data.webhookId as WebhookId)
+    const { deleteWebhook } = await import('@/lib/server/domains/webhooks/webhook.service')
+    await deleteWebhook(data.webhookId as WebhookId)
 
-      log.info({ webhook_id: data.webhookId }, 'webhook deleted')
-      return { id: data.webhookId as WebhookId }
-    })
+    log.info({ webhook_id: data.webhookId }, 'webhook deleted')
+    return { id: data.webhookId as WebhookId }
   })
 
 /**
@@ -149,13 +140,11 @@ export const rotateWebhookSecretFn = createServerFn({ method: 'POST' })
   .validator(rotateWebhookSecretSchema)
   .handler(async ({ data }) => {
     log.debug({ webhook_id: data.webhookId }, 'rotate webhook secret')
-    return withErrorLog(log, 'rotate webhook secret', async () => {
-      await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.WEBHOOK_MANAGE })
 
-      const { rotateWebhookSecret } = await import('@/lib/server/domains/webhooks/webhook.service')
-      const result = await rotateWebhookSecret(data.webhookId as WebhookId)
+    const { rotateWebhookSecret } = await import('@/lib/server/domains/webhooks/webhook.service')
+    const result = await rotateWebhookSecret(data.webhookId as WebhookId)
 
-      log.info({ webhook_id: data.webhookId }, 'webhook secret rotated')
-      return result
-    })
+    log.info({ webhook_id: data.webhookId }, 'webhook secret rotated')
+    return result
   })

@@ -16,12 +16,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { db } from '@/lib/server/db'
 import type { AssistantPendingActionId, PrincipalId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import type { Actor } from '@/lib/server/policy/types'
 import { can } from '@/lib/server/policy/authorize'
 import { NotFoundError, ForbiddenError, ConflictError, DomainException } from '@/lib/shared/errors'
 import type { JsonValue } from '@/lib/shared/json'
-import { logger } from '@/lib/server/logger'
 import { assertConversationViewable } from '@/lib/server/domains/conversation/conversation.service'
 import { assertTicketVisible } from '@/lib/server/domains/tickets/ticket.service'
 import {
@@ -39,8 +37,6 @@ import {
 import { resolveContentAudience } from '@/lib/server/domains/assistant/audience'
 import { executeApprovedPendingAction } from '@/lib/server/domains/assistant/assistant.tools'
 import { ensureAssistantPrincipal } from '@/lib/server/domains/assistant/assistant.principal'
-
-const log = logger.child({ component: 'assistant-actions' })
 
 const PendingActionInput = z.object({ pendingActionId: z.string() })
 
@@ -219,35 +215,31 @@ async function decideAssistantAction(
 export const approveAssistantActionFn = createServerFn({ method: 'POST' })
   .validator(PendingActionInput)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'approve assistant action', async () => {
-      // Base gate: any inbox teammate may act on the queue. The real
-      // authority check is per-proposal, below (every permission the
-      // proposed tool declares).
-      const auth = await requireAuth()
-      const actor = await policyActorFromAuth(auth)
-      const settled = await decideAssistantAction(
-        data.pendingActionId as AssistantPendingActionId,
-        'approved',
-        auth.principal.id,
-        actor
-      )
-      return toDTO(settled)
-    })
+    // Base gate: any inbox teammate may act on the queue. The real
+    // authority check is per-proposal, below (every permission the
+    // proposed tool declares).
+    const auth = await requireAuth()
+    const actor = await policyActorFromAuth(auth)
+    const settled = await decideAssistantAction(
+      data.pendingActionId as AssistantPendingActionId,
+      'approved',
+      auth.principal.id,
+      actor
+    )
+    return toDTO(settled)
   })
 
 export const rejectAssistantActionFn = createServerFn({ method: 'POST' })
   .validator(PendingActionInput)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'reject assistant action', async () => {
-      // Same base gate as approve — see the comment there.
-      const auth = await requireAuth()
-      const actor = await policyActorFromAuth(auth)
-      const settled = await decideAssistantAction(
-        data.pendingActionId as AssistantPendingActionId,
-        'rejected',
-        auth.principal.id,
-        actor
-      )
-      return toDTO(settled)
-    })
+    // Same base gate as approve — see the comment there.
+    const auth = await requireAuth()
+    const actor = await policyActorFromAuth(auth)
+    const settled = await decideAssistantAction(
+      data.pendingActionId as AssistantPendingActionId,
+      'rejected',
+      auth.principal.id,
+      actor
+    )
+    return toDTO(settled)
   })
