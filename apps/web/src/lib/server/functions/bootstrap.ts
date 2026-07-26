@@ -178,10 +178,10 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // `color-scheme: light dark` canvas.
   setResponseHeader('Accept-CH', 'Sec-CH-Prefers-Color-Scheme')
   setResponseHeader('Critical-CH', 'Sec-CH-Prefers-Color-Scheme')
-  // This document is keyed on every input we render into it: Cookie and
-  // Authorization for session-, role-, and segment-aware context;
-  // Accept-Language for `<html lang>`/`dir`; the color-scheme hint; and Host
-  // because baseUrl can switch to a verified Help Center custom domain.
+  // This document varies on Cookie for session- and role-aware context, and on
+  // Authorization as defense in depth for credential-bearing requests.
+  // Accept-Language controls `<html lang>`/`dir`; the color-scheme hint controls
+  // theme rendering; and Host can select a verified Help Center custom domain.
   // Keep this call on the shared constant so bootstrap and the public document
   // cache helper cannot silently disagree about representation variance.
   setResponseHeader('Vary', DOCUMENT_CACHE_VARY)

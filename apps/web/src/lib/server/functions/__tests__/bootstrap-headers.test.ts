@@ -6,7 +6,11 @@ const hoisted = vi.hoisted(() => ({
   handlers: [] as Handler[],
   headers: new Headers(),
   setResponseHeader: vi.fn(),
+  varySentinel: 'test-document-cache-vary-sentinel',
 }))
+
+let bootstrapHandler: Handler | undefined
+let actualDocumentCacheVary: string
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => ({
@@ -21,6 +25,10 @@ vi.mock('@tanstack/react-start', () => ({
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () => hoisted.headers,
   setResponseHeader: hoisted.setResponseHeader,
+}))
+
+vi.mock('@/lib/server/functions/public-cache', () => ({
+  DOCUMENT_CACHE_VARY: hoisted.varySentinel,
 }))
 
 vi.mock('@/lib/shared/theme', () => ({
@@ -64,6 +72,11 @@ vi.mock('@/lib/server/domains/help-center/help-center-domain.service', () => ({
 beforeAll(async () => {
   vi.useFakeTimers()
   await import('../bootstrap')
+  bootstrapHandler = hoisted.handlers.at(-1)
+
+  const actualPublicCache =
+    await vi.importActual<typeof import('../public-cache')>('../public-cache')
+  actualDocumentCacheVary = actualPublicCache.DOCUMENT_CACHE_VARY
 })
 
 beforeEach(() => {
@@ -77,15 +90,17 @@ afterAll(() => {
 })
 
 describe('bootstrap response headers', () => {
-  it('emits the canonical credential-aware root document Vary value', async () => {
-    const bootstrapHandler = hoisted.handlers.at(-1)
+  it('defines the canonical credential-aware root document Vary value', () => {
+    expect(actualDocumentCacheVary).toBe(
+      'Cookie, Authorization, Accept-Language, Sec-CH-Prefers-Color-Scheme, Host'
+    )
+  })
+
+  it('consumes the shared document Vary value', async () => {
     expect(bootstrapHandler).toBeTypeOf('function')
 
     await bootstrapHandler!()
 
-    expect(hoisted.setResponseHeader).toHaveBeenCalledWith(
-      'Vary',
-      'Cookie, Authorization, Accept-Language, Sec-CH-Prefers-Color-Scheme, Host'
-    )
+    expect(hoisted.setResponseHeader).toHaveBeenCalledWith('Vary', hoisted.varySentinel)
   })
 })
