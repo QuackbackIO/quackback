@@ -13,7 +13,7 @@ import { updateProfileNameFn } from '@/lib/server/functions/user'
 import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PasswordForm } from '@/components/settings/password-form'
-import { getInitials } from '@/lib/shared/utils/string'
+import { getInitials } from '@/lib/shared/utils'
 
 interface ProfileFormProps {
   user: {

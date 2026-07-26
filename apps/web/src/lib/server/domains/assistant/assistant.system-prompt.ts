@@ -24,6 +24,7 @@ import {
   type AssistantRole,
   type AssistantTone,
 } from '@/lib/shared/assistant/config'
+import type { AssistantWriteToolPolicy } from './assistant.toolspec'
 
 export const ASSISTANT_PROMPT_VERSION = 'support-agent-v4' as const
 
@@ -91,8 +92,12 @@ export interface AssistantRolePolicy {
   /** Whether customer tone, length, and global voice instructions apply. */
   customerVoice: boolean
   contentAudience: 'public' | 'team'
-  /** The runtime must apply this before tool assembly. */
-  writeToolPolicy: 'execute' | 'propose'
+  /**
+   * The runtime must apply this before tool assembly. Derived from the tool
+   * union rather than restated, minus `simulate` — that is a runtime-only
+   * override for the sandbox and is never assignable to a role.
+   */
+  writeToolPolicy: Exclude<AssistantWriteToolPolicy, 'simulate'>
   pipelineStep: 'assistant'
   inabilitySemantics: 'cannot_answer'
   textAudience: 'customer' | 'teammate'

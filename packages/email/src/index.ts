@@ -247,18 +247,13 @@ async function dispatch(
 }
 
 /**
- * Send a branded email (rendered React template) from the workspace identity
- * (`EMAIL_FROM`). The transactional notifier — invites, notifications, alerts.
- */
-/**
  * The console provider never sends: it logs a preview and reports the mail as
  * not sent. Returns null when a real provider is configured, so callers early
  * return on a non-null result and otherwise fall through to `sendEmail`.
  *
  * This stays an early return rather than deferring to `dispatch`'s own console
- * branch: `sendEmail` resolves EMAIL_FROM first, which throws when it is unset
- * (the normal dev case), and dispatch would also render the React template for
- * a mail nobody sends.
+ * branch because `sendEmail` resolves EMAIL_FROM first, which throws when it is
+ * unset (the normal dev case).
  */
 function consolePreview(
   emailType: string,
@@ -270,6 +265,10 @@ function consolePreview(
   return { sent: false }
 }
 
+/**
+ * Send a branded email (rendered React template) from the workspace identity
+ * (`EMAIL_FROM`). The transactional notifier — invites, notifications, alerts.
+ */
 async function sendEmail(
   options: {
     to: string

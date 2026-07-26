@@ -48,23 +48,30 @@ export const adminQueries = {
   boards: () =>
     queryOptions({
       queryKey: ['admin', 'boards'],
-      queryFn: async () => {
-        const data = await fetchBoardsFn()
-        return data.map((b) => ({
+      queryFn: () => fetchBoardsFn(),
+      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
+      // Date coercion happens per observer, so the cache holds one raw copy
+      // shared with boardsForSettings below.
+      select: (data) =>
+        data.map((b) => ({
           ...b,
           createdAt: new Date(b.createdAt),
           updatedAt: new Date(b.updatedAt),
-        }))
-      },
-      staleTime: 5 * 60 * 1000, // 5min - reference data, rarely changes during session
+        })),
     }),
 
   /**
-   * List boards for settings page (includes additional metadata)
+   * The same board list as `boards`, without the Date coercion.
+   *
+   * Shares `boards`' query key deliberately: both now resolve to the identical
+   * zero-argument `fetchBoardsFn`, so a separate key meant fetching the same
+   * payload twice and holding two copies whenever a screen mounted both (the
+   * post modal lives in the admin root layout, so `?post=` on a settings screen
+   * did exactly that). Invalidating either name refreshes both.
    */
   boardsForSettings: () =>
     queryOptions({
-      queryKey: ['admin', 'settings', 'boards'],
+      queryKey: ['admin', 'boards'],
       queryFn: () => fetchBoardsFn(),
       staleTime: 5 * 60 * 1000, // 5min - reference data
     }),

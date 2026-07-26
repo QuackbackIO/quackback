@@ -162,32 +162,20 @@ export async function updateAuthConfig(input: UpdateAuthConfigInput): Promise<Au
     // Tier gate: refuse non-standard OAuth providers when
     // customOidcProvider is off. No-op when the feature is unlimited.
     if (input.oauth) {
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-      const limits = await getTierLimits()
       const enablingNonStandard = Object.entries(input.oauth).some(
         ([id, enabled]) => enabled && !STANDARD_OAUTH_PROVIDERS.has(id)
       )
       if (enablingNonStandard) {
-        enforceFeatureGate({
-          enabled: limits.features.customOidcProvider,
-          feature: 'customOidcProvider',
-          friendly: 'Custom OIDC providers',
-        })
+        const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+        await assertTierFeature('customOidcProvider', 'Custom OIDC providers')
       }
     }
 
     // Tier gate: ssoOidc itself requires customOidcProvider. Reject
     // attempts to enable or configure SSO when the tier is off.
     if (input.ssoOidc?.enabled === true) {
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-      const limits = await getTierLimits()
-      enforceFeatureGate({
-        enabled: limits.features.customOidcProvider,
-        feature: 'customOidcProvider',
-        friendly: 'Single sign-on (OIDC)',
-      })
+      const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+      await assertTierFeature('customOidcProvider', 'Single sign-on (OIDC)')
 
       // Secret-presence gate: enabling SSO without a saved client
       // secret would register a Better-Auth provider that 4xxs on
