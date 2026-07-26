@@ -1,12 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequestHeaders, setResponseHeader } from '@tanstack/react-start/server'
 
+export const DOCUMENT_CACHE_VARY =
+  'Cookie, Authorization, Accept-Language, Sec-CH-Prefers-Color-Scheme, Host'
+
 /**
  * Mark a credential-free public document response as shared-cacheable.
  * The presence of Cookie or Authorization makes the response private and
  * uncacheable, including malformed or denied credentials. The root bootstrap
- * must vary public documents across both credential transports as defense in
- * depth.
+ * consumes DOCUMENT_CACHE_VARY as defense in depth.
  *
  * Call from a route loader under an SSR-only guard, mirroring
  * setPortalFrameHeaders:

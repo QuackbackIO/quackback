@@ -6,6 +6,7 @@ import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
+import { DOCUMENT_CACHE_VARY } from '@/lib/server/functions/public-cache'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'bootstrap' })
@@ -177,14 +178,13 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
   // `color-scheme: light dark` canvas.
   setResponseHeader('Accept-CH', 'Sec-CH-Prefers-Color-Scheme')
   setResponseHeader('Critical-CH', 'Sec-CH-Prefers-Color-Scheme')
-  // This document is keyed on every input we render into it: the `theme` cookie
-  // (and the session/role embedded in the dehydrated context), Accept-Language
-  // for `<html lang>`/`dir`, the color-scheme hint, and now Host (below,
-  // baseUrl switches to the help center's verified custom domain when the
-  // request arrives on it). List them all so a shared cache can never serve
-  // e.g. a dark-cookie document to a no-cookie visitor that happens to share
-  // the same hint.
-  setResponseHeader('Vary', 'Cookie, Accept-Language, Sec-CH-Prefers-Color-Scheme, Host')
+  // This document is keyed on every input we render into it: Cookie and
+  // Authorization for session-, role-, and segment-aware context;
+  // Accept-Language for `<html lang>`/`dir`; the color-scheme hint; and Host
+  // because baseUrl can switch to a verified Help Center custom domain.
+  // Keep this call on the shared constant so bootstrap and the public document
+  // cache helper cannot silently disagree about representation variance.
+  setResponseHeader('Vary', DOCUMENT_CACHE_VARY)
   const prefersColorScheme = parsePrefersColorScheme(headers.get('sec-ch-prefers-color-scheme'))
 
   // Canonical URLs switch to the help center's custom domain when the
