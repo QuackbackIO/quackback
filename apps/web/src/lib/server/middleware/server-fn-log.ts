@@ -16,6 +16,7 @@ import { isNotFound, isRedirect } from '@tanstack/react-router'
 import type { AppLogger } from '@quackback/logger'
 import { logger } from '@/lib/server/logger'
 import { DomainException } from '@/lib/shared/errors'
+import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
 
 /**
  * Input validators run inside the middleware chain, upstream of the handler, so
@@ -33,16 +34,36 @@ function isValidationFailure(error: unknown): boolean {
 }
 
 /**
+ * Some errors carry an HTTP status without extending DomainException — e.g.
+ * CopilotUnavailableError. The status is the classification, so read it
+ * structurally rather than requiring a particular base class.
+ */
+function statusCodeOf(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const candidate = error as { statusCode?: unknown }
+  return typeof candidate.statusCode === 'number' ? candidate.statusCode : undefined
+}
+
+/**
  * Severity for a thrown value, or `null` when it is not a failure at all.
  *
  * `redirect()` and `notFound()` are the framework's sanctioned control flow for
  * server functions — an unauthenticated visitor being sent to the login page is
  * the system working, not an incident.
+ *
+ * Everything a caller can provoke lands at warn: a permission denial, a bad
+ * payload, a missing record. `error` is reserved for failures nobody designed
+ * for, which is what makes it worth alerting on.
  */
 export function classifyServerFnError(error: unknown): 'warn' | 'error' | null {
   if (isRedirect(error) || isNotFound(error)) return null
   if (error instanceof DomainException) return error.statusCode >= 500 ? 'error' : 'warn'
+  // requireAuth throws a plain Error, and it is the most common expected
+  // failure in the app — without this every signed-out call would log at error.
+  if (isAuthDenialError(error)) return 'warn'
   if (isValidationFailure(error)) return 'warn'
+  const status = statusCodeOf(error)
+  if (status !== undefined) return status >= 500 ? 'error' : 'warn'
   return 'error'
 }
 

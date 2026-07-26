@@ -24,17 +24,12 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { db, assistantEvents } from '@/lib/server/db'
-import { gateCopilotFn, CopilotUnavailableError } from '@/lib/server/domains/assistant/copilot-gate'
+import { gateCopilotFn } from '@/lib/server/domains/assistant/copilot-gate'
 import { withAssistantItemRef } from '@/lib/server/domains/assistant/item-ref.schema'
 import {
   COPILOT_EVENT_TYPES,
   COPILOT_INSERT_DESTINATIONS,
 } from '@/lib/shared/assistant/copilot-contract'
-import { isAuthDenialError } from '@/lib/server/functions/auth-errors'
-import { NotFoundError } from '@/lib/shared/errors'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'copilot-events-fn' })
 
 const recordCopilotEventSchema = z
   .object({
@@ -98,38 +93,27 @@ export type CopilotEventInput = z.input<typeof recordCopilotEventSchema>
 export const recordCopilotEventFn = createServerFn({ method: 'POST' })
   .validator(recordCopilotEventSchema)
   .handler(async ({ data }) => {
-    try {
-      const { auth, conversationId, ticketId } = await gateCopilotFn(data.item)
+    // An expected denial here (no copilot.use, flag off / unconfigured, item
+    // not viewable) is the gate doing its job on a fire-and-forget telemetry
+    // write. The server-fn log middleware already classifies all three as warn
+    // rather than error — auth denials, CopilotUnavailableError via its
+    // statusCode, and NotFoundError as a DomainException — so this handler no
+    // longer sorts them itself.
+    const { auth, conversationId, ticketId } = await gateCopilotFn(data.item)
 
-      await db.insert(assistantEvents).values({
-        eventType: data.eventType,
-        principalId: auth.principal.id,
-        conversationId,
-        ticketId,
-        metadata: {
-          ...(data.destination !== undefined && { destination: data.destination }),
-          ...(data.rating !== undefined && { rating: data.rating }),
-          ...(data.reason !== undefined && { reason: data.reason }),
-          ...(data.answerType !== undefined && { answerType: data.answerType }),
-          ...(data.internalSourced !== undefined && { internalSourced: data.internalSourced }),
-        },
-      })
+    await db.insert(assistantEvents).values({
+      eventType: data.eventType,
+      principalId: auth.principal.id,
+      conversationId,
+      ticketId,
+      metadata: {
+        ...(data.destination !== undefined && { destination: data.destination }),
+        ...(data.rating !== undefined && { rating: data.rating }),
+        ...(data.reason !== undefined && { reason: data.reason }),
+        ...(data.answerType !== undefined && { answerType: data.answerType }),
+        ...(data.internalSourced !== undefined && { internalSourced: data.internalSourced }),
+      },
+    })
 
-      return { ok: true as const }
-    } catch (error) {
-      // An expected denial (no copilot.use, flag off / unconfigured, item not
-      // viewable) is the gate doing its job on a fire-and-forget telemetry
-      // write — debug, not error; log.error is reserved for failures nobody
-      // designed for (db down, session store broken).
-      if (
-        isAuthDenialError(error) ||
-        error instanceof CopilotUnavailableError ||
-        error instanceof NotFoundError
-      ) {
-        log.debug({ err: error }, 'copilot usage event denied by gate')
-      } else {
-        log.error({ err: error }, 'recording copilot usage event failed')
-      }
-      throw error
-    }
+    return { ok: true as const }
   })

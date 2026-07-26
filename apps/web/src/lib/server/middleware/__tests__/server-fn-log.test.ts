@@ -47,6 +47,23 @@ describe('classifyServerFnError', () => {
     expect(classifyServerFnError(standardSchemaish)).toBe('warn')
   })
 
+  it('logs auth denials at warn', () => {
+    // requireAuth throws a plain Error, and a signed-out call is the single
+    // most common expected failure — at error it would swamp everything else.
+    expect(classifyServerFnError(new Error('Authentication required'))).toBe('warn')
+    expect(classifyServerFnError(new Error('Access denied: post.view_private'))).toBe('warn')
+  })
+
+  it('reads a statusCode off errors that are not DomainExceptions', () => {
+    // e.g. CopilotUnavailableError, which carries a status without the base class.
+    expect(classifyServerFnError(Object.assign(new Error('gate'), { statusCode: 404 }))).toBe(
+      'warn'
+    )
+    expect(classifyServerFnError(Object.assign(new Error('gate'), { statusCode: 503 }))).toBe(
+      'error'
+    )
+  })
+
   it('logs anything unrecognised at error', () => {
     expect(classifyServerFnError(new Error('boom'))).toBe('error')
     expect(classifyServerFnError('boom')).toBe('error')
