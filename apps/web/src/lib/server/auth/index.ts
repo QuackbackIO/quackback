@@ -102,12 +102,11 @@ async function createAuth() {
   // and the segment evaluator can target on language. Wrapped as a
   // permissive shape because each provider returns a slightly
   // different profile envelope.
-  const mapProfileLocale = (profile: unknown): { locale: string | null } => {
-    const p = profile as { locale?: unknown } | null | undefined
-    return {
-      locale: typeof p?.locale === 'string' && p.locale.length > 0 ? p.locale : null,
-    }
-  }
+  // Locale passthrough plus a strict `email_verified` coercion. Better-Auth
+  // spreads this hook's result over the resolved profile, so setting
+  // emailVerified here is what stops a stringified "false" from being read as
+  // truthy and marking the account verified. See map-profile-claims.ts.
+  const mapProfileLocale = mapProfileClaims
 
   // login_hint pre-selects the typed email in the IdP picker. Read from
   // the `additionalData.loginHint` body field that the team-login /
@@ -663,6 +662,7 @@ export { type Role, isTeamMember, isAdmin } from '@/lib/shared/roles'
 
 import type { Role } from '@/lib/shared/roles'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
+import { mapProfileClaims } from '@/lib/server/auth/map-profile-claims'
 
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {
