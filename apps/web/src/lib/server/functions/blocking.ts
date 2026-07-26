@@ -8,9 +8,6 @@ import { createServerFn } from '@tanstack/react-start'
 import type { PrincipalId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'blocking' })
 
 const principalIdSchema = z.object({ principalId: z.string() })
 
@@ -27,28 +24,18 @@ export const getPersonBlockStatusFn = createServerFn({ method: 'GET' })
 export const blockPersonFn = createServerFn({ method: 'POST' })
   .validator(principalIdSchema)
   .handler(async ({ data }) => {
-    try {
-      const ctx = await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
-      const { block } = await import('@/lib/server/domains/principals/blocking')
-      await block(data.principalId as PrincipalId, ctx.principal.id)
-      return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'block person failed')
-      throw error
-    }
+    const ctx = await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    const { block } = await import('@/lib/server/domains/principals/blocking')
+    await block(data.principalId as PrincipalId, ctx.principal.id)
+    return { ok: true }
   })
 
 /** Unblock a person previously blocked. */
 export const unblockPersonFn = createServerFn({ method: 'POST' })
   .validator(principalIdSchema)
   .handler(async ({ data }) => {
-    try {
-      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
-      const { unblock } = await import('@/lib/server/domains/principals/blocking')
-      await unblock(data.principalId as PrincipalId)
-      return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'unblock person failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    const { unblock } = await import('@/lib/server/domains/principals/blocking')
+    await unblock(data.principalId as PrincipalId)
+    return { ok: true }
   })

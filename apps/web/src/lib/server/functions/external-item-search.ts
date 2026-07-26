@@ -27,26 +27,21 @@ export const searchExternalItemsFn = createServerFn({ method: 'POST' })
   .validator(searchSchema)
   .handler(async ({ data }): Promise<RemoteItemMatch[]> => {
     log.debug({ integration_type: data.integrationType }, 'search external items')
-    try {
-      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const search = getIntegration(data.integrationType)?.externalLinks?.search
-      if (!search) return []
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const search = getIntegration(data.integrationType)?.externalLinks?.search
+    if (!search) return []
 
-      const integration = await db.query.integrations.findFirst({
-        where: eq(integrations.integrationType, data.integrationType),
-      })
-      if (!integration?.secrets || integration.status !== 'active') return []
+    const integration = await db.query.integrations.findFirst({
+      where: eq(integrations.integrationType, data.integrationType),
+    })
+    if (!integration?.secrets || integration.status !== 'active') return []
 
-      const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
-      const accessToken = await getValidAccessToken(integration.id as IntegrationId)
-      if (!accessToken) return []
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
+    const accessToken = await getValidAccessToken(integration.id as IntegrationId)
+    if (!accessToken) return []
 
-      const config = (integration.config ?? {}) as Record<string, unknown>
-      return search({ accessToken, config, query: data.query })
-    } catch (error) {
-      log.error({ err: error }, 'search external items failed')
-      throw error
-    }
+    const config = (integration.config ?? {}) as Record<string, unknown>
+    return search({ accessToken, config, query: data.query })
   })

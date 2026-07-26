@@ -35,28 +35,23 @@ export const fetchExternalStatusesFn = createServerFn({ method: 'POST' })
   .validator(fetchExternalStatusesSchema)
   .handler(async ({ data }): Promise<ExternalStatusItem[]> => {
     log.debug({ integration_type: data.integrationType }, 'fetch external statuses')
-    try {
-      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const listExternalStatuses = getIntegration(data.integrationType)?.listExternalStatuses
-      if (!listExternalStatuses) return []
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const listExternalStatuses = getIntegration(data.integrationType)?.listExternalStatuses
+    if (!listExternalStatuses) return []
 
-      const integration = await db.query.integrations.findFirst({
-        where: eq(integrations.integrationType, data.integrationType),
-      })
-      if (!integration?.secrets || integration.status !== 'active') {
-        return []
-      }
-
-      const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
-      if (!secrets.accessToken) return []
-
-      const config = (integration.config ?? {}) as Record<string, unknown>
-
-      return listExternalStatuses({ accessToken: secrets.accessToken, config })
-    } catch (error) {
-      log.error({ err: error }, 'fetch external statuses failed')
-      throw error
+    const integration = await db.query.integrations.findFirst({
+      where: eq(integrations.integrationType, data.integrationType),
+    })
+    if (!integration?.secrets || integration.status !== 'active') {
+      return []
     }
+
+    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    if (!secrets.accessToken) return []
+
+    const config = (integration.config ?? {}) as Record<string, unknown>
+
+    return listExternalStatuses({ accessToken: secrets.accessToken, config })
   })

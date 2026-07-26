@@ -85,7 +85,10 @@ export const getCategoryTranslationStatusesFn = createServerFn({ method: 'GET' }
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     const config = await getHelpCenterConfig()
-    return getCategoryTranslationStatuses(data.categoryId as KbCategoryId, config.locales.additional)
+    return getCategoryTranslationStatuses(
+      data.categoryId as KbCategoryId,
+      config.locales.additional
+    )
   })
 
 export const upsertCategoryTranslationFn = createServerFn({ method: 'POST' })

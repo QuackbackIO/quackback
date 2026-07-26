@@ -148,17 +148,12 @@ function serializeSnapshot(snapshot: StatusPageSnapshot) {
 // ============================================================================
 
 export const listStatusComponentsAdminFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-    const [groups, ungrouped] = await Promise.all([
-      listStatusComponentGroupsWithComponents(),
-      listUngroupedStatusComponents(),
-    ])
-    return { groups, ungrouped }
-  } catch (error) {
-    log.error({ err: error }, 'list status components admin failed')
-    throw error
-  }
+  await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+  const [groups, ungrouped] = await Promise.all([
+    listStatusComponentGroupsWithComponents(),
+    listUngroupedStatusComponents(),
+  ])
+  return { groups, ungrouped }
 })
 
 const createStatusComponentSchema = z.object({
@@ -174,21 +169,16 @@ export const createStatusComponentFn = createServerFn({ method: 'POST' })
   .validator(createStatusComponentSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create status component')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await enforceStatusComponentLimit()
-      return await createStatusComponent({
-        name: data.name,
-        description: data.description ?? null,
-        groupId: (data.groupId ?? null) as StatusComponentGroupId | null,
-        status: data.status,
-        showUptime: data.showUptime,
-        segmentIds: data.segmentIds as SegmentId[] | undefined,
-      })
-    } catch (error) {
-      log.error({ err: error }, 'create status component failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await enforceStatusComponentLimit()
+    return await createStatusComponent({
+      name: data.name,
+      description: data.description ?? null,
+      groupId: (data.groupId ?? null) as StatusComponentGroupId | null,
+      status: data.status,
+      showUptime: data.showUptime,
+      segmentIds: data.segmentIds as SegmentId[] | undefined,
+    })
   })
 
 const updateStatusComponentSchema = z.object({
@@ -204,20 +194,15 @@ export const updateStatusComponentFn = createServerFn({ method: 'POST' })
   .validator(updateStatusComponentSchema)
   .handler(async ({ data }) => {
     log.debug({ component_id: data.id }, 'update status component')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      return await updateStatusComponent(data.id as StatusComponentId, {
-        name: data.name,
-        description: data.description,
-        groupId:
-          data.groupId === undefined ? undefined : (data.groupId as StatusComponentGroupId | null),
-        showUptime: data.showUptime,
-        segmentIds: data.segmentIds as SegmentId[] | undefined,
-      })
-    } catch (error) {
-      log.error({ err: error }, 'update status component failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    return await updateStatusComponent(data.id as StatusComponentId, {
+      name: data.name,
+      description: data.description,
+      groupId:
+        data.groupId === undefined ? undefined : (data.groupId as StatusComponentGroupId | null),
+      showUptime: data.showUptime,
+      segmentIds: data.segmentIds as SegmentId[] | undefined,
+    })
   })
 
 const idSchema = z.object({ id: z.string() })
@@ -227,28 +212,18 @@ export const deleteStatusComponentFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     log.debug({ component_id: data.id }, 'delete status component')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await deleteStatusComponent(data.id as StatusComponentId)
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete status component failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await deleteStatusComponent(data.id as StatusComponentId)
+    return { success: true }
   })
 
 export const reorderStatusComponentsFn = createServerFn({ method: 'POST' })
   .validator(reorderIdsSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.ids.length }, 'reorder status components')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await reorderStatusComponents(data.ids as StatusComponentId[])
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'reorder status components failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await reorderStatusComponents(data.ids as StatusComponentId[])
+    return { success: true }
   })
 
 const setStatusComponentStatusSchema = z.object({
@@ -260,14 +235,9 @@ export const setStatusComponentStatusFn = createServerFn({ method: 'POST' })
   .validator(setStatusComponentStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ component_id: data.id, status: data.status }, 'set status component status')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await setComponentStatus(data.id as StatusComponentId, data.status, 'manual')
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'set status component status failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await setComponentStatus(data.id as StatusComponentId, data.status, 'manual')
+    return { success: true }
   })
 
 const createStatusGroupSchema = z.object({
@@ -279,13 +249,8 @@ export const createStatusGroupFn = createServerFn({ method: 'POST' })
   .validator(createStatusGroupSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create status group')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      return await createStatusComponentGroup({ name: data.name, collapsed: data.collapsed })
-    } catch (error) {
-      log.error({ err: error }, 'create status group failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    return await createStatusComponentGroup({ name: data.name, collapsed: data.collapsed })
   })
 
 const updateStatusGroupSchema = z.object({
@@ -298,45 +263,30 @@ export const updateStatusGroupFn = createServerFn({ method: 'POST' })
   .validator(updateStatusGroupSchema)
   .handler(async ({ data }) => {
     log.debug({ group_id: data.id }, 'update status group')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await updateStatusComponentGroup(data.id as StatusComponentGroupId, {
-        name: data.name,
-        collapsed: data.collapsed,
-      })
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'update status group failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await updateStatusComponentGroup(data.id as StatusComponentGroupId, {
+      name: data.name,
+      collapsed: data.collapsed,
+    })
+    return { success: true }
   })
 
 export const deleteStatusGroupFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     log.debug({ group_id: data.id }, 'delete status group')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await deleteStatusComponentGroup(data.id as StatusComponentGroupId)
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete status group failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await deleteStatusComponentGroup(data.id as StatusComponentGroupId)
+    return { success: true }
   })
 
 export const reorderStatusGroupsFn = createServerFn({ method: 'POST' })
   .validator(reorderIdsSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.ids.length }, 'reorder status groups')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await reorderStatusComponentGroups(data.ids as StatusComponentGroupId[])
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'reorder status groups failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await reorderStatusComponentGroups(data.ids as StatusComponentGroupId[])
+    return { success: true }
   })
 
 // ============================================================================
@@ -369,35 +319,30 @@ export const createStatusIncidentFn = createServerFn({ method: 'POST' })
   .validator(createStatusIncidentSchema)
   .handler(async ({ data }) => {
     log.debug({ kind: data.kind, title: data.title }, 'create status incident')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-      const incident = await createIncident(
-        {
-          kind: data.kind,
-          title: data.title,
-          status: data.status,
-          impact: data.impact,
-          impactOverride: data.impactOverride,
-          affectedComponents: data.affectedComponents.map((c) => ({
-            componentId: c.componentId as StatusComponentId,
-            componentStatus: c.componentStatus,
-          })),
-          body: data.body,
-          scheduledStartAt: data.scheduledStartAt,
-          scheduledEndAt: data.scheduledEndAt,
-          autoStart: data.autoStart,
-          autoComplete: data.autoComplete,
-          backfill: data.backfill,
-          notifySubscribers: data.notifySubscribers,
-          templateId: data.templateId as StatusIncidentTemplateId | undefined,
-        },
-        { principalId: auth.principal.id }
-      )
-      return serializeIncident(incident)
-    } catch (error) {
-      log.error({ err: error }, 'create status incident failed')
-      throw error
-    }
+    const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    const incident = await createIncident(
+      {
+        kind: data.kind,
+        title: data.title,
+        status: data.status,
+        impact: data.impact,
+        impactOverride: data.impactOverride,
+        affectedComponents: data.affectedComponents.map((c) => ({
+          componentId: c.componentId as StatusComponentId,
+          componentStatus: c.componentStatus,
+        })),
+        body: data.body,
+        scheduledStartAt: data.scheduledStartAt,
+        scheduledEndAt: data.scheduledEndAt,
+        autoStart: data.autoStart,
+        autoComplete: data.autoComplete,
+        backfill: data.backfill,
+        notifySubscribers: data.notifySubscribers,
+        templateId: data.templateId as StatusIncidentTemplateId | undefined,
+      },
+      { principalId: auth.principal.id }
+    )
+    return serializeIncident(incident)
   })
 
 const updateStatusIncidentSchema = z.object({
@@ -416,26 +361,21 @@ export const updateStatusIncidentFn = createServerFn({ method: 'POST' })
   .validator(updateStatusIncidentSchema)
   .handler(async ({ data }) => {
     log.debug({ incident_id: data.id }, 'update status incident')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-      const incident = await updateIncident(data.id as StatusIncidentId, {
-        title: data.title,
-        impact: data.impact,
-        impactOverride: data.impactOverride,
-        affectedComponents: data.affectedComponents?.map((c) => ({
-          componentId: c.componentId as StatusComponentId,
-          componentStatus: c.componentStatus,
-        })),
-        scheduledStartAt: data.scheduledStartAt,
-        scheduledEndAt: data.scheduledEndAt,
-        autoStart: data.autoStart,
-        autoComplete: data.autoComplete,
-      })
-      return serializeIncident(incident)
-    } catch (error) {
-      log.error({ err: error }, 'update status incident failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    const incident = await updateIncident(data.id as StatusIncidentId, {
+      title: data.title,
+      impact: data.impact,
+      impactOverride: data.impactOverride,
+      affectedComponents: data.affectedComponents?.map((c) => ({
+        componentId: c.componentId as StatusComponentId,
+        componentStatus: c.componentStatus,
+      })),
+      scheduledStartAt: data.scheduledStartAt,
+      scheduledEndAt: data.scheduledEndAt,
+      autoStart: data.autoStart,
+      autoComplete: data.autoComplete,
+    })
+    return serializeIncident(incident)
   })
 
 const postStatusIncidentUpdateSchema = z.object({
@@ -450,37 +390,27 @@ export const postStatusIncidentUpdateFn = createServerFn({ method: 'POST' })
   .validator(postStatusIncidentUpdateSchema)
   .handler(async ({ data }) => {
     log.debug({ incident_id: data.id, status: data.status }, 'post status incident update')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-      const incident = await postIncidentUpdate(
-        data.id as StatusIncidentId,
-        {
-          status: data.status,
-          body: data.body,
-          skipRestore: data.skipRestore,
-          templateId: data.templateId as StatusIncidentTemplateId | undefined,
-        },
-        { principalId: auth.principal.id }
-      )
-      return serializeIncident(incident)
-    } catch (error) {
-      log.error({ err: error }, 'post status incident update failed')
-      throw error
-    }
+    const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    const incident = await postIncidentUpdate(
+      data.id as StatusIncidentId,
+      {
+        status: data.status,
+        body: data.body,
+        skipRestore: data.skipRestore,
+        templateId: data.templateId as StatusIncidentTemplateId | undefined,
+      },
+      { principalId: auth.principal.id }
+    )
+    return serializeIncident(incident)
   })
 
 export const deleteStatusIncidentFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     log.debug({ incident_id: data.id }, 'delete status incident')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-      await deleteIncident(data.id as StatusIncidentId)
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete status incident failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    await deleteIncident(data.id as StatusIncidentId)
+    return { success: true }
   })
 
 /** Danger-zone reset: clears resolved incidents + uptime history (Status
@@ -488,39 +418,29 @@ export const deleteStatusIncidentFn = createServerFn({ method: 'POST' })
  *  posting to it. */
 export const clearStatusHistoryFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('clear status history')
-  try {
-    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-    return await clearStatusHistory()
-  } catch (error) {
-    log.error({ err: error }, 'clear status history failed')
-    throw error
-  }
+  await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+  return await clearStatusHistory()
 })
 
 export const getStatusIncidentAdminFn = createServerFn({ method: 'GET' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     log.debug({ incident_id: data.id }, 'get status incident admin')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-      const incident = await getStatusIncidentById(data.id as StatusIncidentId)
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    const incident = await getStatusIncidentById(data.id as StatusIncidentId)
 
-      // Approximate "emailed N subscribers" for the editor's publish marker.
-      // The recipient count is not persisted at publish time (the claim only
-      // writes notified_at), so this is the CURRENT active pool for the
-      // affected components — the editor copy hedges accordingly ("~N").
-      let notifiedSubscriberCount: number | null = null
-      if (incident.notifiedAt && !incident.backfilled) {
-        notifiedSubscriberCount = await countActiveSubscribersForComponents(
-          incident.affectedComponents.map((c) => c.componentId)
-        )
-      }
-
-      return { ...serializeIncident(incident), notifiedSubscriberCount }
-    } catch (error) {
-      log.error({ err: error }, 'get status incident admin failed')
-      throw error
+    // Approximate "emailed N subscribers" for the editor's publish marker.
+    // The recipient count is not persisted at publish time (the claim only
+    // writes notified_at), so this is the CURRENT active pool for the
+    // affected components — the editor copy hedges accordingly ("~N").
+    let notifiedSubscriberCount: number | null = null
+    if (incident.notifiedAt && !incident.backfilled) {
+      notifiedSubscriberCount = await countActiveSubscribersForComponents(
+        incident.affectedComponents.map((c) => c.componentId)
+      )
     }
+
+    return { ...serializeIncident(incident), notifiedSubscriberCount }
   })
 
 const listStatusIncidentsAdminSchema = z.object({
@@ -535,20 +455,15 @@ export const listStatusIncidentsAdminFn = createServerFn({ method: 'GET' })
   .validator(listStatusIncidentsAdminSchema)
   .handler(async ({ data }) => {
     log.debug({ kind: data.kind, state: data.state }, 'list status incidents admin')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-      const result = await listStatusIncidents({
-        kind: data.kind,
-        state: data.state,
-        search: data.search,
-        cursor: data.cursor,
-        limit: data.limit,
-      })
-      return { ...result, items: result.items.map(serializeIncident) }
-    } catch (error) {
-      log.error({ err: error }, 'list status incidents admin failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    const result = await listStatusIncidents({
+      kind: data.kind,
+      state: data.state,
+      search: data.search,
+      cursor: data.cursor,
+      limit: data.limit,
+    })
+    return { ...result, items: result.items.map(serializeIncident) }
   })
 
 const getStatusUptimeAdminSchema = z.object({
@@ -562,14 +477,9 @@ const getStatusUptimeAdminSchema = z.object({
 export const getStatusUptimeAdminFn = createServerFn({ method: 'GET' })
   .validator(getStatusUptimeAdminSchema)
   .handler(async ({ data }) => {
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      const actor = await policyActorFromAuth(auth)
-      return await getUptimeSeries(actor, data.componentIds as StatusComponentId[], data.windowDays)
-    } catch (error) {
-      log.error({ err: error }, 'get status uptime admin failed')
-      throw error
-    }
+    const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    const actor = await policyActorFromAuth(auth)
+    return await getUptimeSeries(actor, data.componentIds as StatusComponentId[], data.windowDays)
   })
 
 // ============================================================================
@@ -588,20 +498,11 @@ const DAY_MS = 24 * 60 * 60 * 1000
  * to see and fix a disabled page.
  */
 export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-    const now = new Date()
+  const auth = await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+  const now = new Date()
 
-    const [
-      groups,
-      ungrouped,
-      incidents,
-      maintenance,
-      counts,
-      newLast7d,
-      incidentsLast30d,
-      settings,
-    ] = await Promise.all([
+  const [groups, ungrouped, incidents, maintenance, counts, newLast7d, incidentsLast30d, settings] =
+    await Promise.all([
       listStatusComponentGroupsWithComponents(),
       listUngroupedStatusComponents(),
       listStatusIncidents({ kind: 'incident', state: 'active', limit: 20 }),
@@ -612,53 +513,48 @@ export const getStatusOverviewAdminFn = createServerFn({ method: 'GET' }).handle
       getStatusSettings(),
     ])
 
-    const leanComponent = (c: { id: string; name: string; status: string }) => ({
-      id: c.id,
-      name: c.name,
-      status: c.status,
-    })
-    const allComponents = [...ungrouped, ...groups.flatMap((g) => g.components)]
+  const leanComponent = (c: { id: string; name: string; status: string }) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+  })
+  const allComponents = [...ungrouped, ...groups.flatMap((g) => g.components)]
 
-    // Uptime via a policy actor for the authed admin (team actors bypass
-    // segment gates, so this sees every component).
-    const actor = await policyActorFromAuth(auth)
-    const uptime =
-      allComponents.length > 0
-        ? await getUptimeSeries(
-            actor,
-            allComponents.map((c) => c.id),
-            90
-          )
-        : []
-    const allDays = uptime.flatMap((s) => s.days)
-    const uptime90d =
-      allDays.length > 0 ? allDays.reduce((sum, d) => sum + d.uptimePct, 0) / allDays.length : null
-
-    return {
-      enabled: settings.enabled,
-      topLevelStatus: deriveTopLevelStatus(allComponents.map((c) => c.status)),
-      ungroupedComponents: ungrouped.map(leanComponent),
-      groups: groups.map((g) => ({
-        id: g.id,
-        name: g.name,
-        components: g.components.map(leanComponent),
-      })),
-      activeIncidents: incidents.items.map(serializeIncident),
-      upcomingMaintenance: maintenance.items
-        .slice()
-        .sort(
-          (a, b) =>
-            (a.scheduledStartAt?.getTime() ?? Infinity) -
-            (b.scheduledStartAt?.getTime() ?? Infinity)
+  // Uptime via a policy actor for the authed admin (team actors bypass
+  // segment gates, so this sees every component).
+  const actor = await policyActorFromAuth(auth)
+  const uptime =
+    allComponents.length > 0
+      ? await getUptimeSeries(
+          actor,
+          allComponents.map((c) => c.id),
+          90
         )
-        .map(serializeIncident),
-      uptime90d,
-      subscribers: { ...counts, newLast7d },
-      incidentsLast30d,
-    }
-  } catch (error) {
-    log.error({ err: error }, 'get status overview admin failed')
-    throw error
+      : []
+  const allDays = uptime.flatMap((s) => s.days)
+  const uptime90d =
+    allDays.length > 0 ? allDays.reduce((sum, d) => sum + d.uptimePct, 0) / allDays.length : null
+
+  return {
+    enabled: settings.enabled,
+    topLevelStatus: deriveTopLevelStatus(allComponents.map((c) => c.status)),
+    ungroupedComponents: ungrouped.map(leanComponent),
+    groups: groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      components: g.components.map(leanComponent),
+    })),
+    activeIncidents: incidents.items.map(serializeIncident),
+    upcomingMaintenance: maintenance.items
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.scheduledStartAt?.getTime() ?? Infinity) - (b.scheduledStartAt?.getTime() ?? Infinity)
+      )
+      .map(serializeIncident),
+    uptime90d,
+    subscribers: { ...counts, newLast7d },
+    incidentsLast30d,
   }
 })
 
@@ -668,15 +564,10 @@ export const startStatusMaintenanceNowFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     log.debug({ incident_id: data.id }, 'start status maintenance now')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-      await startMaintenanceNow(data.id as StatusIncidentId)
-      const incident = await getStatusIncidentById(data.id as StatusIncidentId)
-      return serializeIncident(incident)
-    } catch (error) {
-      log.error({ err: error }, 'start status maintenance now failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+    await startMaintenanceNow(data.id as StatusIncidentId)
+    const incident = await getStatusIncidentById(data.id as StatusIncidentId)
+    return serializeIncident(incident)
   })
 
 // ============================================================================
@@ -685,13 +576,8 @@ export const startStatusMaintenanceNowFn = createServerFn({ method: 'POST' })
 // ============================================================================
 
 export const listStatusIncidentTemplatesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
-    return await listStatusIncidentTemplates()
-  } catch (error) {
-    log.error({ err: error }, 'list status incident templates failed')
-    throw error
-  }
+  await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_PUBLISH })
+  return await listStatusIncidentTemplates()
 })
 
 const createStatusTemplateSchema = z.object({
@@ -706,19 +592,14 @@ export const createStatusIncidentTemplateFn = createServerFn({ method: 'POST' })
   .validator(createStatusTemplateSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create status incident template')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      return await createStatusIncidentTemplate({
-        name: data.name,
-        title: data.title,
-        body: data.body,
-        impact: data.impact,
-        componentIds: data.componentIds as StatusComponentId[] | undefined,
-      })
-    } catch (error) {
-      log.error({ err: error }, 'create status incident template failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    return await createStatusIncidentTemplate({
+      name: data.name,
+      title: data.title,
+      body: data.body,
+      impact: data.impact,
+      componentIds: data.componentIds as StatusComponentId[] | undefined,
+    })
   })
 
 const updateStatusTemplateSchema = z.object({
@@ -734,33 +615,23 @@ export const updateStatusIncidentTemplateFn = createServerFn({ method: 'POST' })
   .validator(updateStatusTemplateSchema)
   .handler(async ({ data }) => {
     log.debug({ template_id: data.id }, 'update status incident template')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      return await updateStatusIncidentTemplate(data.id as StatusIncidentTemplateId, {
-        name: data.name,
-        title: data.title,
-        body: data.body,
-        impact: data.impact,
-        componentIds: data.componentIds as StatusComponentId[] | undefined,
-      })
-    } catch (error) {
-      log.error({ err: error }, 'update status incident template failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    return await updateStatusIncidentTemplate(data.id as StatusIncidentTemplateId, {
+      name: data.name,
+      title: data.title,
+      body: data.body,
+      impact: data.impact,
+      componentIds: data.componentIds as StatusComponentId[] | undefined,
+    })
   })
 
 export const deleteStatusIncidentTemplateFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     log.debug({ template_id: data.id }, 'delete status incident template')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await deleteStatusIncidentTemplate(data.id as StatusIncidentTemplateId)
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete status incident template failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await deleteStatusIncidentTemplate(data.id as StatusIncidentTemplateId)
+    return { success: true }
   })
 
 // ============================================================================
@@ -777,35 +648,25 @@ export const listStatusSubscriptionsAdminFn = createServerFn({ method: 'GET' })
   .validator(listStatusSubscriptionsSchema)
   .handler(async ({ data }) => {
     log.debug({ cursor: data.cursor, limit: data.limit }, 'list status subscriptions admin')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      const result = await listStatusSubscriptions({
-        cursor: data.cursor,
-        limit: data.limit,
-        search: data.search,
-      })
-      return {
-        ...result,
-        items: result.items.map((item) => ({
-          ...item,
-          createdAt: toIsoString(item.createdAt),
-          unsubscribedAt: toIsoStringOrNull(item.unsubscribedAt),
-        })),
-      }
-    } catch (error) {
-      log.error({ err: error }, 'list status subscriptions admin failed')
-      throw error
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    const result = await listStatusSubscriptions({
+      cursor: data.cursor,
+      limit: data.limit,
+      search: data.search,
+    })
+    return {
+      ...result,
+      items: result.items.map((item) => ({
+        ...item,
+        createdAt: toIsoString(item.createdAt),
+        unsubscribedAt: toIsoStringOrNull(item.unsubscribedAt),
+      })),
     }
   })
 
 export const getStatusSubscriptionCountsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-    return await getStatusSubscriptionCounts()
-  } catch (error) {
-    log.error({ err: error }, 'get status subscription counts failed')
-    throw error
-  }
+  await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+  return await getStatusSubscriptionCounts()
 })
 
 const addStatusSubscriberSchema = z.object({ email: z.string().trim().email() })
@@ -816,14 +677,9 @@ export const addStatusSubscriberFn = createServerFn({ method: 'POST' })
   .validator(addStatusSubscriberSchema)
   .handler(async ({ data }) => {
     log.debug({ email: data.email }, 'add status subscriber')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      await addStatusSubscriberByEmail(data.email)
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'add status subscriber failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    await addStatusSubscriberByEmail(data.email)
+    return { success: true }
   })
 
 const importStatusSubscribersSchema = z.object({
@@ -837,31 +693,21 @@ export const importStatusSubscribersFn = createServerFn({ method: 'POST' })
   .validator(importStatusSubscribersSchema)
   .handler(async ({ data }) => {
     log.info({ count: data.emails.length }, 'import status subscribers from CSV')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      return await importStatusSubscribersFromEmails(data.emails)
-    } catch (error) {
-      log.error({ err: error }, 'import status subscribers failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    return await importStatusSubscribersFromEmails(data.emails)
   })
 
 /** Full unpaginated subscriber set for the client-side CSV export. The
  *  paginated list fn caps at 100/page, so exporting needs a dedicated read. */
 export const exportStatusSubscribersAdminFn = createServerFn({ method: 'GET' }).handler(
   async () => {
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      const rows = await listAllStatusSubscribersForExport()
-      return rows.map((r) => ({
-        ...r,
-        createdAt: toIsoString(r.createdAt),
-        unsubscribedAt: toIsoStringOrNull(r.unsubscribedAt),
-      }))
-    } catch (error) {
-      log.error({ err: error }, 'export status subscribers admin failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    const rows = await listAllStatusSubscribersForExport()
+    return rows.map((r) => ({
+      ...r,
+      createdAt: toIsoString(r.createdAt),
+      unsubscribedAt: toIsoStringOrNull(r.unsubscribedAt),
+    }))
   }
 )
 
@@ -870,26 +716,16 @@ export const exportStatusSubscribersAdminFn = createServerFn({ method: 'GET' }).
 // ============================================================================
 
 export const getStatusSettingsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-    return await getStatusSettings()
-  } catch (error) {
-    log.error({ err: error }, 'get status settings failed')
-    throw error
-  }
+  await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+  return await getStatusSettings()
 })
 
 export const updateStatusSettingsFn = createServerFn({ method: 'POST' })
   .validator(statusSettingsSchema)
   .handler(async ({ data }) => {
     log.debug(data, 'update status settings')
-    try {
-      await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
-      return await updateStatusSettings(data)
-    } catch (error) {
-      log.error({ err: error }, 'update status settings failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.STATUS_PAGE_MANAGE })
+    return await updateStatusSettings(data)
   })
 
 // ============================================================================
@@ -944,38 +780,33 @@ async function resolveStatusPageGate(): Promise<StatusPageGateResult> {
 /** Full public status page: component tree, active incidents/maintenance,
  *  and recent history — gated per `resolveStatusPageGate`. */
 export const getStatusPageFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    const gate = await resolveStatusPageGate()
-    if (!gate.available) {
-      throw new NotFoundError('STATUS_PAGE_NOT_FOUND', 'Status page not found')
-    }
+  const gate = await resolveStatusPageGate()
+  if (!gate.available) {
+    throw new NotFoundError('STATUS_PAGE_NOT_FOUND', 'Status page not found')
+  }
 
-    const snapshot = await getStatusPageSnapshot(gate.actor, gate.settings)
+  const snapshot = await getStatusPageSnapshot(gate.actor, gate.settings)
 
-    // Uptime bars ship in the page payload (not a separate client fetch): the
-    // series is small (90 days × visible components), so folding it in here
-    // SSRs the bars with no request waterfall and no client-side flash.
-    const uptimeComponentIds = [
-      ...snapshot.ungroupedComponents,
-      ...snapshot.groups.flatMap((g) => g.components),
-    ]
-      .filter((c) => c.showUptime)
-      .map((c) => c.id)
-    const uptime = uptimeComponentIds.length
-      ? await getUptimeSeries(gate.actor, uptimeComponentIds)
-      : []
+  // Uptime bars ship in the page payload (not a separate client fetch): the
+  // series is small (90 days × visible components), so folding it in here
+  // SSRs the bars with no request waterfall and no client-side flash.
+  const uptimeComponentIds = [
+    ...snapshot.ungroupedComponents,
+    ...snapshot.groups.flatMap((g) => g.components),
+  ]
+    .filter((c) => c.showUptime)
+    .map((c) => c.id)
+  const uptime = uptimeComponentIds.length
+    ? await getUptimeSeries(gate.actor, uptimeComponentIds)
+    : []
 
-    return {
-      snapshot: serializeSnapshot(snapshot),
-      settings: {
-        pageDescription: gate.settings.pageDescription,
-        audience: gate.settings.audience,
-      },
-      uptime,
-    }
-  } catch (error) {
-    log.error({ err: error }, 'get status page failed')
-    throw error
+  return {
+    snapshot: serializeSnapshot(snapshot),
+    settings: {
+      pageDescription: gate.settings.pageDescription,
+      audience: gate.settings.audience,
+    },
+    uptime,
   }
 })
 
@@ -986,22 +817,17 @@ const getStatusIncidentPublicSchema = z.object({ id: z.string() })
 export const getStatusIncidentPublicFn = createServerFn({ method: 'GET' })
   .validator(getStatusIncidentPublicSchema)
   .handler(async ({ data }) => {
-    try {
-      const gate = await resolveStatusPageGate()
-      if (!gate.available) {
-        throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${data.id} not found`)
-      }
-
-      const incident = await getPublicStatusIncident(gate.actor, data.id as StatusIncidentId)
-      if (!incident) {
-        throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${data.id} not found`)
-      }
-
-      return serializePublicIncident(incident)
-    } catch (error) {
-      log.error({ err: error }, 'get status incident public failed')
-      throw error
+    const gate = await resolveStatusPageGate()
+    if (!gate.available) {
+      throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${data.id} not found`)
     }
+
+    const incident = await getPublicStatusIncident(gate.actor, data.id as StatusIncidentId)
+    if (!incident) {
+      throw new NotFoundError('STATUS_INCIDENT_NOT_FOUND', `Status incident ${data.id} not found`)
+    }
+
+    return serializePublicIncident(incident)
   })
 
 const getStatusUptimeSchema = z.object({
@@ -1014,19 +840,14 @@ const getStatusUptimeSchema = z.object({
 export const getStatusUptimeFn = createServerFn({ method: 'GET' })
   .validator(getStatusUptimeSchema)
   .handler(async ({ data }) => {
-    try {
-      const gate = await resolveStatusPageGate()
-      if (!gate.available) return []
+    const gate = await resolveStatusPageGate()
+    if (!gate.available) return []
 
-      return await getUptimeSeries(
-        gate.actor,
-        data.componentIds as StatusComponentId[],
-        data.windowDays
-      )
-    } catch (error) {
-      log.error({ err: error }, 'get status uptime failed')
-      throw error
-    }
+    return await getUptimeSeries(
+      gate.actor,
+      data.componentIds as StatusComponentId[],
+      data.windowDays
+    )
   })
 
 const listStatusHistorySchema = z.object({
@@ -1038,19 +859,14 @@ const listStatusHistorySchema = z.object({
 export const listStatusHistoryFn = createServerFn({ method: 'GET' })
   .validator(listStatusHistorySchema)
   .handler(async ({ data }) => {
-    try {
-      const gate = await resolveStatusPageGate()
-      if (!gate.available) {
-        return { items: [], nextCursor: null, hasMore: false }
-      }
-
-      const result = await listIncidentHistory(gate.actor, {
-        cursor: data.cursor,
-        limit: data.limit,
-      })
-      return { ...result, items: result.items.map(serializePublicIncident) }
-    } catch (error) {
-      log.error({ err: error }, 'list status history failed')
-      throw error
+    const gate = await resolveStatusPageGate()
+    if (!gate.available) {
+      return { items: [], nextCursor: null, hasMore: false }
     }
+
+    const result = await listIncidentHistory(gate.actor, {
+      cursor: data.cursor,
+      limit: data.limit,
+    })
+    return { ...result, items: result.items.map(serializePublicIncident) }
   })

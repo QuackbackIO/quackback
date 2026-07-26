@@ -59,14 +59,8 @@ export async function handleExportUsers(request: Request): Promise<Response> {
     }
 
     // Tier gate: data exports are a Pro+ feature (same gate as posts/companies).
-    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-    const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-    const limits = await getTierLimits()
-    enforceFeatureGate({
-      enabled: limits.features.analyticsExports,
-      feature: 'analyticsExports',
-      friendly: 'Data export',
-    })
+    const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+    await assertTierFeature('analyticsExports', 'Data export')
 
     const filter = parseFilter(new URL(request.url))
     const { items } = await listPortalUsers({

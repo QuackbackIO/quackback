@@ -56,19 +56,14 @@ export interface MyLanguagePreference {
 export const getMyLanguagePreferenceFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<MyLanguagePreference> => {
     log.debug('get my language preference')
-    try {
-      const auth = await requireAuth()
+    const auth = await requireAuth()
 
-      const record = await db.query.user.findFirst({
-        where: eq(user.id, auth.user.id),
-        columns: { preferredLanguage: true },
-      })
+    const record = await db.query.user.findFirst({
+      where: eq(user.id, auth.user.id),
+      columns: { preferredLanguage: true },
+    })
 
-      return { language: record?.preferredLanguage ?? null }
-    } catch (error) {
-      log.error({ err: error }, 'get my language preference failed')
-      throw error
-    }
+    return { language: record?.preferredLanguage ?? null }
   }
 )
 
@@ -82,20 +77,15 @@ export const setMyLanguagePreferenceFn = createServerFn({ method: 'POST' })
   .handler(
     async ({ data }: { data: SetMyLanguagePreferenceInput }): Promise<MyLanguagePreference> => {
       log.debug('set my language preference')
-      try {
-        const auth = await requireAuth()
+      const auth = await requireAuth()
 
-        const [updated] = await db
-          .update(user)
-          .set({ preferredLanguage: data.language })
-          .where(eq(user.id, auth.user.id))
-          .returning({ preferredLanguage: user.preferredLanguage })
+      const [updated] = await db
+        .update(user)
+        .set({ preferredLanguage: data.language })
+        .where(eq(user.id, auth.user.id))
+        .returning({ preferredLanguage: user.preferredLanguage })
 
-        log.info({ user_id: auth.user.id, language: data.language }, 'language preference updated')
-        return { language: updated?.preferredLanguage ?? null }
-      } catch (error) {
-        log.error({ err: error }, 'set my language preference failed')
-        throw error
-      }
+      log.info({ user_id: auth.user.id, language: data.language }, 'language preference updated')
+      return { language: updated?.preferredLanguage ?? null }
     }
   )

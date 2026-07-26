@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { allowDecision, denyDecision, isAllowed, ANONYMOUS_ACTOR } from '../types'
+import { allowDecision, denyDecision, ANONYMOUS_ACTOR } from '../types'
 
 describe('policy decisions', () => {
   it('allowDecision returns an allowed decision', () => {
     const decision = allowDecision()
     expect(decision.allowed).toBe(true)
-    expect(isAllowed(decision)).toBe(true)
   })
 
   it('denyDecision carries a reason string', () => {
@@ -14,7 +13,6 @@ describe('policy decisions', () => {
     if (!decision.allowed) {
       expect(decision.reason).toBe('not in audience')
     }
-    expect(isAllowed(decision)).toBe(false)
   })
 
   it('ANONYMOUS_ACTOR has empty segment set, anonymous principal type, no role', () => {

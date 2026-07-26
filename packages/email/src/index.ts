@@ -159,19 +159,27 @@ export async function getReceivedEmail(
 
 /**
  * The single low-level send: provider selection (SMTP → Resend → console), the
- * anon-address guard, and RFC 5322 threading. Takes an explicit From and EITHER
- * a prerendered `html` body or a `react` element (the branded senders pass
- * `react`; the raw sender passes `html`). Falls back to console when unconfigured.
+ * anon-address guard, and RFC 5322 threading. Takes EITHER a prerendered `html`
+ * body or a `react` element (the branded senders pass `react`; the raw sender
+ * passes `html`). Falls back to console when unconfigured.
+ *
+ * Every send goes through here, including the console preview, so no caller has
+ * to know which provider is active.
  */
 async function dispatch(
   options: {
-    from: string
+    /** Omit to use the workspace EMAIL_FROM; the raw sender passes its own. */
+    from?: string
     to: string
     subject: string
     html?: string
     react?: React.ReactElement
     text?: string
     replyTo?: string
+    /** Template name, for the dev preview line. */
+    emailType?: string
+    /** Extra identifying fields for the dev preview line (links, codes). */
+    preview?: Record<string, unknown>
   } & ThreadingOptions
 ): Promise<EmailResult> {
   const threadingHeaders = buildThreadingHeaders(options)
@@ -186,11 +194,24 @@ async function dispatch(
 
   const provider = getProvider()
 
+  // Console provider never sends. Handled before `from` is resolved because
+  // getEmailFrom() throws when EMAIL_FROM is unset, which is the normal dev
+  // case and must not stop a preview from being logged.
+  if (provider === 'console') {
+    log.debug(
+      { email_type: options.emailType ?? 'RawEmail', to: options.to, ...options.preview },
+      '[dev] email preview (console provider)'
+    )
+    return { sent: false }
+  }
+
+  const from = options.from ?? getEmailFrom()
+
   if (provider === 'smtp') {
     const html = options.html ?? (options.react ? await render(options.react) : undefined)
     try {
       const result = await getSmtpTransporter().sendMail({
-        from: options.from,
+        from,
         to: options.to,
         subject: options.subject,
         html,
@@ -222,7 +243,7 @@ async function dispatch(
       ? { react: options.react }
       : { html: options.html ?? '', ...(options.text ? { text: options.text } : {}) }
     const result = await getResend().emails.send({
-      from: options.from,
+      from,
       to: options.to,
       subject: options.subject,
       ...body,
@@ -259,10 +280,13 @@ async function sendEmail(
     replyTo?: string
     /** Override the workspace EMAIL_FROM (e.g. a per-team sending address). */
     from?: string
+    /** Template name, for the dev preview line. */
+    emailType?: string
+    /** Extra identifying fields for the dev preview line (links, codes). */
+    preview?: Record<string, unknown>
   } & ThreadingOptions
 ): Promise<EmailResult> {
-  const { from, ...rest } = options
-  return dispatch({ from: from ?? getEmailFrom(), ...rest })
+  return dispatch(options)
 }
 
 /** A prerendered, custom-From email (no template). */
@@ -302,14 +326,6 @@ interface SendInvitationParams {
 export async function sendInvitationEmail(params: SendInvitationParams): Promise<EmailResult> {
   const { to, invitedByName, inviteeName, workspaceName, inviteLink, logoUrl } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'InvitationEmail', to, inviteLink },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `You've been invited to join ${workspaceName} on Quackback`,
@@ -320,6 +336,8 @@ export async function sendInvitationEmail(params: SendInvitationParams): Promise
       inviteLink,
       logoUrl,
     }),
+    emailType: 'InvitationEmail',
+    preview: { inviteLink },
   })
 }
 
@@ -338,18 +356,12 @@ interface SendPortalInviteParams {
 export async function sendPortalInviteEmail(params: SendPortalInviteParams): Promise<EmailResult> {
   const { to, workspaceName, inviteLink, logoUrl, personalMessage } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'PortalInviteEmail', to, inviteLink },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `You've been invited to ${workspaceName}`,
     react: PortalInviteEmail({ workspaceName, inviteLink, logoUrl, personalMessage }),
+    emailType: 'PortalInviteEmail',
+    preview: { inviteLink },
   })
 }
 
@@ -368,18 +380,12 @@ interface SendWelcomeParams {
 export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<EmailResult> {
   const { to, name, workspaceName, dashboardUrl, logoUrl } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'WelcomeEmail', to, dashboardUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `Welcome to ${workspaceName} on Quackback!`,
     react: WelcomeEmail({ name, workspaceName, dashboardUrl, logoUrl }),
+    emailType: 'WelcomeEmail',
+    preview: { dashboardUrl },
   })
 }
 
@@ -397,19 +403,13 @@ interface SendMagicLinkParams {
 export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<EmailResult> {
   const { to, signInUrl, code, logoUrl } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'MagicLinkEmail', to, signInUrl, code },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   log.debug('sending sign-in email')
   return sendEmail({
     to,
     subject: 'Your Quackback sign-in link',
     react: MagicLinkEmail({ signInUrl, code, logoUrl }),
+    emailType: 'MagicLinkEmail',
+    preview: { signInUrl, code },
   })
 }
 
@@ -428,19 +428,13 @@ export async function sendPasswordResetEmail(
 ): Promise<EmailResult> {
   const { to, resetLink, logoUrl } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'PasswordResetEmail', to, resetLink },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   log.debug('sending password reset email')
   return sendEmail({
     to,
     subject: 'Reset your Quackback password',
     react: PasswordResetEmail({ resetLink, logoUrl }),
+    emailType: 'PasswordResetEmail',
+    preview: { resetLink },
   })
 }
 
@@ -467,19 +461,13 @@ export async function sendRecoveryCodeUsedEmail(
 ): Promise<EmailResult> {
   const { to, workspaceName, ipAddress, userAgent, occurredAt, logoUrl } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'RecoveryCodeUsedEmail', to, occurredAt },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   log.debug('sending recovery-code-used alert')
   return sendEmail({
     to,
     subject: 'A recovery code on your account was just used',
     react: RecoveryCodeUsedEmail({ workspaceName, ipAddress, userAgent, occurredAt, logoUrl }),
+    emailType: 'RecoveryCodeUsedEmail',
+    preview: { occurredAt },
   })
 }
 
@@ -502,19 +490,13 @@ interface SendNewSignInParams {
 export async function sendNewSignInEmail(params: SendNewSignInParams): Promise<EmailResult> {
   const { to, workspaceName, occurredAt, ipAddress, userAgent, logoUrl } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'NewSignInEmail', to, occurredAt },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   log.debug('sending new-sign-in alert')
   return sendEmail({
     to,
     subject: 'New sign-in to your account',
     react: NewSignInEmail({ workspaceName, occurredAt, ipAddress, userAgent, logoUrl }),
+    emailType: 'NewSignInEmail',
+    preview: { occurredAt },
   })
 }
 
@@ -547,14 +529,6 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
     logoUrl,
   } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'StatusChangeEmail', to, postUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   const formattedNewStatus = newStatus.replace(/_/g, ' ')
 
   return sendEmail({
@@ -570,6 +544,8 @@ export async function sendStatusChangeEmail(params: SendStatusChangeParams): Pro
       preferencesUrl,
       logoUrl,
     }),
+    emailType: 'StatusChangeEmail',
+    preview: { postUrl },
   })
 }
 
@@ -604,14 +580,6 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
     logoUrl,
   } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'NewCommentEmail', to, postUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `New comment on "${postTitle}"`,
@@ -626,6 +594,8 @@ export async function sendNewCommentEmail(params: SendNewCommentParams): Promise
       preferencesUrl,
       logoUrl,
     }),
+    emailType: 'NewCommentEmail',
+    preview: { postUrl },
   })
 }
 
@@ -712,14 +682,6 @@ export async function sendConversationMessageEmail(
       ? `New message from ${workspaceName}`
       : `New message in ${workspaceName}`
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'ConversationMessageEmail', to, ctaUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject,
@@ -741,6 +703,8 @@ export async function sendConversationMessageEmail(
     inReplyTo,
     references,
     from,
+    emailType: 'ConversationMessageEmail',
+    preview: { ctaUrl },
   })
 }
 
@@ -893,14 +857,6 @@ export async function sendTicketEventEmail(
 ): Promise<EmailResult> {
   const copy = ticketEventCopy(params)
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'TicketEventEmail', kind: params.kind, to: params.to, ctaUrl: params.ctaUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to: params.to,
     subject: copy.subject,
@@ -924,6 +880,11 @@ export async function sendTicketEventEmail(
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
+    emailType: 'TicketEventEmail',
+    preview: {
+      kind: params.kind,
+      ctaUrl: params.ctaUrl,
+    },
   })
 }
 
@@ -960,14 +921,6 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
   const displayName = mentionerName || 'Anonymous user'
   const subject = `${displayName} mentioned you in "${postTitle}"`
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'PostMentionEmail', to, postUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject,
@@ -981,6 +934,8 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
       preferencesUrl,
       logoUrl,
     }),
+    emailType: 'PostMentionEmail',
+    preview: { postUrl },
   })
 }
 
@@ -1017,14 +972,6 @@ export async function sendChangelogPublishedEmail(
     from,
   } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'ChangelogPublishedEmail', to, changelogUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `New update: ${changelogTitle}`,
@@ -1038,6 +985,8 @@ export async function sendChangelogPublishedEmail(
       logoUrl,
     }),
     from,
+    emailType: 'ChangelogPublishedEmail',
+    preview: { changelogUrl },
   })
 }
 
@@ -1072,14 +1021,6 @@ export async function sendFeedbackLinkedEmail(
     logoUrl,
   } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'FeedbackLinkedEmail', to, postUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `Your feedback has been linked to "${postTitle}"`,
@@ -1093,6 +1034,8 @@ export async function sendFeedbackLinkedEmail(
       attributedByName,
       logoUrl,
     }),
+    emailType: 'FeedbackLinkedEmail',
+    preview: { postUrl },
   })
 }
 
@@ -1132,14 +1075,6 @@ export async function sendStatusIncidentPublishedEmail(
     logoUrl,
   } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'StatusIncidentPublishedEmail', to, incidentUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `Incident: ${incidentTitle}`,
@@ -1155,6 +1090,8 @@ export async function sendStatusIncidentPublishedEmail(
       preferencesUrl,
       logoUrl,
     }),
+    emailType: 'StatusIncidentPublishedEmail',
+    preview: { incidentUrl },
   })
 }
 
@@ -1196,14 +1133,6 @@ export async function sendStatusMaintenanceScheduledEmail(
     logoUrl,
   } = params
 
-  if (getProvider() === 'console') {
-    log.debug(
-      { email_type: 'StatusMaintenanceScheduledEmail', to, incidentUrl },
-      '[dev] email preview (console provider)'
-    )
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `Scheduled maintenance: ${maintenanceTitle}`,
@@ -1219,6 +1148,8 @@ export async function sendStatusMaintenanceScheduledEmail(
       preferencesUrl,
       logoUrl,
     }),
+    emailType: 'StatusMaintenanceScheduledEmail',
+    preview: { incidentUrl },
   })
 }
 
@@ -1247,15 +1178,11 @@ export async function sendCsatRequestEmail(
 ): Promise<EmailResult> {
   const { to, promptText, ratingUrls, workspaceName, logoUrl } = params
 
-  if (getProvider() === 'console') {
-    log.debug({ email_type: 'CsatRequestEmail', to }, '[dev] email preview (console provider)')
-    return { sent: false }
-  }
-
   return sendEmail({
     to,
     subject: `How did we do, ${workspaceName}?`,
     react: CsatRequestEmail({ promptText, ratingUrls, workspaceName, logoUrl }),
+    emailType: 'CsatRequestEmail',
   })
 }
 

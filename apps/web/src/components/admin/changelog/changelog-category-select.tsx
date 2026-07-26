@@ -76,9 +76,7 @@ export function ChangelogCategorySelect({ value, onChange }: ChangelogCategorySe
           </PopoverTrigger>
           <PopoverContent className="w-56 p-1" align="start">
             {unselected.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">
-                All labels applied
-              </p>
+              <p className="py-4 text-center text-xs text-muted-foreground">All labels applied</p>
             ) : (
               unselected.map((category) => (
                 <button

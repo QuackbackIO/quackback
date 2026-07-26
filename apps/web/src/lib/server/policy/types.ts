@@ -43,10 +43,6 @@ export function denyDecision(reason: string): Decision {
   return { allowed: false, reason }
 }
 
-export function isAllowed(decision: Decision): boolean {
-  return decision.allowed
-}
-
 /**
  * Whether the actor is a team member (admin or member). Use this for
  * resource-level "team sees more" decisions inside handlers — distinct

@@ -26,6 +26,18 @@ import { firstNameOf } from '@/lib/shared/conversation/personalize'
 import { NotFoundError } from '@/lib/shared/errors'
 import type { MacroRenderContext } from './macro.render'
 
+/**
+ * The columns every macro read and write projects. Kept as a plain object:
+ * Drizzle's `SelectedFields` does not accept a readonly (`as const`) shape.
+ */
+const MACRO_COLUMNS = {
+  id: macros.id,
+  name: macros.name,
+  body: macros.body,
+  scope: macros.scope,
+  actions: macros.actions,
+}
+
 export interface MacroDTO {
   id: MacroId
   name: string
@@ -57,13 +69,7 @@ export async function listMacros(surface?: 'support' | 'feedback'): Promise<Macr
         ? ['feedback', 'both']
         : ['support', 'feedback', 'both']
   const rows = await db
-    .select({
-      id: macros.id,
-      name: macros.name,
-      body: macros.body,
-      scope: macros.scope,
-      actions: macros.actions,
-    })
+    .select(MACRO_COLUMNS)
     .from(macros)
     .where(and(isNull(macros.deletedAt), inArray(macros.scope, scopes)))
     .orderBy(desc(macros.createdAt))
@@ -72,13 +78,7 @@ export async function listMacros(surface?: 'support' | 'feedback'): Promise<Macr
 
 async function loadMacroOr404(id: MacroId) {
   const [row] = await db
-    .select({
-      id: macros.id,
-      name: macros.name,
-      body: macros.body,
-      scope: macros.scope,
-      actions: macros.actions,
-    })
+    .select(MACRO_COLUMNS)
     .from(macros)
     .where(and(eq(macros.id, id), isNull(macros.deletedAt)))
     .limit(1)
@@ -102,13 +102,7 @@ export async function createMacro(input: {
       actions: input.actions,
       createdByPrincipalId: input.createdByPrincipalId,
     })
-    .returning({
-      id: macros.id,
-      name: macros.name,
-      body: macros.body,
-      scope: macros.scope,
-      actions: macros.actions,
-    })
+    .returning(MACRO_COLUMNS)
   return toDTO(row)
 }
 
@@ -127,13 +121,7 @@ export async function updateMacro(
       updatedAt: new Date(),
     })
     .where(eq(macros.id, id))
-    .returning({
-      id: macros.id,
-      name: macros.name,
-      body: macros.body,
-      scope: macros.scope,
-      actions: macros.actions,
-    })
+    .returning(MACRO_COLUMNS)
   return toDTO(row)
 }
 

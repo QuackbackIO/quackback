@@ -19,9 +19,7 @@ import { requireAuth } from './auth-helpers'
 import { db, eq, posts } from '@/lib/server/db'
 import { listTeamMembers } from '@/lib/server/domains/principals/principal.service'
 import type { TeamMember } from '@/lib/server/domains/principals/principal.types'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'post-owner-context' })
+import { setLogContext } from '@/lib/server/log-context'
 
 /**
  * A team member as an assignable post owner — identity plus the display bits
@@ -60,19 +58,17 @@ export const getPostOwnerFn = createServerFn({ method: 'GET' })
   .validator(postIdSchema)
   .handler(async ({ data }): Promise<OwnerRef | null> => {
     await requireAuth({ permission: PERMISSIONS.POST_SET_OWNER })
-    try {
-      const [row] = await db
-        .select({ ownerPrincipalId: posts.ownerPrincipalId })
-        .from(posts)
-        .where(eq(posts.id, data.postId as PostId))
-        .limit(1)
-      const ownerId = row?.ownerPrincipalId ?? null
-      if (!ownerId) return null
-      const members = await listTeamMembers()
-      const owner = members.find((m) => m.id === ownerId)
-      return owner ? toOwnerRef(owner) : null
-    } catch (error) {
-      log.error({ err: error, post_id: data.postId }, 'get post owner failed')
-      throw error
-    }
+    // Ambient context, so the failure line the server-fn middleware emits
+    // carries post_id without this handler logging its own.
+    setLogContext({ post_id: data.postId })
+    const [row] = await db
+      .select({ ownerPrincipalId: posts.ownerPrincipalId })
+      .from(posts)
+      .where(eq(posts.id, data.postId as PostId))
+      .limit(1)
+    const ownerId = row?.ownerPrincipalId ?? null
+    if (!ownerId) return null
+    const members = await listTeamMembers()
+    const owner = members.find((m) => m.id === ownerId)
+    return owner ? toOwnerRef(owner) : null
   })

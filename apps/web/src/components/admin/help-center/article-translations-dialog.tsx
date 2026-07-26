@@ -116,9 +116,11 @@ export function ArticleTranslationsDialog({
           </Select>
           {locale && (
             <span className="text-xs text-muted-foreground">
-              {STATUS_LABELS[
-                statusesQuery.data?.find((s) => s.locale === locale)?.status ?? 'untranslated'
-              ]}
+              {
+                STATUS_LABELS[
+                  statusesQuery.data?.find((s) => s.locale === locale)?.status ?? 'untranslated'
+                ]
+              }
             </span>
           )}
         </div>
@@ -166,9 +168,8 @@ function TranslationForm({
       const existingStatus = statuses.find((s) => s.locale === locale)?.status ?? 'untranslated'
       setStatus(existingStatus)
       if (existingStatus !== 'untranslated') {
-        const { listArticleTranslationsFn } = await import(
-          '@/lib/server/functions/help-center-translations'
-        )
+        const { listArticleTranslationsFn } =
+          await import('@/lib/server/functions/help-center-translations')
         const translations = await listArticleTranslationsFn({ data: { articleId } })
         const translation = translations.find((t) => t.locale === locale)
         setTitle(translation?.title ?? '')

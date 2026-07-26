@@ -68,16 +68,11 @@ export type DeleteTagInput = z.infer<typeof deleteTagSchema>
  */
 export const fetchTags = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'fetch tags')
-  try {
-    await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
+  await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
-    const tags = await listPostTags()
-    log.debug({ count: tags.length }, 'fetch tags')
-    return tags
-  } catch (error) {
-    log.error({ err: error }, 'fetch tags failed')
-    throw error
-  }
+  const tags = await listPostTags()
+  log.debug({ count: tags.length }, 'fetch tags')
+  return tags
 })
 
 /**
@@ -87,16 +82,11 @@ export const fetchTag = createServerFn({ method: 'GET' })
   .validator(getTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'fetch tag')
-    try {
-      await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
+    await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
-      const tag = await getTagById(data.id as PostTagId)
-      log.debug({ found: !!tag }, 'fetch tag')
-      return tag
-    } catch (error) {
-      log.error({ err: error }, 'fetch tag failed')
-      throw error
-    }
+    const tag = await getTagById(data.id as PostTagId)
+    log.debug({ found: !!tag }, 'fetch tag')
+    return tag
   })
 
 // ============================================
@@ -110,20 +100,15 @@ export const createPostTagFn = createServerFn({ method: 'POST' })
   .validator(createTagSchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create tag')
-    try {
-      await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
-      const tag = await createPostTag({
-        name: data.name,
-        color: data.color,
-        description: data.description,
-      })
-      log.info({ tag_id: tag.id }, 'tag created')
-      return tag
-    } catch (error) {
-      log.error({ err: error }, 'create tag failed')
-      throw error
-    }
+    const tag = await createPostTag({
+      name: data.name,
+      color: data.color,
+      description: data.description,
+    })
+    log.info({ tag_id: tag.id }, 'tag created')
+    return tag
   })
 
 /**
@@ -133,20 +118,15 @@ export const updatePostTagFn = createServerFn({ method: 'POST' })
   .validator(updateTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'update tag')
-    try {
-      await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
-      const tag = await updatePostTag(data.id as PostTagId, {
-        name: data.name,
-        color: data.color,
-        description: data.description,
-      })
-      log.info({ tag_id: tag.id }, 'tag updated')
-      return tag
-    } catch (error) {
-      log.error({ err: error }, 'update tag failed')
-      throw error
-    }
+    const tag = await updatePostTag(data.id as PostTagId, {
+      name: data.name,
+      color: data.color,
+      description: data.description,
+    })
+    log.info({ tag_id: tag.id }, 'tag updated')
+    return tag
   })
 
 /**
@@ -156,14 +136,9 @@ export const deletePostTagFn = createServerFn({ method: 'POST' })
   .validator(deleteTagSchema)
   .handler(async ({ data }) => {
     log.debug({ tag_id: data.id }, 'delete tag')
-    try {
-      await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
-      await deletePostTag(data.id as PostTagId)
-      log.info({ tag_id: data.id }, 'tag deleted')
-      return { id: data.id as PostTagId }
-    } catch (error) {
-      log.error({ err: error }, 'delete tag failed')
-      throw error
-    }
+    await deletePostTag(data.id as PostTagId)
+    log.info({ tag_id: data.id }, 'tag deleted')
+    return { id: data.id as PostTagId }
   })

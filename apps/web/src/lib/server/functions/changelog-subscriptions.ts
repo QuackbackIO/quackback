@@ -34,12 +34,10 @@ export const unsubscribeFromChangelogFn = createServerFn({ method: 'POST' }).han
 })
 
 /** The signed-in caller's own subscription status, for the Subscribe button. */
-export const getMyChangelogSubscriptionFn = createServerFn({ method: 'GET' }).handler(
-  async () => {
-    const auth = await requireAuth()
-    return getChangelogSubscriptionStatus(auth.principal.id)
-  }
-)
+export const getMyChangelogSubscriptionFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const auth = await requireAuth()
+  return getChangelogSubscriptionStatus(auth.principal.id)
+})
 
 const principalIdSchema = z.object({ principalId: z.string() })
 

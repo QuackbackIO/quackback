@@ -44,64 +44,39 @@ const reorderSchema = z.object({ ids: z.array(z.string()) })
 /** List categories (public: powers the widget/portal filter chips too). */
 export const listChangelogCategoriesFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list changelog categories')
-  try {
-    return await listChangelogCategories()
-  } catch (error) {
-    log.error({ err: error }, 'list changelog categories failed')
-    throw error
-  }
+  return await listChangelogCategories()
 })
 
 export const createChangelogCategoryFn = createServerFn({ method: 'POST' })
   .validator(createCategorySchema)
   .handler(async ({ data }) => {
     log.debug({ name: data.name }, 'create changelog category')
-    try {
-      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
-      return await createChangelogCategory(data)
-    } catch (error) {
-      log.error({ err: error }, 'create changelog category failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+    return await createChangelogCategory(data)
   })
 
 export const updateChangelogCategoryFn = createServerFn({ method: 'POST' })
   .validator(updateCategorySchema)
   .handler(async ({ data }) => {
     log.debug({ category_id: data.id }, 'update changelog category')
-    try {
-      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
-      return await updateChangelogCategory(data.id as ChangelogCategoryId, data)
-    } catch (error) {
-      log.error({ err: error }, 'update changelog category failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+    return await updateChangelogCategory(data.id as ChangelogCategoryId, data)
   })
 
 export const deleteChangelogCategoryFn = createServerFn({ method: 'POST' })
   .validator(idSchema)
   .handler(async ({ data }) => {
     log.debug({ category_id: data.id }, 'delete changelog category')
-    try {
-      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
-      await deleteChangelogCategory(data.id as ChangelogCategoryId)
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete changelog category failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+    await deleteChangelogCategory(data.id as ChangelogCategoryId)
+    return { success: true }
   })
 
 export const reorderChangelogCategoriesFn = createServerFn({ method: 'POST' })
   .validator(reorderSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.ids.length }, 'reorder changelog categories')
-    try {
-      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
-      await reorderChangelogCategories(data.ids as ChangelogCategoryId[])
-      return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'reorder changelog categories failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+    await reorderChangelogCategories(data.ids as ChangelogCategoryId[])
+    return { success: true }
   })

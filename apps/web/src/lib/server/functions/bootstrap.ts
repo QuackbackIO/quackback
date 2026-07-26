@@ -213,11 +213,6 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BootstrapData> => {
     log.debug('get bootstrap data')
-    try {
-      return await getBootstrapDataInternal()
-    } catch (error) {
-      log.error({ err: error }, 'get bootstrap data failed')
-      throw error
-    }
+    return await getBootstrapDataInternal()
   }
 )

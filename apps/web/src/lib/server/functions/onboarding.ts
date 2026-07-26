@@ -121,126 +121,121 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
         { workspace_name: data.workspaceName, use_case: data.useCase },
         'save workspace and goal'
       )
-      try {
-        const session = await getSession()
-        if (!session?.user) throw new Error('Authentication required')
+      const session = await getSession()
+      if (!session?.user) throw new Error('Authentication required')
 
-        const workspaceName = data.workspaceName.trim()
-        const slug = slugify(workspaceName)
-        if (slug.length < 2) throw new Error('Invalid workspace name - cannot generate valid slug')
-        const existingSettings = await getSettings()
-        const setupState = getSetupState(existingSettings?.setupState ?? null)
+      const workspaceName = data.workspaceName.trim()
+      const slug = slugify(workspaceName)
+      if (slug.length < 2) throw new Error('Invalid workspace name - cannot generate valid slug')
+      const existingSettings = await getSettings()
+      const setupState = getSetupState(existingSettings?.setupState ?? null)
 
-        if (existingSettings && setupState?.steps.workspace) {
-          const principalRecord = await db.query.principal.findFirst({
-            where: eq(principal.userId, session.user.id as UserId),
-          })
-          if (!principalRecord || !isAdmin(principalRecord.role))
-            throw new Error('Only admin can change setup')
-        } else {
-          await ensureBootstrapAdmin(session.user.id as UserId)
-        }
-
-        if (data.userName) {
-          await db
-            .update(user)
-            .set({ name: data.userName.trim(), updatedAt: new Date() })
-            .where(eq(user.id, session.user.id as UserId))
-          await syncPrincipalProfile(session.user.id as UserId, {
-            displayName: data.userName.trim(),
-          })
-        }
-
-        let result: SaveWorkspaceAndGoalResult
-        if (!existingSettings) {
-          const initialState: SetupState = {
-            ...DEFAULT_SETUP_STATE,
-            steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true },
-            useCase: data.useCase,
-          }
-          const [created] = await db
-            .insert(settings)
-            .values({
-              id: generateId('workspace'),
-              name: workspaceName,
-              slug,
-              createdAt: new Date(),
-              portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
-              authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-              setupState: JSON.stringify(initialState),
-            })
-            .returning()
-          await invalidateSettingsCache()
-          result = {
-            id: created.id,
-            name: created.name,
-            slug: created.slug,
-            useCase: data.useCase,
-            managed: { name: false, slug: false, useCase: false },
-          }
-        } else {
-          const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
-            const nameManaged = isPathManaged('workspace.name', row.managedFieldPaths)
-            const slugManaged = isPathManaged('workspace.slug', row.managedFieldPaths)
-            const useCaseManaged = isPathManaged('workspace.useCase', row.managedFieldPaths)
-            if (nameManaged && workspaceName !== row.name) {
-              throw new Error('Workspace name is managed by your workspace admin')
-            }
-            if (useCaseManaged && data.useCase !== current.useCase) {
-              throw new Error('Workspace goal is managed by your workspace admin')
-            }
-            const updatePayload: Record<string, unknown> = {
-              portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
-              authConfig:
-                row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
-            }
-            if (!nameManaged) updatePayload.name = workspaceName
-            if (!slugManaged) updatePayload.slug = slug
-            const [updated] = await tx
-              .update(settings)
-              .set(updatePayload)
-              .where(eq(settings.id, row.id))
-              .returning()
-            const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
-            return {
-              state: {
-                ...current,
-                steps: { ...current.steps, workspace: true },
-                useCase: goal,
-              },
-              value: {
-                updated,
-                goal,
-                managed: { name: nameManaged, slug: slugManaged, useCase: useCaseManaged },
-              },
-            }
-          })
-          result = {
-            id: value.updated.id,
-            name: value.updated.name,
-            slug: value.updated.slug,
-            useCase: value.goal,
-            managed: value.managed,
-          }
-        }
-
-        const existingStatuses = await db.query.postStatuses.findFirst()
-        if (!existingStatuses) {
-          const statusValues = DEFAULT_STATUSES.map((status) => ({
-            id: generateId('post_status') as PostStatusId,
-            ...status,
-            createdAt: new Date(),
-          }))
-          await db.insert(postStatuses).values(statusValues)
-          log.info({ count: statusValues.length }, 'setup workspace: created default statuses')
-        }
-
-        log.info({ workspace_id: result.id, slug: result.slug }, 'save workspace and goal complete')
-        return result
-      } catch (error) {
-        log.error({ err: error }, 'save workspace and goal failed')
-        throw error
+      if (existingSettings && setupState?.steps.workspace) {
+        const principalRecord = await db.query.principal.findFirst({
+          where: eq(principal.userId, session.user.id as UserId),
+        })
+        if (!principalRecord || !isAdmin(principalRecord.role))
+          throw new Error('Only admin can change setup')
+      } else {
+        await ensureBootstrapAdmin(session.user.id as UserId)
       }
+
+      if (data.userName) {
+        await db
+          .update(user)
+          .set({ name: data.userName.trim(), updatedAt: new Date() })
+          .where(eq(user.id, session.user.id as UserId))
+        await syncPrincipalProfile(session.user.id as UserId, {
+          displayName: data.userName.trim(),
+        })
+      }
+
+      let result: SaveWorkspaceAndGoalResult
+      if (!existingSettings) {
+        const initialState: SetupState = {
+          ...DEFAULT_SETUP_STATE,
+          steps: { ...DEFAULT_SETUP_STATE.steps, workspace: true },
+          useCase: data.useCase,
+        }
+        const [created] = await db
+          .insert(settings)
+          .values({
+            id: generateId('workspace'),
+            name: workspaceName,
+            slug,
+            createdAt: new Date(),
+            portalConfig: JSON.stringify(DEFAULT_PORTAL_CONFIG),
+            authConfig: JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
+            setupState: JSON.stringify(initialState),
+          })
+          .returning()
+        await invalidateSettingsCache()
+        result = {
+          id: created.id,
+          name: created.name,
+          slug: created.slug,
+          useCase: data.useCase,
+          managed: { name: false, slug: false, useCase: false },
+        }
+      } else {
+        const { value } = await mutateSetupStateAtomic(async (current, row, tx) => {
+          const nameManaged = isPathManaged('workspace.name', row.managedFieldPaths)
+          const slugManaged = isPathManaged('workspace.slug', row.managedFieldPaths)
+          const useCaseManaged = isPathManaged('workspace.useCase', row.managedFieldPaths)
+          if (nameManaged && workspaceName !== row.name) {
+            throw new Error('Workspace name is managed by your workspace admin')
+          }
+          if (useCaseManaged && data.useCase !== current.useCase) {
+            throw new Error('Workspace goal is managed by your workspace admin')
+          }
+          const updatePayload: Record<string, unknown> = {
+            portalConfig: row.portalConfig ?? JSON.stringify(DEFAULT_PORTAL_CONFIG),
+            authConfig:
+              row.authConfig ?? JSON.stringify({ ...DEFAULT_AUTH_CONFIG, openSignup: true }),
+          }
+          if (!nameManaged) updatePayload.name = workspaceName
+          if (!slugManaged) updatePayload.slug = slug
+          const [updated] = await tx
+            .update(settings)
+            .set(updatePayload)
+            .where(eq(settings.id, row.id))
+            .returning()
+          const goal = useCaseManaged ? (current.useCase ?? data.useCase) : data.useCase
+          return {
+            state: {
+              ...current,
+              steps: { ...current.steps, workspace: true },
+              useCase: goal,
+            },
+            value: {
+              updated,
+              goal,
+              managed: { name: nameManaged, slug: slugManaged, useCase: useCaseManaged },
+            },
+          }
+        })
+        result = {
+          id: value.updated.id,
+          name: value.updated.name,
+          slug: value.updated.slug,
+          useCase: value.goal,
+          managed: value.managed,
+        }
+      }
+
+      const existingStatuses = await db.query.postStatuses.findFirst()
+      if (!existingStatuses) {
+        const statusValues = DEFAULT_STATUSES.map((status) => ({
+          id: generateId('post_status') as PostStatusId,
+          ...status,
+          createdAt: new Date(),
+        }))
+        await db.insert(postStatuses).values(statusValues)
+        log.info({ count: statusValues.length }, 'setup workspace: created default statuses')
+      }
+
+      log.info({ workspace_id: result.id, slug: result.slug }, 'save workspace and goal complete')
+      return result
     }
   )
 
@@ -256,24 +251,19 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data }: { data: { name: string } }): Promise<void> => {
     log.debug('save user name: entry')
-    try {
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
-
-      await db
-        .update(user)
-        .set({
-          name: data.name.trim(),
-          updatedAt: new Date(),
-        })
-        .where(eq(user.id, session.user.id as UserId))
-      await syncPrincipalProfile(session.user.id as UserId, { displayName: data.name.trim() })
-
-      log.info({ user_id: session.user.id }, 'save user name: saved')
-    } catch (error) {
-      log.error({ err: error }, 'save user name failed')
-      throw error
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
     }
+
+    await db
+      .update(user)
+      .set({
+        name: data.name.trim(),
+        updatedAt: new Date(),
+      })
+      .where(eq(user.id, session.user.id as UserId))
+    await syncPrincipalProfile(session.user.id as UserId, { displayName: data.name.trim() })
+
+    log.info({ user_id: session.user.id }, 'save user name: saved')
   })

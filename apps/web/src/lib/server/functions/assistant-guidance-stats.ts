@@ -9,12 +9,7 @@ const log = logger.child({ component: 'assistant-guidance-stats' })
 /** Per-rule application stats, keyed by guidance rule id. */
 export const getGuidanceRuleStatsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch guidance rule stats')
-  try {
-    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-    const { getGuidanceRuleStats } = await import('@/lib/server/domains/assistant/guidance-stats')
-    return await getGuidanceRuleStats()
-  } catch (error) {
-    log.error({ err: error }, 'fetch guidance rule stats failed')
-    throw error
-  }
+  await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+  const { getGuidanceRuleStats } = await import('@/lib/server/domains/assistant/guidance-stats')
+  return await getGuidanceRuleStats()
 })

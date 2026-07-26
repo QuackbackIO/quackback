@@ -12,10 +12,7 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ConversationViewId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { logger } from '@/lib/server/logger'
 import { conversationViewFiltersSchema, CONVERSATION_SORTS } from '@/lib/shared/conversation/views'
-
-const log = logger.child({ component: 'conversation-views' })
 
 const sortSchema = z.enum(CONVERSATION_SORTS)
 
@@ -47,103 +44,73 @@ const viewIdSchema = z.object({ viewId: z.string() })
 
 /** All shared saved views with the caller's pin state (pinned-first). */
 export const listConversationViewsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-    const { listViewsForPrincipal } =
-      await import('@/lib/server/domains/conversation-views/conversation-views.service')
-    return await listViewsForPrincipal(ctx.principal.id)
-  } catch (error) {
-    log.error({ err: error }, 'list conversation views failed')
-    throw error
-  }
+  const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+  const { listViewsForPrincipal } =
+    await import('@/lib/server/domains/conversation-views/conversation-views.service')
+  return await listViewsForPrincipal(ctx.principal.id)
 })
 
 export const createConversationViewFn = createServerFn({ method: 'POST' })
   .validator(createViewSchema)
   .handler(async ({ data }) => {
-    try {
-      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
-      const { createView } =
-        await import('@/lib/server/domains/conversation-views/conversation-views.service')
-      const id = await createView(
-        {
-          name: data.name,
-          filters: data.filters,
-          sort: data.sort ?? null,
-          isShared: data.isShared,
-        },
-        ctx.principal.id
-      )
-      return { id }
-    } catch (error) {
-      log.error({ err: error }, 'create conversation view failed')
-      throw error
-    }
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
+    const { createView } =
+      await import('@/lib/server/domains/conversation-views/conversation-views.service')
+    const id = await createView(
+      {
+        name: data.name,
+        filters: data.filters,
+        sort: data.sort ?? null,
+        isShared: data.isShared,
+      },
+      ctx.principal.id
+    )
+    return { id }
   })
 
 export const updateConversationViewFn = createServerFn({ method: 'POST' })
   .validator(updateViewSchema)
   .handler(async ({ data }) => {
-    try {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
-      const { updateView } =
-        await import('@/lib/server/domains/conversation-views/conversation-views.service')
-      await updateView(data.id as ConversationViewId, {
-        name: data.name,
-        filters: data.filters,
-        // `null` clears the sort back to the default; `undefined` leaves it.
-        sort: data.sort === undefined ? undefined : data.sort,
-        isShared: data.isShared,
-      })
-      return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'update conversation view failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
+    const { updateView } =
+      await import('@/lib/server/domains/conversation-views/conversation-views.service')
+    await updateView(data.id as ConversationViewId, {
+      name: data.name,
+      filters: data.filters,
+      // `null` clears the sort back to the default; `undefined` leaves it.
+      sort: data.sort === undefined ? undefined : data.sort,
+      isShared: data.isShared,
+    })
+    return { ok: true }
   })
 
 export const deleteConversationViewFn = createServerFn({ method: 'POST' })
   .validator(viewIdSchema)
   .handler(async ({ data }) => {
-    try {
-      await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
-      const { deleteView } =
-        await import('@/lib/server/domains/conversation-views/conversation-views.service')
-      await deleteView(data.viewId as ConversationViewId)
-      return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete conversation view failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
+    const { deleteView } =
+      await import('@/lib/server/domains/conversation-views/conversation-views.service')
+    await deleteView(data.viewId as ConversationViewId)
+    return { ok: true }
   })
 
 /** Pin a view for the caller (personal; any inbox viewer may pin). */
 export const pinConversationViewFn = createServerFn({ method: 'POST' })
   .validator(viewIdSchema)
   .handler(async ({ data }) => {
-    try {
-      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-      const { pinView } =
-        await import('@/lib/server/domains/conversation-views/conversation-views.service')
-      await pinView(ctx.principal.id, data.viewId as ConversationViewId)
-      return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'pin conversation view failed')
-      throw error
-    }
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const { pinView } =
+      await import('@/lib/server/domains/conversation-views/conversation-views.service')
+    await pinView(ctx.principal.id, data.viewId as ConversationViewId)
+    return { ok: true }
   })
 
 export const unpinConversationViewFn = createServerFn({ method: 'POST' })
   .validator(viewIdSchema)
   .handler(async ({ data }) => {
-    try {
-      const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
-      const { unpinView } =
-        await import('@/lib/server/domains/conversation-views/conversation-views.service')
-      await unpinView(ctx.principal.id, data.viewId as ConversationViewId)
-      return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'unpin conversation view failed')
-      throw error
-    }
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const { unpinView } =
+      await import('@/lib/server/domains/conversation-views/conversation-views.service')
+    await unpinView(ctx.principal.id, data.viewId as ConversationViewId)
+    return { ok: true }
   })

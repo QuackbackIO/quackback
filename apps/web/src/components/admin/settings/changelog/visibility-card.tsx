@@ -33,7 +33,9 @@ export function VisibilityCard({ settings, onChange, disabled }: VisibilityCardP
           </div>
           <Select
             value={settings.audience}
-            onValueChange={(value) => onChange({ audience: value as ChangelogSettings['audience'] })}
+            onValueChange={(value) =>
+              onChange({ audience: value as ChangelogSettings['audience'] })
+            }
             disabled={disabled}
           >
             <SelectTrigger className="w-44">

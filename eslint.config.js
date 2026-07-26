@@ -168,6 +168,36 @@ export default tseslint.config(
       ],
     },
   },
+  // Server-function failures are logged once, globally, by the
+  // `functionMiddleware` in src/start.ts (see lib/server/middleware/
+  // server-fn-log.ts). Re-adding a per-handler log-and-rethrow tail produces a
+  // second line for the same failure, and — because it has to be remembered at
+  // every call site — reliably ends up covering only part of the surface. That
+  // is what these rules exist to prevent: the previous hand-rolled helper
+  // reached just 46% of server functions before it was replaced.
+  //
+  // A catch that RECOVERS (returns a fallback, swallows deliberately) is still
+  // fine and still wants its own log; only log-then-rethrow is banned.
+  {
+    files: ['**/src/lib/server/functions/**/*.ts'],
+    ignores: ['**/__tests__/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CatchClause > BlockStatement > ExpressionStatement[expression.callee.property.name='error'] + ThrowStatement",
+          message:
+            'Server-function failures are logged once by the global functionMiddleware; drop the log.error and just rethrow. To attach context, call setLogContext({ ... }) instead.',
+        },
+        {
+          selector: "CallExpression[callee.name='withErrorLog']",
+          message:
+            'withErrorLog was replaced by the global functionMiddleware in src/start.ts. Handlers should throw and let it log.',
+        },
+      ],
+    },
+  },
   // Page routes are client-bundled (via routeTree.gen), so server logic must
   // cross through createServerFn bridges in lib/server/functions. Anything
   // else drags server modules (db/redis/settings) into the client graph, which

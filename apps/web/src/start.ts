@@ -12,6 +12,7 @@
  */
 import { createStart, createCsrfMiddleware } from '@tanstack/react-start'
 import { requestContextMiddleware } from '@/lib/server/middleware/request-context'
+import { serverFnLogMiddleware } from '@/lib/server/middleware/server-fn-log'
 
 /**
  * Same-origin protection for server functions, matching the framework default.
@@ -31,5 +32,9 @@ export const startInstance = createStart(() => {
     // Request-context/logging first so even CSRF-rejected requests get a
     // request_id and an access log; CSRF second.
     requestMiddleware: [requestContextMiddleware, csrfMiddleware],
+    // Server-function failures never reach the request middleware's error
+    // branch (see server-fn-log.ts), so they are logged here instead. Unlike
+    // `requestMiddleware` above, this list replaces no framework default.
+    functionMiddleware: [serverFnLogMiddleware],
   }
 })

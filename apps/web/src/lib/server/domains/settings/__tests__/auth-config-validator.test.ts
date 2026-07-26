@@ -38,7 +38,10 @@ vi.mock('@/lib/server/domains/settings/tier-limits.service', () => ({
   getTierLimits: vi.fn().mockResolvedValue({ features: { customOidcProvider: true } }),
 }))
 
-vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({ enforceFeatureGate: vi.fn() }))
+vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
+  enforceFeatureGate: vi.fn(),
+  assertTierFeature: vi.fn(),
+}))
 
 vi.mock('@/lib/server/content/ssrf-guard', () => ({
   checkUrlSafety: vi.fn().mockResolvedValue({ safe: true }),

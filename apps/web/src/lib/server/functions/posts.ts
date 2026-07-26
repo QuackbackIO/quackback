@@ -188,42 +188,37 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   .validator(listInboxPostsSchema)
   .handler(async ({ data }) => {
     log.debug('fetch inbox posts for admin')
-    try {
-      await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
+    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
-      const result = await listInboxPosts({
-        boardIds: data.boardIds as BoardId[] | undefined,
-        statusIds: data.statusIds as PostStatusId[] | undefined,
-        statusSlugs: data.statusSlugs,
-        tagIds: data.tagIds as PostTagId[] | undefined,
-        segmentIds: data.segmentIds as SegmentId[] | undefined,
-        ownerId: data.ownerId as PrincipalId | null | undefined,
-        search: data.search,
-        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-        minVotes: data.minVotes,
-        minComments: data.minComments,
-        responded: data.responded,
-        updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
-        sort: data.sort,
-        showDeleted: data.showDeleted,
-        cursor: data.cursor,
-        limit: data.limit,
-      })
-      log.debug(
-        { count: result.items.length, cursor: data.cursor ?? 'none' },
-        'fetched inbox posts for admin'
-      )
-      return {
-        ...result,
-        items: result.items.map((p) => ({
-          ...serializePostDates(p),
-          contentJson: (p.contentJson ?? {}) as TiptapContent,
-        })),
-      }
-    } catch (error) {
-      log.error({ err: error }, 'fetch inbox posts for admin failed')
-      throw error
+    const result = await listInboxPosts({
+      boardIds: data.boardIds as BoardId[] | undefined,
+      statusIds: data.statusIds as PostStatusId[] | undefined,
+      statusSlugs: data.statusSlugs,
+      tagIds: data.tagIds as PostTagId[] | undefined,
+      segmentIds: data.segmentIds as SegmentId[] | undefined,
+      ownerId: data.ownerId as PrincipalId | null | undefined,
+      search: data.search,
+      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+      minVotes: data.minVotes,
+      minComments: data.minComments,
+      responded: data.responded,
+      updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
+      sort: data.sort,
+      showDeleted: data.showDeleted,
+      cursor: data.cursor,
+      limit: data.limit,
+    })
+    log.debug(
+      { count: result.items.length, cursor: data.cursor ?? 'none' },
+      'fetched inbox posts for admin'
+    )
+    return {
+      ...result,
+      items: result.items.map((p) => ({
+        ...serializePostDates(p),
+        contentJson: (p.contentJson ?? {}) as TiptapContent,
+      })),
     }
   })
 
@@ -241,83 +236,78 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
   )
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post with details')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
-      const postId = data.id as PostId
+    const postId = data.id as PostId
 
-      const [result, commentsPage, voted] = await Promise.all([
-        getPostWithDetails(postId),
-        getPaginatedCommentsWithReplies(postId, {
-          principalId: auth.principal.id,
-          cursor: data.commentsCursor ?? null,
-          limit: data.commentsLimit,
-        }),
-        hasUserVoted(postId, auth.principal.id),
-      ])
-      const comments = commentsPage.comments
-      log.debug(
-        { post_id: data.id, found: !!result, comment_count: comments.length, has_voted: voted },
-        'fetched post with details'
-      )
+    const [result, commentsPage, voted] = await Promise.all([
+      getPostWithDetails(postId),
+      getPaginatedCommentsWithReplies(postId, {
+        principalId: auth.principal.id,
+        cursor: data.commentsCursor ?? null,
+        limit: data.commentsLimit,
+      }),
+      hasUserVoted(postId, auth.principal.id),
+    ])
+    const comments = commentsPage.comments
+    log.debug(
+      { post_id: data.id, found: !!result, comment_count: comments.length, has_voted: voted },
+      'fetched post with details'
+    )
 
-      // Serialize Date fields in comments
-      type SerializedComment = Omit<(typeof comments)[0], 'createdAt' | 'replies'> & {
-        createdAt: string
-        replies: SerializedComment[]
-      }
-      const serializeComment = (comment: (typeof comments)[0]): SerializedComment => ({
-        ...comment,
-        createdAt: toIsoString(comment.createdAt),
-        replies: comment.replies.map(serializeComment),
-      })
+    // Serialize Date fields in comments
+    type SerializedComment = Omit<(typeof comments)[0], 'createdAt' | 'replies'> & {
+      createdAt: string
+      replies: SerializedComment[]
+    }
+    const serializeComment = (comment: (typeof comments)[0]): SerializedComment => ({
+      ...comment,
+      createdAt: toIsoString(comment.createdAt),
+      replies: comment.replies.map(serializeComment),
+    })
 
-      // Serialize pinned comment dates
-      const serializedPinnedComment = result.pinnedComment
-        ? {
-            ...result.pinnedComment,
-            createdAt: toIsoString(result.pinnedComment.createdAt),
-          }
-        : null
+    // Serialize pinned comment dates
+    const serializedPinnedComment = result.pinnedComment
+      ? {
+          ...result.pinnedComment,
+          createdAt: toIsoString(result.pinnedComment.createdAt),
+        }
+      : null
 
-      // Fetch merge info: merged posts (if canonical) or merge info (if duplicate)
-      // The admin handler is team-gated, so the resolved actor is admin
-      // or member — both pass canViewPost on any audience. Without the
-      // actor though, getPostMergeInfo defaulted to ANONYMOUS_ACTOR and
-      // hid the merge banner for canonicals on restricted-audience boards.
-      const adminMergeActor = await policyActorFromAuth(auth)
-      const [mergedPosts, mergeInfo] = await Promise.all([
-        getMergedPosts(postId).then((posts) =>
-          posts.map((p) => ({
-            ...p,
-            createdAt: toIsoString(p.createdAt),
-            mergedAt: toIsoString(p.mergedAt),
-          }))
-        ),
-        result.canonicalPostId
-          ? getPostMergeInfo(postId, adminMergeActor).then((info) =>
-              info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
-            )
-          : null,
-      ])
+    // Fetch merge info: merged posts (if canonical) or merge info (if duplicate)
+    // The admin handler is team-gated, so the resolved actor is admin
+    // or member — both pass canViewPost on any audience. Without the
+    // actor though, getPostMergeInfo defaulted to ANONYMOUS_ACTOR and
+    // hid the merge banner for canonicals on restricted-audience boards.
+    const adminMergeActor = await policyActorFromAuth(auth)
+    const [mergedPosts, mergeInfo] = await Promise.all([
+      getMergedPosts(postId).then((posts) =>
+        posts.map((p) => ({
+          ...p,
+          createdAt: toIsoString(p.createdAt),
+          mergedAt: toIsoString(p.mergedAt),
+        }))
+      ),
+      result.canonicalPostId
+        ? getPostMergeInfo(postId, adminMergeActor).then((info) =>
+            info ? { ...info, mergedAt: toIsoString(info.mergedAt) } : null
+          )
+        : null,
+    ])
 
-      return {
-        ...serializePostDates(result),
-        summaryUpdatedAt: toIsoStringOrNull(result.summaryUpdatedAt),
-        hasVoted: voted,
-        comments: comments.map(serializeComment),
-        commentsHasMore: commentsPage.hasMore,
-        commentsNextCursor: commentsPage.nextCursor,
-        commentsTotalRootCount: commentsPage.totalRootCount,
-        pinnedComment: serializedPinnedComment,
-        canonicalPostId: result.canonicalPostId,
-        mergedAt: toIsoStringOrNull(result.mergedAt),
-        mergedPosts: mergedPosts.length > 0 ? mergedPosts : undefined,
-        mergeInfo,
-      }
-    } catch (error) {
-      log.error({ err: error }, 'fetch post with details failed')
-      throw error
+    return {
+      ...serializePostDates(result),
+      summaryUpdatedAt: toIsoStringOrNull(result.summaryUpdatedAt),
+      hasVoted: voted,
+      comments: comments.map(serializeComment),
+      commentsHasMore: commentsPage.hasMore,
+      commentsNextCursor: commentsPage.nextCursor,
+      commentsTotalRootCount: commentsPage.totalRootCount,
+      pinnedComment: serializedPinnedComment,
+      canonicalPostId: result.canonicalPostId,
+      mergedAt: toIsoStringOrNull(result.mergedAt),
+      mergedPosts: mergedPosts.length > 0 ? mergedPosts : undefined,
+      mergeInfo,
     }
   })
 
@@ -346,67 +336,62 @@ export const createPostFn = createServerFn({ method: 'POST' })
   .validator(createPostSchema)
   .handler(async ({ data }) => {
     log.info({ board_id: data.boardId }, 'create post')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_CREATE })
-      // Caller is always team — the policy gate inside createPost bypasses
-      // approval for team via canCreatePost. We still build the actor to
-      // pass through so audience checks are correct (e.g. a non-team API
-      // path wouldn't get here at all).
-      const actor = await policyActorFromAuth(auth)
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_CREATE })
+    // Caller is always team — the policy gate inside createPost bypasses
+    // approval for team via canCreatePost. We still build the actor to
+    // pass through so audience checks are correct (e.g. a non-team API
+    // path wouldn't get here at all).
+    const actor = await policyActorFromAuth(auth)
 
-      // Resolve author: use specified principal or fall back to authenticated user
-      let author: {
-        principalId: PrincipalId
-        userId?: UserId
-        name?: string
-        email?: string
-        actor?: typeof actor
-      } = {
-        principalId: auth.principal.id,
-        userId: auth.user.id as UserId,
-        name: auth.user.name,
-        email: auth.user.email,
-        actor,
-      }
+    // Resolve author: use specified principal or fall back to authenticated user
+    let author: {
+      principalId: PrincipalId
+      userId?: UserId
+      name?: string
+      email?: string
+      actor?: typeof actor
+    } = {
+      principalId: auth.principal.id,
+      userId: auth.user.id as UserId,
+      name: auth.user.name,
+      email: auth.user.email,
+      actor,
+    }
 
-      if (
-        data.authorPrincipalId &&
-        data.authorPrincipalId !== auth.principal.id &&
-        can(actor, PERMISSIONS.POST_SET_AUTHOR)
-      ) {
-        const selectedPrincipal = await getMemberById(data.authorPrincipalId as PrincipalId)
-        if (selectedPrincipal) {
-          author = {
-            principalId: selectedPrincipal.id,
-            name: selectedPrincipal.displayName ?? undefined,
-            // Keep the actor of the *caller* (the admin), not the override
-            // target — policy decisions reflect who's doing the create.
-            actor,
-          }
+    if (
+      data.authorPrincipalId &&
+      data.authorPrincipalId !== auth.principal.id &&
+      can(actor, PERMISSIONS.POST_SET_AUTHOR)
+    ) {
+      const selectedPrincipal = await getMemberById(data.authorPrincipalId as PrincipalId)
+      if (selectedPrincipal) {
+        author = {
+          principalId: selectedPrincipal.id,
+          name: selectedPrincipal.displayName ?? undefined,
+          // Keep the actor of the *caller* (the admin), not the override
+          // target — policy decisions reflect who's doing the create.
+          actor,
         }
       }
-
-      const result = await createPost(
-        {
-          title: data.title,
-          content: data.content,
-          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-          boardId: data.boardId as BoardId,
-          statusId: data.statusId as PostStatusId | undefined,
-          tagIds: data.tagIds as PostTagId[] | undefined,
-        },
-        author,
-        { headers: getRequestHeaders() }
-      )
-      log.info({ post_id: result.id }, 'post created')
-
-      // Events are now dispatched by the service layer
-
-      return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'create post failed')
-      throw error
     }
+
+    const result = await createPost(
+      {
+        title: data.title,
+        content: data.content,
+        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+        boardId: data.boardId as BoardId,
+        statusId: data.statusId as PostStatusId | undefined,
+        tagIds: data.tagIds as PostTagId[] | undefined,
+      },
+      author,
+      { headers: getRequestHeaders() }
+    )
+    log.info({ post_id: result.id }, 'post created')
+
+    // Events are now dispatched by the service layer
+
+    return serializePostDates(result)
   })
 
 /**
@@ -416,29 +401,24 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .validator(updatePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'update post')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_EDIT })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_EDIT })
 
-      const result = await updatePost(
-        data.id as PostId,
-        {
-          title: data.title,
-          content: data.content,
-          contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
-        },
-        {
-          principalId: auth.principal.id,
-          userId: auth.user.id as UserId,
-          email: auth.user.email,
-          displayName: auth.user.name,
-        }
-      )
-      log.info({ post_id: result.id }, 'post updated')
-      return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'update post failed')
-      throw error
-    }
+    const result = await updatePost(
+      data.id as PostId,
+      {
+        title: data.title,
+        content: data.content,
+        contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+      },
+      {
+        principalId: auth.principal.id,
+        userId: auth.user.id as UserId,
+        email: auth.user.email,
+        displayName: auth.user.name,
+      }
+    )
+    log.info({ post_id: result.id }, 'post updated')
+    return serializePostDates(result)
   })
 
 /**
@@ -449,25 +429,20 @@ export const setPostOwnerFn = createServerFn({ method: 'POST' })
   .validator(setPostOwnerSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'set post owner')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_OWNER })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_OWNER })
 
-      const result = await updatePost(
-        data.id as PostId,
-        { ownerPrincipalId: data.ownerId as PrincipalId | null },
-        {
-          principalId: auth.principal.id,
-          userId: auth.user.id as UserId,
-          email: auth.user.email,
-          displayName: auth.user.name,
-        }
-      )
-      log.info({ post_id: result.id }, 'post owner set')
-      return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'set post owner failed')
-      throw error
-    }
+    const result = await updatePost(
+      data.id as PostId,
+      { ownerPrincipalId: data.ownerId as PrincipalId | null },
+      {
+        principalId: auth.principal.id,
+        userId: auth.user.id as UserId,
+        email: auth.user.email,
+        displayName: auth.user.name,
+      }
+    )
+    log.info({ post_id: result.id }, 'post owner set')
+    return serializePostDates(result)
   })
 
 /**
@@ -478,25 +453,20 @@ export const setPostEtaFn = createServerFn({ method: 'POST' })
   .validator(setPostEtaSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'set post eta')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_ETA })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_ETA })
 
-      const result = await updatePost(
-        data.id as PostId,
-        { eta: data.eta ? new Date(data.eta) : null },
-        {
-          principalId: auth.principal.id,
-          userId: auth.user.id as UserId,
-          email: auth.user.email,
-          displayName: auth.user.name,
-        }
-      )
-      log.info({ post_id: result.id }, 'post eta set')
-      return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'set post eta failed')
-      throw error
-    }
+    const result = await updatePost(
+      data.id as PostId,
+      { eta: data.eta ? new Date(data.eta) : null },
+      {
+        principalId: auth.principal.id,
+        userId: auth.user.id as UserId,
+        email: auth.user.email,
+        displayName: auth.user.name,
+      }
+    )
+    log.info({ post_id: result.id }, 'post eta set')
+    return serializePostDates(result)
   })
 
 /**
@@ -507,46 +477,41 @@ export const deletePostFn = createServerFn({ method: 'POST' })
   .validator(deletePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'delete post')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_DELETE })
-      const postId = data.id as PostId
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_DELETE })
+    const postId = data.id as PostId
 
-      // Soft delete the post (always succeeds or throws; dispatches post.deleted event)
-      await softDeletePost(postId, {
-        principalId: auth.principal.id,
-        role: auth.principal.role,
-        userId: auth.user.id,
-      })
-      log.info({ post_id: data.id }, 'post deleted')
+    // Soft delete the post (always succeeds or throws; dispatches post.deleted event)
+    await softDeletePost(postId, {
+      principalId: auth.principal.id,
+      role: auth.principal.role,
+      userId: auth.user.id,
+    })
+    log.info({ post_id: data.id }, 'post deleted')
 
-      // Cascade archive/close linked issues (never blocks post delete)
-      let cascadeResults: Array<{
-        linkId: string
-        integrationType: string
-        externalId: string
-        success: boolean
-        error?: string
-      }> = []
-      if (data.cascadeChoices && data.cascadeChoices.length > 0) {
-        try {
-          cascadeResults = await executeCascadeDelete(postId, data.cascadeChoices)
-          const failed = cascadeResults.filter((r) => !r.success)
-          if (failed.length > 0) {
-            log.warn(
-              { post_id: data.id, failed_count: failed.length, failed },
-              'cascade archive(s) failed'
-            )
-          }
-        } catch (err) {
-          log.error({ err }, 'cascade archive error (non-blocking)')
+    // Cascade archive/close linked issues (never blocks post delete)
+    let cascadeResults: Array<{
+      linkId: string
+      integrationType: string
+      externalId: string
+      success: boolean
+      error?: string
+    }> = []
+    if (data.cascadeChoices && data.cascadeChoices.length > 0) {
+      try {
+        cascadeResults = await executeCascadeDelete(postId, data.cascadeChoices)
+        const failed = cascadeResults.filter((r) => !r.success)
+        if (failed.length > 0) {
+          log.warn(
+            { post_id: data.id, failed_count: failed.length, failed },
+            'cascade archive(s) failed'
+          )
         }
+      } catch (err) {
+        log.error({ err }, 'cascade archive error (non-blocking)')
       }
-
-      return { id: data.id, cascadeResults }
-    } catch (error) {
-      log.error({ err: error }, 'delete post failed')
-      throw error
     }
+
+    return { id: data.id, cascadeResults }
   })
 
 /**
@@ -556,15 +521,10 @@ export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post external links')
-    try {
-      await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
-      const links = await getPostExternalLinks(data.id as PostId)
-      log.debug({ count: links.length }, 'fetch post external links result')
-      return links
-    } catch (error) {
-      log.error({ err: error }, 'fetch post external links failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
+    const links = await getPostExternalLinks(data.id as PostId)
+    log.debug({ count: links.length }, 'fetch post external links result')
+    return links
   })
 
 /**
@@ -574,23 +534,18 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
   .validator(changeStatusSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, status_id: data.statusId }, 'change post status')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_STATUS })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_STATUS })
 
-      const result = await changeStatus(data.id as PostId, data.statusId as PostStatusId, {
-        principalId: auth.principal.id,
-        userId: auth.user.id as UserId,
-        email: auth.user.email,
-      })
+    const result = await changeStatus(data.id as PostId, data.statusId as PostStatusId, {
+      principalId: auth.principal.id,
+      userId: auth.user.id as UserId,
+      email: auth.user.email,
+    })
 
-      // Events are dispatched by the service layer
+    // Events are dispatched by the service layer
 
-      log.info({ post_id: data.id, new_status: result.newStatus }, 'post status changed')
-      return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'change post status failed')
-      throw error
-    }
+    log.info({ post_id: data.id, new_status: result.newStatus }, 'post status changed')
+    return serializePostDates(result)
   })
 
 /**
@@ -600,20 +555,15 @@ export const changePostBoardFn = createServerFn({ method: 'POST' })
   .validator(changePostBoardSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, board_id: data.boardId }, 'change post board')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_BOARD })
-      const result = await changeBoard(data.id as PostId, data.boardId as BoardId, {
-        principalId: auth.principal.id,
-        userId: auth.user.id as UserId,
-        email: auth.user.email,
-        displayName: auth.user.name,
-      })
-      log.info({ post_id: data.id }, 'post board changed')
-      return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'change post board failed')
-      throw error
-    }
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_BOARD })
+    const result = await changeBoard(data.id as PostId, data.boardId as BoardId, {
+      principalId: auth.principal.id,
+      userId: auth.user.id as UserId,
+      email: auth.user.email,
+      displayName: auth.user.name,
+    })
+    log.info({ post_id: data.id }, 'post board changed')
+    return serializePostDates(result)
   })
 
 /**
@@ -623,16 +573,11 @@ export const restorePostFn = createServerFn({ method: 'POST' })
   .validator(restorePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'restore post')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_DELETE })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_DELETE })
 
-      const result = await restorePost(data.id as PostId, auth.principal.id, auth.user.id)
-      log.info({ post_id: result.id }, 'post restored')
-      return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'restore post failed')
-      throw error
-    }
+    const result = await restorePost(data.id as PostId, auth.principal.id, auth.user.id)
+    log.info({ post_id: result.id }, 'post restored')
+    return serializePostDates(result)
   })
 
 /**
@@ -642,27 +587,22 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .validator(updateTagsSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, tag_count: data.tagIds.length }, 'update post tags')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_TAGS })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_TAGS })
 
-      await updatePost(
-        data.id as PostId,
-        {
-          tagIds: data.tagIds as PostTagId[],
-        },
-        {
-          principalId: auth.principal.id,
-          userId: auth.user.id as UserId,
-          email: auth.user.email,
-          displayName: auth.user.name,
-        }
-      )
-      log.info({ post_id: data.id }, 'post tags updated')
-      return { id: data.id }
-    } catch (error) {
-      log.error({ err: error }, 'update post tags failed')
-      throw error
-    }
+    await updatePost(
+      data.id as PostId,
+      {
+        tagIds: data.tagIds as PostTagId[],
+      },
+      {
+        principalId: auth.principal.id,
+        userId: auth.user.id as UserId,
+        email: auth.user.email,
+        displayName: auth.user.name,
+      }
+    )
+    log.info({ post_id: data.id }, 'post tags updated')
+    return { id: data.id }
   })
 
 /**
@@ -734,24 +674,19 @@ export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
   .validator(toggleCommentsLockSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, locked: data.locked }, 'toggle comments lock')
-    try {
-      const auth = await requireAuth({ permission: PERMISSIONS.POST_EDIT })
+    const auth = await requireAuth({ permission: PERMISSIONS.POST_EDIT })
 
-      await db
-        .update(posts)
-        .set({ isCommentsLocked: data.locked })
-        .where(eq(posts.id, data.id as PostId))
+    await db
+      .update(posts)
+      .set({ isCommentsLocked: data.locked })
+      .where(eq(posts.id, data.id as PostId))
 
-      createActivity({
-        postId: data.id as PostId,
-        principalId: auth.principal.id,
-        type: data.locked ? 'comments.locked' : 'comments.unlocked',
-      })
+    createActivity({
+      postId: data.id as PostId,
+      principalId: auth.principal.id,
+      type: data.locked ? 'comments.locked' : 'comments.unlocked',
+    })
 
-      log.info({ post_id: data.id }, 'comments lock toggled')
-      return { id: data.id, isCommentsLocked: data.locked }
-    } catch (error) {
-      log.error({ err: error }, 'toggle comments lock failed')
-      throw error
-    }
+    log.info({ post_id: data.id }, 'comments lock toggled')
+    return { id: data.id, isCommentsLocked: data.locked }
   })

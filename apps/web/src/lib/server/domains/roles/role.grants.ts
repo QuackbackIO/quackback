@@ -8,6 +8,7 @@ import { db } from '@/lib/server/db'
 import type { RoleId } from '@quackback/ids'
 import { SYSTEM_ROLES, type PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
+import { assertWithinCeiling } from './role.ceiling'
 import { loadRole, permissionKeysForRole } from './role.service'
 
 /**
@@ -27,13 +28,10 @@ export async function assertGrantableRole(
     throw new ForbiddenError('FORBIDDEN', 'Grant Owner by promoting to admin instead')
   }
   const targetKeys = await permissionKeysForRole(db, role.id)
-  const held = new Set(granter)
-  const aboveCeiling = [...targetKeys].filter((k) => !held.has(k))
-  if (aboveCeiling.length > 0) {
-    throw new ForbiddenError(
-      'GRANT_CEILING',
-      `You can't grant a role with permissions you don't hold: ${aboveCeiling.sort().join(', ')}`
-    )
-  }
+  assertWithinCeiling(
+    [...targetKeys],
+    new Set(granter),
+    "You can't grant a role with permissions you don't hold"
+  )
   return { id: role.id, key: role.key, name: role.name }
 }

@@ -193,30 +193,20 @@ export const restoreCategoryFn = createServerFn({ method: 'POST' })
   .validator(restoreCategorySchema)
   .handler(async ({ data }) => {
     log.debug({ category_id: data.id }, 'restore category')
-    try {
-      await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-      const category = await restoreCategory(data.id as KbCategoryId)
-      log.info({ category_id: category.id }, 'category restored')
-      return serializeCategory(category)
-    } catch (error) {
-      log.error({ err: error }, 'restore category failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    const category = await restoreCategory(data.id as KbCategoryId)
+    log.info({ category_id: category.id }, 'category restored')
+    return serializeCategory(category)
   })
 
 export const restoreArticleFn = createServerFn({ method: 'POST' })
   .validator(restoreArticleSchema)
   .handler(async ({ data }) => {
     log.debug({ article_id: data.id }, 'restore article')
-    try {
-      await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-      const article = await restoreArticle(data.id as KbArticleId)
-      log.info({ article_id: article.id }, 'article restored')
-      return serializeArticle(article)
-    } catch (error) {
-      log.error({ err: error }, 'restore article failed')
-      throw error
-    }
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    const article = await restoreArticle(data.id as KbArticleId)
+    log.info({ article_id: article.id }, 'article restored')
+    return serializeArticle(article)
   })
 
 export const listPublicArticlesFn = createServerFn({ method: 'GET' })

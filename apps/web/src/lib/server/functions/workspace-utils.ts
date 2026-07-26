@@ -60,47 +60,42 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
     // portal) fall back to '/' for the regular sign-in flow.
     const teamOnly = data.allowedRoles.every(isTeamMember)
     const unauthRedirect = teamOnly ? buildSigninRedirect('/admin') : { to: '/' as const }
-    try {
-      const session = await getSession()
-      if (!session?.user) {
-        throw redirect(unauthRedirect)
-      }
+    const session = await getSession()
+    if (!session?.user) {
+      throw redirect(unauthRedirect)
+    }
 
-      const appSettings = await db.query.settings.findFirst()
-      if (!appSettings) {
-        throw redirect({ to: '/' })
-      }
+    const appSettings = await db.query.settings.findFirst()
+    if (!appSettings) {
+      throw redirect({ to: '/' })
+    }
 
-      // Note: Onboarding check is handled in __root.tsx beforeLoad
+    // Note: Onboarding check is handled in __root.tsx beforeLoad
 
-      const principalRecord = await db.query.principal.findFirst({
-        where: eq(principal.userId, session.user.id as UserId),
-      })
-      if (!principalRecord) {
-        throw redirect(unauthRedirect)
-      }
+    const principalRecord = await db.query.principal.findFirst({
+      where: eq(principal.userId, session.user.id as UserId),
+    })
+    if (!principalRecord) {
+      throw redirect(unauthRedirect)
+    }
 
-      if (!data.allowedRoles.includes(principalRecord.role)) {
-        throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))
-      }
+    if (!data.allowedRoles.includes(principalRecord.role)) {
+      throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))
+    }
 
-      const resolvedPermissions = await permissionsForPrincipal(
-        principalRecord.id,
-        principalRecord.role as Role
-      )
+    const resolvedPermissions = await permissionsForPrincipal(
+      principalRecord.id,
+      principalRecord.role as Role
+    )
 
-      if (data.permission && !resolvedPermissions.has(data.permission as PermissionKey)) {
-        throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))
-      }
+    if (data.permission && !resolvedPermissions.has(data.permission as PermissionKey)) {
+      throw redirect(buildSigninRedirect('/admin', { error: 'not_team_member' }))
+    }
 
-      return {
-        settings: appSettings,
-        principal: principalRecord,
-        user: session.user,
-        permissions: [...resolvedPermissions],
-      }
-    } catch (error) {
-      log.error({ err: error }, 'require workspace role failed')
-      throw error
+    return {
+      settings: appSettings,
+      principal: principalRecord,
+      user: session.user,
+      permissions: [...resolvedPermissions],
     }
   })

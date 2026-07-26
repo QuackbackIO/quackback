@@ -6,6 +6,7 @@ import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-u
 import { JsonLd } from '@/components/json-ld'
 import { buildCollectionPageJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import { CategoryIcon } from '@/components/help-center/category-icon'
+import { getInitials } from '@/lib/shared/utils'
 
 const MAX_ARTICLES_SHOWN = 8
 const AUTHOR_COLORS = [
@@ -29,12 +30,7 @@ interface Author {
 }
 
 function AuthorAvatar({ author, index }: { author: Author; index: number }) {
-  const initials = author.name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
+  const initials = getInitials(author.name)
 
   const bg = AUTHOR_COLORS[index % AUTHOR_COLORS.length]
 

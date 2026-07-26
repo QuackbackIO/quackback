@@ -63,12 +63,11 @@ export function ChangelogListPublic() {
               onClick={() => setActiveCategoryId(category.id)}
               className={cn(
                 'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                activeCategoryId === category.id
-                  ? 'text-white'
-                  : 'hover:opacity-80'
+                activeCategoryId === category.id ? 'text-white' : 'hover:opacity-80'
               )}
               style={{
-                backgroundColor: activeCategoryId === category.id ? category.color : category.color + '1a',
+                backgroundColor:
+                  activeCategoryId === category.id ? category.color : category.color + '1a',
                 color: activeCategoryId === category.id ? '#fff' : category.color,
               }}
             >

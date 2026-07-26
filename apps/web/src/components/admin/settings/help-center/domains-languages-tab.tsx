@@ -123,7 +123,12 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
                 </span>
               )}
             </div>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => verifyDomain.mutate()}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => verifyDomain.mutate()}
+            >
               <InlineSpinner visible={verifyDomain.isPending} />
               Verify
             </Button>
@@ -132,8 +137,8 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
 
         <div className="space-y-1.5 rounded-lg bg-muted/30 p-4 text-xs text-muted-foreground">
           <p>
-            Point a CNAME for your domain at this instance. TLS terminates at your own reverse
-            proxy (Caddy, nginx, Traefik) -- Quackback does not issue certificates.
+            Point a CNAME for your domain at this instance. TLS terminates at your own reverse proxy
+            (Caddy, nginx, Traefik) -- Quackback does not issue certificates.
           </p>
           <p>
             Article content stores absolute image URLs. Changing the domain does not rewrite
@@ -143,9 +148,7 @@ function DomainCard({ domain }: { domain: HelpCenterConfig['domain'] }) {
             If you self-host branding fonts, keep doing so on the new domain too -- never link a
             Google Fonts stylesheet from the help center.
           </p>
-          <p>
-            Once verified, /hc pages on the default host redirect to this domain automatically.
-          </p>
+          <p>Once verified, /hc pages on the default host redirect to this domain automatically.</p>
         </div>
       </div>
     </SettingsCard>
@@ -197,7 +200,8 @@ function RedirectRulesCard() {
                 <div className="min-w-0">
                   <code className="text-xs font-medium">{rule.path}</code>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    &rarr; {rule.targetType} {rule.targetLabel ? `"${rule.targetLabel}"` : '(unpublished)'}
+                    &rarr; {rule.targetType}{' '}
+                    {rule.targetLabel ? `"${rule.targetLabel}"` : '(unpublished)'}
                   </p>
                 </div>
                 <Button
@@ -329,8 +333,7 @@ function IndexingCard({ indexable }: { indexable: boolean }) {
             Allow search engines to index the help center
           </Label>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Off adds a noindex tag to every /hc page and removes it from the sitemap and
-            robots.txt
+            Off adds a noindex tag to every /hc page and removes it from the sitemap and robots.txt
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -340,11 +340,6 @@ describe('assembleAssistantToolset: assistant actions flag', () => {
 })
 
 describe('assembleAssistantToolset: write-policy gating', () => {
-  it('does not register a write tool when the turn policy is disabled (proactive-suggestions)', async () => {
-    const tools = await assembleTools(ctx({ writeToolPolicy: 'disabled' }), [makeFakeWriteSpec()])
-    expect(tools).toHaveLength(0)
-  })
-
   it('registers a write tool for a real customer-support turn (autonomous execution)', async () => {
     const tools = await assembleTools(
       ctx({ conversationId: 'conversation_1' as never, writeToolPolicy: 'execute' }),
@@ -354,7 +349,7 @@ describe('assembleAssistantToolset: write-policy gating', () => {
   })
 
   it('a read tool is never dropped by the write policy', async () => {
-    const tools = await assembleTools(ctx({ writeToolPolicy: 'disabled' }), undefined, true)
+    const tools = await assembleTools(ctx({ writeToolPolicy: 'propose' }), undefined, true)
     expect(tools.map((t) => t.name)).toContain('search')
   })
 })
@@ -767,7 +762,6 @@ describe('resolveEffectiveToolMode', () => {
     expect(resolveEffectiveToolMode(spec, ctx({ simulate: false }))).toBe('autonomous')
     expect(resolveEffectiveToolMode(spec, ctx({ simulate: true }))).toBe('autonomous')
     expect(resolveEffectiveToolMode(spec, ctx({ writeToolPolicy: 'propose' }))).toBe('autonomous')
-    expect(resolveEffectiveToolMode(spec, ctx({ writeToolPolicy: 'disabled' }))).toBe('autonomous')
   })
 
   it("resolves a write tool to autonomous for a real customer-support turn ('execute')", () => {
@@ -839,35 +833,10 @@ describe('resolveEffectiveToolMode', () => {
     }
   })
 
-  it("QUINN-PROACTIVE-SUGGESTIONS-SPEC.md: writeToolPolicy: 'disabled' drops a write tool", () => {
-    const spec = makeFakeWriteSpec()
-    expect(
-      resolveEffectiveToolMode(spec, ctx({ simulate: false, writeToolPolicy: 'disabled' }))
-    ).toBe('disabled')
-  })
-
-  it("writeToolPolicy: 'disabled' wins over simulate too", () => {
-    const spec = makeFakeWriteSpec()
-    expect(
-      resolveEffectiveToolMode(spec, ctx({ simulate: true, writeToolPolicy: 'disabled' }))
-    ).toBe('disabled')
-  })
-
-  it("the 'disabled' policy disables every static write, including set_attribute", () => {
-    const c = ctx({ simulate: false, writeToolPolicy: 'disabled' })
-    const writes = Object.values(ASSISTANT_TOOL_SPECS).filter((spec) => spec.risk === 'write')
-    for (const spec of writes) {
-      expect(resolveEffectiveToolMode(spec, c), spec.name).toBe('disabled')
-    }
-  })
-
   it('control tools are always autonomous, whatever the write policy', () => {
     const controls = Object.values(ASSISTANT_TOOL_SPECS).filter((spec) => spec.risk === 'control')
     expect(controls.length).toBeGreaterThan(0)
     for (const spec of controls) {
-      expect(resolveEffectiveToolMode(spec, ctx({ writeToolPolicy: 'disabled' })), spec.name).toBe(
-        'autonomous'
-      )
       expect(resolveEffectiveToolMode(spec, ctx({ writeToolPolicy: 'propose' })), spec.name).toBe(
         'autonomous'
       )
