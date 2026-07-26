@@ -97,17 +97,6 @@ async function createAuth() {
   const { ensurePrincipalForUser } =
     await import('@/lib/server/domains/principals/principal.factory')
 
-  // OIDC `locale` claim: shipped by Google, Microsoft, and most generic
-  // OIDC IdPs. Pass it through so `user.locale` populates from sign-in
-  // and the segment evaluator can target on language. Wrapped as a
-  // permissive shape because each provider returns a slightly
-  // different profile envelope.
-  // Locale passthrough plus a strict `email_verified` coercion. Better-Auth
-  // spreads this hook's result over the resolved profile, so setting
-  // emailVerified here is what stops a stringified "false" from being read as
-  // truthy and marking the account verified. See map-profile-claims.ts.
-  const mapProfileLocale = mapProfileClaims
-
   // login_hint pre-selects the typed email in the IdP picker. Read from
   // the `additionalData.loginHint` body field that the team-login /
   // portal-auth forms pass when initiating an OIDC sign-in. When absent
@@ -146,7 +135,7 @@ async function createAuth() {
     providers: await listIdentityProviders(),
     creds: getIdentityProviderCredentials,
     tierAllowsOidc: tierLimits.features.customOidcProvider,
-    mapProfileToUser: mapProfileLocale,
+    mapProfileToUser: mapProfileClaims,
     buildLoginHintParams,
   })
   genericOAuthConfigs.push(...oidcConfigs)
@@ -180,7 +169,7 @@ async function createAuth() {
     const providerConfig: Record<string, unknown> = {
       clientId: creds.clientId,
       clientSecret: creds.clientSecret,
-      mapProfileToUser: mapProfileLocale,
+      mapProfileToUser: mapProfileClaims,
     }
     // Add provider-specific fields (e.g., tenantId for Microsoft, issuer for GitLab)
     for (const field of provider.platformCredentials) {

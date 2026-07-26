@@ -54,41 +54,47 @@ const sqlFiles = readdirSync(DRIZZLE_DIR)
  */
 const KNOWN_HISTORICAL_WHEN_REGRESSIONS = new Set(['0052_otp_to_magic_link'])
 
+/**
+ * Adjacent entry pairs where `key` fails to strictly increase. Shared by every
+ * ordering assertion so the pairing and the comparison exist once — three
+ * copies of this would let a future fix land in one and silently reintroduce
+ * the very bug class this file guards, in whichever copy was missed.
+ */
+function nonMonotonic(key: 'when' | 'idx'): { e: JournalEntry; prev: JournalEntry }[] {
+  return journal.entries
+    .slice(1)
+    .map((e, i) => ({ e, prev: journal.entries[i]! }))
+    .filter(({ e, prev }) => e[key] <= prev[key])
+}
+
 describe('migration journal integrity', () => {
   it('has at least one entry', () => {
     expect(journal.entries.length).toBeGreaterThan(0)
   })
 
   it('`when` strictly increases in entry order', () => {
-    const offenders = journal.entries
-      .map((e, i) => ({ e, prev: journal.entries[i - 1] }))
-      .filter(({ e, prev }) => prev !== undefined && e.when <= prev.when)
+    const offenders = nonMonotonic('when')
       .filter(({ e }) => !KNOWN_HISTORICAL_WHEN_REGRESSIONS.has(e.tag))
       .map(
-        ({ e, prev }) =>
-          `${e.tag} (when=${e.when}) does not exceed ${prev!.tag} (when=${prev!.when})`
+        ({ e, prev }) => `${e.tag} (when=${e.when}) does not exceed ${prev.tag} (when=${prev.when})`
       )
     expect(offenders).toEqual([])
   })
 
-  it('the historical allowlist is not silently carrying fixed entries', () => {
-    // Keeps the exception list honest: if one of these is ever renumbered, the
-    // allowlist entry must be deleted rather than left to mask a future break.
-    const stillBroken = journal.entries
-      .map((e, i) => ({ e, prev: journal.entries[i - 1] }))
-      .filter(({ e, prev }) => prev !== undefined && e.when <= prev.when)
-      .map(({ e }) => e.tag)
-    expect([...KNOWN_HISTORICAL_WHEN_REGRESSIONS]).toEqual(
-      [...KNOWN_HISTORICAL_WHEN_REGRESSIONS].filter((t) => stillBroken.includes(t))
+  it('`idx` strictly increases in entry order', () => {
+    const offenders = nonMonotonic('idx').map(
+      ({ e, prev }) => `${e.tag} (idx=${e.idx}) does not exceed ${prev.tag}`
     )
+    expect(offenders).toEqual([])
   })
 
-  it('`idx` strictly increases in entry order', () => {
-    const offenders = journal.entries
-      .map((e, i) => ({ e, prev: journal.entries[i - 1] }))
-      .filter(({ e, prev }) => prev !== undefined && e.idx <= prev.idx)
-      .map(({ e, prev }) => `${e.tag} (idx=${e.idx}) does not exceed ${prev!.tag}`)
-    expect(offenders).toEqual([])
+  it('every allowlisted entry is still actually broken', () => {
+    // Keeps the exception list honest: once an entry is renumbered, its
+    // allowlist line must go rather than linger and mask the next break.
+    const stillBroken = new Set(nonMonotonic('when').map(({ e }) => e.tag))
+    for (const tag of KNOWN_HISTORICAL_WHEN_REGRESSIONS) {
+      expect(stillBroken.has(tag)).toBe(true)
+    }
   })
 
   it('every journal entry has a matching .sql file', () => {

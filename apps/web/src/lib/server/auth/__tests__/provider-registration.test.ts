@@ -18,13 +18,23 @@ function row(over: Record<string, unknown> = {}) {
   }
 }
 
-async function buildOne(over: Record<string, unknown> = {}) {
-  const cfgs = await buildGenericOAuthConfigs({
-    providers: [row(over)] as never,
-    creds: async () => ({ clientId: 'c', clientSecret: 's' }),
-    tierAllowsOidc: true,
+type BuildOpts = {
+  creds?: (registrationId: string) => Promise<{ clientId?: string; clientSecret?: string } | null>
+  tierAllowsOidc?: boolean
+}
+
+/** Build configs from the given rows, defaulting creds + tier to the happy path. */
+async function buildConfigs(rows: Record<string, unknown>[], opts: BuildOpts = {}) {
+  return buildGenericOAuthConfigs({
+    providers: rows as never,
+    creds: opts.creds ?? (async () => ({ clientId: 'c', clientSecret: 's' })),
+    tierAllowsOidc: opts.tierAllowsOidc ?? true,
   })
-  return cfgs[0]
+}
+
+/** The single-provider shorthand: one row of overrides, one config back. */
+async function buildOne(over: Record<string, unknown> = {}, opts: BuildOpts = {}) {
+  return (await buildConfigs([row(over)], opts))[0]
 }
 
 describe('effectiveScopes', () => {
@@ -80,19 +90,7 @@ describe('buildGenericOAuthConfigs scope + userinfo wiring', () => {
 
 describe('buildGenericOAuthConfigs', () => {
   it('registers one config per enabled provider under its registrationId', async () => {
-    const cfgs = await buildGenericOAuthConfigs({
-      providers: [
-        {
-          id: 'idp_abc',
-          registrationId: 'sso',
-          enabled: true,
-          autoCreateUsers: true,
-          discoveryUrl: 'https://x/.well-known/openid-configuration',
-        },
-      ] as any,
-      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
-      tierAllowsOidc: true,
-    })
+    const cfgs = await buildConfigs([row({ registrationId: 'sso' })])
     expect(cfgs).toHaveLength(1)
     expect(cfgs[0].providerId).toBe('sso') // preserved registration id, NOT oidc_idp_abc
     expect(cfgs[0].pkce).toBe(true)
@@ -100,32 +98,20 @@ describe('buildGenericOAuthConfigs', () => {
   })
 
   it('skips disabled providers and providers without credentials', async () => {
-    const cfgs = await buildGenericOAuthConfigs({
-      providers: [
-        { id: 'idp_off', registrationId: 'oidc_idp_off', enabled: false },
-        { id: 'idp_nc', registrationId: 'oidc_idp_nc', enabled: true },
-      ] as any,
-      creds: async (rid: string) =>
-        rid === 'oidc_idp_nc' ? null : { clientId: 'c', clientSecret: 's' },
-      tierAllowsOidc: true,
-    })
+    const cfgs = await buildConfigs(
+      [
+        row({ id: 'idp_off', registrationId: 'oidc_idp_off', enabled: false }),
+        row({ id: 'idp_nc', registrationId: 'oidc_idp_nc' }),
+      ],
+      {
+        creds: async (rid) => (rid === 'oidc_idp_nc' ? null : { clientId: 'c', clientSecret: 's' }),
+      }
+    )
     expect(cfgs).toHaveLength(0)
   })
 
   it('returns no configs when the tier disallows OIDC', async () => {
-    const cfgs = await buildGenericOAuthConfigs({
-      providers: [
-        {
-          id: 'idp_abc',
-          registrationId: 'sso',
-          enabled: true,
-          autoCreateUsers: true,
-          discoveryUrl: 'https://x/.well-known/openid-configuration',
-        },
-      ] as any,
-      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
-      tierAllowsOidc: false,
-    })
+    const cfgs = await buildConfigs([row({ registrationId: 'sso' })], { tierAllowsOidc: false })
     expect(cfgs).toHaveLength(0)
   })
 })

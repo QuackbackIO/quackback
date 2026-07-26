@@ -152,6 +152,8 @@ const CONNECTION_FIELDS = [
   'scopes',
 ] as const
 
+type ConnectionField = (typeof CONNECTION_FIELDS)[number]
+
 /**
  * True when an upsert changes anything the connection test depends on, so
  * `detailsChangedAt` must be restamped and a prior `lastSuccessfulTestAt`
@@ -162,8 +164,8 @@ const CONNECTION_FIELDS = [
  * Pure and exported so the rule is unit-testable without a transaction.
  */
 export function connectionAffectingChange(
-  input: Partial<Pick<UpsertIdentityProviderInput, (typeof CONNECTION_FIELDS)[number]>>,
-  existing: Pick<IdentityProvider, (typeof CONNECTION_FIELDS)[number]>
+  input: Partial<Pick<UpsertIdentityProviderInput, ConnectionField>>,
+  existing: Pick<IdentityProvider, ConnectionField>
 ): boolean {
   return CONNECTION_FIELDS.some((f) => input[f] !== undefined && input[f] !== existing[f])
 }
