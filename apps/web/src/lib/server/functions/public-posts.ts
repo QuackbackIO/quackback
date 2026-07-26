@@ -46,6 +46,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
 import { roadmapIdSchema, postStatusIdSchema } from '@quackback/ids/zod'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'public-posts' })
 
@@ -151,7 +152,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
   .validator(listPublicPostsSchema)
   .handler(async ({ data }: { data: ListPublicPostsInput }) => {
     log.debug({ sort: data.sort, board_slug: data.boardSlug || 'all' }, 'list public posts')
-    try {
+    return withErrorLog(log, 'list public posts', async () => {
       // Outer gate: private portal + unauthorized caller → no portal data.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -206,10 +207,7 @@ export const listPublicPostsFn = createServerFn({ method: 'GET' })
           createdAt: post.createdAt.toISOString(),
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'list public posts failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -279,7 +277,7 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
   .validator(userEditPostSchema)
   .handler(async ({ data }: { data: UserEditPostInput }) => {
     log.debug({ post_id: data.postId }, 'user edit post')
-    try {
+    return withErrorLog(log, 'user edit post', async () => {
       // Portal-visibility gate — see toggleVoteFn / createPublicPostFn
       // for rationale. Denied callers must not mutate inside a portal
       // they can't view.
@@ -320,10 +318,7 @@ export const userEditPostFn = createServerFn({ method: 'POST' })
         updatedAt: result.updatedAt.toISOString(),
         deletedAt: result.deletedAt?.toISOString() || null,
       }
-    } catch (error) {
-      log.error({ err: error }, 'user edit post failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -333,7 +328,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
   .validator(userDeletePostSchema)
   .handler(async ({ data }: { data: UserDeletePostInput }) => {
     log.debug({ post_id: data.postId }, 'user delete post')
-    try {
+    return withErrorLog(log, 'user delete post', async () => {
       // Portal-visibility gate — see toggleVoteFn / createPublicPostFn.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -358,10 +353,7 @@ export const userDeletePostFn = createServerFn({ method: 'POST' })
 
       log.info({ post_id: postId }, 'user deleted post')
       return { id: postId }
-    } catch (error) {
-      log.error({ err: error }, 'user delete post failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -374,7 +366,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
   .handler(
     async ({ data }: { data: ToggleVoteInput }): Promise<{ voted: boolean; voteCount: number }> => {
       log.debug({ post_id: data.postId }, 'toggle vote')
-      try {
+      return withErrorLog(log, 'toggle vote', async () => {
         // Portal-visibility gate: a denied caller (signed-in but not on
         // the allowlist of a private portal) must not be able to vote.
         // Read-side gating happens at list / detail; write paths need
@@ -426,10 +418,7 @@ export const toggleVoteFn = createServerFn({ method: 'POST' })
           'toggle vote results'
         )
         return result
-      } catch (error) {
-        log.error({ err: error }, 'toggle vote failed')
-        throw error
-      }
+      })
     }
   )
 
@@ -440,7 +429,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
   .validator(createPublicPostSchema)
   .handler(async ({ data }: { data: CreatePublicPostInput }) => {
     log.debug({ board_id: data.boardId }, 'create public post')
-    try {
+    return withErrorLog(log, 'create public post', async () => {
       // Portal-visibility gate: a denied caller must not be able to
       // create posts inside a portal they're not entitled to view. The
       // per-board audience check inside getPublicBoardById still runs
@@ -528,10 +517,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
           slug: board.slug,
         },
       }
-    } catch (error) {
-      log.error({ err: error }, 'create public post failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -540,7 +526,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
 export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<{ votedPostIds: string[] }> => {
     log.debug('get voted posts')
-    try {
+    return withErrorLog(log, 'get voted posts', async () => {
       if (!hasAuthCredentials()) {
         log.debug('no session cookie, skipping auth')
         return { votedPostIds: [] }
@@ -555,10 +541,7 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
       const result = await getAllUserVotedPostIds(ctx.principal.id)
       log.debug({ count: result.size }, 'get voted posts results')
       return { votedPostIds: Array.from(result) }
-    } catch (error) {
-      log.error({ err: error }, 'get voted posts failed')
-      throw error
-    }
+    })
   }
 )
 
@@ -570,7 +553,7 @@ export const getVotedPostsFn = createServerFn({ method: 'GET' }).handler(
  */
 export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list public roadmaps')
-  try {
+  return withErrorLog(log, 'list public roadmaps', async () => {
     // Outer gate: private portal + unauthorized caller → no portal data.
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
@@ -608,10 +591,7 @@ export const listPublicRoadmapsFn = createServerFn({ method: 'GET' }).handler(as
       createdAt: roadmap.createdAt.toISOString(),
       updatedAt: roadmap.updatedAt.toISOString(),
     }))
-  } catch (error) {
-    log.error({ err: error }, 'list public roadmaps failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -624,7 +604,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
   .validator(getPublicRoadmapPostsSchema)
   .handler(async ({ data }: { data: GetPublicRoadmapPostsInput }) => {
     log.debug({ roadmap_id: data.roadmapId }, 'get public roadmap posts')
-    try {
+    return withErrorLog(log, 'get public roadmap posts', async () => {
       // Outer gate: private portal + unauthorized caller → no portal data.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -669,10 +649,7 @@ export const getPublicRoadmapPostsFn = createServerFn({ method: 'GET' })
           },
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'get public roadmap posts failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -685,7 +662,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
   .validator(getRoadmapPostsByStatusSchema)
   .handler(async ({ data }: { data: GetRoadmapPostsByStatusInput }) => {
     log.debug({ status_id: data.statusId }, 'get roadmap posts by status')
-    try {
+    return withErrorLog(log, 'get roadmap posts by status', async () => {
       // Outer gate: private portal + unauthorized caller → no portal data.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -718,10 +695,7 @@ export const getRoadmapPostsByStatusFn = createServerFn({ method: 'GET' })
           statusId: item.statusId ? String(item.statusId) : null,
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'get roadmap posts by status failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -732,7 +706,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
   .validator(getVoteSidebarDataSchema)
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'get vote sidebar data')
-    try {
+    return withErrorLog(log, 'get vote sidebar data', async () => {
       const postId = data.postId as PostId
       const noSub = { subscribed: false, level: 'none' as const, reason: null }
       const denied = { isMember: false, canVote: false, hasVoted: false, subscriptionStatus: noSub }
@@ -848,10 +822,7 @@ export const getVoteSidebarDataFn = createServerFn({ method: 'GET' })
               reason: subscription.reason,
             },
       }
-    } catch (error) {
-      log.error({ err: error }, 'get vote sidebar data failed')
-      throw error
-    }
+    })
   })
 
 // ============================================

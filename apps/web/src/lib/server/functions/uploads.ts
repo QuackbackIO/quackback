@@ -7,6 +7,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { getWidgetSession } from './widget-auth'
 import {
   isS3Configured,
@@ -61,7 +62,7 @@ export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
       { prefix: data.prefix, content_type: data.contentType, file_size: data.fileSize },
       'presigned upload url requested'
     )
-    try {
+    return withErrorLog(log, 'presigned upload url', async () => {
       // Require admin or member authentication
       await requireAuth({ permission: PERMISSIONS.POST_CREATE })
 
@@ -84,10 +85,7 @@ export const getPresignedUploadUrlFn = createServerFn({ method: 'POST' })
       const result = await generatePresignedUploadUrl(key, data.contentType)
 
       return result
-    } catch (error) {
-      log.error({ err: error }, 'presigned upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -107,7 +105,7 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'changelog image upload url requested'
     )
-    try {
+    return withErrorLog(log, 'changelog image upload url', async () => {
       // Require admin authentication for changelog images
       await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
 
@@ -130,10 +128,7 @@ export const getChangelogImageUploadUrlFn = createServerFn({ method: 'POST' })
       const result = await generatePresignedUploadUrl(key, data.contentType)
 
       return result
-    } catch (error) {
-      log.error({ err: error }, 'changelog image upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -153,7 +148,7 @@ export const getPostImageUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'post image upload url requested'
     )
-    try {
+    return withErrorLog(log, 'post image upload url', async () => {
       await requireAuth({ permission: PERMISSIONS.POST_CREATE })
 
       if (!isS3Configured()) {
@@ -168,10 +163,7 @@ export const getPostImageUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('post-images', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'post image upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -191,7 +183,7 @@ export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'widget image upload url requested'
     )
-    try {
+    return withErrorLog(log, 'widget image upload url', async () => {
       const session = await getWidgetSession()
       if (!session) {
         throw new Error('Authentication required to upload images.')
@@ -212,10 +204,7 @@ export const getWidgetImageUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('widget-images', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'widget image upload url failed')
-      throw error
-    }
+    })
   })
 
 // ============================================================================
@@ -238,7 +227,7 @@ export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'logo upload url requested'
     )
-    try {
+    return withErrorLog(log, 'logo upload url', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
       if (!isS3Configured()) {
@@ -253,10 +242,7 @@ export const getLogoUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('logos', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'logo upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -269,7 +255,7 @@ export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'favicon upload url requested'
     )
-    try {
+    return withErrorLog(log, 'favicon upload url', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
       if (!isS3Configured()) {
@@ -284,10 +270,7 @@ export const getFaviconUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('favicons', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'favicon upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -300,7 +283,7 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'header logo upload url requested'
     )
-    try {
+    return withErrorLog(log, 'header logo upload url', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
       if (!isS3Configured()) {
@@ -315,10 +298,7 @@ export const getHeaderLogoUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('header-logos', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'header logo upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -331,7 +311,7 @@ export const getWidgetHeroUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'widget hero upload url requested'
     )
-    try {
+    return withErrorLog(log, 'widget hero upload url', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
 
       if (!isS3Configured()) {
@@ -346,10 +326,7 @@ export const getWidgetHeroUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('widget-hero', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'widget hero upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -362,7 +339,7 @@ export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'avatar upload url requested'
     )
-    try {
+    return withErrorLog(log, 'avatar upload url', async () => {
       // Any authenticated user can upload their own avatar
       await requireAuth()
 
@@ -378,10 +355,7 @@ export const getAvatarUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('avatars', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'avatar upload url failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -395,7 +369,7 @@ export const getAssistantAvatarUploadUrlFn = createServerFn({ method: 'POST' })
       { content_type: data.contentType, file_size: data.fileSize },
       'assistant avatar upload url requested'
     )
-    try {
+    return withErrorLog(log, 'assistant avatar upload url', async () => {
       await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
 
       if (!isS3Configured()) {
@@ -410,8 +384,5 @@ export const getAssistantAvatarUploadUrlFn = createServerFn({ method: 'POST' })
 
       const key = generateStorageKey('assistant-avatars', data.filename)
       return await generatePresignedUploadUrl(key, data.contentType)
-    } catch (error) {
-      log.error({ err: error }, 'assistant avatar upload url failed')
-      throw error
-    }
+    })
   })

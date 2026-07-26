@@ -32,6 +32,7 @@ import {
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -48,44 +49,32 @@ const log = logger.child({ component: 'settings' })
 
 export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch branding config')
-  try {
+  return withErrorLog(log, 'fetch branding config', async () => {
     return await getBrandingConfig()
-  } catch (error) {
-    log.error({ err: error }, 'fetch branding config failed')
-    throw error
-  }
+  })
 })
 
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch portal config')
-  try {
+  return withErrorLog(log, 'fetch portal config', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const config = await getPortalConfig()
     return config ?? DEFAULT_PORTAL_CONFIG
-  } catch (error) {
-    log.error({ err: error }, 'fetch portal config failed')
-    throw error
-  }
+  })
 })
 
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public portal config')
-  try {
+  return withErrorLog(log, 'fetch public portal config', async () => {
     return await getPublicPortalConfig()
-  } catch (error) {
-    log.error({ err: error }, 'fetch public portal config failed')
-    throw error
-  }
+  })
 })
 
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public auth config')
-  try {
+  return withErrorLog(log, 'fetch public auth config', async () => {
     return await getPublicAuthConfig()
-  } catch (error) {
-    log.error({ err: error }, 'fetch public auth config failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -96,7 +85,7 @@ export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(a
  */
 export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch auth config')
-  try {
+  return withErrorLog(log, 'fetch auth config', async () => {
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
     const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
     const tenant = await getTenantSettings()
@@ -106,21 +95,15 @@ export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async
         openSignup: false,
       }
     )
-  } catch (error) {
-    log.error({ err: error }, 'fetch auth config failed')
-    throw error
-  }
+  })
 })
 
 export const fetchDeveloperConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch developer config')
-  try {
+  return withErrorLog(log, 'fetch developer config', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     return await getDeveloperConfig()
-  } catch (error) {
-    log.error({ err: error }, 'fetch developer config failed')
-    throw error
-  }
+  })
 })
 
 function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null }): string | null {
@@ -133,7 +116,7 @@ function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null 
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
   async () => {
     log.debug('fetch team members and invitations')
-    try {
+    return withErrorLog(log, 'fetch team members and invitations', async () => {
       await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
       // Subquery: latest session timestamp per user. Left-joined so
@@ -268,10 +251,7 @@ export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).
       }
 
       return { members, avatarMap, formattedInvitations, seatUsage }
-    } catch (error) {
-      log.error({ err: error }, 'fetch team members and invitations failed')
-      throw error
-    }
+    })
   }
 )
 
@@ -279,7 +259,7 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
   .validator(userIdSchema)
   .handler(async ({ data }) => {
     log.debug({ user_id: data }, 'fetch user profile')
-    try {
+    return withErrorLog(log, 'fetch user profile', async () => {
       const session = await getSession()
       if (!session?.user) {
         throw new Error('Authentication required')
@@ -341,10 +321,7 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
         hasPassword: !!credentialAccount,
         ssoEnforced,
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch user profile failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -422,26 +399,20 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
   .validator(updateThemeSchema)
   .handler(async ({ data }) => {
     log.info('update theme')
-    try {
+    return withErrorLog(log, 'update theme', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
-    } catch (error) {
-      log.error({ err: error }, 'update theme failed')
-      throw error
-    }
+    })
   })
 
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .validator(updatePortalConfigSchema)
   .handler(async ({ data }) => {
     log.info('update portal config')
-    try {
+    return withErrorLog(log, 'update portal config', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
       return await updatePortalConfig(data as UpdatePortalConfigInput)
-    } catch (error) {
-      log.error({ err: error }, 'update portal config failed')
-      throw error
-    }
+    })
   })
 
 export const updateAuthConfigSchema = z.object({
@@ -518,7 +489,7 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
   .validator(updateAuthConfigSchema)
   .handler(async ({ data }) => {
     log.info('update auth config')
-    try {
+    return withErrorLog(log, 'update auth config', async () => {
       const { getRequestHeaders } = await import('@tanstack/react-start/server')
       const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
       const actor = actorFromAuth(auth)
@@ -630,84 +601,63 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
         }
         throw error
       }
-    } catch (error) {
-      log.error({ err: error }, 'update auth config failed')
-      throw error
-    }
+    })
   })
 
 export const saveLogoKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save logo key')
-    try {
+    return withErrorLog(log, 'save logo key', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await saveLogoKey(data.key)
-    } catch (error) {
-      log.error({ err: error }, 'save logo key failed')
-      throw error
-    }
+    })
   })
 
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete logo')
-  try {
+  return withErrorLog(log, 'delete logo', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
     return await deleteLogoKey()
-  } catch (error) {
-    log.error({ err: error }, 'delete logo failed')
-    throw error
-  }
+  })
 })
 
 export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save header logo key')
-    try {
+    return withErrorLog(log, 'save header logo key', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await saveHeaderLogoKey(data.key)
-    } catch (error) {
-      log.error({ err: error }, 'save header logo key failed')
-      throw error
-    }
+    })
   })
 
 export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete header logo')
-  try {
+  return withErrorLog(log, 'delete header logo', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
     return await deleteHeaderLogoKey()
-  } catch (error) {
-    log.error({ err: error }, 'delete header logo failed')
-    throw error
-  }
+  })
 })
 
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   .validator(updateHeaderDisplayModeSchema)
   .handler(async ({ data }) => {
     log.info({ mode: data.mode }, 'update header display mode')
-    try {
+    return withErrorLog(log, 'update header display mode', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateHeaderDisplayMode(data.mode)
-    } catch (error) {
-      log.error({ err: error }, 'update header display mode failed')
-      throw error
-    }
+    })
   })
 
 export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .validator(updateHeaderDisplayNameSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update header display name')
-    try {
+    return withErrorLog(log, 'update header display name', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateHeaderDisplayName(data.name)
-    } catch (error) {
-      log.error({ err: error }, 'update header display name failed')
-      throw error
-    }
+    })
   })
 
 const updateWorkspaceNameSchema = z.object({
@@ -720,13 +670,10 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
   .validator(updateWorkspaceNameSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update workspace name')
-    try {
+    return withErrorLog(log, 'update workspace name', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateWorkspaceName(data.name)
-    } catch (error) {
-      log.error({ err: error }, 'update workspace name failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -743,25 +690,19 @@ export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>
 
 export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch custom css')
-  try {
+  return withErrorLog(log, 'fetch custom css', async () => {
     return await getCustomCss()
-  } catch (error) {
-    log.error({ err: error }, 'fetch custom css failed')
-    throw error
-  }
+  })
 })
 
 export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .validator(updateCustomCssSchema)
   .handler(async ({ data }) => {
     log.info({ css_length: data.customCss.length }, 'update custom css')
-    try {
+    return withErrorLog(log, 'update custom css', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
       return await updateCustomCss(data.customCss)
-    } catch (error) {
-      log.error({ err: error }, 'update custom css failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -783,13 +724,10 @@ export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
       },
       'update developer config'
     )
-    try {
+    return withErrorLog(log, 'update developer config', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
       return await updateDeveloperConfig(data)
-    } catch (error) {
-      log.error({ err: error }, 'update developer config failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -798,26 +736,20 @@ export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
 
 export const fetchWidgetConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch widget config')
-  try {
+  return withErrorLog(log, 'fetch widget config', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
     return await getWidgetConfig()
-  } catch (error) {
-    log.error({ err: error }, 'fetch widget config failed')
-    throw error
-  }
+  })
 })
 
 export const fetchWidgetSecret = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch widget secret')
-  try {
+  return withErrorLog(log, 'fetch widget secret', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { getWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
     return await getWidgetSecret()
-  } catch (error) {
-    log.error({ err: error }, 'fetch widget secret failed')
-    throw error
-  }
+  })
 })
 
 const messengerConfigInputSchema = z.object({
@@ -938,53 +870,41 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
   .validator(updateWidgetConfigSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled, position: data.position }, 'update widget config')
-    try {
+    return withErrorLog(log, 'update widget config', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
       const { updateWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
       return await updateWidgetConfig(data)
-    } catch (error) {
-      log.error({ err: error }, 'update widget config failed')
-      throw error
-    }
+    })
   })
 
 export const saveWidgetHeroImageKeyFn = createServerFn({ method: 'POST' })
   .validator(z.object({ key: z.string().min(1).max(512) }))
   .handler(async ({ data }) => {
     log.info('save widget hero image key')
-    try {
+    return withErrorLog(log, 'save widget hero image key', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
       const { saveWidgetHeroImageKey } =
         await import('@/lib/server/domains/settings/settings.widget')
       await saveWidgetHeroImageKey(data.key)
-    } catch (error) {
-      log.error({ err: error }, 'save widget hero image key failed')
-      throw error
-    }
+    })
   })
 
 export const deleteWidgetHeroImageFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete widget hero image')
-  try {
+  return withErrorLog(log, 'delete widget hero image', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { deleteWidgetHeroImage } = await import('@/lib/server/domains/settings/settings.widget')
     await deleteWidgetHeroImage()
-  } catch (error) {
-    log.error({ err: error }, 'delete widget hero image failed')
-    throw error
-  }
+  })
 })
 
 export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('regenerate widget secret')
-  try {
+  return withErrorLog(log, 'regenerate widget secret', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { regenerateWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
     return await regenerateWidgetSecret()
-  } catch (error) {
-    log.error({ err: error }, 'regenerate widget secret failed')
-    throw error
-  }
+  })
 })
 
 // ============================================
@@ -993,30 +913,24 @@ export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handl
 
 export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch office hours')
-  try {
+  return withErrorLog(log, 'fetch office hours', async () => {
     await requireAuth({ permission: PERMISSIONS.OFFICE_HOURS_MANAGE })
     const { getOfficeHoursSchedule } =
       await import('@/lib/server/domains/settings/settings.office-hours')
     return await getOfficeHoursSchedule()
-  } catch (error) {
-    log.error({ err: error }, 'fetch office hours failed')
-    throw error
-  }
+  })
 })
 
 export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
   .validator(officeHoursScheduleSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled, intervals: data.intervals.length }, 'update office hours')
-    try {
+    return withErrorLog(log, 'update office hours', async () => {
       await requireAuth({ permission: PERMISSIONS.OFFICE_HOURS_MANAGE })
       const { updateOfficeHoursSchedule } =
         await import('@/lib/server/domains/settings/settings.office-hours')
       return await updateOfficeHoursSchedule(data)
-    } catch (error) {
-      log.error({ err: error }, 'update office hours failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -1025,30 +939,24 @@ export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
 
 export const fetchChangelogSettingsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch changelog settings')
-  try {
+  return withErrorLog(log, 'fetch changelog settings', async () => {
     await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
     const { getChangelogSettings } =
       await import('@/lib/server/domains/settings/settings.changelog')
     return await getChangelogSettings()
-  } catch (error) {
-    log.error({ err: error }, 'fetch changelog settings failed')
-    throw error
-  }
+  })
 })
 
 export const updateChangelogSettingsFn = createServerFn({ method: 'POST' })
   .validator(changelogSettingsSchema)
   .handler(async ({ data }) => {
     log.info(data, 'update changelog settings')
-    try {
+    return withErrorLog(log, 'update changelog settings', async () => {
       await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
       const { updateChangelogSettings } =
         await import('@/lib/server/domains/settings/settings.changelog')
       return await updateChangelogSettings(data)
-    } catch (error) {
-      log.error({ err: error }, 'update changelog settings failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -1063,15 +971,12 @@ export const updateChangelogSettingsFn = createServerFn({ method: 'POST' })
 export const fetchWorkflowAbandonedAutoCloseFn = createServerFn({ method: 'GET' }).handler(
   async () => {
     log.debug('fetch workflow abandoned auto-close settings')
-    try {
+    return withErrorLog(log, 'fetch workflow abandoned auto-close settings', async () => {
       await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
       const { getWorkflowAbandonedAutoCloseSettings } =
         await import('@/lib/server/domains/settings/settings.workflows')
       return await getWorkflowAbandonedAutoCloseSettings()
-    } catch (error) {
-      log.error({ err: error }, 'fetch workflow abandoned auto-close settings failed')
-      throw error
-    }
+    })
   }
 )
 
@@ -1079,15 +984,12 @@ export const updateWorkflowAbandonedAutoCloseFn = createServerFn({ method: 'POST
   .validator(workflowAbandonedAutoCloseSchema)
   .handler(async ({ data }) => {
     log.info(data, 'update workflow abandoned auto-close settings')
-    try {
+    return withErrorLog(log, 'update workflow abandoned auto-close settings', async () => {
       await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
       const { updateWorkflowAbandonedAutoCloseSettings } =
         await import('@/lib/server/domains/settings/settings.workflows')
       return await updateWorkflowAbandonedAutoCloseSettings(data)
-    } catch (error) {
-      log.error({ err: error }, 'update workflow abandoned auto-close settings failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -1105,7 +1007,7 @@ const moderationDefaultSchema = z.object({
  */
 export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('get email channel status')
-  try {
+  return withErrorLog(log, 'get email channel status', async () => {
     await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
     const { getEmailProvider } = await import('@quackback/email')
     const { isEmailInboundConfigured } =
@@ -1116,10 +1018,7 @@ export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler
       inboundConfigured: isEmailInboundConfigured(),
       inboundDomain: process.env.EMAIL_INBOUND_DOMAIN ?? null,
     }
-  } catch (error) {
-    log.error({ err: error }, 'get email channel status failed')
-    throw error
-  }
+  })
 })
 
 export const updateModerationDefaultFn = createServerFn({ method: 'POST' })

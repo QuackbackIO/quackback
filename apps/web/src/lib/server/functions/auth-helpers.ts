@@ -122,7 +122,7 @@ export interface AuthContext {
  */
 export async function requireAuth(options?: { permission?: PermissionKey }): Promise<AuthContext> {
   log.debug({ permission: options?.permission }, 'require auth')
-  try {
+  return withErrorLog(log, 'require auth', async () => {
     const session = await getSessionDirect()
     if (!session?.user) {
       throw new Error('Authentication required')
@@ -178,10 +178,7 @@ export async function requireAuth(options?: { permission?: PermissionKey }): Pro
       },
       permissions: [...resolvedPermissions],
     }
-  } catch (error) {
-    log.error({ err: error }, 'require auth failed')
-    throw error
-  }
+  })
 }
 
 // The denial-vocabulary matcher for the throws above lives in the pure leaf
@@ -219,7 +216,7 @@ export function assertPermission(
  */
 export async function getOptionalAuth(): Promise<AuthContext | null> {
   log.debug('get optional auth')
-  try {
+  return withErrorLog(log, 'get optional auth', async () => {
     const session = await getSessionDirect()
     if (!session?.user) {
       return null
@@ -278,10 +275,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
       },
       permissions: [...resolvedPermissions],
     }
-  } catch (error) {
-    log.error({ err: error }, 'get optional auth failed')
-    throw error
-  }
+  })
 }
 
 // ============================================================================
@@ -291,6 +285,7 @@ export async function getOptionalAuth(): Promise<AuthContext | null> {
 import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import { ANONYMOUS_ACTOR } from '@/lib/server/policy/types'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
+import { withErrorLog } from './with-error-log'
 
 /**
  * Preserve all three principal types. Collapsing 'anonymous' onto 'user'

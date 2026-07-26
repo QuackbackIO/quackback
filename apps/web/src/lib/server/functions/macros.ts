@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { MacroId, ConversationId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import {
@@ -122,7 +123,7 @@ export const deleteMacroFn = createServerFn({ method: 'POST' })
 export const applyMacroFn = createServerFn({ method: 'POST' })
   .validator(applyMacroSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'apply macro', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
       const actor = await policyActorFromAuth(ctx)
       const conversationId = data.conversationId as ConversationId
@@ -134,8 +135,5 @@ export const applyMacroFn = createServerFn({ method: 'POST' })
       const body = renderMacro(macro.body, context)
       const applied = await applyMacroActions(conversationId, macro.actions, actor)
       return { body, applied }
-    } catch (error) {
-      log.error({ err: error }, 'apply macro failed')
-      throw error
-    }
+    })
   })

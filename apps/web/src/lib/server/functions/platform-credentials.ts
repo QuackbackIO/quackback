@@ -6,6 +6,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import {
   savePlatformCredentials,
   deletePlatformCredentials,
@@ -38,7 +39,7 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .validator(savePlatformCredentialsSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'save platform credentials')
-    try {
+    return withErrorLog(log, 'save platform credentials', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
@@ -74,10 +75,7 @@ export const savePlatformCredentialsFn = createServerFn({ method: 'POST' })
       })
 
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'save platform credentials failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -87,16 +85,13 @@ export const deletePlatformCredentialsFn = createServerFn({ method: 'POST' })
   .validator(deletePlatformCredentialsSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'delete platform credentials')
-    try {
+    return withErrorLog(log, 'delete platform credentials', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       await deletePlatformCredentials(data.integrationType)
 
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete platform credentials failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -107,7 +102,7 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
   .validator(fetchPlatformCredentialsMaskedSchema)
   .handler(async ({ data }) => {
     log.debug({ integration_type: data.integrationType }, 'fetch masked platform credentials')
-    try {
+    return withErrorLog(log, 'fetch masked platform credentials', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const { getIntegration } = await import('@/lib/server/integrations')
@@ -147,8 +142,5 @@ export const fetchPlatformCredentialsMaskedFn = createServerFn({ method: 'GET' }
         fields: masked,
         managed: arePlatformCredentialsManaged(data.integrationType),
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch masked platform credentials failed')
-      throw error
-    }
+    })
   })

@@ -92,7 +92,7 @@ export interface AssistantRolePolicy {
   customerVoice: boolean
   contentAudience: 'public' | 'team'
   /** The runtime must apply this before tool assembly. */
-  writeToolPolicy: 'execute' | 'propose' | 'disabled'
+  writeToolPolicy: 'execute' | 'propose'
   pipelineStep: 'assistant'
   inabilitySemantics: 'cannot_answer'
   textAudience: 'customer' | 'teammate'

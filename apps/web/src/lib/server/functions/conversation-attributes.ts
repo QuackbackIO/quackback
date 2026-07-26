@@ -12,6 +12,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId } from '@quackback/ids'
 import type { ConversationAttributeId, ConversationId, TicketId } from '@quackback/ids'
 import { requireAuth, assertPermission } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { ValidationError } from '@/lib/shared/errors'
 import {
@@ -89,62 +90,47 @@ const setAttributeValueSchema = z
 export const listConversationAttributesFn = createServerFn({ method: 'GET' })
   .validator(listAttributesSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'list conversation attributes', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       return listConversationAttributes({ includeArchived: data?.includeArchived })
-    } catch (error) {
-      log.error({ err: error }, 'list conversation attributes failed')
-      throw error
-    }
+    })
   })
 
 export const createConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(createAttributeSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'create conversation attribute', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       return createConversationAttribute(data)
-    } catch (error) {
-      log.error({ err: error }, 'create conversation attribute failed')
-      throw error
-    }
+    })
   })
 
 export const updateConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(updateAttributeSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'update conversation attribute', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const { id, ...input } = data
       return updateConversationAttribute(id as ConversationAttributeId, input)
-    } catch (error) {
-      log.error({ err: error }, 'update conversation attribute failed')
-      throw error
-    }
+    })
   })
 
 export const archiveConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(attributeIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'archive conversation attribute', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       return archiveConversationAttribute(data.id as ConversationAttributeId)
-    } catch (error) {
-      log.error({ err: error }, 'archive conversation attribute failed')
-      throw error
-    }
+    })
   })
 
 export const restoreConversationAttributeFn = createServerFn({ method: 'POST' })
   .validator(attributeIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'restore conversation attribute', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       return restoreConversationAttribute(data.id as ConversationAttributeId)
-    } catch (error) {
-      log.error({ err: error }, 'restore conversation attribute failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -161,7 +147,7 @@ export const restoreConversationAttributeFn = createServerFn({ method: 'POST' })
 export const setConversationAttributeValueFn = createServerFn({ method: 'POST' })
   .validator(setAttributeValueSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'set conversation attribute value', async () => {
       const ctx = await requireAuth()
       let target: SetAttributeTarget
       if (data.conversationId) {
@@ -185,10 +171,7 @@ export const setConversationAttributeValueFn = createServerFn({ method: 'POST' }
         'teammate'
       )
       return { customAttributes }
-    } catch (error) {
-      log.error({ err: error }, 'set conversation attribute value failed')
-      throw error
-    }
+    })
   })
 
 const previewOptionSchema = z.object({
@@ -219,7 +202,7 @@ const previewAttributeDetectionSchema = z.object({
 export const previewAttributeDetectionFn = createServerFn({ method: 'POST' })
   .validator(previewAttributeDetectionSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'preview attribute detection', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       // New (not-yet-saved) options have no id; a positional placeholder is
       // fine here since it's only ever used within this one ephemeral call,
@@ -238,10 +221,7 @@ export const previewAttributeDetectionFn = createServerFn({ method: 'POST' })
         },
         sampleMessage: data.sampleMessage,
       })
-    } catch (error) {
-      log.error({ err: error }, 'preview attribute detection failed')
-      throw error
-    }
+    })
   })
 
 const draftAttributeDescriptionsSchema = z.object({
@@ -257,13 +237,10 @@ const draftAttributeDescriptionsSchema = z.object({
 export const draftAttributeDescriptionsFn = createServerFn({ method: 'POST' })
   .validator(draftAttributeDescriptionsSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'draft attribute descriptions', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       return await draftAttributeDescriptions(data)
-    } catch (error) {
-      log.error({ err: error }, 'draft attribute descriptions failed')
-      throw error
-    }
+    })
   })
 
 const attributeValueCountsSchema = z.object({
@@ -280,11 +257,8 @@ const attributeValueCountsSchema = z.object({
 export const attributeValueCountsFn = createServerFn({ method: 'GET' })
   .validator(attributeValueCountsSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'attribute value counts', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       return await attributeValueCounts(data)
-    } catch (error) {
-      log.error({ err: error }, 'attribute value counts failed')
-      throw error
-    }
+    })
   })

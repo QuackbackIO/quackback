@@ -7,6 +7,7 @@ import { ensurePrincipalForUser } from '@/lib/server/domains/principals/principa
 import { rawSessionToken } from '@/lib/server/auth/session-token'
 import { shouldRollSession, WIDGET_SESSION_TTL_MS } from './widget-session-roll'
 import { logger } from '@/lib/server/logger'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'widget-auth' })
 
@@ -43,7 +44,7 @@ export async function getWidgetSession(opts?: {
   roll?: boolean
 }): Promise<WidgetAuthContext | null> {
   log.debug('get widget session')
-  try {
+  return withErrorLog(log, 'get widget session', async () => {
     const headers = getRequestHeaders()
     const authHeader = headers.get('authorization')
     // Bearer is the widget's sole credential — the visitor's localStorage token.
@@ -102,10 +103,7 @@ export async function getWidgetSession(opts?: {
         type: principalRecord.type ?? 'user',
       },
     }
-  } catch (error) {
-    log.error({ err: error }, 'get widget session failed')
-    throw error
-  }
+  })
 }
 
 /**

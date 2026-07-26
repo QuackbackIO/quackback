@@ -1,8 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { PostId, RoadmapId } from '@quackback/ids'
 import {
-  fetchBoardsList,
-  fetchBoardsForSettings,
   fetchTagsList,
   fetchStatusesList,
   fetchTeamMembers,
@@ -15,6 +13,7 @@ import {
   listSegmentsFn,
   listUserAttributesFn,
 } from '@/lib/server/functions/admin'
+import { fetchBoardsFn } from '@/lib/server/functions/boards'
 import { fetchPlatformCredentialsMaskedFn } from '@/lib/server/functions/platform-credentials'
 import {
   fetchAuthProviderStatusFn,
@@ -50,7 +49,7 @@ export const adminQueries = {
     queryOptions({
       queryKey: ['admin', 'boards'],
       queryFn: async () => {
-        const data = await fetchBoardsList()
+        const data = await fetchBoardsFn()
         return data.map((b) => ({
           ...b,
           createdAt: new Date(b.createdAt),
@@ -66,7 +65,7 @@ export const adminQueries = {
   boardsForSettings: () =>
     queryOptions({
       queryKey: ['admin', 'settings', 'boards'],
-      queryFn: () => fetchBoardsForSettings(),
+      queryFn: () => fetchBoardsFn(),
       staleTime: 5 * 60 * 1000, // 5min - reference data
     }),
 

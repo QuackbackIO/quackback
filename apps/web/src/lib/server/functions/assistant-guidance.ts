@@ -16,6 +16,7 @@ import {
 import { logger } from '@/lib/server/logger'
 import { recordAuditEvent, actorFromAuth } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'assistant-guidance' })
 
@@ -31,23 +32,20 @@ const deleteGuidanceRuleSchema = z.object({ id: z.string() })
 /** All guidance rules, enabled or not — the admin list shows every rule. */
 export const listGuidanceRulesFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list guidance rules')
-  try {
+  return withErrorLog(log, 'list guidance rules', async () => {
     await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
     const { listGuidanceRules, GUIDANCE_CHAR_BUDGET } =
       await import('@/lib/server/domains/assistant/guidance.service')
     const rules = await listGuidanceRules({ enabledOnly: false })
     return { rules, charBudget: GUIDANCE_CHAR_BUDGET }
-  } catch (error) {
-    log.error({ err: error }, 'list guidance rules failed')
-    throw error
-  }
+  })
 })
 
 export const createGuidanceRuleFn = createServerFn({ method: 'POST' })
   .validator(createGuidanceRuleSchema)
   .handler(async ({ data }) => {
     log.info('create guidance rule')
-    try {
+    return withErrorLog(log, 'create guidance rule', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { createGuidanceRule } = await import('@/lib/server/domains/assistant/guidance.service')
       const rule = await createGuidanceRule({
@@ -73,17 +71,14 @@ export const createGuidanceRuleFn = createServerFn({ method: 'POST' })
         },
       })
       return rule
-    } catch (error) {
-      log.error({ err: error }, 'create guidance rule failed')
-      throw error
-    }
+    })
   })
 
 export const updateGuidanceRuleFn = createServerFn({ method: 'POST' })
   .validator(updateGuidanceRuleSchema)
   .handler(async ({ data }) => {
     log.info('update guidance rule')
-    try {
+    return withErrorLog(log, 'update guidance rule', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { updateGuidanceRule } = await import('@/lib/server/domains/assistant/guidance.service')
       const rule = await updateGuidanceRule(data.id as AssistantGuidanceRuleId, {
@@ -110,17 +105,14 @@ export const updateGuidanceRuleFn = createServerFn({ method: 'POST' })
           : null,
       })
       return rule
-    } catch (error) {
-      log.error({ err: error }, 'update guidance rule failed')
-      throw error
-    }
+    })
   })
 
 export const reorderGuidanceRulesFn = createServerFn({ method: 'POST' })
   .validator(reorderGuidanceRulesSchema)
   .handler(async ({ data }) => {
     log.info('reorder guidance rules')
-    try {
+    return withErrorLog(log, 'reorder guidance rules', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { reorderGuidanceRules } =
         await import('@/lib/server/domains/assistant/guidance.service')
@@ -132,17 +124,14 @@ export const reorderGuidanceRulesFn = createServerFn({ method: 'POST' })
         metadata: { count: data.ids.length },
       })
       return { ids: data.ids }
-    } catch (error) {
-      log.error({ err: error }, 'reorder guidance rules failed')
-      throw error
-    }
+    })
   })
 
 export const deleteGuidanceRuleFn = createServerFn({ method: 'POST' })
   .validator(deleteGuidanceRuleSchema)
   .handler(async ({ data }) => {
     log.info('delete guidance rule')
-    try {
+    return withErrorLog(log, 'delete guidance rule', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
       const { deleteGuidanceRule } = await import('@/lib/server/domains/assistant/guidance.service')
       await deleteGuidanceRule(data.id as AssistantGuidanceRuleId)
@@ -153,10 +142,7 @@ export const deleteGuidanceRuleFn = createServerFn({ method: 'POST' })
         target: { type: 'assistant_guidance', id: data.id },
       })
       return { id: data.id }
-    } catch (error) {
-      log.error({ err: error }, 'delete guidance rule failed')
-      throw error
-    }
+    })
   })
 
 /** The projected shape of a tool spec — everything the settings UI needs, nothing model-facing. */
@@ -170,7 +156,7 @@ export interface AssistantToolSummary {
 /** The built-in tool catalogue projected for the settings UI. */
 export const listAssistantToolsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list assistant tools')
-  try {
+  return withErrorLog(log, 'list assistant tools', async () => {
     await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
     const { resolveToolSpecs } = await import('@/lib/server/domains/assistant/assistant.toolspec')
     const specs = await resolveToolSpecs()
@@ -189,8 +175,5 @@ export const listAssistantToolsFn = createServerFn({ method: 'GET' }).handler(as
           risk: spec.risk === 'write' ? 'write' : 'read',
         })
       )
-  } catch (error) {
-    log.error({ err: error }, 'list assistant tools failed')
-    throw error
-  }
+  })
 })

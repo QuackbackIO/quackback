@@ -430,16 +430,11 @@ export async function deleteRole(
     // deleting a throwaway role becomes a path to hand out bundles (the Admin
     // preset, a billing-bearing custom) the editor doesn't hold.
     const targetKeys = await permissionKeysForRole(db, target.id)
-    const held = new Set(editor.permissions)
-    const aboveCeiling = [...targetKeys].filter((k) => !held.has(k))
-    if (aboveCeiling.length > 0) {
-      throw new ForbiddenError(
-        'GRANT_CEILING',
-        `You can't reassign members to a role with permissions you don't hold: ${aboveCeiling
-          .sort()
-          .join(', ')}`
-      )
-    }
+    assertWithinCeiling(
+      [...targetKeys],
+      new Set(editor.permissions),
+      "You can't reassign members to a role with permissions you don't hold"
+    )
     reassignTo = target.id
   }
 

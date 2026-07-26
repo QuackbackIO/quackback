@@ -15,6 +15,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { AssistantPendingActionId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { NotFoundError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
 import {
@@ -56,7 +57,7 @@ function toDTO(row: AssistantPendingAction): AssistantPendingActionDTO {
 export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
   .validator(PendingActionInput)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'fetch assistant pending action', async () => {
       // Base gate: any inbox teammate may open the approval queue.
       const auth = await requireAuth()
       const row = await getPendingActionById(data.pendingActionId as AssistantPendingActionId)
@@ -70,8 +71,5 @@ export const getAssistantPendingActionFn = createServerFn({ method: 'GET' })
         await assertTicketVisible(row.ticketId, actor)
       }
       return toDTO(row)
-    } catch (error) {
-      log.error({ err: error }, 'fetch assistant pending action failed')
-      throw error
-    }
+    })
   })

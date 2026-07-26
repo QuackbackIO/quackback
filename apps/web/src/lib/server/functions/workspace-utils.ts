@@ -17,6 +17,7 @@ import { buildSigninRedirect } from '@/lib/shared/auth-prompt'
 import { permissionsForPrincipal } from '@/lib/server/policy/permissions'
 import type { Role } from '@/lib/shared/roles'
 import { ALL_PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'workspace-utils' })
 
@@ -60,7 +61,7 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
     // portal) fall back to '/' for the regular sign-in flow.
     const teamOnly = data.allowedRoles.every(isTeamMember)
     const unauthRedirect = teamOnly ? buildSigninRedirect('/admin') : { to: '/' as const }
-    try {
+    return withErrorLog(log, 'require workspace role', async () => {
       const session = await getSession()
       if (!session?.user) {
         throw redirect(unauthRedirect)
@@ -99,8 +100,5 @@ export const requireWorkspaceRole = createServerFn({ method: 'GET' })
         user: session.user,
         permissions: [...resolvedPermissions],
       }
-    } catch (error) {
-      log.error({ err: error }, 'require workspace role failed')
-      throw error
-    }
+    })
   })

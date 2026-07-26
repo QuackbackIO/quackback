@@ -12,6 +12,7 @@ import { logger } from '@/lib/server/logger'
 
 import { createComment } from '@/lib/server/domains/comments/comment.service'
 import { policyActorFromAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { addReaction, removeReaction } from '@/lib/server/domains/comments/comment.reactions'
 import {
   canDeleteComment,
@@ -78,7 +79,7 @@ export const createCommentFn = createServerFn({ method: 'POST' })
   .validator(createCommentSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.postId }, 'create comment')
-    try {
+    return withErrorLog(log, 'create comment', async () => {
       // Portal-visibility gate: a denied caller (signed-in but not on
       // the allowlist of a private portal) must not be able to comment.
       // Matches createPublicPostFn / toggleVoteFn — read-side gating
@@ -138,17 +139,14 @@ export const createCommentFn = createServerFn({ method: 'POST' })
 
       log.info({ comment_id: result.comment.id }, 'comment created')
       return result
-    } catch (error) {
-      log.error({ err: error }, 'create comment failed')
-      throw error
-    }
+    })
   })
 
 export const addReactionFn = createServerFn({ method: 'POST' })
   .validator(reactionSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId, emoji: data.emoji }, 'add reaction')
-    try {
+    return withErrorLog(log, 'add reaction', async () => {
       // Portal-visibility gate — mirror createCommentFn / toggleVoteFn.
       const { resolvePortalAccessForRequest } = await import('./portal-access')
       const access = await resolvePortalAccessForRequest()
@@ -168,17 +166,14 @@ export const addReactionFn = createServerFn({ method: 'POST' })
       )
       log.debug({ added: result.added }, 'add reaction result')
       return result
-    } catch (error) {
-      log.error({ err: error }, 'add reaction failed')
-      throw error
-    }
+    })
   })
 
 export const removeReactionFn = createServerFn({ method: 'POST' })
   .validator(reactionSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId, emoji: data.emoji }, 'remove reaction')
-    try {
+    return withErrorLog(log, 'remove reaction', async () => {
       const { resolvePortalAccessForRequest } = await import('./portal-access')
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -194,10 +189,7 @@ export const removeReactionFn = createServerFn({ method: 'POST' })
       )
       log.debug('reaction removed')
       return result
-    } catch (error) {
-      log.error({ err: error }, 'remove reaction failed')
-      throw error
-    }
+    })
   })
 
 // Read Operations
@@ -250,7 +242,7 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
   .validator(userEditCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'user edit comment')
-    try {
+    return withErrorLog(log, 'user edit comment', async () => {
       // Portal-visibility gate + per-comment audience gate. Same shape
       // as the userEditPostFn / userDeletePostFn fixes: the existing
       // canEditComment policy only checks authorship + lock state, so
@@ -280,17 +272,14 @@ export const userEditCommentFn = createServerFn({ method: 'POST' })
       })
       log.info({ comment_id: data.commentId }, 'comment edited')
       return result
-    } catch (error) {
-      log.error({ err: error }, 'user edit comment failed')
-      throw error
-    }
+    })
   })
 
 export const userDeleteCommentFn = createServerFn({ method: 'POST' })
   .validator(userDeleteCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'user delete comment')
-    try {
+    return withErrorLog(log, 'user delete comment', async () => {
       const { resolvePortalAccessForRequest } = await import('./portal-access')
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -310,10 +299,7 @@ export const userDeleteCommentFn = createServerFn({ method: 'POST' })
       await softDeleteComment(data.commentId as PostCommentId, actor)
       log.info({ comment_id: data.commentId }, 'comment deleted')
       return { id: data.commentId }
-    } catch (error) {
-      log.error({ err: error }, 'user delete comment failed')
-      throw error
-    }
+    })
   })
 
 // Restore Operations
@@ -327,7 +313,7 @@ export const restoreCommentFn = createServerFn({ method: 'POST' })
   .validator(restoreCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'restore comment')
-    try {
+    return withErrorLog(log, 'restore comment', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_MODERATE })
 
       await restoreComment(data.commentId as PostCommentId, {
@@ -336,10 +322,7 @@ export const restoreCommentFn = createServerFn({ method: 'POST' })
       })
       log.info({ comment_id: data.commentId }, 'comment restored')
       return { id: data.commentId }
-    } catch (error) {
-      log.error({ err: error }, 'restore comment failed')
-      throw error
-    }
+    })
   })
 
 // Pin/Unpin Operations
@@ -363,7 +346,7 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
   .validator(pinCommentSchema)
   .handler(async ({ data }) => {
     log.info({ comment_id: data.commentId }, 'pin comment')
-    try {
+    return withErrorLog(log, 'pin comment', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_PIN })
 
       const result = await pinComment(data.commentId as PostCommentId, {
@@ -380,17 +363,14 @@ export const pinCommentFn = createServerFn({ method: 'POST' })
 
       log.info({ comment_id: data.commentId, post_id: result.postId }, 'comment pinned')
       return result
-    } catch (error) {
-      log.error({ err: error }, 'pin comment failed')
-      throw error
-    }
+    })
   })
 
 export const unpinCommentFn = createServerFn({ method: 'POST' })
   .validator(unpinCommentSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.postId }, 'unpin comment')
-    try {
+    return withErrorLog(log, 'unpin comment', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.COMMENT_PIN })
 
       await unpinComment(data.postId as PostId, {
@@ -406,10 +386,7 @@ export const unpinCommentFn = createServerFn({ method: 'POST' })
 
       log.info({ post_id: data.postId }, 'comment unpinned')
       return { postId: data.postId }
-    } catch (error) {
-      log.error({ err: error }, 'unpin comment failed')
-      throw error
-    }
+    })
   })
 
 export const canPinCommentFn = createServerFn({ method: 'GET' })

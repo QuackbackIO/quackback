@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { db, user, eq } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 
@@ -56,7 +57,7 @@ export interface MyLanguagePreference {
 export const getMyLanguagePreferenceFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<MyLanguagePreference> => {
     log.debug('get my language preference')
-    try {
+    return withErrorLog(log, 'get my language preference', async () => {
       const auth = await requireAuth()
 
       const record = await db.query.user.findFirst({
@@ -65,10 +66,7 @@ export const getMyLanguagePreferenceFn = createServerFn({ method: 'GET' }).handl
       })
 
       return { language: record?.preferredLanguage ?? null }
-    } catch (error) {
-      log.error({ err: error }, 'get my language preference failed')
-      throw error
-    }
+    })
   }
 )
 
@@ -82,7 +80,7 @@ export const setMyLanguagePreferenceFn = createServerFn({ method: 'POST' })
   .handler(
     async ({ data }: { data: SetMyLanguagePreferenceInput }): Promise<MyLanguagePreference> => {
       log.debug('set my language preference')
-      try {
+      return withErrorLog(log, 'set my language preference', async () => {
         const auth = await requireAuth()
 
         const [updated] = await db
@@ -93,9 +91,6 @@ export const setMyLanguagePreferenceFn = createServerFn({ method: 'POST' })
 
         log.info({ user_id: auth.user.id, language: data.language }, 'language preference updated')
         return { language: updated?.preferredLanguage ?? null }
-      } catch (error) {
-        log.error({ err: error }, 'set my language preference failed')
-        throw error
-      }
+      })
     }
   )

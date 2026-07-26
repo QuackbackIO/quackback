@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { PostStatusId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listStatuses,
@@ -82,16 +83,13 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
  */
 export const fetchStatusesFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch statuses')
-  try {
+  return withErrorLog(log, 'fetch statuses', async () => {
     await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
     const statuses = await listStatuses()
     log.debug({ count: statuses.length }, 'fetch statuses count')
     return statuses
-  } catch (error) {
-    log.error({ err: error }, 'fetch statuses failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -101,16 +99,13 @@ export const fetchStatusFn = createServerFn({ method: 'GET' })
   .validator(getStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'fetch status')
-    try {
+    return withErrorLog(log, 'fetch status', async () => {
       await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
       const status = await getStatusById(data.id as PostStatusId)
       log.debug({ found: !!status }, 'fetch status result')
       return status
-    } catch (error) {
-      log.error({ err: error }, 'fetch status failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -124,16 +119,13 @@ export const createStatusFn = createServerFn({ method: 'POST' })
   .validator(createStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ category: data.category }, 'create status')
-    try {
+    return withErrorLog(log, 'create status', async () => {
       await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       const status = await createStatus(data)
       log.info({ status_id: status.id }, 'status created')
       return status
-    } catch (error) {
-      log.error({ err: error }, 'create status failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -143,7 +135,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
   .validator(updateStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'update status')
-    try {
+    return withErrorLog(log, 'update status', async () => {
       await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       const status = await updateStatus(data.id as PostStatusId, {
@@ -154,10 +146,7 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
       })
       log.info({ status_id: status.id }, 'status updated')
       return status
-    } catch (error) {
-      log.error({ err: error }, 'update status failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -167,16 +156,13 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
   .validator(deleteStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'delete status')
-    try {
+    return withErrorLog(log, 'delete status', async () => {
       await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       await deleteStatus(data.id as PostStatusId)
       log.info({ status_id: data.id }, 'status deleted')
       return { id: data.id as PostStatusId }
-    } catch (error) {
-      log.error({ err: error }, 'delete status failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -186,14 +172,11 @@ export const reorderStatusesFn = createServerFn({ method: 'POST' })
   .validator(reorderStatusesSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.statusIds.length }, 'reorder statuses')
-    try {
+    return withErrorLog(log, 'reorder statuses', async () => {
       await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
       await reorderStatuses(data.statusIds as PostStatusId[])
       log.info({ count: data.statusIds.length }, 'statuses reordered')
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'reorder statuses failed')
-      throw error
-    }
+    })
   })

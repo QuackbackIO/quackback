@@ -5,6 +5,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { db, integrations, eq } from '@/lib/server/db'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
 import {
@@ -66,7 +67,7 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
       { integration_id: data.integrationId, integration_type: data.integrationType },
       'enable status sync'
     )
-    try {
+    return withErrorLog(log, 'enable status sync', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const integrationId = data.integrationId as IntegrationId
@@ -135,10 +136,7 @@ export const enableStatusSyncFn = createServerFn({ method: 'POST' })
         // For manual platforms, return the URL so the UI can display it
         isManual: !externalWebhookId && !accessToken,
       }
-    } catch (error) {
-      log.error({ err: error }, 'enable status sync failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -151,7 +149,7 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
       { integration_id: data.integrationId, integration_type: data.integrationType },
       'disable status sync'
     )
-    try {
+    return withErrorLog(log, 'disable status sync', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const integrationId = data.integrationId as IntegrationId
@@ -190,10 +188,7 @@ export const disableStatusSyncFn = createServerFn({ method: 'POST' })
 
       await clearWebhookConfig(integrationId)
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'disable status sync failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -209,7 +204,7 @@ export const updateStatusMappingsFn = createServerFn({ method: 'POST' })
       },
       'update status mappings'
     )
-    try {
+    return withErrorLog(log, 'update status mappings', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const integrationId = data.integrationId as IntegrationId
@@ -230,10 +225,7 @@ export const updateStatusMappingsFn = createServerFn({ method: 'POST' })
         .where(eq(integrations.id, integrationId))
 
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'update status mappings failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -251,7 +243,7 @@ export const updateTicketStatusMappingsFn = createServerFn({ method: 'POST' })
       },
       'update ticket status mappings'
     )
-    try {
+    return withErrorLog(log, 'update ticket status mappings', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const integrationId = data.integrationId as IntegrationId
@@ -272,10 +264,7 @@ export const updateTicketStatusMappingsFn = createServerFn({ method: 'POST' })
         .where(eq(integrations.id, integrationId))
 
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'update ticket status mappings failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -291,7 +280,7 @@ export const updatePushStatusMappingsFn = createServerFn({ method: 'POST' })
       { integration_id: data.integrationId, target: data.target },
       'update push status mappings'
     )
-    try {
+    return withErrorLog(log, 'update push status mappings', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const integrationId = data.integrationId as IntegrationId
@@ -312,8 +301,5 @@ export const updatePushStatusMappingsFn = createServerFn({ method: 'POST' })
         .where(eq(integrations.id, integrationId))
 
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'update push status mappings failed')
-      throw error
-    }
+    })
   })

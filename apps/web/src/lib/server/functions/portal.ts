@@ -50,6 +50,7 @@ import {
 import { resolvePortalAccessForRequest } from './portal-access'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'portal' })
 
@@ -123,15 +124,12 @@ export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
   .validator(z.object({ userId: z.string() }))
   .handler(async ({ data }): Promise<PrincipalId | null> => {
     log.debug({ user_id: data.userId }, 'get principal id for user')
-    try {
+    return withErrorLog(log, 'get principal id for user', async () => {
       const record = await db.query.principal.findFirst({
         where: eq(principalTable.userId, data.userId as UserId),
       })
       return record?.id ?? null
-    } catch (error) {
-      log.error({ err: error }, 'get principal id for user failed')
-      throw error
-    }
+    })
   })
 
 export const fetchPortalData = createServerFn({ method: 'GET' })
@@ -265,7 +263,7 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
 
 export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public boards')
-  try {
+  return withErrorLog(log, 'fetch public boards', async () => {
     // Outer gate: private portal + unauthorized caller → no boards.
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
@@ -282,17 +280,14 @@ export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async
       ...b,
       settings: (b.settings ?? {}) as BoardSettings,
     }))
-  } catch (error) {
-    log.error({ err: error }, 'fetch public boards failed')
-    throw error
-  }
+  })
 })
 
 export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ slug: data.slug }, 'fetch public board by slug')
-    try {
+    return withErrorLog(log, 'fetch public board by slug', async () => {
       // Outer gate: private portal + unauthorized caller → no board.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -312,10 +307,7 @@ export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
       // Strip the internal access matrix (see fetchPortalData) before serializing.
       const { access: _access, ...rest } = board
       return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
-    } catch (error) {
-      log.error({ err: error }, 'fetch public board by slug failed')
-      throw error
-    }
+    })
   })
 
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
@@ -426,7 +418,7 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
   .validator(fetchPublicPostsSchema)
   .handler(async ({ data }) => {
     log.debug({ board_slug: data.boardSlug, sort: data.sort }, 'fetch public posts')
-    try {
+    return withErrorLog(log, 'fetch public posts', async () => {
       // Outer gate: private portal + unauthorized caller → no posts.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -441,15 +433,12 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
         ...result,
         items: result.items.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch public posts failed')
-      throw error
-    }
+    })
   })
 
 export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public statuses')
-  try {
+  return withErrorLog(log, 'fetch public statuses', async () => {
     // Outer gate: a private portal must not expose its status taxonomy to a
     // denied caller.
     const access = await resolvePortalAccessForRequest()
@@ -458,15 +447,12 @@ export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(asy
       return []
     }
     return await listPublicStatuses()
-  } catch (error) {
-    log.error({ err: error }, 'fetch public statuses failed')
-    throw error
-  }
+  })
 })
 
 export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public tags')
-  try {
+  return withErrorLog(log, 'fetch public tags', async () => {
     // Outer gate: a private portal must not expose its tag taxonomy to a
     // denied caller.
     const access = await resolvePortalAccessForRequest()
@@ -475,17 +461,14 @@ export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async (
       return []
     }
     return await listPublicPostTags()
-  } catch (error) {
-    log.error({ err: error }, 'fetch public tags failed')
-    throw error
-  }
+  })
 })
 
 export const fetchUserAvatar = createServerFn({ method: 'GET' })
   .validator(z.object({ userId: z.string(), fallbackImageUrl: z.string().nullable().optional() }))
   .handler(async ({ data }) => {
     log.debug({ user_id: data.userId }, 'fetch user avatar')
-    try {
+    return withErrorLog(log, 'fetch user avatar', async () => {
       const user = await db.query.user.findFirst({
         where: eq(userTable.id, data.userId as UserId),
         columns: { imageKey: true, image: true },
@@ -501,17 +484,14 @@ export const fetchUserAvatar = createServerFn({ method: 'GET' })
       }
 
       return { avatarUrl: user.image ?? data.fallbackImageUrl ?? null, hasCustomAvatar: false }
-    } catch (error) {
-      log.error({ err: error }, 'fetch user avatar failed')
-      throw error
-    }
+    })
   })
 
 export const fetchAvatars = createServerFn({ method: 'GET' })
   .validator(z.array(z.string()))
   .handler(async ({ data }) => {
     log.debug({ count: data.length }, 'fetch avatars')
-    try {
+    return withErrorLog(log, 'fetch avatars', async () => {
       const principalIds = (data as PrincipalId[]).filter((id): id is PrincipalId => id !== null)
       if (principalIds.length === 0) return {}
 
@@ -534,17 +514,14 @@ export const fetchAvatars = createServerFn({ method: 'GET' })
       }
 
       return Object.fromEntries(avatarMap)
-    } catch (error) {
-      log.error({ err: error }, 'fetch avatars failed')
-      throw error
-    }
+    })
   })
 
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .validator(z.object({ principalId: z.string(), postId: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ principal_id: data.principalId, post_id: data.postId }, 'fetch subscription status')
-    try {
+    return withErrorLog(log, 'fetch subscription status', async () => {
       // The route used to accept a client-supplied principalId with no
       // auth check at all — a textbook IDOR. Lock the lookup to the
       // caller's own principal unless they're team. Team-role actors
@@ -568,15 +545,12 @@ export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
       const actor = await policyActorFromAuth(auth)
       await assertPostViewable(data.postId as PostId, actor)
       return await getSubscriptionStatus(requestedPrincipalId, data.postId as PostId)
-    } catch (error) {
-      log.error({ err: error }, 'fetch subscription status failed')
-      throw error
-    }
+    })
   })
 
 export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public roadmaps')
-  try {
+  return withErrorLog(log, 'fetch public roadmaps', async () => {
     // Outer gate: private portal + unauthorized caller → no roadmaps.
     const access = await resolvePortalAccessForRequest()
     if (!access.granted) {
@@ -611,10 +585,7 @@ export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(asy
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }))
-  } catch (error) {
-    log.error({ err: error }, 'fetch public roadmaps failed')
-    throw error
-  }
+  })
 })
 
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
@@ -637,7 +608,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
       { roadmap_id: data.roadmapId, limit: data.limit, offset: data.offset },
       'fetch public roadmap posts'
     )
-    try {
+    return withErrorLog(log, 'fetch public roadmap posts', async () => {
       // Outer gate: private portal + unauthorized caller → no roadmap posts.
       const access = await resolvePortalAccessForRequest()
       if (!access.granted) {
@@ -685,10 +656,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
           board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch public roadmap posts failed')
-      throw error
-    }
+    })
   })
 
 export const fetchPublicRoadmapDateBuckets = createServerFn({ method: 'GET' })
@@ -708,7 +676,7 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'get comments section data')
     const denied = { isMember: false, isTeamMember: false, canComment: false, user: undefined }
-    try {
+    return withErrorLog(log, 'get comments section data', async () => {
       const postId = data.postId as PostId
 
       // Portal-visibility gate: a caller who can't see the portal must not
@@ -763,10 +731,7 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
           ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
           : undefined,
       }
-    } catch (error) {
-      log.error({ err: error }, 'get comments section data failed')
-      throw error
-    }
+    })
   })
 
 /**

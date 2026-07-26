@@ -41,19 +41,6 @@ export async function getSettingsLogoData(): Promise<LogoData | null> {
   return { url }
 }
 
-/**
- * Get favicon data for the settings.
- */
-export async function getSettingsFaviconData(): Promise<{ url: string } | null> {
-  const record = await getSettingsRecord()
-  if (!record) return null
-
-  const url = getPublicUrlOrNull(record.faviconKey)
-  if (!url) return null
-
-  return { url }
-}
-
 export interface HeaderLogoData {
   url: string | null
   displayMode: string | null

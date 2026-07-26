@@ -23,6 +23,7 @@ import type {
   PublicProfileActivityItem,
   PublicProfileTeamContext,
 } from '@/lib/server/domains/users/user.public-profile'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'public-profile' })
 
@@ -77,7 +78,7 @@ function serializeItem(item: PublicProfileActivityItem): PublicProfileActivityIt
 export const getPublicUserProfileFn = createServerFn({ method: 'GET' })
   .validator(profileParamsSchema)
   .handler(async ({ data }): Promise<PublicUserProfileView | null> => {
-    try {
+    return withErrorLog(log, 'get public user profile', async () => {
       if (!isValidTypeId(data.principalId, 'principal')) return null
 
       // Outer gate: a private portal serves no profiles to a denied caller.
@@ -111,10 +112,7 @@ export const getPublicUserProfileFn = createServerFn({ method: 'GET' })
         comments: profile.comments.map(serializeItem),
         upvotes: profile.upvotes.map(serializeItem),
       }
-    } catch (error) {
-      log.error({ err: error }, 'get public user profile failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -128,14 +126,11 @@ export const getProfileTeamContextFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<ProfileTeamContextView | null> => {
     const { requireAuth } = await import('./auth-helpers')
     await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
-    try {
+    return withErrorLog(log, 'get profile team context', async () => {
       if (!isValidTypeId(data.principalId, 'principal')) return null
 
       const { getProfileTeamContext } =
         await import('@/lib/server/domains/users/user.public-profile')
       return await getProfileTeamContext(data.principalId as PrincipalId)
-    } catch (error) {
-      log.error({ err: error }, 'get profile team context failed')
-      throw error
-    }
+    })
   })

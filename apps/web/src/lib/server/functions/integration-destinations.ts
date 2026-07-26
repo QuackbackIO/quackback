@@ -10,6 +10,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { IntegrationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { db, integrations, eq } from '@/lib/server/db'
 import type { DestinationItem } from '@/lib/server/integrations/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -41,7 +42,7 @@ export const fetchIntegrationDestinationsFn = createServerFn({ method: 'POST' })
       { integration_type: data.integrationType, kind: data.kind, parent_id: data.parentId },
       'fetch integration destinations'
     )
-    try {
+    return withErrorLog(log, 'fetch integration destinations', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const { getIntegration } = await import('@/lib/server/integrations')
@@ -63,8 +64,5 @@ export const fetchIntegrationDestinationsFn = createServerFn({ method: 'POST' })
 
       const config = (integration.config ?? {}) as Record<string, unknown>
       return destination.list({ accessToken, config, parentId: data.parentId })
-    } catch (error) {
-      log.error({ err: error }, 'fetch integration destinations failed')
-      throw error
-    }
+    })
   })

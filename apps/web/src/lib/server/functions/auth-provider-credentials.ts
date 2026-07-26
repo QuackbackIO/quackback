@@ -6,6 +6,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   savePlatformCredentials,
@@ -39,7 +40,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
   .validator(saveSchema)
   .handler(async ({ data }) => {
     log.debug({ credential_type: data.credentialType }, 'save auth provider credentials')
-    try {
+    return withErrorLog(log, 'save auth provider credentials', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
       const { getAuthProvider } = await import('@/lib/server/auth/auth-providers')
@@ -101,10 +102,7 @@ export const saveAuthProviderCredentialsFn = createServerFn({ method: 'POST' })
       resetAuth()
 
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'save auth provider credentials failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -115,7 +113,7 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
   .validator(deleteSchema)
   .handler(async ({ data }) => {
     log.debug({ credential_type: data.credentialType }, 'delete auth provider credentials')
-    try {
+    return withErrorLog(log, 'delete auth provider credentials', async () => {
       await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
       const { getAuthProvider } = await import('@/lib/server/auth/auth-providers')
@@ -157,10 +155,7 @@ export const deleteAuthProviderCredentialsFn = createServerFn({ method: 'POST' }
       resetAuth()
 
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete auth provider credentials failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -170,7 +165,7 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
   .validator(fetchMaskedSchema)
   .handler(async ({ data }) => {
     log.debug({ credential_type: data.credentialType }, 'fetch masked auth provider credentials')
-    try {
+    return withErrorLog(log, 'fetch masked auth provider credentials', async () => {
       await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
       const { getAuthProvider } = await import('@/lib/server/auth/auth-providers')
@@ -202,10 +197,7 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
       }
 
       return { configured: true as const, fields: masked, baseUrl }
-    } catch (error) {
-      log.error({ err: error }, 'fetch masked auth provider credentials failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -214,7 +206,7 @@ export const fetchAuthProviderCredentialsMaskedFn = createServerFn({ method: 'GE
  */
 export const fetchAuthProviderStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch auth provider status')
-  try {
+  return withErrorLog(log, 'fetch auth provider status', async () => {
     await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
     const { getAllAuthProviders } = await import('@/lib/server/auth/auth-providers')
@@ -227,8 +219,5 @@ export const fetchAuthProviderStatusFn = createServerFn({ method: 'GET' }).handl
     }
 
     return { ...status, _emailConfigured: isEmailConfigured() }
-  } catch (error) {
-    log.error({ err: error }, 'fetch auth provider status failed')
-    throw error
-  }
+  })
 })

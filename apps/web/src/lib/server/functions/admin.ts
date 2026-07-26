@@ -9,13 +9,10 @@ import {
   type SegmentId,
 } from '@quackback/ids'
 import type { BoardId, PostTagId, RoleId } from '@quackback/ids'
-import {
-  getSetupState,
-  isOnboardingComplete as checkComplete,
-  type BoardSettings,
-} from '@/lib/server/db'
+import { getSetupState, isOnboardingComplete as checkComplete } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
 import {
@@ -37,7 +34,6 @@ import {
 import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { listInboxPosts } from '@/lib/server/domains/posts/post.inbox'
-import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { listPostTags } from '@/lib/server/domains/post-tags/post-tag.service'
 import { listStatuses } from '@/lib/server/domains/statuses/status.service'
 import {
@@ -159,7 +155,7 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .validator(inboxPostListSchema)
   .handler(async ({ data }) => {
     log.debug({ sort: data.sort, cursor: data.cursor ?? 'none' }, 'fetch inbox posts')
-    try {
+    return withErrorLog(log, 'fetch inbox posts', async () => {
       await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
       const result = await listInboxPosts({
@@ -192,49 +188,21 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
           deletedAt: p.deletedAt?.toISOString() || null,
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch inbox posts failed')
-      throw error
-    }
+    })
   })
-
-/**
- * Fetch all boards for the organization
- */
-export const fetchBoardsList = createServerFn({ method: 'GET' }).handler(async () => {
-  log.debug('fetch boards list')
-  try {
-    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
-
-    const result = await listBoards()
-    log.debug({ count: result.length }, 'fetch boards list')
-    return result.map((b) => ({
-      ...b,
-      settings: (b.settings ?? {}) as BoardSettings,
-      createdAt: b.createdAt.toISOString(),
-      updatedAt: b.updatedAt.toISOString(),
-    }))
-  } catch (error) {
-    log.error({ err: error }, 'fetch boards list failed')
-    throw error
-  }
-})
 
 /**
  * Fetch all tags for the organization
  */
 export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch tags list')
-  try {
+  return withErrorLog(log, 'fetch tags list', async () => {
     await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
     const result = await listPostTags()
     log.debug({ count: result.length }, 'fetch tags list')
     return result
-  } catch (error) {
-    log.error({ err: error }, 'fetch tags list failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -242,16 +210,13 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
  */
 export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch statuses list')
-  try {
+  return withErrorLog(log, 'fetch statuses list', async () => {
     await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
     const result = await listStatuses()
     log.debug({ count: result.length }, 'fetch statuses list')
     return result
-  } catch (error) {
-    log.error({ err: error }, 'fetch statuses list failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -259,16 +224,13 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
  */
 export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch team members')
-  try {
+  return withErrorLog(log, 'fetch team members', async () => {
     await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     const result = await listTeamMembers()
     log.debug({ count: result.length }, 'fetch team members')
     return result
-  } catch (error) {
-    log.error({ err: error }, 'fetch team members failed')
-    throw error
-  }
+  })
 })
 
 const searchPeopleSchema = z.object({
@@ -304,7 +266,7 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
   .validator(updatePrincipalRoleSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId, role: data.role }, 'update member role')
-    try {
+    return withErrorLog(log, 'update member role', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
 
@@ -322,10 +284,7 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
 
       log.info({ principal_id: data.principalId, role: data.role }, 'member role updated')
       return { principalId: data.principalId, role: data.role }
-    } catch (error) {
-      log.error({ err: error }, 'update member role failed')
-      throw error
-    }
+    })
   })
 
 const forceSignOutInput = z.object({
@@ -378,7 +337,7 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
   .validator(principalIdSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'remove team member')
-    try {
+    return withErrorLog(log, 'remove team member', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
 
@@ -391,10 +350,7 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
 
       log.info({ principal_id: data.principalId }, 'member removed')
       return { principalId: data.principalId }
-    } catch (error) {
-      log.error({ err: error }, 'remove team member failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -403,7 +359,7 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
  */
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch onboarding status')
-  try {
+  return withErrorLog(log, 'fetch onboarding status', async () => {
     const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
     const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
@@ -529,10 +485,7 @@ export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(a
         integrations: tierLimits.features.integrations,
       },
     }
-  } catch (error) {
-    log.error({ err: error }, 'fetch onboarding status failed')
-    throw error
-  }
+  })
 })
 
 /** Save or clear a launch-plan task preference. Required steps can be moved
@@ -547,7 +500,7 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
   .validator(taskResolutionSchema)
   .handler(async ({ data }) => {
     log.debug({ task_id: data.taskId, resolution: data.resolution }, 'set launch task resolution')
-    try {
+    return withErrorLog(log, 'set launch task resolution', async () => {
       await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
       const { buildLaunchTasks } = await import('@/lib/shared/launch-checklist')
       const status = await fetchOnboardingStatus()
@@ -594,40 +547,15 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
         'launch task resolution saved'
       )
       return { taskResolutions: state.taskResolutions ?? {} }
-    } catch (error) {
-      log.error({ err: error }, 'set launch task resolution failed')
-      throw error
-    }
+    })
   })
-
-/**
- * Fetch boards list for settings page
- */
-export const fetchBoardsForSettings = createServerFn({ method: 'GET' }).handler(async () => {
-  log.debug('fetch boards for settings')
-  try {
-    await requireAuth({ permission: PERMISSIONS.BOARD_MANAGE })
-
-    const orgBoards = await listBoards()
-    log.debug({ count: orgBoards.length }, 'fetch boards for settings')
-    return orgBoards.map((b) => ({
-      ...b,
-      settings: (b.settings ?? {}) as BoardSettings,
-      createdAt: b.createdAt.toISOString(),
-      updatedAt: b.updatedAt.toISOString(),
-    }))
-  } catch (error) {
-    log.error({ err: error }, 'fetch boards for settings failed')
-    throw error
-  }
-})
 
 /**
  * Fetch integrations list
  */
 export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch integrations list')
-  try {
+  return withErrorLog(log, 'fetch integrations list', async () => {
     await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
 
     const results = await db.query.integrations.findMany()
@@ -639,10 +567,7 @@ export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(a
       workspaceName: (i.config as Record<string, unknown>)?.workspaceName as string | undefined,
       connectedAt: i.connectedAt,
     }))
-  } catch (error) {
-    log.error({ err: error }, 'fetch integrations list failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -660,7 +585,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
   .validator(z.object({ type: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ type: data.type }, 'fetch integration by type')
-    try {
+    return withErrorLog(log, 'fetch integration by type', async () => {
       // integration.manage (admin-only), not integration.view: this returns the
       // raw integration.config, which holds live OAuth/bot tokens. A Manager-tier
       // read permission must never see those.
@@ -756,10 +681,7 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
         platformCredentialFields,
         platformCredentialsConfigured,
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch integration by type failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -798,7 +720,7 @@ export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(asy
  */
 export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('check onboarding state')
-  try {
+  return withErrorLog(log, 'check onboarding state', async () => {
     const session = await getSession()
     const userId = session?.user?.id
 
@@ -872,10 +794,7 @@ export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(as
       setupState,
       isOnboardingComplete,
     }
-  } catch (error) {
-    log.error({ err: error }, 'check onboarding state failed')
-    throw error
-  }
+  })
 })
 
 // ============================================
@@ -889,7 +808,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
   .validator(listPortalUsersSchema)
   .handler(async ({ data }) => {
     log.debug('list portal users')
-    try {
+    return withErrorLog(log, 'list portal users', async () => {
       await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
       const result = await listPortalUsers({
@@ -919,10 +838,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
           lastSeenAt: user.lastSeenAt ? user.lastSeenAt.toISOString() : null,
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'list portal users failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -932,7 +848,7 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
   .validator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     log.debug({ principal_id: data.principalId }, 'get portal user')
-    try {
+    return withErrorLog(log, 'get portal user', async () => {
       await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
       const result = await getPortalUserDetail(data.principalId as PrincipalId)
@@ -954,10 +870,7 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
           engagedAt: post.engagedAt.toISOString(),
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'get portal user failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -973,7 +886,7 @@ export const updatePortalUserFn = createServerFn({ method: 'POST' })
   .validator(updatePortalUserSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'update portal user')
-    try {
+    return withErrorLog(log, 'update portal user', async () => {
       await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
       // Look up the principal to get userId
@@ -1019,10 +932,7 @@ export const updatePortalUserFn = createServerFn({ method: 'POST' })
 
       log.info({ principal_id: data.principalId }, 'portal user updated')
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'update portal user failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1041,7 +951,7 @@ export const createPortalUserFn = createServerFn({ method: 'POST' })
   .validator(createPortalUserSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create portal user')
-    try {
+    return withErrorLog(log, 'create portal user', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
       const { createPortalUser } = await import('@/lib/server/domains/users/user.create')
@@ -1058,10 +968,7 @@ export const createPortalUserFn = createServerFn({ method: 'POST' })
         email: result.email,
         emailVerified: result.emailVerified,
       }
-    } catch (error) {
-      log.error({ err: error }, 'create portal user failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1081,14 +988,11 @@ export type { ContactEmailMatch } from '@/lib/server/domains/users/user.dedup'
 export const findPortalUsersByEmailFn = createServerFn({ method: 'POST' })
   .validator(findPortalUsersByEmailSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'find portal users by email', async () => {
       await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
       const { findContactsByEmail } = await import('@/lib/server/domains/users/user.dedup')
       return await findContactsByEmail(data.email)
-    } catch (error) {
-      log.error({ err: error }, 'find portal users by email failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1098,17 +1002,14 @@ export const deletePortalUserFn = createServerFn({ method: 'POST' })
   .validator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'delete portal user')
-    try {
+    return withErrorLog(log, 'delete portal user', async () => {
       await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
       await removePortalUser(data.principalId as PrincipalId)
 
       log.info({ principal_id: data.principalId }, 'portal user deleted')
       return { principalId: data.principalId }
-    } catch (error) {
-      log.error({ err: error }, 'delete portal user failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -1139,7 +1040,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
   .validator(sendInvitationSchema)
   .handler(async ({ data }) => {
     log.info({ role: data.role }, 'send invitation')
-    try {
+    return withErrorLog(log, 'send invitation', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
       // Tier-limit gate (no-op in OSS).
@@ -1235,10 +1136,7 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
         emailSent: result.sent,
         inviteLink: !result.sent ? inviteLink : undefined,
       }
-    } catch (error) {
-      log.error({ err: error }, 'send invitation failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1248,7 +1146,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
   .validator(invitationByIdSchema)
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'cancel invitation')
-    try {
+    return withErrorLog(log, 'cancel invitation', async () => {
       await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
       const invitationId = data.invitationId as InviteId
@@ -1296,10 +1194,7 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
 
       log.info({ invitation_id: invitationId }, 'invitation canceled')
       return { invitationId }
-    } catch (error) {
-      log.error({ err: error }, 'cancel invitation failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1309,7 +1204,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
   .validator(invitationByIdSchema)
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'resend invitation')
-    try {
+    return withErrorLog(log, 'resend invitation', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
       const invitationId = data.invitationId as InviteId
@@ -1395,10 +1290,7 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
         emailSent: result.sent,
         inviteLink: !result.sent ? inviteLink : undefined,
       }
-    } catch (error) {
-      log.error({ err: error }, 'resend invitation failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -1532,7 +1424,7 @@ export const fetchSegmentAttributeValuesFn = createServerFn({ method: 'GET' })
  */
 export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list segments')
-  try {
+  return withErrorLog(log, 'list segments', async () => {
     await requireAuth({ permission: PERMISSIONS.SEGMENT_VIEW })
     const result = await listSegments()
     log.debug({ count: result.length }, 'list segments')
@@ -1541,10 +1433,7 @@ export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async ()
       createdAt: seg.createdAt.toISOString(),
       updatedAt: seg.updatedAt.toISOString(),
     }))
-  } catch (error) {
-    log.error({ err: error }, 'list segments failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -1554,7 +1443,7 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
   .validator(createSegmentSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create segment')
-    try {
+    return withErrorLog(log, 'create segment', async () => {
       await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const segment = await createSegment(data as CreateSegmentInput)
 
@@ -1572,10 +1461,7 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
         createdAt: segment.createdAt.toISOString(),
         updatedAt: segment.updatedAt.toISOString(),
       }
-    } catch (error) {
-      log.error({ err: error }, 'create segment failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1585,7 +1471,7 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
   .validator(updateSegmentSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'update segment')
-    try {
+    return withErrorLog(log, 'update segment', async () => {
       await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const { segmentId, ...updates } = data
       const segment = await updateSegment(segmentId as SegmentId, updates as UpdateSegmentInput)
@@ -1610,10 +1496,7 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
         createdAt: segment.createdAt.toISOString(),
         updatedAt: segment.updatedAt.toISOString(),
       }
-    } catch (error) {
-      log.error({ err: error }, 'update segment failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1623,16 +1506,13 @@ export const deleteSegmentFn = createServerFn({ method: 'POST' })
   .validator(segmentByIdSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'delete segment')
-    try {
+    return withErrorLog(log, 'delete segment', async () => {
       await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
 
       await deleteSegment(data.segmentId as SegmentId)
       log.info({ segment_id: data.segmentId }, 'segment deleted')
       return { segmentId: data.segmentId }
-    } catch (error) {
-      log.error({ err: error }, 'delete segment failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1645,7 +1525,7 @@ export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
       { segment_id: data.segmentId, count: data.principalIds.length },
       'assign users to segment'
     )
-    try {
+    return withErrorLog(log, 'assign users to segment', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
       const { assigned } = await assignUsersToSegment(
@@ -1656,10 +1536,7 @@ export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
       )
       log.info({ segment_id: data.segmentId, assigned }, 'users assigned to segment')
       return { segmentId: data.segmentId, assigned }
-    } catch (error) {
-      log.error({ err: error }, 'assign users to segment failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1672,7 +1549,7 @@ export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
       { segment_id: data.segmentId, count: data.principalIds.length },
       'remove users from segment'
     )
-    try {
+    return withErrorLog(log, 'remove users from segment', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const { actorFromAuth } = await import('@/lib/server/audit/log')
       const { removed, removedPrincipalIds } = await removeUsersFromSegment(
@@ -1683,10 +1560,7 @@ export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
       )
       log.info({ segment_id: data.segmentId, removed }, 'users removed from segment')
       return { segmentId: data.segmentId, removed, removedPrincipalIds }
-    } catch (error) {
-      log.error({ err: error }, 'remove users from segment failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1696,15 +1570,12 @@ export const evaluateSegmentFn = createServerFn({ method: 'POST' })
   .validator(segmentByIdSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'evaluate segment')
-    try {
+    return withErrorLog(log, 'evaluate segment', async () => {
       await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
       const result = await evaluateDynamicSegment(data.segmentId as SegmentId)
       log.info({ added: result.added, removed: result.removed }, 'segment evaluated')
       return result
-    } catch (error) {
-      log.error({ err: error }, 'evaluate segment failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1712,15 +1583,12 @@ export const evaluateSegmentFn = createServerFn({ method: 'POST' })
  */
 export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('evaluate all segments')
-  try {
+  return withErrorLog(log, 'evaluate all segments', async () => {
     await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
     const results = await evaluateAllDynamicSegments()
     log.info({ count: results.length }, 'all segments evaluated')
     return results
-  } catch (error) {
-    log.error({ err: error }, 'evaluate all segments failed')
-    throw error
-  }
+  })
 })
 
 // ============================================
@@ -1758,13 +1626,10 @@ const updateUserAttributeSchema = z.object({
  * List all user attribute definitions.
  */
 export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
+  return withErrorLog(log, 'list user attributes', async () => {
     await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_VIEW })
     return listUserAttributes()
-  } catch (error) {
-    log.error({ err: error }, 'list user attributes failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -1773,7 +1638,7 @@ export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(as
 export const createUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(createUserAttributeSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'create user attribute', async () => {
       await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
       return createUserAttribute({
         key: data.key,
@@ -1783,10 +1648,7 @@ export const createUserAttributeFn = createServerFn({ method: 'POST' })
         currencyCode: data.currencyCode,
         externalKey: data.externalKey,
       })
-    } catch (error) {
-      log.error({ err: error }, 'create user attribute failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1795,7 +1657,7 @@ export const createUserAttributeFn = createServerFn({ method: 'POST' })
 export const updateUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(updateUserAttributeSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'update user attribute', async () => {
       await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
       return updateUserAttribute(data.id as UserAttributeId, {
         label: data.label,
@@ -1804,10 +1666,7 @@ export const updateUserAttributeFn = createServerFn({ method: 'POST' })
         currencyCode: data.currencyCode,
         externalKey: data.externalKey,
       })
-    } catch (error) {
-      log.error({ err: error }, 'update user attribute failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1816,12 +1675,9 @@ export const updateUserAttributeFn = createServerFn({ method: 'POST' })
 export const deleteUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(userAttributeIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'delete user attribute', async () => {
       await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
       await deleteUserAttribute(data.id as UserAttributeId)
       return { deleted: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete user attribute failed')
-      throw error
-    }
+    })
   })

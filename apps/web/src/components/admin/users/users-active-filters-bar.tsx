@@ -10,7 +10,8 @@ import {
   ChatBubbleLeftIcon,
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/solid'
-import { cn, toIsoDateOnly } from '@/lib/shared/utils'
+import { cn } from '@/lib/shared/utils'
+import { DATE_PRESETS, getDateFromDaysAgo } from '@/components/shared/filter-presets'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { FilterChip, type FilterOption } from '@/components/shared/filter-chip'
 import { Input } from '@/components/ui/input'
@@ -65,20 +66,6 @@ const FILTER_CATEGORIES: FilterCategoryDef[] = [
   { key: 'voteCount', label: 'Vote Count', icon: HandThumbUpIcon },
   { key: 'commentCount', label: 'Comment Count', icon: ChatBubbleLeftIcon },
 ]
-
-function getDateFromDaysAgo(daysAgo: number): string {
-  const date = new Date()
-  date.setHours(0, 0, 0, 0)
-  date.setDate(date.getDate() - daysAgo)
-  return toIsoDateOnly(date)
-}
-
-const DATE_PRESETS = [
-  { value: 'today', label: 'Today', daysAgo: 0 },
-  { value: '7days', label: 'Last 7 days', daysAgo: 7 },
-  { value: '30days', label: 'Last 30 days', daysAgo: 30 },
-  { value: '90days', label: 'Last 90 days', daysAgo: 90 },
-] as const
 
 const ACTIVITY_OPERATORS = [
   { value: 'gte', label: 'at least' },

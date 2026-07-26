@@ -37,15 +37,8 @@ export const Route = createFileRoute('/api/export')({
           }
 
           // Tier gate: analyticsExports is a Pro+ feature.
-          const { getTierLimits } =
-            await import('@/lib/server/domains/settings/tier-limits.service')
-          const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-          const limits = await getTierLimits()
-          enforceFeatureGate({
-            enabled: limits.features.analyticsExports,
-            feature: 'analyticsExports',
-            friendly: 'Data export',
-          })
+          const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+          await assertTierFeature('analyticsExports', 'Data export')
 
           // Validate boardId TypeID format
           let boardId: BoardId | undefined

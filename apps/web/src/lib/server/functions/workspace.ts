@@ -7,6 +7,7 @@ import type { Role } from '@/lib/shared/roles'
 import { db, principal, eq } from '@/lib/server/db'
 import { getSession } from '@/lib/server/auth/session'
 import { logger } from '@/lib/server/logger'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'workspace' })
 
@@ -19,13 +20,10 @@ const log = logger.child({ component: 'workspace' })
  * instead of casting a column off this row.
  */
 export const getSettings = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
+  return withErrorLog(log, 'get settings', async () => {
     const org = await db.query.settings.findFirst()
     return org ?? null
-  } catch (error) {
-    log.error({ err: error }, 'get settings failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -34,7 +32,7 @@ export const getSettings = createServerFn({ method: 'GET' }).handler(async () =>
 export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
   async (): Promise<Role | null> => {
     log.debug('get current user role')
-    try {
+    return withErrorLog(log, 'get current user role', async () => {
       const session = await getSession()
       if (!session?.user) {
         log.debug('no session')
@@ -51,10 +49,7 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
       }
       log.debug({ role: principalRecord.role }, 'current user role')
       return principalRecord.role as Role
-    } catch (error) {
-      log.error({ err: error }, 'get current user role failed')
-      throw error
-    }
+    })
   }
 )
 
@@ -62,7 +57,7 @@ export const getCurrentUserRole = createServerFn({ method: 'GET' }).handler(
  * Validate API workspace access
  */
 export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
+  return withErrorLog(log, 'validate api workspace access', async () => {
     const session = await getSession()
     if (!session?.user) {
       return { success: false as const, error: 'Unauthorized', status: 401 as const }
@@ -89,10 +84,7 @@ export const validateApiWorkspaceAccess = createServerFn({ method: 'GET' }).hand
       principal: principalRecord,
       user: session.user,
     }
-  } catch (error) {
-    log.error({ err: error }, 'validate api workspace access failed')
-    throw error
-  }
+  })
 })
 
 export type ApiWorkspaceResult = Awaited<ReturnType<typeof validateApiWorkspaceAccess>>

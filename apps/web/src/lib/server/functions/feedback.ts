@@ -12,6 +12,7 @@ import type { PrincipalId } from '@quackback/ids'
 import { isTypeId } from '@quackback/ids'
 
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 
@@ -30,7 +31,7 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
   .validator(acceptSuggestionSchema)
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id, swap_direction: data.swapDirection }, 'accept suggestion')
-    try {
+    return withErrorLog(log, 'accept suggestion', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
 
       if (!isTypeId(data.id, 'post_merge_sug')) {
@@ -43,17 +44,14 @@ export const acceptSuggestionFn = createServerFn({ method: 'POST' })
         swapDirection: data.swapDirection,
       })
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'accept suggestion failed')
-      throw error
-    }
+    })
   })
 
 export const dismissSuggestionFn = createServerFn({ method: 'POST' })
   .validator(dismissSuggestionSchema)
   .handler(async ({ data }) => {
     log.debug({ suggestion_id: data.id }, 'dismiss suggestion')
-    try {
+    return withErrorLog(log, 'dismiss suggestion', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.SUGGESTION_MANAGE })
 
       if (!isTypeId(data.id, 'post_merge_sug')) {
@@ -64,8 +62,5 @@ export const dismissSuggestionFn = createServerFn({ method: 'POST' })
         await import('@/lib/server/domains/merge-suggestions/merge-suggestion.service')
       await dismissMergeSuggestion(data.id, auth.principal.id as PrincipalId)
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'dismiss suggestion failed')
-      throw error
-    }
+    })
   })

@@ -14,9 +14,8 @@ const log = logger.child({ component: 'export-conversations' })
 export async function handleExportConversations(request: Request): Promise<Response> {
   const { validateApiWorkspaceAccess } = await import('@/lib/server/functions/workspace')
   const { canAccess } = await import('@/lib/server/auth')
-  const { listConversationsForExport } = await import(
-    '@/lib/server/domains/conversation/conversation.export'
-  )
+  const { listConversationsForExport } =
+    await import('@/lib/server/domains/conversation/conversation.export')
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
 
   log.info('conversations export started')
@@ -32,14 +31,8 @@ export async function handleExportConversations(request: Request): Promise<Respo
     }
 
     // Tier gate: data exports are a Pro+ feature (same gate as posts/users/companies).
-    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-    const { enforceFeatureGate } = await import('@/lib/server/domains/settings/tier-enforce')
-    const limits = await getTierLimits()
-    enforceFeatureGate({
-      enabled: limits.features.analyticsExports,
-      feature: 'analyticsExports',
-      friendly: 'Data export',
-    })
+    const { assertTierFeature } = await import('@/lib/server/domains/settings/tier-enforce')
+    await assertTierFeature('analyticsExports', 'Data export')
 
     const rows = await listConversationsForExport()
     const ndjson = rows.map((row) => JSON.stringify(row)).join('\n')

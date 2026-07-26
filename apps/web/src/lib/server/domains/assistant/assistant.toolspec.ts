@@ -135,7 +135,7 @@ export type AssistantInabilityReason = (typeof ASSISTANT_INABILITY_REASONS)[numb
  * member). Named once here so the context field and `makeAssistantToolContext`
  * cannot drift on the union.
  */
-export type AssistantWriteToolPolicy = 'simulate' | 'execute' | 'propose' | 'disabled'
+export type AssistantWriteToolPolicy = 'simulate' | 'execute' | 'propose'
 
 /**
  * The per-attempt MUTABLE state a turn's tools accumulate: the citations they
@@ -273,13 +273,7 @@ export interface AssistantToolContext {
    * the confirmation UX, so nothing fires without a human decision. Quinn must
    * never act in the conversation from a teammate's Q&A about it, only ever
    * suggest an action for a human to approve.
-   * 'disabled' (QUINN-PROACTIVE-SUGGESTIONS-SPEC.md, the proactive-suggestions
-   * turn) drops the write-risk tool from the turn's tool set entirely — no
-   * simulate preview, no proposal, not even a pending-approval row — because a
-   * suggestion drafts a reply and must have zero side effects. Only ever set
-   * by the runtime's own suggest-intent profile (`COPILOT_INTENT_PROFILES`,
-   * assistant.runtime.ts), never passed in by a route: the invariant is the
-   * intent's. See `resolveEffectiveToolMode` in assistant.tools.ts.
+   * See `resolveEffectiveToolMode` in assistant.tools.ts.
    */
   writeToolPolicy?: AssistantWriteToolPolicy
   /** The involvement this turn belongs to, for audit rows and pending actions. Null before the first involvement opens. */

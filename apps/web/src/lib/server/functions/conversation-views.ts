@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { ConversationViewId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import { conversationViewFiltersSchema, CONVERSATION_SORTS } from '@/lib/shared/conversation/views'
@@ -47,21 +48,18 @@ const viewIdSchema = z.object({ viewId: z.string() })
 
 /** All shared saved views with the caller's pin state (pinned-first). */
 export const listConversationViewsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
+  return withErrorLog(log, 'list conversation views', async () => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const { listViewsForPrincipal } =
       await import('@/lib/server/domains/conversation-views/conversation-views.service')
     return await listViewsForPrincipal(ctx.principal.id)
-  } catch (error) {
-    log.error({ err: error }, 'list conversation views failed')
-    throw error
-  }
+  })
 })
 
 export const createConversationViewFn = createServerFn({ method: 'POST' })
   .validator(createViewSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'create conversation view', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
       const { createView } =
         await import('@/lib/server/domains/conversation-views/conversation-views.service')
@@ -75,16 +73,13 @@ export const createConversationViewFn = createServerFn({ method: 'POST' })
         ctx.principal.id
       )
       return { id }
-    } catch (error) {
-      log.error({ err: error }, 'create conversation view failed')
-      throw error
-    }
+    })
   })
 
 export const updateConversationViewFn = createServerFn({ method: 'POST' })
   .validator(updateViewSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'update conversation view', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
       const { updateView } =
         await import('@/lib/server/domains/conversation-views/conversation-views.service')
@@ -96,54 +91,42 @@ export const updateConversationViewFn = createServerFn({ method: 'POST' })
         isShared: data.isShared,
       })
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'update conversation view failed')
-      throw error
-    }
+    })
   })
 
 export const deleteConversationViewFn = createServerFn({ method: 'POST' })
   .validator(viewIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'delete conversation view', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE_VIEWS })
       const { deleteView } =
         await import('@/lib/server/domains/conversation-views/conversation-views.service')
       await deleteView(data.viewId as ConversationViewId)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete conversation view failed')
-      throw error
-    }
+    })
   })
 
 /** Pin a view for the caller (personal; any inbox viewer may pin). */
 export const pinConversationViewFn = createServerFn({ method: 'POST' })
   .validator(viewIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'pin conversation view', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { pinView } =
         await import('@/lib/server/domains/conversation-views/conversation-views.service')
       await pinView(ctx.principal.id, data.viewId as ConversationViewId)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'pin conversation view failed')
-      throw error
-    }
+    })
   })
 
 export const unpinConversationViewFn = createServerFn({ method: 'POST' })
   .validator(viewIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'unpin conversation view', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { unpinView } =
         await import('@/lib/server/domains/conversation-views/conversation-views.service')
       await unpinView(ctx.principal.id, data.viewId as ConversationViewId)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'unpin conversation view failed')
-      throw error
-    }
+    })
   })

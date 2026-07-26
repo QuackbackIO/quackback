@@ -53,6 +53,7 @@ import type { RequesterTicketDTO, ConversationTicketSummary } from '@/lib/server
 import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.involvement'
 import { ConflictError, ForbiddenError } from '@/lib/shared/errors'
 import { logger } from '@/lib/server/logger'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'conversation' })
 
@@ -317,7 +318,7 @@ async function assertVisitorConversationAccess(role: string | null): Promise<voi
 export const sendConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(sendMessageSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'send conversation message', async () => {
       const ctx = await requireAuth()
       await assertVisitorConversationAccess(ctx.principal.role)
 
@@ -406,10 +407,7 @@ export const sendConversationMessageFn = createServerFn({ method: 'POST' })
         actor,
         (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null
       )
-    } catch (error) {
-      log.error({ err: error }, 'send conversation message failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -466,7 +464,7 @@ const myConversationSchema = z
 export const getMyConversationFn = createServerFn({ method: 'GET' })
   .validator(myConversationSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'get my conversation', async () => {
       const { getMessengerConfig, getWidgetConfig } =
         await import('@/lib/server/domains/settings/settings.widget')
       const { isConversationsEnabled } =
@@ -601,10 +599,7 @@ export const getMyConversationFn = createServerFn({ method: 'GET' })
         hasMore: page.hasMore,
         linkedTicket,
       }
-    } catch (error) {
-      log.error({ err: error }, 'get my conversation failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -618,7 +613,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
     conversations: [],
     linkedTickets: {} as Record<string, ConversationTicketSummary>,
   }
-  try {
+  return withErrorLog(log, 'get my conversations', async () => {
     const { isConversationsEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     if (!(await isConversationsEnabled()) || !hasAuthCredentials()) return empty
@@ -659,10 +654,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
     }
 
     return { conversations, linkedTickets }
-  } catch (error) {
-    log.error({ err: error }, 'get my conversations failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -677,7 +669,7 @@ export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(as
  */
 export const getMessengerUnreadFn = createServerFn({ method: 'GET' }).handler(async () => {
   const zero = { conversations: 0, total: 0 }
-  try {
+  return withErrorLog(log, 'get messenger unread', async () => {
     const { isConversationsEnabled } =
       await import('@/lib/server/domains/settings/settings.support')
     if (!(await isConversationsEnabled()) || !hasAuthCredentials()) return zero
@@ -696,17 +688,14 @@ export const getMessengerUnreadFn = createServerFn({ method: 'GET' }).handler(as
       await import('@/lib/server/domains/conversation/conversation.query')
     const conversationUnread = await countVisitorUnreadMessages(ctx.principal.id)
     return { conversations: conversationUnread, total: conversationUnread }
-  } catch (error) {
-    log.error({ err: error }, 'get messenger unread failed')
-    throw error
-  }
+  })
 })
 
 /** Older messages for a conversation the caller can view (keyset pagination). */
 export const listConversationMessagesFn = createServerFn({ method: 'GET' })
   .validator(listMessagesSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'list conversation messages', async () => {
       const ctx = await requireAuth()
       await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
@@ -745,10 +734,7 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
         }
       }
       return page
-    } catch (error) {
-      log.error({ err: error }, 'list conversation messages failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -760,7 +746,7 @@ export const listConversationMessagesFn = createServerFn({ method: 'GET' })
 export const exportConversationTranscriptFn = createServerFn({ method: 'GET' })
   .validator((d: unknown) => z.object({ conversationId: z.string() }).parse(d))
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'export conversation transcript', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       // Belt-and-suspenders with the permission gate: internal notes must never
       // reach a non-team principal, whatever a custom role was granted.
@@ -803,17 +789,14 @@ export const exportConversationTranscriptFn = createServerFn({ method: 'GET' })
         all
       )
       return { filename: `conversation-${conversationId}.md`, content, mimeType: 'text/markdown' }
-    } catch (error) {
-      log.error({ err: error }, 'export conversation transcript failed')
-      throw error
-    }
+    })
   })
 
 /** Mark a conversation read up to now for the caller's side. */
 export const markConversationReadFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'mark conversation read', async () => {
       const ctx = await requireAuth()
       await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
@@ -823,17 +806,14 @@ export const markConversationReadFn = createServerFn({ method: 'POST' })
         await import('@/lib/server/domains/conversation/conversation.service')
       await markConversationRead(data.conversationId as ConversationId, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'mark conversation read failed')
-      throw error
-    }
+    })
   })
 
 /** Broadcast that the caller is typing (ephemeral; client-throttled). */
 export const sendConversationTypingFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'send conversation typing', async () => {
       const ctx = await requireAuth()
       await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
@@ -842,27 +822,21 @@ export const sendConversationTypingFn = createServerFn({ method: 'POST' })
         await import('@/lib/server/domains/conversation/conversation.service')
       await signalTyping(data.conversationId as ConversationId, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'send conversation typing failed')
-      throw error
-    }
+    })
   })
 
 /** Submit a CSAT rating for a conversation (visitor only). */
 export const submitCsatFn = createServerFn({ method: 'POST' })
   .validator(csatSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'submit csat', async () => {
       const ctx = await requireAuth()
       await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
       const { recordCsat } = await import('@/lib/server/domains/conversation/conversation.service')
       await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'submit csat failed')
-      throw error
-    }
+    })
   })
 
 const agentAvailabilitySchema = z.object({ availability: z.enum(['online', 'away']) })
@@ -871,35 +845,29 @@ const agentAvailabilitySchema = z.object({ availability: z.enum(['online', 'away
 export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
   .validator(agentAvailabilitySchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'set agent availability', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { setAgentAvailability } = await import('@/lib/server/realtime/presence')
       await setAgentAvailability(ctx.principal.id, data.availability)
       return { availability: data.availability }
-    } catch (error) {
-      log.error({ err: error }, 'set agent availability failed')
-      throw error
-    }
+    })
   })
 
 /** Mint a short-lived token authorizing this principal's SSE stream. */
 export const mintConversationStreamTokenFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
+  return withErrorLog(log, 'mint conversation stream token', async () => {
     const ctx = await requireAuth()
     await assertVisitorConversationAccess(ctx.principal.role)
     const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
     return { token: mintStreamToken(ctx.principal.id) }
-  } catch (error) {
-    log.error({ err: error }, 'mint conversation stream token failed')
-    throw error
-  }
+  })
 })
 
 /** Soft-delete a message (team members; or a visitor deleting their own). */
 export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
   .validator(messageIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'delete conversation message', async () => {
       const ctx = await requireAuth()
       await assertVisitorConversationAccess(ctx.principal.role)
       const actor = await policyActorFromAuth(ctx)
@@ -907,10 +875,7 @@ export const deleteConversationMessageFn = createServerFn({ method: 'POST' })
         await import('@/lib/server/domains/conversation/conversation.service')
       await deleteConversationMessage(data.messageId as ConversationMessageId, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'delete conversation message failed')
-      throw error
-    }
+    })
   })
 
 /** Build the agent-author object used by conversation convert/share operations. */
@@ -929,7 +894,7 @@ function agentFromCtx(ctx: AuthContext) {
 export const listConversationsFn = createServerFn({ method: 'GET' })
   .validator(listConversationsSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'list conversations', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const actor = await policyActorFromAuth(ctx)
       const { listConversationsForAgent } =
@@ -977,10 +942,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         },
         actor
       )
-    } catch (error) {
-      log.error({ err: error }, 'list conversations failed')
-      throw error
-    }
+    })
   })
 
 /** Conversation counts per Quinn-inbox bucket (Resolved / Escalated / Pending),
@@ -1026,7 +988,7 @@ const userConversationsSchema = z.object({
 export const listConversationsForUserFn = createServerFn({ method: 'GET' })
   .validator(userConversationsSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'list conversations for user', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const actor = await policyActorFromAuth(ctx)
       const { listConversationsForAgent } =
@@ -1039,17 +1001,14 @@ export const listConversationsForUserFn = createServerFn({ method: 'GET' })
         },
         actor
       )
-    } catch (error) {
-      log.error({ err: error }, 'list conversations for user failed')
-      throw error
-    }
+    })
   })
 
 /** A single conversation (agent view) + first page of messages. */
 export const getConversationFn = createServerFn({ method: 'GET' })
   .validator(listMessagesSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'get conversation', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const actor = await policyActorFromAuth(ctx)
       const { assertConversationViewable } =
@@ -1103,17 +1062,14 @@ export const getConversationFn = createServerFn({ method: 'GET' })
         page.translatedFromPointers
       )
       return { conversation: dto, messages, hasMore: page.hasMore }
-    } catch (error) {
-      log.error({ err: error }, 'get conversation failed')
-      throw error
-    }
+    })
   })
 
 /** Agent reply. */
 export const sendAgentMessageFn = createServerFn({ method: 'POST' })
   .validator(agentSendSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'send agent message', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
       const actor = await policyActorFromAuth(ctx)
       const { sendAgentMessage } =
@@ -1161,10 +1117,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
         contentJson,
         translatedFrom ? { translatedFrom } : undefined
       )
-    } catch (error) {
-      log.error({ err: error }, 'send agent message failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -1175,7 +1128,7 @@ export const sendAgentMessageFn = createServerFn({ method: 'POST' })
 export const startAgentConversationFn = createServerFn({ method: 'POST' })
   .validator(startConversationSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'start agent conversation', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
       const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
       if (!(await isFeatureEnabled('supportInbox'))) {
@@ -1199,17 +1152,14 @@ export const startAgentConversationFn = createServerFn({ method: 'POST' })
         },
         actor
       )
-    } catch (error) {
-      log.error({ err: error }, 'start agent conversation failed')
-      throw error
-    }
+    })
   })
 
 /** Add an agent-only internal note (never sent to the visitor). */
 export const addConversationNoteFn = createServerFn({ method: 'POST' })
   .validator(agentNoteSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'add conversation note', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { addAgentNote } =
@@ -1226,10 +1176,7 @@ export const addConversationNoteFn = createServerFn({ method: 'POST' })
         (data.contentJson ?? null) as import('@/lib/shared/db-types').TiptapContent | null,
         data.attachments as ConversationAttachment[] | undefined
       )
-    } catch (error) {
-      log.error({ err: error }, 'add conversation note failed')
-      throw error
-    }
+    })
   })
 
 const convertSchema = z.object({
@@ -1245,7 +1192,7 @@ const convertSchema = z.object({
 export const createPostFromConversationFn = createServerFn({ method: 'POST' })
   .validator(convertSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'create post from conversation', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.POST_CREATE })
       const actor = await policyActorFromAuth(ctx)
       const { createPostFromConversation } =
@@ -1262,10 +1209,7 @@ export const createPostFromConversationFn = createServerFn({ method: 'POST' })
         },
         { agentActor: actor, agentPrincipalId: ctx.principal.id, agent }
       )
-    } catch (error) {
-      log.error({ err: error }, 'create post from conversation failed')
-      throw error
-    }
+    })
   })
 
 // Loose on the email (max-length only, not `.email()`): a malformed value must
@@ -1280,7 +1224,7 @@ const captureContactEmailSchema = z.object({
 export const captureVisitorContactEmailFn = createServerFn({ method: 'POST' })
   .validator(captureContactEmailSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'capture visitor contact email', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const actor = await policyActorFromAuth(ctx)
       const { captureVisitorContactEmail } =
@@ -1290,10 +1234,7 @@ export const captureVisitorContactEmailFn = createServerFn({ method: 'POST' })
         data.email,
         actor
       )
-    } catch (error) {
-      log.error({ err: error }, 'capture visitor contact email failed')
-      throw error
-    }
+    })
   })
 
 const sharePostSchema = z.object({
@@ -1305,7 +1246,7 @@ const sharePostSchema = z.object({
 export const sharePostFn = createServerFn({ method: 'POST' })
   .validator(sharePostSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'share post', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
       const actor = await policyActorFromAuth(ctx)
       const { sharePost } = await import('@/lib/server/domains/conversation/conversation.cards')
@@ -1318,16 +1259,13 @@ export const sharePostFn = createServerFn({ method: 'POST' })
         { agentActor: actor, agentPrincipalId: ctx.principal.id, agent }
       )
       return { messageId: r.message.id }
-    } catch (error) {
-      log.error({ err: error }, 'share post failed')
-      throw error
-    }
+    })
   })
 
 export const setConversationStatusFn = createServerFn({ method: 'POST' })
   .validator(setStatusSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'set conversation status', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
       const actor = await policyActorFromAuth(ctx)
       // Required-to-close applies ONLY here and in the bulk close — the
@@ -1341,17 +1279,14 @@ export const setConversationStatusFn = createServerFn({ method: 'POST' })
         await import('@/lib/server/domains/conversation/conversation.service')
       await setConversationStatus(data.conversationId as ConversationId, data.status, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'set conversation status failed')
-      throw error
-    }
+    })
   })
 
 /** Agent action: snooze a conversation until a wake time (or until the customer replies). */
 export const snoozeConversationFn = createServerFn({ method: 'POST' })
   .validator(snoozeConversationSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'snooze conversation', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
       const actor = await policyActorFromAuth(ctx)
       const { snoozeConversation } =
@@ -1362,17 +1297,14 @@ export const snoozeConversationFn = createServerFn({ method: 'POST' })
         actor
       )
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'snooze conversation failed')
-      throw error
-    }
+    })
   })
 
 /** Agent action: end a conversation with a reason (+ optional note). */
 export const endConversationFn = createServerFn({ method: 'POST' })
   .validator(endConversationSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'end conversation', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
       const actor = await policyActorFromAuth(ctx)
       const { endConversation } =
@@ -1383,16 +1315,13 @@ export const endConversationFn = createServerFn({ method: 'POST' })
         data.note,
         actor
       )
-    } catch (error) {
-      log.error({ err: error }, 'end conversation failed')
-      throw error
-    }
+    })
   })
 
 export const assignConversationFn = createServerFn({ method: 'POST' })
   .validator(assignSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'assign conversation', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_ASSIGN })
       const actor = await policyActorFromAuth(ctx)
       const { assignConversation } =
@@ -1403,80 +1332,65 @@ export const assignConversationFn = createServerFn({ method: 'POST' })
           : ((data.assignTo as PrincipalId | null | undefined) ?? null)
       await assignConversation(data.conversationId as ConversationId, assignTo, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'assign conversation failed')
-      throw error
-    }
+    })
   })
 
 export const setConversationPriorityFn = createServerFn({ method: 'POST' })
   .validator(setPrioritySchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'set conversation priority', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
       const actor = await policyActorFromAuth(ctx)
       const { setConversationPriority } =
         await import('@/lib/server/domains/conversation/conversation.service')
       await setConversationPriority(data.conversationId as ConversationId, data.priority, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'set conversation priority failed')
-      throw error
-    }
+    })
   })
 
 /** Add an emoji reaction to a message (agent-only, team-internal). */
 export const addMessageReactionFn = createServerFn({ method: 'POST' })
   .validator(messageReactionSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'add message reaction', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { addMessageReaction } =
         await import('@/lib/server/domains/conversation/message.actions')
       return await addMessageReaction(data.messageId as ConversationMessageId, data.emoji, actor)
-    } catch (error) {
-      log.error({ err: error }, 'add message reaction failed')
-      throw error
-    }
+    })
   })
 
 /** Remove the caller's own emoji reaction from a message. */
 export const removeMessageReactionFn = createServerFn({ method: 'POST' })
   .validator(messageReactionSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'remove message reaction', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { removeMessageReaction } =
         await import('@/lib/server/domains/conversation/message.actions')
       return await removeMessageReaction(data.messageId as ConversationMessageId, data.emoji, actor)
-    } catch (error) {
-      log.error({ err: error }, 'remove message reaction failed')
-      throw error
-    }
+    })
   })
 
 /** Set or clear the team-wide flag on a message. */
 export const setMessageFlagFn = createServerFn({ method: 'POST' })
   .validator(messageFlagSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'set message flag', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_NOTE })
       const actor = await policyActorFromAuth(ctx)
       const { setMessageFlag } = await import('@/lib/server/domains/conversation/message.actions')
       return await setMessageFlag(data.messageId as ConversationMessageId, data.flagged, actor)
-    } catch (error) {
-      log.error({ err: error }, 'set message flag failed')
-      throw error
-    }
+    })
   })
 
 /** Mark a conversation unread for the agent side, starting at a message. */
 export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POST' })
   .validator(markUnreadFromMessageSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'mark conversation unread from message', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const actor = await policyActorFromAuth(ctx)
       const { markConversationUnreadFromMessage } =
@@ -1487,10 +1401,7 @@ export const markConversationUnreadFromMessageFn = createServerFn({ method: 'POS
         actor
       )
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'mark conversation unread from message failed')
-      throw error
-    }
+    })
   })
 
 // ── Bulk inbox actions ─────────────────────────────────────────────────────
@@ -1545,7 +1456,7 @@ function permissionForBulkAction(type: BulkConversationAction['type']) {
 export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
   .validator(bulkUpdateConversationsSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'bulk update conversations', async () => {
       const ctx = await requireAuth()
       assertPermission(ctx, permissionForBulkAction(data.action.type))
       const actor = await policyActorFromAuth(ctx)
@@ -1606,53 +1517,41 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
         }
       }
       return { succeeded, failed }
-    } catch (error) {
-      log.error({ err: error }, 'bulk update conversations failed')
-      throw error
-    }
+    })
   })
 
 /** The caller's "Saved for later" feed — their flagged messages (conversation-
  *  or ticket-parented), newest first. */
 export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
+  return withErrorLog(log, 'list flagged messages', async () => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
     const { listFlaggedMessages } =
       await import('@/lib/server/domains/conversation/conversation.query')
     return await listFlaggedMessages(actor)
-  } catch (error) {
-    log.error({ err: error }, 'list flagged messages failed')
-    throw error
-  }
+  })
 })
 
 export const getLinkedPostsForConversationFn = createServerFn({ method: 'GET' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'get linked posts for conversation', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { getLinkedPostsForConversation } =
         await import('@/lib/server/domains/conversation/conversation.query')
       return await getLinkedPostsForConversation(data.conversationId as ConversationId)
-    } catch (error) {
-      log.error({ err: error }, 'get linked posts for conversation failed')
-      throw error
-    }
+    })
   })
 
 export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
   .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'get linked conversations for post', async () => {
       await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const { getLinkedConversationsForPost } =
         await import('@/lib/server/domains/conversation/conversation.query')
       return await getLinkedConversationsForPost(data.postId as PostId)
-    } catch (error) {
-      log.error({ err: error }, 'get linked conversations for post failed')
-      throw error
-    }
+    })
   })
 
 // ============================================
@@ -1668,7 +1567,7 @@ export const getLinkedConversationsForPostFn = createServerFn({ method: 'GET' })
 export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
   .validator(translateConversationMessagesSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'translate conversation messages', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
       const actor = await policyActorFromAuth(ctx)
       const { isFeatureEnabled } = await import('@/lib/server/domains/settings/settings.service')
@@ -1734,42 +1633,33 @@ export const translateConversationMessagesFn = createServerFn({ method: 'GET' })
         }
       }
       return results
-    } catch (error) {
-      log.error({ err: error }, 'translate conversation messages failed')
-      throw error
-    }
+    })
   })
 
 /** Manual per-conversation activation toggle (ACTIVATION). */
 export const setInboxTranslationEnabledFn = createServerFn({ method: 'POST' })
   .validator(setInboxTranslationEnabledSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'set inbox translation enabled', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const actor = await policyActorFromAuth(ctx)
       const { setInboxTranslationEnabled } =
         await import('@/lib/server/domains/conversation/conversation-translation.service')
       await setInboxTranslationEnabled(data.conversationId as ConversationId, data.enabled, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'set inbox translation enabled failed')
-      throw error
-    }
+    })
   })
 
 /** Dismiss the auto-suggest translation banner for this conversation. */
 export const dismissInboxTranslationSuggestionFn = createServerFn({ method: 'POST' })
   .validator(conversationIdSchema)
   .handler(async ({ data }) => {
-    try {
+    return withErrorLog(log, 'dismiss inbox translation suggestion', async () => {
       const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_MANAGE })
       const actor = await policyActorFromAuth(ctx)
       const { dismissInboxTranslationSuggestion } =
         await import('@/lib/server/domains/conversation/conversation-translation.service')
       await dismissInboxTranslationSuggestion(data.conversationId as ConversationId, actor)
       return { ok: true }
-    } catch (error) {
-      log.error({ err: error }, 'dismiss inbox translation suggestion failed')
-      throw error
-    }
+    })
   })

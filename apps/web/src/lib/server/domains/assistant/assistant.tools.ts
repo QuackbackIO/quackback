@@ -69,11 +69,8 @@ const FAILED_NOTE = 'This action could not be completed.'
 /**
  * A tool's resolved execution branch for this turn (see
  * `resolveEffectiveToolMode`), decoupled from any saved per-tool config.
- * 'disabled' is only ever consumed by `assembleAssistantToolset`'s filter,
- * which drops the tool before it is registered; `runWithPipeline` itself only
- * ever receives 'propose' | 'autonomous' | 'simulate'.
  */
-export type ToolExecutionMode = 'autonomous' | 'propose' | 'simulate' | 'disabled'
+export type ToolExecutionMode = 'autonomous' | 'propose' | 'simulate'
 
 /**
  * Resolve a spec's execution branch for this turn from its risk class and the
@@ -85,8 +82,6 @@ export type ToolExecutionMode = 'autonomous' | 'propose' | 'simulate' | 'disable
  *   deployment (the model must express handoff/inability as tool calls).
  * - Read tools only observe: always autonomous, never simulated or proposed.
  * - Write tools branch on `ctx.writeToolPolicy`:
- *   - 'disabled' (the proactive-suggestions turn): dropped entirely — no
- *     preview, no proposal, not even a pending-approval row.
  *   - 'propose' (the copilot Q&A surface): resolves to a pending-action
  *     proposal; the approval card IS the confirmation UX, so nothing fires
  *     without a human decision, regardless of `ctx.simulate`.
@@ -103,7 +98,6 @@ export function resolveEffectiveToolMode(
   if (spec.risk === 'control') return 'autonomous'
   if (spec.risk !== 'write') return 'autonomous'
   // Write-risk from here.
-  if (ctx.writeToolPolicy === 'disabled') return 'disabled'
   if (ctx.writeToolPolicy === 'propose') return 'propose'
   if (ctx.simulate && (ctx.writeToolPolicy ?? 'simulate') === 'simulate') return 'simulate'
   return 'autonomous'
@@ -172,7 +166,7 @@ function resolveIdempotencyKey(
  */
 async function runWithPipeline(
   spec: AssistantToolSpec,
-  mode: Exclude<ToolExecutionMode, 'disabled'>,
+  mode: ToolExecutionMode,
   args: unknown,
   ctx: AssistantToolContext
 ): Promise<unknown> {
@@ -425,15 +419,10 @@ export async function assembleAssistantToolset(
   }
 
   const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableForTurn)
-  const active = resolvedSpecs
-    .map((spec) => ({
-      spec,
-      mode: resolveEffectiveToolMode(spec, ctx),
-    }))
-    .filter(
-      (entry): entry is { spec: AssistantToolSpec; mode: Exclude<ToolExecutionMode, 'disabled'> } =>
-        entry.mode !== 'disabled'
-    )
+  const active = resolvedSpecs.map((spec) => ({
+    spec,
+    mode: resolveEffectiveToolMode(spec, ctx),
+  }))
   return {
     tools: active.map(({ spec, mode }) =>
       spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))

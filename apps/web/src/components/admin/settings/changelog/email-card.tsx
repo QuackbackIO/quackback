@@ -19,7 +19,10 @@ export function EmailCard({ settings, onChange, disabled }: EmailCardProps) {
       <div className="space-y-5">
         <div className="flex items-center justify-between gap-4 py-1">
           <div className="pr-4">
-            <Label htmlFor="changelog-auto-subscribe" className="text-sm font-medium cursor-pointer">
+            <Label
+              htmlFor="changelog-auto-subscribe"
+              className="text-sm font-medium cursor-pointer"
+            >
               Auto-subscribe users
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -37,12 +40,15 @@ export function EmailCard({ settings, onChange, disabled }: EmailCardProps) {
 
         <div className="flex items-center justify-between gap-4 py-1">
           <div className="pr-4">
-            <Label htmlFor="changelog-emails-disabled" className="text-sm font-medium cursor-pointer">
+            <Label
+              htmlFor="changelog-emails-disabled"
+              className="text-sm font-medium cursor-pointer"
+            >
               Disable changelog emails
             </Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Turns off every changelog email workspace-wide. The public changelog page and RSS
-              feed are unaffected.
+              Turns off every changelog email workspace-wide. The public changelog page and RSS feed
+              are unaffected.
             </p>
           </div>
           <Switch

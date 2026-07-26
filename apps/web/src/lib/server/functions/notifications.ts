@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { NotificationId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import {
   getNotificationsForMember,
   getUnreadCount,
@@ -46,7 +47,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
       { limit: data.limit, offset: data.offset, unread_only: data.unreadOnly },
       'get notifications'
     )
-    try {
+    return withErrorLog(log, 'get notifications', async () => {
       const auth = await requireAuth()
       // Resolve the actor so audience-denied posts get their preview
       // hidden in the notification list.
@@ -104,10 +105,7 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
         unreadCount: result.unreadCount,
         hasMore: result.hasMore,
       }
-    } catch (error) {
-      log.error({ err: error }, 'get notifications failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -115,14 +113,11 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
  */
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'get unread count')
-  try {
+  return withErrorLog(log, 'get unread count', async () => {
     const auth = await requireAuth()
     const count = await getUnreadCount(auth.principal.id)
     return { count }
-  } catch (error) {
-    log.error({ err: error }, 'get unread count failed')
-    throw error
-  }
+  })
 })
 
 // ============================================
@@ -136,14 +131,11 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
   .validator(notificationIdSchema)
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification marked read')
-    try {
+    return withErrorLog(log, 'mark notification read', async () => {
       const auth = await requireAuth()
       await markAsRead(auth.principal.id, data.notificationId as NotificationId)
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'mark notification read failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -151,14 +143,11 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
  */
 export const markAllNotificationsAsReadFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info({}, 'all notifications marked read')
-  try {
+  return withErrorLog(log, 'mark all notifications read', async () => {
     const auth = await requireAuth()
     await markAllAsRead(auth.principal.id)
     return { success: true }
-  } catch (error) {
-    log.error({ err: error }, 'mark all notifications read failed')
-    throw error
-  }
+  })
 })
 
 /**
@@ -168,14 +157,11 @@ export const archiveNotificationFn = createServerFn({ method: 'POST' })
   .validator(notificationIdSchema)
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification archived')
-    try {
+    return withErrorLog(log, 'archive notification', async () => {
       const auth = await requireAuth()
       await archiveNotification(auth.principal.id, data.notificationId as NotificationId)
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'archive notification failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -184,13 +170,10 @@ export const archiveNotificationFn = createServerFn({ method: 'POST' })
 export const archiveAllReadNotificationsFn = createServerFn({ method: 'POST' }).handler(
   async () => {
     log.info({}, 'all read notifications archived')
-    try {
+    return withErrorLog(log, 'archive all read notifications', async () => {
       const auth = await requireAuth()
       await archiveAllNotifications(auth.principal.id, { onlyRead: true })
       return { success: true }
-    } catch (error) {
-      log.error({ err: error }, 'archive all read notifications failed')
-      throw error
-    }
+    })
   }
 )

@@ -18,6 +18,7 @@ import { tiptapContentSchema, type TiptapContent } from '@/lib/shared/schemas/po
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { can } from '@/lib/server/policy/authorize'
 import { db, eq, posts } from '@/lib/server/db'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
@@ -188,7 +189,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
   .validator(listInboxPostsSchema)
   .handler(async ({ data }) => {
     log.debug('fetch inbox posts for admin')
-    try {
+    return withErrorLog(log, 'fetch inbox posts for admin', async () => {
       await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
       const result = await listInboxPosts({
@@ -221,10 +222,7 @@ export const fetchInboxPostsForAdmin = createServerFn({ method: 'GET' })
           contentJson: (p.contentJson ?? {}) as TiptapContent,
         })),
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch inbox posts for admin failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -241,7 +239,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
   )
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post with details')
-    try {
+    return withErrorLog(log, 'fetch post with details', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
       const postId = data.id as PostId
@@ -315,10 +313,7 @@ export const fetchPostWithDetails = createServerFn({ method: 'GET' })
         mergedPosts: mergedPosts.length > 0 ? mergedPosts : undefined,
         mergeInfo,
       }
-    } catch (error) {
-      log.error({ err: error }, 'fetch post with details failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -346,7 +341,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
   .validator(createPostSchema)
   .handler(async ({ data }) => {
     log.info({ board_id: data.boardId }, 'create post')
-    try {
+    return withErrorLog(log, 'create post', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_CREATE })
       // Caller is always team — the policy gate inside createPost bypasses
       // approval for team via canCreatePost. We still build the actor to
@@ -403,10 +398,7 @@ export const createPostFn = createServerFn({ method: 'POST' })
       // Events are now dispatched by the service layer
 
       return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'create post failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -416,7 +408,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
   .validator(updatePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'update post')
-    try {
+    return withErrorLog(log, 'update post', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_EDIT })
 
       const result = await updatePost(
@@ -435,10 +427,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
       )
       log.info({ post_id: result.id }, 'post updated')
       return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'update post failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -449,7 +438,7 @@ export const setPostOwnerFn = createServerFn({ method: 'POST' })
   .validator(setPostOwnerSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'set post owner')
-    try {
+    return withErrorLog(log, 'set post owner', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_OWNER })
 
       const result = await updatePost(
@@ -464,10 +453,7 @@ export const setPostOwnerFn = createServerFn({ method: 'POST' })
       )
       log.info({ post_id: result.id }, 'post owner set')
       return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'set post owner failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -478,7 +464,7 @@ export const setPostEtaFn = createServerFn({ method: 'POST' })
   .validator(setPostEtaSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'set post eta')
-    try {
+    return withErrorLog(log, 'set post eta', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_ETA })
 
       const result = await updatePost(
@@ -493,10 +479,7 @@ export const setPostEtaFn = createServerFn({ method: 'POST' })
       )
       log.info({ post_id: result.id }, 'post eta set')
       return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'set post eta failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -507,7 +490,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
   .validator(deletePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'delete post')
-    try {
+    return withErrorLog(log, 'delete post', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_DELETE })
       const postId = data.id as PostId
 
@@ -543,10 +526,7 @@ export const deletePostFn = createServerFn({ method: 'POST' })
       }
 
       return { id: data.id, cascadeResults }
-    } catch (error) {
-      log.error({ err: error }, 'delete post failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -556,15 +536,12 @@ export const fetchPostExternalLinksFn = createServerFn({ method: 'GET' })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ post_id: data.id }, 'fetch post external links')
-    try {
+    return withErrorLog(log, 'fetch post external links', async () => {
       await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
       const links = await getPostExternalLinks(data.id as PostId)
       log.debug({ count: links.length }, 'fetch post external links result')
       return links
-    } catch (error) {
-      log.error({ err: error }, 'fetch post external links failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -574,7 +551,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
   .validator(changeStatusSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, status_id: data.statusId }, 'change post status')
-    try {
+    return withErrorLog(log, 'change post status', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_STATUS })
 
       const result = await changeStatus(data.id as PostId, data.statusId as PostStatusId, {
@@ -587,10 +564,7 @@ export const changePostStatusFn = createServerFn({ method: 'POST' })
 
       log.info({ post_id: data.id, new_status: result.newStatus }, 'post status changed')
       return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'change post status failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -600,7 +574,7 @@ export const changePostBoardFn = createServerFn({ method: 'POST' })
   .validator(changePostBoardSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, board_id: data.boardId }, 'change post board')
-    try {
+    return withErrorLog(log, 'change post board', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_BOARD })
       const result = await changeBoard(data.id as PostId, data.boardId as BoardId, {
         principalId: auth.principal.id,
@@ -610,10 +584,7 @@ export const changePostBoardFn = createServerFn({ method: 'POST' })
       })
       log.info({ post_id: data.id }, 'post board changed')
       return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'change post board failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -623,16 +594,13 @@ export const restorePostFn = createServerFn({ method: 'POST' })
   .validator(restorePostSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id }, 'restore post')
-    try {
+    return withErrorLog(log, 'restore post', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_DELETE })
 
       const result = await restorePost(data.id as PostId, auth.principal.id, auth.user.id)
       log.info({ post_id: result.id }, 'post restored')
       return serializePostDates(result)
-    } catch (error) {
-      log.error({ err: error }, 'restore post failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -642,7 +610,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
   .validator(updateTagsSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, tag_count: data.tagIds.length }, 'update post tags')
-    try {
+    return withErrorLog(log, 'update post tags', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_SET_TAGS })
 
       await updatePost(
@@ -659,10 +627,7 @@ export const updatePostTagsFn = createServerFn({ method: 'POST' })
       )
       log.info({ post_id: data.id }, 'post tags updated')
       return { id: data.id }
-    } catch (error) {
-      log.error({ err: error }, 'update post tags failed')
-      throw error
-    }
+    })
   })
 
 /**
@@ -734,7 +699,7 @@ export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
   .validator(toggleCommentsLockSchema)
   .handler(async ({ data }) => {
     log.info({ post_id: data.id, locked: data.locked }, 'toggle comments lock')
-    try {
+    return withErrorLog(log, 'toggle comments lock', async () => {
       const auth = await requireAuth({ permission: PERMISSIONS.POST_EDIT })
 
       await db
@@ -750,8 +715,5 @@ export const toggleCommentsLockFn = createServerFn({ method: 'POST' })
 
       log.info({ post_id: data.id }, 'comments lock toggled')
       return { id: data.id, isCommentsLocked: data.locked }
-    } catch (error) {
-      log.error({ err: error }, 'toggle comments lock failed')
-      throw error
-    }
+    })
   })

@@ -13,6 +13,7 @@ import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { getSession } from '@/lib/server/auth/session'
 import { cacheDel } from '@/lib/server/redis'
 import { logger } from '@/lib/server/logger'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'invitations' })
 
@@ -134,7 +135,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { invitationId, name } = data
     log.debug({ invitation_id: invitationId }, 'accept invitation: entry')
-    try {
+    return withErrorLog(log, 'accept invitation', async () => {
       // Get current session
       const session = await getSession()
       if (!session?.user) {
@@ -315,10 +316,7 @@ export const acceptInvitationFn = createServerFn({ method: 'POST' })
 
       log.info({ invitation_id: invitationId }, 'accept invitation: accepted')
       return { invitationId: invitationId as InviteId }
-    } catch (error) {
-      log.error({ err: error }, 'accept invitation failed')
-      throw error
-    }
+    })
   })
 
 /**

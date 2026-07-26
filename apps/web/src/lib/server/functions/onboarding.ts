@@ -34,6 +34,7 @@ import { slugify } from '@/lib/shared/utils'
 import { getSetupState } from '@/lib/shared/db-types'
 import { logger } from '@/lib/server/logger'
 import { mutateSetupStateAtomic } from '@/lib/server/setup-state'
+import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'onboarding' })
 
@@ -121,7 +122,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
         { workspace_name: data.workspaceName, use_case: data.useCase },
         'save workspace and goal'
       )
-      try {
+      return withErrorLog(log, 'save workspace and goal', async () => {
         const session = await getSession()
         if (!session?.user) throw new Error('Authentication required')
 
@@ -237,10 +238,7 @@ export const saveWorkspaceAndGoalFn = createServerFn({ method: 'POST' })
 
         log.info({ workspace_id: result.id, slug: result.slug }, 'save workspace and goal complete')
         return result
-      } catch (error) {
-        log.error({ err: error }, 'save workspace and goal failed')
-        throw error
-      }
+      })
     }
   )
 
@@ -256,7 +254,7 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data }: { data: { name: string } }): Promise<void> => {
     log.debug('save user name: entry')
-    try {
+    return withErrorLog(log, 'save user name', async () => {
       const session = await getSession()
       if (!session?.user) {
         throw new Error('Authentication required')
@@ -272,8 +270,5 @@ export const saveUserNameFn = createServerFn({ method: 'POST' })
       await syncPrincipalProfile(session.user.id as UserId, { displayName: data.name.trim() })
 
       log.info({ user_id: session.user.id }, 'save user name: saved')
-    } catch (error) {
-      log.error({ err: error }, 'save user name failed')
-      throw error
-    }
+    })
   })

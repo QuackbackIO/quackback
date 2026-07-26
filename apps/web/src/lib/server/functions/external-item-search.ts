@@ -9,6 +9,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { IntegrationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
+import { withErrorLog } from './with-error-log'
 import { db, integrations, eq } from '@/lib/server/db'
 import type { RemoteItemMatch } from '@/lib/server/integrations/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -27,7 +28,7 @@ export const searchExternalItemsFn = createServerFn({ method: 'POST' })
   .validator(searchSchema)
   .handler(async ({ data }): Promise<RemoteItemMatch[]> => {
     log.debug({ integration_type: data.integrationType }, 'search external items')
-    try {
+    return withErrorLog(log, 'search external items', async () => {
       await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
       const { getIntegration } = await import('@/lib/server/integrations')
@@ -45,8 +46,5 @@ export const searchExternalItemsFn = createServerFn({ method: 'POST' })
 
       const config = (integration.config ?? {}) as Record<string, unknown>
       return search({ accessToken, config, query: data.query })
-    } catch (error) {
-      log.error({ err: error }, 'search external items failed')
-      throw error
-    }
+    })
   })
