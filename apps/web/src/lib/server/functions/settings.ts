@@ -32,7 +32,6 @@ import {
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { actorFromAuth, recordAuditEvent, type AuditEventType } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { getSession } from '@/lib/server/auth/session'
 import { db, principal, user, invitation, account, eq, ne, and } from '@/lib/server/db'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -49,32 +48,24 @@ const log = logger.child({ component: 'settings' })
 
 export const fetchBrandingConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch branding config')
-  return withErrorLog(log, 'fetch branding config', async () => {
-    return await getBrandingConfig()
-  })
+  return await getBrandingConfig()
 })
 
 export const fetchPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch portal config')
-  return withErrorLog(log, 'fetch portal config', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const config = await getPortalConfig()
-    return config ?? DEFAULT_PORTAL_CONFIG
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const config = await getPortalConfig()
+  return config ?? DEFAULT_PORTAL_CONFIG
 })
 
 export const fetchPublicPortalConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public portal config')
-  return withErrorLog(log, 'fetch public portal config', async () => {
-    return await getPublicPortalConfig()
-  })
+  return await getPublicPortalConfig()
 })
 
 export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public auth config')
-  return withErrorLog(log, 'fetch public auth config', async () => {
-    return await getPublicAuthConfig()
-  })
+  return await getPublicAuthConfig()
 })
 
 /**
@@ -85,25 +76,21 @@ export const fetchPublicAuthConfig = createServerFn({ method: 'GET' }).handler(a
  */
 export const fetchAuthConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch auth config')
-  return withErrorLog(log, 'fetch auth config', async () => {
-    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-    const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
-    const tenant = await getTenantSettings()
-    return (
-      tenant?.authConfig ?? {
-        oauth: { google: true, github: true, password: false },
-        openSignup: false,
-      }
-    )
-  })
+  await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+  const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
+  const tenant = await getTenantSettings()
+  return (
+    tenant?.authConfig ?? {
+      oauth: { google: true, github: true, password: false },
+      openSignup: false,
+    }
+  )
 })
 
 export const fetchDeveloperConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch developer config')
-  return withErrorLog(log, 'fetch developer config', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    return await getDeveloperConfig()
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  return await getDeveloperConfig()
 })
 
 function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null }): string | null {
@@ -116,142 +103,138 @@ function buildAvatarUrl(p: { avatarKey: string | null; avatarUrl: string | null 
 export const fetchTeamMembersAndInvitations = createServerFn({ method: 'GET' }).handler(
   async () => {
     log.debug('fetch team members and invitations')
-    return withErrorLog(log, 'fetch team members and invitations', async () => {
-      await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
-      // Subquery: latest session timestamp per user. Left-joined so
-      // a team member with no sessions still appears (lastSignInAt
-      // = null) — useful for spotting stale accounts.
-      const { session, max, sql: sqlOp } = await import('@/lib/server/db')
-      const lastSession = db
-        .select({
-          userId: session.userId,
-          lastSignInAt: max(session.createdAt).as('last_sign_in_at'),
-        })
-        .from(session)
-        .groupBy(session.userId)
-        .as('last_session')
+    // Subquery: latest session timestamp per user. Left-joined so
+    // a team member with no sessions still appears (lastSignInAt
+    // = null) — useful for spotting stale accounts.
+    const { session, max, sql: sqlOp } = await import('@/lib/server/db')
+    const lastSession = db
+      .select({
+        userId: session.userId,
+        lastSignInAt: max(session.createdAt).as('last_sign_in_at'),
+      })
+      .from(session)
+      .groupBy(session.userId)
+      .as('last_session')
 
-      const membersRaw = await db
-        .select({
-          id: principal.id,
-          role: principal.role,
-          userId: principal.userId,
-          avatarKey: principal.avatarKey,
-          avatarUrl: principal.avatarUrl,
-          userName: user.name,
-          userEmail: user.email,
-          lastSignInAt: sqlOp<Date | null>`${lastSession.lastSignInAt}`,
-        })
-        .from(principal)
-        .innerJoin(user, eq(principal.userId, user.id))
-        .leftJoin(lastSession, eq(lastSession.userId, user.id))
-        .where(ne(principal.role, 'user'))
+    const membersRaw = await db
+      .select({
+        id: principal.id,
+        role: principal.role,
+        userId: principal.userId,
+        avatarKey: principal.avatarKey,
+        avatarUrl: principal.avatarUrl,
+        userName: user.name,
+        userEmail: user.email,
+        lastSignInAt: sqlOp<Date | null>`${lastSession.lastSignInAt}`,
+      })
+      .from(principal)
+      .innerJoin(user, eq(principal.userId, user.id))
+      .leftJoin(lastSession, eq(lastSession.userId, user.id))
+      .where(ne(principal.role, 'user'))
 
-      // Serialise to ISO string on the boundary so the client type
-      // stays narrow (`string | null`). `toIsoStringOrNull` handles
-      // both the Date and string shapes — postgres-js returns the
-      // `max()` aggregate as a string, plain timestamp selects come
-      // back as Date.
-      const { toIsoStringOrNull } = await import('@/lib/shared/utils/date')
-      // Resolved workspace assignment (one per member post-reconcile) so the
-      // table can show the real role name — a custom role, or a preset that
-      // differs from the legacy column's implied one. Fetched separately to
-      // avoid fanning out the member rows on a join.
-      const { principalRoleAssignments, roles, isNull, inArray } = await import('@/lib/server/db')
-      const memberIds = membersRaw.map((m) => m.id)
-      const assignmentRows = memberIds.length
-        ? await db
-            .select({
-              principalId: principalRoleAssignments.principalId,
-              roleId: roles.id,
-              roleKey: roles.key,
-              roleName: roles.name,
-              isSystem: roles.isSystem,
-            })
-            .from(principalRoleAssignments)
-            .innerJoin(roles, eq(roles.id, principalRoleAssignments.roleId))
-            .where(
-              and(
-                inArray(principalRoleAssignments.principalId, memberIds),
-                isNull(principalRoleAssignments.teamId)
-              )
+    // Serialise to ISO string on the boundary so the client type
+    // stays narrow (`string | null`). `toIsoStringOrNull` handles
+    // both the Date and string shapes — postgres-js returns the
+    // `max()` aggregate as a string, plain timestamp selects come
+    // back as Date.
+    const { toIsoStringOrNull } = await import('@/lib/shared/utils/date')
+    // Resolved workspace assignment (one per member post-reconcile) so the
+    // table can show the real role name — a custom role, or a preset that
+    // differs from the legacy column's implied one. Fetched separately to
+    // avoid fanning out the member rows on a join.
+    const { principalRoleAssignments, roles, isNull, inArray } = await import('@/lib/server/db')
+    const memberIds = membersRaw.map((m) => m.id)
+    const assignmentRows = memberIds.length
+      ? await db
+          .select({
+            principalId: principalRoleAssignments.principalId,
+            roleId: roles.id,
+            roleKey: roles.key,
+            roleName: roles.name,
+            isSystem: roles.isSystem,
+          })
+          .from(principalRoleAssignments)
+          .innerJoin(roles, eq(roles.id, principalRoleAssignments.roleId))
+          .where(
+            and(
+              inArray(principalRoleAssignments.principalId, memberIds),
+              isNull(principalRoleAssignments.teamId)
             )
-        : []
-      const assignmentByPrincipal = new Map(assignmentRows.map((a) => [a.principalId, a]))
+          )
+      : []
+    const assignmentByPrincipal = new Map(assignmentRows.map((a) => [a.principalId, a]))
 
-      const members = membersRaw.map((m) => {
-        const assigned = assignmentByPrincipal.get(m.id)
-        return {
-          ...m,
-          lastSignInAt: toIsoStringOrNull(m.lastSignInAt),
-          assignedRole: assigned
-            ? {
-                id: assigned.roleId,
-                key: assigned.roleKey,
-                name: assigned.roleName,
-                isSystem: assigned.isSystem,
-              }
-            : null,
-        }
-      })
-
-      const pendingInvitations = await db.query.invitation.findMany({
-        where: and(eq(invitation.status, 'pending'), eq(invitation.kind, 'team')),
-        orderBy: (inv, { desc }) => [desc(inv.createdAt)],
-      })
-
-      // Build avatar map from principal fields (keyed by userId for the frontend)
-      const avatarMap: Record<string, string | null> = {}
-
-      for (const m of members) {
-        if (m.userId) {
-          avatarMap[m.userId] = buildAvatarUrl(m)
-        }
+    const members = membersRaw.map((m) => {
+      const assigned = assignmentByPrincipal.get(m.id)
+      return {
+        ...m,
+        lastSignInAt: toIsoStringOrNull(m.lastSignInAt),
+        assignedRole: assigned
+          ? {
+              id: assigned.roleId,
+              key: assigned.roleKey,
+              name: assigned.roleName,
+              isSystem: assigned.isSystem,
+            }
+          : null,
       }
-
-      const inviteRoleIds = [
-        ...new Set(
-          pendingInvitations
-            .map((i) => i.roleId)
-            .filter((v): v is NonNullable<typeof v> => v != null)
-        ),
-      ]
-      const inviteRoles = inviteRoleIds.length
-        ? await db
-            .select({ id: roles.id, name: roles.name })
-            .from(roles)
-            .where(inArray(roles.id, inviteRoleIds))
-        : []
-      const inviteRoleNameById = new Map(inviteRoles.map((r) => [r.id, r.name]))
-
-      const formattedInvitations = pendingInvitations.map((inv) => ({
-        id: inv.id,
-        email: inv.email,
-        name: inv.name,
-        role: inv.role,
-        roleId: inv.roleId,
-        roleName: inv.roleId ? (inviteRoleNameById.get(inv.roleId) ?? null) : null,
-        createdAt: inv.createdAt.toISOString(),
-        lastSentAt: inv.lastSentAt?.toISOString() ?? null,
-        expiresAt: inv.expiresAt.toISOString(),
-      }))
-
-      // Seat line data: same predicate as enforceSeatLimit / the usage report
-      // (human admin/member principals), plus the plan cap (null = unlimited).
-      const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
-      const limits = await getTierLimits()
-      const [seatRow] = await db
-        .select({ count: sqlOp<number>`count(*)`.as('count') })
-        .from(principal)
-        .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user')))
-      const seatUsage = {
-        used: Number(seatRow?.count ?? 0),
-        limit: limits.maxTeamSeats,
-      }
-
-      return { members, avatarMap, formattedInvitations, seatUsage }
     })
+
+    const pendingInvitations = await db.query.invitation.findMany({
+      where: and(eq(invitation.status, 'pending'), eq(invitation.kind, 'team')),
+      orderBy: (inv, { desc }) => [desc(inv.createdAt)],
+    })
+
+    // Build avatar map from principal fields (keyed by userId for the frontend)
+    const avatarMap: Record<string, string | null> = {}
+
+    for (const m of members) {
+      if (m.userId) {
+        avatarMap[m.userId] = buildAvatarUrl(m)
+      }
+    }
+
+    const inviteRoleIds = [
+      ...new Set(
+        pendingInvitations.map((i) => i.roleId).filter((v): v is NonNullable<typeof v> => v != null)
+      ),
+    ]
+    const inviteRoles = inviteRoleIds.length
+      ? await db
+          .select({ id: roles.id, name: roles.name })
+          .from(roles)
+          .where(inArray(roles.id, inviteRoleIds))
+      : []
+    const inviteRoleNameById = new Map(inviteRoles.map((r) => [r.id, r.name]))
+
+    const formattedInvitations = pendingInvitations.map((inv) => ({
+      id: inv.id,
+      email: inv.email,
+      name: inv.name,
+      role: inv.role,
+      roleId: inv.roleId,
+      roleName: inv.roleId ? (inviteRoleNameById.get(inv.roleId) ?? null) : null,
+      createdAt: inv.createdAt.toISOString(),
+      lastSentAt: inv.lastSentAt?.toISOString() ?? null,
+      expiresAt: inv.expiresAt.toISOString(),
+    }))
+
+    // Seat line data: same predicate as enforceSeatLimit / the usage report
+    // (human admin/member principals), plus the plan cap (null = unlimited).
+    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+    const limits = await getTierLimits()
+    const [seatRow] = await db
+      .select({ count: sqlOp<number>`count(*)`.as('count') })
+      .from(principal)
+      .where(and(inArray(principal.role, ['admin', 'member']), eq(principal.type, 'user')))
+    const seatUsage = {
+      used: Number(seatRow?.count ?? 0),
+      limit: limits.maxTeamSeats,
+    }
+
+    return { members, avatarMap, formattedInvitations, seatUsage }
   }
 )
 
@@ -259,69 +242,66 @@ export const fetchUserProfile = createServerFn({ method: 'GET' })
   .validator(userIdSchema)
   .handler(async ({ data }) => {
     log.debug({ user_id: data }, 'fetch user profile')
-    return withErrorLog(log, 'fetch user profile', async () => {
-      const session = await getSession()
-      if (!session?.user) {
-        throw new Error('Authentication required')
-      }
+    const session = await getSession()
+    if (!session?.user) {
+      throw new Error('Authentication required')
+    }
 
-      const userId = data as UserId
-      if (session.user.id !== userId) {
-        throw new Error("Access denied: Cannot view other users' profiles")
-      }
+    const userId = data as UserId
+    if (session.user.id !== userId) {
+      throw new Error("Access denied: Cannot view other users' profiles")
+    }
 
-      // Profile-page sections (Password, 2FA) depend on the user's auth
-      // posture: do they actually use a password? Is their email
-      // SSO-bound (so password and 2FA are both managed by the IdP)?
-      // Resolve once server-side so the page doesn't fan out to
-      // listAccounts on the client + so we can hide sections that aren't
-      // meaningful for this user.
-      const [userRecord, credentialAccount] = await Promise.all([
-        db.query.user.findFirst({
-          where: eq(user.id, userId),
-          columns: { imageKey: true, image: true, twoFactorEnabled: true, email: true },
-        }),
-        db.query.account.findFirst({
-          where: and(eq(account.userId, userId), eq(account.providerId, 'credential')),
-          columns: { id: true },
-        }),
-      ])
+    // Profile-page sections (Password, 2FA) depend on the user's auth
+    // posture: do they actually use a password? Is their email
+    // SSO-bound (so password and 2FA are both managed by the IdP)?
+    // Resolve once server-side so the page doesn't fan out to
+    // listAccounts on the client + so we can hide sections that aren't
+    // meaningful for this user.
+    const [userRecord, credentialAccount] = await Promise.all([
+      db.query.user.findFirst({
+        where: eq(user.id, userId),
+        columns: { imageKey: true, image: true, twoFactorEnabled: true, email: true },
+      }),
+      db.query.account.findFirst({
+        where: and(eq(account.userId, userId), eq(account.providerId, 'credential')),
+        columns: { id: true },
+      }),
+    ])
 
-      const { isHardBound } = await import('@/lib/server/auth/auth-restrictions')
-      const { listIdentityProviders } =
-        await import('@/lib/server/domains/settings/identity-providers.service')
-      const { getRegisteredOidcProviderIds } =
-        await import('@/lib/server/auth/registered-providers')
-      const providers = await listIdentityProviders()
-      const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
-      // Use the full predicate so the profile page hides the password
-      // section for users whose email is at an enforced verified domain.
-      // When the owning IdP isn't viable (tier downgrade, missing secret)
-      // the predicate fails open — the UI then surfaces the password section
-      // as a fallback, mirroring the sign-in flow.
-      const ssoEnforced = isHardBound(
-        'credential',
-        userRecord?.email ?? null,
-        providers,
-        registeredOidcIds
-      )
+    const { isHardBound } = await import('@/lib/server/auth/auth-restrictions')
+    const { listIdentityProviders } =
+      await import('@/lib/server/domains/settings/identity-providers.service')
+    const { getRegisteredOidcProviderIds } = await import('@/lib/server/auth/registered-providers')
+    const providers = await listIdentityProviders()
+    const registeredOidcIds = await getRegisteredOidcProviderIds(providers)
+    // Use the full predicate so the profile page hides the password
+    // section for users whose email is at an enforced verified domain.
+    // When the owning IdP isn't viable (tier downgrade, missing secret)
+    // the predicate fails open — the UI then surfaces the password section
+    // as a fallback, mirroring the sign-in flow.
+    const ssoEnforced = isHardBound(
+      'credential',
+      userRecord?.email ?? null,
+      providers,
+      registeredOidcIds
+    )
 
-      const hasCustomAvatar = !!userRecord?.imageKey
-      const oauthAvatarUrl = userRecord?.image ?? null
-      const avatarUrl = buildAvatarUrl({
-        avatarKey: userRecord?.imageKey ?? null,
-        avatarUrl: oauthAvatarUrl,
-      })
-
-      return {
-        avatarUrl,
-        oauthAvatarUrl,
-        hasCustomAvatar,
-        twoFactorEnabled: userRecord?.twoFactorEnabled === true,
-        hasPassword: !!credentialAccount,
-        ssoEnforced,
-      }
+    const hasCustomAvatar = !!userRecord?.imageKey
+    const oauthAvatarUrl = userRecord?.image ?? null
+    const avatarUrl = buildAvatarUrl({
+      avatarKey: userRecord?.imageKey ?? null,
+      avatarUrl: oauthAvatarUrl,
     })
+
+    return {
+      avatarUrl,
+      oauthAvatarUrl,
+      hasCustomAvatar,
+      twoFactorEnabled: userRecord?.twoFactorEnabled === true,
+      hasPassword: !!credentialAccount,
+      ssoEnforced,
+    }
   })
 
 // ============================================
@@ -399,20 +379,16 @@ export const updateThemeFn = createServerFn({ method: 'POST' })
   .validator(updateThemeSchema)
   .handler(async ({ data }) => {
     log.info('update theme')
-    return withErrorLog(log, 'update theme', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-      return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await updateBrandingConfig(data.brandingConfig as BrandingConfig)
   })
 
 export const updatePortalConfigFn = createServerFn({ method: 'POST' })
   .validator(updatePortalConfigSchema)
   .handler(async ({ data }) => {
     log.info('update portal config')
-    return withErrorLog(log, 'update portal config', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-      return await updatePortalConfig(data as UpdatePortalConfigInput)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    return await updatePortalConfig(data as UpdatePortalConfigInput)
   })
 
 export const updateAuthConfigSchema = z.object({
@@ -489,175 +465,161 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
   .validator(updateAuthConfigSchema)
   .handler(async ({ data }) => {
     log.info('update auth config')
-    return withErrorLog(log, 'update auth config', async () => {
-      const { getRequestHeaders } = await import('@tanstack/react-start/server')
-      const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-      const actor = actorFromAuth(auth)
-      const headers = getRequestHeaders()
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const actor = actorFromAuth(auth)
+    const headers = getRequestHeaders()
 
-      const { updateAuthConfig, getAuthConfig } =
-        await import('@/lib/server/domains/settings/settings.service')
+    const { updateAuthConfig, getAuthConfig } =
+      await import('@/lib/server/domains/settings/settings.service')
 
-      // Snapshot when the payload touches an audit-tracked key OR the
-      // ssoOidc subtree. Both audits compare prior/new state to decide
-      // whether to emit. Routine non-tracked saves skip the read.
-      const tracksAnyToggle = Boolean(
-        data.oauth && AUDIT_TRACKED_OAUTH_KEYS.some(({ key }) => key in (data.oauth ?? {}))
-      )
-      const tracksSso = Boolean(data.ssoOidc)
-      const before = tracksAnyToggle || tracksSso ? await getAuthConfig() : null
+    // Snapshot when the payload touches an audit-tracked key OR the
+    // ssoOidc subtree. Both audits compare prior/new state to decide
+    // whether to emit. Routine non-tracked saves skip the read.
+    const tracksAnyToggle = Boolean(
+      data.oauth && AUDIT_TRACKED_OAUTH_KEYS.some(({ key }) => key in (data.oauth ?? {}))
+    )
+    const tracksSso = Boolean(data.ssoOidc)
+    const before = tracksAnyToggle || tracksSso ? await getAuthConfig() : null
 
-      try {
-        // Backstop the unified "keep ≥1 working sign-in method" invariant — a
-        // direct API call must not be able to disable the workspace's last way
-        // in (the client `isLastMethod` guard covers only the UI). A blocked
-        // attempt falls through to the failure audit + re-throw below.
-        if (data.oauth) {
-          const current = before ?? (await getAuthConfig())
-          const proposedOauth = {
-            ...((current?.oauth ?? {}) as Record<string, boolean | undefined>),
-            ...data.oauth,
-          }
-          const { wouldLeaveNoWorkingSignInMethod } =
-            await import('@/lib/server/auth/sign-in-method-availability')
-          if (await wouldLeaveNoWorkingSignInMethod(proposedOauth)) {
-            const { ConflictError } = await import('@/lib/shared/errors')
-            throw new ConflictError(
-              'LAST_SIGN_IN_METHOD',
-              'Cannot disable the last enabled sign-in method. Enable another method first.'
-            )
+    try {
+      // Backstop the unified "keep ≥1 working sign-in method" invariant — a
+      // direct API call must not be able to disable the workspace's last way
+      // in (the client `isLastMethod` guard covers only the UI). A blocked
+      // attempt falls through to the failure audit + re-throw below.
+      if (data.oauth) {
+        const current = before ?? (await getAuthConfig())
+        const proposedOauth = {
+          ...((current?.oauth ?? {}) as Record<string, boolean | undefined>),
+          ...data.oauth,
+        }
+        const { wouldLeaveNoWorkingSignInMethod } =
+          await import('@/lib/server/auth/sign-in-method-availability')
+        if (await wouldLeaveNoWorkingSignInMethod(proposedOauth)) {
+          const { ConflictError } = await import('@/lib/shared/errors')
+          throw new ConflictError(
+            'LAST_SIGN_IN_METHOD',
+            'Cannot disable the last enabled sign-in method. Enable another method first.'
+          )
+        }
+      }
+
+      const result = await updateAuthConfig(data as Parameters<typeof updateAuthConfig>[0])
+
+      if (tracksAnyToggle && before && data.oauth) {
+        for (const { key, enabled, disabled } of AUDIT_TRACKED_OAUTH_KEYS) {
+          if (!(key in data.oauth)) continue
+          const next = data.oauth[key]
+          const prior = (before.oauth as Record<string, boolean | undefined>)?.[key]
+          if (typeof next !== 'boolean' || next === prior) continue
+          await recordAuditEvent({
+            event: next ? enabled : disabled,
+            outcome: 'success',
+            actor,
+            headers,
+            before: { [key]: prior ?? null },
+            after: { [key]: next },
+          })
+        }
+      }
+
+      if (tracksSso && before && data.ssoOidc) {
+        const priorSso = (before.ssoOidc ?? {}) as Record<string, unknown>
+        const changedFields: string[] = []
+        for (const key of Object.keys(data.ssoOidc)) {
+          if (priorSso[key] !== (data.ssoOidc as Record<string, unknown>)[key]) {
+            changedFields.push(key)
           }
         }
-
-        const result = await updateAuthConfig(data as Parameters<typeof updateAuthConfig>[0])
-
-        if (tracksAnyToggle && before && data.oauth) {
-          for (const { key, enabled, disabled } of AUDIT_TRACKED_OAUTH_KEYS) {
-            if (!(key in data.oauth)) continue
-            const next = data.oauth[key]
-            const prior = (before.oauth as Record<string, boolean | undefined>)?.[key]
-            if (typeof next !== 'boolean' || next === prior) continue
-            await recordAuditEvent({
-              event: next ? enabled : disabled,
-              outcome: 'success',
-              actor,
-              headers,
-              before: { [key]: prior ?? null },
-              after: { [key]: next },
-            })
-          }
-        }
-
-        if (tracksSso && before && data.ssoOidc) {
-          const priorSso = (before.ssoOidc ?? {}) as Record<string, unknown>
-          const changedFields: string[] = []
-          for (const key of Object.keys(data.ssoOidc)) {
-            if (priorSso[key] !== (data.ssoOidc as Record<string, unknown>)[key]) {
-              changedFields.push(key)
-            }
-          }
-          if (changedFields.length > 0) {
-            await recordAuditEvent({
-              event: 'sso.config.changed',
-              outcome: 'success',
-              actor,
-              headers,
-              metadata: { fields: changedFields },
-            })
-          }
-        }
-
-        return result
-      } catch (error) {
-        // Symmetric failure audit so blocked attempts (tier gate,
-        // managed-fields, secret-presence) show up in the log.
-        if (tracksAnyToggle && data.oauth) {
-          for (const { key, enabled, disabled } of AUDIT_TRACKED_OAUTH_KEYS) {
-            if (!(key in data.oauth)) continue
-            const next = data.oauth[key]
-            if (typeof next !== 'boolean') continue
-            await recordAuditEvent({
-              event: next ? enabled : disabled,
-              outcome: 'failure',
-              actor,
-              headers,
-              metadata: {
-                reason: error instanceof Error ? error.message.slice(0, 200) : 'UNEXPECTED',
-              },
-            })
-          }
-        }
-        if (tracksSso) {
+        if (changedFields.length > 0) {
           await recordAuditEvent({
             event: 'sso.config.changed',
+            outcome: 'success',
+            actor,
+            headers,
+            metadata: { fields: changedFields },
+          })
+        }
+      }
+
+      return result
+    } catch (error) {
+      // Symmetric failure audit so blocked attempts (tier gate,
+      // managed-fields, secret-presence) show up in the log.
+      if (tracksAnyToggle && data.oauth) {
+        for (const { key, enabled, disabled } of AUDIT_TRACKED_OAUTH_KEYS) {
+          if (!(key in data.oauth)) continue
+          const next = data.oauth[key]
+          if (typeof next !== 'boolean') continue
+          await recordAuditEvent({
+            event: next ? enabled : disabled,
             outcome: 'failure',
             actor,
             headers,
             metadata: {
-              fields: Object.keys(data.ssoOidc ?? {}),
               reason: error instanceof Error ? error.message.slice(0, 200) : 'UNEXPECTED',
             },
           })
         }
-        throw error
       }
-    })
+      if (tracksSso) {
+        await recordAuditEvent({
+          event: 'sso.config.changed',
+          outcome: 'failure',
+          actor,
+          headers,
+          metadata: {
+            fields: Object.keys(data.ssoOidc ?? {}),
+            reason: error instanceof Error ? error.message.slice(0, 200) : 'UNEXPECTED',
+          },
+        })
+      }
+      throw error
+    }
   })
 
 export const saveLogoKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save logo key')
-    return withErrorLog(log, 'save logo key', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-      return await saveLogoKey(data.key)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await saveLogoKey(data.key)
   })
 
 export const deleteLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete logo')
-  return withErrorLog(log, 'delete logo', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await deleteLogoKey()
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  return await deleteLogoKey()
 })
 
 export const saveHeaderLogoKeyFn = createServerFn({ method: 'POST' })
   .validator(saveLogoKeySchema)
   .handler(async ({ data }) => {
     log.info({ key: data.key }, 'save header logo key')
-    return withErrorLog(log, 'save header logo key', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-      return await saveHeaderLogoKey(data.key)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await saveHeaderLogoKey(data.key)
   })
 
 export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete header logo')
-  return withErrorLog(log, 'delete header logo', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-    return await deleteHeaderLogoKey()
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  return await deleteHeaderLogoKey()
 })
 
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
   .validator(updateHeaderDisplayModeSchema)
   .handler(async ({ data }) => {
     log.info({ mode: data.mode }, 'update header display mode')
-    return withErrorLog(log, 'update header display mode', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-      return await updateHeaderDisplayMode(data.mode)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await updateHeaderDisplayMode(data.mode)
   })
 
 export const updateHeaderDisplayNameFn = createServerFn({ method: 'POST' })
   .validator(updateHeaderDisplayNameSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update header display name')
-    return withErrorLog(log, 'update header display name', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-      return await updateHeaderDisplayName(data.name)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await updateHeaderDisplayName(data.name)
   })
 
 const updateWorkspaceNameSchema = z.object({
@@ -670,10 +632,8 @@ export const updateWorkspaceNameFn = createServerFn({ method: 'POST' })
   .validator(updateWorkspaceNameSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'update workspace name')
-    return withErrorLog(log, 'update workspace name', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-      return await updateWorkspaceName(data.name)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await updateWorkspaceName(data.name)
   })
 
 // ============================================
@@ -690,19 +650,15 @@ export type UpdateCustomCssInput = z.infer<typeof updateCustomCssSchema>
 
 export const fetchCustomCssFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch custom css')
-  return withErrorLog(log, 'fetch custom css', async () => {
-    return await getCustomCss()
-  })
+  return await getCustomCss()
 })
 
 export const updateCustomCssFn = createServerFn({ method: 'POST' })
   .validator(updateCustomCssSchema)
   .handler(async ({ data }) => {
     log.info({ css_length: data.customCss.length }, 'update custom css')
-    return withErrorLog(log, 'update custom css', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
-      return await updateCustomCss(data.customCss)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await updateCustomCss(data.customCss)
   })
 
 // ============================================
@@ -724,10 +680,8 @@ export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
       },
       'update developer config'
     )
-    return withErrorLog(log, 'update developer config', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-      return await updateDeveloperConfig(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    return await updateDeveloperConfig(data)
   })
 
 // ============================================
@@ -736,20 +690,16 @@ export const updateDeveloperConfigFn = createServerFn({ method: 'POST' })
 
 export const fetchWidgetConfig = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch widget config')
-  return withErrorLog(log, 'fetch widget config', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-    return await getWidgetConfig()
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
+  return await getWidgetConfig()
 })
 
 export const fetchWidgetSecret = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch widget secret')
-  return withErrorLog(log, 'fetch widget secret', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { getWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
-    return await getWidgetSecret()
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { getWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
+  return await getWidgetSecret()
 })
 
 const messengerConfigInputSchema = z.object({
@@ -870,41 +820,32 @@ export const updateWidgetConfigFn = createServerFn({ method: 'POST' })
   .validator(updateWidgetConfigSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled, position: data.position }, 'update widget config')
-    return withErrorLog(log, 'update widget config', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-      const { updateWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-      return await updateWidgetConfig(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { updateWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
+    return await updateWidgetConfig(data)
   })
 
 export const saveWidgetHeroImageKeyFn = createServerFn({ method: 'POST' })
   .validator(z.object({ key: z.string().min(1).max(512) }))
   .handler(async ({ data }) => {
     log.info('save widget hero image key')
-    return withErrorLog(log, 'save widget hero image key', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-      const { saveWidgetHeroImageKey } =
-        await import('@/lib/server/domains/settings/settings.widget')
-      await saveWidgetHeroImageKey(data.key)
-    })
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { saveWidgetHeroImageKey } = await import('@/lib/server/domains/settings/settings.widget')
+    await saveWidgetHeroImageKey(data.key)
   })
 
 export const deleteWidgetHeroImageFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('delete widget hero image')
-  return withErrorLog(log, 'delete widget hero image', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { deleteWidgetHeroImage } = await import('@/lib/server/domains/settings/settings.widget')
-    await deleteWidgetHeroImage()
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { deleteWidgetHeroImage } = await import('@/lib/server/domains/settings/settings.widget')
+  await deleteWidgetHeroImage()
 })
 
 export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('regenerate widget secret')
-  return withErrorLog(log, 'regenerate widget secret', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { regenerateWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
-    return await regenerateWidgetSecret()
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { regenerateWidgetSecret } = await import('@/lib/server/domains/settings/settings.widget')
+  return await regenerateWidgetSecret()
 })
 
 // ============================================
@@ -913,24 +854,20 @@ export const regenerateWidgetSecretFn = createServerFn({ method: 'POST' }).handl
 
 export const fetchOfficeHoursFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch office hours')
-  return withErrorLog(log, 'fetch office hours', async () => {
-    await requireAuth({ permission: PERMISSIONS.OFFICE_HOURS_MANAGE })
-    const { getOfficeHoursSchedule } =
-      await import('@/lib/server/domains/settings/settings.office-hours')
-    return await getOfficeHoursSchedule()
-  })
+  await requireAuth({ permission: PERMISSIONS.OFFICE_HOURS_MANAGE })
+  const { getOfficeHoursSchedule } =
+    await import('@/lib/server/domains/settings/settings.office-hours')
+  return await getOfficeHoursSchedule()
 })
 
 export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
   .validator(officeHoursScheduleSchema)
   .handler(async ({ data }) => {
     log.info({ enabled: data.enabled, intervals: data.intervals.length }, 'update office hours')
-    return withErrorLog(log, 'update office hours', async () => {
-      await requireAuth({ permission: PERMISSIONS.OFFICE_HOURS_MANAGE })
-      const { updateOfficeHoursSchedule } =
-        await import('@/lib/server/domains/settings/settings.office-hours')
-      return await updateOfficeHoursSchedule(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.OFFICE_HOURS_MANAGE })
+    const { updateOfficeHoursSchedule } =
+      await import('@/lib/server/domains/settings/settings.office-hours')
+    return await updateOfficeHoursSchedule(data)
   })
 
 // ============================================
@@ -939,24 +876,19 @@ export const updateOfficeHoursFn = createServerFn({ method: 'POST' })
 
 export const fetchChangelogSettingsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch changelog settings')
-  return withErrorLog(log, 'fetch changelog settings', async () => {
-    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
-    const { getChangelogSettings } =
-      await import('@/lib/server/domains/settings/settings.changelog')
-    return await getChangelogSettings()
-  })
+  await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+  const { getChangelogSettings } = await import('@/lib/server/domains/settings/settings.changelog')
+  return await getChangelogSettings()
 })
 
 export const updateChangelogSettingsFn = createServerFn({ method: 'POST' })
   .validator(changelogSettingsSchema)
   .handler(async ({ data }) => {
     log.info(data, 'update changelog settings')
-    return withErrorLog(log, 'update changelog settings', async () => {
-      await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
-      const { updateChangelogSettings } =
-        await import('@/lib/server/domains/settings/settings.changelog')
-      return await updateChangelogSettings(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.CHANGELOG_MANAGE })
+    const { updateChangelogSettings } =
+      await import('@/lib/server/domains/settings/settings.changelog')
+    return await updateChangelogSettings(data)
   })
 
 // ============================================
@@ -971,12 +903,10 @@ export const updateChangelogSettingsFn = createServerFn({ method: 'POST' })
 export const fetchWorkflowAbandonedAutoCloseFn = createServerFn({ method: 'GET' }).handler(
   async () => {
     log.debug('fetch workflow abandoned auto-close settings')
-    return withErrorLog(log, 'fetch workflow abandoned auto-close settings', async () => {
-      await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
-      const { getWorkflowAbandonedAutoCloseSettings } =
-        await import('@/lib/server/domains/settings/settings.workflows')
-      return await getWorkflowAbandonedAutoCloseSettings()
-    })
+    await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
+    const { getWorkflowAbandonedAutoCloseSettings } =
+      await import('@/lib/server/domains/settings/settings.workflows')
+    return await getWorkflowAbandonedAutoCloseSettings()
   }
 )
 
@@ -984,12 +914,10 @@ export const updateWorkflowAbandonedAutoCloseFn = createServerFn({ method: 'POST
   .validator(workflowAbandonedAutoCloseSchema)
   .handler(async ({ data }) => {
     log.info(data, 'update workflow abandoned auto-close settings')
-    return withErrorLog(log, 'update workflow abandoned auto-close settings', async () => {
-      await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
-      const { updateWorkflowAbandonedAutoCloseSettings } =
-        await import('@/lib/server/domains/settings/settings.workflows')
-      return await updateWorkflowAbandonedAutoCloseSettings(data)
-    })
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    const { updateWorkflowAbandonedAutoCloseSettings } =
+      await import('@/lib/server/domains/settings/settings.workflows')
+    return await updateWorkflowAbandonedAutoCloseSettings(data)
   })
 
 // ============================================
@@ -1007,18 +935,16 @@ const moderationDefaultSchema = z.object({
  */
 export const getEmailChannelStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('get email channel status')
-  return withErrorLog(log, 'get email channel status', async () => {
-    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-    const { getEmailProvider } = await import('@quackback/email')
-    const { isEmailInboundConfigured } =
-      await import('@/lib/server/domains/conversation/conversation.email-channel')
-    return {
-      provider: getEmailProvider(),
-      fromAddress: process.env.EMAIL_FROM ?? null,
-      inboundConfigured: isEmailInboundConfigured(),
-      inboundDomain: process.env.EMAIL_INBOUND_DOMAIN ?? null,
-    }
-  })
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { getEmailProvider } = await import('@quackback/email')
+  const { isEmailInboundConfigured } =
+    await import('@/lib/server/domains/conversation/conversation.email-channel')
+  return {
+    provider: getEmailProvider(),
+    fromAddress: process.env.EMAIL_FROM ?? null,
+    inboundConfigured: isEmailInboundConfigured(),
+    inboundDomain: process.env.EMAIL_INBOUND_DOMAIN ?? null,
+  }
 })
 
 export const updateModerationDefaultFn = createServerFn({ method: 'POST' })

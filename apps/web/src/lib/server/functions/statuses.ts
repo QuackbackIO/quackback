@@ -6,7 +6,6 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { PostStatusId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
   listStatuses,
@@ -83,13 +82,11 @@ export type ReorderStatusesInput = z.infer<typeof reorderStatusesSchema>
  */
 export const fetchStatusesFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch statuses')
-  return withErrorLog(log, 'fetch statuses', async () => {
-    await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
+  await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
-    const statuses = await listStatuses()
-    log.debug({ count: statuses.length }, 'fetch statuses count')
-    return statuses
-  })
+  const statuses = await listStatuses()
+  log.debug({ count: statuses.length }, 'fetch statuses count')
+  return statuses
 })
 
 /**
@@ -99,13 +96,11 @@ export const fetchStatusFn = createServerFn({ method: 'GET' })
   .validator(getStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'fetch status')
-    return withErrorLog(log, 'fetch status', async () => {
-      await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
+    await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
-      const status = await getStatusById(data.id as PostStatusId)
-      log.debug({ found: !!status }, 'fetch status result')
-      return status
-    })
+    const status = await getStatusById(data.id as PostStatusId)
+    log.debug({ found: !!status }, 'fetch status result')
+    return status
   })
 
 // ============================================
@@ -119,13 +114,11 @@ export const createStatusFn = createServerFn({ method: 'POST' })
   .validator(createStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ category: data.category }, 'create status')
-    return withErrorLog(log, 'create status', async () => {
-      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
-      const status = await createStatus(data)
-      log.info({ status_id: status.id }, 'status created')
-      return status
-    })
+    const status = await createStatus(data)
+    log.info({ status_id: status.id }, 'status created')
+    return status
   })
 
 /**
@@ -135,18 +128,16 @@ export const updateStatusFn = createServerFn({ method: 'POST' })
   .validator(updateStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'update status')
-    return withErrorLog(log, 'update status', async () => {
-      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
-      const status = await updateStatus(data.id as PostStatusId, {
-        name: data.name,
-        color: data.color,
-        showOnRoadmap: data.showOnRoadmap,
-        isDefault: data.isDefault,
-      })
-      log.info({ status_id: status.id }, 'status updated')
-      return status
+    const status = await updateStatus(data.id as PostStatusId, {
+      name: data.name,
+      color: data.color,
+      showOnRoadmap: data.showOnRoadmap,
+      isDefault: data.isDefault,
     })
+    log.info({ status_id: status.id }, 'status updated')
+    return status
   })
 
 /**
@@ -156,13 +147,11 @@ export const deleteStatusFn = createServerFn({ method: 'POST' })
   .validator(deleteStatusSchema)
   .handler(async ({ data }) => {
     log.debug({ status_id: data.id }, 'delete status')
-    return withErrorLog(log, 'delete status', async () => {
-      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
-      await deleteStatus(data.id as PostStatusId)
-      log.info({ status_id: data.id }, 'status deleted')
-      return { id: data.id as PostStatusId }
-    })
+    await deleteStatus(data.id as PostStatusId)
+    log.info({ status_id: data.id }, 'status deleted')
+    return { id: data.id as PostStatusId }
   })
 
 /**
@@ -172,11 +161,9 @@ export const reorderStatusesFn = createServerFn({ method: 'POST' })
   .validator(reorderStatusesSchema)
   .handler(async ({ data }) => {
     log.debug({ count: data.statusIds.length }, 'reorder statuses')
-    return withErrorLog(log, 'reorder statuses', async () => {
-      await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.STATUS_MANAGE })
 
-      await reorderStatuses(data.statusIds as PostStatusId[])
-      log.info({ count: data.statusIds.length }, 'statuses reordered')
-      return { success: true }
-    })
+    await reorderStatuses(data.statusIds as PostStatusId[])
+    log.info({ count: data.statusIds.length }, 'statuses reordered')
+    return { success: true }
   })

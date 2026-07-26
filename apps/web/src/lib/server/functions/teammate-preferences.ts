@@ -13,7 +13,6 @@
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { db, user, eq } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 
@@ -57,16 +56,14 @@ export interface MyLanguagePreference {
 export const getMyLanguagePreferenceFn = createServerFn({ method: 'GET' }).handler(
   async (): Promise<MyLanguagePreference> => {
     log.debug('get my language preference')
-    return withErrorLog(log, 'get my language preference', async () => {
-      const auth = await requireAuth()
+    const auth = await requireAuth()
 
-      const record = await db.query.user.findFirst({
-        where: eq(user.id, auth.user.id),
-        columns: { preferredLanguage: true },
-      })
-
-      return { language: record?.preferredLanguage ?? null }
+    const record = await db.query.user.findFirst({
+      where: eq(user.id, auth.user.id),
+      columns: { preferredLanguage: true },
     })
+
+    return { language: record?.preferredLanguage ?? null }
   }
 )
 
@@ -80,17 +77,15 @@ export const setMyLanguagePreferenceFn = createServerFn({ method: 'POST' })
   .handler(
     async ({ data }: { data: SetMyLanguagePreferenceInput }): Promise<MyLanguagePreference> => {
       log.debug('set my language preference')
-      return withErrorLog(log, 'set my language preference', async () => {
-        const auth = await requireAuth()
+      const auth = await requireAuth()
 
-        const [updated] = await db
-          .update(user)
-          .set({ preferredLanguage: data.language })
-          .where(eq(user.id, auth.user.id))
-          .returning({ preferredLanguage: user.preferredLanguage })
+      const [updated] = await db
+        .update(user)
+        .set({ preferredLanguage: data.language })
+        .where(eq(user.id, auth.user.id))
+        .returning({ preferredLanguage: user.preferredLanguage })
 
-        log.info({ user_id: auth.user.id, language: data.language }, 'language preference updated')
-        return { language: updated?.preferredLanguage ?? null }
-      })
+      log.info({ user_id: auth.user.id, language: data.language }, 'language preference updated')
+      return { language: updated?.preferredLanguage ?? null }
     }
   )

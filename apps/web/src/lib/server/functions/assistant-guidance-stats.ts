@@ -3,16 +3,13 @@ import { createServerFn } from '@tanstack/react-start'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'assistant-guidance-stats' })
 
 /** Per-rule application stats, keyed by guidance rule id. */
 export const getGuidanceRuleStatsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch guidance rule stats')
-  return withErrorLog(log, 'fetch guidance rule stats', async () => {
-    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-    const { getGuidanceRuleStats } = await import('@/lib/server/domains/assistant/guidance-stats')
-    return await getGuidanceRuleStats()
-  })
+  await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+  const { getGuidanceRuleStats } = await import('@/lib/server/domains/assistant/guidance-stats')
+  return await getGuidanceRuleStats()
 })

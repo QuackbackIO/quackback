@@ -7,7 +7,6 @@ import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
-import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'bootstrap' })
 
@@ -214,8 +213,6 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
 export const getBootstrapData = createServerFn({ method: 'GET' }).handler(
   async (): Promise<BootstrapData> => {
     log.debug('get bootstrap data')
-    return withErrorLog(log, 'get bootstrap data', async () => {
-      return await getBootstrapDataInternal()
-    })
+    return await getBootstrapDataInternal()
   }
 )

@@ -10,7 +10,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { IntegrationId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { db, integrations, eq } from '@/lib/server/db'
 import type { DestinationItem } from '@/lib/server/integrations/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -42,27 +41,25 @@ export const fetchIntegrationDestinationsFn = createServerFn({ method: 'POST' })
       { integration_type: data.integrationType, kind: data.kind, parent_id: data.parentId },
       'fetch integration destinations'
     )
-    return withErrorLog(log, 'fetch integration destinations', async () => {
-      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const destination = getIntegration(data.integrationType)?.destinations?.[data.kind]
-      if (!destination) return []
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const destination = getIntegration(data.integrationType)?.destinations?.[data.kind]
+    if (!destination) return []
 
-      // A dependent kind can't be listed until its parent is chosen.
-      if (destination.childOf && !data.parentId) return []
+    // A dependent kind can't be listed until its parent is chosen.
+    if (destination.childOf && !data.parentId) return []
 
-      const integration = await db.query.integrations.findFirst({
-        where: eq(integrations.integrationType, data.integrationType),
-      })
-      if (!integration?.secrets || integration.status !== 'active') return []
-
-      // Centralized token refresh (IF WO-13) so slot `list` closures stay thin.
-      const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
-      const accessToken = await getValidAccessToken(integration.id as IntegrationId)
-      if (!accessToken) return []
-
-      const config = (integration.config ?? {}) as Record<string, unknown>
-      return destination.list({ accessToken, config, parentId: data.parentId })
+    const integration = await db.query.integrations.findFirst({
+      where: eq(integrations.integrationType, data.integrationType),
     })
+    if (!integration?.secrets || integration.status !== 'active') return []
+
+    // Centralized token refresh (IF WO-13) so slot `list` closures stay thin.
+    const { getValidAccessToken } = await import('@/lib/server/integrations/token-refresh')
+    const accessToken = await getValidAccessToken(integration.id as IntegrationId)
+    if (!accessToken) return []
+
+    const config = (integration.config ?? {}) as Record<string, unknown>
+    return destination.list({ accessToken, config, parentId: data.parentId })
   })

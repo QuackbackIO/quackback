@@ -12,7 +12,6 @@ import type { AssistantSnippetId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { logger } from '@/lib/server/logger'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'assistant-snippets' })
 
@@ -38,27 +37,23 @@ const deleteSnippetSchema = z.object({ id: z.string() })
 /** All snippets, enabled or not — the admin list shows every snippet. */
 export const listSnippetsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list snippets')
-  return withErrorLog(log, 'list snippets', async () => {
-    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-    const { listSnippets } = await import('@/lib/server/domains/assistant/snippet.service')
-    return listSnippets()
-  })
+  await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+  const { listSnippets } = await import('@/lib/server/domains/assistant/snippet.service')
+  return listSnippets()
 })
 
 export const createSnippetFn = createServerFn({ method: 'POST' })
   .validator(createSnippetSchema)
   .handler(async ({ data }) => {
     log.info('create snippet')
-    return withErrorLog(log, 'create snippet', async () => {
-      const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-      const { createSnippet } = await import('@/lib/server/domains/assistant/snippet.service')
-      return createSnippet({
-        title: data.title,
-        content: data.content,
-        audience: data.audience,
-        enabled: data.enabled,
-        createdById: ctx.principal.id,
-      })
+    const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const { createSnippet } = await import('@/lib/server/domains/assistant/snippet.service')
+    return createSnippet({
+      title: data.title,
+      content: data.content,
+      audience: data.audience,
+      enabled: data.enabled,
+      createdById: ctx.principal.id,
     })
   })
 
@@ -66,15 +61,13 @@ export const updateSnippetFn = createServerFn({ method: 'POST' })
   .validator(updateSnippetSchema)
   .handler(async ({ data }) => {
     log.info('update snippet')
-    return withErrorLog(log, 'update snippet', async () => {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-      const { updateSnippet } = await import('@/lib/server/domains/assistant/snippet.service')
-      return updateSnippet(data.id as AssistantSnippetId, {
-        title: data.title,
-        content: data.content,
-        audience: data.audience,
-        enabled: data.enabled,
-      })
+    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const { updateSnippet } = await import('@/lib/server/domains/assistant/snippet.service')
+    return updateSnippet(data.id as AssistantSnippetId, {
+      title: data.title,
+      content: data.content,
+      audience: data.audience,
+      enabled: data.enabled,
     })
   })
 
@@ -82,10 +75,8 @@ export const deleteSnippetFn = createServerFn({ method: 'POST' })
   .validator(deleteSnippetSchema)
   .handler(async ({ data }) => {
     log.info('delete snippet')
-    return withErrorLog(log, 'delete snippet', async () => {
-      await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
-      const { deleteSnippet } = await import('@/lib/server/domains/assistant/snippet.service')
-      await deleteSnippet(data.id as AssistantSnippetId)
-      return { id: data.id }
-    })
+    await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
+    const { deleteSnippet } = await import('@/lib/server/domains/assistant/snippet.service')
+    await deleteSnippet(data.id as AssistantSnippetId)
+    return { id: data.id }
   })

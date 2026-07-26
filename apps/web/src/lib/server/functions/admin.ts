@@ -12,7 +12,6 @@ import type { BoardId, PostTagId, RoleId } from '@quackback/ids'
 import { getSetupState, isOnboardingComplete as checkComplete } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { getSession } from '@/lib/server/auth/session'
 import { getSettings } from './workspace'
 import {
@@ -155,40 +154,38 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
   .validator(inboxPostListSchema)
   .handler(async ({ data }) => {
     log.debug({ sort: data.sort, cursor: data.cursor ?? 'none' }, 'fetch inbox posts')
-    return withErrorLog(log, 'fetch inbox posts', async () => {
-      await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
+    await requireAuth({ permission: PERMISSIONS.POST_VIEW_PRIVATE })
 
-      const result = await listInboxPosts({
-        boardIds: data.boardIds as BoardId[] | undefined,
-        statusSlugs: data.statusSlugs,
-        tagIds: data.tagIds as PostTagId[] | undefined,
-        segmentIds: data.segmentIds as SegmentId[] | undefined,
-        ownerId: data.ownerId as PrincipalId | null | undefined,
-        search: data.search,
-        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-        minVotes: data.minVotes,
-        minComments: data.minComments,
-        responded: data.responded,
-        updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
-        sort: data.sort,
-        showDeleted: data.showDeleted,
-        cursor: data.cursor,
-        limit: data.limit,
-      })
-      log.debug({ count: result.items.length }, 'fetch inbox posts')
-      // Serialize contentJson field and Date fields
-      return {
-        ...result,
-        items: result.items.map((p) => ({
-          ...p,
-          contentJson: (p.contentJson ?? {}) as TiptapContent,
-          createdAt: p.createdAt.toISOString(),
-          updatedAt: p.updatedAt.toISOString(),
-          deletedAt: p.deletedAt?.toISOString() || null,
-        })),
-      }
+    const result = await listInboxPosts({
+      boardIds: data.boardIds as BoardId[] | undefined,
+      statusSlugs: data.statusSlugs,
+      tagIds: data.tagIds as PostTagId[] | undefined,
+      segmentIds: data.segmentIds as SegmentId[] | undefined,
+      ownerId: data.ownerId as PrincipalId | null | undefined,
+      search: data.search,
+      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+      minVotes: data.minVotes,
+      minComments: data.minComments,
+      responded: data.responded,
+      updatedBefore: data.updatedBefore ? new Date(data.updatedBefore) : undefined,
+      sort: data.sort,
+      showDeleted: data.showDeleted,
+      cursor: data.cursor,
+      limit: data.limit,
     })
+    log.debug({ count: result.items.length }, 'fetch inbox posts')
+    // Serialize contentJson field and Date fields
+    return {
+      ...result,
+      items: result.items.map((p) => ({
+        ...p,
+        contentJson: (p.contentJson ?? {}) as TiptapContent,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+        deletedAt: p.deletedAt?.toISOString() || null,
+      })),
+    }
   })
 
 /**
@@ -196,13 +193,11 @@ export const fetchInboxPosts = createServerFn({ method: 'GET' })
  */
 export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch tags list')
-  return withErrorLog(log, 'fetch tags list', async () => {
-    await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
+  await requireAuth({ permission: PERMISSIONS.TAG_VIEW })
 
-    const result = await listPostTags()
-    log.debug({ count: result.length }, 'fetch tags list')
-    return result
-  })
+  const result = await listPostTags()
+  log.debug({ count: result.length }, 'fetch tags list')
+  return result
 })
 
 /**
@@ -210,13 +205,11 @@ export const fetchTagsList = createServerFn({ method: 'GET' }).handler(async () 
  */
 export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch statuses list')
-  return withErrorLog(log, 'fetch statuses list', async () => {
-    await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
+  await requireAuth({ permission: PERMISSIONS.STATUS_VIEW })
 
-    const result = await listStatuses()
-    log.debug({ count: result.length }, 'fetch statuses list')
-    return result
-  })
+  const result = await listStatuses()
+  log.debug({ count: result.length }, 'fetch statuses list')
+  return result
 })
 
 /**
@@ -224,13 +217,11 @@ export const fetchStatusesList = createServerFn({ method: 'GET' }).handler(async
  */
 export const fetchTeamMembers = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch team members')
-  return withErrorLog(log, 'fetch team members', async () => {
-    await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+  await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
-    const result = await listTeamMembers()
-    log.debug({ count: result.length }, 'fetch team members')
-    return result
-  })
+  const result = await listTeamMembers()
+  log.debug({ count: result.length }, 'fetch team members')
+  return result
 })
 
 const searchPeopleSchema = z.object({
@@ -266,25 +257,23 @@ export const updateMemberRoleFn = createServerFn({ method: 'POST' })
   .validator(updatePrincipalRoleSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId, role: data.role }, 'update member role')
-    return withErrorLog(log, 'update member role', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
-      const { actorFromAuth } = await import('@/lib/server/audit/log')
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
+    const { actorFromAuth } = await import('@/lib/server/audit/log')
 
-      await updateMemberRole(
-        data.principalId as PrincipalId,
-        data.role,
-        auth.principal.id,
-        actorFromAuth(auth),
-        getRequestHeaders(),
-        {
-          assignRoleId: data.roleId as RoleId | undefined,
-          granterPermissions: auth.permissions,
-        }
-      )
+    await updateMemberRole(
+      data.principalId as PrincipalId,
+      data.role,
+      auth.principal.id,
+      actorFromAuth(auth),
+      getRequestHeaders(),
+      {
+        assignRoleId: data.roleId as RoleId | undefined,
+        granterPermissions: auth.permissions,
+      }
+    )
 
-      log.info({ principal_id: data.principalId, role: data.role }, 'member role updated')
-      return { principalId: data.principalId, role: data.role }
-    })
+    log.info({ principal_id: data.principalId, role: data.role }, 'member role updated')
+    return { principalId: data.principalId, role: data.role }
   })
 
 const forceSignOutInput = z.object({
@@ -337,20 +326,18 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
   .validator(principalIdSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'remove team member')
-    return withErrorLog(log, 'remove team member', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
-      const { actorFromAuth } = await import('@/lib/server/audit/log')
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
+    const { actorFromAuth } = await import('@/lib/server/audit/log')
 
-      await removeTeamMember(
-        data.principalId as PrincipalId,
-        auth.principal.id,
-        actorFromAuth(auth),
-        getRequestHeaders()
-      )
+    await removeTeamMember(
+      data.principalId as PrincipalId,
+      auth.principal.id,
+      actorFromAuth(auth),
+      getRequestHeaders()
+    )
 
-      log.info({ principal_id: data.principalId }, 'member removed')
-      return { principalId: data.principalId }
-    })
+    log.info({ principal_id: data.principalId }, 'member removed')
+    return { principalId: data.principalId }
   })
 
 /**
@@ -359,133 +346,131 @@ export const removeTeamMemberFn = createServerFn({ method: 'POST' })
  */
 export const fetchOnboardingStatus = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch onboarding status')
-  return withErrorLog(log, 'fetch onboarding status', async () => {
-    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
+  const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_VIEW })
 
-    const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
-    const { boards, helpCenterArticles, statusComponents, isNull, isNotNull, lte } =
-      await import('@/lib/server/db')
-    const { getSetupState } = await import('@/lib/shared/db-types')
-    const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
-    const { resolveFeatureFlags } = await import('@/lib/server/domains/settings/settings.types')
-    const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
+  const { getWidgetConfig } = await import('@/lib/server/domains/settings/settings.widget')
+  const { boards, helpCenterArticles, statusComponents, isNull, isNotNull, lte } =
+    await import('@/lib/server/db')
+  const { getSetupState } = await import('@/lib/shared/db-types')
+  const { permissionsForLegacyRole } = await import('@/lib/server/policy/permissions')
+  const { resolveFeatureFlags } = await import('@/lib/server/domains/settings/settings.types')
+  const { getTierLimits } = await import('@/lib/server/domains/settings/tier-limits.service')
 
-    const [
-      orgBoards,
-      humanMembers,
-      orgSettings,
-      widgetConfig,
-      connectedIntegration,
-      helpArticle,
-      publishedHelpArticle,
-      statusComponent,
-      tierLimits,
-    ] = await Promise.all([
-      db.query.boards.findMany({
-        columns: { id: true, access: true },
-        where: isNull(boards.deletedAt),
-      }),
-      // Teammates only (admin/member) — portal role=user must not complete "invite"
-      db
-        .select({ id: principal.id })
-        .from(principal)
-        .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member']))),
-      getSettings(),
-      getWidgetConfig(),
-      db.query.integrations.findFirst({
-        columns: { id: true },
-        where: eq(integrations.status, 'connected'),
-      }),
-      db.query.helpCenterArticles.findFirst({
-        columns: { id: true },
-        where: isNull(helpCenterArticles.deletedAt),
-      }),
-      db.query.helpCenterArticles.findFirst({
-        columns: { id: true },
-        where: and(
-          isNull(helpCenterArticles.deletedAt),
-          isNotNull(helpCenterArticles.publishedAt),
-          lte(helpCenterArticles.publishedAt, new Date())
-        ),
-      }),
-      db.query.statusComponents.findFirst({
-        columns: { id: true },
-        where: isNull(statusComponents.deletedAt),
-      }),
-      getTierLimits(),
-    ])
-
-    const setupState = getSetupState(orgSettings?.setupState ?? null)
-    const firstWin = await (await import('@/lib/server/activation-wins')).detectFirstWin(setupState)
-    const flags = resolveFeatureFlags(orgSettings?.featureFlags)
-    const permissions = permissionsForLegacyRole(auth.principal.role)
-    const hasBranding = Boolean(orgSettings?.logoKey)
-    const hasWidgetEnabled = widgetConfig.enabled === true
-    // Messenger is "live" when the messenger surface is on and the widget is enabled
-    const hasMessengerEnabled =
-      hasWidgetEnabled &&
-      (widgetConfig.messenger?.enabled ?? false) &&
-      (widgetConfig.tabs?.messenger ?? false)
-    const hasIntegration = Boolean(connectedIntegration)
-    const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
-    const hasPublicBoard = orgBoards.some((board) => board.access.view !== 'team')
-
-    log.debug(
-      {
-        has_boards: orgBoards.length > 0,
-        member_count: humanMembers.length,
-        has_branding: hasBranding,
-        has_widget: hasWidgetEnabled,
-        has_messenger: hasMessengerEnabled,
-        has_help_article: Boolean(helpArticle),
-        has_status_component: Boolean(statusComponent),
-        use_case: setupState?.useCase,
-      },
-      'fetch onboarding status'
-    )
-    return {
-      hasBoards: orgBoards.length > 0,
-      hasPublicBoard,
-      hasInternalBoard,
-      memberCount: humanMembers.length,
-      hasBranding,
-      hasWidgetEnabled,
-      hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
-      widgetLastSeenAt: orgSettings?.widgetInstalledLastSeenAt?.toISOString() ?? null,
-      widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
-      hasMessengerEnabled,
-      hasHelpArticle: Boolean(helpArticle),
-      hasPublishedHelpArticle: Boolean(publishedHelpArticle),
-      hasStatusComponent: Boolean(statusComponent),
-      hasIntegration,
-      hasFirstWin: firstWin.reached,
-      firstWinAt: firstWin.reachedAt,
-      useCase: setupState?.useCase ?? null,
-      taskResolutions: setupState?.taskResolutions ?? {},
-      boardCount: orgBoards.length,
-      maxBoards: tierLimits.maxBoards,
-      goalManaged: Boolean(
-        orgSettings &&
-        (orgSettings.managedFieldPaths as string[]).some(
-          (path) => path === 'workspace.useCase' || path === 'workspace'
-        )
+  const [
+    orgBoards,
+    humanMembers,
+    orgSettings,
+    widgetConfig,
+    connectedIntegration,
+    helpArticle,
+    publishedHelpArticle,
+    statusComponent,
+    tierLimits,
+  ] = await Promise.all([
+    db.query.boards.findMany({
+      columns: { id: true, access: true },
+      where: isNull(boards.deletedAt),
+    }),
+    // Teammates only (admin/member) — portal role=user must not complete "invite"
+    db
+      .select({ id: principal.id })
+      .from(principal)
+      .where(and(eq(principal.type, 'user'), inArray(principal.role, ['admin', 'member']))),
+    getSettings(),
+    getWidgetConfig(),
+    db.query.integrations.findFirst({
+      columns: { id: true },
+      where: eq(integrations.status, 'connected'),
+    }),
+    db.query.helpCenterArticles.findFirst({
+      columns: { id: true },
+      where: isNull(helpCenterArticles.deletedAt),
+    }),
+    db.query.helpCenterArticles.findFirst({
+      columns: { id: true },
+      where: and(
+        isNull(helpCenterArticles.deletedAt),
+        isNotNull(helpCenterArticles.publishedAt),
+        lte(helpCenterArticles.publishedAt, new Date())
       ),
-      permissions: {
-        settingsManage: permissions.has(PERMISSIONS.SETTINGS_MANAGE),
-        boardManage: permissions.has(PERMISSIONS.BOARD_MANAGE),
-        memberManage: permissions.has(PERMISSIONS.MEMBER_MANAGE),
-        brandingManage: permissions.has(PERMISSIONS.SETTINGS_BRANDING),
-        integrationManage: permissions.has(PERMISSIONS.INTEGRATION_MANAGE),
-        helpCenterManage: permissions.has(PERMISSIONS.HELP_CENTER_MANAGE),
-      },
-      features: {
-        supportInbox: flags.supportInbox,
-        helpCenter: flags.helpCenter,
-        statusPage: flags.statusPage,
-        integrations: tierLimits.features.integrations,
-      },
-    }
-  })
+    }),
+    db.query.statusComponents.findFirst({
+      columns: { id: true },
+      where: isNull(statusComponents.deletedAt),
+    }),
+    getTierLimits(),
+  ])
+
+  const setupState = getSetupState(orgSettings?.setupState ?? null)
+  const firstWin = await (await import('@/lib/server/activation-wins')).detectFirstWin(setupState)
+  const flags = resolveFeatureFlags(orgSettings?.featureFlags)
+  const permissions = permissionsForLegacyRole(auth.principal.role)
+  const hasBranding = Boolean(orgSettings?.logoKey)
+  const hasWidgetEnabled = widgetConfig.enabled === true
+  // Messenger is "live" when the messenger surface is on and the widget is enabled
+  const hasMessengerEnabled =
+    hasWidgetEnabled &&
+    (widgetConfig.messenger?.enabled ?? false) &&
+    (widgetConfig.tabs?.messenger ?? false)
+  const hasIntegration = Boolean(connectedIntegration)
+  const hasInternalBoard = orgBoards.some((board) => board.access.view === 'team')
+  const hasPublicBoard = orgBoards.some((board) => board.access.view !== 'team')
+
+  log.debug(
+    {
+      has_boards: orgBoards.length > 0,
+      member_count: humanMembers.length,
+      has_branding: hasBranding,
+      has_widget: hasWidgetEnabled,
+      has_messenger: hasMessengerEnabled,
+      has_help_article: Boolean(helpArticle),
+      has_status_component: Boolean(statusComponent),
+      use_case: setupState?.useCase,
+    },
+    'fetch onboarding status'
+  )
+  return {
+    hasBoards: orgBoards.length > 0,
+    hasPublicBoard,
+    hasInternalBoard,
+    memberCount: humanMembers.length,
+    hasBranding,
+    hasWidgetEnabled,
+    hasWidgetInstalled: Boolean(orgSettings?.widgetInstalledFirstSeenAt),
+    widgetLastSeenAt: orgSettings?.widgetInstalledLastSeenAt?.toISOString() ?? null,
+    widgetOriginHost: orgSettings?.widgetInstalledOriginHost ?? null,
+    hasMessengerEnabled,
+    hasHelpArticle: Boolean(helpArticle),
+    hasPublishedHelpArticle: Boolean(publishedHelpArticle),
+    hasStatusComponent: Boolean(statusComponent),
+    hasIntegration,
+    hasFirstWin: firstWin.reached,
+    firstWinAt: firstWin.reachedAt,
+    useCase: setupState?.useCase ?? null,
+    taskResolutions: setupState?.taskResolutions ?? {},
+    boardCount: orgBoards.length,
+    maxBoards: tierLimits.maxBoards,
+    goalManaged: Boolean(
+      orgSettings &&
+      (orgSettings.managedFieldPaths as string[]).some(
+        (path) => path === 'workspace.useCase' || path === 'workspace'
+      )
+    ),
+    permissions: {
+      settingsManage: permissions.has(PERMISSIONS.SETTINGS_MANAGE),
+      boardManage: permissions.has(PERMISSIONS.BOARD_MANAGE),
+      memberManage: permissions.has(PERMISSIONS.MEMBER_MANAGE),
+      brandingManage: permissions.has(PERMISSIONS.SETTINGS_BRANDING),
+      integrationManage: permissions.has(PERMISSIONS.INTEGRATION_MANAGE),
+      helpCenterManage: permissions.has(PERMISSIONS.HELP_CENTER_MANAGE),
+    },
+    features: {
+      supportInbox: flags.supportInbox,
+      helpCenter: flags.helpCenter,
+      statusPage: flags.statusPage,
+      integrations: tierLimits.features.integrations,
+    },
+  }
 })
 
 /** Save or clear a launch-plan task preference. Required steps can be moved
@@ -500,54 +485,49 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
   .validator(taskResolutionSchema)
   .handler(async ({ data }) => {
     log.debug({ task_id: data.taskId, resolution: data.resolution }, 'set launch task resolution')
-    return withErrorLog(log, 'set launch task resolution', async () => {
-      await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
-      const { buildLaunchTasks } = await import('@/lib/shared/launch-checklist')
-      const status = await fetchOnboardingStatus()
-      const task = buildLaunchTasks(status, data.outcome).find(
-        (candidate) => candidate.id === data.taskId
-      )
-      if (!task) throw new Error('Unknown launch task')
-      if (data.resolution === 'deferred' && task.classification !== 'prerequisite') {
-        throw new Error('Only setup steps can be moved later')
-      }
-      if (data.resolution === 'dismissed' && task.classification !== 'polish') {
-        throw new Error('Only optional customization can be skipped')
-      }
-      if (task.isCompleted && data.resolution)
-        throw new Error('Completed tasks cannot be deferred or dismissed')
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { buildLaunchTasks } = await import('@/lib/shared/launch-checklist')
+    const status = await fetchOnboardingStatus()
+    const task = buildLaunchTasks(status, data.outcome).find(
+      (candidate) => candidate.id === data.taskId
+    )
+    if (!task) throw new Error('Unknown launch task')
+    if (data.resolution === 'deferred' && task.classification !== 'prerequisite') {
+      throw new Error('Only setup steps can be moved later')
+    }
+    if (data.resolution === 'dismissed' && task.classification !== 'polish') {
+      throw new Error('Only optional customization can be skipped')
+    }
+    if (task.isCompleted && data.resolution)
+      throw new Error('Completed tasks cannot be deferred or dismissed')
 
-      const { mutateSetupStateAtomic } = await import('@/lib/server/setup-state')
-      const { state } = await mutateSetupStateAtomic((current) => {
-        if (current.useCase !== data.outcome)
-          throw new Error('Task outcome does not match the workspace goal')
-        const taskResolutions = { ...(current.taskResolutions ?? {}) }
-        const outcomeTasks = { ...(taskResolutions[data.outcome] ?? {}) }
-        if (data.resolution) {
-          outcomeTasks[data.taskId] = {
-            resolution: data.resolution,
-            resolvedAt: new Date().toISOString(),
-          }
-        } else {
-          delete outcomeTasks[data.taskId]
+    const { mutateSetupStateAtomic } = await import('@/lib/server/setup-state')
+    const { state } = await mutateSetupStateAtomic((current) => {
+      if (current.useCase !== data.outcome)
+        throw new Error('Task outcome does not match the workspace goal')
+      const taskResolutions = { ...(current.taskResolutions ?? {}) }
+      const outcomeTasks = { ...(taskResolutions[data.outcome] ?? {}) }
+      if (data.resolution) {
+        outcomeTasks[data.taskId] = {
+          resolution: data.resolution,
+          resolvedAt: new Date().toISOString(),
         }
-        if (Object.keys(outcomeTasks).length > 0) taskResolutions[data.outcome] = outcomeTasks
-        else delete taskResolutions[data.outcome]
-        return {
-          state: {
-            ...current,
-            taskResolutions: Object.keys(taskResolutions).length > 0 ? taskResolutions : undefined,
-          },
-          value: undefined,
-        }
-      })
-
-      log.info(
-        { task_id: data.taskId, resolution: data.resolution },
-        'launch task resolution saved'
-      )
-      return { taskResolutions: state.taskResolutions ?? {} }
+      } else {
+        delete outcomeTasks[data.taskId]
+      }
+      if (Object.keys(outcomeTasks).length > 0) taskResolutions[data.outcome] = outcomeTasks
+      else delete taskResolutions[data.outcome]
+      return {
+        state: {
+          ...current,
+          taskResolutions: Object.keys(taskResolutions).length > 0 ? taskResolutions : undefined,
+        },
+        value: undefined,
+      }
     })
+
+    log.info({ task_id: data.taskId, resolution: data.resolution }, 'launch task resolution saved')
+    return { taskResolutions: state.taskResolutions ?? {} }
   })
 
 /**
@@ -555,19 +535,17 @@ export const setLaunchTaskResolutionFn = createServerFn({ method: 'POST' })
  */
 export const fetchIntegrationsList = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch integrations list')
-  return withErrorLog(log, 'fetch integrations list', async () => {
-    await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
+  await requireAuth({ permission: PERMISSIONS.INTEGRATION_VIEW })
 
-    const results = await db.query.integrations.findMany()
-    log.debug({ count: results.length }, 'fetch integrations list')
-    return results.map((i) => ({
-      id: i.id,
-      integrationType: i.integrationType,
-      status: i.status,
-      workspaceName: (i.config as Record<string, unknown>)?.workspaceName as string | undefined,
-      connectedAt: i.connectedAt,
-    }))
-  })
+  const results = await db.query.integrations.findMany()
+  log.debug({ count: results.length }, 'fetch integrations list')
+  return results.map((i) => ({
+    id: i.id,
+    integrationType: i.integrationType,
+    status: i.status,
+    workspaceName: (i.config as Record<string, unknown>)?.workspaceName as string | undefined,
+    connectedAt: i.connectedAt,
+  }))
 })
 
 /**
@@ -585,103 +563,101 @@ export const fetchIntegrationByType = createServerFn({ method: 'GET' })
   .validator(z.object({ type: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ type: data.type }, 'fetch integration by type')
-    return withErrorLog(log, 'fetch integration by type', async () => {
-      // integration.manage (admin-only), not integration.view: this returns the
-      // raw integration.config, which holds live OAuth/bot tokens. A Manager-tier
-      // read permission must never see those.
-      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    // integration.manage (admin-only), not integration.view: this returns the
+    // raw integration.config, which holds live OAuth/bot tokens. A Manager-tier
+    // read permission must never see those.
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { integrations } = await import('@/lib/server/db')
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const { hasPlatformCredentials } =
-        await import('@/lib/server/domains/platform-credentials/platform-credential.service')
+    const { integrations } = await import('@/lib/server/db')
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const { hasPlatformCredentials } =
+      await import('@/lib/server/domains/platform-credentials/platform-credential.service')
 
-      const definition = getIntegration(data.type)
-      const platformCredentialFields = definition?.platformCredentials ?? []
-      const platformCredentialsConfigured =
-        platformCredentialFields.length === 0 || (await hasPlatformCredentials(data.type))
+    const definition = getIntegration(data.type)
+    const platformCredentialFields = definition?.platformCredentials ?? []
+    const platformCredentialsConfigured =
+      platformCredentialFields.length === 0 || (await hasPlatformCredentials(data.type))
 
-      const integration = await db.query.integrations.findFirst({
-        where: eq(integrations.integrationType, data.type),
-        with: {
-          eventMappings: true,
-        },
-      })
+    const integration = await db.query.integrations.findFirst({
+      where: eq(integrations.integrationType, data.type),
+      with: {
+        eventMappings: true,
+      },
+    })
 
-      if (!integration) {
-        log.debug({ type: data.type }, 'fetch integration by type not found')
-        return {
-          integration: null,
-          platformCredentialFields,
-          platformCredentialsConfigured,
-        }
-      }
-
-      log.debug({ type: data.type, id: integration.id }, 'fetch integration by type found')
-
-      // Group event mappings by targetKey into notification channels
-      const channelMap = new Map<
-        string,
-        {
-          channelId: string
-          events: { eventType: string; enabled: boolean }[]
-          boardIds: string[] | null
-        }
-      >()
-
-      const integrationConfig = (integration.config as Record<string, unknown>) || {}
-
-      for (const m of integration.eventMappings) {
-        const targetKey = (m as { targetKey?: string }).targetKey || 'default'
-        const actionConfig = (m.actionConfig as Record<string, unknown>) || {}
-        const channelId = (actionConfig.channelId || integrationConfig.channelId) as
-          | string
-          | undefined
-
-        if (!channelId) continue
-
-        if (!channelMap.has(targetKey)) {
-          const filters = (m.filters as { boardIds?: string[] } | null) || null
-          channelMap.set(targetKey, {
-            channelId,
-            events: [],
-            boardIds: filters?.boardIds?.length ? filters.boardIds : null,
-          })
-        }
-
-        channelMap.get(targetKey)!.events.push({
-          eventType: m.eventType,
-          enabled: m.enabled,
-        })
-      }
-
-      const notificationChannels = [...channelMap.values()]
-
+    if (!integration) {
+      log.debug({ type: data.type }, 'fetch integration by type not found')
       return {
-        integration: {
-          id: integration.id,
-          status: integration.status,
-          workspaceName: integrationConfig.workspaceName as string | undefined,
-          config: integration.config as Record<string, string | number | boolean | null>,
-          eventMappings: integration.eventMappings.map((m) => ({
-            id: m.id,
-            eventType: m.eventType,
-            enabled: m.enabled,
-          })),
-          notificationChannels,
-          // Per-integration health telemetry (IF WO-14 columns): last successful
-          // outbound delivery, last inbound webhook, and last recorded error.
-          health: {
-            lastOutboundAt: integration.lastOutboundAt?.toISOString() ?? null,
-            lastInboundAt: integration.lastInboundAt?.toISOString() ?? null,
-            lastError: integration.lastError ?? null,
-            lastErrorAt: integration.lastErrorAt?.toISOString() ?? null,
-          },
-        },
+        integration: null,
         platformCredentialFields,
         platformCredentialsConfigured,
       }
-    })
+    }
+
+    log.debug({ type: data.type, id: integration.id }, 'fetch integration by type found')
+
+    // Group event mappings by targetKey into notification channels
+    const channelMap = new Map<
+      string,
+      {
+        channelId: string
+        events: { eventType: string; enabled: boolean }[]
+        boardIds: string[] | null
+      }
+    >()
+
+    const integrationConfig = (integration.config as Record<string, unknown>) || {}
+
+    for (const m of integration.eventMappings) {
+      const targetKey = (m as { targetKey?: string }).targetKey || 'default'
+      const actionConfig = (m.actionConfig as Record<string, unknown>) || {}
+      const channelId = (actionConfig.channelId || integrationConfig.channelId) as
+        | string
+        | undefined
+
+      if (!channelId) continue
+
+      if (!channelMap.has(targetKey)) {
+        const filters = (m.filters as { boardIds?: string[] } | null) || null
+        channelMap.set(targetKey, {
+          channelId,
+          events: [],
+          boardIds: filters?.boardIds?.length ? filters.boardIds : null,
+        })
+      }
+
+      channelMap.get(targetKey)!.events.push({
+        eventType: m.eventType,
+        enabled: m.enabled,
+      })
+    }
+
+    const notificationChannels = [...channelMap.values()]
+
+    return {
+      integration: {
+        id: integration.id,
+        status: integration.status,
+        workspaceName: integrationConfig.workspaceName as string | undefined,
+        config: integration.config as Record<string, string | number | boolean | null>,
+        eventMappings: integration.eventMappings.map((m) => ({
+          id: m.id,
+          eventType: m.eventType,
+          enabled: m.enabled,
+        })),
+        notificationChannels,
+        // Per-integration health telemetry (IF WO-14 columns): last successful
+        // outbound delivery, last inbound webhook, and last recorded error.
+        health: {
+          lastOutboundAt: integration.lastOutboundAt?.toISOString() ?? null,
+          lastInboundAt: integration.lastInboundAt?.toISOString() ?? null,
+          lastError: integration.lastError ?? null,
+          lastErrorAt: integration.lastErrorAt?.toISOString() ?? null,
+        },
+      },
+      platformCredentialFields,
+      platformCredentialsConfigured,
+    }
   })
 
 /**
@@ -720,81 +696,79 @@ export const getPublicAuthConfig = createServerFn({ method: 'GET' }).handler(asy
  */
 export const checkOnboardingState = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('check onboarding state')
-  return withErrorLog(log, 'check onboarding state', async () => {
-    const session = await getSession()
-    const userId = session?.user?.id
+  const session = await getSession()
+  const userId = session?.user?.id
 
-    if (!userId) {
-      log.debug('check onboarding state no user id')
+  if (!userId) {
+    log.debug('check onboarding state no user id')
+    return {
+      principalRecord: null,
+      hasSettings: false,
+      setupState: null,
+      isOnboardingComplete: false,
+    }
+  }
+
+  // Check if user has a principal record
+  let principalRecord = await db.query.principal.findFirst({
+    where: eq(principal.userId, userId as UserId),
+  })
+
+  if (!principalRecord) {
+    // Check if any human admin exists (exclude service principals)
+    const existingAdmin = await db.query.principal.findFirst({
+      where: and(eq(principal.role, 'admin'), eq(principal.type, 'user')),
+    })
+
+    if (existingAdmin) {
+      // Not first user - they need an invitation
+      log.debug({ needs_invitation: true }, 'check onboarding state')
       return {
         principalRecord: null,
+        needsInvitation: true,
         hasSettings: false,
         setupState: null,
         isOnboardingComplete: false,
       }
     }
 
-    // Check if user has a principal record
-    let principalRecord = await db.query.principal.findFirst({
-      where: eq(principal.userId, userId as UserId),
+    // First user - create admin principal record (race-safe).
+    const { principal: newPrincipal, created } = await ensurePrincipalForUser({
+      userId: userId as UserId,
+      role: 'admin',
     })
+    // A concurrent lazy create may have seeded role 'user'; promote so the
+    // first user still lands as admin.
+    if (!created && !isAdmin(newPrincipal.role)) {
+      await setPrincipalRole({ userId: userId as UserId }, 'admin')
+      newPrincipal.role = 'admin'
+    }
+    principalRecord = newPrincipal
+    log.info({ principal_id: principalRecord.id }, 'created admin principal')
+  }
 
-    if (!principalRecord) {
-      // Check if any human admin exists (exclude service principals)
-      const existingAdmin = await db.query.principal.findFirst({
-        where: and(eq(principal.role, 'admin'), eq(principal.type, 'user')),
-      })
+  // Get settings to check setup state
+  const currentSettings = await getSettings()
+  const setupState = getSetupState(currentSettings?.setupState ?? null)
+  const isOnboardingComplete = checkComplete(setupState)
 
-      if (existingAdmin) {
-        // Not first user - they need an invitation
-        log.debug({ needs_invitation: true }, 'check onboarding state')
-        return {
-          principalRecord: null,
-          needsInvitation: true,
-          hasSettings: false,
-          setupState: null,
-          isOnboardingComplete: false,
+  log.debug(
+    { setup_state: setupState, is_complete: isOnboardingComplete },
+    'check onboarding state'
+  )
+  return {
+    principalRecord: principalRecord
+      ? {
+          id: principalRecord.id,
+          userId: principalRecord.userId,
+          role: principalRecord.role,
         }
-      }
-
-      // First user - create admin principal record (race-safe).
-      const { principal: newPrincipal, created } = await ensurePrincipalForUser({
-        userId: userId as UserId,
-        role: 'admin',
-      })
-      // A concurrent lazy create may have seeded role 'user'; promote so the
-      // first user still lands as admin.
-      if (!created && !isAdmin(newPrincipal.role)) {
-        await setPrincipalRole({ userId: userId as UserId }, 'admin')
-        newPrincipal.role = 'admin'
-      }
-      principalRecord = newPrincipal
-      log.info({ principal_id: principalRecord.id }, 'created admin principal')
-    }
-
-    // Get settings to check setup state
-    const currentSettings = await getSettings()
-    const setupState = getSetupState(currentSettings?.setupState ?? null)
-    const isOnboardingComplete = checkComplete(setupState)
-
-    log.debug(
-      { setup_state: setupState, is_complete: isOnboardingComplete },
-      'check onboarding state'
-    )
-    return {
-      principalRecord: principalRecord
-        ? {
-            id: principalRecord.id,
-            userId: principalRecord.userId,
-            role: principalRecord.role,
-          }
-        : null,
-      needsInvitation: false,
-      hasSettings: !!currentSettings,
-      setupState,
-      isOnboardingComplete,
-    }
-  })
+      : null,
+    needsInvitation: false,
+    hasSettings: !!currentSettings,
+    setupState,
+    isOnboardingComplete,
+  }
 })
 
 // ============================================
@@ -808,37 +782,35 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
   .validator(listPortalUsersSchema)
   .handler(async ({ data }) => {
     log.debug('list portal users')
-    return withErrorLog(log, 'list portal users', async () => {
-      await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
-      const result = await listPortalUsers({
-        search: data.search,
-        verified: data.verified,
-        dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
-        dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
-        emailDomain: data.emailDomain,
-        postCount: data.postCount,
-        voteCount: data.voteCount,
-        commentCount: data.commentCount,
-        customAttrs: data.customAttrs,
-        sort: data.sort,
-        page: data.page,
-        limit: data.limit,
-        segmentIds: data.segmentIds as SegmentId[] | undefined,
-        lifecycle: data.lifecycle,
-      })
-
-      log.debug({ count: result.items.length }, 'list portal users')
-      // Serialize Date fields for client
-      return {
-        ...result,
-        items: result.items.map((user) => ({
-          ...user,
-          joinedAt: user.joinedAt.toISOString(),
-          lastSeenAt: user.lastSeenAt ? user.lastSeenAt.toISOString() : null,
-        })),
-      }
+    const result = await listPortalUsers({
+      search: data.search,
+      verified: data.verified,
+      dateFrom: data.dateFrom ? new Date(data.dateFrom) : undefined,
+      dateTo: data.dateTo ? new Date(data.dateTo) : undefined,
+      emailDomain: data.emailDomain,
+      postCount: data.postCount,
+      voteCount: data.voteCount,
+      commentCount: data.commentCount,
+      customAttrs: data.customAttrs,
+      sort: data.sort,
+      page: data.page,
+      limit: data.limit,
+      segmentIds: data.segmentIds as SegmentId[] | undefined,
+      lifecycle: data.lifecycle,
     })
+
+    log.debug({ count: result.items.length }, 'list portal users')
+    // Serialize Date fields for client
+    return {
+      ...result,
+      items: result.items.map((user) => ({
+        ...user,
+        joinedAt: user.joinedAt.toISOString(),
+        lastSeenAt: user.lastSeenAt ? user.lastSeenAt.toISOString() : null,
+      })),
+    }
   })
 
 /**
@@ -848,29 +820,27 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
   .validator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     log.debug({ principal_id: data.principalId }, 'get portal user')
-    return withErrorLog(log, 'get portal user', async () => {
-      await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
 
-      const result = await getPortalUserDetail(data.principalId as PrincipalId)
+    const result = await getPortalUserDetail(data.principalId as PrincipalId)
 
-      // Serialize Date fields for client
-      if (!result) {
-        log.debug({ principal_id: data.principalId }, 'get portal user not found')
-        return null
-      }
+    // Serialize Date fields for client
+    if (!result) {
+      log.debug({ principal_id: data.principalId }, 'get portal user not found')
+      return null
+    }
 
-      log.debug({ principal_id: data.principalId }, 'get portal user found')
-      return {
-        ...result,
-        joinedAt: result.joinedAt.toISOString(),
-        createdAt: result.createdAt.toISOString(),
-        engagedPosts: result.engagedPosts.map((post) => ({
-          ...post,
-          createdAt: post.createdAt.toISOString(),
-          engagedAt: post.engagedAt.toISOString(),
-        })),
-      }
-    })
+    log.debug({ principal_id: data.principalId }, 'get portal user found')
+    return {
+      ...result,
+      joinedAt: result.joinedAt.toISOString(),
+      createdAt: result.createdAt.toISOString(),
+      engagedPosts: result.engagedPosts.map((post) => ({
+        ...post,
+        createdAt: post.createdAt.toISOString(),
+        engagedAt: post.engagedAt.toISOString(),
+      })),
+    }
   })
 
 /**
@@ -886,53 +856,51 @@ export const updatePortalUserFn = createServerFn({ method: 'POST' })
   .validator(updatePortalUserSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'update portal user')
-    return withErrorLog(log, 'update portal user', async () => {
-      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
-      // Look up the principal to get userId
-      const p = await db.query.principal.findFirst({
-        where: eq(principal.id, data.principalId as PrincipalId),
-        columns: { userId: true },
-      })
-      if (!p?.userId) throw new Error('User not found')
-
-      // Build update set
-      const updates: Record<string, unknown> = {}
-      if (data.name !== undefined) updates.name = data.name.trim()
-      if (data.email !== undefined) {
-        // If setting an email, check uniqueness
-        if (data.email !== null) {
-          const normalized = data.email.toLowerCase().trim()
-          const existing = await db
-            .select({ id: user.id })
-            .from(user)
-            .where(eq(user.email, normalized))
-            .limit(1)
-          if (existing.length > 0 && existing[0].id !== p.userId) {
-            throw new Error('Email already in use')
-          }
-          updates.email = normalized
-        } else {
-          updates.email = null
-        }
-      }
-
-      if (Object.keys(updates).length === 0) {
-        return { success: true }
-      }
-
-      await db.update(user).set(updates).where(eq(user.id, p.userId))
-
-      // Sync display name to principal if name changed
-      if (data.name !== undefined) {
-        await syncPrincipalProfileById(data.principalId as PrincipalId, {
-          displayName: data.name.trim(),
-        })
-      }
-
-      log.info({ principal_id: data.principalId }, 'portal user updated')
-      return { success: true }
+    // Look up the principal to get userId
+    const p = await db.query.principal.findFirst({
+      where: eq(principal.id, data.principalId as PrincipalId),
+      columns: { userId: true },
     })
+    if (!p?.userId) throw new Error('User not found')
+
+    // Build update set
+    const updates: Record<string, unknown> = {}
+    if (data.name !== undefined) updates.name = data.name.trim()
+    if (data.email !== undefined) {
+      // If setting an email, check uniqueness
+      if (data.email !== null) {
+        const normalized = data.email.toLowerCase().trim()
+        const existing = await db
+          .select({ id: user.id })
+          .from(user)
+          .where(eq(user.email, normalized))
+          .limit(1)
+        if (existing.length > 0 && existing[0].id !== p.userId) {
+          throw new Error('Email already in use')
+        }
+        updates.email = normalized
+      } else {
+        updates.email = null
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return { success: true }
+    }
+
+    await db.update(user).set(updates).where(eq(user.id, p.userId))
+
+    // Sync display name to principal if name changed
+    if (data.name !== undefined) {
+      await syncPrincipalProfileById(data.principalId as PrincipalId, {
+        displayName: data.name.trim(),
+      })
+    }
+
+    log.info({ principal_id: data.principalId }, 'portal user updated')
+    return { success: true }
   })
 
 /**
@@ -951,24 +919,22 @@ export const createPortalUserFn = createServerFn({ method: 'POST' })
   .validator(createPortalUserSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create portal user')
-    return withErrorLog(log, 'create portal user', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
-      const { createPortalUser } = await import('@/lib/server/domains/users/user.create')
-      const { actorFromAuth } = await import('@/lib/server/audit/log')
-      const result = await createPortalUser(data, {
-        actor: actorFromAuth(auth),
-        headers: getRequestHeaders(),
-      })
-
-      log.info({ principal_id: result.principalId }, 'portal user created')
-      return {
-        principalId: result.principalId as string,
-        name: result.name,
-        email: result.email,
-        emailVerified: result.emailVerified,
-      }
+    const { createPortalUser } = await import('@/lib/server/domains/users/user.create')
+    const { actorFromAuth } = await import('@/lib/server/audit/log')
+    const result = await createPortalUser(data, {
+      actor: actorFromAuth(auth),
+      headers: getRequestHeaders(),
     })
+
+    log.info({ principal_id: result.principalId }, 'portal user created')
+    return {
+      principalId: result.principalId as string,
+      name: result.name,
+      email: result.email,
+      emailVerified: result.emailVerified,
+    }
   })
 
 /**
@@ -988,11 +954,9 @@ export type { ContactEmailMatch } from '@/lib/server/domains/users/user.dedup'
 export const findPortalUsersByEmailFn = createServerFn({ method: 'POST' })
   .validator(findPortalUsersByEmailSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'find portal users by email', async () => {
-      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
-      const { findContactsByEmail } = await import('@/lib/server/domains/users/user.dedup')
-      return await findContactsByEmail(data.email)
-    })
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    const { findContactsByEmail } = await import('@/lib/server/domains/users/user.dedup')
+    return await findContactsByEmail(data.email)
   })
 
 /**
@@ -1002,14 +966,12 @@ export const deletePortalUserFn = createServerFn({ method: 'POST' })
   .validator(portalUserByIdSchema)
   .handler(async ({ data }) => {
     log.info({ principal_id: data.principalId }, 'delete portal user')
-    return withErrorLog(log, 'delete portal user', async () => {
-      await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
-      await removePortalUser(data.principalId as PrincipalId)
+    await removePortalUser(data.principalId as PrincipalId)
 
-      log.info({ principal_id: data.principalId }, 'portal user deleted')
-      return { principalId: data.principalId }
-    })
+    log.info({ principal_id: data.principalId }, 'portal user deleted')
+    return { principalId: data.principalId }
   })
 
 // ============================================
@@ -1040,103 +1002,101 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
   .validator(sendInvitationSchema)
   .handler(async ({ data }) => {
     log.info({ role: data.role }, 'send invitation')
-    return withErrorLog(log, 'send invitation', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
-      // Tier-limit gate (no-op in OSS).
-      const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
-      await enforceSeatLimit()
+    // Tier-limit gate (no-op in OSS).
+    const { enforceSeatLimit } = await import('@/lib/server/domains/principals/seat-limit')
+    await enforceSeatLimit()
 
-      const email = data.email.toLowerCase()
+    const email = data.email.toLowerCase()
 
-      // Parallelize invitation and user validation queries
-      const [existingInvitation, existingUser] = await Promise.all([
-        db.query.invitation.findFirst({
-          where: and(
-            eq(invitation.email, email),
-            eq(invitation.status, 'pending'),
-            eq(invitation.kind, 'team')
-          ),
-        }),
-        db.query.user.findFirst({
-          where: eq(user.email, email),
-        }),
-      ])
+    // Parallelize invitation and user validation queries
+    const [existingInvitation, existingUser] = await Promise.all([
+      db.query.invitation.findFirst({
+        where: and(
+          eq(invitation.email, email),
+          eq(invitation.status, 'pending'),
+          eq(invitation.kind, 'team')
+        ),
+      }),
+      db.query.user.findFirst({
+        where: eq(user.email, email),
+      }),
+    ])
 
-      if (existingInvitation) {
-        throw new Error('An invitation has already been sent to this email')
-      }
+    if (existingInvitation) {
+      throw new Error('An invitation has already been sent to this email')
+    }
 
-      if (existingUser) {
-        // Check if they already have a team member role (admin or member)
-        const existingPrincipal = await db.query.principal.findFirst({
-          where: eq(principal.userId, existingUser.id),
-        })
-
-        if (existingPrincipal && existingPrincipal.role !== 'user') {
-          throw new Error('A team member with this email already exists')
-        }
-        // Portal users (role='user' or no member record) can be invited to become team members
-      }
-
-      // A custom-role grant rides role='member', never points at the Owner
-      // preset, and is capped by the inviter's own permission set (assignment
-      // is a grant — same ceiling as authoring).
-      if (data.roleId) {
-        if (data.role !== 'member') {
-          throw new Error('Custom role invites use the member role')
-        }
-        const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
-        await assertGrantableRole(data.roleId as RoleId, auth.permissions)
-      }
-
-      const invitationId = generateId('invite')
-      const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
-      const now = new Date()
-
-      // Mint the magic link before the insert so the row records its token in
-      // its token set (cancel revokes every token in the set). invitationId is
-      // fixed above, so the callback path is already known.
-      const portalUrl = getBaseUrl()
-      const callbackURL = `/complete-signup/${invitationId}`
-      const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
-        email,
-        callbackURL,
-        portalUrl
-      )
-
-      await db.insert(invitation).values({
-        id: invitationId,
-        email,
-        name: data.name || null,
-        role: data.role,
-        roleId: (data.roleId as RoleId | undefined) ?? null,
-        status: 'pending',
-        expiresAt,
-        lastSentAt: now,
-        inviterId: auth.user.id,
-        createdAt: now,
-        magicLinkTokens: [magicLinkToken],
+    if (existingUser) {
+      // Check if they already have a team member role (admin or member)
+      const existingPrincipal = await db.query.principal.findFirst({
+        where: eq(principal.userId, existingUser.id),
       })
 
-      const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-      const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-      const result = await sendInvitationEmail({
-        to: email,
-        invitedByName: auth.user.name,
-        inviteeName: data.name || undefined,
-        workspaceName: auth.settings.name,
-        inviteLink,
-        logoUrl,
-      })
-
-      log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation sent')
-      return {
-        invitationId,
-        emailSent: result.sent,
-        inviteLink: !result.sent ? inviteLink : undefined,
+      if (existingPrincipal && existingPrincipal.role !== 'user') {
+        throw new Error('A team member with this email already exists')
       }
+      // Portal users (role='user' or no member record) can be invited to become team members
+    }
+
+    // A custom-role grant rides role='member', never points at the Owner
+    // preset, and is capped by the inviter's own permission set (assignment
+    // is a grant — same ceiling as authoring).
+    if (data.roleId) {
+      if (data.role !== 'member') {
+        throw new Error('Custom role invites use the member role')
+      }
+      const { assertGrantableRole } = await import('@/lib/server/domains/roles/role.grants')
+      await assertGrantableRole(data.roleId as RoleId, auth.permissions)
+    }
+
+    const invitationId = generateId('invite')
+    const expiresAt = new Date(Date.now() + INVITATION_EXPIRY_MS)
+    const now = new Date()
+
+    // Mint the magic link before the insert so the row records its token in
+    // its token set (cancel revokes every token in the set). invitationId is
+    // fixed above, so the callback path is already known.
+    const portalUrl = getBaseUrl()
+    const callbackURL = `/complete-signup/${invitationId}`
+    const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
+      email,
+      callbackURL,
+      portalUrl
+    )
+
+    await db.insert(invitation).values({
+      id: invitationId,
+      email,
+      name: data.name || null,
+      role: data.role,
+      roleId: (data.roleId as RoleId | undefined) ?? null,
+      status: 'pending',
+      expiresAt,
+      lastSentAt: now,
+      inviterId: auth.user.id,
+      createdAt: now,
+      magicLinkTokens: [magicLinkToken],
     })
+
+    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+    const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
+    const result = await sendInvitationEmail({
+      to: email,
+      invitedByName: auth.user.name,
+      inviteeName: data.name || undefined,
+      workspaceName: auth.settings.name,
+      inviteLink,
+      logoUrl,
+    })
+
+    log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation sent')
+    return {
+      invitationId,
+      emailSent: result.sent,
+      inviteLink: !result.sent ? inviteLink : undefined,
+    }
   })
 
 /**
@@ -1146,55 +1106,53 @@ export const cancelInvitationFn = createServerFn({ method: 'POST' })
   .validator(invitationByIdSchema)
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'cancel invitation')
-    return withErrorLog(log, 'cancel invitation', async () => {
-      await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
-      const invitationId = data.invitationId as InviteId
+    const invitationId = data.invitationId as InviteId
 
-      const invitationRecord = await db.query.invitation.findFirst({
-        where: and(
-          eq(invitation.id, invitationId),
-          eq(invitation.status, 'pending'),
-          eq(invitation.kind, 'team')
-        ),
-      })
-
-      if (!invitationRecord) {
-        throw new Error('Invitation not found')
-      }
-
-      // TOCTOU pin: status='pending' in the WHERE so a concurrent
-      // accept (Better Auth's magic-link verify) isn't silently
-      // overwritten to 'canceled'. Mirrors the portal-side cancel in
-      // functions/portal-invites.ts:256 which had this pin from day
-      // one. `.returning()` lets us treat zero rows as "lost the race"
-      // so the response doesn't lie about success.
-      const cancelled = await db
-        .update(invitation)
-        .set({ status: 'canceled' })
-        .where(
-          and(
-            eq(invitation.id, invitationId),
-            eq(invitation.kind, 'team'),
-            eq(invitation.status, 'pending')
-          )
-        )
-        .returning({ id: invitation.id, magicLinkTokens: invitation.magicLinkTokens })
-
-      if (cancelled.length === 0) {
-        throw new Error('Invitation is no longer pending — refresh and try again')
-      }
-
-      // Invalidate every link this invite ever minted, so a cancelled invite
-      // can't sign anyone in. Revoking the full set (returned atomically by the
-      // status flip) closes the resend/copy/worker-restart windows where a
-      // single rotating pointer could leave a token live but untracked.
-      const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
-      await revokeMagicLinkTokens(cancelled[0].magicLinkTokens)
-
-      log.info({ invitation_id: invitationId }, 'invitation canceled')
-      return { invitationId }
+    const invitationRecord = await db.query.invitation.findFirst({
+      where: and(
+        eq(invitation.id, invitationId),
+        eq(invitation.status, 'pending'),
+        eq(invitation.kind, 'team')
+      ),
     })
+
+    if (!invitationRecord) {
+      throw new Error('Invitation not found')
+    }
+
+    // TOCTOU pin: status='pending' in the WHERE so a concurrent
+    // accept (Better Auth's magic-link verify) isn't silently
+    // overwritten to 'canceled'. Mirrors the portal-side cancel in
+    // functions/portal-invites.ts:256 which had this pin from day
+    // one. `.returning()` lets us treat zero rows as "lost the race"
+    // so the response doesn't lie about success.
+    const cancelled = await db
+      .update(invitation)
+      .set({ status: 'canceled' })
+      .where(
+        and(
+          eq(invitation.id, invitationId),
+          eq(invitation.kind, 'team'),
+          eq(invitation.status, 'pending')
+        )
+      )
+      .returning({ id: invitation.id, magicLinkTokens: invitation.magicLinkTokens })
+
+    if (cancelled.length === 0) {
+      throw new Error('Invitation is no longer pending — refresh and try again')
+    }
+
+    // Invalidate every link this invite ever minted, so a cancelled invite
+    // can't sign anyone in. Revoking the full set (returned atomically by the
+    // status flip) closes the resend/copy/worker-restart windows where a
+    // single rotating pointer could leave a token live but untracked.
+    const { revokeMagicLinkTokens } = await import('@/lib/server/auth/magic-link-mint')
+    await revokeMagicLinkTokens(cancelled[0].magicLinkTokens)
+
+    log.info({ invitation_id: invitationId }, 'invitation canceled')
+    return { invitationId }
   })
 
 /**
@@ -1204,93 +1162,91 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
   .validator(invitationByIdSchema)
   .handler(async ({ data }) => {
     log.info({ invitation_id: data.invitationId }, 'resend invitation')
-    return withErrorLog(log, 'resend invitation', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
+    const auth = await requireAuth({ permission: PERMISSIONS.MEMBER_MANAGE })
 
-      const invitationId = data.invitationId as InviteId
+    const invitationId = data.invitationId as InviteId
 
-      const invitationRecord = await db.query.invitation.findFirst({
-        where: and(
-          eq(invitation.id, invitationId),
-          eq(invitation.status, 'pending'),
-          eq(invitation.kind, 'team')
-        ),
-      })
-
-      if (!invitationRecord) {
-        throw new Error('Invitation not found')
-      }
-
-      // Claim-then-send ordering — see resendPortalInviteFn for the
-      // full rationale. Mint the magic link AFTER the UPDATE succeeds
-      // so a concurrent accept/cancel during the SMTP window can't
-      // leak a live link for a row the server now considers terminal.
-      // The UPDATE WHERE pins both status='pending' AND expiresAt > now()
-      // so neither a terminal-state flip nor an expiry that landed
-      // between SELECT and UPDATE can be silently extended.
-      const resendNow = new Date()
-      const freshExpiresAt = new Date(resendNow.getTime() + INVITATION_EXPIRY_MS)
-      const updated = await db
-        .update(invitation)
-        .set({ lastSentAt: resendNow, expiresAt: freshExpiresAt })
-        .where(
-          and(
-            eq(invitation.id, invitationId),
-            eq(invitation.kind, 'team'),
-            eq(invitation.status, 'pending'),
-            gt(invitation.expiresAt, resendNow)
-          )
-        )
-        .returning({ id: invitation.id })
-
-      if (updated.length === 0) {
-        throw new Error('Invitation is no longer pending — refresh and try again')
-      }
-
-      // Generate a new magic link and add it to the invite's token set. Prior
-      // tokens are left intact (resend is additive, not destructive) — both the
-      // old and new links work until the invite is accepted, cancelled, or
-      // expires. The token is recorded the moment it's minted, so even if the
-      // send below fails or the worker restarts, cancellation still revokes it.
-      const portalUrl = getBaseUrl()
-      const callbackURL = `/complete-signup/${invitationId}`
-      const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
-        invitationRecord.email,
-        callbackURL,
-        portalUrl
-      )
-
-      const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
-      if (!(await appendInviteMagicLinkToken(invitationId, magicLinkToken))) {
-        await revokeMagicLinkToken(magicLinkToken) // invite no longer pending; drop it
-        throw new Error('Invitation is no longer pending — refresh and try again')
-      }
-
-      const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
-      const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-      let result: Awaited<ReturnType<typeof sendInvitationEmail>>
-      try {
-        result = await sendInvitationEmail({
-          to: invitationRecord.email,
-          invitedByName: auth.user.name,
-          inviteeName: invitationRecord.name || undefined,
-          workspaceName: auth.settings.name,
-          inviteLink,
-          logoUrl,
-        })
-      } catch (sendError) {
-        // The new link never went out — drop it from the set and revoke it.
-        await removeInviteMagicLinkToken(invitationId, magicLinkToken)
-        throw sendError
-      }
-
-      log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation resent')
-      return {
-        invitationId,
-        emailSent: result.sent,
-        inviteLink: !result.sent ? inviteLink : undefined,
-      }
+    const invitationRecord = await db.query.invitation.findFirst({
+      where: and(
+        eq(invitation.id, invitationId),
+        eq(invitation.status, 'pending'),
+        eq(invitation.kind, 'team')
+      ),
     })
+
+    if (!invitationRecord) {
+      throw new Error('Invitation not found')
+    }
+
+    // Claim-then-send ordering — see resendPortalInviteFn for the
+    // full rationale. Mint the magic link AFTER the UPDATE succeeds
+    // so a concurrent accept/cancel during the SMTP window can't
+    // leak a live link for a row the server now considers terminal.
+    // The UPDATE WHERE pins both status='pending' AND expiresAt > now()
+    // so neither a terminal-state flip nor an expiry that landed
+    // between SELECT and UPDATE can be silently extended.
+    const resendNow = new Date()
+    const freshExpiresAt = new Date(resendNow.getTime() + INVITATION_EXPIRY_MS)
+    const updated = await db
+      .update(invitation)
+      .set({ lastSentAt: resendNow, expiresAt: freshExpiresAt })
+      .where(
+        and(
+          eq(invitation.id, invitationId),
+          eq(invitation.kind, 'team'),
+          eq(invitation.status, 'pending'),
+          gt(invitation.expiresAt, resendNow)
+        )
+      )
+      .returning({ id: invitation.id })
+
+    if (updated.length === 0) {
+      throw new Error('Invitation is no longer pending — refresh and try again')
+    }
+
+    // Generate a new magic link and add it to the invite's token set. Prior
+    // tokens are left intact (resend is additive, not destructive) — both the
+    // old and new links work until the invite is accepted, cancelled, or
+    // expires. The token is recorded the moment it's minted, so even if the
+    // send below fails or the worker restarts, cancellation still revokes it.
+    const portalUrl = getBaseUrl()
+    const callbackURL = `/complete-signup/${invitationId}`
+    const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
+      invitationRecord.email,
+      callbackURL,
+      portalUrl
+    )
+
+    const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
+    if (!(await appendInviteMagicLinkToken(invitationId, magicLinkToken))) {
+      await revokeMagicLinkToken(magicLinkToken) // invite no longer pending; drop it
+      throw new Error('Invitation is no longer pending — refresh and try again')
+    }
+
+    const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+    const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
+    let result: Awaited<ReturnType<typeof sendInvitationEmail>>
+    try {
+      result = await sendInvitationEmail({
+        to: invitationRecord.email,
+        invitedByName: auth.user.name,
+        inviteeName: invitationRecord.name || undefined,
+        workspaceName: auth.settings.name,
+        inviteLink,
+        logoUrl,
+      })
+    } catch (sendError) {
+      // The new link never went out — drop it from the set and revoke it.
+      await removeInviteMagicLinkToken(invitationId, magicLinkToken)
+      throw sendError
+    }
+
+    log.info({ invitation_id: invitationId, sent: result.sent }, 'invitation resent')
+    return {
+      invitationId,
+      emailSent: result.sent,
+      inviteLink: !result.sent ? inviteLink : undefined,
+    }
   })
 
 // ============================================
@@ -1424,16 +1380,14 @@ export const fetchSegmentAttributeValuesFn = createServerFn({ method: 'GET' })
  */
 export const listSegmentsFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('list segments')
-  return withErrorLog(log, 'list segments', async () => {
-    await requireAuth({ permission: PERMISSIONS.SEGMENT_VIEW })
-    const result = await listSegments()
-    log.debug({ count: result.length }, 'list segments')
-    return result.map((seg) => ({
-      ...seg,
-      createdAt: seg.createdAt.toISOString(),
-      updatedAt: seg.updatedAt.toISOString(),
-    }))
-  })
+  await requireAuth({ permission: PERMISSIONS.SEGMENT_VIEW })
+  const result = await listSegments()
+  log.debug({ count: result.length }, 'list segments')
+  return result.map((seg) => ({
+    ...seg,
+    createdAt: seg.createdAt.toISOString(),
+    updatedAt: seg.updatedAt.toISOString(),
+  }))
 })
 
 /**
@@ -1443,25 +1397,23 @@ export const createSegmentFn = createServerFn({ method: 'POST' })
   .validator(createSegmentSchema)
   .handler(async ({ data }) => {
     log.info({ name: data.name }, 'create segment')
-    return withErrorLog(log, 'create segment', async () => {
-      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
-      const segment = await createSegment(data as CreateSegmentInput)
+    await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
+    const segment = await createSegment(data as CreateSegmentInput)
 
-      // Set up auto-evaluation schedule if configured
-      if (segment.type === 'dynamic' && segment.evaluationSchedule?.enabled) {
-        await upsertSegmentEvaluationSchedule(
-          segment.id as SegmentId,
-          segment.evaluationSchedule
-        ).catch((err) => log.error({ err }, 'failed to set up evaluation schedule'))
-      }
+    // Set up auto-evaluation schedule if configured
+    if (segment.type === 'dynamic' && segment.evaluationSchedule?.enabled) {
+      await upsertSegmentEvaluationSchedule(
+        segment.id as SegmentId,
+        segment.evaluationSchedule
+      ).catch((err) => log.error({ err }, 'failed to set up evaluation schedule'))
+    }
 
-      log.info({ segment_id: segment.id }, 'segment created')
-      return {
-        ...segment,
-        createdAt: segment.createdAt.toISOString(),
-        updatedAt: segment.updatedAt.toISOString(),
-      }
-    })
+    log.info({ segment_id: segment.id }, 'segment created')
+    return {
+      ...segment,
+      createdAt: segment.createdAt.toISOString(),
+      updatedAt: segment.updatedAt.toISOString(),
+    }
   })
 
 /**
@@ -1471,32 +1423,30 @@ export const updateSegmentFn = createServerFn({ method: 'POST' })
   .validator(updateSegmentSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'update segment')
-    return withErrorLog(log, 'update segment', async () => {
-      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
-      const { segmentId, ...updates } = data
-      const segment = await updateSegment(segmentId as SegmentId, updates as UpdateSegmentInput)
+    await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
+    const { segmentId, ...updates } = data
+    const segment = await updateSegment(segmentId as SegmentId, updates as UpdateSegmentInput)
 
-      // Update evaluation schedule
-      if (updates.evaluationSchedule !== undefined) {
-        if (segment.evaluationSchedule?.enabled) {
-          await upsertSegmentEvaluationSchedule(
-            segmentId as SegmentId,
-            segment.evaluationSchedule
-          ).catch((err) => log.error({ err }, 'failed to update evaluation schedule'))
-        } else {
-          await removeSegmentEvaluationSchedule(segmentId as SegmentId).catch((err) =>
-            log.error({ err }, 'failed to remove evaluation schedule')
-          )
-        }
+    // Update evaluation schedule
+    if (updates.evaluationSchedule !== undefined) {
+      if (segment.evaluationSchedule?.enabled) {
+        await upsertSegmentEvaluationSchedule(
+          segmentId as SegmentId,
+          segment.evaluationSchedule
+        ).catch((err) => log.error({ err }, 'failed to update evaluation schedule'))
+      } else {
+        await removeSegmentEvaluationSchedule(segmentId as SegmentId).catch((err) =>
+          log.error({ err }, 'failed to remove evaluation schedule')
+        )
       }
+    }
 
-      log.info({ segment_id: segment.id }, 'segment updated')
-      return {
-        ...segment,
-        createdAt: segment.createdAt.toISOString(),
-        updatedAt: segment.updatedAt.toISOString(),
-      }
-    })
+    log.info({ segment_id: segment.id }, 'segment updated')
+    return {
+      ...segment,
+      createdAt: segment.createdAt.toISOString(),
+      updatedAt: segment.updatedAt.toISOString(),
+    }
   })
 
 /**
@@ -1506,13 +1456,11 @@ export const deleteSegmentFn = createServerFn({ method: 'POST' })
   .validator(segmentByIdSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'delete segment')
-    return withErrorLog(log, 'delete segment', async () => {
-      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
 
-      await deleteSegment(data.segmentId as SegmentId)
-      log.info({ segment_id: data.segmentId }, 'segment deleted')
-      return { segmentId: data.segmentId }
-    })
+    await deleteSegment(data.segmentId as SegmentId)
+    log.info({ segment_id: data.segmentId }, 'segment deleted')
+    return { segmentId: data.segmentId }
   })
 
 /**
@@ -1525,18 +1473,16 @@ export const assignUsersToSegmentFn = createServerFn({ method: 'POST' })
       { segment_id: data.segmentId, count: data.principalIds.length },
       'assign users to segment'
     )
-    return withErrorLog(log, 'assign users to segment', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
-      const { actorFromAuth } = await import('@/lib/server/audit/log')
-      const { assigned } = await assignUsersToSegment(
-        data.segmentId as SegmentId,
-        data.principalIds as PrincipalId[],
-        actorFromAuth(auth),
-        getRequestHeaders()
-      )
-      log.info({ segment_id: data.segmentId, assigned }, 'users assigned to segment')
-      return { segmentId: data.segmentId, assigned }
-    })
+    const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
+    const { actorFromAuth } = await import('@/lib/server/audit/log')
+    const { assigned } = await assignUsersToSegment(
+      data.segmentId as SegmentId,
+      data.principalIds as PrincipalId[],
+      actorFromAuth(auth),
+      getRequestHeaders()
+    )
+    log.info({ segment_id: data.segmentId, assigned }, 'users assigned to segment')
+    return { segmentId: data.segmentId, assigned }
   })
 
 /**
@@ -1549,18 +1495,16 @@ export const removeUsersFromSegmentFn = createServerFn({ method: 'POST' })
       { segment_id: data.segmentId, count: data.principalIds.length },
       'remove users from segment'
     )
-    return withErrorLog(log, 'remove users from segment', async () => {
-      const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
-      const { actorFromAuth } = await import('@/lib/server/audit/log')
-      const { removed, removedPrincipalIds } = await removeUsersFromSegment(
-        data.segmentId as SegmentId,
-        data.principalIds as PrincipalId[],
-        actorFromAuth(auth),
-        getRequestHeaders()
-      )
-      log.info({ segment_id: data.segmentId, removed }, 'users removed from segment')
-      return { segmentId: data.segmentId, removed, removedPrincipalIds }
-    })
+    const auth = await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
+    const { actorFromAuth } = await import('@/lib/server/audit/log')
+    const { removed, removedPrincipalIds } = await removeUsersFromSegment(
+      data.segmentId as SegmentId,
+      data.principalIds as PrincipalId[],
+      actorFromAuth(auth),
+      getRequestHeaders()
+    )
+    log.info({ segment_id: data.segmentId, removed }, 'users removed from segment')
+    return { segmentId: data.segmentId, removed, removedPrincipalIds }
   })
 
 /**
@@ -1570,12 +1514,10 @@ export const evaluateSegmentFn = createServerFn({ method: 'POST' })
   .validator(segmentByIdSchema)
   .handler(async ({ data }) => {
     log.info({ segment_id: data.segmentId }, 'evaluate segment')
-    return withErrorLog(log, 'evaluate segment', async () => {
-      await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
-      const result = await evaluateDynamicSegment(data.segmentId as SegmentId)
-      log.info({ added: result.added, removed: result.removed }, 'segment evaluated')
-      return result
-    })
+    await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
+    const result = await evaluateDynamicSegment(data.segmentId as SegmentId)
+    log.info({ added: result.added, removed: result.removed }, 'segment evaluated')
+    return result
   })
 
 /**
@@ -1583,12 +1525,10 @@ export const evaluateSegmentFn = createServerFn({ method: 'POST' })
  */
 export const evaluateAllSegmentsFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info('evaluate all segments')
-  return withErrorLog(log, 'evaluate all segments', async () => {
-    await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
-    const results = await evaluateAllDynamicSegments()
-    log.info({ count: results.length }, 'all segments evaluated')
-    return results
-  })
+  await requireAuth({ permission: PERMISSIONS.SEGMENT_MANAGE })
+  const results = await evaluateAllDynamicSegments()
+  log.info({ count: results.length }, 'all segments evaluated')
+  return results
 })
 
 // ============================================
@@ -1626,10 +1566,8 @@ const updateUserAttributeSchema = z.object({
  * List all user attribute definitions.
  */
 export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(async () => {
-  return withErrorLog(log, 'list user attributes', async () => {
-    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_VIEW })
-    return listUserAttributes()
-  })
+  await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_VIEW })
+  return listUserAttributes()
 })
 
 /**
@@ -1638,16 +1576,14 @@ export const listUserAttributesFn = createServerFn({ method: 'GET' }).handler(as
 export const createUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(createUserAttributeSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'create user attribute', async () => {
-      await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
-      return createUserAttribute({
-        key: data.key,
-        label: data.label,
-        description: data.description,
-        type: data.type,
-        currencyCode: data.currencyCode,
-        externalKey: data.externalKey,
-      })
+    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
+    return createUserAttribute({
+      key: data.key,
+      label: data.label,
+      description: data.description,
+      type: data.type,
+      currencyCode: data.currencyCode,
+      externalKey: data.externalKey,
     })
   })
 
@@ -1657,15 +1593,13 @@ export const createUserAttributeFn = createServerFn({ method: 'POST' })
 export const updateUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(updateUserAttributeSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'update user attribute', async () => {
-      await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
-      return updateUserAttribute(data.id as UserAttributeId, {
-        label: data.label,
-        description: data.description,
-        type: data.type,
-        currencyCode: data.currencyCode,
-        externalKey: data.externalKey,
-      })
+    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
+    return updateUserAttribute(data.id as UserAttributeId, {
+      label: data.label,
+      description: data.description,
+      type: data.type,
+      currencyCode: data.currencyCode,
+      externalKey: data.externalKey,
     })
   })
 
@@ -1675,9 +1609,7 @@ export const updateUserAttributeFn = createServerFn({ method: 'POST' })
 export const deleteUserAttributeFn = createServerFn({ method: 'POST' })
   .validator(userAttributeIdSchema)
   .handler(async ({ data }) => {
-    return withErrorLog(log, 'delete user attribute', async () => {
-      await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
-      await deleteUserAttribute(data.id as UserAttributeId)
-      return { deleted: true }
-    })
+    await requireAuth({ permission: PERMISSIONS.USER_ATTRIBUTE_MANAGE })
+    await deleteUserAttribute(data.id as UserAttributeId)
+    return { deleted: true }
   })

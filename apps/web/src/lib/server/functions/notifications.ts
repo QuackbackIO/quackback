@@ -6,7 +6,6 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import type { NotificationId } from '@quackback/ids'
 import { requireAuth, policyActorFromAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import {
   getNotificationsForMember,
   getUnreadCount,
@@ -47,65 +46,63 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
       { limit: data.limit, offset: data.offset, unread_only: data.unreadOnly },
       'get notifications'
     )
-    return withErrorLog(log, 'get notifications', async () => {
-      const auth = await requireAuth()
-      // Resolve the actor so audience-denied posts get their preview
-      // hidden in the notification list.
-      const actor = await policyActorFromAuth(auth)
+    const auth = await requireAuth()
+    // Resolve the actor so audience-denied posts get their preview
+    // hidden in the notification list.
+    const actor = await policyActorFromAuth(auth)
 
-      const result = await getNotificationsForMember(
-        auth.principal.id,
-        {
-          limit: data.limit,
-          offset: data.offset,
-          unreadOnly: data.unreadOnly,
-        },
-        actor
-      )
+    const result = await getNotificationsForMember(
+      auth.principal.id,
+      {
+        limit: data.limit,
+        offset: data.offset,
+        unreadOnly: data.unreadOnly,
+      },
+      actor
+    )
 
-      // Serialize dates for JSON transport
-      return {
-        notifications: result.notifications.map((n) => {
-          // Conversation notifications carry their target conversation in metadata so
-          // the client can deep-link into the inbox.
-          const conversationId = n.metadata?.conversationId
-          const ticketId = n.metadata?.ticketId
-          const changelogId = n.metadata?.changelogId
-          const incidentId = n.metadata?.incidentId
-          // Older comment_created rows predate actorName and only carry
-          // commenterName — fall back so their avatar still renders.
-          const actorName = n.metadata?.actorName ?? n.metadata?.commenterName
-          const actorAvatarUrl = n.metadata?.actorAvatarUrl
-          // Ticket bells carry a per-recipient audience so the client resolver
-          // can route the requester to the portal thread and agents to the
-          // admin inbox. Absent on pre-watchers rows.
-          const audience = n.metadata?.audience
-          return {
-            id: n.id,
-            principalId: n.principalId,
-            type: n.type,
-            title: n.title,
-            body: n.body,
-            postId: n.postId,
-            commentId: n.commentId,
-            conversationId: typeof conversationId === 'string' ? conversationId : null,
-            ticketId: typeof ticketId === 'string' ? ticketId : null,
-            changelogId: typeof changelogId === 'string' ? changelogId : null,
-            incidentId: typeof incidentId === 'string' ? incidentId : null,
-            actorName: typeof actorName === 'string' ? actorName : null,
-            actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
-            audience: audience === 'admin' || audience === 'portal' ? audience : null,
-            readAt: n.readAt?.toISOString() ?? null,
-            archivedAt: n.archivedAt?.toISOString() ?? null,
-            createdAt: n.createdAt.toISOString(),
-            post: n.post,
-          }
-        }),
-        total: result.total,
-        unreadCount: result.unreadCount,
-        hasMore: result.hasMore,
-      }
-    })
+    // Serialize dates for JSON transport
+    return {
+      notifications: result.notifications.map((n) => {
+        // Conversation notifications carry their target conversation in metadata so
+        // the client can deep-link into the inbox.
+        const conversationId = n.metadata?.conversationId
+        const ticketId = n.metadata?.ticketId
+        const changelogId = n.metadata?.changelogId
+        const incidentId = n.metadata?.incidentId
+        // Older comment_created rows predate actorName and only carry
+        // commenterName — fall back so their avatar still renders.
+        const actorName = n.metadata?.actorName ?? n.metadata?.commenterName
+        const actorAvatarUrl = n.metadata?.actorAvatarUrl
+        // Ticket bells carry a per-recipient audience so the client resolver
+        // can route the requester to the portal thread and agents to the
+        // admin inbox. Absent on pre-watchers rows.
+        const audience = n.metadata?.audience
+        return {
+          id: n.id,
+          principalId: n.principalId,
+          type: n.type,
+          title: n.title,
+          body: n.body,
+          postId: n.postId,
+          commentId: n.commentId,
+          conversationId: typeof conversationId === 'string' ? conversationId : null,
+          ticketId: typeof ticketId === 'string' ? ticketId : null,
+          changelogId: typeof changelogId === 'string' ? changelogId : null,
+          incidentId: typeof incidentId === 'string' ? incidentId : null,
+          actorName: typeof actorName === 'string' ? actorName : null,
+          actorAvatarUrl: typeof actorAvatarUrl === 'string' ? actorAvatarUrl : null,
+          audience: audience === 'admin' || audience === 'portal' ? audience : null,
+          readAt: n.readAt?.toISOString() ?? null,
+          archivedAt: n.archivedAt?.toISOString() ?? null,
+          createdAt: n.createdAt.toISOString(),
+          post: n.post,
+        }
+      }),
+      total: result.total,
+      unreadCount: result.unreadCount,
+      hasMore: result.hasMore,
+    }
   })
 
 /**
@@ -113,11 +110,9 @@ export const getNotificationsFn = createServerFn({ method: 'GET' })
  */
 export const getUnreadCountFn = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug({}, 'get unread count')
-  return withErrorLog(log, 'get unread count', async () => {
-    const auth = await requireAuth()
-    const count = await getUnreadCount(auth.principal.id)
-    return { count }
-  })
+  const auth = await requireAuth()
+  const count = await getUnreadCount(auth.principal.id)
+  return { count }
 })
 
 // ============================================
@@ -131,11 +126,9 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
   .validator(notificationIdSchema)
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification marked read')
-    return withErrorLog(log, 'mark notification read', async () => {
-      const auth = await requireAuth()
-      await markAsRead(auth.principal.id, data.notificationId as NotificationId)
-      return { success: true }
-    })
+    const auth = await requireAuth()
+    await markAsRead(auth.principal.id, data.notificationId as NotificationId)
+    return { success: true }
   })
 
 /**
@@ -143,11 +136,9 @@ export const markNotificationAsReadFn = createServerFn({ method: 'POST' })
  */
 export const markAllNotificationsAsReadFn = createServerFn({ method: 'POST' }).handler(async () => {
   log.info({}, 'all notifications marked read')
-  return withErrorLog(log, 'mark all notifications read', async () => {
-    const auth = await requireAuth()
-    await markAllAsRead(auth.principal.id)
-    return { success: true }
-  })
+  const auth = await requireAuth()
+  await markAllAsRead(auth.principal.id)
+  return { success: true }
 })
 
 /**
@@ -157,11 +148,9 @@ export const archiveNotificationFn = createServerFn({ method: 'POST' })
   .validator(notificationIdSchema)
   .handler(async ({ data }) => {
     log.info({ notification_id: data.notificationId }, 'notification archived')
-    return withErrorLog(log, 'archive notification', async () => {
-      const auth = await requireAuth()
-      await archiveNotification(auth.principal.id, data.notificationId as NotificationId)
-      return { success: true }
-    })
+    const auth = await requireAuth()
+    await archiveNotification(auth.principal.id, data.notificationId as NotificationId)
+    return { success: true }
   })
 
 /**
@@ -170,10 +159,8 @@ export const archiveNotificationFn = createServerFn({ method: 'POST' })
 export const archiveAllReadNotificationsFn = createServerFn({ method: 'POST' }).handler(
   async () => {
     log.info({}, 'all read notifications archived')
-    return withErrorLog(log, 'archive all read notifications', async () => {
-      const auth = await requireAuth()
-      await archiveAllNotifications(auth.principal.id, { onlyRead: true })
-      return { success: true }
-    })
+    const auth = await requireAuth()
+    await archiveAllNotifications(auth.principal.id, { onlyRead: true })
+    return { success: true }
   }
 )

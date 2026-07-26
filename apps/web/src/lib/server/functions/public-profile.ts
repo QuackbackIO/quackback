@@ -18,14 +18,10 @@ import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
 import { isValidTypeId, type PrincipalId } from '@quackback/ids'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { logger } from '@/lib/server/logger'
 import type {
   PublicProfileActivityItem,
   PublicProfileTeamContext,
 } from '@/lib/server/domains/users/user.public-profile'
-import { withErrorLog } from './with-error-log'
-
-const log = logger.child({ component: 'public-profile' })
 
 const profileParamsSchema = z.object({
   principalId: z.string(),
@@ -78,41 +74,38 @@ function serializeItem(item: PublicProfileActivityItem): PublicProfileActivityIt
 export const getPublicUserProfileFn = createServerFn({ method: 'GET' })
   .validator(profileParamsSchema)
   .handler(async ({ data }): Promise<PublicUserProfileView | null> => {
-    return withErrorLog(log, 'get public user profile', async () => {
-      if (!isValidTypeId(data.principalId, 'principal')) return null
+    if (!isValidTypeId(data.principalId, 'principal')) return null
 
-      // Outer gate: a private portal serves no profiles to a denied caller.
-      const { resolvePortalAccessForRequest } = await import('./portal-access')
-      const access = await resolvePortalAccessForRequest()
-      if (!access.granted) return null
+    // Outer gate: a private portal serves no profiles to a denied caller.
+    const { resolvePortalAccessForRequest } = await import('./portal-access')
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) return null
 
-      // Resolve the CALLER's actor so all activity filtering runs from the
-      // viewer's perspective (anonymous visitors get the anonymous actor).
-      const [{ getOptionalAuth, policyActorFromAuth }, { getPublicUserProfile }] =
-        await Promise.all([
-          import('./auth-helpers'),
-          import('@/lib/server/domains/users/user.public-profile'),
-        ])
-      const auth = await getOptionalAuth()
-      const actor = await policyActorFromAuth(auth)
+    // Resolve the CALLER's actor so all activity filtering runs from the
+    // viewer's perspective (anonymous visitors get the anonymous actor).
+    const [{ getOptionalAuth, policyActorFromAuth }, { getPublicUserProfile }] = await Promise.all([
+      import('./auth-helpers'),
+      import('@/lib/server/domains/users/user.public-profile'),
+    ])
+    const auth = await getOptionalAuth()
+    const actor = await policyActorFromAuth(auth)
 
-      const profile = await getPublicUserProfile(data.principalId as PrincipalId, actor)
-      if (!profile) return null
+    const profile = await getPublicUserProfile(data.principalId as PrincipalId, actor)
+    if (!profile) return null
 
-      return {
-        principalId: profile.principalId,
-        displayName: profile.displayName,
-        avatarUrl: profile.avatarUrl,
-        isTeamMember: profile.isTeamMember,
-        joinedAt: profile.joinedAt.toISOString(),
-        postCount: profile.postCount,
-        commentCount: profile.commentCount,
-        voteCount: profile.voteCount,
-        posts: profile.posts.map(serializeItem),
-        comments: profile.comments.map(serializeItem),
-        upvotes: profile.upvotes.map(serializeItem),
-      }
-    })
+    return {
+      principalId: profile.principalId,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      isTeamMember: profile.isTeamMember,
+      joinedAt: profile.joinedAt.toISOString(),
+      postCount: profile.postCount,
+      commentCount: profile.commentCount,
+      voteCount: profile.voteCount,
+      posts: profile.posts.map(serializeItem),
+      comments: profile.comments.map(serializeItem),
+      upvotes: profile.upvotes.map(serializeItem),
+    }
   })
 
 /**
@@ -126,11 +119,8 @@ export const getProfileTeamContextFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<ProfileTeamContextView | null> => {
     const { requireAuth } = await import('./auth-helpers')
     await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
-    return withErrorLog(log, 'get profile team context', async () => {
-      if (!isValidTypeId(data.principalId, 'principal')) return null
+    if (!isValidTypeId(data.principalId, 'principal')) return null
 
-      const { getProfileTeamContext } =
-        await import('@/lib/server/domains/users/user.public-profile')
-      return await getProfileTeamContext(data.principalId as PrincipalId)
-    })
+    const { getProfileTeamContext } = await import('@/lib/server/domains/users/user.public-profile')
+    return await getProfileTeamContext(data.principalId as PrincipalId)
   })

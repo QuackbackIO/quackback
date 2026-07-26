@@ -56,7 +56,6 @@ import {
 import { z } from 'zod'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import { logger } from '@/lib/server/logger'
-import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'help-center' })
 
@@ -194,24 +193,20 @@ export const restoreCategoryFn = createServerFn({ method: 'POST' })
   .validator(restoreCategorySchema)
   .handler(async ({ data }) => {
     log.debug({ category_id: data.id }, 'restore category')
-    return withErrorLog(log, 'restore category', async () => {
-      await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-      const category = await restoreCategory(data.id as KbCategoryId)
-      log.info({ category_id: category.id }, 'category restored')
-      return serializeCategory(category)
-    })
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    const category = await restoreCategory(data.id as KbCategoryId)
+    log.info({ category_id: category.id }, 'category restored')
+    return serializeCategory(category)
   })
 
 export const restoreArticleFn = createServerFn({ method: 'POST' })
   .validator(restoreArticleSchema)
   .handler(async ({ data }) => {
     log.debug({ article_id: data.id }, 'restore article')
-    return withErrorLog(log, 'restore article', async () => {
-      await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
-      const article = await restoreArticle(data.id as KbArticleId)
-      log.info({ article_id: article.id }, 'article restored')
-      return serializeArticle(article)
-    })
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    const article = await restoreArticle(data.id as KbArticleId)
+    log.info({ article_id: article.id }, 'article restored')
+    return serializeArticle(article)
   })
 
 export const listPublicArticlesFn = createServerFn({ method: 'GET' })

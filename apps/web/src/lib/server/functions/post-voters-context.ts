@@ -21,9 +21,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { requireAuth } from './auth-helpers'
 import { getPostVoters } from '@/lib/server/domains/posts/post.voting'
 import { toIsoString } from '@/lib/shared/utils'
-import { logger } from '@/lib/server/logger'
-
-const log = logger.child({ component: 'post-voters-context' })
+import { setLogContext } from '@/lib/server/log-context'
 
 /**
  * The voters for a post, resolved for a holder of post.vote_on_behalf. Same
@@ -34,14 +32,12 @@ export const listPostVotersForVoteManagerFn = createServerFn({ method: 'GET' })
   .validator(z.object({ postId: z.string() }))
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.POST_VOTE_ON_BEHALF })
-    try {
-      const voters = await getPostVoters(data.postId as PostId)
-      return voters.map((v) => ({
-        ...v,
-        createdAt: toIsoString(v.createdAt as Date | string),
-      }))
-    } catch (error) {
-      log.error({ err: error, post_id: data.postId }, 'list post voters (vote manager) failed')
-      throw error
-    }
+    // Ambient context, so the failure line the server-fn middleware emits
+    // carries post_id without this handler logging its own.
+    setLogContext({ post_id: data.postId })
+    const voters = await getPostVoters(data.postId as PostId)
+    return voters.map((v) => ({
+      ...v,
+      createdAt: toIsoString(v.createdAt as Date | string),
+    }))
   })

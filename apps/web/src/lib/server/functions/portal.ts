@@ -50,7 +50,6 @@ import {
 import { resolvePortalAccessForRequest } from './portal-access'
 import { logger } from '@/lib/server/logger'
 import { toIsoStringOrNull } from '@/lib/shared/utils'
-import { withErrorLog } from './with-error-log'
 
 const log = logger.child({ component: 'portal' })
 
@@ -124,12 +123,10 @@ export const getPrincipalIdForUser = createServerFn({ method: 'GET' })
   .validator(z.object({ userId: z.string() }))
   .handler(async ({ data }): Promise<PrincipalId | null> => {
     log.debug({ user_id: data.userId }, 'get principal id for user')
-    return withErrorLog(log, 'get principal id for user', async () => {
-      const record = await db.query.principal.findFirst({
-        where: eq(principalTable.userId, data.userId as UserId),
-      })
-      return record?.id ?? null
+    const record = await db.query.principal.findFirst({
+      where: eq(principalTable.userId, data.userId as UserId),
     })
+    return record?.id ?? null
   })
 
 export const fetchPortalData = createServerFn({ method: 'GET' })
@@ -263,51 +260,47 @@ export const fetchPortalData = createServerFn({ method: 'GET' })
 
 export const fetchPublicBoards = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public boards')
-  return withErrorLog(log, 'fetch public boards', async () => {
-    // Outer gate: private portal + unauthorized caller → no boards.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning empty')
-      return []
-    }
+  // Outer gate: private portal + unauthorized caller → no boards.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return []
+  }
 
-    const auth = await getOptionalAuth()
-    const actor = await policyActorFromAuth(auth)
-    const boards = await listPublicBoardsWithStats(actor)
-    // Strip the internal access matrix (see fetchPortalData) — clients never
-    // read board.access, so it must not reach the public payload (#191).
-    return boards.map(({ access: _access, ...b }) => ({
-      ...b,
-      settings: (b.settings ?? {}) as BoardSettings,
-    }))
-  })
+  const auth = await getOptionalAuth()
+  const actor = await policyActorFromAuth(auth)
+  const boards = await listPublicBoardsWithStats(actor)
+  // Strip the internal access matrix (see fetchPortalData) — clients never
+  // read board.access, so it must not reach the public payload (#191).
+  return boards.map(({ access: _access, ...b }) => ({
+    ...b,
+    settings: (b.settings ?? {}) as BoardSettings,
+  }))
 })
 
 export const fetchPublicBoardBySlug = createServerFn({ method: 'GET' })
   .validator(z.object({ slug: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ slug: data.slug }, 'fetch public board by slug')
-    return withErrorLog(log, 'fetch public board by slug', async () => {
-      // Outer gate: private portal + unauthorized caller → no board.
-      const access = await resolvePortalAccessForRequest()
-      if (!access.granted) {
-        log.debug('portal access denied, returning null')
-        return null
-      }
+    // Outer gate: private portal + unauthorized caller → no board.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied, returning null')
+      return null
+    }
 
-      // Direct-load lookup must honour the request actor — otherwise an
-      // authenticated/segment-member user navigating directly to the slug
-      // is denied a board they can see in the portal list. Without the
-      // actor, the helper defaults to ANONYMOUS_ACTOR and only public
-      // boards round-trip.
-      const auth = await getOptionalAuth()
-      const actor = await policyActorFromAuth(auth)
-      const board = await getPublicBoardBySlug(data.slug, actor)
-      if (!board) return null
-      // Strip the internal access matrix (see fetchPortalData) before serializing.
-      const { access: _access, ...rest } = board
-      return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
-    })
+    // Direct-load lookup must honour the request actor — otherwise an
+    // authenticated/segment-member user navigating directly to the slug
+    // is denied a board they can see in the portal list. Without the
+    // actor, the helper defaults to ANONYMOUS_ACTOR and only public
+    // boards round-trip.
+    const auth = await getOptionalAuth()
+    const actor = await policyActorFromAuth(auth)
+    const board = await getPublicBoardBySlug(data.slug, actor)
+    if (!board) return null
+    // Strip the internal access matrix (see fetchPortalData) before serializing.
+    const { access: _access, ...rest } = board
+    return { ...rest, settings: (rest.settings ?? {}) as BoardSettings }
   })
 
 export const fetchPublicPostDetail = createServerFn({ method: 'GET' })
@@ -418,174 +411,160 @@ export const fetchPublicPosts = createServerFn({ method: 'GET' })
   .validator(fetchPublicPostsSchema)
   .handler(async ({ data }) => {
     log.debug({ board_slug: data.boardSlug, sort: data.sort }, 'fetch public posts')
-    return withErrorLog(log, 'fetch public posts', async () => {
-      // Outer gate: private portal + unauthorized caller → no posts.
-      const access = await resolvePortalAccessForRequest()
-      if (!access.granted) {
-        log.debug('portal access denied, returning empty')
-        return { items: [], hasMore: false, total: 0 }
-      }
+    // Outer gate: private portal + unauthorized caller → no posts.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied, returning empty')
+      return { items: [], hasMore: false, total: 0 }
+    }
 
-      const auth = await getOptionalAuth()
-      const actor = await policyActorFromAuth(auth)
-      const result = await listPublicPosts({ ...data, page: 1, limit: 20, actor })
-      return {
-        ...result,
-        items: result.items.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
-      }
-    })
+    const auth = await getOptionalAuth()
+    const actor = await policyActorFromAuth(auth)
+    const result = await listPublicPosts({ ...data, page: 1, limit: 20, actor })
+    return {
+      ...result,
+      items: result.items.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
+    }
   })
 
 export const fetchPublicStatuses = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public statuses')
-  return withErrorLog(log, 'fetch public statuses', async () => {
-    // Outer gate: a private portal must not expose its status taxonomy to a
-    // denied caller.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning empty')
-      return []
-    }
-    return await listPublicStatuses()
-  })
+  // Outer gate: a private portal must not expose its status taxonomy to a
+  // denied caller.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return []
+  }
+  return await listPublicStatuses()
 })
 
 export const fetchPublicTags = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public tags')
-  return withErrorLog(log, 'fetch public tags', async () => {
-    // Outer gate: a private portal must not expose its tag taxonomy to a
-    // denied caller.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning empty')
-      return []
-    }
-    return await listPublicPostTags()
-  })
+  // Outer gate: a private portal must not expose its tag taxonomy to a
+  // denied caller.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return []
+  }
+  return await listPublicPostTags()
 })
 
 export const fetchUserAvatar = createServerFn({ method: 'GET' })
   .validator(z.object({ userId: z.string(), fallbackImageUrl: z.string().nullable().optional() }))
   .handler(async ({ data }) => {
     log.debug({ user_id: data.userId }, 'fetch user avatar')
-    return withErrorLog(log, 'fetch user avatar', async () => {
-      const user = await db.query.user.findFirst({
-        where: eq(userTable.id, data.userId as UserId),
-        columns: { imageKey: true, image: true },
-      })
-
-      if (!user) return { avatarUrl: data.fallbackImageUrl ?? null, hasCustomAvatar: false }
-
-      if (user.imageKey) {
-        const avatarUrl = getPublicUrlOrNull(user.imageKey)
-        if (avatarUrl) {
-          return { avatarUrl, hasCustomAvatar: true }
-        }
-      }
-
-      return { avatarUrl: user.image ?? data.fallbackImageUrl ?? null, hasCustomAvatar: false }
+    const user = await db.query.user.findFirst({
+      where: eq(userTable.id, data.userId as UserId),
+      columns: { imageKey: true, image: true },
     })
+
+    if (!user) return { avatarUrl: data.fallbackImageUrl ?? null, hasCustomAvatar: false }
+
+    if (user.imageKey) {
+      const avatarUrl = getPublicUrlOrNull(user.imageKey)
+      if (avatarUrl) {
+        return { avatarUrl, hasCustomAvatar: true }
+      }
+    }
+
+    return { avatarUrl: user.image ?? data.fallbackImageUrl ?? null, hasCustomAvatar: false }
   })
 
 export const fetchAvatars = createServerFn({ method: 'GET' })
   .validator(z.array(z.string()))
   .handler(async ({ data }) => {
     log.debug({ count: data.length }, 'fetch avatars')
-    return withErrorLog(log, 'fetch avatars', async () => {
-      const principalIds = (data as PrincipalId[]).filter((id): id is PrincipalId => id !== null)
-      if (principalIds.length === 0) return {}
+    const principalIds = (data as PrincipalId[]).filter((id): id is PrincipalId => id !== null)
+    if (principalIds.length === 0) return {}
 
-      const principals = await db
-        .select({
-          id: principalTable.id,
-          avatarKey: principalTable.avatarKey,
-          avatarUrl: principalTable.avatarUrl,
-        })
-        .from(principalTable)
-        .where(inArray(principalTable.id, principalIds))
+    const principals = await db
+      .select({
+        id: principalTable.id,
+        avatarKey: principalTable.avatarKey,
+        avatarUrl: principalTable.avatarUrl,
+      })
+      .from(principalTable)
+      .where(inArray(principalTable.id, principalIds))
 
-      const avatarMap = new Map<PrincipalId, string | null>()
-      for (const p of principals) {
-        const s3Url = p.avatarKey ? getPublicUrlOrNull(p.avatarKey) : null
-        avatarMap.set(p.id, s3Url ?? p.avatarUrl)
-      }
-      for (const id of principalIds) {
-        if (!avatarMap.has(id)) avatarMap.set(id, null)
-      }
+    const avatarMap = new Map<PrincipalId, string | null>()
+    for (const p of principals) {
+      const s3Url = p.avatarKey ? getPublicUrlOrNull(p.avatarKey) : null
+      avatarMap.set(p.id, s3Url ?? p.avatarUrl)
+    }
+    for (const id of principalIds) {
+      if (!avatarMap.has(id)) avatarMap.set(id, null)
+    }
 
-      return Object.fromEntries(avatarMap)
-    })
+    return Object.fromEntries(avatarMap)
   })
 
 export const fetchSubscriptionStatus = createServerFn({ method: 'GET' })
   .validator(z.object({ principalId: z.string(), postId: z.string() }))
   .handler(async ({ data }) => {
     log.debug({ principal_id: data.principalId, post_id: data.postId }, 'fetch subscription status')
-    return withErrorLog(log, 'fetch subscription status', async () => {
-      // The route used to accept a client-supplied principalId with no
-      // auth check at all — a textbook IDOR. Lock the lookup to the
-      // caller's own principal unless they're team. Team-role actors
-      // can read any principal's subscription (admin support flow).
-      const auth = await requireAuth()
-      const requestedPrincipalId = data.principalId as PrincipalId
-      const isTeam = auth.principal.role === 'admin' || auth.principal.role === 'member'
-      if (!isTeam && requestedPrincipalId !== auth.principal.id) {
-        // 404-shape so denied callers can't probe other users'
-        // subscription state by varying principalId.
-        throw new NotFoundError(
-          'SUBSCRIPTION_NOT_FOUND',
-          `Subscription not found for principal ${requestedPrincipalId}`
-        )
-      }
-      // Audience gate: even the caller themselves shouldn't be able to
-      // read a subscription tied to a post they can't view (the
-      // subscribe path is also gated below, but a stale row from before
-      // an audience change could otherwise leak the post's existence).
-      const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
-      const actor = await policyActorFromAuth(auth)
-      await assertPostViewable(data.postId as PostId, actor)
-      return await getSubscriptionStatus(requestedPrincipalId, data.postId as PostId)
-    })
+    // The route used to accept a client-supplied principalId with no
+    // auth check at all — a textbook IDOR. Lock the lookup to the
+    // caller's own principal unless they're team. Team-role actors
+    // can read any principal's subscription (admin support flow).
+    const auth = await requireAuth()
+    const requestedPrincipalId = data.principalId as PrincipalId
+    const isTeam = auth.principal.role === 'admin' || auth.principal.role === 'member'
+    if (!isTeam && requestedPrincipalId !== auth.principal.id) {
+      // 404-shape so denied callers can't probe other users'
+      // subscription state by varying principalId.
+      throw new NotFoundError(
+        'SUBSCRIPTION_NOT_FOUND',
+        `Subscription not found for principal ${requestedPrincipalId}`
+      )
+    }
+    // Audience gate: even the caller themselves shouldn't be able to
+    // read a subscription tied to a post they can't view (the
+    // subscribe path is also gated below, but a stale row from before
+    // an audience change could otherwise leak the post's existence).
+    const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
+    const actor = await policyActorFromAuth(auth)
+    await assertPostViewable(data.postId as PostId, actor)
+    return await getSubscriptionStatus(requestedPrincipalId, data.postId as PostId)
   })
 
 export const fetchPublicRoadmaps = createServerFn({ method: 'GET' }).handler(async () => {
   log.debug('fetch public roadmaps')
-  return withErrorLog(log, 'fetch public roadmaps', async () => {
-    // Outer gate: private portal + unauthorized caller → no roadmaps.
-    const access = await resolvePortalAccessForRequest()
-    if (!access.granted) {
-      log.debug('portal access denied, returning empty')
-      return []
-    }
+  // Outer gate: private portal + unauthorized caller → no roadmaps.
+  const access = await resolvePortalAccessForRequest()
+  if (!access.granted) {
+    log.debug('portal access denied, returning empty')
+    return []
+  }
 
-    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
-    const actor = await policyActorFromAuth(auth)
-    const roadmaps = await listPublicRoadmaps(actor)
-    return roadmaps.map((r) => ({
-      id: r.id,
-      name: r.name,
-      slug: r.slug,
-      description: r.description,
-      type: r.type,
-      baseFilter: r.baseFilter,
-      dateSource: r.dateSource,
-      frequency: r.frequency,
-      visibility: r.visibility,
-      visibleSegmentIds: r.visibleSegmentIds as SegmentId[] | null,
-      position: r.position,
-      columns: r.columns.map((column) => ({
-        id: column.id,
-        roadmapId: column.roadmapId,
-        statusId: column.statusId,
-        name: column.name,
-        icon: column.icon,
-        color: column.color,
-        position: column.position,
-      })),
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
-    }))
-  })
+  const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+  const actor = await policyActorFromAuth(auth)
+  const roadmaps = await listPublicRoadmaps(actor)
+  return roadmaps.map((r) => ({
+    id: r.id,
+    name: r.name,
+    slug: r.slug,
+    description: r.description,
+    type: r.type,
+    baseFilter: r.baseFilter,
+    dateSource: r.dateSource,
+    frequency: r.frequency,
+    visibility: r.visibility,
+    visibleSegmentIds: r.visibleSegmentIds as SegmentId[] | null,
+    position: r.position,
+    columns: r.columns.map((column) => ({
+      id: column.id,
+      roadmapId: column.roadmapId,
+      statusId: column.statusId,
+      name: column.name,
+      icon: column.icon,
+      color: column.color,
+      position: column.position,
+    })),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  }))
 })
 
 export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
@@ -608,55 +587,53 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
       { roadmap_id: data.roadmapId, limit: data.limit, offset: data.offset },
       'fetch public roadmap posts'
     )
-    return withErrorLog(log, 'fetch public roadmap posts', async () => {
-      // Outer gate: private portal + unauthorized caller → no roadmap posts.
-      const access = await resolvePortalAccessForRequest()
-      if (!access.granted) {
-        log.debug('portal access denied, returning empty')
-        return { items: [], hasMore: false, total: 0 }
-      }
+    // Outer gate: private portal + unauthorized caller → no roadmap posts.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) {
+      log.debug('portal access denied, returning empty')
+      return { items: [], hasMore: false, total: 0 }
+    }
 
-      // Resolve auth once — used for both the segment-filter gate and
-      // the per-board audience filter on getPublicRoadmapPosts.
-      const auth = hasAuthCredentials() ? await getOptionalAuth() : null
+    // Resolve auth once — used for both the segment-filter gate and
+    // the per-board audience filter on getPublicRoadmapPosts.
+    const auth = hasAuthCredentials() ? await getOptionalAuth() : null
 
-      // Segment filtering requires admin/member role
-      let segmentIds: SegmentId[] | undefined
-      if (data.segmentIds?.length && auth && isTeamMember(auth.principal.role)) {
-        segmentIds = data.segmentIds as SegmentId[]
-        // Non-team callers silently ignore segmentIds
-      }
+    // Segment filtering requires admin/member role
+    let segmentIds: SegmentId[] | undefined
+    if (data.segmentIds?.length && auth && isTeamMember(auth.principal.role)) {
+      segmentIds = data.segmentIds as SegmentId[]
+      // Non-team callers silently ignore segmentIds
+    }
 
-      const actor = await policyActorFromAuth(auth)
+    const actor = await policyActorFromAuth(auth)
 
-      const result = await getPublicRoadmapPosts(
-        data.roadmapId as RoadmapId,
-        {
-          statusId: data.statusId as PostStatusId | undefined,
-          bucketId: data.bucketId,
-          limit: data.limit ?? 20,
-          offset: data.offset ?? 0,
-          search: data.search,
-          boardIds: data.boardIds as BoardId[] | undefined,
-          tagIds: data.tagIds as PostTagId[] | undefined,
-          segmentIds,
-          sort: data.sort,
-        },
-        actor
-      )
+    const result = await getPublicRoadmapPosts(
+      data.roadmapId as RoadmapId,
+      {
+        statusId: data.statusId as PostStatusId | undefined,
+        bucketId: data.bucketId,
+        limit: data.limit ?? 20,
+        offset: data.offset ?? 0,
+        search: data.search,
+        boardIds: data.boardIds as BoardId[] | undefined,
+        tagIds: data.tagIds as PostTagId[] | undefined,
+        segmentIds,
+        sort: data.sort,
+      },
+      actor
+    )
 
-      return {
-        ...result,
-        items: result.items.map((item) => ({
-          id: String(item.id),
-          title: item.title,
-          voteCount: item.voteCount,
-          statusId: item.statusId ? String(item.statusId) : null,
-          eta: toIsoStringOrNull(item.eta),
-          board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
-        })),
-      }
-    })
+    return {
+      ...result,
+      items: result.items.map((item) => ({
+        id: String(item.id),
+        title: item.title,
+        voteCount: item.voteCount,
+        statusId: item.statusId ? String(item.statusId) : null,
+        eta: toIsoStringOrNull(item.eta),
+        board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },
+      })),
+    }
   })
 
 export const fetchPublicRoadmapDateBuckets = createServerFn({ method: 'GET' })
@@ -676,62 +653,60 @@ export const getCommentsSectionDataFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     log.debug({ post_id: data.postId }, 'get comments section data')
     const denied = { isMember: false, isTeamMember: false, canComment: false, user: undefined }
-    return withErrorLog(log, 'get comments section data', async () => {
-      const postId = data.postId as PostId
+    const postId = data.postId as PostId
 
-      // Portal-visibility gate: a caller who can't see the portal must not
-      // learn whether commenting is open. Mirrors getVoteSidebarDataFn.
-      const access = await resolvePortalAccessForRequest()
-      if (!access.granted) return denied
+    // Portal-visibility gate: a caller who can't see the portal must not
+    // learn whether commenting is open. Mirrors getVoteSidebarDataFn.
+    const access = await resolvePortalAccessForRequest()
+    if (!access.granted) return denied
 
-      const ctx = await getOptionalAuth()
-      const actor = await policyActorFromAuth(ctx)
+    const ctx = await getOptionalAuth()
+    const actor = await policyActorFromAuth(ctx)
 
-      // Per-post audience gate: a portal-granted caller can still be probing a
-      // post on a team-only / segment-restricted board. NotFound => denial.
-      try {
-        const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
-        await assertPostViewable(postId, actor)
-      } catch (err) {
-        if (err instanceof Error && err.name === 'NotFoundError') return denied
-        throw err
-      }
+    // Per-post audience gate: a portal-granted caller can still be probing a
+    // post on a team-only / segment-restricted board. NotFound => denial.
+    try {
+      const { assertPostViewable } = await import('@/lib/server/domains/posts/post.access')
+      await assertPostViewable(postId, actor)
+    } catch (err) {
+      if (err instanceof Error && err.name === 'NotFoundError') return denied
+      throw err
+    }
 
-      // Per-board comment capability for the real actor, composed with the
-      // workspace anonymous ceiling. boardCapabilitiesForActor is the single
-      // source of truth the portal + widget UIs share, so the CTA can't desync
-      // from the server-side canCreateComment gate (it passes a published,
-      // unlocked post internally — assertPostViewable already proved view, and
-      // comments-locked is handled by the component's lockedMessage).
-      const { loadBoardAccessForPost } = await import('@/lib/server/domains/posts/post.access')
-      const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
-      const boardAccess = await loadBoardAccessForPost(postId)
-      if (!boardAccess) return denied
+    // Per-board comment capability for the real actor, composed with the
+    // workspace anonymous ceiling. boardCapabilitiesForActor is the single
+    // source of truth the portal + widget UIs share, so the CTA can't desync
+    // from the server-side canCreateComment gate (it passes a published,
+    // unlocked post internally — assertPostViewable already proved view, and
+    // comments-locked is handled by the component's lockedMessage).
+    const { loadBoardAccessForPost } = await import('@/lib/server/domains/posts/post.access')
+    const { boardCapabilitiesForActor } = await import('@/lib/server/policy')
+    const boardAccess = await loadBoardAccessForPost(postId)
+    if (!boardAccess) return denied
 
-      // The workspace anonymous ceiling only applies to non-user actors, so
-      // only real anonymous / no-session viewers need the (uncached) config
-      // read — a user actor's canComment is gated purely by the per-board tier,
-      // making allowAnonymous irrelevant. Keep the read lazy + conditional
-      // rather than eager so a user actor's path never depends on it.
-      let allowAnonymous = false
-      if (actor.principalType !== 'user') {
-        allowAnonymous = await loadAllowAnonymous()
-      }
-      const canComment = boardCapabilitiesForActor(actor, boardAccess, allowAnonymous).canComment
+    // The workspace anonymous ceiling only applies to non-user actors, so
+    // only real anonymous / no-session viewers need the (uncached) config
+    // read — a user actor's canComment is gated purely by the per-board tier,
+    // making allowAnonymous irrelevant. Keep the read lazy + conditional
+    // rather than eager so a user actor's path never depends on it.
+    let allowAnonymous = false
+    if (actor.principalType !== 'user') {
+      allowAnonymous = await loadAllowAnonymous()
+    }
+    const canComment = boardCapabilitiesForActor(actor, boardAccess, allowAnonymous).canComment
 
-      const isMember = !!(ctx?.user && ctx?.principal)
-      const isTeamMember =
-        isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
+    const isMember = !!(ctx?.user && ctx?.principal)
+    const isTeamMember =
+      isMember && (ctx.principal.role === 'admin' || ctx.principal.role === 'member')
 
-      return {
-        isMember,
-        isTeamMember,
-        canComment,
-        user: isMember
-          ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
-          : undefined,
-      }
-    })
+    return {
+      isMember,
+      isTeamMember,
+      canComment,
+      user: isMember
+        ? { name: ctx.user.name, email: ctx.user.email, principalId: ctx.principal.id }
+        : undefined,
+    }
   })
 
 /**

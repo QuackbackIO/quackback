@@ -7,7 +7,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireAuth } from './auth-helpers'
-import { withErrorLog } from './with-error-log'
 import { db, integrations, eq } from '@/lib/server/db'
 import { decryptSecrets } from '@/lib/server/integrations/encryption'
 import type { ExternalStatusItem } from '@/lib/server/integrations/types'
@@ -36,25 +35,23 @@ export const fetchExternalStatusesFn = createServerFn({ method: 'POST' })
   .validator(fetchExternalStatusesSchema)
   .handler(async ({ data }): Promise<ExternalStatusItem[]> => {
     log.debug({ integration_type: data.integrationType }, 'fetch external statuses')
-    return withErrorLog(log, 'fetch external statuses', async () => {
-      await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
+    await requireAuth({ permission: PERMISSIONS.INTEGRATION_MANAGE })
 
-      const { getIntegration } = await import('@/lib/server/integrations')
-      const listExternalStatuses = getIntegration(data.integrationType)?.listExternalStatuses
-      if (!listExternalStatuses) return []
+    const { getIntegration } = await import('@/lib/server/integrations')
+    const listExternalStatuses = getIntegration(data.integrationType)?.listExternalStatuses
+    if (!listExternalStatuses) return []
 
-      const integration = await db.query.integrations.findFirst({
-        where: eq(integrations.integrationType, data.integrationType),
-      })
-      if (!integration?.secrets || integration.status !== 'active') {
-        return []
-      }
-
-      const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
-      if (!secrets.accessToken) return []
-
-      const config = (integration.config ?? {}) as Record<string, unknown>
-
-      return listExternalStatuses({ accessToken: secrets.accessToken, config })
+    const integration = await db.query.integrations.findFirst({
+      where: eq(integrations.integrationType, data.integrationType),
     })
+    if (!integration?.secrets || integration.status !== 'active') {
+      return []
+    }
+
+    const secrets = decryptSecrets<{ accessToken?: string }>(integration.secrets)
+    if (!secrets.accessToken) return []
+
+    const config = (integration.config ?? {}) as Record<string, unknown>
+
+    return listExternalStatuses({ accessToken: secrets.accessToken, config })
   })
