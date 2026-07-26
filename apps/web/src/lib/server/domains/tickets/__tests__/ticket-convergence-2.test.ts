@@ -1,7 +1,7 @@
 /**
  * Real-DB coverage for convergence Phase 2 READ-THROUGH
  * (scratchpad/convergence-design.md — "the pair runs on the conversation's
- * two watermarks"; Intercom's "a ticket is marked as read when the linked
+ * two watermarks"; "a ticket is marked as read when the linked
  * conversation is read"). Runs inside the db-test-fixture rollback
  * transaction. Covers:
  *

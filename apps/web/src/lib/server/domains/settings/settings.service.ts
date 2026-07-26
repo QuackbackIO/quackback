@@ -711,7 +711,7 @@ export async function updateHelpCenterConfig(
 
 /**
  * Enable an additional help-center locale (domains/languages §2). Requires a
- * non-empty homepage title (Intercom-style validation: a locale with no
+ * non-empty homepage title: a locale with no
  * chrome strings has nothing to show on its own homepage). Idempotent --
  * re-enabling an already-enabled locale just replaces its chrome.
  */

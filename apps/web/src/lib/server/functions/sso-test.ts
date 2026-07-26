@@ -27,7 +27,7 @@ import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
-import { DEFAULT_OIDC_SCOPES } from '@/lib/server/auth/build-oauth-configs'
+import { effectiveScopes } from '@/lib/server/auth/build-oauth-configs'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 
 const TTL_SECONDS = 600
@@ -188,11 +188,12 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       response_type: 'code',
       client_id: provider.clientId,
       redirect_uri: redirectUri,
-      // Mirror production: buildGenericOAuthConfigs requests provider.scopes
-      // (falling back to the default set). A test that always sent a fixed
-      // scope set could pass while real sign-in requests a different one,
-      // letting a non-representative test unlock enforcement.
-      scope: provider.scopes ?? DEFAULT_OIDC_SCOPES.join(' '),
+      // Mirror production exactly by sharing one resolver with the registration
+      // builder. A test that sent a different scope set could pass while real
+      // sign-in requests another, letting a non-representative test unlock
+      // enforcement — which a stored blank `scopes` used to do, because the two
+      // sides disagreed on whether blank meant "defaults" or "no scopes".
+      scope: effectiveScopes(provider).join(' '),
       state,
       nonce,
       prompt: 'login',

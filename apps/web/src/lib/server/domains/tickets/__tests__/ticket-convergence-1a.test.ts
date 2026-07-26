@@ -367,7 +367,7 @@ describe.skipIf(!fixture.available)('convergence Phase 1a (real DB, rolled back)
       })
     })
 
-    it('keeps an internal note ticket-parented on a linked pair (Intercom ticket notes)', async () => {
+    it('keeps an internal note ticket-parented on a linked pair (ticket notes stay ticket-scoped)', async () => {
       const statuses = await seedStatuses()
       const agentP = await seedPrincipal()
       const requesterP = await seedPrincipal()

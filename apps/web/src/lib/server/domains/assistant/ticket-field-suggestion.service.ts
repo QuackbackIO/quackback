@@ -7,7 +7,7 @@
  * SUGGESTION-ONLY CONTRACT. Nothing here writes anything: the returned values
  * pre-fill the dialog's form marked "✨ suggested", every field stays
  * editable, and the ticket persists only through the dialog's normal submit
- * (`createTicketFn`). Featurebase (Fibi) and Intercom auto-apply on
+ * (`createTicketFn`). Competing assistants auto-apply on conversion; ours
  * conversion; ours never does — suggestion-only stays even when auto-apply
  * gets tempting (second opinion, design doc ruling 5).
  *

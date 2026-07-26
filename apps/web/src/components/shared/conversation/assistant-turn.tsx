@@ -112,7 +112,7 @@ const CITATION_DOT_CLASS =
 const CITATION_DOT_INTERNAL_CLASS =
   'bg-amber-400/20 text-amber-700 dark:bg-amber-400/25 dark:text-amber-300 hover:bg-amber-500 hover:text-white focus-visible:bg-amber-500 focus-visible:text-white'
 
-/** A single inline citation dot with a hover/focus source card (Fibi-style).
+/** A single inline citation dot with a hover/focus source card.
  *  An internal-sourced citation (`internal === true`) additionally gets an
  *  amber tint and a small lock badge — the visual half of the Copilot leak
  *  gate (COPILOT-SIDEBAR-UX.md B.4) — and its hovercard shows an "Internal"

@@ -76,7 +76,7 @@ export type ToolExecutionMode = 'autonomous' | 'propose' | 'simulate'
  * Resolve a spec's execution branch for this turn from its risk class and the
  * turn's write policy (`ctx.writeToolPolicy`, selected from the role policy).
  * There is no saved per-tool configuration: end-user-triggered write tools
- * execute autonomously, matching Featurebase.
+ * execute autonomously, with no approval step.
  *
  * - Control tools are agent-protocol primitives: always autonomous, on every
  *   deployment (the model must express handoff/inability as tool calls).

@@ -2,7 +2,7 @@
  * "Draft descriptions" authoring assist (AI-ATTRIBUTES-PARITY-SPEC.md Phase
  * 3): one chat call that turns an attribute label + its option labels into
  * applies-if/does-not-apply-if/likely-phrasing descriptions — the exact
- * template both Intercom's and Featurebase's authoring docs tell admins to
+ * template competing products' authoring docs tell admins to write
  * write themselves with an external LLM (AI-ATTRIBUTES-PARITY-SPEC.md §1's
  * "Authoring guidance" row). Building it in turns a documented manual
  * workaround into a button.

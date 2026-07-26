@@ -236,8 +236,8 @@ export interface RawFeedbackItemContextEnvelope {
 
 // Use case types for personalized onboarding
 /**
- * First-run intent — ideally an *outcome* ICP would name (Featurebase /
- * Intercom / Statuspage style), not an industry vertical.
+ * First-run intent — ideally an *outcome* ICP would name, not an industry
+ * vertical.
  *
  * UI offers: product_feedback | customer_support | help_center | internal.
  * Legacy saas | consumer | marketplace still parse (config-file / old rows)

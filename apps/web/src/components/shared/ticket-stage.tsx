@@ -19,7 +19,7 @@ import { cn } from '@/lib/shared/utils'
 
 /** Semantic soft-chip colors per customer-facing stage — neutral while queued,
  *  blue while worked, amber when the ball is in the requester's court
- *  (Intercom's "waiting on customer" attention state), emerald when done. */
+ *  (the "waiting on customer" attention state), emerald when done. */
 const STAGE_CHIP_CLASS: Record<string, string> = {
   received: 'bg-muted/60 text-muted-foreground',
   in_progress: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
@@ -62,7 +62,7 @@ export function StageChip({
 }
 
 /** The received -> in_progress -> awaiting_requester -> resolved progress bar,
- *  with every stage labeled under its segment (Featurebase/Intercom show the
+ *  with every stage labeled under its segment (the full progression stays
  *  full progression, not just the current stop). Mobile keeps only the current
  *  label — four labels don't fit a phone row. B22: a closed ticket with no
  *  stage slot shows a single quiet "Closed" bar instead of no tracker. */

@@ -28,6 +28,23 @@ import type { IdentityProvider } from '@/lib/server/domains/settings/identity-pr
  */
 export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile'] as const
 
+/**
+ * The scopes a provider actually requests. NULL — or a blank/whitespace-only
+ * column — means "use the defaults".
+ *
+ * Both consumers must route through this. They previously disagreed on the
+ * blank case: registration branched on truthiness (`''` → defaults) while the
+ * SSO test used `??` (`''` → no scopes at all), so a stored empty string made
+ * the test exercise a different scope set from production and could unlock
+ * enforcement on a non-representative pass.
+ *
+ * The column is documented as space- OR comma-joined, so split on both.
+ */
+export function effectiveScopes(provider: Pick<IdentityProvider, 'scopes'>): string[] {
+  const parsed = (provider.scopes ?? '').split(/[\s,]+/).filter(Boolean)
+  return parsed.length > 0 ? parsed : [...DEFAULT_OIDC_SCOPES]
+}
+
 /** A single entry in the genericOAuth plugin's `config` array. */
 export interface GenericOAuthConfig {
   providerId: string
@@ -38,6 +55,10 @@ export interface GenericOAuthConfig {
   pkce?: boolean
   authorizationUrl?: string
   tokenUrl?: string
+  /** Manual-endpoint userinfo URL. Without this the plugin's id_token →
+   *  userinfo fallback has nowhere to go for a provider with no discovery
+   *  document, and the callback aborts with `user_info_is_missing`. */
+  userInfoUrl?: string
   scopes?: string[]
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   // Force the IdP account picker so admins notice when they're already
@@ -115,6 +136,7 @@ export async function buildGenericOAuthConfigs({
     const discoveryUrl = provider.discoveryUrl || c.discoveryUrl || undefined
     const authorizationUrl = provider.authorizationUrl || undefined
     const tokenUrl = provider.tokenUrl || undefined
+    const userInfoUrl = provider.userInfoUrl || undefined
 
     configs.push({
       providerId: provider.registrationId,
@@ -123,9 +145,8 @@ export async function buildGenericOAuthConfigs({
       ...(discoveryUrl ? { discoveryUrl } : {}),
       ...(authorizationUrl ? { authorizationUrl } : {}),
       ...(tokenUrl ? { tokenUrl } : {}),
-      scopes: provider.scopes
-        ? provider.scopes.split(/\s+/).filter(Boolean)
-        : [...DEFAULT_OIDC_SCOPES],
+      ...(userInfoUrl ? { userInfoUrl } : {}),
+      scopes: effectiveScopes(provider),
       // PKCE on every provider. OAuth 2.1 IdPs require code_challenge and
       // reject without it; RFC 7636 §5 makes the params backwards-compatible
       // (IdPs without PKCE support simply ignore them).

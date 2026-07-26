@@ -137,6 +137,37 @@ export function deriveVisibility(p: {
   return verifiedDomainCount(p) > 0 ? 'routed' : 'button'
 }
 
+/** Fields whose change invalidates a prior successful connection test. */
+const CONNECTION_FIELDS = [
+  'clientId',
+  'discoveryUrl',
+  'authorizationUrl',
+  'tokenUrl',
+  'userInfoUrl',
+  'jwksUri',
+  'issuer',
+  // Scopes decide which claims the IdP releases, which is precisely what the
+  // test validates. Omitting them let a stale pass keep vouching for a scope
+  // set the test never exercised.
+  'scopes',
+] as const
+
+/**
+ * True when an upsert changes anything the connection test depends on, so
+ * `detailsChangedAt` must be restamped and a prior `lastSuccessfulTestAt`
+ * stops counting (`isSsoTestValid` compares the two).
+ *
+ * Honours patch semantics: a field the caller did not supply is not a change,
+ * so editing an unrelated field (a label, say) never invalidates a good test.
+ * Pure and exported so the rule is unit-testable without a transaction.
+ */
+export function connectionAffectingChange(
+  input: Partial<Pick<UpsertIdentityProviderInput, (typeof CONNECTION_FIELDS)[number]>>,
+  existing: Pick<IdentityProvider, (typeof CONNECTION_FIELDS)[number]>
+): boolean {
+  return CONNECTION_FIELDS.some((f) => input[f] !== undefined && input[f] !== existing[f])
+}
+
 // ============================================================================
 // Row mappers
 // ============================================================================
@@ -376,16 +407,7 @@ export async function upsertIdentityProvider(
         // authorization/token/userinfo URLs). The gate `isSsoTestValid`
         // compares `lastSuccessfulTestAt` vs `detailsChangedAt`; without this
         // stamp a pre-edit test could vouch for a swapped token endpoint.
-        const connectionChanged =
-          input.clientId !== existing.clientId ||
-          (input.discoveryUrl !== undefined && input.discoveryUrl !== existing.discoveryUrl) ||
-          (input.authorizationUrl !== undefined &&
-            input.authorizationUrl !== existing.authorizationUrl) ||
-          (input.tokenUrl !== undefined && input.tokenUrl !== existing.tokenUrl) ||
-          (input.userInfoUrl !== undefined && input.userInfoUrl !== existing.userInfoUrl) ||
-          (input.jwksUri !== undefined && input.jwksUri !== existing.jwksUri) ||
-          (input.issuer !== undefined && input.issuer !== existing.issuer)
-        if (connectionChanged) {
+        if (connectionAffectingChange(input, existing)) {
           patch.detailsChangedAt = new Date()
         }
 

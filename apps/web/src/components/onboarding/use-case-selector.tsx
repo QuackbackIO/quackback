@@ -25,11 +25,11 @@ interface OutcomeOption {
 }
 
 /**
- * Outcome-first picker, modeled on how Intercom / Featurebase / Statuspage
+ * Outcome-first picker, modeled on how feedback/support-tool ICPs actually
  * ICPs actually buy:
  *
- *  - Product feedback  → Featurebase / Canny PM & founder ICP
- *  - Customer support  → Intercom support / CX ICP
+ *  - Product feedback  → PM & founder ICP
+ *  - Customer support  → support / CX ICP
  *  - Help center       → Self-serve / deflect volume
  *  - Internal          → Employee voice / ops feedback
  *

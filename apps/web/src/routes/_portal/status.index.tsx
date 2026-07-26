@@ -152,7 +152,7 @@ function StatusPage() {
         className="mb-6"
       />
 
-      {/* Statuspage convention: when something is active, the incident itself
+      {/* Status-page convention: when something is active, the incident itself
           is the banner — no separate summary banner restating the outage. */}
       {snapshot.activeIncidents.length === 0 ? (
         <StatusHero status={snapshot.topLevel.status} lastUpdatedAt={lastUpdatedAt} />

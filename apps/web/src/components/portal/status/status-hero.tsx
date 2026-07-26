@@ -26,7 +26,7 @@ interface StatusHeroProps {
   className?: string
 }
 
-/** The top banner: a solid Statuspage-style bar colored by the page's
+/** The top banner: a solid bar colored by the page's
  *  worst-of-visible-components status. Only shown when no incident is active
  *  — an active incident renders its own banner card instead. */
 export function StatusHero({ status, lastUpdatedAt, className }: StatusHeroProps) {

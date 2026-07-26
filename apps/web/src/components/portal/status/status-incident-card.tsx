@@ -22,7 +22,7 @@ interface StatusIncidentCardProps {
 }
 
 /** Banner-headed card for active incidents / in-progress maintenance — the
- *  incident doubles as the page's status banner (Statuspage convention): an
+ *  incident doubles as the page's status banner: an impact-tinted header
  *  impact-tinted header strip with the title + lifecycle label, then the
  *  latest update excerpt and affected-component chips in the body. */
 export function StatusIncidentCard({ incident, className }: StatusIncidentCardProps) {

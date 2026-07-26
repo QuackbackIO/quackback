@@ -1,6 +1,82 @@
 import { describe, it, expect } from 'vitest'
-import { buildGenericOAuthConfigs } from '../build-oauth-configs'
+import {
+  buildGenericOAuthConfigs,
+  effectiveScopes,
+  DEFAULT_OIDC_SCOPES,
+} from '../build-oauth-configs'
 import { getAllAuthProviders } from '../auth-providers'
+
+/** Minimal enabled provider row for the builder. */
+function row(over: Record<string, unknown> = {}) {
+  return {
+    id: 'idp_abc',
+    registrationId: 'oidc_abc',
+    enabled: true,
+    autoCreateUsers: true,
+    discoveryUrl: 'https://x/.well-known/openid-configuration',
+    ...over,
+  }
+}
+
+async function buildOne(over: Record<string, unknown> = {}) {
+  const cfgs = await buildGenericOAuthConfigs({
+    providers: [row(over)] as never,
+    creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+    tierAllowsOidc: true,
+  })
+  return cfgs[0]
+}
+
+describe('effectiveScopes', () => {
+  it('falls back to the default set for null', () => {
+    expect(effectiveScopes({ scopes: null })).toEqual([...DEFAULT_OIDC_SCOPES])
+  })
+
+  it('treats a blank or whitespace-only column as unset, not as "no scopes"', () => {
+    // Regression: registration branched on truthiness ('' -> defaults) while the
+    // SSO test used ?? ('' -> empty scope), so a stored blank made the test
+    // exercise a different scope set from production.
+    expect(effectiveScopes({ scopes: '' })).toEqual([...DEFAULT_OIDC_SCOPES])
+    expect(effectiveScopes({ scopes: '   ' })).toEqual([...DEFAULT_OIDC_SCOPES])
+  })
+
+  it('splits on whitespace and collapses runs', () => {
+    expect(effectiveScopes({ scopes: 'openid   public' })).toEqual(['openid', 'public'])
+  })
+
+  it('splits comma-joined values, which the column is documented to allow', () => {
+    expect(effectiveScopes({ scopes: 'openid,public' })).toEqual(['openid', 'public'])
+    expect(effectiveScopes({ scopes: 'openid, public' })).toEqual(['openid', 'public'])
+  })
+
+  it('preserves a custom set verbatim', () => {
+    expect(effectiveScopes({ scopes: 'openid public' })).toEqual(['openid', 'public'])
+  })
+})
+
+describe('buildGenericOAuthConfigs scope + userinfo wiring', () => {
+  it('requests the effective scopes, not the raw column', async () => {
+    expect((await buildOne({ scopes: '' }))?.scopes).toEqual([...DEFAULT_OIDC_SCOPES])
+    expect((await buildOne({ scopes: 'openid public' }))?.scopes).toEqual(['openid', 'public'])
+  })
+
+  it('forwards the row userInfoUrl so the userinfo fallback has a target', async () => {
+    // Without this the plugin's id_token -> userinfo fallback resolves
+    // undefined for a manual-endpoint provider and the callback aborts with
+    // user_info_is_missing, even though the connection test honours the column.
+    const cfg = await buildOne({
+      discoveryUrl: null,
+      authorizationUrl: 'https://idp/authorize',
+      tokenUrl: 'https://idp/token',
+      userInfoUrl: 'https://idp/userinfo',
+    })
+    expect(cfg?.userInfoUrl).toBe('https://idp/userinfo')
+  })
+
+  it('omits userInfoUrl when the row has none', async () => {
+    expect(await buildOne({ userInfoUrl: null })).not.toHaveProperty('userInfoUrl')
+  })
+})
 
 describe('buildGenericOAuthConfigs', () => {
   it('registers one config per enabled provider under its registrationId', async () => {

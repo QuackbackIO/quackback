@@ -1,5 +1,5 @@
 /**
- * Changelog subscriber model (Changelog Settings §2, opt-out per Featurebase):
+ * Changelog subscriber model (Changelog Settings §2, opt-out semantics):
  * one row per subscribed principal. `source` records how the row was created
  * (auto-subscribe, self-serve, CSV import, or an admin adding someone
  * manually); `unsubscribedAt` is a soft opt-out so the audit trail (who

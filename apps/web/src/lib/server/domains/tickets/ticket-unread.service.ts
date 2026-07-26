@@ -10,7 +10,7 @@
  * CONVERGENCE PHASE 2 — READ-THROUGH (scratchpad/convergence-design.md, "the
  * pair runs on the conversation's two watermarks"). A customer ticket and its
  * linked conversation are ONE item with ONE shared watermark per side; reading
- * either surface of the pair marks BOTH read (Intercom's "a ticket is marked
+ * either surface of the pair marks BOTH read ("a ticket is marked
  * as read when the linked conversation is read"). The mark-read entry points
  * here therefore resolve the pair first and, for a linked customer ticket,
  * delegate to the conversation's own mark-read (which writes
