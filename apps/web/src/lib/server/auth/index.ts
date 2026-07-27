@@ -359,6 +359,17 @@ async function createAuth() {
       accountLinking: {
         enabled: true,
         trustedProviders,
+        // Let someone already signed in attach a provider whose address differs
+        // from their account's. Without it a provider that releases no email —
+        // and therefore signs people in under a placeholder address — can never
+        // be linked to a real account at all, which is the population this work
+        // adds.
+        //
+        // Safe because this gates the DELIBERATE flows only: the explicit link
+        // endpoint and the account-linking API, both authorised by an existing
+        // session rather than by the address. Auto-linking is untouched, since
+        // it finds the user BY email and so is an address match by definition.
+        allowDifferentEmails: true,
       },
     },
 
