@@ -131,7 +131,17 @@ export async function resolveIdentity({
     const claims = await loadSource(source)
     if (!claims) continue
 
-    const claimedId = asNonEmptyString(resolveClaim(claims, idClaim))
+    // Reproduce the library's own derivation exactly, or an upgrade re-keys
+    // existing accounts: lookup matches the account identifier first, so a
+    // changed value misses, the email fallback finds the user, and a second
+    // account row appears — or, with no email, the user forks. The `id`
+    // fallback is userinfo-only because that is where the library applies it;
+    // its ID-token path keys on `sub` alone. An explicit idClaim wins over both.
+    const claimedId =
+      asNonEmptyString(resolveClaim(claims, idClaim)) ??
+      (source === 'userinfo' && !mapping?.idClaim
+        ? asNonEmptyString(resolveClaim(claims, 'id'))
+        : undefined)
 
     // OIDC Core 5.3.2: a userinfo response whose subject differs from the ID
     // token's must be discarded entirely. Scoped to userinfo deliberately —

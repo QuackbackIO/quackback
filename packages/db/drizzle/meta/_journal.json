@@ -1436,6 +1436,13 @@
       "when": 1784902535956,
       "tag": "0221_remove_web_form_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "7",
+      "when": 1784902535957,
+      "tag": "0222_account_identity_index",
+      "breakpoints": true
     }
   ]
 }

@@ -237,6 +237,13 @@ export const account = pgTable(
     // created_at ASC LIMIT 1`. Without the composite the ORDER BY
     // requires a sort even though the WHERE is index-satisfied.
     index('account_userId_createdAt_idx').on(table.userId, table.createdAt),
+    // The identity key. Deliberately NOT unique: this ships to installations we
+    // cannot inspect, and a unique index would abort the migration wherever
+    // duplicates already exist, turning a latent data issue into a failed
+    // upgrade. The index makes detection cheap; the constraint can follow once
+    // the real rate is known. See 0222_account_identity_index.sql.
+    index('account_provider_account_idx').on(table.providerId, table.accountId),
+    index('account_user_provider_idx').on(table.userId, table.providerId),
   ]
 )
 

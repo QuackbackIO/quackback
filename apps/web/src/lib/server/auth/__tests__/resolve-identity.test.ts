@@ -190,3 +190,72 @@ describe('resolveIdentity — emailVerified provenance', () => {
     expect(result.identity.emailVerified).toBe(false)
   })
 })
+
+/**
+ * Account-identifier compatibility.
+ *
+ * The account row's identifier is written from whatever the resolver returns as
+ * `id`, and lookup matches on it first with an email fallback. If an upgrade
+ * changes which claim supplies it, the lookup misses, the email fallback finds
+ * the user, and a SECOND account row appears — or, with no email, the user
+ * forks. Neither is undone by rolling the image back, and there is no
+ * uniqueness constraint that would make it fail loudly instead.
+ *
+ * So the resolver must reproduce the library's own derivation exactly for every
+ * provider that works today.
+ */
+describe('resolveIdentity — account identifier compatibility', () => {
+  it('falls back to `id` for a userinfo document with no `sub`', async () => {
+    // The library does `userInfo.sub ?? userInfo.id`. Resolving only `sub`
+    // would re-key every account on a provider whose userinfo omits it.
+    const result = await resolveIdentity({
+      tokens: {},
+      fetchUserInfo: async () => ({ id: 'legacy-account-id', email: 'e@x.com', name: 'N' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('legacy-account-id')
+  })
+
+  it('prefers `sub` when userinfo carries both', async () => {
+    const result = await resolveIdentity({
+      tokens: {},
+      fetchUserInfo: async () => ({ sub: 'the-sub', id: 'the-id', email: 'e@x.com', name: 'N' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('the-sub')
+  })
+
+  it('does NOT fall back to `id` in an ID token', async () => {
+    // The library keys the id_token path on `sub` alone, so honouring `id`
+    // here would invent an identifier it never used.
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ id: 'not-a-subject', email: 'e@x.com', name: 'N' }) },
+      fetchUserInfo: async () => null,
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('compares the subject guard against the same fallback', async () => {
+    // A userinfo doc identified by `id` must still be checked for agreement.
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 'from-token' }) },
+      fetchUserInfo: async () => ({ id: 'different', email: 'e@x.com', name: 'N' }),
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('subject_mismatch')
+  })
+
+  it('honours an explicit idClaim over the fallback', async () => {
+    const result = await resolveIdentity({
+      tokens: {},
+      fetchUserInfo: async () => ({ sub: 'ignored', CharacterID: 42, name: 'N' }),
+      mapping: { idClaim: 'CharacterID' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('42')
+  })
+})
