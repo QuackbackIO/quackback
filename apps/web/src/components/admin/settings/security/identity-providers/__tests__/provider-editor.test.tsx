@@ -25,7 +25,9 @@ beforeAll(() => {
 
 const { upsertSpy } = vi.hoisted(() => ({
   upsertSpy: vi.fn(
-    async (_args: { data: { kind: string | null; attributeMapping: unknown } }) => undefined
+    async (_args: {
+      data: { kind: string | null; attributeMapping: unknown; scopes: string | null }
+    }) => undefined
   ),
 }))
 
@@ -230,5 +232,86 @@ describe('<ProviderEditor> claim-mapping autocomplete', () => {
     )
     // Disclosure auto-opens because a mapping object exists; no "from your test" hint.
     expect(screen.queryByText(/From your test sign-in:/)).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Scopes control.
+ *
+ * The column was wired end to end — service, server function, registration
+ * builder, connection test — but the editor rendered no input, so an admin
+ * whose IdP does not define `email`/`profile` had no way to see or change what
+ * was being requested. That is the whole reported failure.
+ */
+describe('<ProviderEditor> scopes', () => {
+  const openAdvanced = () => {
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+  }
+
+  it('collapses Advanced by default for a provider on the default scopes', () => {
+    renderEditor(makeProvider({ scopes: null }))
+    expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+  })
+
+  it('auto-expands Advanced when the provider has a custom scope set', () => {
+    // Otherwise a non-default configuration is invisible behind a closed panel.
+    renderEditor(makeProvider({ scopes: 'openid public' }))
+    expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+  })
+
+  it('prefills the effective scopes rather than an empty field', () => {
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    for (const scope of ['openid', 'email', 'profile']) {
+      expect(screen.getByTestId(`scope-token-${scope}`)).toBeInTheDocument()
+    }
+  })
+
+  it('does not offer to remove openid', () => {
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    expect(screen.queryByRole('button', { name: 'Remove scope openid' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove scope email' })).toBeInTheDocument()
+  })
+
+  it('saves null when the admin leaves the defaults untouched', async () => {
+    renderEditor(makeProvider({ scopes: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls[0][0].data.scopes).toBeNull()
+  })
+
+  it('saves the reduced set after removing a scope the IdP does not support', async () => {
+    // The customer case: an IdP advertising only `public` and `openid`.
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove scope email' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove scope profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls[0][0].data.scopes).toBe('openid')
+  })
+
+  it('adds a scope typed by the admin', async () => {
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    fireEvent.change(screen.getByLabelText('Add a scope'), { target: { value: 'public' } })
+    fireEvent.submit(screen.getByTestId('scope-add-form'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls[0][0].data.scopes).toBe('openid email profile public')
+  })
+
+  it('round-trips a custom set without rewriting it', async () => {
+    renderEditor(makeProvider({ scopes: 'openid public' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls[0][0].data.scopes).toBe('openid public')
   })
 })

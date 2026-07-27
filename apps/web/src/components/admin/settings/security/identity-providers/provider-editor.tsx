@@ -41,6 +41,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import {
+  REQUIRED_OIDC_SCOPE,
+  effectiveScopes,
+  normalizeScopesInput,
+  parseScopes,
+} from '@/lib/shared/oidc-scopes'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -183,6 +189,14 @@ export function ProviderEditor({
     jwksUri: provider?.jwksUri ?? '',
     issuer: provider?.issuer ?? '',
   })
+  // Prefilled with the EFFECTIVE set, not an empty field. The reported failure
+  // was an admin unable to see what was being requested, so a blank input
+  // showing the defaults as placeholder text would reproduce the same problem.
+  // `normalizeScopesInput` puts null back when the set still equals the
+  // defaults, so prefilling does not rewrite an untouched provider.
+  const [scopes, setScopes] = useState<string[]>(() =>
+    effectiveScopes({ scopes: provider?.scopes ?? null })
+  )
   const [clientId, setClientId] = useState(provider?.clientId ?? '')
   const [secretDraft, setSecretDraft] = useState('')
   // Enabling/disabling lives on the provider list row now; the editor only
@@ -228,6 +242,7 @@ export function ProviderEditor({
           kind,
           clientId: clientId.trim(),
           discoveryUrl: discoveryUrl.trim() || null,
+          scopes: normalizeScopesInput(scopes),
           // Manual endpoints only apply to "Other"; null them out otherwise so
           // switching back to a shortcut kind clears any stale manual config.
           authorizationUrl: kind === 'other' ? manual.authorizationUrl.trim() || null : null,
@@ -389,6 +404,8 @@ export function ProviderEditor({
                 disabled={saving}
               />
             </div>
+
+            <AdvancedSection scopes={scopes} disabled={saving} onChange={setScopes} />
 
             <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
 
@@ -608,6 +625,102 @@ function IdpDiscoveryFields({
           {f.help && <p className="text-xs text-muted-foreground">{f.help}</p>}
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Advanced connection settings. Only scopes today, in its own disclosure
+ * because it applies to every provider kind, unlike the manual endpoints
+ * section which only renders for "other".
+ *
+ * Scopes are tokens rather than a free-text field for two reasons: a text box
+ * cannot show WHICH scope an IdP rejected, and it lets someone delete `openid`
+ * without noticing that doing so stops the request being an OIDC request at
+ * all. `openid` therefore has no remove control.
+ */
+function AdvancedSection({
+  scopes,
+  disabled,
+  onChange,
+}: {
+  scopes: string[]
+  disabled: boolean
+  onChange: (next: string[]) => void
+}) {
+  // Auto-expand when the provider is already off the defaults, so a
+  // non-default configuration is never hidden behind a closed panel.
+  const [open, setOpen] = useState(() => normalizeScopesInput(scopes) !== null)
+  const [draft, setDraft] = useState('')
+
+  const addScope = (e: React.FormEvent) => {
+    e.preventDefault()
+    const next = parseScopes(draft)
+    if (next.length === 0) return
+    onChange(parseScopes([...scopes, ...next].join(' ')))
+    setDraft('')
+  }
+
+  return (
+    <div className="rounded-md border border-border/50 bg-muted/10">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
+        aria-expanded={open}
+      >
+        <span>Advanced</span>
+        <span>{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-border/40 px-3 py-3">
+          <div className="space-y-2">
+            <Label className="text-xs">Scopes</Label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {scopes.map((scope) => (
+                <span
+                  key={scope}
+                  data-testid={`scope-token-${scope}`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 py-1 font-mono text-xs"
+                >
+                  {scope}
+                  {scope === REQUIRED_OIDC_SCOPE ? (
+                    <span className="text-[11px] text-muted-foreground">required</span>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={`Remove scope ${scope}`}
+                      disabled={disabled}
+                      onClick={() => onChange(scopes.filter((s) => s !== scope))}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+            <form onSubmit={addScope} data-testid="scope-add-form" className="flex gap-2">
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Add a scope"
+                aria-label="Add a scope"
+                disabled={disabled}
+                className="h-8 max-w-56 text-xs"
+              />
+              <Button type="submit" size="sm" variant="outline" disabled={disabled}>
+                Add
+              </Button>
+            </form>
+            <p className="text-xs text-muted-foreground">
+              Requested as <code className="font-mono">{scopes.join(' ')}</code>. Your IdP lists
+              what it accepts under <code className="font-mono">scopes_supported</code> in its
+              discovery document.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

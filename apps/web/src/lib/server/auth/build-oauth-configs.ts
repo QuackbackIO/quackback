@@ -20,30 +20,14 @@
  */
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
+import { effectiveScopes } from '@/lib/shared/oidc-scopes'
 
-/**
- * Default OIDC scopes requested when a provider has no explicit `scopes`.
- * The SSO test flow mirrors this exact set so a passing test exercises the
- * same scope request production sign-in will make.
- */
-export const DEFAULT_OIDC_SCOPES = ['openid', 'email', 'profile'] as const
-
-/**
- * The scopes a provider actually requests. NULL — or a blank/whitespace-only
- * column — means "use the defaults".
- *
- * Both consumers must route through this. They previously disagreed on the
- * blank case: registration branched on truthiness (`''` → defaults) while the
- * SSO test used `??` (`''` → no scopes at all), so a stored empty string made
- * the test exercise a different scope set from production and could unlock
- * enforcement on a non-representative pass.
- *
- * The column is documented as space- OR comma-joined, so split on both.
- */
-export function effectiveScopes(provider: Pick<IdentityProvider, 'scopes'>): string[] {
-  const parsed = (provider.scopes ?? '').split(/[\s,]+/).filter(Boolean)
-  return parsed.length > 0 ? parsed : [...DEFAULT_OIDC_SCOPES]
-}
+// Re-exported so server callers keep this import path. The implementation lives
+// in `shared` because the admin editor needs it too, and having exactly one
+// scope resolver is the whole point — see oidc-scopes.ts. The connection test
+// mirrors this same set, so a passing test exercises the scope request that
+// production sign-in will actually make.
+export { DEFAULT_OIDC_SCOPES, effectiveScopes } from '@/lib/shared/oidc-scopes'
 
 /** A single entry in the genericOAuth plugin's `config` array. */
 export interface GenericOAuthConfig {
