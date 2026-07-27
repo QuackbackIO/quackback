@@ -563,12 +563,18 @@ export function UserDetail({
                     </button>
                   )}
                 </div>
-                {(user.email ?? user.contactEmail) ? (
+                {/* Sanitised, not raw: a placeholder address is not a real one
+                    and must never be shown as if it were. Rendering it would
+                    tell an agent they can email someone the transport will
+                    refuse to deliver to. */}
+                {realEmail(user.email ?? user.contactEmail) ? (
                   <p className="text-sm text-muted-foreground truncate">
-                    {user.email ?? user.contactEmail}
+                    {realEmail(user.email ?? user.contactEmail)}
                   </p>
                 ) : (
-                  <p className="text-sm text-muted-foreground/50 italic">No email</p>
+                  <p className="text-sm text-muted-foreground/50 italic">
+                    No email &middot; cannot receive notifications
+                  </p>
                 )}
                 <div className="mt-2 flex items-center gap-1.5">
                   <Badge variant="secondary" className="text-xs">
@@ -607,7 +613,8 @@ export function UserDetail({
             initialTarget={{
               principalId: user.principalId,
               name: user.name,
-              email: user.email ?? user.contactEmail,
+              // Never hand a placeholder to the composer as a deliverable target.
+              email: realEmail(user.email ?? user.contactEmail),
               image: user.image,
             }}
           />

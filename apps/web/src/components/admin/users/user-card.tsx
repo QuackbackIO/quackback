@@ -1,3 +1,4 @@
+import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   CheckCircleIcon,
   ChatBubbleLeftIcon,
@@ -71,10 +72,12 @@ export function UserCard({
           )}
         </div>
 
-        {/* Email: identified account email, or a lead's captured contact email */}
-        {(user.email ?? user.contactEmail) ? (
+        {/* Email: identified account email, or a lead's captured contact email.
+            Sanitised — a placeholder address is not a real one and showing it
+            would suggest this person can be emailed when they cannot. */}
+        {realEmail(user.email ?? user.contactEmail) ? (
           <p className="text-sm text-muted-foreground truncate">
-            {user.email ?? user.contactEmail}
+            {realEmail(user.email ?? user.contactEmail)}
           </p>
         ) : (
           <p className="text-sm text-muted-foreground/50 italic">No email</p>
