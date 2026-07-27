@@ -109,3 +109,21 @@ export const confirmContactEmailFn = createServerFn({ method: 'POST' })
 
     return { ok: true as const, email: challenge.email }
   })
+
+/**
+ * Whether this person already has a contact address on file.
+ *
+ * The prompt only asks when there is nowhere to reach someone, and the client
+ * can already tell from its own session whether its account address is a
+ * placeholder. So this is called only by the small population that has one,
+ * and everybody else pays nothing.
+ */
+export const getContactEmailStatusFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const ctx = await requireAuth()
+  const { db, principal, eq } = await import('@/lib/server/db')
+  const row = await db.query.principal.findFirst({
+    where: eq(principal.id, ctx.principal.id),
+    columns: { contactEmail: true },
+  })
+  return { hasContactEmail: !!row?.contactEmail }
+})
