@@ -70,6 +70,26 @@ export function hasAnyWorkingSignInMethod(snap: WorkingMethodInputs): boolean {
 }
 
 /**
+ * Pure decision: is the workspace reachable ONLY through an identity provider?
+ * True when at least one IdP works and no password, magic link, or social does.
+ *
+ * This is the second route to SSO-only, and it used to be the unguarded one.
+ * Per-domain enforcement demands a break-glass recovery code before it will
+ * turn on, but turning off password + magic link on the sign-in methods tab
+ * reaches the same end state and was gated only by "at least one method
+ * survives". A provider whose email addresses are placeholders can never pass
+ * domain verification, so this path is the ONLY way such a workspace becomes
+ * SSO-only — which made it exactly the wrong one to leave unguarded.
+ */
+export function isSsoOnlySignIn(snap: WorkingMethodInputs): boolean {
+  const anyProviderWorks = snap.tierEnabled && snap.providers.some((p) => p.enabled && p.configured)
+  if (!anyProviderWorks) return false
+
+  // No IdP in the picture: if anything still works, it is not SSO-only.
+  return !hasAnyWorkingSignInMethod({ ...snap, tierEnabled: false, providers: [] })
+}
+
+/**
  * Pure decision: is the target identity provider the workspace's ONLY working
  * sign-in method? True only when it's working and nothing else is — so removing
  * or disabling it would lock the workspace out.
@@ -151,4 +171,32 @@ export async function wouldLeaveNoWorkingSignInMethod(
 ): Promise<boolean> {
   const inputs = await gatherWorkingMethodInputs(proposedOauth)
   return !hasAnyWorkingSignInMethod(inputs)
+}
+
+/**
+ * Would applying `proposedOauth` leave an identity provider as the workspace's
+ * only way in? Backs the break-glass precondition on the sign-in methods save,
+ * mirroring what per-domain enforcement already demands.
+ */
+export async function wouldLeaveSsoOnly(
+  proposedOauth: Record<string, boolean | undefined>
+): Promise<boolean> {
+  return isSsoOnlySignIn(await gatherWorkingMethodInputs(proposedOauth))
+}
+
+/**
+ * THE break-glass precondition for reaching an SSO-only workspace, shared by
+ * both routes that can get there: per-domain enforcement and the sign-in
+ * methods save. Throws when no active recovery code exists.
+ *
+ * Deliberately one function rather than a copied check. Two implementations of
+ * one rule in two code paths is the failure this branch exists to remove, and
+ * a duplicate here would drift the same way.
+ */
+export async function assertBreakGlassAvailable(): Promise<void> {
+  const { hasActiveRecoveryCodes } = await import('@/lib/server/auth/recovery-codes-status')
+  if (!(await hasActiveRecoveryCodes())) {
+    const { ForbiddenError } = await import('@/lib/shared/errors')
+    throw new ForbiddenError('RECOVERY_CODES_REQUIRED', 'recovery_codes_required')
+  }
 }

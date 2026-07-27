@@ -493,7 +493,7 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
           ...((current?.oauth ?? {}) as Record<string, boolean | undefined>),
           ...data.oauth,
         }
-        const { wouldLeaveNoWorkingSignInMethod } =
+        const { wouldLeaveNoWorkingSignInMethod, wouldLeaveSsoOnly, assertBreakGlassAvailable } =
           await import('@/lib/server/auth/sign-in-method-availability')
         if (await wouldLeaveNoWorkingSignInMethod(proposedOauth)) {
           const { ConflictError } = await import('@/lib/shared/errors')
@@ -501,6 +501,12 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
             'LAST_SIGN_IN_METHOD',
             'Cannot disable the last enabled sign-in method. Enable another method first.'
           )
+        }
+        // Second route to an SSO-only workspace. Per-domain enforcement already
+        // demands a break-glass recovery code; disabling password + magic link
+        // here reaches the same end state, so it must demand the same thing.
+        if (await wouldLeaveSsoOnly(proposedOauth)) {
+          await assertBreakGlassAvailable()
         }
       }
 

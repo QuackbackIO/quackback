@@ -2,8 +2,87 @@ import { describe, it, expect } from 'vitest'
 import {
   isOnlyWorkingSignInMethod,
   hasAnyWorkingSignInMethod,
+  isSsoOnlySignIn,
   type SignInMethodSnapshot,
 } from '../sign-in-method-availability'
+
+describe('isSsoOnlySignIn', () => {
+  // Workspace whose only working method is a registered identity provider.
+  const ssoOnly = {
+    tierEnabled: true,
+    providers: [{ id: 'idp_1', enabled: true, configured: true }],
+    oauth: { password: false, magicLink: false },
+    emailConfigured: true,
+    socialIds: ['google', 'github'],
+    configuredSocialIds: new Set<string>(),
+  }
+
+  it('true when a provider works and nothing else does', () => {
+    expect(isSsoOnlySignIn(ssoOnly)).toBe(true)
+  })
+
+  it('false when password is still available', () => {
+    expect(isSsoOnlySignIn({ ...ssoOnly, oauth: { magicLink: false } })).toBe(false)
+    expect(isSsoOnlySignIn({ ...ssoOnly, oauth: { password: true, magicLink: false } })).toBe(false)
+  })
+
+  it('false when magic link is usable', () => {
+    expect(isSsoOnlySignIn({ ...ssoOnly, oauth: { password: false, magicLink: true } })).toBe(false)
+  })
+
+  it('true when magic link is enabled but email delivery is not wired', () => {
+    // Enabled-but-unusable is not a way in, so this is still SSO-only.
+    expect(
+      isSsoOnlySignIn({
+        ...ssoOnly,
+        oauth: { password: false, magicLink: true },
+        emailConfigured: false,
+      })
+    ).toBe(true)
+  })
+
+  it('false when a social provider is enabled and has credentials', () => {
+    expect(
+      isSsoOnlySignIn({
+        ...ssoOnly,
+        oauth: { password: false, magicLink: false, google: true },
+        configuredSocialIds: new Set(['google']),
+      })
+    ).toBe(false)
+  })
+
+  it('true when a social provider is enabled but has no credentials', () => {
+    expect(
+      isSsoOnlySignIn({
+        ...ssoOnly,
+        oauth: { password: false, magicLink: false, google: true },
+        configuredSocialIds: new Set<string>(),
+      })
+    ).toBe(true)
+  })
+
+  it('false when no method works at all', () => {
+    // That is a lockout, caught by the separate last-method guard. SSO-only
+    // means SSO specifically remains, so it must not also be true here.
+    expect(isSsoOnlySignIn({ ...ssoOnly, providers: [] })).toBe(false)
+    expect(isSsoOnlySignIn({ ...ssoOnly, tierEnabled: false })).toBe(false)
+  })
+
+  it('false when the provider is disabled or unconfigured', () => {
+    expect(
+      isSsoOnlySignIn({
+        ...ssoOnly,
+        providers: [{ id: 'idp_1', enabled: false, configured: true }],
+      })
+    ).toBe(false)
+    expect(
+      isSsoOnlySignIn({
+        ...ssoOnly,
+        providers: [{ id: 'idp_1', enabled: true, configured: false }],
+      })
+    ).toBe(false)
+  })
+})
 
 // The lockout scenario: one enabled+configured IdP, password + magic link off,
 // no social. The IdP is the workspace's last sign-in method.

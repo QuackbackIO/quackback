@@ -96,6 +96,10 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
 // check; stub it so these audit-wiring tests stay unit-level.
 vi.mock('@/lib/server/auth/sign-in-method-availability', () => ({
   wouldLeaveNoWorkingSignInMethod: vi.fn(async () => false),
+  // Default to "not SSO-only" so these audit tests exercise the happy path;
+  // the break-glass precondition itself is covered in the availability suite.
+  wouldLeaveSsoOnly: vi.fn(async () => false),
+  assertBreakGlassAvailable: vi.fn(async () => {}),
 }))
 
 beforeEach(() => {

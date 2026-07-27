@@ -503,10 +503,9 @@ export const setDomainEnforcedFn = createServerFn({ method: 'POST' })
             )
           }
 
-          const { hasActiveRecoveryCodes } = await import('@/lib/server/auth/recovery-codes-status')
-          if (!(await hasActiveRecoveryCodes())) {
-            throw new ForbiddenError('RECOVERY_CODES_REQUIRED', 'recovery_codes_required')
-          }
+          const { assertBreakGlassAvailable } =
+            await import('@/lib/server/auth/sign-in-method-availability')
+          await assertBreakGlassAvailable()
         }
 
         return setVerifiedDomainEnforced(data.id, data.enforced)
