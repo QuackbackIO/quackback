@@ -3,7 +3,7 @@
  *
  * The `idp.updated` event used to record a hand-written `{ label, enabled }`
  * pair, leaving every field that actually decides identity resolution —
- * `clientId`, the endpoints, `scopes`, `attributeMapping`, `autoProvisionRole`
+ * `clientId`, the endpoints, `scopes`, `claimMapping`, `autoProvisionRole`
  * — with no audit trace at all.
  *
  * That is a real privilege-boundary gap, not just thin logging: someone holding
@@ -37,7 +37,7 @@ const AUDITED_FIELDS = [
   'enabled',
   'autoCreateUsers',
   'autoProvisionRole',
-  'attributeMapping',
+  'claimMapping',
   'showButton',
 ] as const
 

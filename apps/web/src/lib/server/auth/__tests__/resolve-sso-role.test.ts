@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { getNestedClaim, resolveSsoRole } from '../resolve-sso-role'
-import type { IdentityProviderAttributeMapping } from '@/lib/server/db'
+import type { ClaimRoleMapping } from '@/lib/server/db'
 
 describe('getNestedClaim', () => {
   it('reads a dotted path', () => {
@@ -42,7 +42,7 @@ describe('getNestedClaim', () => {
 
 const mapping = (
   rules: Array<{ whenContains: string; role: 'admin' | 'member' | 'user' }>
-): IdentityProviderAttributeMapping => ({
+): ClaimRoleMapping => ({
   claimPath: 'groups',
   rules,
 })

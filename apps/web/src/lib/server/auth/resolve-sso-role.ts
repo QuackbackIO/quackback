@@ -14,7 +14,7 @@
  * the provider's default role (`autoProvisionRole`).
  */
 
-import type { IdentityProviderAttributeMapping } from '@/lib/server/db'
+import type { ClaimRoleMapping } from '@/lib/server/db'
 import type { Role } from '@/lib/shared/roles'
 
 type Claims = Record<string, unknown>
@@ -48,13 +48,10 @@ function matchesRule(claim: unknown, whenContains: string): boolean {
 
 /**
  * Look up the user's role from their ID-token claims. Returns null
- * when no rule matches or the workspace hasn't configured attribute
+ * when no rule matches or the workspace hasn't configured role
  * mapping — the caller falls back to the provider's autoProvisionRole.
  */
-export function resolveSsoRole(
-  claims: Claims,
-  mapping: IdentityProviderAttributeMapping | undefined
-): Role | null {
+export function resolveSsoRole(claims: Claims, mapping: ClaimRoleMapping | undefined): Role | null {
   if (!mapping) return null
   const claim = getNestedClaim(claims, mapping.claimPath)
   for (const rule of mapping.rules) {

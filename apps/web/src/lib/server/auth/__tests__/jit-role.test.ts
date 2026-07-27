@@ -3,7 +3,7 @@
  *
  * Task 13: the JIT auto-provision hook reads provisioning config from the
  * MATCHED PROVIDER ROW (`autoCreateUsers` / `autoProvisionRole` /
- * `attributeMapping`) and scopes the verified-domain check to that
+ * `claimMapping.role`) and scopes the verified-domain check to that
  * provider's own domains. The target role defaults to 'member'; setting
  * 'user' disables promotion.
  *
@@ -77,7 +77,7 @@ type SsoOidc = {
   clientId: string
   autoCreateUsers: boolean
   autoProvisionRole?: 'admin' | 'member' | 'user'
-  attributeMapping?: {
+  roleMapping?: {
     claimPath: string
     rules: { whenContains: string; role: 'admin' | 'member' | 'user' }[]
     syncOnEverySignIn?: boolean
@@ -133,7 +133,7 @@ const callHandlerWith = async (opts: CallOpts = {}) => {
         enabled: true,
         autoCreateUsers: ssoOidc.autoCreateUsers,
         autoProvisionRole: ssoOidc.autoProvisionRole ?? null,
-        attributeMapping: ssoOidc.attributeMapping ?? null,
+        claimMapping: ssoOidc.roleMapping ? { role: ssoOidc.roleMapping } : null,
         domains: [
           {
             id: 'domain_1',
@@ -237,13 +237,13 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     expect(mockSet).not.toHaveBeenCalled()
   })
 
-  it('re-applies on every sign-in when attributeMapping.syncOnEverySignIn=true (and can demote)', async () => {
+  it('re-applies on every sign-in when claimMapping.role.syncOnEverySignIn=true (and can demote)', async () => {
     mockFindFirst.mockResolvedValue({ role: 'admin' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [],
           syncOnEverySignIn: true,
@@ -257,13 +257,13 @@ describe('handleAutoProvisionAfter -- syncOnEverySignIn', () => {
     mockFindFirst.mockResolvedValue({ role: 'admin' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     // With sync on, the resolved-from-claims role is authoritative on
-    // every sign-in. attributeMapping has no matching rules, so the resolver
+    // every sign-in. The role mapping has no matching rules, so the resolver
     // returns null and falls back to autoProvisionRole='user' — effectively
     // saying "this user has no team role". An existing admin gets demoted.
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'user',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [],
           syncOnEverySignIn: true,
@@ -307,20 +307,20 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
       providerId: 'custom-oidc',
       registeredIds: new Set(['custom-oidc']),
       ssoOidc: {
-        attributeMapping: { claimPath: 'roles', rules: [] },
+        roleMapping: { claimPath: 'roles', rules: [] },
       },
     })
     expect(mockEq).toHaveBeenCalledWith('account.providerId', 'custom-oidc')
     expect(mockEq).not.toHaveBeenCalledWith('account.providerId', 'sso')
   })
 
-  it('marks audit source=attribute_mapping when role came from claim resolution', async () => {
+  it('marks audit source=claim_mapping when role came from claim resolution', async () => {
     mockFindFirst.mockResolvedValue({ role: 'user' })
     mockAccountFindFirst.mockResolvedValue({ idToken: null })
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [],
         },
@@ -331,7 +331,7 @@ describe('handleAutoProvisionAfter -- audit on role change', () => {
     const call = mockRecordAuditEvent.mock.calls[0][0] as {
       metadata: Record<string, unknown>
     }
-    expect(call.metadata.source).toBe('attribute_mapping')
+    expect(call.metadata.source).toBe('claim_mapping')
   })
 })
 
@@ -351,7 +351,7 @@ describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-indepe
         // Default role is the no-promote sentinel; ONLY the claim should drive
         // promotion, proving the role came from the assertion, not the default.
         autoProvisionRole: 'user',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [
             { whenContains: 'admin', role: 'admin' },
@@ -373,7 +373,7 @@ describe('handleAutoProvisionAfter -- claim-driven provisioning is domain-indepe
       email: 'james@quackback.io',
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'admin', role: 'admin' }],
         },
@@ -395,7 +395,7 @@ describe('handleAutoProvisionAfter -- returning user whose principal was soft-re
       email: 'james@quackback.io',
       ssoOidc: {
         autoProvisionRole: 'user',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'member', role: 'member' }],
         },
@@ -414,7 +414,7 @@ describe('handleAutoProvisionAfter -- returning user whose principal was soft-re
     await callHandlerWith({
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'admin', role: 'admin' }],
         },
@@ -434,7 +434,7 @@ describe('handleAutoProvisionAfter -- returning user whose principal was soft-re
       email: 'james@quackback.io',
       ssoOidc: {
         autoProvisionRole: 'member',
-        attributeMapping: {
+        roleMapping: {
           claimPath: 'roles',
           rules: [{ whenContains: 'admin', role: 'admin' }],
         },

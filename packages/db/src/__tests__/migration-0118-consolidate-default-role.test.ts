@@ -32,6 +32,15 @@ describe.skipIf(!dbAvailable)('migration 0118 consolidate default role', () => {
     if (!db) return
     await db
       .transaction(async (tx) => {
+        // 0224 folded `attribute_mapping` into the sectioned `claim_mapping`
+        // and dropped the column, so the schema this migration ran against no
+        // longer exists at HEAD. Recreate it for the length of this
+        // transaction: the point of the pin is 0118's behaviour on the shape
+        // it actually faced, and that is worth keeping after the column goes.
+        await tx.execute(
+          sql`ALTER TABLE "identity_provider" ADD COLUMN IF NOT EXISTS "attribute_mapping" jsonb`
+        )
+
         const mapping = {
           claimPath: 'groups',
           rules: [{ whenContains: 'admins', role: 'admin' }],

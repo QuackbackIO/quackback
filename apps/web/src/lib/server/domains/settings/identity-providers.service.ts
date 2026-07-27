@@ -20,7 +20,7 @@ import {
   eq,
   identityProvider,
   ssoVerifiedDomain,
-  type IdentityProviderAttributeMapping,
+  type IdentityProviderClaimMapping,
 } from '@/lib/server/db'
 import type { IdentityProviderId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
@@ -78,7 +78,7 @@ export interface IdentityProvider {
   configured: boolean
   autoCreateUsers: boolean
   autoProvisionRole: Role | null
-  attributeMapping: IdentityProviderAttributeMapping | null
+  claimMapping: IdentityProviderClaimMapping | null
   showButton: boolean
   /** ISO-8601 UTC; null until a redirect-affecting detail changes. */
   detailsChangedAt: string | null
@@ -116,7 +116,7 @@ export interface UpsertIdentityProviderInput {
   enabled?: boolean
   autoCreateUsers?: boolean
   autoProvisionRole?: Role | null
-  attributeMapping?: IdentityProviderAttributeMapping | null
+  claimMapping?: IdentityProviderClaimMapping | null
   showButton?: boolean
 }
 
@@ -218,7 +218,7 @@ function rowToIdentityProvider(
     configured,
     autoCreateUsers: row.autoCreateUsers,
     autoProvisionRole: row.autoProvisionRole,
-    attributeMapping: row.attributeMapping ?? null,
+    claimMapping: row.claimMapping ?? null,
     showButton: row.showButton,
     detailsChangedAt: row.detailsChangedAt ? row.detailsChangedAt.toISOString() : null,
     lastSuccessfulTestAt: row.lastSuccessfulTestAt ? row.lastSuccessfulTestAt.toISOString() : null,
@@ -414,7 +414,7 @@ export async function upsertIdentityProvider(
         if (input.enabled !== undefined) patch.enabled = input.enabled
         if (input.autoCreateUsers !== undefined) patch.autoCreateUsers = input.autoCreateUsers
         if (input.autoProvisionRole !== undefined) patch.autoProvisionRole = input.autoProvisionRole
-        if (input.attributeMapping !== undefined) patch.attributeMapping = input.attributeMapping
+        if (input.claimMapping !== undefined) patch.claimMapping = input.claimMapping
         if (input.showButton !== undefined) patch.showButton = input.showButton
 
         // Restamp the freshness baseline when a connection-affecting field
@@ -452,7 +452,7 @@ export async function upsertIdentityProvider(
             enabled: input.enabled ?? false,
             autoCreateUsers: input.autoCreateUsers ?? true,
             autoProvisionRole: input.autoProvisionRole ?? null,
-            attributeMapping: input.attributeMapping ?? null,
+            claimMapping: input.claimMapping ?? null,
             showButton: input.showButton ?? false,
           })
           .returning()

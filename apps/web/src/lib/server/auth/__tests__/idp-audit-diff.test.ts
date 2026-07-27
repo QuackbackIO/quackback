@@ -17,7 +17,7 @@ const prior = {
   enabled: true,
   autoCreateUsers: true,
   autoProvisionRole: 'user' as const,
-  attributeMapping: null,
+  claimMapping: null,
   showButton: true,
 }
 
@@ -58,18 +58,18 @@ describe('diffProviderAudit — update', () => {
     expect(after.userInfoUrl).toBe('https://evil/userinfo')
   })
 
-  it('captures an attribute-mapping change, comparing by value not reference', () => {
+  it('captures a claim-mapping change, comparing by value not reference', () => {
     // The abuse this closes: repoint the claim used for identity, sign in as
     // someone else, repoint back. Both saves previously produced byte-identical
     // audit rows recording only label and enabled.
-    const mapping = { claimPath: 'groups', rules: [], syncOnEverySignIn: false }
-    const changed = diffProviderAudit(prior, { ...next, attributeMapping: mapping })
-    expect(changed.before).toEqual({ attributeMapping: null })
-    expect(changed.after.attributeMapping).toEqual(mapping)
+    const mapping = { role: { claimPath: 'groups', rules: [], syncOnEverySignIn: false } }
+    const changed = diffProviderAudit(prior, { ...next, claimMapping: mapping })
+    expect(changed.before).toEqual({ claimMapping: null })
+    expect(changed.after.claimMapping).toEqual(mapping)
 
     const unchanged = diffProviderAudit(
-      { ...prior, attributeMapping: mapping },
-      { ...next, attributeMapping: { ...mapping } }
+      { ...prior, claimMapping: mapping },
+      { ...next, claimMapping: { ...mapping } }
     )
     expect(unchanged.before).toEqual({})
     expect(unchanged.after).toEqual({})

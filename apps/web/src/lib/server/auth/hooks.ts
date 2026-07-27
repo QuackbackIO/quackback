@@ -482,7 +482,7 @@ export function shouldBootstrapPromote(
  * callbacks are likewise blocked.
  *
  * Two trust paths decide the role, each with its own scoping:
- *  - CLAIM-MATCHED: when the provider has `attributeMapping` and a rule
+ *  - CLAIM-MATCHED: when the provider has a `claimMapping.role` and a rule
  *    matches the user's claim, the IdP is attesting THIS user's role — a
  *    per-user signal — so the role is assigned regardless of the email's
  *    domain. This is the primary path for enterprise IdPs that emit group/
@@ -495,11 +495,11 @@ export function shouldBootstrapPromote(
  *    inbox control isn't enough to claim team membership.
  *
  * Provisioning config is read from the MATCHED PROVIDER ROW (`autoCreateUsers`
- * / `autoProvisionRole` / `attributeMapping`), never another provider's.
+ * / `autoProvisionRole` / `claimMapping`), never another provider's.
  *
  * Invariants:
  *  - Only upgrades from `role='user'`; `admin` and `member` are left
- *    alone unless `attributeMapping.syncOnEverySignIn` is set. The special
+ *    alone unless `claimMapping.role.syncOnEverySignIn` is set. The special
  *    `autoProvisionRole='user'` disables default-role promotion entirely.
  *  - A returning user with no principal row (soft-removed via "Remove from
  *    portal", which keeps the auth identity) is treated as a fresh sign-in:
@@ -551,11 +551,13 @@ export async function handleAutoProvisionAfter(
   // check. An explicit claim match is the IdP attesting THIS user's role — a
   // per-user signal stronger than domain ownership — so it provisions even when
   // the email is not at one of the provider's verified domains.
+  const { roleMappingFor } = await import('@/lib/shared/oidc-claim-mapping')
+  const roleMapping = roleMappingFor(provider.claimMapping)
   let claimRole: Role | null = null
-  if (provider.attributeMapping) {
+  if (roleMapping) {
     const claims = await readSsoClaims(userIdTyped, providerId)
     const { resolveSsoRole } = await import('./resolve-sso-role')
-    claimRole = resolveSsoRole(claims, provider.attributeMapping)
+    claimRole = resolveSsoRole(claims, roleMapping)
   }
 
   // The default role (no claim matched) is NOT a per-user attestation, so it
@@ -581,7 +583,7 @@ export async function handleAutoProvisionAfter(
   // Sync mode: re-apply on every sign-in, including for existing
   // admin/member users. Without sync, JIT semantics — only a fresh
   // first sign-in (role='user') gets touched.
-  const syncOnEverySignIn = provider.attributeMapping?.syncOnEverySignIn === true
+  const syncOnEverySignIn = roleMapping?.syncOnEverySignIn === true
   if (!syncOnEverySignIn && currentRole !== 'user') return
 
   // 'user' as the target is the explicit no-promote choice — only
@@ -627,7 +629,7 @@ export async function handleAutoProvisionAfter(
       target: { type: 'user', id: userIdTyped },
       before: { role: p.role },
       after: { role: targetRole },
-      metadata: { source: provider.attributeMapping ? 'attribute_mapping' : 'auto_provision' },
+      metadata: { source: roleMapping ? 'claim_mapping' : 'auto_provision' },
     })
   }
 
@@ -1200,7 +1202,7 @@ export async function handleCountryCapture(ctx: {
  *  1. `handleSsoCallbackAfter` — bootstrap admin promotion +
  *     lastSsoSignInAt stamp. Only fires on SSO callbacks.
  *  2. `handleAutoProvisionAfter` — for SSO callbacks, set the user's role
- *     from the CALLBACK PROVIDER's autoProvisionRole / attributeMapping
+ *     from the CALLBACK PROVIDER's autoProvisionRole / claimMapping
  *     config, scoped to that provider's own verified domains (brand-new
  *     sign-ins default to `role='user'`).
  *  3. `handleCallbackPolicyCleanup` — revoke sessions that violate

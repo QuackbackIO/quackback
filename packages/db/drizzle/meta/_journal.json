@@ -1450,6 +1450,13 @@
       "when": 1784902535958,
       "tag": "0223_identity_provider_request_options",
       "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "7",
+      "when": 1784902535959,
+      "tag": "0224_identity_provider_claim_mapping",
+      "breakpoints": true
     }
   ]
 }
