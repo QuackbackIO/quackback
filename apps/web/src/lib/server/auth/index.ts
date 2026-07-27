@@ -131,10 +131,31 @@ async function createAuth() {
   // buildGenericOAuthConfigs: a downgraded workspace stops registering
   // OIDC even though the rows remain. The login_hint params are carried
   // to every provider since any may be domain-routed.
+  // Discovery and userinfo are fetched through the SSRF-guarded helper, and
+  // resolved HERE rather than inside the resolver: the plugin's getUserInfo
+  // seam receives only the token set, so without closing the endpoint over at
+  // build time every sign-in would re-fetch discovery. Rebuilt whenever
+  // auth_config_version changes, which is the same cadence the rest of this
+  // config already refreshes on. A discovery outage returns null and the
+  // provider still registers — a complete ID token needs no userinfo.
+  const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+  const fetchJson = async (url: string, headers?: Record<string, string>) => {
+    try {
+      const res = await safeFetch(url, { ...(headers ? { headers } : {}), timeoutMs: 5000 })
+      if (!res.ok) return null
+      const body: unknown = await res.json()
+      return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null
+    } catch {
+      return null
+    }
+  }
+
   const oidcConfigs = await buildGenericOAuthConfigs({
     providers: await listIdentityProviders(),
     creds: getIdentityProviderCredentials,
     tierAllowsOidc: tierLimits.features.customOidcProvider,
+    discovery: (discoveryUrl) => fetchJson(discoveryUrl),
+    fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
     mapProfileToUser: mapProfileClaims,
     buildLoginHintParams,
   })

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   buildGenericOAuthConfigs,
   effectiveScopes,
@@ -138,5 +138,74 @@ describe('social provider registration regression (H3)', () => {
     )
     const generic = getAllAuthProviders().filter((p) => p.type === 'generic-oauth')
     expect(generic.map((p) => p.id)).toEqual(['custom-oidc'])
+  })
+})
+
+/**
+ * Discovery injection + resolver wiring.
+ *
+ * The plugin's `getUserInfo` seam is typed `(tokens) => Promise<UserInfo|null>`
+ * and receives nothing else — not the discovery document the callback fetched
+ * moments earlier, not the row. So the userinfo endpoint has to be closed over
+ * at build time, or the resolver would have to re-fetch discovery on every
+ * sign-in and the "no network on the fast path" property would be a fiction.
+ *
+ * Injected the same way credentials already are, which keeps this file free of
+ * DB and fetch imports.
+ */
+describe('buildGenericOAuthConfigs discovery + resolver wiring', () => {
+  const discoveryDoc = { userinfo_endpoint: 'https://idp/userinfo', issuer: 'https://idp' }
+
+  it('resolves discovery once per build, not per sign-in', async () => {
+    const discovery = vi.fn(async () => discoveryDoc)
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row(), row({ id: 'idp_2', registrationId: 'oidc_2' })] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery,
+    })
+    expect(discovery).toHaveBeenCalledTimes(2) // once per provider, at build
+
+    // Signing in must not fetch discovery again.
+    discovery.mockClear()
+    await cfgs[0].getUserInfo?.({ idToken: undefined, accessToken: undefined })
+    expect(discovery).not.toHaveBeenCalled()
+  })
+
+  it('attaches a resolver to every provider, not just mapped ones', async () => {
+    // The resolver is a superset of the default behaviour, so withholding it
+    // from unmapped providers would leave two resolution paths again.
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row()] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery: async () => discoveryDoc,
+    })
+    expect(cfgs[0].getUserInfo).toBeTypeOf('function')
+  })
+
+  it('prefers the row userInfoUrl over the discovery document', async () => {
+    const discovery = vi.fn(async () => discoveryDoc)
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row({ discoveryUrl: null, userInfoUrl: 'https://manual/userinfo' })] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery,
+    })
+    expect(cfgs[0].userInfoUrl).toBe('https://manual/userinfo')
+    expect(discovery).not.toHaveBeenCalled()
+  })
+
+  it('still builds when discovery is unreachable', async () => {
+    // A discovery outage must not stop the provider registering — a complete
+    // ID token needs no userinfo at all.
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row()] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      discovery: async () => null,
+    })
+    expect(cfgs).toHaveLength(1)
+    expect(cfgs[0].getUserInfo).toBeTypeOf('function')
   })
 })

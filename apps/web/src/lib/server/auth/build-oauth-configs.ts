@@ -21,6 +21,7 @@
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { effectiveScopes } from '@/lib/shared/oidc-scopes'
+import { resolveIdentity } from './resolve-identity'
 
 // Re-exported so server callers keep this import path. The implementation lives
 // in `shared` because the admin editor needs it too, and having exactly one
@@ -28,6 +29,19 @@ import { effectiveScopes } from '@/lib/shared/oidc-scopes'
 // mirrors this same set, so a passing test exercises the scope request that
 // production sign-in will actually make.
 export { DEFAULT_OIDC_SCOPES, effectiveScopes } from '@/lib/shared/oidc-scopes'
+
+/**
+ * What the resolver hands back to the plugin. Mirrors the library's
+ * `OAuth2UserInfo` while staying open, because the raw claims ride along and
+ * `mapProfileToUser` reads them for locale and avatar.
+ */
+export type ResolvedProfile = {
+  id: string
+  email?: string
+  name?: string
+  image?: string
+  emailVerified: boolean
+} & Record<string, unknown>
 
 /** A single entry in the genericOAuth plugin's `config` array. */
 export interface GenericOAuthConfig {
@@ -43,6 +57,13 @@ export interface GenericOAuthConfig {
    *  userinfo fallback has nowhere to go for a provider with no discovery
    *  document, and the callback aborts with `user_info_is_missing`. */
   userInfoUrl?: string
+  /** Custom user-info resolution. Attached to EVERY provider — it is a superset
+   *  of the plugin's own behaviour, so leaving it off any provider would
+   *  reinstate a second resolution path. */
+  getUserInfo?: (tokens: {
+    idToken?: string
+    accessToken?: string
+  }) => Promise<ResolvedProfile | null>
   scopes?: string[]
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   // Force the IdP account picker so admins notice when they're already
@@ -78,6 +99,20 @@ export interface BuildGenericOAuthConfigsArgs {
   creds: (registrationId: string) => Promise<ProviderCredentials>
   /** `tierLimits.features.customOidcProvider` — gates ALL OIDC registration. */
   tierAllowsOidc: boolean
+  /**
+   * Fetches a provider's discovery document, or null when it is unreachable.
+   *
+   * Injected the same way `creds` is, which keeps this module free of fetch and
+   * DB imports. Resolution happens HERE, at build time, because the plugin's
+   * `getUserInfo` seam receives only the token set — not the discovery document
+   * the callback fetched moments earlier. Without closing the endpoint over at
+   * build time the resolver would have to re-fetch discovery on every sign-in,
+   * and the fast path's "no network" property would not be real.
+   */
+  discovery?: (discoveryUrl: string) => Promise<{ userinfo_endpoint?: unknown } | null>
+  /** Fetches a userinfo document with the bearer token. Injected for the same
+   *  reason as `discovery`: the guarded fetch belongs outside this module. */
+  fetchUserInfo?: (url: string, accessToken: string) => Promise<Record<string, unknown> | null>
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   /**
@@ -99,6 +134,8 @@ export async function buildGenericOAuthConfigs({
   providers,
   creds,
   tierAllowsOidc,
+  discovery,
+  fetchUserInfo,
   mapProfileToUser,
   buildLoginHintParams,
 }: BuildGenericOAuthConfigsArgs): Promise<GenericOAuthConfig[]> {
@@ -120,9 +157,41 @@ export async function buildGenericOAuthConfigs({
     const discoveryUrl = provider.discoveryUrl || c.discoveryUrl || undefined
     const authorizationUrl = provider.authorizationUrl || undefined
     const tokenUrl = provider.tokenUrl || undefined
-    const userInfoUrl = provider.userInfoUrl || undefined
+    // The row wins: a manual endpoint is an explicit choice, and consulting
+    // discovery when one is set would be both wasteful and overridable.
+    let userInfoUrl = provider.userInfoUrl || undefined
+    if (!userInfoUrl && discoveryUrl && discovery) {
+      const doc = await discovery(discoveryUrl)
+      if (typeof doc?.userinfo_endpoint === 'string') userInfoUrl = doc.userinfo_endpoint
+    }
+
+    // One resolver for every provider, mapped or not. It is a superset of the
+    // library's own behaviour, so withholding it from unmapped providers would
+    // leave two resolution paths — the thing this work exists to remove.
+    const resolvedUserInfoUrl = userInfoUrl
+    const getUserInfo: NonNullable<GenericOAuthConfig['getUserInfo']> = async (tokens) => {
+      const result = await resolveIdentity({
+        tokens,
+        fetchUserInfo: async () =>
+          resolvedUserInfoUrl && tokens.accessToken && fetchUserInfo
+            ? await fetchUserInfo(resolvedUserInfoUrl, tokens.accessToken)
+            : null,
+      })
+      if (!result.ok) return null
+      const { id, email, name, emailVerified, claims } = result.identity
+      // Raw claims first, mapped fields last: the mapped values are the
+      // resolved answer and must not be shadowed by a same-named raw claim.
+      return {
+        ...claims,
+        id,
+        emailVerified,
+        ...(email ? { email } : {}),
+        ...(name ? { name } : {}),
+      }
+    }
 
     configs.push({
+      getUserInfo,
       providerId: provider.registrationId,
       clientId,
       clientSecret: c.clientSecret,
