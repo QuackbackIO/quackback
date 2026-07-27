@@ -227,6 +227,9 @@ export function ProviderEditor({
   // admin can untick to hide. Existing providers keep their stored choice.
   const [showButton, setShowButton] = useState(provider?.showButton ?? true)
   const [mapping, setMapping] = useState<Mapping | null>(provider?.claimMapping?.role ?? null)
+  const [allowMissingEmail, setAllowMissingEmail] = useState(
+    provider?.claimMapping?.profile?.allowMissingEmail === true
+  )
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -248,10 +251,20 @@ export function ProviderEditor({
       requestAnimationFrame(() => document.getElementById(missing)?.focus())
       return
     }
-    // A claim mapping with no rules and no sign-in sync does nothing, so persist
+    // A role mapping with no rules and no sign-in sync does nothing, so persist
     // null (the canonical "no mapping" state). A custom claim path alone is inert.
-    const mappingToSave =
+    const roleToSave =
       mapping && (mapping.rules.length > 0 || mapping.syncOnEverySignIn === true) ? mapping : null
+    // Each control owns its own section, and `attributes` has no UI yet, so it
+    // passes through verbatim rather than being blanked by a save from here.
+    const nextClaimMapping = {
+      ...(roleToSave ? { role: roleToSave } : {}),
+      ...(allowMissingEmail ? { profile: { allowMissingEmail: true } } : {}),
+      ...(provider?.claimMapping?.attributes
+        ? { attributes: provider.claimMapping.attributes }
+        : {}),
+    }
+    const mappingToSave = Object.keys(nextClaimMapping).length > 0 ? nextClaimMapping : null
     setSaving(true)
     try {
       const saved = await upsert({
@@ -279,7 +292,7 @@ export function ProviderEditor({
           // Role only applies when auto-create is on; null it out otherwise
           // so a stale role doesn't linger on a provisioning-off provider.
           autoProvisionRole: autoCreateUsers ? autoProvisionRole : null,
-          claimMapping: mappingToSave ? { ...provider?.claimMapping, role: mappingToSave } : null,
+          claimMapping: mappingToSave,
           showButton,
         },
       })
@@ -552,6 +565,28 @@ export function ProviderEditor({
                     including for people who already have accounts.
                   </p>
                 </div>
+
+                {/* Identity fields. Off by default and one-way: minting stores
+                  the address permanently, so turning this back off later does
+                  not convert accounts that already have one. */}
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    checked={allowMissingEmail}
+                    onCheckedChange={(v) => setAllowMissingEmail(v === true)}
+                    disabled={saving}
+                    aria-label="Allow accounts without an email address"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Allow accounts without an email address
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      For providers that release no email. Quackback creates a placeholder so people
+                      can still sign in, then asks them for a real address afterwards. Placeholders
+                      are permanent: turning this off later does not convert accounts that already
+                      have one. Off, these people cannot sign in at all.
+                    </span>
+                  </span>
+                </label>
 
                 <ClaimMappingEditor
                   mapping={mapping}

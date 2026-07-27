@@ -453,3 +453,52 @@ describe('<ProviderEditor> request options', () => {
     expect(screen.getByLabelText('Client authentication')).toBeInTheDocument()
   })
 })
+
+/**
+ * The switch that lets a provider releasing no email create accounts anyway.
+ * Minting is one-way, so the packaging matters as much as the behaviour.
+ */
+describe('<ProviderEditor> identity fields', () => {
+  it('is off for a provider that has never been configured', async () => {
+    renderEditor(makeProvider({ claimMapping: null }))
+    await openTab('Accounts')
+    expect(screen.getByLabelText(/allow accounts without an email/i)).not.toBeChecked()
+  })
+
+  it('reflects a provider that has opted in', async () => {
+    renderEditor(makeProvider({ claimMapping: { profile: { allowMissingEmail: true } } }))
+    await openTab('Accounts')
+    expect(screen.getByLabelText(/allow accounts without an email/i)).toBeChecked()
+  })
+
+  it('persists the opt-in without disturbing the role section', async () => {
+    // The sections share one column, so writing one must not blank the other.
+    renderEditor(
+      makeProvider({
+        claimMapping: {
+          role: { claimPath: 'groups', rules: [{ whenContains: 'a', role: 'admin' }] },
+        },
+      })
+    )
+    await openTab('Accounts')
+    await userEvent.click(screen.getByLabelText(/allow accounts without an email/i))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    const sent = upsertSpy.mock.calls.at(-1)![0].data.claimMapping as {
+      profile?: { allowMissingEmail?: boolean }
+      role?: { claimPath?: string }
+    }
+    expect(sent.profile?.allowMissingEmail).toBe(true)
+    expect(sent.role?.claimPath).toBe('groups')
+  })
+
+  it('sends no profile section when the opt-in is left off', async () => {
+    // Absent means "not configured" everywhere else; writing an explicit false
+    // would make an untouched provider look deliberately configured.
+    renderEditor(makeProvider({ claimMapping: null }))
+    await openTab('Accounts')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls.at(-1)![0].data.claimMapping).toBeNull()
+  })
+})
