@@ -51,6 +51,15 @@ export interface HandshakeInput {
   tokenAuth?: 'basic' | 'post'
   /** The `prompt` this attempt sent, so a configuration error can name it. */
   requestedPrompt?: string
+  /**
+   * Whether this provider is configured to mint a placeholder address when the
+   * IdP releases none. The test has to know, because sign-in does: with it on,
+   * a provider that releases no email signs people in perfectly well, and a
+   * test that failed anyway would report a broken connection for a working
+   * configuration — and block enforcement, which a passing test is what
+   * unlocks.
+   */
+  allowMissingEmail?: boolean
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -451,12 +460,22 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   }
 
   if (!identity.email) {
-    return {
-      ok: false,
-      stage: 'claim-check',
-      hint: "No email address was released, in the ID token or from the userinfo endpoint. Quackback needs one to create the account. Either configure your IdP's claim mapper to release it, or — if this provider has no email addresses to give — enable the placeholder-address option on the provider.",
-      steps,
+    if (!input.allowMissingEmail) {
+      return {
+        ok: false,
+        stage: 'claim-check',
+        hint: "No email address was released, in the ID token or from the userinfo endpoint. Quackback needs one to create the account. Either configure your IdP's claim mapper to release it, or — if this provider has no email addresses to give — enable the placeholder-address option on the provider.",
+        steps,
+      }
     }
+    // Configured for exactly this, so the connection is sound. Say plainly what
+    // signing in will produce rather than reporting a bare success: these
+    // accounts cannot receive email until the person supplies an address.
+    steps.push({
+      ok: true,
+      stage: 'claim-check',
+      label: 'No email released — a placeholder address will be created',
+    })
   }
 
   return {

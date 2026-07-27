@@ -233,26 +233,6 @@ export const listIdentityProvidersFn = createServerFn({ method: 'GET' }).handler
   return listIdentityProviders()
 })
 
-/**
- * How many identities sign in through this provider. `deleteIdentityProviderFn`
- * refuses while any exist (removal would orphan them), so the Remove control
- * states the count up front instead of surfacing it as a failed delete.
- */
-export const getProviderAccountCountFn = createServerFn({ method: 'GET' })
-  .validator(z.object({ id: identityProviderId }))
-  .handler(async ({ data }) => {
-    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
-    const { countProviderAccounts } =
-      await import('@/lib/server/domains/settings/identity-provider-accounts')
-    return { count: await countProviderAccounts(data.id) }
-  })
-
-/**
- * Create or update a provider (matched by `id`, else by `registrationId`).
- * Emits `idp.created` / `idp.updated` based on whether a matching row
- * already exists; the underlying service bumps the auth-config version and
- * resets the local auth instance so the new config registers.
- */
 export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
   .validator(upsertIdentityProviderInput)
   .handler(async ({ data }) => {
@@ -587,3 +567,31 @@ export const fetchDiscoveryScopesFn = createServerFn({ method: 'POST' })
       return { scopesSupported: null }
     }
   })
+
+/**
+ * Declared LAST deliberately. `sso-domain-guards.test.ts` resolves these
+ * handlers by declaration order (`ssoHandlers[9]`), so inserting a function
+ * mid-file silently repoints every later index at the wrong handler — the
+ * failure reads as a function returning someone else's shape, not as an
+ * ordering problem. Append here; do not insert above.
+ */
+/**
+ * How many identities sign in through this provider. `deleteIdentityProviderFn`
+ * refuses while any exist (removal would orphan them), so the Remove control
+ * states the count up front instead of surfacing it as a failed delete.
+ */
+export const getProviderAccountCountFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ id: identityProviderId }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { countProviderAccounts } =
+      await import('@/lib/server/domains/settings/identity-provider-accounts')
+    return { count: await countProviderAccounts(data.id) }
+  })
+
+/**
+ * Create or update a provider (matched by `id`, else by `registrationId`).
+ * Emits `idp.created` / `idp.updated` based on whether a matching row
+ * already exists; the underlying service bumps the auth-config version and
+ * resets the local auth instance so the new config registers.
+ */

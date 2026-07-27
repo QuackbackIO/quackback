@@ -73,6 +73,9 @@ vi.mock('@/lib/server/domains/settings/settings.service', () => ({
   updateAuthConfig: hoisted.mockUpdateAuthConfig,
   setSsoDomainSubtree: hoisted.mockSetSsoDomainSubtree,
   setVerifiedDomainEnforced: mockSetVerifiedDomainEnforced,
+  // Enforcement stamps the domain's verification alongside the flag, so the
+  // mock has to expose it or every enforcement path throws on a missing export.
+  stampVerifiedDomain: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/server/auth/sso-secret', () => ({

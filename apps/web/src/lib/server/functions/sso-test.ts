@@ -28,6 +28,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
 import { authorizeRequestFor } from '@/lib/shared/oidc-request'
+import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 
 const TTL_SECONDS = 600
@@ -38,6 +39,9 @@ type TestSession = {
   nonce: string
   /** The provider registrationId that initiated this test. */
   registrationId: string
+  /** Mirrors the provider's placeholder-address setting so the callback can
+   *  judge a missing email the same way sign-in will. */
+  allowMissingEmail: boolean
   /** Present for discovery providers; absent for manual-endpoint providers. */
   discoveryUrl?: string
   tokenEndpoint: string
@@ -175,6 +179,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       state,
       nonce,
       registrationId: data.registrationId,
+      allowMissingEmail: allowsMissingEmail(provider.claimMapping),
       discoveryUrl: provider.discoveryUrl ?? undefined,
       tokenEndpoint: endpoints.tokenEndpoint,
       jwksUri: endpoints.jwksUri,
