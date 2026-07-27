@@ -1,0 +1,192 @@
+import { describe, it, expect, vi } from 'vitest'
+import { resolveIdentity } from '../resolve-identity'
+import {
+  WORLD_A,
+  WORLD_B,
+  WORLD_C,
+  WORLD_NO_ID_TOKEN,
+  WORLD_SUBJECT_MISMATCH,
+  WORLD_UNRESOLVABLE,
+  fakeJwt,
+  userinfoFetcherFor,
+  type IdpWorld,
+} from './_idp-worlds'
+
+function resolveWorld(world: IdpWorld, over: Record<string, unknown> = {}) {
+  return resolveIdentity({
+    tokens: world.tokens,
+    fetchUserInfo: userinfoFetcherFor(world),
+    ...over,
+  })
+}
+
+describe('resolveIdentity — the worlds', () => {
+  it.each([WORLD_A, WORLD_B, WORLD_C, WORLD_NO_ID_TOKEN])('resolves $name', async (world) => {
+    const result = await resolveWorld(world, {
+      // The EVE-shaped world needs its opt-in source; everything else is default.
+      mapping: world === WORLD_NO_ID_TOKEN ? { sources: ['accessTokenJwt'] } : undefined,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe(world.expect.id)
+    expect(result.identity.email ?? null).toBe(world.expect.email)
+    expect(result.identity.name ?? null).toBe(world.expect.name)
+  })
+
+  it('records which source supplied each field', async () => {
+    const result = await resolveWorld(WORLD_B)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.sources).toMatchObject(WORLD_B.expect.sources!)
+  })
+
+  it('returns every raw claim alongside the mapped fields', async () => {
+    // Better-Auth spreads the resolved object into mapProfileToUser, which is
+    // how locale and avatar populate. Dropping the raw claims would regress
+    // both on every provider, compliant ones included.
+    const result = await resolveWorld(WORLD_A)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.claims).toMatchObject({ sub: WORLD_A.expect.id, name: 'World A' })
+  })
+})
+
+describe('resolveIdentity — the fast path', () => {
+  it('does not touch userinfo when the ID token is complete', async () => {
+    // Compliant providers must take no added latency from the cascade.
+    const fetchUserInfo = vi.fn(async () => WORLD_A.userinfo)
+    const result = await resolveIdentity({ tokens: WORLD_A.tokens, fetchUserInfo })
+    expect(result.ok).toBe(true)
+    expect(fetchUserInfo).not.toHaveBeenCalled()
+  })
+
+  it('DOES fetch userinfo when a required field is missing', async () => {
+    const fetchUserInfo = vi.fn(async () => WORLD_B.userinfo)
+    await resolveIdentity({ tokens: WORLD_B.tokens, fetchUserInfo })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+  })
+
+  it('fetches userinfo only once even when several fields are missing', async () => {
+    const fetchUserInfo = vi.fn(async () => ({ sub: 'x', email: 'e@x.com', name: 'N' }))
+    await resolveIdentity({ tokens: { idToken: fakeJwt({ sub: 'x' }) }, fetchUserInfo })
+    expect(fetchUserInfo).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('resolveIdentity — subject consistency (OIDC Core 5.3.2)', () => {
+  it('fails when userinfo reports a different subject', async () => {
+    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('subject_mismatch')
+  })
+
+  it('does not adopt any field from a mismatched userinfo response', async () => {
+    // Quietly preferring one source would let a token-confused IdP bind an
+    // attacker-controlled address, which trusted-provider linking matches on.
+    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH)
+    expect(JSON.stringify(result)).not.toContain('attacker@example.com')
+  })
+
+  it('does NOT apply the rule to the access token, whose subject may differ', async () => {
+    // 5.3.2 is scoped to the userinfo response. An access token is
+    // audience-scoped and pairwise subjects legitimately differ, so enforcing
+    // equality there would hard-fail every user on such a provider.
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({ sub: 'client-facing-sub', email: 'e@x.com', name: 'N' }),
+        accessToken: fakeJwt({ sub: 'resource-facing-sub' }),
+      },
+      fetchUserInfo: async () => null,
+      mapping: { sources: ['idToken', 'accessTokenJwt'] },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('client-facing-sub')
+  })
+})
+
+describe('resolveIdentity — failure', () => {
+  it('reports no_identity when nothing yields a subject', async () => {
+    const result = await resolveWorld(WORLD_UNRESOLVABLE)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('no_identity')
+  })
+
+  it('survives an unreachable userinfo endpoint', async () => {
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 's', email: 'e@x.com', name: 'N' }) },
+      fetchUserInfo: async () => {
+        throw new Error('network down')
+      },
+    })
+    // The ID token already had everything, so the outage is irrelevant.
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe('resolveIdentity — claim mapping', () => {
+  it('reads non-standard claim names from a configured path', async () => {
+    const result = await resolveIdentity({
+      tokens: { accessToken: fakeJwt({ CharacterID: 42, CharacterName: 'Pilot' }) },
+      fetchUserInfo: async () => null,
+      mapping: { sources: ['accessTokenJwt'], idClaim: 'CharacterID', nameClaim: 'CharacterName' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('42')
+    expect(result.identity.name).toBe('Pilot')
+  })
+
+  it('prefers an exact key match before treating dots as a path', async () => {
+    // Namespaced claims contain dots that are not separators.
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({ sub: 's', 'https://acme.com/email': 'ns@x.com', name: 'N' }),
+      },
+      fetchUserInfo: async () => null,
+      mapping: { emailClaim: 'https://acme.com/email' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.email).toBe('ns@x.com')
+  })
+
+  it('resolves a genuinely nested claim by dotted path', async () => {
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 's', contact: { email: 'deep@x.com' }, name: 'N' }) },
+      fetchUserInfo: async () => null,
+      mapping: { emailClaim: 'contact.email' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.email).toBe('deep@x.com')
+  })
+})
+
+describe('resolveIdentity — emailVerified provenance', () => {
+  it('takes the verified flag from the source that supplied the address', async () => {
+    // A verified flag from the ID token must not vouch for a userinfo address.
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 's', email_verified: true }) },
+      fetchUserInfo: async () => ({ sub: 's', email: 'from-userinfo@x.com', name: 'N' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.email).toBe('from-userinfo@x.com')
+    expect(result.identity.emailVerified).toBe(false)
+  })
+
+  it('coerces strictly, so a stringified "false" is not verified', async () => {
+    const result = await resolveIdentity({
+      tokens: {
+        idToken: fakeJwt({ sub: 's', email: 'e@x.com', name: 'N', email_verified: 'false' }),
+      },
+      fetchUserInfo: async () => null,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.emailVerified).toBe(false)
+  })
+})
