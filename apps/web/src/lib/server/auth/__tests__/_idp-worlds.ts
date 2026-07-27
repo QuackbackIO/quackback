@@ -7,10 +7,10 @@
  * fixture closes, and it exists BEFORE the resolver so the resolver has
  * something to be verified against rather than the other way round.
  *
- * The names come from the diagnosis of a real customer failure. A provider's
- * "world" is decided by two independent settings on the IdP: which scope gates
- * each claim, and whether the claim rides in the ID token or only at the
- * userinfo endpoint.
+ * A provider's "world" is decided by two independent settings on its side:
+ * which scope gates each claim, and whether the claim rides in the ID token or
+ * only at the userinfo endpoint. Every shape here was observed on a real
+ * OpenID Connect provider; none of them is hypothetical.
  */
 
 /** Unsigned JWT. Nothing in the resolution path verifies signatures. */
@@ -93,24 +93,25 @@ export const WORLD_C: IdpWorld = {
 }
 
 /**
- * No ID token at all; identity lives in a JWT access token with non-standard
- * claim names and no email. The EVE Online shape from the community PR.
+ * No ID token at all; identity lives in a JWT access token, under non-standard
+ * claim names, with no email anywhere. A structured, non-UUID subject exercises
+ * the case where the account identifier is not a plain opaque string.
  */
 export const WORLD_NO_ID_TOKEN: IdpWorld = {
   name: 'No ID token — identity in the access token',
   tokens: {
     accessToken: fakeJwt({
-      sub: 'CHARACTER:EVE:2119123456',
-      name: 'Some Pilot',
+      sub: 'ACCOUNT:REGION:2119123456',
+      name: 'Structured Subject',
       owner: 'jFj9dK2mQ0xR',
       exp: EXP,
     }),
   },
-  userinfo: { CharacterID: 2119123456, CharacterName: 'Some Pilot' },
+  userinfo: { AccountID: 2119123456, AccountName: 'Structured Subject' },
   expect: {
-    id: 'CHARACTER:EVE:2119123456',
+    id: 'ACCOUNT:REGION:2119123456',
     email: null,
-    name: 'Some Pilot',
+    name: 'Structured Subject',
     sources: { id: 'accessTokenJwt', name: 'accessTokenJwt' },
   },
 }

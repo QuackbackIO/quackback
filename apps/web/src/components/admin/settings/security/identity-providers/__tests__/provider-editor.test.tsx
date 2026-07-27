@@ -295,7 +295,8 @@ describe('<ProviderEditor> scopes', () => {
   })
 
   it('saves the reduced set after removing a scope the IdP does not support', async () => {
-    // The customer case: an IdP advertising only `public` and `openid`.
+    // An IdP that advertises only `public` and `openid`, so the default set
+    // is rejected outright.
     renderEditor(makeProvider({ scopes: null }))
     openAdvanced()
     fireEvent.click(screen.getByRole('button', { name: 'Remove scope email' }))

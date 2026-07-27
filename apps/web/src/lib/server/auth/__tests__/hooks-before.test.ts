@@ -629,7 +629,7 @@ describe('handleSignInPreCheck — reserved placeholder domain', () => {
   })
 
   it('leaves a lookalike domain alone', async () => {
-    // Only the exact reserved domain is reserved; a customer legitimately
+    // Only the exact reserved domain is reserved; a workspace legitimately
     // owning something similar must not be blocked.
     const ctx = ctxFor('/sign-up/email', { email: 'real@notanon.quackback.io.example.com' })
     await handleSignInPreCheck(ctx)
