@@ -33,9 +33,15 @@ function deriveRequestId(request: Request): string {
   return crypto.randomUUID()
 }
 
-/** Minimal shape of what the framework's `next()` resolves to. */
+/**
+ * Minimal shape of what the framework's `next()` resolves to.
+ *
+ * `response` is optional on purpose. `next()` returns the request context, and
+ * the framework only attaches a response once something downstream produced
+ * one — which a failing server function has not yet done at this point.
+ */
 interface NextResult {
-  response: Response
+  response?: Response
 }
 
 /**
@@ -60,17 +66,25 @@ export async function handleRequestWithContext<T extends NextResult>({
     try {
       const result = await next()
       const durationMs = Math.round(performance.now() - start)
+      // `next()` resolves to the framework's context, and `response` is only
+      // present once something downstream produced one. A failing server
+      // function does not: the error is carried as a value and turned into a
+      // response after this middleware returns. Dereferencing it
+      // unconditionally threw a TypeError out of this boundary, which the
+      // framework then reported to the client as an unhandled 500 in place of
+      // the serialized error it had already built.
+      const response = result.response
       // Echo the id back so clients/proxies can correlate.
       try {
-        result.response.headers.set('x-request-id', requestId)
+        response?.headers.set('x-request-id', requestId)
       } catch {
         // Some responses have immutable headers; correlation still works
         // via the logged request_id.
       }
-      const status = result.response.status
+      const status = response?.status
       // Suppress the completion line for successful health probes (see
       // HEALTH_PATH). Everything else — and unhealthy probes — still logs.
-      if (!(pathname === HEALTH_PATH && status < 400)) {
+      if (!(pathname === HEALTH_PATH && status !== undefined && status < 400)) {
         log.info({ status, duration_ms: durationMs }, 'request completed')
       }
       return result

@@ -19,8 +19,8 @@ export interface ParsedEmailAttachment {
   bytes: Buffer
   /** Declared MIME type, lowercased and param-stripped (e.g. `image/png`); `''` when absent. */
   contentType: string
-  /** Filename from Content-Disposition `filename` or Content-Type `name`, or null.
-   *  Kept verbatim — RFC 2047 encoded-words are NOT decoded (no helper exists). */
+  /** Filename from Content-Disposition `filename` or Content-Type `name`, or
+   *  null. RFC 2047 encoded-words are decoded (see `decodeEncodedWords`). */
   filename: string | null
   /** Bare `Content-ID` (angle brackets stripped) for `cid:` matching, or null. */
   contentId: string | null
@@ -152,6 +152,59 @@ export function normalizeSenderAddress(raw: string | null): string | null {
  *  trimmed. Shared with the email store's `normalizeMessageId`. */
 export function stripAngleBrackets(id: string): string {
   return id.trim().replace(/^<|>$/g, '')
+}
+
+/** Q-encoding is quoted-printable with `_` standing in for a space. Decoded to
+ *  bytes first, because a multi-byte character arrives as several `=XX` pairs
+ *  and must be decoded as a unit, not per escape. */
+function qEncodingToBytes(text: string): Buffer {
+  const out: number[] = []
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === '_') {
+      out.push(0x20)
+    } else if (ch === '=' && /^[0-9A-Fa-f]{2}$/.test(text.slice(i + 1, i + 3))) {
+      out.push(parseInt(text.slice(i + 1, i + 3), 16))
+      i += 2
+    } else {
+      out.push(ch.charCodeAt(0) & 0xff)
+    }
+  }
+  return Buffer.from(out)
+}
+
+/**
+ * Decode RFC 2047 encoded-words (`=?utf-8?Q?caf=C3=A9?=`) in a header value.
+ *
+ * Any non-ASCII header — a subject in French or Japanese, a sender's display
+ * name, an attachment filename — arrives in this form. Left encoded it reaches
+ * the agent inbox, AI transcripts and outbound webhooks as visible gibberish,
+ * and `email-cold-inbound` truncates the subject to 200 chars, which can sever
+ * an encoded-word and make it undecodable after the fact.
+ *
+ * Plain ASCII passes through untouched, so this is safe to apply to any header.
+ * An unknown charset or malformed payload keeps the original token rather than
+ * throwing, since a mangled subject beats a rejected message.
+ */
+export function decodeEncodedWords(value: string | null): string | null {
+  if (!value || !value.includes('=?')) return value
+  return (
+    value
+      // Whitespace *between* two encoded-words is folding artefact, not content.
+      .replace(/(\?=)\s+(=\?)/g, '$1$2')
+      .replace(
+        /=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g,
+        (whole, charset: string, enc: string, text: string) => {
+          try {
+            const bytes =
+              enc.toUpperCase() === 'B' ? Buffer.from(text, 'base64') : qEncodingToBytes(text)
+            return new TextDecoder(charset.trim().toLowerCase(), { fatal: true }).decode(bytes)
+          } catch {
+            return whole
+          }
+        }
+      )
+  )
 }
 
 /** Extract every `<...>` Message-ID token from a header, bare (no angle
@@ -460,7 +513,7 @@ function walkMime(
   out.attachments.push({
     bytes,
     contentType: mimeOnly(contentType),
-    filename,
+    filename: decodeEncodedWords(filename),
     contentId,
     disposition: disposition ?? (contentId ? 'inline' : 'attachment'),
   })
@@ -489,8 +542,10 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
   return {
     toAddresses: headerAddresses('to'),
     ccAddresses: headerAddresses('cc'),
-    from: readHeader(headers, 'from'),
-    subject: readHeader(headers, 'subject'),
+    // Raw headers, unlike a provider webhook payload, still carry RFC 2047
+    // encoded-words for any non-ASCII display name or subject.
+    from: decodeEncodedWords(readHeader(headers, 'from')),
+    subject: decodeEncodedWords(readHeader(headers, 'subject')),
     text,
     html: html || undefined,
     messageId: readHeader(headers, 'message-id'),

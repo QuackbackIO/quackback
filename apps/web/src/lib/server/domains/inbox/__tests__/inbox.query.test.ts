@@ -236,6 +236,9 @@ describe.skipIf(!fixture.available)('inbox.query (real DB, rolled back)', () => 
       expect(conversationRow?.kind === 'conversation' && conversationRow.linkedTicket).toEqual({
         id: linkedTicket.id,
         number: linkedTicket.number,
+        // The chip renders the title alongside the number
+        // (conversation-list-column.tsx), so it is part of the summary.
+        title: linkedTicket.title,
         statusName: linkedTicket.status.name,
         statusCategory: linkedTicket.status.category,
       })
