@@ -642,9 +642,16 @@ export const principal = pgTable(
      * /oauth2/callback/:providerId hooks.after middleware.
      */
     lastSsoSignInAt: timestamp('last_sso_sign_in_at', { withTimezone: true }),
-    // Contact email for an anonymous visitor (captured in the messenger) so an
-    // offline reply can reach them across conversations. Agent-only — the
-    // principal stays anonymous; never exposed to the visitor.
+    // A reachable address for a principal whose account email cannot receive
+    // mail. Two populations arrive here:
+    //   - an anonymous visitor, captured in the messenger by an agent, so an
+    //     offline reply can reach them across conversations. Agent-only: the
+    //     principal stays anonymous and this is never shown back to them.
+    //   - a signed-in person whose identity provider released no address, so
+    //     their account holds a minted placeholder. They supply this one
+    //     themselves and confirm it by mail before it is written.
+    // Delivery precedence lives in `resolveReplyRecipient`, which places this
+    // above the per-conversation capture and below a real account email.
     contactEmail: text('contact_email'),
     // Manual agent availability override: 'online' (default — route chats to me)
     // vs 'away' (connected but opted out of routing). The presence TTL handles

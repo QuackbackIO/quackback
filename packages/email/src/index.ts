@@ -31,6 +31,7 @@ import { StatusIncidentPublishedEmail } from './templates/status-incident-publis
 import type { IncidentImpact } from './templates/status-incident-published'
 import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 import { CsatRequestEmail } from './templates/csat-request'
+import { ConfirmContactEmail } from './templates/confirm-contact-email'
 
 /**
  * Get environment variable at runtime.
@@ -1206,3 +1207,38 @@ export { StatusIncidentPublishedEmail } from './templates/status-incident-publis
 export type { IncidentImpact } from './templates/status-incident-published'
 export { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 export { CsatRequestEmail, CSAT_FACES as CSAT_REQUEST_EMAIL_FACES } from './templates/csat-request'
+
+// ============================================================================
+// Contact-email confirmation
+// ============================================================================
+
+export interface SendConfirmContactEmailParams {
+  to: string
+  confirmUrl: string
+  workspaceName?: string
+  logoUrl?: string
+}
+
+/**
+ * Proof-of-control for an address someone asked us to send their notifications
+ * to. They signed in through a provider that releases no email, so their
+ * account holds an undeliverable placeholder and this is the only route to
+ * reaching them.
+ *
+ * Anyone can type any address, which is why nothing is written until this is
+ * confirmed: `contactEmail` is a delivery target, so an unverified value would
+ * be a way to point somebody else's replies at an address they do not own.
+ */
+export async function sendConfirmContactEmail(
+  params: SendConfirmContactEmailParams
+): Promise<EmailResult> {
+  const { to, confirmUrl, workspaceName, logoUrl } = params
+
+  log.debug('sending contact-email confirmation')
+  return sendEmail({
+    to,
+    subject: 'Confirm your email address',
+    react: ConfirmContactEmail({ confirmUrl, workspaceName, logoUrl }),
+    emailType: 'ConfirmContactEmail',
+  })
+}
