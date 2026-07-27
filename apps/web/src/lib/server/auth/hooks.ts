@@ -43,6 +43,7 @@ import {
   isDeviceUnseen,
   markDeviceSeen,
 } from './signin-device-tracker'
+import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -216,6 +217,21 @@ export async function handleSignInPreCheck(ctx: {
   const body = ctx.body as { email?: unknown } | undefined
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : null
   if (!email) return
+
+  // The reserved placeholder domain is never a real address: it backs the
+  // synthetic ones minted for principals that have no email. Refuse it at
+  // every email-bearing entry point so a placeholder cannot be pre-registered
+  // by whoever derives it — provider-scoped placeholders are computed from
+  // public subjects, and a squatter would permanently block the real identity
+  // from linking while being unable to verify the address either, since the
+  // transport refuses to deliver there.
+  //
+  // Checked before the tenant load and the rate limiter: it is the cheapest
+  // possible rejection and it keeps the reserved domain out of the rate-limit
+  // keyspace.
+  if (isSyntheticAnonEmail(email)) {
+    throw ctx.redirect('/?auth=signin&error=reserved_email_domain')
+  }
 
   // Rate-limit before any DB load. Generic redirect on block so the
   // response doesn't leak which dimension hit the cap. Sequential

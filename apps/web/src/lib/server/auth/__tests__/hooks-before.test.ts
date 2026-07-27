@@ -591,3 +591,48 @@ describe('handleSignInPreCheck — anonymous-mint rate-limit', () => {
     expect((err as { headers?: Record<string, string> }).headers?.['Retry-After']).toBeUndefined()
   })
 })
+
+/**
+ * Reserved placeholder domain.
+ *
+ * `anon.quackback.io` backs the synthetic addresses minted for principals with
+ * no real email. Nothing rejected it at any account-creating path, so a
+ * placeholder address could be pre-registered by whoever guessed or derived it
+ * — and once provider-scoped placeholders exist, those are derived from public
+ * subjects with an open-source sanitiser. The squatter wins the address, the
+ * real identity can never link, and neither party can ever verify it because
+ * the transport refuses to deliver there.
+ */
+describe('handleSignInPreCheck — reserved placeholder domain', () => {
+  it.each([
+    '/sign-up/email',
+    '/sign-in/email',
+    '/sign-in/magic-link',
+    '/email-otp/send-verification-otp',
+  ])('refuses a reserved-domain address on %s', async (path) => {
+    const ctx = ctxFor(path, { email: 'temp-user_123@anon.quackback.io' })
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
+    expect(ctx.redirect).toHaveBeenCalled()
+  })
+
+  it('matches case-insensitively and ignores surrounding whitespace', async () => {
+    const ctx = ctxFor('/sign-up/email', { email: '  Temp-User@ANON.Quackback.IO  ' })
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
+  })
+
+  it('refuses before any tenant or rate-limit work happens', async () => {
+    // Cheapest possible rejection, and it keeps the reserved domain out of the
+    // rate-limit keyspace.
+    const ctx = ctxFor('/sign-up/email', { email: 'x@anon.quackback.io' })
+    await expect(handleSignInPreCheck(ctx)).rejects.toBeDefined()
+    expect(mockGetTenantSettings).not.toHaveBeenCalled()
+  })
+
+  it('leaves a lookalike domain alone', async () => {
+    // Only the exact reserved domain is reserved; a customer legitimately
+    // owning something similar must not be blocked.
+    const ctx = ctxFor('/sign-up/email', { email: 'real@notanon.quackback.io.example.com' })
+    await handleSignInPreCheck(ctx)
+    expect(ctx.redirect).not.toHaveBeenCalled()
+  })
+})
