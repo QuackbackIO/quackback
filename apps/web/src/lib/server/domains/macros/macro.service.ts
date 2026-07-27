@@ -164,7 +164,7 @@ export async function buildMacroContext(
   return {
     firstName: firstNameOf(fullName) ?? null,
     lastName: rest.length > 0 ? rest.join(' ') : null,
-    email: realEmail(row.userEmail ?? row.contactEmail),
+    email: realEmail(row.userEmail) ?? realEmail(row.contactEmail),
     conversationTitle: row.subject ?? null,
   }
 }

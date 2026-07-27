@@ -567,9 +567,9 @@ export function UserDetail({
                     and must never be shown as if it were. Rendering it would
                     tell an agent they can email someone the transport will
                     refuse to deliver to. */}
-                {realEmail(user.email ?? user.contactEmail) ? (
+                {(realEmail(user.email) ?? realEmail(user.contactEmail)) ? (
                   <p className="text-sm text-muted-foreground truncate">
-                    {realEmail(user.email ?? user.contactEmail)}
+                    {realEmail(user.email) ?? realEmail(user.contactEmail)}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">
@@ -594,9 +594,9 @@ export function UserDetail({
               size="sm"
               variant="outline"
               onClick={() => setComposeOpen(true)}
-              disabled={!realEmail(user.email ?? user.contactEmail)}
+              disabled={!(realEmail(user.email) ?? realEmail(user.contactEmail))}
               title={
-                realEmail(user.email ?? user.contactEmail)
+                (realEmail(user.email) ?? realEmail(user.contactEmail))
                   ? undefined
                   : 'This user has no email address to deliver a message to'
               }
@@ -614,7 +614,7 @@ export function UserDetail({
               principalId: user.principalId,
               name: user.name,
               // Never hand a placeholder to the composer as a deliverable target.
-              email: realEmail(user.email ?? user.contactEmail),
+              email: realEmail(user.email) ?? realEmail(user.contactEmail),
               image: user.image,
             }}
           />

@@ -75,9 +75,9 @@ export function UserCard({
         {/* Email: identified account email, or a lead's captured contact email.
             Sanitised — a placeholder address is not a real one and showing it
             would suggest this person can be emailed when they cannot. */}
-        {realEmail(user.email ?? user.contactEmail) ? (
+        {(realEmail(user.email) ?? realEmail(user.contactEmail)) ? (
           <p className="text-sm text-muted-foreground truncate">
-            {realEmail(user.email ?? user.contactEmail)}
+            {realEmail(user.email) ?? realEmail(user.contactEmail)}
           </p>
         ) : (
           <p className="text-sm text-muted-foreground/50 italic">No email</p>

@@ -30,4 +30,28 @@ describe('resolveReplyRecipient', () => {
     expect(resolveReplyRecipient({ type: 'anonymous', email: null }, null, null)).toBeNull()
     expect(resolveReplyRecipient(undefined, undefined, undefined)).toBeNull()
   })
+
+  it('falls past a placeholder account address to the contact email', () => {
+    // A provider that releases no email gets a minted placeholder on the
+    // account. It is non-null, so a truthiness check hands it back as the
+    // recipient and the transport then silently drops the send — the agent
+    // sees a reply that was never delivered.
+    expect(
+      resolveReplyRecipient(
+        { type: 'user', email: 'sso-oidc-01j9-abc@anon.quackback.io' },
+        'real@x.com',
+        null
+      )
+    ).toBe('real@x.com')
+  })
+
+  it('returns null rather than a placeholder when nothing real is on file', () => {
+    expect(
+      resolveReplyRecipient(
+        { type: 'user', email: 'sso-oidc-01j9-abc@anon.quackback.io' },
+        null,
+        null
+      )
+    ).toBeNull()
+  })
 })
