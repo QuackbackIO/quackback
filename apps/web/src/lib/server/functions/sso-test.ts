@@ -56,6 +56,8 @@ type TestSession = {
   requestedScopes: string[]
   /** Token-endpoint auth method, mirrored from production. */
   tokenAuth: 'basic' | 'post'
+  /** The prompt sent, replayed into a configuration-error hint. */
+  requestedPrompt?: string
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -185,6 +187,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       codeVerifier,
       requestedScopes,
       tokenAuth: request.tokenAuth,
+      requestedPrompt: request.prompt,
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,

@@ -129,3 +129,26 @@ describe('explainTokenError', () => {
     expect(hint).toMatch(/HTTP 418/)
   })
 })
+
+describe('explainAuthorizeError — prompt rejection', () => {
+  it('names the prompt actually sent on invalid_configuration', () => {
+    // The observed shape: a provider answering invalid_configuration with the
+    // generic server_error description because it does not implement the
+    // prompt we asked for. Nothing in the response says "prompt", so the hint
+    // is the only thing that connects the error to its cause.
+    const hint = explainAuthorizeError('invalid_configuration', null, undefined, 'select_account')
+    expect(hint).toContain('select_account')
+    expect(hint).toMatch(/prompt/i)
+  })
+
+  it('mentions the prompt on a generic server_error too', () => {
+    const hint = explainAuthorizeError('server_error', null, undefined, 'select_account')
+    expect(hint).toMatch(/prompt/i)
+  })
+
+  it('says nothing about the prompt when none was sent', () => {
+    // Blaming a parameter we did not send would send an admin the wrong way.
+    const hint = explainAuthorizeError('server_error', null, undefined, undefined)
+    expect(hint).not.toMatch(/prompt/i)
+  })
+})

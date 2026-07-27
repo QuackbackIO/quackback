@@ -26,7 +26,13 @@ beforeAll(() => {
 const { upsertSpy } = vi.hoisted(() => ({
   upsertSpy: vi.fn(
     async (_args: {
-      data: { kind: string | null; attributeMapping: unknown; scopes: string | null }
+      data: {
+        kind: string | null
+        attributeMapping: unknown
+        scopes: string | null
+        prompt: string | null
+        tokenEndpointAuthMethod: string | null
+      }
     }) => undefined
   ),
 }))
@@ -374,5 +380,56 @@ describe('<ProviderEditor> scope validation', () => {
     openAdvanced()
     await waitFor(() => expect(discoveryScopesSpy).toHaveBeenCalled())
     expect(screen.queryByTestId('scope-mismatch-warning')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Prompt and client authentication.
+ *
+ * The other two authorize-request parameters that were fixed in code. Both sit
+ * in the same Advanced section as scopes, because they are the same kind of
+ * thing and splitting them would suggest otherwise.
+ */
+describe('<ProviderEditor> request options', () => {
+  const openAdvanced = () => fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+
+  it('saves null for an untouched provider on the defaults', async () => {
+    renderEditor(makeProvider({ prompt: null, tokenEndpointAuthMethod: null }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls[0][0].data.prompt).toBeNull()
+    expect(upsertSpy.mock.calls[0][0].data.tokenEndpointAuthMethod).toBeNull()
+  })
+
+  it('round-trips a configured prompt without rewriting it', async () => {
+    renderEditor(makeProvider({ prompt: 'omit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls[0][0].data.prompt).toBe('omit')
+  })
+
+  it('auto-expands Advanced when a non-default prompt is set', () => {
+    // A non-default configuration must never sit hidden behind a closed panel.
+    renderEditor(makeProvider({ prompt: 'login' }))
+    expect(screen.getByRole('button', { name: /Advanced/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+  })
+
+  it('offers omit and none as separate choices', async () => {
+    // Collapsing them would read as a tidy-up and would break sign-in for
+    // anyone who picked the wrong one.
+    renderEditor(makeProvider({}))
+    openAdvanced()
+    fireEvent.click(screen.getByLabelText('Sign-in prompt'))
+    await waitFor(() => expect(screen.getByTestId('prompt-choice-omit')).toBeInTheDocument())
+    expect(screen.getByTestId('prompt-choice-none')).toBeInTheDocument()
+  })
+
+  it('exposes the client authentication method', () => {
+    renderEditor(makeProvider({}))
+    openAdvanced()
+    expect(screen.getByLabelText('Client authentication')).toBeInTheDocument()
   })
 })

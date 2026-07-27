@@ -9,10 +9,17 @@ export function explainAuthorizeError(
   description?: string | null,
   /** The scopes actually sent on this attempt, so the hint names them rather
    *  than asserting a default set the provider may not be using. */
-  requestedScopes?: readonly string[]
+  requestedScopes?: readonly string[],
+  /** The `prompt` this attempt sent, if any. Some providers answer a prompt
+   *  they do not implement with a generic server-side error that names nothing,
+   *  so the hint is the only thing connecting cause to effect. */
+  requestedPrompt?: string
 ): string {
   const desc = description ? ` ${description}` : ''
   const sent = requestedScopes?.length ? ` (${requestedScopes.join(' ')})` : ''
+  const promptHint = requestedPrompt
+    ? ` This request also sent prompt=${requestedPrompt}. Some providers answer a prompt they do not implement with exactly this error and name nothing — if the failure persists, change the sign-in prompt on this provider (Re-authenticate and Ask for consent are the most widely supported) or turn it off.`
+    : ''
   switch (code) {
     case 'invalid_request':
       return `${desc} Most often this is a redirect_uri mismatch. The redirect URI in the IdP's allowed-redirect list must match exactly, including the trailing slash and path.`
@@ -25,7 +32,8 @@ export function explainAuthorizeError(
     case 'invalid_scope':
       return `${desc} Your IdP rejected at least one of the scopes requested${sent}. Either add the missing scope to the IdP application's allowed scopes, or edit Scopes on this provider to match what it supports — its discovery document lists them under scopes_supported.`
     case 'server_error':
-      return `${desc} The IdP hit an internal error. Retry the test; if persistent, check your IdP's status page.`
+    case 'invalid_configuration':
+      return `${desc} The IdP reported an internal or configuration error. Retry the test; if persistent, check your IdP's status page.${promptHint}`
     case 'temporarily_unavailable':
       return `${desc} The IdP is temporarily refusing requests. Retry in a minute.`
     default:

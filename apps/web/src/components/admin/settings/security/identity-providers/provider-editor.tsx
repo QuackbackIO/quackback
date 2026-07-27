@@ -49,6 +49,14 @@ import {
   supportedSubset,
   unsupportedScopes,
 } from '@/lib/shared/oidc-scopes'
+import {
+  DEFAULT_OIDC_PROMPT,
+  DEFAULT_TOKEN_AUTH_METHOD,
+  PROMPT_CHOICES,
+  TOKEN_AUTH_CHOICES,
+  normalizePromptInput,
+  normalizeTokenAuthInput,
+} from '@/lib/shared/oidc-request'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -200,6 +208,10 @@ export function ProviderEditor({
   const [scopes, setScopes] = useState<string[]>(() =>
     effectiveScopes({ scopes: provider?.scopes ?? null })
   )
+  const [prompt, setPrompt] = useState<string>(provider?.prompt ?? DEFAULT_OIDC_PROMPT)
+  const [tokenAuth, setTokenAuth] = useState<string>(
+    provider?.tokenEndpointAuthMethod ?? DEFAULT_TOKEN_AUTH_METHOD
+  )
   const [clientId, setClientId] = useState(provider?.clientId ?? '')
   const [secretDraft, setSecretDraft] = useState('')
   // Enabling/disabling lives on the provider list row now; the editor only
@@ -246,6 +258,8 @@ export function ProviderEditor({
           clientId: clientId.trim(),
           discoveryUrl: discoveryUrl.trim() || null,
           scopes: normalizeScopesInput(scopes),
+          prompt: normalizePromptInput(prompt),
+          tokenEndpointAuthMethod: normalizeTokenAuthInput(tokenAuth),
           // Manual endpoints only apply to "Other"; null them out otherwise so
           // switching back to a shortcut kind clears any stale manual config.
           authorizationUrl: kind === 'other' ? manual.authorizationUrl.trim() || null : null,
@@ -410,9 +424,13 @@ export function ProviderEditor({
 
             <AdvancedSection
               scopes={scopes}
+              prompt={prompt}
+              tokenAuth={tokenAuth}
               discoveryUrl={discoveryUrl}
               disabled={saving}
               onChange={setScopes}
+              onPromptChange={setPrompt}
+              onTokenAuthChange={setTokenAuth}
             />
 
             <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
@@ -649,18 +667,31 @@ function IdpDiscoveryFields({
  */
 function AdvancedSection({
   scopes,
+  prompt,
+  tokenAuth,
   discoveryUrl,
   disabled,
   onChange,
+  onPromptChange,
+  onTokenAuthChange,
 }: {
   scopes: string[]
+  prompt: string
+  tokenAuth: string
   discoveryUrl: string
   disabled: boolean
   onChange: (next: string[]) => void
+  onPromptChange: (next: string) => void
+  onTokenAuthChange: (next: string) => void
 }) {
-  // Auto-expand when the provider is already off the defaults, so a
-  // non-default configuration is never hidden behind a closed panel.
-  const [open, setOpen] = useState(() => normalizeScopesInput(scopes) !== null)
+  // Auto-expand when ANY of these is off its default, so a non-default
+  // configuration is never hidden behind a closed panel.
+  const [open, setOpen] = useState(
+    () =>
+      normalizeScopesInput(scopes) !== null ||
+      normalizePromptInput(prompt) !== null ||
+      normalizeTokenAuthInput(tokenAuth) !== null
+  )
   const [draft, setDraft] = useState('')
   const fetchScopes = useServerFn(fetchDiscoveryScopesFn)
   const [supported, setSupported] = useState<string[] | null>(null)
@@ -751,6 +782,55 @@ function AdvancedSection({
               what it accepts under <code className="font-mono">scopes_supported</code> in its
               discovery document.
             </p>
+            <div className="space-y-2 border-t border-border/40 pt-3">
+              <Label htmlFor="idp-prompt" className="text-xs">
+                Sign-in prompt
+              </Label>
+              <Select value={prompt} onValueChange={onPromptChange} disabled={disabled}>
+                <SelectTrigger id="idp-prompt" size="sm" aria-label="Sign-in prompt">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROMPT_CHOICES.map((c) => (
+                    <SelectItem
+                      key={c.value}
+                      value={c.value}
+                      data-testid={`prompt-choice-${c.value}`}
+                    >
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                What your provider does when someone already has a session with it.{' '}
+                <strong>Don&apos;t send a prompt</strong> leaves it to behave normally;{' '}
+                <strong>Silent</strong> is different, and fails outright when nobody is signed in.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t border-border/40 pt-3">
+              <Label htmlFor="idp-token-auth" className="text-xs">
+                Client authentication
+              </Label>
+              <Select value={tokenAuth} onValueChange={onTokenAuthChange} disabled={disabled}>
+                <SelectTrigger id="idp-token-auth" size="sm" aria-label="Client authentication">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TOKEN_AUTH_CHOICES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                How your client secret reaches the token endpoint. Some providers accept only one of
+                the two.
+              </p>
+            </div>
+
             {unsupported.length > 0 && (
               <div data-testid="scope-mismatch-warning" className="space-y-2">
                 <WarningBox

@@ -49,6 +49,8 @@ export interface HandshakeInput {
   /** How to authenticate at the token endpoint. Mirrors production, which is
    *  the point: a test using the other method proves nothing about sign-in. */
   tokenAuth?: 'basic' | 'post'
+  /** The `prompt` this attempt sent, so a configuration error can name it. */
+  requestedPrompt?: string
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -103,7 +105,12 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       ok: false,
       stage: 'idp-authorize',
       errorCode: input.idpError,
-      hint: explainAuthorizeError(input.idpError, input.idpErrorDescription, input.requestedScopes),
+      hint: explainAuthorizeError(
+        input.idpError,
+        input.idpErrorDescription,
+        input.requestedScopes,
+        input.requestedPrompt
+      ),
       steps,
     }
   }
