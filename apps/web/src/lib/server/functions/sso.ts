@@ -238,17 +238,20 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
       }
     }
 
+    // Field-level diff over the whole DTO. Recording only label + enabled left
+    // every field that decides identity resolution — the endpoints, clientId,
+    // scopes, the attribute mapping — with no trace, so repointing a claim and
+    // then repointing it back produced two identical rows.
+    const { diffProviderAudit } = await import('@/lib/server/auth/idp-audit-diff')
+    const { before, after } = diffProviderAudit(prior ?? null, data)
+
     return withAuditEvent(
       {
         event: prior ? 'idp.updated' : 'idp.created',
         actor: actorFromAuth(auth),
         target: { type: 'identity_provider', id: prior?.id ?? data.registrationId },
-        before: prior ? { label: prior.label, enabled: prior.enabled } : null,
-        after: {
-          registrationId: data.registrationId,
-          label: data.label,
-          enabled: data.enabled ?? false,
-        },
+        before,
+        after,
         headers: getRequestHeaders(),
       },
       async () => upsertIdentityProvider(data)
