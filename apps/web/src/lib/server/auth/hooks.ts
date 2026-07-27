@@ -631,21 +631,22 @@ async function readSsoClaims(
   userId: `user_${string}`,
   providerId: string
 ): Promise<Record<string, unknown>> {
-  const { db, account, and, eq } = await import('@/lib/server/db')
+  const { db, account, and, eq, desc } = await import('@/lib/server/db')
   const row = await db.query.account.findFirst({
     where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
     columns: { idToken: true },
+    // Deterministic ordering. There is no uniqueness constraint on
+    // (user_id, provider_id), so a duplicate account row — which a change in
+    // which claim supplies the account identifier can create — would otherwise
+    // leave this reading whichever row the database happened to return, quite
+    // possibly a stale one, on every sign-in.
+    orderBy: desc(account.createdAt),
   })
-  if (!row?.idToken) return {}
 
-  const parts = row.idToken.split('.')
-  if (parts.length !== 3) return {}
-  try {
-    const payload = Buffer.from(parts[1], 'base64url').toString('utf-8')
-    return JSON.parse(payload) as Record<string, unknown>
-  } catch {
-    return {}
-  }
+  // Refuses an expired token; see sso-claims-decode.ts for why freshness is
+  // the property that matters when the signature is not verified.
+  const { decodeSsoClaims } = await import('./sso-claims-decode')
+  return decodeSsoClaims(row?.idToken)
 }
 
 /**
