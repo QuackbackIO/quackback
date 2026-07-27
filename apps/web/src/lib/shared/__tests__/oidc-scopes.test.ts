@@ -5,6 +5,8 @@ import {
   effectiveScopes,
   normalizeScopesInput,
   parseScopes,
+  supportedSubset,
+  unsupportedScopes,
 } from '../oidc-scopes'
 
 describe('parseScopes', () => {
@@ -66,5 +68,49 @@ describe('REQUIRED_OIDC_SCOPE', () => {
     // openid-scoped token to accept, so the editor must not let it be removed.
     expect(REQUIRED_OIDC_SCOPE).toBe('openid')
     expect(DEFAULT_OIDC_SCOPES).toContain(REQUIRED_OIDC_SCOPE)
+  })
+})
+
+describe('unsupportedScopes', () => {
+  it('reports nothing when every scope is advertised', () => {
+    expect(unsupportedScopes(['openid', 'email'], ['openid', 'email', 'profile'])).toEqual([])
+  })
+
+  it('reports the scopes the IdP does not advertise', () => {
+    // The reported failure exactly: an IdP advertising only public + openid,
+    // asked for openid email profile.
+    expect(unsupportedScopes(['openid', 'email', 'profile'], ['public', 'openid'])).toEqual([
+      'email',
+      'profile',
+    ])
+  })
+
+  it('reports nothing when the IdP advertises no list at all', () => {
+    // scopes_supported is RECOMMENDED, not required. Absent means unknown, and
+    // flagging every scope on a provider that simply omits it would be noise.
+    expect(unsupportedScopes(['openid', 'email'], null)).toEqual([])
+    expect(unsupportedScopes(['openid', 'email'], [])).toEqual([])
+  })
+
+  it('is case-sensitive, as scope values are', () => {
+    expect(unsupportedScopes(['openid'], ['OpenID'])).toEqual(['openid'])
+  })
+})
+
+describe('supportedSubset', () => {
+  it('keeps only the advertised scopes, preserving order', () => {
+    expect(supportedSubset(['openid', 'email', 'profile'], ['public', 'openid'])).toEqual([
+      'openid',
+    ])
+  })
+
+  it('always keeps the required scope, even if unadvertised', () => {
+    // Dropping openid would stop the request being an OIDC request at all, so
+    // the one-click fix must never produce that.
+    expect(supportedSubset(['openid', 'email'], ['email'])).toEqual(['openid', 'email'])
+  })
+
+  it('returns the input unchanged when nothing is advertised', () => {
+    expect(supportedSubset(['openid', 'email'], null)).toEqual(['openid', 'email'])
   })
 })

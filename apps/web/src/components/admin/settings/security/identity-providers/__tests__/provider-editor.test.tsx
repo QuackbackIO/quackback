@@ -31,6 +31,10 @@ const { upsertSpy } = vi.hoisted(() => ({
   ),
 }))
 
+const { discoveryScopesSpy } = vi.hoisted(() => ({
+  discoveryScopesSpy: vi.fn(async () => ({ scopesSupported: null as string[] | null })),
+}))
+
 const { ssoTestRef } = vi.hoisted(() => ({
   ssoTestRef: {
     current: null as null | { registrationId: string; allClaims: Record<string, unknown> },
@@ -54,6 +58,7 @@ vi.mock('@/lib/server/functions/sso', () => ({
   deleteIdentityProviderFn: vi.fn(),
   addProviderDomainFn: vi.fn(),
   verifyProviderDomainFn: vi.fn(),
+  fetchDiscoveryScopesFn: discoveryScopesSpy,
   setDomainEnforcedFn: vi.fn(),
   removeVerifiedDomainFn: vi.fn(),
 }))
@@ -114,6 +119,8 @@ function renderEditor(provider: IdentityProvider) {
 
 beforeEach(() => {
   upsertSpy.mockClear()
+  discoveryScopesSpy.mockClear()
+  discoveryScopesSpy.mockResolvedValue({ scopesSupported: null })
   ssoTestRef.current = null
 })
 
@@ -313,5 +320,56 @@ describe('<ProviderEditor> scopes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
     expect(upsertSpy.mock.calls[0][0].data.scopes).toBe('openid public')
+  })
+})
+
+/**
+ * Inline scope validation against the discovery document.
+ *
+ * This is the check that would have caught the reported failure at
+ * configuration time rather than as an opaque `invalid_scope` after a round
+ * trip through the IdP.
+ */
+describe('<ProviderEditor> scope validation', () => {
+  const openAdvanced = () => fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+
+  it('warns about scopes the IdP does not advertise', async () => {
+    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: ['public', 'openid'] })
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    await waitFor(() => {
+      expect(screen.getByTestId('scope-mismatch-warning')).toHaveTextContent('email')
+    })
+    expect(screen.getByTestId('scope-mismatch-warning')).toHaveTextContent('profile')
+  })
+
+  it('reduces the set to what the IdP advertises on one click', async () => {
+    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: ['public', 'openid'] })
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    await waitFor(() => expect(screen.getByTestId('scope-mismatch-warning')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Use supported scopes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(upsertSpy).toHaveBeenCalled())
+    expect(upsertSpy.mock.calls[0][0].data.scopes).toBe('openid')
+  })
+
+  it('says nothing when the IdP advertises no scope list', async () => {
+    // Absent means unknown, not unsupported — the field is only RECOMMENDED.
+    discoveryScopesSpy.mockResolvedValueOnce({ scopesSupported: null })
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    await waitFor(() => expect(discoveryScopesSpy).toHaveBeenCalled())
+    expect(screen.queryByTestId('scope-mismatch-warning')).not.toBeInTheDocument()
+  })
+
+  it('says nothing when every scope is advertised', async () => {
+    discoveryScopesSpy.mockResolvedValueOnce({
+      scopesSupported: ['openid', 'email', 'profile'],
+    })
+    renderEditor(makeProvider({ scopes: null }))
+    openAdvanced()
+    await waitFor(() => expect(discoveryScopesSpy).toHaveBeenCalled())
+    expect(screen.queryByTestId('scope-mismatch-warning')).not.toBeInTheDocument()
   })
 })

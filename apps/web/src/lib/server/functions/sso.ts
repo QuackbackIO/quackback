@@ -258,6 +258,39 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
     )
   })
 
+/**
+ * Read `scopes_supported` from a provider's discovery document.
+ *
+ * Backs the editor's inline scope validation — the check that would have caught
+ * the reported failure at configuration time instead of as an opaque
+ * `invalid_scope` after a round trip to the IdP.
+ *
+ * Returns null when the document is unreachable or omits the field, which the
+ * caller must treat as "unknown" rather than "nothing supported": the field is
+ * RECOMMENDED, not required.
+ */
+export const fetchDiscoveryScopesFn = createServerFn({ method: 'POST' })
+  .validator(z.object({ discoveryUrl: httpsUrl }))
+  .handler(async ({ data }): Promise<{ scopesSupported: string[] | null }> => {
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    try {
+      // Same SSRF guard the connection test uses: validated, IP-pinned, no
+      // redirects, so an admin-supplied URL cannot probe the internal network.
+      const { safeFetch } = await import('@/lib/server/content/ssrf-guard')
+      const res = await safeFetch(data.discoveryUrl, { timeoutMs: 5000 })
+      if (!res.ok) return { scopesSupported: null }
+      const doc = (await res.json()) as { scopes_supported?: unknown }
+      if (!Array.isArray(doc.scopes_supported)) return { scopesSupported: null }
+      return {
+        scopesSupported: doc.scopes_supported.filter((s): s is string => typeof s === 'string'),
+      }
+    } catch {
+      // Unreachable is not an error the admin needs to act on here; the
+      // connection test is where a broken discovery URL gets reported.
+      return { scopesSupported: null }
+    }
+  })
+
 const deleteIdentityProviderInput = z.object({ id: identityProviderId })
 
 /**

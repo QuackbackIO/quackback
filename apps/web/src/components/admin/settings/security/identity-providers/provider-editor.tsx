@@ -46,6 +46,8 @@ import {
   effectiveScopes,
   normalizeScopesInput,
   parseScopes,
+  supportedSubset,
+  unsupportedScopes,
 } from '@/lib/shared/oidc-scopes'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -74,6 +76,7 @@ import {
   setProviderCredentialsFn,
   upsertIdentityProviderFn,
   verifyProviderDomainFn,
+  fetchDiscoveryScopesFn,
   type VerifyDomainResult,
 } from '@/lib/server/functions/sso'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
@@ -405,7 +408,12 @@ export function ProviderEditor({
               />
             </div>
 
-            <AdvancedSection scopes={scopes} disabled={saving} onChange={setScopes} />
+            <AdvancedSection
+              scopes={scopes}
+              discoveryUrl={discoveryUrl}
+              disabled={saving}
+              onChange={setScopes}
+            />
 
             <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
 
@@ -641,10 +649,12 @@ function IdpDiscoveryFields({
  */
 function AdvancedSection({
   scopes,
+  discoveryUrl,
   disabled,
   onChange,
 }: {
   scopes: string[]
+  discoveryUrl: string
   disabled: boolean
   onChange: (next: string[]) => void
 }) {
@@ -652,6 +662,29 @@ function AdvancedSection({
   // non-default configuration is never hidden behind a closed panel.
   const [open, setOpen] = useState(() => normalizeScopesInput(scopes) !== null)
   const [draft, setDraft] = useState('')
+  const fetchScopes = useServerFn(fetchDiscoveryScopesFn)
+  const [supported, setSupported] = useState<string[] | null>(null)
+
+  // Read the IdP's advertised scopes once the panel is open. Catching a
+  // mismatch here is the difference between a warning at configuration time and
+  // an opaque `invalid_scope` after a round trip through the IdP — which is
+  // exactly how this failure was reported.
+  useEffect(() => {
+    if (!open || !discoveryUrl.trim()) return
+    let cancelled = false
+    void fetchScopes({ data: { discoveryUrl: discoveryUrl.trim() } })
+      .then((r) => {
+        if (!cancelled) setSupported(r.scopesSupported)
+      })
+      .catch(() => {
+        // Unreachable discovery is reported by the connection test, not here.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, discoveryUrl, fetchScopes])
+
+  const unsupported = unsupportedScopes(scopes, supported)
 
   const addScope = (e: React.FormEvent) => {
     e.preventDefault()
@@ -718,6 +751,29 @@ function AdvancedSection({
               what it accepts under <code className="font-mono">scopes_supported</code> in its
               discovery document.
             </p>
+            {unsupported.length > 0 && (
+              <div data-testid="scope-mismatch-warning" className="space-y-2">
+                <WarningBox
+                  variant="warning"
+                  title={`Your provider does not support ${unsupported.join(', ')}`}
+                  description={
+                    <>
+                      It accepts only{' '}
+                      <span className="font-mono">{(supported ?? []).join(' ')}</span>. Sign-in will
+                      be rejected until these are removed.
+                    </>
+                  }
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={disabled}
+                  onClick={() => onChange(supportedSubset(scopes, supported))}
+                >
+                  Use supported scopes
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

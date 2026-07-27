@@ -42,6 +42,39 @@ export function effectiveScopes(provider: { scopes: string | null }): string[] {
 }
 
 /**
+ * Which requested scopes the IdP does not advertise in `scopes_supported`.
+ *
+ * An empty or absent list means unknown, not "none supported": the field is
+ * RECOMMENDED rather than required by OIDC Discovery, and flagging every scope
+ * on a provider that simply omits it would be noise an admin learns to ignore.
+ */
+export function unsupportedScopes(
+  requested: readonly string[],
+  supported: readonly string[] | null | undefined
+): string[] {
+  if (!supported || supported.length === 0) return []
+  const advertised = new Set(supported)
+  return requested.filter((scope) => !advertised.has(scope))
+}
+
+/**
+ * The requested set reduced to what the IdP advertises — the one-click fix.
+ *
+ * `openid` survives regardless. Dropping it would stop the request being an
+ * OIDC request at all, leaving no ID token owed and no openid-scoped token for
+ * the userinfo endpoint, so a "fix" that removed it would break more than it
+ * repaired.
+ */
+export function supportedSubset(
+  requested: readonly string[],
+  supported: readonly string[] | null | undefined
+): string[] {
+  if (!supported || supported.length === 0) return [...requested]
+  const advertised = new Set(supported)
+  return requested.filter((scope) => advertised.has(scope) || scope === REQUIRED_OIDC_SCOPE)
+}
+
+/**
  * Turn the editor's token list into the value to persist.
  *
  * Returns null — never a blank string — when the set is empty or matches the
