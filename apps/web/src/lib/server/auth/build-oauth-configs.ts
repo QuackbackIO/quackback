@@ -22,6 +22,8 @@
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
 import { resolveIdentity } from './resolve-identity'
+import { synthesizeName } from './placeholder-identity'
+import { allowsMissingEmail } from '@/lib/shared/oidc-claim-mapping'
 
 // Re-exported so server callers keep this import path. The implementation lives
 // in `shared` because the admin editor needs it too, and having exactly one
@@ -124,6 +126,16 @@ export interface BuildGenericOAuthConfigsArgs {
   /** Called with the claims behind a successful resolution, so downstream
    *  consumers need not re-derive them from stored tokens. */
   onResolved?: (registrationId: string, accountId: string, claims: Record<string, unknown>) => void
+  /**
+   * Returns the placeholder address to use for a provider that released none.
+   *
+   * READ-OR-MINT, not mint: `getUserInfo` runs on every sign-in, so minting
+   * here unconditionally would hand a returning person a different address each
+   * time. The implementation looks up the account by this identity and reuses
+   * the stored address, minting only when there is no account yet. Injected so
+   * this module keeps needing no DB import.
+   */
+  placeholderEmailFor?: (registrationId: string, accountId: string) => Promise<string>
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   /**
@@ -149,6 +161,7 @@ export async function buildGenericOAuthConfigs({
   fetchUserInfo,
   onResolutionWarning,
   onResolved,
+  placeholderEmailFor,
   mapProfileToUser,
   buildLoginHintParams,
 }: BuildGenericOAuthConfigsArgs): Promise<GenericOAuthConfig[]> {
@@ -222,14 +235,28 @@ export async function buildGenericOAuthConfigs({
       // otherwise re-read the stored ID token — and find nothing for a provider
       // that resolves identity from userinfo or an access token.
       onResolved?.(provider.registrationId, id, claims)
+
+      // Gap-fill runs LAST, after every real source has been tried, so it can
+      // never shadow something the provider actually sent.
+      //
+      // A synthesized name needs no opt-in: it only ever rescues a sign-in that
+      // would fail outright, and a display name creates nothing irreversible.
+      // A minted address does, so it stays behind `allowMissingEmail`, which is
+      // off unless an admin turned it on.
+      const resolvedName = name ?? synthesizeName(claims, id)
+      let resolvedEmail = email
+      if (!resolvedEmail && allowsMissingEmail(provider.claimMapping) && placeholderEmailFor) {
+        resolvedEmail = await placeholderEmailFor(provider.registrationId, id)
+      }
+
       // Raw claims first, mapped fields last: the mapped values are the
       // resolved answer and must not be shadowed by a same-named raw claim.
       return {
         ...claims,
         id,
         emailVerified,
-        ...(email ? { email } : {}),
-        ...(name ? { name } : {}),
+        ...(resolvedEmail ? { email: resolvedEmail } : {}),
+        ...(resolvedName ? { name: resolvedName } : {}),
       }
     }
 

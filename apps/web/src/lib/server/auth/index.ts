@@ -150,6 +150,37 @@ async function createAuth() {
     }
   }
 
+  /**
+   * The address to use for a provider that released none: the one already on
+   * file for this identity, or a freshly minted one if this is a first sign-in.
+   *
+   * Read-or-mint, because `getUserInfo` runs on every sign-in. Minting each
+   * time would churn the person's address on every visit and break anything
+   * holding the old one. Only reached when the provider opted in AND no real
+   * address came through, so the lookup costs nothing for everyone else.
+   */
+  const resolvePlaceholderEmail = async (
+    registrationId: string,
+    accountId: string
+  ): Promise<string> => {
+    const { db, account, user, and, eq } = await import('@/lib/server/db')
+    const existing = await db.query.account.findFirst({
+      where: and(eq(account.providerId, registrationId), eq(account.accountId, accountId)),
+      columns: { userId: true },
+    })
+    if (existing?.userId) {
+      const owner = await db.query.user.findFirst({
+        where: eq(user.id, existing.userId),
+        columns: { email: true },
+      })
+      if (owner?.email) return owner.email
+    }
+    const { mintPlaceholderEmail } = await import('./placeholder-identity')
+    const minted = mintPlaceholderEmail(registrationId)
+    log.info({ registrationId }, 'minted placeholder address for provider with no email claim')
+    return minted
+  }
+
   const oidcConfigs = await buildGenericOAuthConfigs({
     providers: await listIdentityProviders(),
     creds: getIdentityProviderCredentials,
@@ -164,6 +195,7 @@ async function createAuth() {
     onResolutionWarning: (registrationId, warnings) => {
       log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
     },
+    placeholderEmailFor: resolvePlaceholderEmail,
     mapProfileToUser: mapProfileClaims,
     buildLoginHintParams,
   })

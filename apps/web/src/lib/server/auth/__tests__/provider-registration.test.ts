@@ -209,3 +209,102 @@ describe('buildGenericOAuthConfigs discovery + resolver wiring', () => {
     expect(cfgs[0].getUserInfo).toBeTypeOf('function')
   })
 })
+
+/**
+ * World C: the provider releases a subject and nothing else. Sign-in fails on
+ * `email_is_missing` today. The gap-fill runs last in the cascade, after every
+ * real source has been tried, so it can never shadow an address the provider
+ * actually sent.
+ */
+describe('gap-fill for providers that release no email or name', () => {
+  const idToken = (payload: Record<string, unknown>) =>
+    `x.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.y`
+
+  /** Build one config with the gap-fill dependency injected. */
+  async function buildWithPlaceholder(
+    over: Record<string, unknown>,
+    placeholderFor?: (registrationId: string, accountId: string) => Promise<string>
+  ) {
+    const cfgs = await buildGenericOAuthConfigs({
+      providers: [row(over)] as never,
+      creds: async () => ({ clientId: 'c', clientSecret: 's' }),
+      tierAllowsOidc: true,
+      ...(placeholderFor ? { placeholderEmailFor: placeholderFor } : {}),
+    } as never)
+    return cfgs[0]
+  }
+
+  it('leaves a provider that sends an email completely untouched', async () => {
+    const cfg = await buildWithPlaceholder(
+      { claimMapping: { profile: { allowMissingEmail: true } } },
+      async () => 'should-not-be-used@anon.quackback.io'
+    )
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'real@x.com', name: 'Real Person' }),
+      accessToken: undefined,
+    })
+    expect(info?.email).toBe('real@x.com')
+    expect(info?.name).toBe('Real Person')
+  })
+
+  it('does not mint when the provider has not opted in', async () => {
+    // allowMissingEmail is off by default and minting is one-way, so an
+    // unconfigured provider must keep failing rather than quietly create
+    // accounts nobody can reach.
+    const cfg = await buildWithPlaceholder({}, async () => 'minted@anon.quackback.io')
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({ sub: 's1' }),
+      accessToken: undefined,
+    })
+    expect(info?.email).toBeUndefined()
+  })
+
+  it('mints an address when opted in and the provider sends none', async () => {
+    const cfg = await buildWithPlaceholder(
+      { claimMapping: { profile: { allowMissingEmail: true } } },
+      async () => 'sso-oidc-abc-deadbeef@anon.quackback.io'
+    )
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({ sub: 's1' }),
+      accessToken: undefined,
+    })
+    expect(info?.email).toBe('sso-oidc-abc-deadbeef@anon.quackback.io')
+  })
+
+  it('asks for the address by account identity, so a returning user keeps theirs', async () => {
+    // getUserInfo runs on EVERY sign-in. Minting unconditionally here would
+    // hand a returning person a different address each time, so the dependency
+    // is read-or-mint and is keyed by the subject.
+    const seen: Array<[string, string]> = []
+    const cfg = await buildWithPlaceholder(
+      { claimMapping: { profile: { allowMissingEmail: true } } },
+      async (registrationId, accountId) => {
+        seen.push([registrationId, accountId])
+        return 'stored@anon.quackback.io'
+      }
+    )
+    await cfg.getUserInfo?.({ idToken: idToken({ sub: 'subject-9' }), accessToken: undefined })
+    expect(seen).toEqual([['oidc_abc', 'subject-9']])
+  })
+
+  it('synthesizes a missing name without needing an opt-in', async () => {
+    // A missing name only ever fails a sign-in that would otherwise work, and
+    // a display name creates nothing irreversible, so it needs no switch.
+    const cfg = await buildWithPlaceholder({})
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({ sub: 's1', email: 'real@x.com', preferred_username: 'somebody' }),
+      accessToken: undefined,
+    })
+    expect(info?.name).toBe('somebody')
+  })
+
+  it('still resolves a name when the provider sends only a subject', async () => {
+    const cfg = await buildWithPlaceholder({})
+    const info = await cfg.getUserInfo?.({
+      idToken: idToken({ sub: 'ACCOUNT:REGION:2119', email: 'real@x.com' }),
+      accessToken: undefined,
+    })
+    expect(info?.name).toBeTruthy()
+    expect(info?.name).not.toContain(':')
+  })
+})
