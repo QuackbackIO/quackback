@@ -58,6 +58,7 @@ import {
   normalizeTokenAuthInput,
 } from '@/lib/shared/oidc-request'
 import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { WarningBox } from '@/components/shared/warning-box'
@@ -229,16 +230,22 @@ export function ProviderEditor({
   const [saving, setSaving] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
+  // Required fields all live on Connection, so a failed save from another tab
+  // must bring the admin back to the field rather than toast about one they
+  // cannot see. The single scroll region could not hide an invalid field; tabs
+  // can, so the routing is part of the tabs, not a follow-up.
+  const [tab, setTab] = useState('connection')
+
   const verifiedDomainCount = (provider?.domains ?? []).filter((d) => d.verifiedAt).length
   const hasVerifiedDomain = verifiedDomainCount > 0
 
   const handleSave = async () => {
-    if (!label.trim()) {
-      toast.error('Display name is required.')
-      return
-    }
-    if (!clientId.trim()) {
-      toast.error('Client ID is required.')
+    const missing = !label.trim() ? 'idp-label' : !clientId.trim() ? 'idp-client-id' : null
+    if (missing) {
+      setTab('connection')
+      toast.error(missing === 'idp-label' ? 'Display name is required.' : 'Client ID is required.')
+      // After the tab has painted, or the field is not in the document yet.
+      requestAnimationFrame(() => document.getElementById(missing)?.focus())
       return
     }
     // A claim mapping with no rules and no sign-in sync does nothing, so persist
@@ -322,176 +329,188 @@ export function ProviderEditor({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="space-y-6 px-6 py-5">
-            {/* Display name */}
-            <div className="space-y-2">
-              <Label htmlFor="idp-label">Display name</Label>
-              <Input
-                id="idp-label"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="Acme SSO"
-                disabled={saving}
-              />
-              {label.trim() && (
-                <p className="text-xs text-muted-foreground">
-                  Button reads: &ldquo;Sign in with {label.trim()}&rdquo;
-                </p>
-              )}
-            </div>
+        <Tabs value={tab} onValueChange={setTab} className="flex flex-1 min-h-0 flex-col gap-0">
+          <TabsList className="mx-6 mt-3 w-auto self-start">
+            <TabsTrigger value="connection">Connection</TabsTrigger>
+            <TabsTrigger value="signin">Sign-in</TabsTrigger>
+            <TabsTrigger value="accounts">Accounts</TabsTrigger>
+          </TabsList>
 
-            {/* Identity provider picker + discovery */}
-            <div className="space-y-3">
-              <Label>Identity provider</Label>
-              <RadioGroup
-                value={kind}
-                onValueChange={(v) => {
-                  const next = v as IdpKind
-                  setKind(next)
-                  // Fixed-discovery kinds (Google) have no shortcut input — seed
-                  // the canonical URL now so the saved row is well-formed without
-                  // a render-time state write.
-                  const def = getIdpShortcut(next)
-                  if (next !== 'other' && def.fields.length === 0) {
-                    const url = def.build({})
-                    if (url) setDiscoveryUrl(url)
-                  }
-                }}
-                className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
-              >
-                {IDP_KIND_OPTIONS.map((k) => (
-                  <RadioGroupPrimitive.Item
-                    key={k}
-                    value={k}
-                    id={`idp-kind-${k}`}
-                    disabled={saving}
-                    className={cn(
-                      'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
-                      'hover:border-border hover:bg-accent/40',
-                      'focus-visible:ring-2 focus-visible:ring-ring/50',
-                      'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
-                      'disabled:cursor-not-allowed disabled:opacity-60'
-                    )}
-                  >
-                    <IdpLogo
-                      kind={k}
-                      className="h-8 w-8 shrink-0"
-                      iconClassName="h-[18px] w-[18px]"
-                    />
-                    <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
-                  </RadioGroupPrimitive.Item>
-                ))}
-              </RadioGroup>
-              <IdpDiscoveryFields
-                kind={kind}
-                discoveryUrl={discoveryUrl}
-                disabled={saving}
-                onChange={setDiscoveryUrl}
-              />
-              {kind === 'other' && (
-                <ManualEndpointsSection
-                  values={manual}
+          <ScrollArea className="flex-1 min-h-0">
+            <TabsContent value="connection" className="space-y-6 px-6 py-5">
+              {/* Display name */}
+              <div className="space-y-2">
+                <Label htmlFor="idp-label">Display name</Label>
+                <Input
+                  id="idp-label"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="Acme SSO"
                   disabled={saving}
-                  onChange={(patch) => setManual((m) => ({ ...m, ...patch }))}
                 />
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="idp-client-id">Client ID</Label>
-              <Input
-                id="idp-client-id"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="idp-client-secret">Client secret</Label>
-              <Input
-                id="idp-client-secret"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                value={secretDraft}
-                onChange={(e) => setSecretDraft(e.target.value)}
-                placeholder={provider ? 'Leave blank to keep the current secret' : ''}
-                disabled={saving}
-              />
-            </div>
-
-            <AdvancedSection
-              scopes={scopes}
-              prompt={prompt}
-              tokenAuth={tokenAuth}
-              discoveryUrl={discoveryUrl}
-              disabled={saving}
-              onChange={setScopes}
-              onPromptChange={setPrompt}
-              onTokenAuthChange={setTokenAuth}
-            />
-
-            <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
-
-            {/* Connection test — the capstone of the connection block. A
-              successful test validates discovery + credentials + the registered
-              redirect URI, and is the precondition that unlocks enforcement. */}
-            <ConnectionTestRow
-              provider={provider}
-              registrationId={registrationId}
-              disabled={saving}
-            />
-
-            {/* Domains */}
-            <DomainsSection provider={provider} disabled={saving} />
-
-            {/* Visibility — the single switch for whether this provider shows a
-              public sign-in button. Off hides it: a routed provider (verified
-              domain) stays email-routed only; a domain-less provider is parked
-              until the toggle is turned back on. */}
-            <div className="space-y-2 border-t border-border/40 pt-5">
-              <Label className="font-medium">Visibility</Label>
-              <label className="flex items-start gap-2 text-sm">
-                <Checkbox
-                  checked={showButton}
-                  onCheckedChange={(v) => setShowButton(v === true)}
-                  disabled={saving}
-                  aria-label="Show a sign-in button"
-                  className="mt-0.5"
-                />
-                <span>
-                  Show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {hasVerifiedDomain
-                      ? 'Off keeps it email-routed only: people at a verified domain are sent here, with no public button.'
-                      : 'Off hides it from the sign-in screen entirely.'}
-                  </span>
-                </span>
-              </label>
-            </div>
-
-            {/* Provisioning */}
-            <div className="space-y-4 border-t border-border/40 pt-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <Label className="font-medium">Auto-create accounts on first sign-in</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Create an account the first time someone signs in through this provider.
+                {label.trim() && (
+                  <p className="text-xs text-muted-foreground">
+                    Button reads: &ldquo;Sign in with {label.trim()}&rdquo;
                   </p>
-                </div>
-                <Switch
-                  checked={autoCreateUsers}
-                  onCheckedChange={setAutoCreateUsers}
+                )}
+              </div>
+
+              {/* Identity provider picker + discovery */}
+              <div className="space-y-3">
+                <Label>Identity provider</Label>
+                <RadioGroup
+                  value={kind}
+                  onValueChange={(v) => {
+                    const next = v as IdpKind
+                    setKind(next)
+                    // Fixed-discovery kinds (Google) have no shortcut input — seed
+                    // the canonical URL now so the saved row is well-formed without
+                    // a render-time state write.
+                    const def = getIdpShortcut(next)
+                    if (next !== 'other' && def.fields.length === 0) {
+                      const url = def.build({})
+                      if (url) setDiscoveryUrl(url)
+                    }
+                  }}
+                  className="grid grid-cols-2 gap-2.5 sm:grid-cols-3"
+                >
+                  {IDP_KIND_OPTIONS.map((k) => (
+                    <RadioGroupPrimitive.Item
+                      key={k}
+                      value={k}
+                      id={`idp-kind-${k}`}
+                      disabled={saving}
+                      className={cn(
+                        'flex items-center gap-2.5 rounded-lg border border-border/50 bg-card p-3 text-left shadow-sm outline-none transition-all',
+                        'hover:border-border hover:bg-accent/40',
+                        'focus-visible:ring-2 focus-visible:ring-ring/50',
+                        'data-[state=checked]:border-primary data-[state=checked]:ring-2 data-[state=checked]:ring-primary/30',
+                        'disabled:cursor-not-allowed disabled:opacity-60'
+                      )}
+                    >
+                      <IdpLogo
+                        kind={k}
+                        className="h-8 w-8 shrink-0"
+                        iconClassName="h-[18px] w-[18px]"
+                      />
+                      <span className="truncate text-sm font-medium">{IDP_KIND_NAMES[k]}</span>
+                    </RadioGroupPrimitive.Item>
+                  ))}
+                </RadioGroup>
+                <IdpDiscoveryFields
+                  kind={kind}
+                  discoveryUrl={discoveryUrl}
                   disabled={saving}
-                  aria-label="Auto-create accounts on first sign-in"
-                  className="mt-0.5 shrink-0"
+                  onChange={setDiscoveryUrl}
+                />
+                {kind === 'other' && (
+                  <ManualEndpointsSection
+                    values={manual}
+                    disabled={saving}
+                    onChange={(patch) => setManual((m) => ({ ...m, ...patch }))}
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="idp-client-id">Client ID</Label>
+                <Input
+                  id="idp-client-id"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  disabled={saving}
                 />
               </div>
 
-              {autoCreateUsers && (
-                <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="idp-client-secret">Client secret</Label>
+                <Input
+                  id="idp-client-secret"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={secretDraft}
+                  onChange={(e) => setSecretDraft(e.target.value)}
+                  placeholder={provider ? 'Leave blank to keep the current secret' : ''}
+                  disabled={saving}
+                />
+              </div>
+
+              <AdvancedSection
+                scopes={scopes}
+                prompt={prompt}
+                tokenAuth={tokenAuth}
+                discoveryUrl={discoveryUrl}
+                disabled={saving}
+                onChange={setScopes}
+                onPromptChange={setPrompt}
+                onTokenAuthChange={setTokenAuth}
+              />
+
+              <RedirectUriCallout uri={redirectUriFor(baseUrl, registrationId)} />
+
+              {/* Connection test — the capstone of the connection block. A
+              successful test validates discovery + credentials + the registered
+              redirect URI, and is the precondition that unlocks enforcement. */}
+              <ConnectionTestRow
+                provider={provider}
+                registrationId={registrationId}
+                disabled={saving}
+              />
+            </TabsContent>
+
+            <TabsContent value="signin" className="space-y-6 px-6 py-5">
+              {/* Domains */}
+              <DomainsSection provider={provider} disabled={saving} />
+
+              {/* Visibility — the single switch for whether this provider shows a
+              public sign-in button. Off hides it: a routed provider (verified
+              domain) stays email-routed only; a domain-less provider is parked
+              until the toggle is turned back on. */}
+              <div className="space-y-2 border-t border-border/40 pt-5">
+                <Label className="font-medium">Visibility</Label>
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    checked={showButton}
+                    onCheckedChange={(v) => setShowButton(v === true)}
+                    disabled={saving}
+                    aria-label="Show a sign-in button"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Show a &ldquo;Sign in with {label.trim() || 'this provider'}&rdquo; button
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {hasVerifiedDomain
+                        ? 'Off keeps it email-routed only: people at a verified domain are sent here, with no public button.'
+                        : 'Off hides it from the sign-in screen entirely.'}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="accounts" className="space-y-6 px-6 py-5">
+              {/* Provisioning */}
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <Label className="font-medium">Auto-create accounts on first sign-in</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Create an account the first time someone signs in through this provider.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={autoCreateUsers}
+                    onCheckedChange={setAutoCreateUsers}
+                    disabled={saving}
+                    aria-label="Auto-create accounts on first sign-in"
+                    className="mt-0.5 shrink-0"
+                  />
+                </div>
+
+                {/* Default role genuinely only applies to accounts being created,
+                so it is the one thing that belongs under this toggle. */}
+                {autoCreateUsers && (
                   <div className="space-y-2">
                     <Label htmlFor="idp-default-role" className="font-medium">
                       Default role
@@ -515,22 +534,36 @@ export function ProviderEditor({
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      New users get this role unless a rule below matches one of their claims.
+                      New users get this role unless a rule in Role from claims matches.
                     </p>
                   </div>
+                )}
+              </div>
 
-                  <ClaimMappingEditor
-                    mapping={mapping}
-                    disabled={saving}
-                    registrationId={registrationId}
-                    canTest={!!provider}
-                    onChange={setMapping}
-                  />
+              {/* Claim mapping sits OUTSIDE the provisioning toggle on purpose.
+              Identity resolution runs on every sign-in, including for people
+              who already have accounts, so hiding its configuration behind
+              "create accounts for new people" hides a live control. */}
+              <div className="space-y-3 rounded-md border border-border/50 p-4">
+                <div>
+                  <Label className="font-medium">Claim mapping</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    How Quackback reads this provider. Identity fields apply on every sign-in,
+                    including for people who already have accounts.
+                  </p>
                 </div>
-              )}
-            </div>
-          </div>
-        </ScrollArea>
+
+                <ClaimMappingEditor
+                  mapping={mapping}
+                  disabled={saving}
+                  registrationId={registrationId}
+                  canTest={!!provider}
+                  onChange={setMapping}
+                />
+              </div>
+            </TabsContent>
+          </ScrollArea>
+        </Tabs>
 
         <DialogFooter className="shrink-0 items-center border-t border-border/50 px-6 py-4 sm:justify-between">
           {provider ? (

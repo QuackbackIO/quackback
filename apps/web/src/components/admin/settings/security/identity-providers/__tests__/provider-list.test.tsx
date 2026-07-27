@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
@@ -184,9 +185,11 @@ describe('<IdentityProvidersSection>', () => {
     renderSection()
     fireEvent.click(screen.getByRole('button', { name: /edit customer login/i }))
     expect(await screen.findByText(/edit identity provider/i)).toBeInTheDocument()
+    // Domains and visibility are both routing decisions and live on Sign-in.
+    await userEvent.click(screen.getByRole('tab', { name: 'Sign-in' }))
     // The visibility toggle is always available so the admin can hide the
     // button even without a verified domain.
-    expect(screen.getByLabelText(/show a sign-in button/i)).toBeInTheDocument()
+    expect(await screen.findByLabelText(/show a sign-in button/i)).toBeInTheDocument()
     // Enforcement is domain-scoped, so it stays hidden without a verified domain.
     expect(screen.queryByLabelText(/require sso/i)).toBeNull()
   })
@@ -194,6 +197,7 @@ describe('<IdentityProvidersSection>', () => {
   it('shows the visibility toggle and enforcement control for a verified-domain provider', async () => {
     renderSection()
     fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Sign-in' }))
     expect(await screen.findByLabelText(/show a sign-in button/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/require sso for acme\.com/i)).toBeInTheDocument()
   })

@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
@@ -125,6 +126,14 @@ function renderEditor(provider: IdentityProvider) {
   )
 }
 
+/**
+ * The editor is tabbed and inactive panels are unmounted, so anything outside
+ * Connection has to be navigated to exactly as an admin would.
+ */
+async function openTab(name: 'Connection' | 'Sign-in' | 'Accounts') {
+  await userEvent.click(screen.getByRole('tab', { name }))
+}
+
 beforeEach(() => {
   upsertSpy.mockClear()
   discoveryScopesSpy.mockClear()
@@ -133,10 +142,11 @@ beforeEach(() => {
 })
 
 describe('<ProviderEditor> provisioning consolidation', () => {
-  it('shows a single Default role and a collapsed group-mapping disclosure when no rules', () => {
+  it('shows a single Default role and a collapsed group-mapping disclosure when no rules', async () => {
     renderEditor(
       makeProvider({ autoCreateUsers: true, autoProvisionRole: 'user', claimMapping: null })
     )
+    await openTab('Accounts')
     // One default-role control, bound to autoProvisionRole.
     expect(screen.getByLabelText('Default role')).toBeInTheDocument()
     // The claim-mapping section is present but the rules are collapsed.
@@ -148,10 +158,15 @@ describe('<ProviderEditor> provisioning consolidation', () => {
     expect(screen.queryByText('No rules. Everyone gets the default role.')).not.toBeInTheDocument()
   })
 
-  it('hides the role controls entirely when auto-create is off', () => {
+  it('keeps claim mapping reachable when auto-create is off', async () => {
+    // Only the default role is creation-only. Identity resolution runs on every
+    // sign-in, including for people who already have accounts, so hiding its
+    // configuration behind "create accounts for new people" would hide a live
+    // control from exactly the workspaces most likely to need it.
     renderEditor(makeProvider({ autoCreateUsers: false }))
+    await openTab('Accounts')
     expect(screen.queryByLabelText('Default role')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Map roles from claims/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Map roles from claims/ })).toBeInTheDocument()
   })
 
   it('persists claimMapping=null when saved with no rules and sync off', async () => {
@@ -220,12 +235,13 @@ describe('<ProviderEditor> connection-test status', () => {
 })
 
 describe('<ProviderEditor> claim-mapping autocomplete', () => {
-  it('names the observed claims inline and drops the old assist block', () => {
+  it('names the observed claims inline and drops the old assist block', async () => {
     ssoTestRef.current = {
       registrationId: 'oidc_x', // matches makeProvider().registrationId
       allClaims: { groups: ['11111111-2222'], roles: ['admin'] },
     }
     renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
+    await openTab('Accounts')
     // Inline hint names the observed claims (disclosure auto-opens on suggestions).
     expect(screen.getByText('From your test sign-in: groups, roles')).toBeInTheDocument()
     // The old batch-add block's caption is gone.
@@ -234,9 +250,10 @@ describe('<ProviderEditor> claim-mapping autocomplete', () => {
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toBeInTheDocument()
   })
 
-  it('auto-fills the claim path when the test returned exactly one array claim', () => {
+  it('auto-fills the claim path when the test returned exactly one array claim', async () => {
     ssoTestRef.current = { registrationId: 'oidc_x', allClaims: { roles: ['admin'] } }
     renderEditor(makeProvider({ autoCreateUsers: true, claimMapping: null }))
+    await openTab('Accounts')
     expect(screen.getByRole('combobox', { name: 'Claim path' })).toHaveTextContent('roles')
   })
 
