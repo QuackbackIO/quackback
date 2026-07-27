@@ -34,6 +34,7 @@ import { AUTH_CREDENTIAL_PREFIX } from '@/lib/server/auth/auth-providers'
 import { verifiedDomainCount, shouldRenderPublicButton } from '@/lib/server/auth/provider-ids'
 import type { VerifiedDomain } from './settings.types'
 import { invalidateSettingsCache, wrapDbError } from './settings.helpers'
+import { ValidationError } from '@/lib/shared/errors'
 
 const log = logger.child({ component: 'identity-providers' })
 
@@ -473,6 +474,32 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
     const { bumpAuthConfigVersionInTx } = await import('@/lib/server/auth/config-version')
 
     const deleted = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ registrationId: identityProvider.registrationId })
+        .from(identityProvider)
+        .where(eq(identityProvider.id, id))
+      if (!existing) return null
+
+      // Refuse while identities still reference it. Deletion removes the row
+      // and its credential but leaves `account` rows carrying the old
+      // registrationId, and registrationId is immutable on update — so
+      // delete-and-recreate is the natural admin move for changing one, and it
+      // silently orphans every identity. A real-email provider papers over it
+      // by re-linking on address match; a placeholder-address provider has no
+      // shared key at all, so its people come back as brand-new accounts and
+      // lose their votes, roles and conversations with no way back.
+      const { account, count } = await import('@/lib/server/db')
+      const [{ n }] = await tx
+        .select({ n: count() })
+        .from(account)
+        .where(eq(account.providerId, existing.registrationId))
+      if (n > 0) {
+        throw new ValidationError(
+          'PROVIDER_HAS_ACCOUNTS',
+          `${n} ${n === 1 ? 'person signs' : 'people sign'} in through this provider. Removing it would orphan ${n === 1 ? 'their account' : 'their accounts'}. Disable it instead, or remove those accounts first.`
+        )
+      }
+
       const [row] = await tx
         .delete(identityProvider)
         .where(eq(identityProvider.id, id))
@@ -488,6 +515,9 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
     // the trailing resetAuth() + cache invalidation for the whole delete.
     await deletePlatformCredentials(`${AUTH_CREDENTIAL_PREFIX}${deleted.registrationId}`)
   } catch (error) {
+    // A refusal is a decision, not a database fault — let it through intact so
+    // the admin sees why rather than a generic write error.
+    if (error instanceof ValidationError) throw error
     log.error({ err: error }, 'delete identity provider failed')
     wrapDbError('delete identity provider', error)
   }
