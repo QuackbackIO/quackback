@@ -34,6 +34,17 @@ vi.mock('@/lib/server/audit/log', () => ({
   recordAuditEvent: (spec: unknown) => mockRecordAuditEvent(spec),
 }))
 
+// The alert is account-class, so the recipient is looked up by id rather than
+// read off the session — the session's address would be the synthetic
+// placeholder for anyone whose provider releases no email.
+vi.mock('@/lib/server/db', async (orig) => {
+  const actual = await orig<typeof import('@/lib/server/db')>()
+  return {
+    ...actual,
+    db: { query: { user: { findFirst: vi.fn(async () => ({ email: 'a@b.com' })) } } },
+  }
+})
+
 vi.mock('@tanstack/react-start/server', () => ({
   getRequestHeaders: () =>
     new Headers({ 'user-agent': 'Mozilla/5.0 Test', 'x-forwarded-for': '203.0.113.42' }),
@@ -154,5 +165,25 @@ describe('handleNewDeviceNotification — failure tolerance', () => {
 
     expect(mockForgetDevice).toHaveBeenCalled()
     expect(mockMarkDeviceSeen).not.toHaveBeenCalled()
+  })
+})
+
+describe('handleNewDeviceNotification — account with no deliverable address', () => {
+  it('sends no alert, but still audits and marks the device seen', async () => {
+    // Someone whose provider releases no email carries a placeholder. The alert
+    // discloses IP, user agent and sign-in timing, so it must not fall back to
+    // a contact address an agent may have typed. Marking the device seen still
+    // has to happen, or every later sign-in retries a send that can never work.
+    mockIsDeviceUnseen.mockResolvedValueOnce(true)
+    const { db } = await import('@/lib/server/db')
+    vi.mocked(db.query.user.findFirst).mockResolvedValueOnce({
+      email: 'sso-oidc-abc-deadbeef@anon.quackback.io',
+    } as never)
+
+    await handleNewDeviceNotification(buildCtx(), tenant())
+
+    expect(mockSendNewSignInEmail).not.toHaveBeenCalled()
+    expect(mockRecordAuditEvent).toHaveBeenCalled()
+    expect(mockMarkDeviceSeen).toHaveBeenCalled()
   })
 })

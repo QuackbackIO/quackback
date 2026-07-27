@@ -72,6 +72,17 @@ const DYNAMIC_PERMISSION = (
 ): Classification => ({ intent: 'DYNAMIC_PERMISSION', resolvesToAny, why })
 
 export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
+  // Anyone signed in acts only on their OWN address here: the principal comes
+  // from the session, never from the request, so there is no object whose
+  // visibility could be checked and no permission that would mean anything.
+  // Abuse is bounded by the rate limiter rather than by authorization, because
+  // the risk is mailing a stranger, not reading someone else's data.
+  'lib/server/functions/contact-email.ts::requestContactEmailFn': END_USER(
+    'signed-in person supplying their own address; principal comes from the session'
+  ),
+  'lib/server/functions/contact-email.ts::getContactEmailStatusFn': END_USER(
+    'reads only whether the caller has an address on file'
+  ),
   // Assistant proposals are item-scoped after authentication. Reads/rejections
   // require visibility of the concrete parent; approval additionally checks
   // every permission declared by the current Writer tool specification.

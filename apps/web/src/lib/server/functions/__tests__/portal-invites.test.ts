@@ -177,6 +177,7 @@ beforeEach(async () => {
   hoisted.mockMintMagicLinkUrl.mockResolvedValue({
     url: 'https://acme.example.com/verify-magic-link?token=abc',
     token: 'tok_new',
+    sealedAddress: 'invitee@example.com',
   })
   hoisted.mockRevokeMagicLinkToken.mockResolvedValue(undefined)
   hoisted.mockRevokeMagicLinkTokens.mockResolvedValue(undefined)
@@ -381,6 +382,7 @@ describe('getPortalInviteLinkFn', () => {
     hoisted.mockMintMagicLinkUrl.mockResolvedValue({
       url: 'https://acme.example.com/verify-magic-link?token=xyz',
       token: 'tok_xyz',
+      sealedAddress: 'invitee@example.com',
     })
 
     const result = await getLinkHandler({ data: { inviteId: 'invite_abc' } })

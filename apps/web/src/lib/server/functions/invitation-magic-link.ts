@@ -29,7 +29,7 @@ export async function generateInvitationMagicLink(
   email: string,
   callbackPath: string,
   portalUrl: string
-): Promise<{ url: string; token: string }> {
+): Promise<{ url: string; token: string; sealedAddress: string }> {
   log.debug({ callback_path: callbackPath }, 'generate invitation magic link')
   const { mintMagicLinkUrl } = await import('@/lib/server/auth/magic-link-mint')
   return mintMagicLinkUrl({

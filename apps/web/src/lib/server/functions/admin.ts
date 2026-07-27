@@ -1060,11 +1060,8 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
     // fixed above, so the callback path is already known.
     const portalUrl = getBaseUrl()
     const callbackURL = `/complete-signup/${invitationId}`
-    const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
-      email,
-      callbackURL,
-      portalUrl
-    )
+    const minted = await generateInvitationMagicLink(email, callbackURL, portalUrl)
+    const { url: inviteLink, token: magicLinkToken } = minted
 
     await db.insert(invitation).values({
       id: invitationId,
@@ -1082,8 +1079,10 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
 
     const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-    const result = await sendInvitationEmail({
-      to: email,
+    // Sealed class: the invitee has no account yet, so the address the token
+    // was minted for is the only correct recipient.
+    const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+    const result = await mailSecure(sendInvitationEmail, sealedRecipient(minted), {
       invitedByName: auth.user.name,
       inviteeName: data.name || undefined,
       workspaceName: auth.settings.name,
@@ -1211,11 +1210,8 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
     // send below fails or the worker restarts, cancellation still revokes it.
     const portalUrl = getBaseUrl()
     const callbackURL = `/complete-signup/${invitationId}`
-    const { url: inviteLink, token: magicLinkToken } = await generateInvitationMagicLink(
-      invitationRecord.email,
-      callbackURL,
-      portalUrl
-    )
+    const minted = await generateInvitationMagicLink(invitationRecord.email, callbackURL, portalUrl)
+    const { url: inviteLink, token: magicLinkToken } = minted
 
     const { revokeMagicLinkToken } = await import('@/lib/server/auth/magic-link-mint')
     if (!(await appendInviteMagicLinkToken(invitationId, magicLinkToken))) {
@@ -1227,8 +1223,8 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
     let result: Awaited<ReturnType<typeof sendInvitationEmail>>
     try {
-      result = await sendInvitationEmail({
-        to: invitationRecord.email,
+      const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+      result = await mailSecure(sendInvitationEmail, sealedRecipient(minted), {
         invitedByName: auth.user.name,
         inviteeName: invitationRecord.name || undefined,
         workspaceName: auth.settings.name,

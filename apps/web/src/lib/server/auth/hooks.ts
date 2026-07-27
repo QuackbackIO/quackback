@@ -20,6 +20,7 @@
  */
 
 import { APIError, createAuthMiddleware } from 'better-auth/api'
+import type { UserId } from '@quackback/ids'
 import type { Role } from '@/lib/shared/roles'
 import {
   findProviderForDomainEmail,
@@ -1136,16 +1137,27 @@ export async function handleNewDeviceNotification(
   try {
     const { sendNewSignInEmail } = await import('@quackback/email')
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
+    const { resolveAccountRecipient, mailSecure } = await import('@/lib/server/email/recipient')
     const occurredAt = new Date().toISOString()
+    // Account class, and deliberately no contact-address fallback: this alert
+    // discloses IP, user agent and sign-in timing, and a contact address can be
+    // one an agent typed into the inbox. An account with no deliverable address
+    // simply does not get the alert. The audit row and markDeviceSeen still run,
+    // or every subsequent sign-in would retry a send that can never succeed.
+    const to = await resolveAccountRecipient(userId as UserId)
+    if (!to) {
+      log.warn({ user_id: userId }, 'new-device alert skipped: no deliverable account address')
+    }
     await Promise.all([
-      sendNewSignInEmail({
-        to: email,
-        workspaceName: tenant?.name,
-        occurredAt,
-        ipAddress: ip,
-        userAgent,
-        logoUrl: tenant?.brandingData?.logoUrl ?? undefined,
-      }),
+      to
+        ? mailSecure(sendNewSignInEmail, to, {
+            workspaceName: tenant?.name,
+            occurredAt,
+            ipAddress: ip,
+            userAgent,
+            logoUrl: tenant?.brandingData?.logoUrl ?? undefined,
+          })
+        : Promise.resolve(),
       recordAuditEvent({
         event: 'auth.signin.new_device',
         outcome: 'success',

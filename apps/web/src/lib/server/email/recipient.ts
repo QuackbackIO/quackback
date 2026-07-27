@@ -71,6 +71,13 @@ export async function resolveAccountRecipient(userId: UserId): Promise<AccountEm
  * redeemed, or worse, somewhere it can.
  */
 export function sealedRecipient(minted: { sealedAddress: string }): SealedEmail {
+  // Throw rather than hand back undefined. A missing seal means the caller
+  // passed something that is not a mint result, and the failure mode of
+  // continuing is mailing a capability to `undefined` — which the transport
+  // would reject, but only after the token is already live and unreachable.
+  if (!minted?.sealedAddress) {
+    throw new Error('sealedRecipient: mint result carries no sealed address')
+  }
   return minted.sealedAddress as SealedEmail
 }
 

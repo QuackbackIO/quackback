@@ -37,7 +37,7 @@ export async function requestEmailSignin(opts: {
     ? '/auth/login?callbackUrl=/admin'
     : '/auth/login'
 
-  const [{ url: signInUrl }, , settings] = await Promise.all([
+  const [minted, , settings] = await Promise.all([
     mintMagicLinkUrl({
       email: opts.email,
       callbackPath: opts.callbackURL,
@@ -59,9 +59,13 @@ export async function requestEmailSignin(opts: {
     return
   }
 
-  await sendMagicLinkEmail({
-    to: opts.email,
-    signInUrl,
+  // Sealed class: mail the address the verification row was minted for, not the
+  // request string. There is no account to look up — this may be a signup — so
+  // "the address IS the claim" is the only rule available, and it is a stronger
+  // one than a lookup would give.
+  const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+  await mailSecure(sendMagicLinkEmail, sealedRecipient(minted), {
+    signInUrl: minted.url,
     code: otp,
     logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
   })

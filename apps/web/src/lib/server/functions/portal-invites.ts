@@ -70,7 +70,7 @@ async function mintPortalInviteMagicLink(
   // Copy-link passes the invite's *remaining* lifetime so a re-minted token
   // can't outlive the invite row it belongs to.
   expiresInSeconds: number = PORTAL_INVITE_MAGIC_LINK_TTL_SECONDS
-): Promise<{ url: string; token: string }> {
+): Promise<{ url: string; token: string; sealedAddress: string }> {
   const { mintMagicLinkUrl } = await import('@/lib/server/auth/magic-link-mint')
   return mintMagicLinkUrl({
     email,
@@ -143,11 +143,8 @@ async function sendOnePortalInvite({
   // (cancel revokes every token in the set). inviteId is fixed above, so the
   // callback path is known.
   const portalUrl = getBaseUrl()
-  const { url: inviteLink, token: magicLinkToken } = await mintPortalInviteMagicLink(
-    email,
-    inviteId,
-    portalUrl
-  )
+  const minted = await mintPortalInviteMagicLink(email, inviteId, portalUrl)
+  const { url: inviteLink, token: magicLinkToken } = minted
 
   await db.insert(invitation).values({
     id: inviteId,
@@ -165,8 +162,9 @@ async function sendOnePortalInvite({
 
   const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
   const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
-  await sendPortalInviteEmail({
-    to: email,
+  // Sealed class: no account exists for the invitee.
+  const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+  await mailSecure(sendPortalInviteEmail, sealedRecipient(minted), {
     workspaceName: auth.settings.name,
     inviteLink,
     logoUrl,
@@ -391,11 +389,8 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     }
 
     const portalUrl = getBaseUrl()
-    const { url: inviteLink, token: magicLinkToken } = await mintPortalInviteMagicLink(
-      inv.email,
-      inviteId,
-      portalUrl
-    )
+    const minted = await mintPortalInviteMagicLink(inv.email, inviteId, portalUrl)
+    const { url: inviteLink, token: magicLinkToken } = minted
 
     // Add the new token to the invite's set (resend is additive — prior links
     // keep working until accept/cancel/expiry). Recorded the moment it's minted,
@@ -410,8 +405,8 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
     let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
     try {
-      result = await sendPortalInviteEmail({
-        to: inv.email,
+      const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+      result = await mailSecure(sendPortalInviteEmail, sealedRecipient(minted), {
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,
