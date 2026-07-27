@@ -37,12 +37,16 @@ export function redactLogArgs(args: readonly unknown[]): unknown[] {
 }
 
 /**
- * Build the `logger` option for `betterAuth({...})`. `level: 'debug'` lets the
- * library hand everything over; the sink decides what is actually persisted.
+ * Build the `logger` option for `betterAuth({...})`.
+ *
+ * `level` defaults to `info` rather than `debug` on purpose: the library filters
+ * by this before calling back, and redaction allocates. Asking for debug would
+ * pay that cost on every internal trace only for pino to discard the record,
+ * since production runs at info. Pass a level explicitly to widen it.
  */
-export function createAuthLogger(sink: LogSink) {
+export function createAuthLogger(sink: LogSink, level: AuthLogLevel = 'info') {
   return {
-    level: 'debug' as const,
+    level,
     disableColors: true,
     log: (level: AuthLogLevel, message: string, ...args: unknown[]) => {
       const write = sink[level] ?? sink.info

@@ -27,6 +27,7 @@ import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/err
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { PERMISSIONS } from '@/lib/shared/permissions'
+import { diffProviderAudit } from '@/lib/server/auth/idp-audit-diff'
 import { requireAuth } from './auth-helpers'
 
 const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${string}`>
@@ -242,7 +243,6 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
     // every field that decides identity resolution — the endpoints, clientId,
     // scopes, the attribute mapping — with no trace, so repointing a claim and
     // then repointing it back produced two identical rows.
-    const { diffProviderAudit } = await import('@/lib/server/auth/idp-audit-diff')
     const { before, after } = diffProviderAudit(prior ?? null, data)
 
     return withAuditEvent(

@@ -18,6 +18,8 @@
  * the safe direction.
  */
 
+import { decodeJwt } from 'jose'
+
 /**
  * Claims from a stored ID token, or `{}` when it is absent, malformed, or
  * expired. `now` is injected so the rule is testable without faking timers.
@@ -28,12 +30,11 @@ export function decodeSsoClaims(
 ): Record<string, unknown> {
   if (!idToken) return {}
 
-  const parts = idToken.split('.')
-  if (parts.length !== 3) return {}
-
+  // jose's unverified-decode primitive, already the repo's tool for this in
+  // sso-test-handshake.ts. It owns the segment parsing and its edge cases.
   let payload: unknown
   try {
-    payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'))
+    payload = decodeJwt(idToken)
   } catch {
     return {}
   }

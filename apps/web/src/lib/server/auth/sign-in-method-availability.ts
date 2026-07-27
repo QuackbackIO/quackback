@@ -85,8 +85,9 @@ export function isSsoOnlySignIn(snap: WorkingMethodInputs): boolean {
   const anyProviderWorks = snap.tierEnabled && snap.providers.some((p) => p.enabled && p.configured)
   if (!anyProviderWorks) return false
 
-  // No IdP in the picture: if anything still works, it is not SSO-only.
-  return !hasAnyWorkingSignInMethod({ ...snap, tierEnabled: false, providers: [] })
+  // Take the providers out of the picture — matching how isOnlyWorkingSignInMethod
+  // below drops just its target — and ask whether anything else is still a way in.
+  return !hasAnyWorkingSignInMethod({ ...snap, providers: [] })
 }
 
 /**
@@ -174,14 +175,20 @@ export async function wouldLeaveNoWorkingSignInMethod(
 }
 
 /**
- * Would applying `proposedOauth` leave an identity provider as the workspace's
- * only way in? Backs the break-glass precondition on the sign-in methods save,
- * mirroring what per-domain enforcement already demands.
+ * Both sign-in-method verdicts for a proposed config, from ONE snapshot.
+ *
+ * The auth-config save needs both, and `gatherWorkingMethodInputs` runs an
+ * uncached `listIdentityProviders()` — two full-table reads — so asking the two
+ * questions separately doubled that on the normal save path for no reason.
  */
-export async function wouldLeaveSsoOnly(
+export async function evaluateProposedSignInMethods(
   proposedOauth: Record<string, boolean | undefined>
-): Promise<boolean> {
-  return isSsoOnlySignIn(await gatherWorkingMethodInputs(proposedOauth))
+): Promise<{ leavesNoMethod: boolean; leavesSsoOnly: boolean }> {
+  const inputs = await gatherWorkingMethodInputs(proposedOauth)
+  return {
+    leavesNoMethod: !hasAnyWorkingSignInMethod(inputs),
+    leavesSsoOnly: isSsoOnlySignIn(inputs),
+  }
 }
 
 /**

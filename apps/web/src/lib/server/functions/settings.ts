@@ -493,9 +493,12 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
           ...((current?.oauth ?? {}) as Record<string, boolean | undefined>),
           ...data.oauth,
         }
-        const { wouldLeaveNoWorkingSignInMethod, wouldLeaveSsoOnly, assertBreakGlassAvailable } =
+        // Both verdicts from one snapshot — gathering them separately would run
+        // the uncached provider listing twice on every save.
+        const { evaluateProposedSignInMethods, assertBreakGlassAvailable } =
           await import('@/lib/server/auth/sign-in-method-availability')
-        if (await wouldLeaveNoWorkingSignInMethod(proposedOauth)) {
+        const { leavesNoMethod, leavesSsoOnly } = await evaluateProposedSignInMethods(proposedOauth)
+        if (leavesNoMethod) {
           const { ConflictError } = await import('@/lib/shared/errors')
           throw new ConflictError(
             'LAST_SIGN_IN_METHOD',
@@ -505,7 +508,7 @@ export const updateAuthConfigFn = createServerFn({ method: 'POST' })
         // Second route to an SSO-only workspace. Per-domain enforcement already
         // demands a break-glass recovery code; disabling password + magic link
         // here reaches the same end state, so it must demand the same thing.
-        if (await wouldLeaveSsoOnly(proposedOauth)) {
+        if (leavesSsoOnly) {
           await assertBreakGlassAvailable()
         }
       }

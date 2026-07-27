@@ -657,7 +657,7 @@ function AdvancedSection({
     e.preventDefault()
     const next = parseScopes(draft)
     if (next.length === 0) return
-    onChange(parseScopes([...scopes, ...next].join(' ')))
+    onChange([...new Set([...scopes, ...next])])
     setDraft('')
   }
 

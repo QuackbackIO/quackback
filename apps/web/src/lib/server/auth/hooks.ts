@@ -44,6 +44,7 @@ import {
   markDeviceSeen,
 } from './signin-device-tracker'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
+import { decodeSsoClaims } from './sso-claims-decode'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -661,7 +662,6 @@ async function readSsoClaims(
 
   // Refuses an expired token; see sso-claims-decode.ts for why freshness is
   // the property that matters when the signature is not verified.
-  const { decodeSsoClaims } = await import('./sso-claims-decode')
   return decodeSsoClaims(row?.idToken)
 }
 
@@ -964,45 +964,36 @@ export async function handleSignInFailureAudit(ctx: {
   const isOidcCallback = path === OIDC_CALLBACK_PATH
   if (!isCredentialPath && !isMagicLinkPath && !isOidcCallback) return
 
-  if (isOidcCallback) {
-    const sessionCreated =
-      !!ctx.context?.newSession?.user?.id && !!ctx.context?.newSession?.session?.token
-    if (sessionCreated) return
-
-    // No email is recorded. The callback body carries no typed credential, and
-    // any address in play came from the IdP response rather than a user attempt.
-    const { recordAuditEvent } = await import('@/lib/server/audit/log')
-    const { getRequestHeaders } = await import('@tanstack/react-start/server')
-    try {
-      await recordAuditEvent({
-        event: 'auth.signin.failed',
-        outcome: 'failure',
-        actor: { email: null, type: 'user', authMethod: 'sso' },
-        headers: getRequestHeaders(),
-        metadata: {
-          reason: oidcFailureReason(ctx.context?.returned) ?? 'OIDC_SIGNIN_FAILED',
-          providerId: typeof ctx.params?.providerId === 'string' ? ctx.params.providerId : null,
-        },
-      })
-    } catch (err) {
-      log.error({ err }, 'OIDC sign-in failure audit emit failed')
-    }
-    return
-  }
-
   // If a session was actually created, the success audit handles it.
   const sessionCreated =
     !!ctx.context?.newSession?.user?.id && !!ctx.context?.newSession?.session?.token
   if (sessionCreated) return
 
-  // Extract the attempted email. Never log passwords, tokens, or other
-  // credential material — only the email address + stable reason code.
-  // token? is intentionally not destructured — PII guard: never read magic-link tokens
-  const body = ctx.body as { email?: unknown; token?: unknown } | undefined
-  const attemptedEmail = typeof body?.email === 'string' ? body.email : null
+  // Each path shape contributes only its actor + reason; the emit tail below is
+  // shared so a change to it (a retry, a new field, the log level) lands once.
+  let actor: { email: string | null; type: 'user'; authMethod: 'sso' | 'magic_link' | 'password' }
+  let metadata: Record<string, unknown>
 
-  const reason = isMagicLinkPath ? 'INVALID_MAGIC_LINK' : 'INVALID_CREDENTIALS'
-  const authMethod = isMagicLinkPath ? 'magic_link' : ('password' as const)
+  if (isOidcCallback) {
+    // No email is recorded. The callback body carries no typed credential, and
+    // any address in play came from the IdP response rather than a user attempt.
+    actor = { email: null, type: 'user', authMethod: 'sso' }
+    metadata = {
+      reason: oidcFailureReason(ctx.context?.returned) ?? 'OIDC_SIGNIN_FAILED',
+      providerId: typeof ctx.params?.providerId === 'string' ? ctx.params.providerId : null,
+    }
+  } else {
+    // Never log passwords, tokens, or other credential material — only the
+    // email address + stable reason code.
+    // token? is intentionally not destructured — PII guard: never read magic-link tokens
+    const body = ctx.body as { email?: unknown; token?: unknown } | undefined
+    actor = {
+      email: typeof body?.email === 'string' ? body.email : null,
+      type: 'user',
+      authMethod: isMagicLinkPath ? 'magic_link' : 'password',
+    }
+    metadata = { reason: isMagicLinkPath ? 'INVALID_MAGIC_LINK' : 'INVALID_CREDENTIALS' }
+  }
 
   const { recordAuditEvent } = await import('@/lib/server/audit/log')
   const { getRequestHeaders } = await import('@tanstack/react-start/server')
@@ -1010,9 +1001,9 @@ export async function handleSignInFailureAudit(ctx: {
     await recordAuditEvent({
       event: 'auth.signin.failed',
       outcome: 'failure',
-      actor: { email: attemptedEmail, type: 'user', authMethod },
+      actor,
       headers: getRequestHeaders(),
-      metadata: { reason },
+      metadata,
     })
   } catch (err) {
     // Best-effort — never let an audit failure surface to the user.
