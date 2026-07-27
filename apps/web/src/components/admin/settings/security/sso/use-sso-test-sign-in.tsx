@@ -539,18 +539,15 @@ function TestResultPanel({
             works.
           </div>
         ) : null}
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-            Show IdP response
-          </summary>
-          <pre className="mt-2 overflow-auto rounded bg-muted/30 p-2 font-mono text-[11px]">
-            {JSON.stringify(
-              { claims: result.allClaims ?? result.claims, tokenInfo: result.tokenInfo },
-              null,
-              2
-            )}
-          </pre>
-        </details>
+        <ClaimList
+          claims={result.allClaims ?? result.claims}
+          tokenInfo={result.tokenInfo}
+          bound={{
+            sub: result.claims.sub,
+            email: result.claims.email,
+            name: result.claims.name,
+          }}
+        />
       </div>
     )
   }
@@ -566,5 +563,68 @@ function TestResultPanel({
       <p className="text-xs text-muted-foreground">{result.hint}</p>
       <StepList steps={result.steps} />
     </div>
+  )
+}
+
+/**
+ * The claims the IdP actually returned, rendered rather than dumped as JSON.
+ *
+ * The values an admin needs when a provider will not resolve are which claims
+ * arrived and which one became the account identity — both of which a raw blob
+ * makes them hunt for. Claims already bound to an identity field are marked, so
+ * "no email anywhere" and "an email under a name we did not look for" stop
+ * looking alike.
+ *
+ * Click-to-bind belongs here too, but it needs somewhere to persist the choice;
+ * until the per-provider claim mapping lands this is read-only.
+ */
+function ClaimList({
+  claims,
+  tokenInfo,
+  bound,
+}: {
+  claims: Record<string, unknown>
+  tokenInfo: Record<string, unknown>
+  bound: { sub?: string; email?: string; name?: string }
+}) {
+  const boundFor = (key: string, value: unknown): string | null => {
+    if (key === 'sub' || value === bound.sub) return 'Account ID'
+    if (bound.email !== undefined && value === bound.email) return 'Email'
+    if (bound.name !== undefined && value === bound.name) return 'Name'
+    return null
+  }
+
+  const entries = Object.entries(claims)
+
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+        Show the {entries.length} claims your IdP returned
+      </summary>
+      <div className="mt-2 space-y-1">
+        {entries.map(([key, value]) => {
+          const role = boundFor(key, value)
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-2 rounded border border-border/50 bg-muted/20 px-2 py-1 font-mono text-[11px]"
+            >
+              <span className="min-w-32 shrink-0 text-foreground">{key}</span>
+              <span className="flex-1 truncate text-muted-foreground">
+                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+              </span>
+              {role && (
+                <span className="shrink-0 rounded border border-border px-1.5 text-[11px] text-foreground">
+                  {role}
+                </span>
+              )}
+            </div>
+          )
+        })}
+        <pre className="mt-2 overflow-auto rounded bg-muted/30 p-2 font-mono text-[11px]">
+          {JSON.stringify(tokenInfo, null, 2)}
+        </pre>
+      </div>
+    </details>
   )
 }
