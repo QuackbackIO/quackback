@@ -992,13 +992,13 @@ function ConnectionTestRow({
             </span>
           )}
           {state.kind === 'verified' && (
-            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+            <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-400">
               <CheckCircleIcon className="size-3.5 shrink-0" />
               Verified <TimeAgo date={state.testedAt} />, ready to enforce SSO.
             </span>
           )}
           {state.kind === 'stale' && (
-            <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+            <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400">
               <ClockIcon className="size-3.5 shrink-0" />
               Connection changed since the last test. Re-test to enforce SSO.
             </span>
@@ -1204,9 +1204,9 @@ function DomainRow({
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {isVerified ? (
-            <CheckCircleIcon className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+            <CheckCircleIcon className="h-4 w-4 shrink-0 text-green-700 dark:text-green-400" />
           ) : (
-            <ClockIcon className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <ClockIcon className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
           )}
           <span className="truncate text-sm font-medium">{domain.name}</span>
           <span className="text-xs text-muted-foreground">
