@@ -74,18 +74,29 @@ describe('resolveIdentity — the fast path', () => {
 })
 
 describe('resolveIdentity — subject consistency (OIDC Core 5.3.2)', () => {
-  it('fails when userinfo reports a different subject', async () => {
-    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH)
+  it('fails when userinfo reports a different subject, under enforcement', async () => {
+    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH, { subjectMismatch: 'enforce' })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.reason).toBe('subject_mismatch')
   })
 
-  it('does not adopt any field from a mismatched userinfo response', async () => {
+  it('does not mix the two sources under enforcement', async () => {
     // Quietly preferring one source would let a token-confused IdP bind an
     // attacker-controlled address, which trusted-provider linking matches on.
-    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH)
+    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH, { subjectMismatch: 'enforce' })
     expect(JSON.stringify(result)).not.toContain('attacker@example.com')
+  })
+
+  it('never mixes the two sources while observing either', async () => {
+    // Observing preserves today's behaviour, which is userinfo winning
+    // WHOLESALE — so the ID token's subject must not survive alongside the
+    // userinfo address. A blend of the two is the one outcome never allowed.
+    const result = await resolveWorld(WORLD_SUBJECT_MISMATCH)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.id).toBe('a-different-subject')
+    expect(result.identity.sources.id).toBe('userinfo')
   })
 
   it('does NOT apply the rule to the access token, whose subject may differ', async () => {
@@ -238,10 +249,12 @@ describe('resolveIdentity — account identifier compatibility', () => {
   })
 
   it('compares the subject guard against the same fallback', async () => {
-    // A userinfo doc identified by `id` must still be checked for agreement.
+    // A userinfo doc identified by `id` rather than `sub` must still be checked
+    // for agreement, or the guard could be sidestepped by omitting `sub`.
     const result = await resolveIdentity({
       tokens: { idToken: fakeJwt({ sub: 'from-token' }) },
       fetchUserInfo: async () => ({ id: 'different', email: 'e@x.com', name: 'N' }),
+      subjectMismatch: 'enforce',
     })
     expect(result.ok).toBe(false)
     if (result.ok) return
@@ -257,5 +270,53 @@ describe('resolveIdentity — account identifier compatibility', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.identity.id).toBe('42')
+  })
+})
+
+/**
+ * Observe-then-enforce on the subject guard.
+ *
+ * The guard is a breaking change for exactly the population the cascade
+ * rescues: a provider whose userinfo subject differs from its ID token's works
+ * TODAY, because the existing path discards the ID token and takes userinfo
+ * wholesale. Enforcing on the same release that ships the cascade would turn
+ * that into a total, simultaneous sign-in outage on an upgrade nobody chose,
+ * delivered as an opaque error redirect, with no telemetry to size it first.
+ *
+ * So the default observes: behave as today and report the discrepancy. A later
+ * release flips to enforcing once the real rate is known.
+ */
+describe('resolveIdentity — subject mismatch, observe vs enforce', () => {
+  const mismatched = {
+    tokens: { idToken: fakeJwt({ sub: 'from-token' }), accessToken: 'at' },
+    fetchUserInfo: async () => ({ sub: 'from-userinfo', email: 'e@x.com', name: 'N' }),
+  }
+
+  it('observes by default: resolves as today and flags it', async () => {
+    const result = await resolveIdentity(mismatched)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // Today's behaviour is userinfo winning wholesale, so preserving it means
+    // the userinfo subject is what keys the account.
+    expect(result.identity.id).toBe('from-userinfo')
+    expect(result.identity.email).toBe('e@x.com')
+    expect(result.identity.warnings).toContain('subject_mismatch')
+  })
+
+  it('enforces when asked, refusing to mix the two', async () => {
+    const result = await resolveIdentity({ ...mismatched, subjectMismatch: 'enforce' })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('subject_mismatch')
+  })
+
+  it('reports no warning when the subjects agree', async () => {
+    const result = await resolveIdentity({
+      tokens: { idToken: fakeJwt({ sub: 'same' }), accessToken: 'at' },
+      fetchUserInfo: async () => ({ sub: 'same', email: 'e@x.com', name: 'N' }),
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.identity.warnings ?? []).not.toContain('subject_mismatch')
   })
 })

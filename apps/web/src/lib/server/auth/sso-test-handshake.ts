@@ -413,6 +413,19 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
     })
   }
 
+  // Observed, not enforced. Surfacing it here is how an admin learns about the
+  // discrepancy while sign-in still works, rather than discovering it on the
+  // release that starts refusing.
+  if (identity.warnings?.includes('subject_mismatch')) {
+    steps.push({
+      ok: false,
+      stage: 'claim-check',
+      label: 'Subject mismatch between ID token and userinfo',
+      detail:
+        'OIDC requires these to agree. Sign-in still works today, but a future release will refuse it — raise this with your IdP.',
+    })
+  }
+
   if (!identity.email) {
     return {
       ok: false,

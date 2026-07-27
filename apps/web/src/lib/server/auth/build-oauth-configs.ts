@@ -113,6 +113,9 @@ export interface BuildGenericOAuthConfigsArgs {
   /** Fetches a userinfo document with the bearer token. Injected for the same
    *  reason as `discovery`: the guarded fetch belongs outside this module. */
   fetchUserInfo?: (url: string, accessToken: string) => Promise<Record<string, unknown> | null>
+  /** Called when resolution succeeds but observed a discrepancy. Injected so
+   *  this module needs no audit or DB imports. */
+  onResolutionWarning?: (registrationId: string, warnings: readonly string[]) => void
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   /**
@@ -136,6 +139,7 @@ export async function buildGenericOAuthConfigs({
   tierAllowsOidc,
   discovery,
   fetchUserInfo,
+  onResolutionWarning,
   mapProfileToUser,
   buildLoginHintParams,
 }: BuildGenericOAuthConfigsArgs): Promise<GenericOAuthConfig[]> {
@@ -178,7 +182,14 @@ export async function buildGenericOAuthConfigs({
             : null,
       })
       if (!result.ok) return null
-      const { id, email, name, emailVerified, claims } = result.identity
+      const { id, email, name, emailVerified, claims, warnings } = result.identity
+      // Phase one of observe-then-enforce: the discrepancy is recorded, not
+      // acted on, so the real rate is known before a release starts refusing
+      // sign-ins over it. `onWarning` is injected for the same reason the
+      // fetches are — this module stays free of DB and audit imports.
+      if (warnings?.length && onResolutionWarning) {
+        onResolutionWarning(provider.registrationId, warnings)
+      }
       // Raw claims first, mapped fields last: the mapped values are the
       // resolved answer and must not be shadowed by a same-named raw claim.
       return {

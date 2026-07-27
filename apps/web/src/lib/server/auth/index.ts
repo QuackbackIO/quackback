@@ -156,6 +156,11 @@ async function createAuth() {
     tierAllowsOidc: tierLimits.features.customOidcProvider,
     discovery: (discoveryUrl) => fetchJson(discoveryUrl),
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
+    // Observe-then-enforce: log the discrepancy so its real rate is known
+    // before any release starts refusing sign-ins over it.
+    onResolutionWarning: (registrationId, warnings) => {
+      log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
+    },
     mapProfileToUser: mapProfileClaims,
     buildLoginHintParams,
   })

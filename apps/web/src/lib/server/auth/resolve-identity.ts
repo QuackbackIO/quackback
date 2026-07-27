@@ -41,9 +41,14 @@ export interface ResolvedIdentity {
   /** Every raw claim seen, earlier sources winning. Spread into the profile by
    *  the caller so `mapProfileToUser` still sees what it always did. */
   claims: Record<string, unknown>
+  /** Discrepancies observed but not treated as fatal. */
+  warnings?: ResolveWarning[]
 }
 
 export type ResolveFailure = 'subject_mismatch' | 'no_identity'
+
+/** Non-fatal discrepancies worth surfacing and counting. */
+export type ResolveWarning = 'subject_mismatch'
 
 export type ResolveResult =
   | { ok: true; identity: ResolvedIdentity }
@@ -55,6 +60,12 @@ export interface ResolveIdentityArgs {
    *  from. Injected so the resolver stays pure and testable. */
   fetchUserInfo: () => Promise<Record<string, unknown> | null>
   mapping?: IdentityMapping
+  /**
+   * What to do when userinfo reports a different subject from the ID token.
+   * Defaults to observing, so the release that introduces the check does not
+   * also break every provider currently relying on the old behaviour.
+   */
+  subjectMismatch?: 'observe' | 'enforce'
 }
 
 /**
@@ -100,6 +111,7 @@ export async function resolveIdentity({
   tokens,
   fetchUserInfo,
   mapping,
+  subjectMismatch = 'observe',
 }: ResolveIdentityArgs): Promise<ResolveResult> {
   const idClaim = mapping?.idClaim ?? 'sub'
   const nameClaim = mapping?.nameClaim ?? 'name'
@@ -112,6 +124,7 @@ export async function resolveIdentity({
   let email: string | undefined
   let name: string | undefined
   let emailVerified = false
+  const warnings: ResolveWarning[] = []
 
   const loadSource = async (source: IdentitySource): Promise<Record<string, unknown> | null> => {
     if (source === 'idToken') return decodePayload(tokens.idToken)
@@ -144,11 +157,31 @@ export async function resolveIdentity({
         : undefined)
 
     // OIDC Core 5.3.2: a userinfo response whose subject differs from the ID
-    // token's must be discarded entirely. Scoped to userinfo deliberately —
-    // an access token is audience-scoped, and with pairwise subjects the same
-    // person legitimately carries a different one there.
+    // token's must be discarded. Scoped to userinfo deliberately — an access
+    // token is audience-scoped, and with pairwise subjects the same person
+    // legitimately carries a different one there.
+    //
+    // Observed rather than enforced by default. A provider in this state works
+    // TODAY, because the path being replaced discards the ID token and takes
+    // userinfo wholesale; enforcing on the same release as the cascade would
+    // make that a total sign-in outage on an upgrade nobody chose, with no
+    // telemetry to size it first. So the default reproduces today's behaviour
+    // and reports the discrepancy, and a later release flips to enforcing.
     if (source === 'userinfo' && id && claimedId && claimedId !== id) {
-      return { ok: false, reason: 'subject_mismatch', claims: merged }
+      if (subjectMismatch === 'enforce') {
+        return { ok: false, reason: 'subject_mismatch', claims: merged }
+      }
+      warnings.push('subject_mismatch')
+      // Legacy behaviour: userinfo wins wholesale, which means its subject is
+      // what keys the account. Anything already taken from the ID token is
+      // cleared so the two are never mixed.
+      id = undefined
+      email = undefined
+      name = undefined
+      emailVerified = false
+      found.id = undefined
+      found.email = undefined
+      found.name = undefined
     }
 
     // Earlier sources win: only fill what is still absent.
@@ -183,6 +216,14 @@ export async function resolveIdentity({
 
   return {
     ok: true,
-    identity: { id, email, name, emailVerified, sources: found, claims: merged },
+    identity: {
+      id,
+      email,
+      name,
+      emailVerified,
+      sources: found,
+      claims: merged,
+      ...(warnings.length > 0 ? { warnings } : {}),
+    },
   }
 }
