@@ -904,6 +904,28 @@ export async function handleTwoFactorLifecycleAudit(ctx: {
  */
 const CREDENTIAL_FAILURE_PATHS = new Set<string>(['/sign-in/email'])
 const MAGIC_LINK_FAILURE_PATHS = new Set<string>(['/magic-link/verify', '/sign-in/email-otp'])
+/** The genericOAuth callback, as a Better-Auth path TEMPLATE — the concrete
+ *  provider id lives in `ctx.params.providerId`, matching `inferProvider`.
+ *  A failure here redirects with `?error=<code>` rather than returning a body,
+ *  so the reason is read off the Location header. */
+const OIDC_CALLBACK_PATH = '/oauth2/callback/:providerId'
+
+/**
+ * Pull the IdP-reported failure code out of the callback's redirect and
+ * normalise it to a stable uppercase reason. Returns null when the response is
+ * not a redirect or carries no error, so the caller can fall back.
+ */
+function oidcFailureReason(returned: unknown): string | null {
+  if (!(returned instanceof Response)) return null
+  const location = returned.headers.get('location')
+  if (!location) return null
+  try {
+    const code = new URL(location, 'https://placeholder.invalid').searchParams.get('error')
+    return code ? code.toUpperCase().replace(/[^A-Z0-9]+/g, '_') : null
+  } catch {
+    return null
+  }
+}
 
 export async function handleSignInFailureAudit(ctx: {
   path?: string
@@ -914,13 +936,42 @@ export async function handleSignInFailureAudit(ctx: {
       user?: { id?: string; email?: string }
       session?: { token?: string }
     } | null
+    /** The Response the route produced, when the hook chain exposes it. */
+    returned?: unknown
   }
 }): Promise<void> {
   // Only fire on sign-in paths where a failure produces no newSession.
   const path = ctx.path ?? ''
   const isCredentialPath = CREDENTIAL_FAILURE_PATHS.has(path)
   const isMagicLinkPath = MAGIC_LINK_FAILURE_PATHS.has(path)
-  if (!isCredentialPath && !isMagicLinkPath) return
+  const isOidcCallback = path === OIDC_CALLBACK_PATH
+  if (!isCredentialPath && !isMagicLinkPath && !isOidcCallback) return
+
+  if (isOidcCallback) {
+    const sessionCreated =
+      !!ctx.context?.newSession?.user?.id && !!ctx.context?.newSession?.session?.token
+    if (sessionCreated) return
+
+    // No email is recorded. The callback body carries no typed credential, and
+    // any address in play came from the IdP response rather than a user attempt.
+    const { recordAuditEvent } = await import('@/lib/server/audit/log')
+    const { getRequestHeaders } = await import('@tanstack/react-start/server')
+    try {
+      await recordAuditEvent({
+        event: 'auth.signin.failed',
+        outcome: 'failure',
+        actor: { email: null, type: 'user', authMethod: 'sso' },
+        headers: getRequestHeaders(),
+        metadata: {
+          reason: oidcFailureReason(ctx.context?.returned) ?? 'OIDC_SIGNIN_FAILED',
+          providerId: typeof ctx.params?.providerId === 'string' ? ctx.params.providerId : null,
+        },
+      })
+    } catch (err) {
+      log.error({ err }, 'OIDC sign-in failure audit emit failed')
+    }
+    return
+  }
 
   // If a session was actually created, the success audit handles it.
   const sessionCreated =

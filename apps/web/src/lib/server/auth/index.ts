@@ -193,6 +193,11 @@ async function createAuth() {
       before: hooksBefore,
       after: hooksAfter,
     },
+    // Route the library's internal logging through pino, redacted. Without it
+    // those lines bypass the app logger entirely — unstructured, uncorrelated,
+    // and on a resolution failure carrying the whole user-info payload
+    // including the email address.
+    logger: createAuthLogger(log),
     // Use SECRET_KEY for auth signing (Better Auth defaults to BETTER_AUTH_SECRET)
     secret: config.secretKey,
 
@@ -652,6 +657,7 @@ export { type Role, isTeamMember, isAdmin } from '@/lib/shared/roles'
 import type { Role } from '@/lib/shared/roles'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 import { mapProfileClaims } from '@/lib/server/auth/map-profile-claims'
+import { createAuthLogger } from '@/lib/server/auth/auth-logger-adapter'
 
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {
