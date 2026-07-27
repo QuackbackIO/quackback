@@ -79,6 +79,7 @@ export async function handleSsoTestCallback(
     jwksUri: session.jwksUri,
     issuer: session.issuer,
     userinfoEndpoint: session.userinfoEndpoint,
+    requestedScopes: session.requestedScopes,
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,

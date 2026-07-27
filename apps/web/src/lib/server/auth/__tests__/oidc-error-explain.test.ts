@@ -40,6 +40,27 @@ describe('explainAuthorizeError', () => {
     expect(hint).toContain(description)
   })
 
+  it('names the scopes actually requested on invalid_scope', () => {
+    // The hint used to hardcode "(openid email profile)" whatever was sent,
+    // which is actively misleading once a provider has a custom scope set —
+    // and this is the exact error a mismatched scope set produces.
+    const hint = explainAuthorizeError('invalid_scope', null, ['openid', 'public'])
+    expect(hint).toContain('openid public')
+    expect(hint).not.toContain('openid email profile')
+  })
+
+  it('falls back to naming no specific scopes when none were supplied', () => {
+    const hint = explainAuthorizeError('invalid_scope')
+    expect(hint).toMatch(/scope/i)
+    // Must not assert a scope set it does not actually know.
+    expect(hint).not.toContain('openid email profile')
+  })
+
+  it('points at the field an admin would change', () => {
+    const hint = explainAuthorizeError('invalid_scope', null, ['openid', 'email'])
+    expect(hint).toMatch(/scopes/i)
+  })
+
   it('returns a default hint mentioning the code for unknown errors', () => {
     const hint = explainAuthorizeError('totally_made_up_code')
     expect(hint).toEqual(expect.any(String))

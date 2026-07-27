@@ -51,6 +51,9 @@ type TestSession = {
   adminUserId: string
   startedAt: number
   codeVerifier: string
+  /** Scopes requested at authorize time. Replayed into the failure hint so an
+   *  invalid_scope names what was actually sent rather than a default set. */
+  requestedScopes: string[]
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -157,6 +160,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // runs with pkce: true. OAuth 2.1 IdPs reject authorize requests
     // without a code_challenge; IdPs without PKCE support ignore it.
     const codeVerifier = randomBytes(32).toString('base64url')
+    const requestedScopes = effectiveScopes(provider)
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
 
     const session: TestSession = {
@@ -174,6 +178,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       clientSecret: creds.clientSecret,
       redirectUri,
       codeVerifier,
+      requestedScopes,
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
@@ -193,7 +198,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       // sign-in requests another, letting a non-representative test unlock
       // enforcement — which a stored blank `scopes` used to do, because the two
       // sides disagreed on whether blank meant "defaults" or "no scopes".
-      scope: effectiveScopes(provider).join(' '),
+      scope: requestedScopes.join(' '),
       state,
       nonce,
       prompt: 'login',

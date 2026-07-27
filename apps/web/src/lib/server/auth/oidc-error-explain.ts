@@ -4,8 +4,15 @@
  * change". Generated from real support tickets and the OIDC core spec.
  */
 
-export function explainAuthorizeError(code: string, description?: string | null): string {
+export function explainAuthorizeError(
+  code: string,
+  description?: string | null,
+  /** The scopes actually sent on this attempt, so the hint names them rather
+   *  than asserting a default set the provider may not be using. */
+  requestedScopes?: readonly string[]
+): string {
   const desc = description ? ` ${description}` : ''
+  const sent = requestedScopes?.length ? ` (${requestedScopes.join(' ')})` : ''
   switch (code) {
     case 'invalid_request':
       return `${desc} Most often this is a redirect_uri mismatch. The redirect URI in the IdP's allowed-redirect list must match exactly, including the trailing slash and path.`
@@ -16,7 +23,7 @@ export function explainAuthorizeError(code: string, description?: string | null)
     case 'unsupported_response_type':
       return `${desc} The IdP rejected response_type=code. Enable authorization code flow on the IdP application.`
     case 'invalid_scope':
-      return `${desc} One of the requested scopes (openid email profile) is not registered. Add the missing scope to the IdP application's allowed scopes.`
+      return `${desc} Your IdP rejected at least one of the scopes requested${sent}. Either add the missing scope to the IdP application's allowed scopes, or edit Scopes on this provider to match what it supports — its discovery document lists them under scopes_supported.`
     case 'server_error':
       return `${desc} The IdP hit an internal error. Retry the test; if persistent, check your IdP's status page.`
     case 'temporarily_unavailable':

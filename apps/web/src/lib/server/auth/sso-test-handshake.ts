@@ -43,6 +43,9 @@ export interface HandshakeInput {
   redirectUri: string
   /** PKCE verifier minted at authorize time (S256 challenge). */
   codeVerifier: string
+  /** The scopes this attempt actually requested, so an invalid_scope hint can
+   *  name them instead of asserting a default set. */
+  requestedScopes?: readonly string[]
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -97,7 +100,7 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
       ok: false,
       stage: 'idp-authorize',
       errorCode: input.idpError,
-      hint: explainAuthorizeError(input.idpError, input.idpErrorDescription),
+      hint: explainAuthorizeError(input.idpError, input.idpErrorDescription, input.requestedScopes),
       steps,
     }
   }
