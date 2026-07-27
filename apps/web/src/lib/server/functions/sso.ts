@@ -234,6 +234,20 @@ export const listIdentityProvidersFn = createServerFn({ method: 'GET' }).handler
 })
 
 /**
+ * How many identities sign in through this provider. `deleteIdentityProviderFn`
+ * refuses while any exist (removal would orphan them), so the Remove control
+ * states the count up front instead of surfacing it as a failed delete.
+ */
+export const getProviderAccountCountFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ id: identityProviderId }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
+    const { countProviderAccounts } =
+      await import('@/lib/server/domains/settings/identity-provider-accounts')
+    return { count: await countProviderAccounts(data.id) }
+  })
+
+/**
  * Create or update a provider (matched by `id`, else by `registrationId`).
  * Emits `idp.created` / `idp.updated` based on whether a matching row
  * already exists; the underlying service bumps the auth-config version and

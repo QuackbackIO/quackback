@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { UserId } from '@quackback/ids'
+import type { IdentityProviderId, UserId } from '@quackback/ids'
 import {
   fetchBrandingConfig,
   fetchPortalConfig,
@@ -22,7 +22,11 @@ import {
   listTeamMembersFn,
   listAssignableTeammatesFn,
 } from '@/lib/server/functions/teams'
-import { getVerifiedDomainsFn, listIdentityProvidersFn } from '@/lib/server/functions/sso'
+import {
+  getProviderAccountCountFn,
+  getVerifiedDomainsFn,
+  listIdentityProvidersFn,
+} from '@/lib/server/functions/sso'
 import { listRolesFn } from '@/lib/server/functions/roles'
 import {
   fetchSettingsLogoData,
@@ -122,6 +126,15 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'identityProviders'],
       queryFn: () => listIdentityProvidersFn(),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  /** Identities linked to one provider — read by its Remove control, which
+   *  states what a removal would orphan before offering it. */
+  providerAccountCount: (id: IdentityProviderId) =>
+    queryOptions({
+      queryKey: ['settings', 'identityProviders', id, 'accountCount'],
+      queryFn: () => getProviderAccountCountFn({ data: { id } }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 

@@ -1,30 +1,42 @@
 // @vitest-environment happy-dom
 /**
- * <IdentityProvidersSection> + <ProviderEditor> — visibility and routing
- * made visible.
+ * <IdentityProvidersSection> — the list, now a pure index.
  *
- * Core assertions:
- *  - The "show a sign-in button" visibility toggle always renders so the admin
- *    can hide the button on any provider, with or without a verified domain.
- *  - Per-domain enforcement is domain-scoped: its control shows only for a
- *    provider WITH a verified domain.
+ * Configuring a provider used to open a dialog over this card; it is a routed
+ * page now, so the list's job is to show each provider's routing at a glance
+ * (verified domains, enforced ones marked), flip `enabled` in place, and link
+ * onward. The controls that used to be asserted through the dialog live in
+ * `provider-detail-page.test.tsx`.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { IdentityProviderId } from '@quackback/ids'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
 import type { VerifiedDomain } from '@/lib/server/domains/settings/settings.types'
 import { IdentityProvidersSection } from '../provider-list'
 
+const { upsertSpy } = vi.hoisted(() => ({
+  upsertSpy: vi.fn(async (_args: { data: { id: string; enabled: boolean } }) => undefined),
+}))
+
 vi.mock('@tanstack/react-router', () => ({
   useRouter: () => ({ invalidate: vi.fn() }),
   useRouteContext: () => ({ managedFieldPaths: [] }),
-}))
-
-const { upsertSpy } = vi.hoisted(() => ({
-  upsertSpy: vi.fn(async (_args: { data: { id: string; enabled: boolean } }) => undefined),
+  Link: ({
+    children,
+    to,
+    params,
+    ...rest
+  }: {
+    children: React.ReactNode
+    to: string
+    params?: { providerId?: string }
+  }) => (
+    <a href={params?.providerId ? to.replace('$providerId', params.providerId) : to} {...rest}>
+      {children}
+    </a>
+  ),
 }))
 
 // useServerFn just unwraps the server fn in the browser — return it as-is so
@@ -50,19 +62,6 @@ beforeEach(() => {
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-// Stub the Test sign-in button so the editor doesn't pull in the full
-// test-flow server fns. Pass `disabled` through so tests can assert state.
-vi.mock('../../sso/test-sign-in-button', () => ({
-  TestSignInButton: ({ disabled }: { disabled?: boolean }) => (
-    <button type="button" disabled={disabled}>
-      Test sign-in
-    </button>
-  ),
-}))
-vi.mock('../../sso/use-sso-test-sign-in', () => ({
-  useSsoTestSignIn: () => ({ open: vi.fn() }),
-  SsoTestSignInProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}))
 // Recovery codes nest inside this section now; stub it so the test doesn't
 // pull in the recovery-codes server fn and its server-only import chain.
 vi.mock('../../sso/recovery-codes-section', () => ({
@@ -180,31 +179,38 @@ describe('<IdentityProvidersSection>', () => {
     // The old "no domains" filler is gone; button providers show no domain text.
     expect(screen.queryByText(/no domains/i)).toBeNull()
   })
+})
 
-  it('shows the visibility toggle but hides the enforcement control for a no-domain provider', async () => {
+describe('links to the provider pages', () => {
+  it('sends Add provider to the create page', () => {
     renderSection()
-    fireEvent.click(screen.getByRole('button', { name: /edit customer login/i }))
-    expect(await screen.findByText(/edit identity provider/i)).toBeInTheDocument()
-    // Domains and visibility are both routing decisions and live on Sign-in.
-    await userEvent.click(screen.getByRole('tab', { name: 'Sign-in' }))
-    // The visibility toggle is always available so the admin can hide the
-    // button even without a verified domain.
-    expect(await screen.findByLabelText(/show a sign-in button/i)).toBeInTheDocument()
-    // Enforcement is domain-scoped, so it stays hidden without a verified domain.
-    expect(screen.queryByLabelText(/require sso/i)).toBeNull()
+    expect(screen.getByRole('link', { name: /add provider/i })).toHaveAttribute(
+      'href',
+      '/admin/settings/security/sso/new'
+    )
   })
 
-  it('shows the visibility toggle and enforcement control for a verified-domain provider', async () => {
+  it('sends each row to its own provider page', () => {
     renderSection()
-    fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
-    await userEvent.click(await screen.findByRole('tab', { name: 'Sign-in' }))
-    expect(await screen.findByLabelText(/show a sign-in button/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/require sso for acme\.com/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /configure customer login/i })).toHaveAttribute(
+      'href',
+      '/admin/settings/security/sso/idp_button'
+    )
+    expect(screen.getByRole('link', { name: /configure acme sso/i })).toHaveAttribute(
+      'href',
+      '/admin/settings/security/sso/idp_routed'
+    )
+  })
+
+  it('opens no dialog over the list', () => {
+    renderSection()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByText(/edit identity provider/i)).toBeNull()
   })
 })
 
 describe('enable toggle on the list row', () => {
-  it('flips the provider enabled flag via upsert without opening the editor', async () => {
+  it('flips the provider enabled flag via upsert without leaving the page', async () => {
     renderSection()
     fireEvent.click(screen.getByRole('switch', { name: /enable customer login/i }))
     await waitFor(() => expect(upsertSpy).toHaveBeenCalledTimes(1))
@@ -212,8 +218,7 @@ describe('enable toggle on the list row', () => {
       id: buttonProvider.id,
       enabled: true,
     })
-    // The editor dialog must not have opened.
-    expect(screen.queryByText(/edit identity provider/i)).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('blocks disabling a provider that is the only working method', () => {
@@ -226,41 +231,5 @@ describe('enable toggle on the list row', () => {
   it('allows disabling a provider when other methods remain', () => {
     renderSection(3)
     expect(screen.getByRole('switch', { name: /enable acme sso/i })).not.toBeDisabled()
-  })
-
-  it('blocks removing a provider that is the only working method', async () => {
-    renderSection(1)
-    fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
-    await screen.findByText(/edit identity provider/i)
-    expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled()
-  })
-
-  it('allows removing a provider when other methods remain', async () => {
-    renderSection(3)
-    fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
-    await screen.findByText(/edit identity provider/i)
-    expect(screen.getByRole('button', { name: 'Remove' })).not.toBeDisabled()
-  })
-})
-
-describe('Test sign-in button in ProviderEditor', () => {
-  // startSsoTestFn now resolves the provider by registrationId and stamps
-  // that provider's own lastSuccessfulTestAt, so the button is enabled for
-  // any saved provider regardless of its registrationId.
-
-  it('is enabled for a saved non-sso provider', async () => {
-    renderSection()
-    fireEvent.click(screen.getByRole('button', { name: /edit customer login/i }))
-    await screen.findByText(/edit identity provider/i)
-    const testBtn = screen.getByRole('button', { name: /test sign-in/i })
-    expect(testBtn).not.toBeDisabled()
-  })
-
-  it('is enabled for the legacy "sso" registrationId provider', async () => {
-    renderSection()
-    fireEvent.click(screen.getByRole('button', { name: /edit acme sso/i }))
-    await screen.findByText(/edit identity provider/i)
-    const testBtn = screen.getByRole('button', { name: /test sign-in/i })
-    expect(testBtn).not.toBeDisabled()
   })
 })
