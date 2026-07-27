@@ -27,7 +27,7 @@ import {
   tickets,
   ticketConversations,
 } from '@/lib/server/db'
-import { realEmail } from '@/lib/shared/anonymous-email'
+import { resolveContactRecipients as resolvePrincipalEmails } from '@/lib/server/email/recipient'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { isSupportTicketsEnabled } from '@/lib/server/domains/settings/settings.support'
 import { canViewPost, type Actor } from '@/lib/server/policy'
@@ -1080,29 +1080,6 @@ async function requesterTicketUrl(portalBaseUrl: string, ticketId: TicketId): Pr
 /** Agent inbox deep link (tickets + conversations both select by `?i=`). */
 function inboxUrl(portalBaseUrl: string, id: string): string {
   return `${portalBaseUrl}/admin/inbox?i=${id}`
-}
-
-/**
- * Resolve a deliverable email for each principal id (account email →
- * principal-level contactEmail, the resolveReplyRecipient precedence), dropping
- * synthetic-anon placeholders and principals with no real address. One joined
- * query for the whole set.
- */
-async function resolvePrincipalEmails(
-  principalIds: PrincipalId[]
-): Promise<Map<PrincipalId, string>> {
-  const out = new Map<PrincipalId, string>()
-  if (principalIds.length === 0) return out
-  const rows = await db
-    .select({ id: principal.id, email: user.email, contactEmail: principal.contactEmail })
-    .from(principal)
-    .leftJoin(user, eq(principal.userId, user.id))
-    .where(inArray(principal.id, principalIds))
-  for (const row of rows) {
-    const email = realEmail(row.email) ?? realEmail(row.contactEmail)
-    if (email) out.set(row.id as PrincipalId, email)
-  }
-  return out
 }
 
 /**

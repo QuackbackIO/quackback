@@ -46,7 +46,9 @@ export function buildVerifyMagicLinkUrl(opts: {
  * for internal token-mint. Token format mirrors BA's magic-link
  * plugin so its `/magic-link/verify` endpoint reads our row.
  */
-export async function mintMagicLinkUrl(opts: MintOptions): Promise<{ url: string; token: string }> {
+export async function mintMagicLinkUrl(
+  opts: MintOptions
+): Promise<{ url: string; token: string; sealedAddress: string }> {
   const auth = await getAuth()
   const token = generateRandomString(32, 'a-z', 'A-Z')
   const expiresInSeconds = opts.expiresInSeconds ?? DEFAULT_EXPIRES_IN_SECONDS
@@ -69,7 +71,12 @@ export async function mintMagicLinkUrl(opts: MintOptions): Promise<{ url: string
   // `token` is the verification-row identifier. Callers that need to be able
   // to invalidate the link later (invitations) persist it; sign-in callers
   // ignore it.
-  return { url, token }
+  //
+  // `sealedAddress` is the address actually written into the verification row
+  // above. Senders mail THAT rather than whatever string they happen to be
+  // holding, so the token can never be delivered somewhere it cannot be
+  // redeemed — or, worse, somewhere it can.
+  return { url, token, sealedAddress: opts.email }
 }
 
 /**
