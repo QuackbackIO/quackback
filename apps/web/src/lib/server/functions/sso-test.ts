@@ -27,7 +27,7 @@ import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { DiagnosticStep, HandshakeStage } from '@/lib/server/auth/sso-test-handshake'
 import type { JsonValue } from '@/lib/server/audit/log'
-import { effectiveScopes } from '@/lib/server/auth/build-oauth-configs'
+import { authorizeRequestFor } from '@/lib/shared/oidc-request'
 import { ssoTestResultKey, ssoTestSessionKey } from '@/lib/shared/sso-test-keys'
 
 const TTL_SECONDS = 600
@@ -54,6 +54,8 @@ type TestSession = {
   /** Scopes requested at authorize time. Replayed into the failure hint so an
    *  invalid_scope names what was actually sent rather than a default set. */
   requestedScopes: string[]
+  /** Token-endpoint auth method, mirrored from production. */
+  tokenAuth: 'basic' | 'post'
   /** The provider's `detailsChangedAt` at test-start. The callback only stamps
    *  `lastSuccessfulTestAt` when this still matches — so a mid-test edit to the
    *  provider can't let a stale test unlock enforcement for the new config. */
@@ -160,7 +162,10 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
     // runs with pkce: true. OAuth 2.1 IdPs reject authorize requests
     // without a code_challenge; IdPs without PKCE support ignore it.
     const codeVerifier = randomBytes(32).toString('base64url')
-    const requestedScopes = effectiveScopes(provider)
+    // The SAME builder production reads. Assembling a different request here is
+    // exactly how a passing test came to vouch for a sign-in that fails.
+    const request = authorizeRequestFor(provider)
+    const requestedScopes = request.scopes
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
 
     const session: TestSession = {
@@ -179,6 +184,7 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       redirectUri,
       codeVerifier,
       requestedScopes,
+      tokenAuth: request.tokenAuth,
       adminUserId: user.id,
       startedAt: Date.now(),
       detailsChangedAt: provider.detailsChangedAt,
@@ -199,9 +205,9 @@ export const startSsoTestFn = createServerFn({ method: 'POST' })
       // enforcement — which a stored blank `scopes` used to do, because the two
       // sides disagreed on whether blank meant "defaults" or "no scopes".
       scope: requestedScopes.join(' '),
+      ...(request.prompt ? { prompt: request.prompt } : {}),
       state,
       nonce,
-      prompt: 'login',
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
     })

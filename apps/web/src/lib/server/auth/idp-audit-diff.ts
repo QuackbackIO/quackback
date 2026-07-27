@@ -32,6 +32,8 @@ const AUDITED_FIELDS = [
   'jwksUri',
   'issuer',
   'scopes',
+  'prompt',
+  'tokenEndpointAuthMethod',
   'enabled',
   'autoCreateUsers',
   'autoProvisionRole',

@@ -103,6 +103,8 @@ function makeProvider(over: Partial<IdentityProvider>): IdentityProvider {
     issuer: null,
     clientId: 'client-id',
     scopes: null,
+    prompt: null,
+    tokenEndpointAuthMethod: null,
     enabled: true,
     autoCreateUsers: true,
     autoProvisionRole: 'user',

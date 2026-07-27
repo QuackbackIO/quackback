@@ -20,7 +20,7 @@
  */
 
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
-import { effectiveScopes } from '@/lib/shared/oidc-scopes'
+import { authorizeRequestFor, supportsPrompt } from '@/lib/shared/oidc-request'
 import { resolveIdentity } from './resolve-identity'
 
 // Re-exported so server callers keep this import path. The implementation lives
@@ -65,6 +65,9 @@ export interface GenericOAuthConfig {
     accessToken?: string
   }) => Promise<ResolvedProfile | null>
   scopes?: string[]
+  /** How the client secret reaches the token endpoint. Some providers accept
+   *  only one of the two, and this was previously fixed in code. */
+  authentication?: 'basic' | 'post'
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   // Force the IdP account picker so admins notice when they're already
   // signed in as a different identity.
@@ -109,7 +112,9 @@ export interface BuildGenericOAuthConfigsArgs {
    * build time the resolver would have to re-fetch discovery on every sign-in,
    * and the fast path's "no network" property would not be real.
    */
-  discovery?: (discoveryUrl: string) => Promise<{ userinfo_endpoint?: unknown } | null>
+  discovery?: (
+    discoveryUrl: string
+  ) => Promise<{ userinfo_endpoint?: unknown; prompt_values_supported?: unknown } | null>
   /** Fetches a userinfo document with the bearer token. Injected for the same
    *  reason as `discovery`: the guarded fetch belongs outside this module. */
   fetchUserInfo?: (url: string, accessToken: string) => Promise<Record<string, unknown> | null>
@@ -168,10 +173,29 @@ export async function buildGenericOAuthConfigs({
     // The row wins: a manual endpoint is an explicit choice, and consulting
     // discovery when one is set would be both wasteful and overridable.
     let userInfoUrl = provider.userInfoUrl || undefined
-    if (!userInfoUrl && discoveryUrl && discovery) {
+    let promptValuesSupported: string[] | null = null
+    if (discoveryUrl && discovery && (!userInfoUrl || true)) {
       const doc = await discovery(discoveryUrl)
-      if (typeof doc?.userinfo_endpoint === 'string') userInfoUrl = doc.userinfo_endpoint
+      if (!userInfoUrl && typeof doc?.userinfo_endpoint === 'string') {
+        userInfoUrl = doc.userinfo_endpoint
+      }
+      if (Array.isArray(doc?.prompt_values_supported)) {
+        promptValuesSupported = doc.prompt_values_supported.filter(
+          (v): v is string => typeof v === 'string'
+        )
+      }
     }
+
+    // One builder, read by production here and by the connection test there.
+    const request = authorizeRequestFor(provider)
+
+    // Derived suppression: a provider that publishes its prompt list and omits
+    // ours would reject the request outright, so drop it rather than send a
+    // parameter we already know will fail. Silence means unknown, not
+    // unsupported — almost nobody publishes this — so the default still goes.
+    const prompt = supportsPrompt(request.prompt, promptValuesSupported)
+      ? request.prompt
+      : undefined
 
     // One resolver for every provider, mapped or not. It is a superset of the
     // library's own behaviour, so withholding it from unmapped providers would
@@ -218,14 +242,13 @@ export async function buildGenericOAuthConfigs({
       ...(authorizationUrl ? { authorizationUrl } : {}),
       ...(tokenUrl ? { tokenUrl } : {}),
       ...(userInfoUrl ? { userInfoUrl } : {}),
-      scopes: effectiveScopes(provider),
+      scopes: request.scopes,
       // PKCE on every provider. OAuth 2.1 IdPs require code_challenge and
       // reject without it; RFC 7636 §5 makes the params backwards-compatible
       // (IdPs without PKCE support simply ignore them).
       pkce: true,
-      // Force the account picker so an admin typing a specific email isn't
-      // silently signed in as whoever the IdP already has a session for.
-      prompt: 'select_account',
+      ...(prompt ? { prompt } : {}),
+      authentication: request.tokenAuth,
       // Better-Auth's JIT block. When false, the OAuth callback aborts in
       // handleOAuthUserInfo before any user/session is created. Existing
       // users still link via accountLinking.trustedProviders.

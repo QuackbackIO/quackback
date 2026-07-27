@@ -46,6 +46,9 @@ export interface HandshakeInput {
   /** The scopes this attempt actually requested, so an invalid_scope hint can
    *  name them instead of asserting a default set. */
   requestedScopes?: readonly string[]
+  /** How to authenticate at the token endpoint. Mirrors production, which is
+   *  the point: a test using the other method proves nothing about sign-in. */
+  tokenAuth?: 'basic' | 'post'
   /** IdP-returned `error` query parameter, if the authorize step failed. */
   idpError?: string | null
   idpErrorDescription?: string | null
@@ -198,19 +201,33 @@ export async function runHandshake(input: HandshakeInput): Promise<HandshakeResu
   // pkce: true in our config, so the test flow sends code_verifier
   // too. Diverging here would test a slightly-different protocol and
   // produce false positives.
+  // Basic sends the credentials in the Authorization header rather than the
+  // body. Some providers accept only one of the two, so this follows whatever
+  // production is configured to send.
+  const useBasic = input.tokenAuth === 'basic'
   const tokenBody = new URLSearchParams({
     grant_type: 'authorization_code',
     code_verifier: input.codeVerifier,
     code: input.code,
     redirect_uri: input.redirectUri,
-    client_id: input.clientId,
-    client_secret: input.clientSecret,
+    ...(useBasic ? {} : { client_id: input.clientId, client_secret: input.clientSecret }),
   })
+  const basicHeader: Record<string, string> = useBasic
+    ? {
+        Authorization: `Basic ${Buffer.from(
+          `${encodeURIComponent(input.clientId)}:${encodeURIComponent(input.clientSecret)}`
+        ).toString('base64')}`,
+      }
+    : {}
   let tokenRes: Response
   try {
     tokenRes = await safeFetch(discovery.token_endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        ...basicHeader,
+      },
       body: tokenBody.toString(),
       timeoutMs: 10_000,
     })

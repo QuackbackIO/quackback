@@ -193,6 +193,8 @@ const upsertIdentityProviderInput = z.object({
   jwksUri: httpsUrl.nullable().optional(),
   issuer: httpsUrl.nullable().optional(),
   scopes: z.string().max(512).nullable().optional(),
+  prompt: z.string().max(64).nullable().optional(),
+  tokenEndpointAuthMethod: z.string().max(32).nullable().optional(),
   enabled: z.boolean().optional(),
   autoCreateUsers: z.boolean().optional(),
   autoProvisionRole: idpRole.nullable().optional(),

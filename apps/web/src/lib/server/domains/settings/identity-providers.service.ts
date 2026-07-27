@@ -69,6 +69,8 @@ export interface IdentityProvider {
   issuer: string | null
   clientId: string
   scopes: string | null
+  prompt: string | null
+  tokenEndpointAuthMethod: string | null
   enabled: boolean
   /** True when a client secret is saved at `auth_<registrationId>`. An enabled
    *  provider without one registers nothing, so it is not a usable sign-in
@@ -109,6 +111,8 @@ export interface UpsertIdentityProviderInput {
   jwksUri?: string | null
   issuer?: string | null
   scopes?: string | null
+  prompt?: string | null
+  tokenEndpointAuthMethod?: string | null
   enabled?: boolean
   autoCreateUsers?: boolean
   autoProvisionRole?: Role | null
@@ -149,8 +153,11 @@ const CONNECTION_FIELDS = [
   'issuer',
   // Scopes decide which claims the IdP releases, which is precisely what the
   // test validates. Omitting them let a stale pass keep vouching for a scope
-  // set the test never exercised.
+  // set the test never exercised. Prompt and the token-endpoint auth method are
+  // here for the same reason: both can make a request the IdP refuses.
   'scopes',
+  'prompt',
+  'tokenEndpointAuthMethod',
 ] as const
 
 type ConnectionField = (typeof CONNECTION_FIELDS)[number]
@@ -205,6 +212,8 @@ function rowToIdentityProvider(
     issuer: row.issuer,
     clientId: row.clientId,
     scopes: row.scopes,
+    prompt: row.prompt,
+    tokenEndpointAuthMethod: row.tokenEndpointAuthMethod,
     enabled: row.enabled,
     configured,
     autoCreateUsers: row.autoCreateUsers,
@@ -399,6 +408,9 @@ export async function upsertIdentityProvider(
         if (input.jwksUri !== undefined) patch.jwksUri = input.jwksUri
         if (input.issuer !== undefined) patch.issuer = input.issuer
         if (input.scopes !== undefined) patch.scopes = input.scopes
+        if (input.prompt !== undefined) patch.prompt = input.prompt
+        if (input.tokenEndpointAuthMethod !== undefined)
+          patch.tokenEndpointAuthMethod = input.tokenEndpointAuthMethod
         if (input.enabled !== undefined) patch.enabled = input.enabled
         if (input.autoCreateUsers !== undefined) patch.autoCreateUsers = input.autoCreateUsers
         if (input.autoProvisionRole !== undefined) patch.autoProvisionRole = input.autoProvisionRole
@@ -435,6 +447,8 @@ export async function upsertIdentityProvider(
             jwksUri: input.jwksUri ?? null,
             issuer: input.issuer ?? null,
             scopes: input.scopes ?? null,
+            prompt: input.prompt ?? null,
+            tokenEndpointAuthMethod: input.tokenEndpointAuthMethod ?? null,
             enabled: input.enabled ?? false,
             autoCreateUsers: input.autoCreateUsers ?? true,
             autoProvisionRole: input.autoProvisionRole ?? null,

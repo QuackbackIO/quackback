@@ -80,6 +80,7 @@ export async function handleSsoTestCallback(
     issuer: session.issuer,
     userinfoEndpoint: session.userinfoEndpoint,
     requestedScopes: session.requestedScopes,
+    tokenAuth: session.tokenAuth,
     clientId: session.clientId,
     clientSecret: session.clientSecret,
     redirectUri: session.redirectUri,

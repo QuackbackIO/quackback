@@ -16,6 +16,8 @@ describe('connectionAffectingChange', () => {
     jwksUri: null,
     issuer: null,
     scopes: null,
+    prompt: null,
+    tokenEndpointAuthMethod: null,
   }
 
   it('is false when no connection-affecting field is supplied', () => {

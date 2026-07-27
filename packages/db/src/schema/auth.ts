@@ -495,6 +495,13 @@ export const identityProvider = pgTable(
     clientId: text('client_id').notNull(),
     /** Space- or comma-joined custom scopes; `openid email profile` when null. */
     scopes: text('scopes'),
+    /** Authorize-request `prompt`; the default account picker when null. The
+     *  sentinel 'omit' means send no prompt parameter at all, which is NOT the
+     *  same as the OIDC value 'none'. See lib/shared/oidc-request.ts. */
+    prompt: text('prompt'),
+    /** How the client secret reaches the token endpoint ('post' | 'basic');
+     *  'post' when null. Some providers accept only one of the two. */
+    tokenEndpointAuthMethod: text('token_endpoint_auth_method'),
     enabled: boolean('enabled').notNull().default(false),
     /** JIT signup toggle — preserves the legacy auto-provision opt-out. */
     autoCreateUsers: boolean('auto_create_users').notNull().default(true),
