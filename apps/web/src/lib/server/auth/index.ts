@@ -158,6 +158,9 @@ async function createAuth() {
     fetchUserInfo: (url, accessToken) => fetchJson(url, { authorization: `Bearer ${accessToken}` }),
     // Observe-then-enforce: log the discrepancy so its real rate is known
     // before any release starts refusing sign-ins over it.
+    onResolved: (registrationId, accountId, claims) => {
+      stashResolvedClaims(registrationId, accountId, claims)
+    },
     onResolutionWarning: (registrationId, warnings) => {
       log.warn({ registrationId, warnings }, 'identity resolution discrepancy observed')
     },
@@ -730,6 +733,7 @@ import type { Role } from '@/lib/shared/roles'
 import { ANON_EMAIL_DOMAIN } from '@/lib/shared/anonymous-email'
 import { mapProfileClaims } from '@/lib/server/auth/map-profile-claims'
 import { createAuthLogger } from '@/lib/server/auth/auth-logger-adapter'
+import { stashResolvedClaims } from '@/lib/server/auth/resolved-claims-stash'
 
 /** Check if role is in allowed list: canAccess('admin', ['admin']) → true */
 export function canAccess(role: Role, allowed: Role[]): boolean {

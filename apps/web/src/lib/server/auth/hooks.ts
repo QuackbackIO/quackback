@@ -45,6 +45,7 @@ import {
 } from './signin-device-tracker'
 import { isSyntheticAnonEmail } from '@/lib/shared/anonymous-email'
 import { decodeSsoClaims } from './sso-claims-decode'
+import { takeResolvedClaims } from './resolved-claims-stash'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-hooks' })
@@ -651,7 +652,7 @@ async function readSsoClaims(
   const { db, account, and, eq, desc } = await import('@/lib/server/db')
   const row = await db.query.account.findFirst({
     where: and(eq(account.userId, userId), eq(account.providerId, providerId)),
-    columns: { idToken: true },
+    columns: { idToken: true, accountId: true },
     // Deterministic ordering. There is no uniqueness constraint on
     // (user_id, provider_id), so a duplicate account row — which a change in
     // which claim supplies the account identifier can create — would otherwise
@@ -659,6 +660,15 @@ async function readSsoClaims(
     // possibly a stale one, on every sign-in.
     orderBy: desc(account.createdAt),
   })
+
+  // Prefer what the resolver actually validated this request. The stored ID
+  // token is a fallback: a provider resolving identity from userinfo or an
+  // access token has none, and would otherwise always land on the default role
+  // however its claims are mapped.
+  if (row?.accountId) {
+    const fresh = takeResolvedClaims(providerId, row.accountId)
+    if (fresh) return fresh
+  }
 
   // Refuses an expired token; see sso-claims-decode.ts for why freshness is
   // the property that matters when the signature is not verified.

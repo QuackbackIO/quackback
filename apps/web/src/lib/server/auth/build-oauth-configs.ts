@@ -116,6 +116,9 @@ export interface BuildGenericOAuthConfigsArgs {
   /** Called when resolution succeeds but observed a discrepancy. Injected so
    *  this module needs no audit or DB imports. */
   onResolutionWarning?: (registrationId: string, warnings: readonly string[]) => void
+  /** Called with the claims behind a successful resolution, so downstream
+   *  consumers need not re-derive them from stored tokens. */
+  onResolved?: (registrationId: string, accountId: string, claims: Record<string, unknown>) => void
   /** Attached to every config so `user.locale` populates from sign-in. */
   mapProfileToUser?: (profile: unknown) => Record<string, unknown>
   /**
@@ -140,6 +143,7 @@ export async function buildGenericOAuthConfigs({
   discovery,
   fetchUserInfo,
   onResolutionWarning,
+  onResolved,
   mapProfileToUser,
   buildLoginHintParams,
 }: BuildGenericOAuthConfigsArgs): Promise<GenericOAuthConfig[]> {
@@ -190,6 +194,10 @@ export async function buildGenericOAuthConfigs({
       if (warnings?.length && onResolutionWarning) {
         onResolutionWarning(provider.registrationId, warnings)
       }
+      // Hand the freshly-validated claims to role provisioning, which would
+      // otherwise re-read the stored ID token — and find nothing for a provider
+      // that resolves identity from userinfo or an access token.
+      onResolved?.(provider.registrationId, id, claims)
       // Raw claims first, mapped fields last: the mapped values are the
       // resolved answer and must not be shadowed by a same-named raw claim.
       return {
