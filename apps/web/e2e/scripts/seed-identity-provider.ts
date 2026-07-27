@@ -72,11 +72,23 @@ interface SeedConfig {
 
 const sql = postgres(connectionString)
 
+/**
+ * A server process caches the auth instance it built and only rebuilds when
+ * `settings.auth_config_version` moves, so dropping Redis keys alone leaves a
+ * warm process serving a provider list that predates this write. The app's own
+ * write path bumps the version in the same transaction; a raw-SQL write has to
+ * mirror that or it is invisible until the process restarts.
+ */
+async function bumpAuthConfigVersion(): Promise<void> {
+  await sql`UPDATE settings SET auth_config_version = auth_config_version + 1`
+}
+
 async function remove(registrationId: string): Promise<void> {
   // Deleting the provider cascades its sso_verified_domain rows (FK on delete
   // cascade); the credential has no FK, so drop it explicitly.
   await sql`DELETE FROM identity_provider WHERE registration_id = ${registrationId}`
   await sql`DELETE FROM integration_platform_credentials WHERE integration_type = ${`auth_${registrationId}`}`
+  await bumpAuthConfigVersion()
 }
 
 async function seed(cfg: SeedConfig): Promise<void> {
@@ -107,6 +119,8 @@ async function seed(cfg: SeedConfig): Promise<void> {
         (${domUuid}, ${cfg.domain.name}, ${`e2e-${randomUUID()}`}, ${verifiedAt},
          ${cfg.domain.enforced ?? false}, ${idpUuid}, NOW())`
   }
+
+  await bumpAuthConfigVersion()
 }
 
 try {

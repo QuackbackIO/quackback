@@ -66,9 +66,14 @@ export function setWorkspaceAnon(enabled: boolean): void {
  * verify the team break-glass form is still served when the portal offers no
  * public sign-in methods. Always call `setPortalAuthMethods('restore')` in a
  * `finally` block so subsequent tests/dev aren't left with a broken portal.
+ *
+ * Busts the tenant-settings cache for the same reason `setPortalVisibility`
+ * does: `portal_config` is written as raw SQL, so a running server keeps
+ * serving the sign-in methods it cached until the key is dropped.
  */
 export function setPortalAuthMethods(action: 'disable' | 'restore' | 'enable-magic-link'): void {
   runScript('../scripts/set-portal-auth-methods.ts', [action])
+  runScript('../scripts/bust-caches.ts', ['settings:tenant'])
 }
 
 /**
@@ -98,6 +103,11 @@ export interface SeedIdpConfig {
  * Drop the tenant-settings + configured-integration-types Redis caches so the
  * running dev server immediately reflects a raw-SQL provider mutation (these
  * caches normally only invalidate via the app's own write paths).
+ *
+ * Runs after the seed script has bumped `settings.auth_config_version`, so the
+ * re-read settings row carries the new version and the server rebuilds its
+ * cached auth instance. Dropping these keys alone is not enough: a warm process
+ * compares the version before it will rebuild.
  */
 function invalidateAuthCaches(): void {
   runScript('../scripts/bust-caches.ts', ['settings:tenant', 'platform-cred:configured-types'])
