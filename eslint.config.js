@@ -168,6 +168,50 @@ export default tseslint.config(
       ],
     },
   },
+  // Capability-bearing mail must never follow a user-settable address.
+  // `principal.contactEmail` has two unverified writers (agent capture,
+  // pre-chat capture), so a reset that fell back to it would be a takeover
+  // path. Recipients come from `lib/server/email/recipient.ts`.
+  //
+  // This catches STATIC imports only. Most of these sites use
+  // `await import('@quackback/email')`, which `no-restricted-imports` cannot
+  // see — the backstop for those is the source scan in
+  // `lib/server/__tests__/security-mail-recipients.test.ts`, and the two
+  // allow-lists must be kept in step.
+  {
+    files: ['**/src/**/*.{ts,tsx}'],
+    ignores: [
+      '**/src/lib/server/auth/index.ts',
+      '**/src/lib/server/auth/hooks.ts',
+      '**/src/lib/server/auth/email-signin.ts',
+      '**/src/lib/server/functions/recovery-codes-consume.ts',
+      '**/src/lib/server/functions/admin.ts',
+      '**/src/lib/server/functions/portal-invites.ts',
+      '**/__tests__/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@quackback/email',
+              importNames: [
+                'sendPasswordResetEmail',
+                'sendMagicLinkEmail',
+                'sendNewSignInEmail',
+                'sendRecoveryCodeUsedEmail',
+                'sendInvitationEmail',
+                'sendPortalInviteEmail',
+              ],
+              message:
+                'Capability-bearing mail must resolve its recipient through lib/server/email/recipient.ts (resolveAccountRecipient or sealedRecipient) and send via mailSecure.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Server-function failures are logged once, globally, by the
   // `functionMiddleware` in src/start.ts (see lib/server/middleware/
   // server-fn-log.ts). Re-adding a per-handler log-and-rethrow tail produces a
