@@ -30,6 +30,7 @@ import {
 import { useServerFn } from '@tanstack/react-start'
 import { ArrowPathIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
@@ -614,9 +615,9 @@ function ClaimList({
                 {typeof value === 'object' ? JSON.stringify(value) : String(value)}
               </span>
               {role && (
-                <span className="shrink-0 rounded border border-border px-1.5 text-[11px] text-foreground">
+                <Badge variant="outline" size="sm" className="shrink-0">
                   {role}
-                </span>
+                </Badge>
               )}
             </div>
           )

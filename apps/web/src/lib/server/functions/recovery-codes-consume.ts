@@ -207,7 +207,7 @@ async function sendRecoveryCodeAlert(opts: {
     const { sendRecoveryCodeUsedEmail, isEmailConfigured } = await import('@quackback/email')
     if (!isEmailConfigured()) return
 
-    const { resolveAccountRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+    const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
     const to = await resolveAccountRecipient(opts.userId)
     if (!to) {
       log.warn({ user_id: opts.userId }, 'recovery-code alert skipped: no deliverable address')
@@ -217,7 +217,8 @@ async function sendRecoveryCodeAlert(opts: {
     const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
     const tenant = await getTenantSettings()
 
-    await mailSecure(sendRecoveryCodeUsedEmail, to, {
+    await sendRecoveryCodeUsedEmail({
+      to,
       workspaceName: tenant?.settings?.name,
       ipAddress: getClientIp(opts.headers) || null,
       userAgent: opts.headers.get('user-agent'),

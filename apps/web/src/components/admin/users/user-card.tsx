@@ -1,4 +1,3 @@
-import { realEmail } from '@/lib/shared/anonymous-email'
 import {
   CheckCircleIcon,
   ChatBubbleLeftIcon,
@@ -31,6 +30,9 @@ export function UserCard({
   onToggleCheck,
 }: UserCardProps) {
   const totalActivity = user.postCount + user.commentCount + user.voteCount
+  // Both fields are sanitised in the DTO (`user.service.ts`), so a placeholder
+  // is already null by the time it reaches here.
+  const displayEmail = user.email ?? user.contactEmail
 
   return (
     <div
@@ -72,13 +74,11 @@ export function UserCard({
           )}
         </div>
 
-        {/* Email: identified account email, or a lead's captured contact email.
-            Sanitised — a placeholder address is not a real one and showing it
-            would suggest this person can be emailed when they cannot. */}
-        {(realEmail(user.email) ?? realEmail(user.contactEmail)) ? (
-          <p className="text-sm text-muted-foreground truncate">
-            {realEmail(user.email) ?? realEmail(user.contactEmail)}
-          </p>
+        {/* Identified account address, or a lead's captured contact address.
+            Both arrive already sanitised from the DTO, so a placeholder reads
+            as absent here rather than as something an agent could write to. */}
+        {displayEmail ? (
+          <p className="text-sm text-muted-foreground truncate">{displayEmail}</p>
         ) : (
           <p className="text-sm text-muted-foreground/50 italic">No email</p>
         )}

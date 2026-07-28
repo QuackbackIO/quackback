@@ -8,9 +8,11 @@
  *  - lookupAuthMethodsFn returns the same shape regardless of whether
  *    an account exists at the supplied email (no enumeration vector).
  *
- * Uses the same `createServerFn` capture pattern as the other
- * `functions/__tests__` suites — handlers are recorded in import
- * order via a mocked builder, then invoked by index.
+ * Uses the `createServerFn` capture pattern from the sibling suites, with the
+ * mocked `.handler(fn)` returning the handler itself so each server function is
+ * reached by its own name. Indexing a positional array breaks silently the
+ * moment a function is added above another in the file under test — it keeps
+ * running, against the wrong handler.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -18,23 +20,11 @@ import type { AuthConfig } from '@/lib/server/domains/settings/settings.types'
 
 type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
 
-// Per-module handler arrays so tests don't have to count past unrelated
-// server-fn declarations in the file under test.
-const handlersByModule = new Map<string, AnyHandler[]>()
-let currentModule = ''
-
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      validator() {
-        return chain
-      },
-      handler(fn: AnyHandler) {
-        const arr = handlersByModule.get(currentModule) ?? []
-        arr.push(fn)
-        handlersByModule.set(currentModule, arr)
-        return chain
-      },
+      validator: () => chain,
+      handler: (fn: AnyHandler) => fn,
     }
     return chain
   },
@@ -257,28 +247,14 @@ const verifiedDomainRow = {
 
 const enforcedDomainRow = { ...verifiedDomainRow, enforced: true }
 
-// Load the SSO module ONCE and resolve handlers by their position in
-// the file. Order matches the export sequence in sso.ts:
-//   0: clearSsoClientSecretFn
-//   1: removeVerifiedDomainFn
-//   2: getVerifiedDomainsFn
-//   3: listIdentityProvidersFn
-//   4: upsertIdentityProviderFn
-//   5: deleteIdentityProviderFn
-//   6: setProviderCredentialsFn
-//   7: addProviderDomainFn
-//   8: verifyProviderDomainFn
-//   9: setDomainEnforcedFn
-currentModule = 'sso'
-await import('../sso')
-const ssoHandlers = handlersByModule.get('sso')!
-const clearSsoClientSecret = ssoHandlers[0]
-const setDomainEnforced = ssoHandlers[9]
+// Under the mock above each export IS its handler, so these are the real
+// functions by name and stay correct however the files are reordered.
+const { clearSsoClientSecretFn, setDomainEnforcedFn } = await import('../sso')
+const { lookupAuthMethodsFn } = await import('../auth')
 
-currentModule = 'auth'
-await import('../auth')
-const authHandlers = handlersByModule.get('auth')!
-const lookupAuthMethods = authHandlers[0]
+const clearSsoClientSecret = clearSsoClientSecretFn as unknown as AnyHandler
+const setDomainEnforced = setDomainEnforcedFn as unknown as AnyHandler
+const lookupAuthMethods = lookupAuthMethodsFn as unknown as AnyHandler
 
 describe('clearSsoClientSecretFn refusals', () => {
   it('refuses when any verified domain has enforcement on', async () => {

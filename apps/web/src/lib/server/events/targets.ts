@@ -1118,6 +1118,29 @@ async function filterByEmailPreference(
   )
 }
 
+/**
+ * The principals to email, and the address for each.
+ *
+ * Two independent questions — is there anywhere to send, and does this person
+ * want this kind of mail — asked together because every ticket and SLA builder
+ * needs both and neither depends on the other. Returning the map alongside the
+ * list saves each caller re-deriving it.
+ */
+async function resolveEligibleRecipients(
+  principalIds: PrincipalId[],
+  matrixKey: string
+): Promise<{ recipients: PrincipalId[]; emailMap: Map<PrincipalId, ContactEmail> }> {
+  if (principalIds.length === 0) return { recipients: [], emailMap: new Map() }
+  const [emailMap, eligible] = await Promise.all([
+    resolveContactRecipients(principalIds),
+    filterByEmailPreference(principalIds, matrixKey),
+  ])
+  return {
+    recipients: principalIds.filter((id) => emailMap.has(id) && eligible.has(id)),
+    emailMap,
+  }
+}
+
 /** Ticket facts re-read from the row when the payload doesn't carry them. */
 async function readTicketFacts(ticketId: TicketId): Promise<{
   requesterPrincipalId: PrincipalId | null
@@ -1371,11 +1394,7 @@ export async function getTicketRepliedEmailTargets(
   )
   if (watchers.length === 0) return []
 
-  const [emailMap, eligible] = await Promise.all([
-    resolveContactRecipients(watchers),
-    filterByEmailPreference(watchers, 'ticket_replied'),
-  ])
-  const recipients = watchers.filter((id) => emailMap.has(id) && eligible.has(id))
+  const { recipients, emailMap } = await resolveEligibleRecipients(watchers, 'ticket_replied')
   if (recipients.length === 0) return []
 
   const assignedTeamId = ((ticket.assignedTeamId as string | null | undefined) ??
@@ -1441,11 +1460,7 @@ export async function getTicketResolvedEmailTargets(
   if (recipientIds.size === 0) return []
 
   const ids = [...recipientIds]
-  const [emailMap, eligible] = await Promise.all([
-    resolveContactRecipients(ids),
-    filterByEmailPreference(ids, 'ticket_status_changed'),
-  ])
-  const recipients = ids.filter((id) => emailMap.has(id) && eligible.has(id))
+  const { recipients, emailMap } = await resolveEligibleRecipients(ids, 'ticket_status_changed')
   if (recipients.length === 0) return []
 
   const { getStageLabels } = await import('@/lib/server/domains/settings/settings.tickets')
@@ -1500,11 +1515,7 @@ export async function getTicketAssignedEmailTargets(
   if (kindById.size === 0) return []
 
   const ids = [...kindById.keys()]
-  const [emailMap, eligible] = await Promise.all([
-    resolveContactRecipients(ids),
-    filterByEmailPreference(ids, 'ticket_assigned'),
-  ])
-  const recipients = ids.filter((id) => emailMap.has(id) && eligible.has(id))
+  const { recipients, emailMap } = await resolveEligibleRecipients(ids, 'ticket_assigned')
   if (recipients.length === 0) return []
 
   const ticketId = ticket.id as TicketId
@@ -1576,11 +1587,7 @@ export async function getSlaEmailTargets(
   const kind =
     event.type === 'sla.approaching_breach' ? ('sla_warning' as const) : ('sla_breach' as const)
 
-  const [emailMap, eligible] = await Promise.all([
-    resolveContactRecipients(recipientIds),
-    filterByEmailPreference(recipientIds, kind),
-  ])
-  const recipients = recipientIds.filter((id) => emailMap.has(id) && eligible.has(id))
+  const { recipients, emailMap } = await resolveEligibleRecipients(recipientIds, kind)
   if (recipients.length === 0) return []
 
   const title = conv.visitorName ?? 'a customer'

@@ -9,9 +9,12 @@ import * as mail from '@quackback/email'
  * — copy an adjacent caller, inherit its recipient, done. This fails CI until
  * the class is stated, which is cheap now and expensive to reconstruct later.
  *
- * `account` and `sealed` additionally appear in the allow-lists of
- * `lib/server/__tests__/security-mail-recipients.test.ts` and `eslint.config.js`.
- * The three lists must move together.
+ * This is the only hand-maintained list left. The `account` and `sealed` classes
+ * used to be restated in an ESLint allow-list and a source-scanning test as
+ * well, all three of which had to move together; the senders now declare
+ * `to: SecureRecipient` themselves, so the compiler enforces that part and the
+ * other two lists are gone. What a type cannot state is that a NEW template was
+ * considered at all, which is what this checks.
  */
 const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = {
   // Capability over an existing account: recipient is user.email by id.

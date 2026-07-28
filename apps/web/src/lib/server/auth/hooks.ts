@@ -1137,7 +1137,7 @@ export async function handleNewDeviceNotification(
   try {
     const { sendNewSignInEmail } = await import('@quackback/email')
     const { recordAuditEvent } = await import('@/lib/server/audit/log')
-    const { resolveAccountRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+    const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
     const occurredAt = new Date().toISOString()
     // Account class, and deliberately no contact-address fallback: this alert
     // discloses IP, user agent and sign-in timing, and a contact address can be
@@ -1150,7 +1150,8 @@ export async function handleNewDeviceNotification(
     }
     await Promise.all([
       to
-        ? mailSecure(sendNewSignInEmail, to, {
+        ? sendNewSignInEmail({
+            to,
             workspaceName: tenant?.name,
             occurredAt,
             ipAddress: ip,

@@ -186,7 +186,12 @@ export async function notifyVisitorMessage(opts: {
     if (!opts.isFirstMessage && agentsOnline) return
 
     const team = await db
-      .select({ principalId: principal.id, email: user.email, name: user.name })
+      .select({
+        principalId: principal.id,
+        email: user.email,
+        contactEmail: principal.contactEmail,
+        name: user.name,
+      })
       .from(principal)
       .leftJoin(user, eq(principal.userId, user.id))
       .where(inArray(principal.role, ['admin', 'member']))
@@ -205,14 +210,13 @@ export async function notifyVisitorMessage(opts: {
       // capability — the session does. So a teammate reachable only via their
       // contact address is correctly included, which the old truthiness filter
       // on the account address would have dropped.
-      const { resolveContactRecipients, mailContact } = await import('@/lib/server/email/recipient')
-      const teamEmails = await resolveContactRecipients(
-        team.map((t) => t.principalId as PrincipalId)
-      )
+      // Both address fields came back with the team query, so the recipient is
+      // decided from rows already in hand rather than by a second round trip.
+      const { contactRecipientFrom, mailContact } = await import('@/lib/server/email/recipient')
       await Promise.allSettled(
         team
           .flatMap((t) => {
-            const to = teamEmails.get(t.principalId as PrincipalId)
+            const to = contactRecipientFrom({ accountEmail: t.email, contactEmail: t.contactEmail })
             return to ? [{ ...t, to }] : []
           })
           .map((t) =>

@@ -1,4 +1,3 @@
-import type { ContactEmail } from '@/lib/server/email/recipient'
 /**
  * Hook system types.
  *
@@ -8,6 +7,7 @@ import type { ContactEmail } from '@/lib/server/email/recipient'
  */
 
 import type { EventData } from './types'
+import type { ContactEmail } from '@/lib/server/email/recipient'
 
 /**
  * Result of running a hook.

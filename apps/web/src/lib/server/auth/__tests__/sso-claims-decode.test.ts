@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { decodeSsoClaims } from '../sso-claims-decode'
-
-/** Unsigned JWT with the given payload. Signature is never checked here. */
-function jwt(payload: Record<string, unknown>): string {
-  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url')
-  return `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64(payload)}.sig`
-}
+import { fakeJwt as jwt } from './_idp-worlds'
 
 const NOW = 1_800_000_000_000 // fixed ms epoch
 

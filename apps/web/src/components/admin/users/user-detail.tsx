@@ -36,7 +36,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ChannelBadge } from '@/components/admin/conversation/channel-badge'
 import { NewConversationDialog } from '@/components/admin/conversation/new-conversation-dialog'
-import { realEmail } from '@/lib/shared/anonymous-email'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import type { PortalUserDetail, EngagedPost } from '@/lib/shared/types'
@@ -421,6 +420,10 @@ export function UserDetail({
   isRemovePending,
   currentMemberRole,
 }: UserDetailProps) {
+  // The account address, or a lead's captured contact address. Both are
+  // sanitised in the DTO (`user.detail.ts`), so a placeholder is already null
+  // and reads here as "no address" rather than as something writable.
+  const displayEmail = user?.email ?? user?.contactEmail ?? null
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -563,14 +566,8 @@ export function UserDetail({
                     </button>
                   )}
                 </div>
-                {/* Sanitised, not raw: a placeholder address is not a real one
-                    and must never be shown as if it were. Rendering it would
-                    tell an agent they can email someone the transport will
-                    refuse to deliver to. */}
-                {(realEmail(user.email) ?? realEmail(user.contactEmail)) ? (
-                  <p className="text-sm text-muted-foreground truncate">
-                    {realEmail(user.email) ?? realEmail(user.contactEmail)}
-                  </p>
+                {displayEmail ? (
+                  <p className="text-sm text-muted-foreground truncate">{displayEmail}</p>
                 ) : (
                   <p className="text-sm text-muted-foreground/50 italic">
                     No email &middot; cannot receive notifications
@@ -594,11 +591,9 @@ export function UserDetail({
               size="sm"
               variant="outline"
               onClick={() => setComposeOpen(true)}
-              disabled={!(realEmail(user.email) ?? realEmail(user.contactEmail))}
+              disabled={!displayEmail}
               title={
-                (realEmail(user.email) ?? realEmail(user.contactEmail))
-                  ? undefined
-                  : 'This user has no email address to deliver a message to'
+                displayEmail ? undefined : 'This user has no email address to deliver a message to'
               }
             >
               <ChatBubbleLeftIcon className="me-1.5 h-4 w-4" />
@@ -613,8 +608,7 @@ export function UserDetail({
             initialTarget={{
               principalId: user.principalId,
               name: user.name,
-              // Never hand a placeholder to the composer as a deliverable target.
-              email: realEmail(user.email) ?? realEmail(user.contactEmail),
+              email: displayEmail,
               image: user.image,
             }}
           />

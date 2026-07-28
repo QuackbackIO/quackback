@@ -6,8 +6,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
-const handlersByModule = new Map<string, AnyHandler[]>()
-let currentModule = ''
 
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
@@ -15,12 +13,7 @@ vi.mock('@tanstack/react-start', () => ({
       validator() {
         return chain
       },
-      handler(fn: AnyHandler) {
-        const arr = handlersByModule.get(currentModule) ?? []
-        arr.push(fn)
-        handlersByModule.set(currentModule, arr)
-        return chain
-      },
+      handler: (fn: AnyHandler) => fn,
     }
     return chain
   },
@@ -121,19 +114,10 @@ beforeEach(() => {
   hoisted.mockRecordAuditEvent.mockResolvedValue(undefined)
 })
 
-currentModule = 'settings'
-await import('../settings')
-const handlers = handlersByModule.get('settings')!
-// Position resolved by `grep -n "^export const .* = createServerFn"` —
-// updateAuthConfigFn is the 11th createServerFn in the file. If the
-// file gets reordered, fix this index along with the comment.
-const UPDATE_AUTH_CONFIG_INDEX = 10
-const updateAuthConfig = handlers[UPDATE_AUTH_CONFIG_INDEX]
-if (!updateAuthConfig) {
-  throw new Error(
-    `updateAuthConfigFn not at index ${UPDATE_AUTH_CONFIG_INDEX} — found ${handlers.length} handlers`
-  )
-}
+// The mocked `.handler(fn)` returns the handler, so the export IS the function
+// under test. By name, so reordering `settings.ts` cannot silently retarget it.
+const { updateAuthConfigFn } = await import('../settings')
+const updateAuthConfig = updateAuthConfigFn as unknown as AnyHandler
 
 describe('updateAuthConfigFn audit-log wiring', () => {
   it('records auth.password.disabled when password flips from on to off', async () => {

@@ -12,15 +12,15 @@ import {
 } from '@/lib/server/functions/contact-email'
 
 /**
- * `current-code` and `claim` are the two ways to name an address — with a proof
- * of the old one, or without because there is nothing to prove. Both end at
- * `verify`, where the address is fixed and only the code is outstanding.
+ * `address` is where the new address is named, with a proof of the current one
+ * alongside it when there is a current one to prove — which `requiresCurrentCode`
+ * already says, so it is not a second state.
  *
- * There is no way back from `verify` to the address field, because the
- * current-address code is spent by the request that got us here. Changing the
- * address means starting over, which is what Cancel does.
+ * There is no way back from `verify` to the address field: the current-address
+ * code is spent by the request that got us here, so changing the address means
+ * starting over, which is what Cancel does.
  */
-type Step = 'idle' | 'current-code' | 'claim' | 'verify'
+type Step = 'idle' | 'address' | 'verify'
 
 const message = (err: unknown, fallback: string) =>
   err instanceof Error && err.message ? err.message : fallback
@@ -68,39 +68,41 @@ export function EmailField() {
   // Starting the flow: for an account with a real address, the first code goes
   // to it. For a placeholder account there is nothing to send to, so the new
   // address is asked for straight away.
-  const begin = async () => {
-    if (!requiresCurrentCode) {
-      setStep('claim')
-      return
-    }
+  /** Every action here is "disable the form, call one server fn, report". */
+  const run = async (action: () => Promise<void>, fallback: string) => {
     setBusy(true)
     try {
-      await sendCurrentAddressCodeFn()
-      setStep('current-code')
+      await action()
     } catch (err) {
-      toast.error(message(err, 'Could not send a code to your current address.'))
+      toast.error(message(err, fallback))
     } finally {
       setBusy(false)
     }
   }
 
-  const sendToNewAddress = async () => {
-    setBusy(true)
-    try {
+  const begin = async () => {
+    // A placeholder account has no reachable current address, so there is
+    // nothing to send to and nothing to prove: go straight to naming one.
+    if (!requiresCurrentCode) {
+      setStep('address')
+      return
+    }
+    await run(async () => {
+      await sendCurrentAddressCodeFn()
+      setStep('address')
+    }, 'Could not send a code to your current address.')
+  }
+
+  const sendToNewAddress = () =>
+    run(async () => {
       await requestEmailChangeFn({
         data: { email: newEmail, ...(requiresCurrentCode ? { currentCode } : {}) },
       })
       setStep('verify')
-    } catch (err) {
-      toast.error(message(err, 'Could not send a code to that address.'))
-    } finally {
-      setBusy(false)
-    }
-  }
+    }, 'Could not send a code to that address.')
 
-  const confirm = async () => {
-    setBusy(true)
-    try {
+  const confirm = () =>
+    run(async () => {
       const res = await confirmEmailChangeFn({ data: { email: newEmail, code: newCode } })
       if (!res.ok) {
         toast.error('That code is not right, or the address is no longer available.')
@@ -109,12 +111,7 @@ export function EmailField() {
       toast.success('Email updated.')
       reset()
       await refetch()
-    } catch (err) {
-      toast.error(message(err, 'Could not confirm that code.'))
-    } finally {
-      setBusy(false)
-    }
-  }
+    }, 'Could not confirm that code.')
 
   return (
     <div className="space-y-2">
@@ -143,14 +140,14 @@ export function EmailField() {
         </>
       )}
 
-      {(step === 'current-code' || step === 'claim') && (
+      {step === 'address' && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            {step === 'current-code'
+            {requiresCurrentCode
               ? `We sent a code to ${currentEmail}. Enter it, then tell us the new address.`
               : 'Enter the address you want to use.'}
           </p>
-          {step === 'current-code' && (
+          {requiresCurrentCode && (
             <Input
               aria-label="Code sent to your current address"
               value={currentCode}
@@ -172,9 +169,7 @@ export function EmailField() {
               type="button"
               size="sm"
               onClick={sendToNewAddress}
-              disabled={
-                busy || !newEmail.trim() || (step === 'current-code' && !currentCode.trim())
-              }
+              disabled={busy || !newEmail.trim() || (requiresCurrentCode && !currentCode.trim())}
             >
               Send verification code
             </Button>

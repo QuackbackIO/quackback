@@ -15,18 +15,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 type AnyHandler = (args: { data: Record<string, unknown> }) => Promise<unknown>
 type NoArgHandler = () => Promise<unknown>
 
-const handlers: (AnyHandler | NoArgHandler)[] = []
-
+// `.handler(fn)` returns the handler itself, so each export IS the function
+// under test and is reached by name below. A positional array would silently
+// retarget every test here the moment a server fn is added above another.
 vi.mock('@tanstack/react-start', () => ({
   createServerFn: () => {
     const chain = {
-      validator() {
-        return chain
-      },
-      handler(fn: AnyHandler | NoArgHandler) {
-        handlers.push(fn)
-        return chain
-      },
+      validator: () => chain,
+      handler: (fn: AnyHandler | NoArgHandler) => fn,
     }
     return chain
   },
@@ -138,38 +134,28 @@ vi.mock('@/lib/server/storage/s3', () => ({
 // Constants
 // ---------------------------------------------------------------------------
 
-// Handler indices in the order portal-invites.ts registers them.
-const SEND_IDX = 0
-const CANCEL_IDX = 1
-const RESEND_IDX = 2
-const FETCH_IDX = 3
-const GET_LINK_IDX = 4
-
 const ADMIN_AUTH = {
   user: { id: 'user_admin', email: 'admin@acme.com', name: 'Admin' },
   principal: { id: 'principal_admin', role: 'admin', type: 'user' },
   settings: { id: 'ws_1', slug: 'acme', name: 'Acme', logoKey: null },
 }
 
-// Load the module once so handlers[] is populated
-let sendHandler: AnyHandler
-let cancelHandler: AnyHandler
-let resendHandler: AnyHandler
-let fetchHandler: NoArgHandler
-let getLinkHandler: AnyHandler
+const {
+  sendPortalInviteFn,
+  cancelPortalInviteFn,
+  resendPortalInviteFn,
+  fetchPortalInvitesFn,
+  getPortalInviteLinkFn,
+} = await import('../portal-invites')
+
+const sendHandler = sendPortalInviteFn as unknown as AnyHandler
+const cancelHandler = cancelPortalInviteFn as unknown as AnyHandler
+const resendHandler = resendPortalInviteFn as unknown as AnyHandler
+const fetchHandler = fetchPortalInvitesFn as unknown as NoArgHandler
+const getLinkHandler = getPortalInviteLinkFn as unknown as AnyHandler
 
 beforeEach(async () => {
   vi.clearAllMocks()
-
-  if (handlers.length === 0) {
-    await import('../portal-invites')
-  }
-
-  sendHandler = handlers[SEND_IDX] as AnyHandler
-  cancelHandler = handlers[CANCEL_IDX] as AnyHandler
-  resendHandler = handlers[RESEND_IDX] as AnyHandler
-  fetchHandler = handlers[FETCH_IDX] as NoArgHandler
-  getLinkHandler = handlers[GET_LINK_IDX] as AnyHandler
 
   // Sensible defaults
   hoisted.mockRequireAuth.mockResolvedValue(ADMIN_AUTH)

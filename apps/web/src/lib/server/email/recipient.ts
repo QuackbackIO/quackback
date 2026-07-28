@@ -1,52 +1,36 @@
 /**
- * THE decision about which address a piece of mail goes to.
+ * Where every mail recipient in this app comes from.
  *
- * The rule this exists to make structural: **mail that can grant account access
- * must never follow a user-settable address.** `principal.contactEmail` has two
- * unverified writers — an agent typing an address into the inbox, and a visitor
- * typing one into a pre-chat form — so letting a password reset fall back to it
- * would be an account-takeover path: set the contact address, trigger a reset,
- * receive it. Nothing enforced that before this module; it simply happened not
- * to be wired up.
+ * The three classes and the rule they encode are defined next to the senders
+ * that demand them, in `@quackback/email/recipient` — a capability-bearing
+ * sender's `to` is typed `SecureRecipient`, so handing one a contact address is
+ * a compile error at the send site rather than something a convention has to
+ * catch. This module is the other half of that: the ONLY place in the app that
+ * mints those brands, which is what makes the type mean anything.
  *
- * The axis is NOT "security vs product". That framing breaks on magic links and
- * invitations, which have no user row to look up — for an invitee one does not
- * exist yet. The honest axis is where the mail's authority comes from:
+ * Each constructor below is the single cast for its class, and each is written
+ * so the rule is enforced by the shape of the code rather than by whoever edits
+ * it next:
  *
- *   account   a capability over an EXISTING account. Recipient is `user.email`
- *             looked up by id, and nothing else.
- *   sealed    a capability over whoever owns an address. The address IS the
- *             claim being minted, so there is nothing to look up: the rule is
- *             "mail exactly the address the token was minted for".
- *   contact   carries no capability. May follow the contact address.
- *
- * `contact` is never usable for the other two, and there is deliberately no
- * "but this contactEmail was verified" carve-out — no column distinguishes the
- * verified writer from the two unverified ones, so the distinction is not
- * expressible and a carve-out would be a lie.
+ *   account   selects only `user.email`, by id, and never joins `principal` —
+ *             so it cannot read a contact address even by accident.
+ *   sealed    takes the mint result, not a bare string, so the mailed address
+ *             cannot drift from the one written into the verification row.
+ *   contact   the only one allowed to fall back to `principal.contactEmail`.
  */
 
 import { eq, inArray } from 'drizzle-orm'
 import type { PrincipalId, UserId } from '@quackback/ids'
+import type { AccountEmail, ContactEmail, SealedEmail } from '@quackback/email/recipient'
 import { db, user, principal } from '@/lib/server/db'
 import { realEmail } from '@/lib/shared/anonymous-email'
 
-declare const ACCOUNT: unique symbol
-declare const SEALED: unique symbol
-declare const CONTACT: unique symbol
-
-/** An address read from `user.email` by id. */
-export type AccountEmail = string & { readonly [ACCOUNT]: true }
-/** The exact address a verification token was minted for. */
-export type SealedEmail = string & { readonly [SEALED]: true }
-/** A reachable address that may have been supplied by someone other than the owner. */
-export type ContactEmail = string & { readonly [CONTACT]: true }
-
-/**
- * Anything a capability may be put in front of. Deliberately excludes
- * `ContactEmail` — that exclusion is the whole point of the type.
- */
-export type SecureRecipient = AccountEmail | SealedEmail
+export type {
+  AccountEmail,
+  ContactEmail,
+  SealedEmail,
+  SecureRecipient,
+} from '@quackback/email/recipient'
 
 /**
  * The account's own address, or null when it has none that can receive mail.
@@ -116,27 +100,23 @@ export async function resolveContactRecipients(
 type Sender<P extends { to: string }> = (params: P) => Promise<{ sent: boolean }>
 
 /**
- * Send capability-bearing mail. Accepts only an account or sealed address.
+ * Send mail that carries no capability.
  *
- * `packages/email` types every `to` as a bare string, so the brand alone proves
- * nothing at the send site; routing through here is what makes passing a
- * contact address a compile error. Note the residual hole honestly: nothing
- * forces a caller to use this wrapper. That is what the lint rule and the
- * source-scan test are for.
+ * There is no `mailSecure` counterpart: the capability-bearing senders declare
+ * `to: SecureRecipient` themselves, so the compiler already refuses a contact
+ * address and a wrapper would add nothing but a layer to forget to use.
+ *
+ * This one still earns its place, because the product senders take a plain
+ * `to: string` — they have to, since the outbox calls them with addresses that
+ * came back from JSON and carry no brand. Routing through here is what makes a
+ * caller that has NOT resolved a recipient fail to compile.
  */
-export function mailSecure<P extends { to: string }>(
-  send: Sender<P>,
-  to: SecureRecipient,
-  rest: Omit<P, 'to'>
-): Promise<{ sent: boolean }> {
-  return send({ ...rest, to } as unknown as P)
-}
-
-/** Send mail that carries no capability. */
 export function mailContact<P extends { to: string }>(
   send: Sender<P>,
   to: ContactEmail,
   rest: Omit<P, 'to'>
 ): Promise<{ sent: boolean }> {
+  // The cast is unavoidable: TypeScript cannot see that spreading `Omit<P,'to'>`
+  // back together with a `to` reconstitutes `P`.
   return send({ ...rest, to } as unknown as P)
 }

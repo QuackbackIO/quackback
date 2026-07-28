@@ -1081,8 +1081,9 @@ export const sendInvitationFn = createServerFn({ method: 'POST' })
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
     // Sealed class: the invitee has no account yet, so the address the token
     // was minted for is the only correct recipient.
-    const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
-    const result = await mailSecure(sendInvitationEmail, sealedRecipient(minted), {
+    const { sealedRecipient } = await import('@/lib/server/email/recipient')
+    const result = await sendInvitationEmail({
+      to: sealedRecipient(minted),
       invitedByName: auth.user.name,
       inviteeName: data.name || undefined,
       workspaceName: auth.settings.name,
@@ -1223,8 +1224,9 @@ export const resendInvitationFn = createServerFn({ method: 'POST' })
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
     let result: Awaited<ReturnType<typeof sendInvitationEmail>>
     try {
-      const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
-      result = await mailSecure(sendInvitationEmail, sealedRecipient(minted), {
+      const { sealedRecipient } = await import('@/lib/server/email/recipient')
+      result = await sendInvitationEmail({
+        to: sealedRecipient(minted),
         invitedByName: auth.user.name,
         inviteeName: invitationRecord.name || undefined,
         workspaceName: auth.settings.name,

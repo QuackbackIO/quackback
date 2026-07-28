@@ -163,8 +163,9 @@ async function sendOnePortalInvite({
   const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
   const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
   // Sealed class: no account exists for the invitee.
-  const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
-  await mailSecure(sendPortalInviteEmail, sealedRecipient(minted), {
+  const { sealedRecipient } = await import('@/lib/server/email/recipient')
+  await sendPortalInviteEmail({
+    to: sealedRecipient(minted),
     workspaceName: auth.settings.name,
     inviteLink,
     logoUrl,
@@ -405,8 +406,9 @@ export const resendPortalInviteFn = createServerFn({ method: 'POST' })
     const logoUrl = getEmailSafeUrl(auth.settings.logoKey) ?? undefined
     let result: Awaited<ReturnType<typeof sendPortalInviteEmail>>
     try {
-      const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
-      result = await mailSecure(sendPortalInviteEmail, sealedRecipient(minted), {
+      const { sealedRecipient } = await import('@/lib/server/email/recipient')
+      result = await sendPortalInviteEmail({
+        to: sealedRecipient(minted),
         workspaceName: auth.settings.name,
         inviteLink,
         logoUrl,

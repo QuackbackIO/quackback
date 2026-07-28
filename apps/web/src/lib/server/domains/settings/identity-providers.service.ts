@@ -17,6 +17,8 @@
 import type { Role } from '@/lib/shared/roles'
 import {
   db,
+  account,
+  count,
   eq,
   identityProvider,
   ssoVerifiedDomain,
@@ -502,7 +504,6 @@ export async function deleteIdentityProvider(id: IdentityProviderId): Promise<vo
       // by re-linking on address match; a placeholder-address provider has no
       // shared key at all, so its people come back as brand-new accounts and
       // lose their votes, roles and conversations with no way back.
-      const { account, count } = await import('@/lib/server/db')
       const [{ n }] = await tx
         .select({ n: count() })
         .from(account)

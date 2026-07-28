@@ -13,6 +13,11 @@ import type { Transporter } from 'nodemailer'
 import { Resend } from 'resend'
 import { createLogger } from '@quackback/logger'
 import { isSyntheticAnonEmail } from './anon'
+// Capability-bearing senders declare `to: SecureRecipient` so a contact address
+// cannot be passed to one. See ./recipient for why the classes are shaped this
+// way, and why the guarantee belongs here rather than at the call sites.
+import type { SecureRecipient } from './recipient'
+export type { AccountEmail, SealedEmail, ContactEmail, SecureRecipient } from './recipient'
 import { MagicLinkEmail } from './templates/magic-link'
 import { InvitationEmail } from './templates/invitation'
 import { PortalInviteEmail } from './templates/portal-invite'
@@ -316,7 +321,7 @@ export async function sendRawEmail(options: RawEmailOptions): Promise<EmailResul
 // ============================================================================
 
 interface SendInvitationParams {
-  to: string
+  to: SecureRecipient
   invitedByName: string
   inviteeName?: string
   workspaceName: string
@@ -347,7 +352,7 @@ export async function sendInvitationEmail(params: SendInvitationParams): Promise
 // ============================================================================
 
 interface SendPortalInviteParams {
-  to: string
+  to: SecureRecipient
   workspaceName: string
   inviteLink: string
   logoUrl?: string
@@ -395,7 +400,7 @@ export async function sendWelcomeEmail(params: SendWelcomeParams): Promise<Email
 // ============================================================================
 
 interface SendMagicLinkParams {
-  to: string
+  to: SecureRecipient
   signInUrl: string
   code: string
   logoUrl?: string
@@ -419,7 +424,7 @@ export async function sendMagicLinkEmail(params: SendMagicLinkParams): Promise<E
 // ============================================================================
 
 interface SendPasswordResetParams {
-  to: string
+  to: SecureRecipient
   resetLink: string
   logoUrl?: string
 }
@@ -444,7 +449,7 @@ export async function sendPasswordResetEmail(
 // ============================================================================
 
 interface SendRecoveryCodeUsedParams {
-  to: string
+  to: SecureRecipient
   workspaceName?: string
   ipAddress?: string | null
   userAgent?: string | null
@@ -477,7 +482,7 @@ export async function sendRecoveryCodeUsedEmail(
 // ============================================================================
 
 interface SendNewSignInParams {
-  to: string
+  to: SecureRecipient
   workspaceName?: string
   occurredAt: string
   ipAddress?: string | null

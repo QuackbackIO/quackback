@@ -388,7 +388,7 @@ async function createAuth() {
         // Account class: the reset link is a capability over THIS account, so
         // the recipient is looked up by id and can never be a contact address
         // somebody else supplied.
-        const { resolveAccountRecipient, mailSecure } = await import('@/lib/server/email/recipient')
+        const { resolveAccountRecipient } = await import('@/lib/server/email/recipient')
         const to = await resolveAccountRecipient(user.id as UserId)
         if (!to) {
           log.warn(
@@ -400,7 +400,7 @@ async function createAuth() {
         const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
         const settings = await db.query.settings.findFirst({ columns: { logoKey: true } })
         const logoUrl = getEmailSafeUrl(settings?.logoKey) ?? undefined
-        await mailSecure(sendPasswordResetEmail, to, { resetLink: url, logoUrl })
+        await sendPasswordResetEmail({ to, resetLink: url, logoUrl })
       },
       resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24 hours
       // Completing a reset proves inbox ownership (the user received and

@@ -63,8 +63,9 @@ export async function requestEmailSignin(opts: {
   // request string. There is no account to look up — this may be a signup — so
   // "the address IS the claim" is the only rule available, and it is a stronger
   // one than a lookup would give.
-  const { sealedRecipient, mailSecure } = await import('@/lib/server/email/recipient')
-  await mailSecure(sendMagicLinkEmail, sealedRecipient(minted), {
+  const { sealedRecipient } = await import('@/lib/server/email/recipient')
+  await sendMagicLinkEmail({
+    to: sealedRecipient(minted),
     signInUrl: minted.url,
     code: otp,
     logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
