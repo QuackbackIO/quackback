@@ -9,6 +9,7 @@
  * importantly — how one card writes its own slice of the shared
  * `claim_mapping` column without erasing the slices it does not render.
  */
+import { toast } from 'sonner'
 import type { Role } from '@/lib/shared/roles'
 import type { IdentityProviderClaimMapping } from '@/lib/shared/oidc-claim-mapping'
 import type { IdentityProvider } from '@/lib/server/domains/settings/identity-providers.service'
@@ -137,6 +138,26 @@ export function identityMappingIssue(
     return 'Role sync is on with no rules'
   }
   return null
+}
+
+/**
+ * Guard the two fields a provider cannot be saved without, from either the
+ * create page or the connection card.
+ *
+ * Returns true when the caller should stop. Both entry points edit the same
+ * pair, so the rule and the way it is reported live here rather than being
+ * copied — a new required field is then one edit, not two that can disagree.
+ * The offending input is scrolled to and focused because both forms are long
+ * enough for the field to be off-screen when the toast fires.
+ */
+export function reportMissingIdpFields(label: string, clientId: string): boolean {
+  const missing = !label.trim() ? 'idp-label' : !clientId.trim() ? 'idp-client-id' : null
+  if (!missing) return false
+  toast.error(missing === 'idp-label' ? 'Display name is required.' : 'Client ID is required.')
+  const field = document.getElementById(missing)
+  field?.scrollIntoView({ block: 'center' })
+  field?.focus()
+  return true
 }
 
 /** This provider is the last thing standing between the workspace and a

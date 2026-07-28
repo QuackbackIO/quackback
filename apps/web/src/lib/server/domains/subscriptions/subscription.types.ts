@@ -13,7 +13,15 @@ export type SubscriptionReason = 'author' | 'vote' | 'comment' | 'manual' | 'fee
 export interface Subscriber {
   principalId: PrincipalId
   userId: string
+  /**
+   * The account address, and the IDENTITY the actor is compared against when
+   * deciding whether to skip notifying someone about their own action. It may
+   * be an undeliverable placeholder, so it is not the send address — see
+   * `contactEmail` and `contactRecipientFrom`.
+   */
   email: string
+  /** Fallback delivery address for a principal whose account address is a placeholder. */
+  contactEmail: string | null
   name: string | null
   reason: SubscriptionReason
   notifyComments: boolean

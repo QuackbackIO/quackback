@@ -17,6 +17,7 @@
  */
 
 import { decodeJwt } from 'jose'
+import { isAffirmativeClaim } from '@/lib/shared/oidc-claim-mapping'
 
 /** Sources in the order they are consulted. */
 export type IdentitySource = 'idToken' | 'userinfo' | 'accessTokenJwt'
@@ -92,13 +93,6 @@ function decodePayload(token: string | undefined): Record<string, unknown> | nul
   } catch {
     return null
   }
-}
-
-/** Only literal `true` or the string "true" counts. A bridge emitting the
- *  string "false" is truthy, which is how an unverified address once marked an
- *  account verified. */
-function isAffirmative(value: unknown): boolean {
-  return value === true || (typeof value === 'string' && value.toLowerCase() === 'true')
 }
 
 function asNonEmptyString(value: unknown): string | undefined {
@@ -207,7 +201,7 @@ export async function resolveIdentity({
         found.email = source
         // The verified flag must come from the SAME source as the address; one
         // asserted in the ID token cannot vouch for a userinfo address.
-        emailVerified = isAffirmative(resolveClaim(claims, 'email_verified'))
+        emailVerified = isAffirmativeClaim(resolveClaim(claims, 'email_verified'))
       }
     }
   }

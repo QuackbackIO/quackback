@@ -8,25 +8,16 @@
  *
  * Kept pure and standalone (no DB, no config) so the rules are unit-testable
  * and so `createAuth()` holds no inline claim logic.
- */
-
-/**
- * OIDC Core types `email_verified` as a boolean, but SAML-to-OIDC bridges
- * routinely stringify it — and the string `"false"` is truthy, which is how an
- * unverified address ended up marking the local account verified. That value
- * then renders a verified badge in admin, ships as a boolean on the public API,
- * and satisfies the local-verification guard that gates trusted-provider
- * linking.
  *
- * Affirmative means literal `true` or the exact (case-insensitive) string
- * `"true"`. Everything else is false. Accepting `"true"` avoids demoting the
- * bridges that already work; refusing `1`, `"yes"` and friends keeps this from
- * turning back into truthiness by degrees.
+ * The one rule it tightens is `email_verified`. OIDC Core types it as a
+ * boolean, but SAML-to-OIDC bridges routinely stringify it, and the string
+ * `"false"` is truthy — which is how an unverified address ended up marking the
+ * local account verified. That value then renders a verified badge in admin,
+ * ships as a boolean on the public API, and satisfies the local-verification
+ * guard that gates trusted-provider linking. `isAffirmativeClaim` is shared
+ * with identity resolution so the two cannot disagree about it.
  */
-function claimIsAffirmative(value: unknown): boolean {
-  if (value === true) return true
-  return typeof value === 'string' && value.toLowerCase() === 'true'
-}
+import { isAffirmativeClaim } from '@/lib/shared/oidc-claim-mapping'
 
 /**
  * Declared as a type alias rather than an interface deliberately: Better-Auth
@@ -44,6 +35,6 @@ export function mapProfileClaims(profile: unknown): MappedProfileClaims {
   const p = profile as { locale?: unknown; email_verified?: unknown } | null | undefined
   return {
     locale: typeof p?.locale === 'string' && p.locale.length > 0 ? p.locale : null,
-    emailVerified: claimIsAffirmative(p?.email_verified),
+    emailVerified: isAffirmativeClaim(p?.email_verified),
   }
 }

@@ -198,8 +198,9 @@ async function createAuth() {
     return minted
   }
 
+  const providerRows = await listIdentityProviders()
   const oidcConfigs = await buildGenericOAuthConfigs({
-    providers: await listIdentityProviders(),
+    providers: providerRows,
     creds: getIdentityProviderCredentials,
     tierAllowsOidc: tierLimits.features.customOidcProvider,
     discovery: (discoveryUrl) => fetchJson(discoveryUrl),
@@ -232,7 +233,6 @@ async function createAuth() {
   // (whether the provider asserts a verified address, and an admin override)
   // also need a column that has not landed yet.
   const { allowsAutoLinking } = await import('./provider-trust')
-  const providerRows = await listIdentityProviders()
   for (const c of oidcConfigs) {
     trustedProviders.push(c.providerId)
     const row = providerRows.find((p) => p.registrationId === c.providerId)

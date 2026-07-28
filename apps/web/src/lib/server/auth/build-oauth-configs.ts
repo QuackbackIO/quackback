@@ -183,11 +183,13 @@ export async function buildGenericOAuthConfigs({
     const discoveryUrl = provider.discoveryUrl || c.discoveryUrl || undefined
     const authorizationUrl = provider.authorizationUrl || undefined
     const tokenUrl = provider.tokenUrl || undefined
-    // The row wins: a manual endpoint is an explicit choice, and consulting
-    // discovery when one is set would be both wasteful and overridable.
+    // A manual endpoint is an explicit choice and the row wins, so discovery
+    // never overwrites `userInfoUrl`. Discovery is still fetched when the row
+    // has one, because the same document carries `prompt_values_supported`,
+    // which has no manual equivalent.
     let userInfoUrl = provider.userInfoUrl || undefined
     let promptValuesSupported: string[] | null = null
-    if (discoveryUrl && discovery && (!userInfoUrl || true)) {
+    if (discoveryUrl && discovery) {
       const doc = await discovery(discoveryUrl)
       if (!userInfoUrl && typeof doc?.userinfo_endpoint === 'string') {
         userInfoUrl = doc.userinfo_endpoint

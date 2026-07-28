@@ -30,7 +30,7 @@ import { ConnectionTestRow } from './connection-test-row'
 import { IdpDiscoveryFields, ManualEndpointsSection } from './idp-discovery-fields'
 import { ProviderKindPicker } from './provider-kind-picker'
 import { RedirectUriCallout } from './redirect-uri-callout'
-import { redirectUriFor } from './provider-shared'
+import { redirectUriFor, reportMissingIdpFields } from './provider-shared'
 import { useProviderSave } from './use-provider-save'
 
 export function ConnectionCard({ provider }: { provider: IdentityProvider }) {
@@ -76,14 +76,7 @@ export function ConnectionCard({ provider }: { provider: IdentityProvider }) {
   const busy = saving || savingSecret
 
   const handleSave = async () => {
-    const missing = !label.trim() ? 'idp-label' : !clientId.trim() ? 'idp-client-id' : null
-    if (missing) {
-      toast.error(missing === 'idp-label' ? 'Display name is required.' : 'Client ID is required.')
-      const field = document.getElementById(missing)
-      field?.scrollIntoView({ block: 'center' })
-      field?.focus()
-      return
-    }
+    if (reportMissingIdpFields(label, clientId)) return
     const ok = await save({
       label: label.trim(),
       // Persist the selected family so the page reopens on the right tile

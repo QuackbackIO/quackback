@@ -314,12 +314,14 @@ async function buildEmailTargets(
 
   // `Subscriber.email` is the IDENTITY field `isActorSubscriber` compares
   // against the actor, so it is read, never overwritten. The delivery address is
-  // resolved separately and may differ — a placeholder account reachable only
-  // via its contact address is the case that motivates this.
-  const emailMap = await resolveContactRecipients(eligibleSubscribers.map((s) => s.principalId))
-
+  // decided separately and may differ — a placeholder account reachable only
+  // via its contact address is the case that motivates this. Both fields come
+  // from the subscriber query, so this costs no extra round trip.
   return eligibleSubscribers.flatMap((subscriber) => {
-    const to = emailMap.get(subscriber.principalId)
+    const to = contactRecipientFrom({
+      accountEmail: subscriber.email,
+      contactEmail: subscriber.contactEmail,
+    })
     if (!to) return []
     return [
       emailTarget(
@@ -573,6 +575,7 @@ export async function getMentionTargets(
       // canViewPost only reads role + principalType + segmentIds.
       userId: '',
       email: row.email ?? '',
+      contactEmail: null,
       name: null,
       reason: 'manual',
       notifyComments: false,
@@ -1660,6 +1663,7 @@ export async function getChangelogSubscriberTargets(
       principalId: changelogSubscriptions.principalId,
       userId: principal.userId,
       email: user.email,
+      contactEmail: principal.contactEmail,
       name: user.name,
     })
     .from(changelogSubscriptions)
@@ -1674,6 +1678,7 @@ export async function getChangelogSubscriberTargets(
       principalId: row.principalId,
       userId: row.userId!,
       email: row.email,
+      contactEmail: row.contactEmail,
       name: row.name,
       reason: 'manual',
       notifyComments: false,
@@ -1736,9 +1741,13 @@ export async function getChangelogSubscriberTargets(
       eligibleSubscribers.map((s) => s.principalId)
     )
 
-    const emailMap = await resolveContactRecipients(eligibleSubscribers.map((s) => s.principalId))
+    // Both address fields already came back with the subscriber rows, so the
+    // delivery address is decided here rather than in a second batched query.
     for (const subscriber of eligibleSubscribers) {
-      const to = emailMap.get(subscriber.principalId)
+      const to = contactRecipientFrom({
+        accountEmail: subscriber.email,
+        contactEmail: subscriber.contactEmail,
+      })
       if (!to) continue
       targets.push(
         emailTarget(

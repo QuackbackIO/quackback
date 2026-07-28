@@ -165,3 +165,20 @@ export function allowsMissingEmail(stored: unknown): boolean {
 export function identitySourcesFor(stored: unknown): IdentitySource[] {
   return claimMappingFor(stored).profile?.sources ?? DEFAULT_IDENTITY_SOURCES
 }
+
+/**
+ * Whether a boolean-ish claim says yes.
+ *
+ * Affirmative is literal `true` or the exact (case-insensitive) string
+ * `"true"`, and nothing else. Accepting `"true"` keeps the SAML-to-OIDC bridges
+ * that stringify their booleans working; refusing `1`, `"yes"` and friends
+ * stops this drifting back into plain truthiness, where the string `"false"`
+ * once marked an unverified address as verified.
+ *
+ * One implementation, because both readers of `email_verified` have to agree:
+ * identity resolution decides whether an address can be trusted, and profile
+ * mapping decides what gets written to the account.
+ */
+export function isAffirmativeClaim(value: unknown): boolean {
+  return value === true || (typeof value === 'string' && value.toLowerCase() === 'true')
+}

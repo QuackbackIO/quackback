@@ -33,6 +33,7 @@ import {
   IDENTITY_PROVIDERS_KEY,
   newRegistrationId,
   redirectUriFor,
+  reportMissingIdpFields,
   SIGN_IN_TAB,
 } from './provider-shared'
 
@@ -55,14 +56,7 @@ export function ProviderCreatePage() {
   const [saving, setSaving] = useState(false)
 
   const handleCreate = async () => {
-    const missing = !label.trim() ? 'idp-label' : !clientId.trim() ? 'idp-client-id' : null
-    if (missing) {
-      toast.error(missing === 'idp-label' ? 'Display name is required.' : 'Client ID is required.')
-      const field = document.getElementById(missing)
-      field?.scrollIntoView({ block: 'center' })
-      field?.focus()
-      return
-    }
+    if (reportMissingIdpFields(label, clientId)) return
     setSaving(true)
     try {
       const saved = await upsert({

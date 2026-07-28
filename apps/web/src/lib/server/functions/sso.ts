@@ -233,6 +233,12 @@ export const listIdentityProvidersFn = createServerFn({ method: 'GET' }).handler
   return listIdentityProviders()
 })
 
+/**
+ * Create or update a provider (matched by `id`, else by `registrationId`).
+ * Emits `idp.created` / `idp.updated` based on whether a matching row
+ * already exists; the underlying service bumps the auth-config version and
+ * resets the local auth instance so the new config registers.
+ */
 export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
   .validator(upsertIdentityProviderInput)
   .handler(async ({ data }) => {
@@ -588,10 +594,3 @@ export const getProviderAccountCountFn = createServerFn({ method: 'GET' })
       await import('@/lib/server/domains/settings/identity-provider-accounts')
     return { count: await countProviderAccounts(data.id) }
   })
-
-/**
- * Create or update a provider (matched by `id`, else by `registrationId`).
- * Emits `idp.created` / `idp.updated` based on whether a matching row
- * already exists; the underlying service bumps the auth-config version and
- * resets the local auth instance so the new config registers.
- */

@@ -72,12 +72,17 @@ vi.mock('@/lib/server/auth', () => ({
   }),
 }))
 
-vi.mock('@/lib/server/domains/principals/contact-email', () => ({
-  acceptableContactEmail: (e: string) => {
-    const v = e.trim().toLowerCase()
-    return v.includes('@') && !v.endsWith('@anon.quackback.io') ? v : null
-  },
-}))
+vi.mock('@/lib/server/domains/principals/contact-email', async () => {
+  // The reserved domain comes from the one constant that owns it; re-typing the
+  // literal here would let the mock keep passing after the real domain moved.
+  const { ANON_EMAIL_DOMAIN } = await import('@/lib/shared/anonymous-email')
+  return {
+    acceptableContactEmail: (e: string) => {
+      const v = e.trim().toLowerCase()
+      return v.includes('@') && !v.endsWith(`@${ANON_EMAIL_DOMAIN}`) ? v : null
+    },
+  }
+})
 
 vi.mock('@/lib/server/domains/api/rate-limit', () => ({ getClientIp: () => '203.0.113.7' }))
 vi.mock('@/lib/server/auth/signin-rate-limit', () => ({

@@ -203,6 +203,10 @@ export async function getSubscribersForEvent(
       notifyStatusChanges: postSubscriptions.notifyStatusChanges,
       userId: principal.userId,
       email: user.email,
+      // Selected alongside the account address so the notification builders can
+      // decide a delivery address from the rows they already have, instead of
+      // issuing a second batched query per fan-out.
+      contactEmail: principal.contactEmail,
       name: user.name,
     })
     .from(postSubscriptions)
@@ -222,6 +226,7 @@ export async function getSubscribersForEvent(
       principalId: row.principalId,
       userId: row.userId!, // INNER JOIN on user guarantees non-null
       email: row.email,
+      contactEmail: row.contactEmail,
       name: row.name,
       reason: row.reason as SubscriptionReason,
       notifyComments: row.notifyComments,
