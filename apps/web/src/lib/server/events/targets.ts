@@ -27,7 +27,12 @@ import {
   tickets,
   ticketConversations,
 } from '@/lib/server/db'
-import { resolveContactRecipients as resolvePrincipalEmails } from '@/lib/server/email/recipient'
+import {
+  resolveContactRecipients,
+  resolveContactRecipients as resolvePrincipalEmails,
+  contactRecipientFrom,
+  type ContactEmail,
+} from '@/lib/server/email/recipient'
 import { formatTicketNumber } from '@/lib/shared/tickets'
 import { isSupportTicketsEnabled } from '@/lib/server/domains/settings/settings.support'
 import { canViewPost, type Actor } from '@/lib/server/policy'
@@ -39,7 +44,7 @@ import {
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
-import type { HookTarget } from './hook-types'
+import type { HookTarget, EmailTarget } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
 import { type HookContext } from './hook-context'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
@@ -308,19 +313,28 @@ async function buildEmailTargets(
     }))
   )
 
-  return eligibleSubscribers.map((subscriber) => ({
-    type: 'email',
-    target: {
-      email: subscriber.email,
-      unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
-    },
-    config: {
-      workspaceName: context.workspaceName,
-      logoUrl: context.logoUrl ?? undefined,
-      preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
-      ...eventConfig,
-    },
-  }))
+  // `Subscriber.email` is the IDENTITY field `isActorSubscriber` compares
+  // against the actor, so it is read, never overwritten. The delivery address is
+  // resolved separately and may differ — a placeholder account reachable only
+  // via its contact address is the case that motivates this.
+  const emailMap = await resolveContactRecipients(principalIds)
+
+  return eligibleSubscribers.flatMap((subscriber) => {
+    const to = emailMap.get(subscriber.principalId)
+    if (!to) return []
+    return [
+      emailTarget(
+        to,
+        `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
+        {
+          workspaceName: context.workspaceName,
+          logoUrl: context.logoUrl ?? undefined,
+          preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+          ...eventConfig,
+        }
+      ),
+    ]
+  })
 }
 
 /**
@@ -532,6 +546,7 @@ export async function getMentionTargets(
       type: principal.type,
       role: principal.role,
       email: user.email,
+      contactEmail: principal.contactEmail,
     })
     .from(principal)
     .leftJoin(user, eq(principal.userId, user.id))
@@ -580,7 +595,11 @@ export async function getMentionTargets(
     },
   })
 
-  if (row.email) {
+  const mentionTo = contactRecipientFrom({
+    accountEmail: row.email,
+    contactEmail: row.contactEmail,
+  })
+  if (mentionTo) {
     // Honour the per-type x per-channel preference matrix (this subsumes the
     // global emailMuted kill switch). Without this, a user who hit
     // unsubscribe-all (which sets emailMuted=true) would still get direct
@@ -597,21 +616,16 @@ export async function getMentionTargets(
         },
       ])
       const token = tokenMap.get(row.id as PrincipalId)
-      targets.push({
-        type: 'email',
-        target: {
-          email: row.email,
-          unsubscribeUrl: token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : undefined,
-        },
-        config: {
+      targets.push(
+        emailTarget(mentionTo, token ? `${context.portalBaseUrl}/unsubscribe?token=${token}` : '', {
           postTitle,
           postUrl,
           workspaceName: context.workspaceName,
           logoUrl: context.logoUrl ?? undefined,
           preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
           eventType: 'post.mentioned',
-        },
-      })
+        })
+      )
     }
   }
 
@@ -1125,8 +1139,26 @@ async function readTicketFacts(ticketId: TicketId): Promise<{
   }
 }
 
-function ticketEmailTarget(email: string, config: Record<string, unknown>): HookTarget {
-  return { type: 'email', target: { email, unsubscribeUrl: '' }, config }
+/**
+ * THE constructor for an email hook target.
+ *
+ * `HookTarget.target` is `unknown` — it has to be, since it carries Slack
+ * channels and webhook URLs too — so branding `EmailTarget.email` enforces
+ * nothing on an object literal. Requiring a `ContactEmail` HERE is what makes
+ * "the address came from the resolver" a compile-time fact rather than a
+ * convention, and it is the only place the cast to the erased wire type
+ * happens.
+ */
+export function emailTarget(
+  email: ContactEmail,
+  unsubscribeUrl: string,
+  config: Record<string, unknown>
+): HookTarget {
+  return { type: 'email', target: { email, unsubscribeUrl } satisfies EmailTarget, config }
+}
+
+function ticketEmailTarget(email: ContactEmail, config: Record<string, unknown>): HookTarget {
+  return emailTarget(email, '', config)
 }
 
 type TicketEmailKind =
@@ -1206,7 +1238,7 @@ function agentFacingConfig(
  */
 async function buildRequesterOrAgentTargets(params: {
   recipients: PrincipalId[]
-  emailMap: Map<PrincipalId, string>
+  emailMap: Map<PrincipalId, ContactEmail>
   requesterPrincipalId: PrincipalId | null
   kind: 'reply' | 'status_resolved'
   ticketId: TicketId
@@ -1705,24 +1737,26 @@ export async function getChangelogSubscriberTargets(
       eligibleSubscribers.map((s) => s.principalId)
     )
 
+    const emailMap = await resolveContactRecipients(eligibleSubscribers.map((s) => s.principalId))
     for (const subscriber of eligibleSubscribers) {
-      targets.push({
-        type: 'email',
-        target: {
-          email: subscriber.email,
-          unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
-        },
-        config: {
-          workspaceName: context.workspaceName,
-          logoUrl: context.logoUrl ?? undefined,
-          preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
-          changelogTitle: event.data.changelog.title,
-          changelogUrl,
-          contentPreview: event.data.changelog.contentPreview,
-          eventType: 'changelog.published',
-          from,
-        },
-      })
+      const to = emailMap.get(subscriber.principalId)
+      if (!to) continue
+      targets.push(
+        emailTarget(
+          to,
+          `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(subscriber.principalId)}`,
+          {
+            workspaceName: context.workspaceName,
+            logoUrl: context.logoUrl ?? undefined,
+            preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+            changelogTitle: event.data.changelog.title,
+            changelogUrl,
+            contentPreview: event.data.changelog.contentPreview,
+            eventType: 'changelog.published',
+            from,
+          }
+        )
+      )
     }
   }
 
@@ -1832,7 +1866,13 @@ export async function getStatusSubscriberTargets(
 
   // Batch-load role/type + segments + email for each subscriber.
   const principals = await db
-    .select({ id: principal.id, role: principal.role, type: principal.type, email: user.email })
+    .select({
+      id: principal.id,
+      role: principal.role,
+      type: principal.type,
+      email: user.email,
+      contactEmail: principal.contactEmail,
+    })
     .from(principal)
     .leftJoin(user, eq(principal.userId, user.id))
     .where(inArray(principal.id, principalIds))
@@ -1906,7 +1946,10 @@ export async function getStatusSubscriberTargets(
 
   // Email targets — gated by emailsDisabled + per-principal notification matrix.
   if (!settings.emailsDisabled) {
-    const withEmail = eligible.filter((p) => !!p.email)
+    const withEmail = eligible.flatMap((p) => {
+      const to = contactRecipientFrom({ accountEmail: p.email, contactEmail: p.contactEmail })
+      return to ? [{ ...p, to }] : []
+    })
     if (withEmail.length > 0) {
       const prefsMap = await batchGetNotificationPreferences(
         withEmail.map((p) => p.id as PrincipalId)
@@ -1920,31 +1963,30 @@ export async function getStatusSubscriberTargets(
           emailable.map((p) => p.id as PrincipalId)
         )
         for (const p of emailable) {
-          targets.push({
-            type: 'email',
-            target: {
-              email: p.email!,
-              unsubscribeUrl: `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(p.id as PrincipalId)}`,
-            },
-            config: {
-              eventType: event.type,
-              workspaceName: context.workspaceName,
-              logoUrl: context.logoUrl ?? undefined,
-              preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
-              incidentTitle: incident.title,
-              incidentUrl,
-              impact: incident.impact,
-              statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
-              body: firstUpdateBody,
-              affectedComponents: affectedForEmail,
-              scheduledStartLabel: incident.scheduledStartAt
-                ? formatStatusDate(incident.scheduledStartAt)
-                : null,
-              scheduledEndLabel: incident.scheduledEndAt
-                ? formatStatusDate(incident.scheduledEndAt)
-                : null,
-            },
-          })
+          targets.push(
+            emailTarget(
+              p.to,
+              `${context.portalBaseUrl}/unsubscribe?token=${tokenMap.get(p.id as PrincipalId)}`,
+              {
+                eventType: event.type,
+                workspaceName: context.workspaceName,
+                logoUrl: context.logoUrl ?? undefined,
+                preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+                incidentTitle: incident.title,
+                incidentUrl,
+                impact: incident.impact,
+                statusLabel: STATUS_LIFECYCLE_LABELS[incident.status] ?? incident.status,
+                body: firstUpdateBody,
+                affectedComponents: affectedForEmail,
+                scheduledStartLabel: incident.scheduledStartAt
+                  ? formatStatusDate(incident.scheduledStartAt)
+                  : null,
+                scheduledEndLabel: incident.scheduledEndAt
+                  ? formatStatusDate(incident.scheduledEndAt)
+                  : null,
+              }
+            )
+          )
         }
       }
     }

@@ -51,7 +51,10 @@ const postCreatedEvent = {
 } as EventData
 
 const baseTarget: EmailTarget = {
-  email: 'user@example.com',
+  // The delivery handler receives an address that was already resolved at
+  // construction; the brand does not survive the outbox's JSON round trip, so
+  // a fixture asserts it the same way the handler does.
+  email: 'user@example.com' as EmailTarget['email'],
   unsubscribeUrl: 'https://example.com/unsubscribe',
 }
 

@@ -263,3 +263,42 @@ describe('post.mentioned target resolution', () => {
     expect(emailTargets).toHaveLength(0)
   })
 })
+
+describe('mention email — reachable only via a contact address', () => {
+  it('emails the contact address when the account address is a placeholder', async () => {
+    // Someone whose provider releases no email carries a synthetic placeholder
+    // on the account. The old truthiness check on `email` handed that
+    // placeholder to the transport, which dropped it silently — so a person
+    // with a perfectly good contact address on file received nothing.
+    setupMentionDbChain([
+      {
+        id: 'principal_mentioned',
+        type: 'user',
+        role: 'user',
+        email: 'sso-oidc-abc-deadbeef@anon.quackback.io',
+        contactEmail: 'reachable@example.com',
+      },
+    ])
+
+    const targets = await getHookTargets(makePostMentionedEvent())
+    const emailTargets = targets.filter((t) => t.type === 'email')
+
+    expect(emailTargets).toHaveLength(1)
+    expect((emailTargets[0].target as { email: string }).email).toBe('reachable@example.com')
+  })
+
+  it('produces no email target when both addresses are placeholders', async () => {
+    setupMentionDbChain([
+      {
+        id: 'principal_mentioned',
+        type: 'user',
+        role: 'user',
+        email: 'sso-oidc-abc-deadbeef@anon.quackback.io',
+        contactEmail: null,
+      },
+    ])
+
+    const targets = await getHookTargets(makePostMentionedEvent())
+    expect(targets.filter((t) => t.type === 'email')).toHaveLength(0)
+  })
+})

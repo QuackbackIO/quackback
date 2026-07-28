@@ -81,6 +81,27 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
 // including channelAccounts, added with the email channel — is present) and
 // override ONLY the `db` handle. Re-listing tables here is the banned pattern
 // that broke when channelAccounts landed.
+// Address resolution has its own tests; this suite is about who gets fanned
+// out to, so the resolver returns whatever the fixture's team rows carry.
+vi.mock('@/lib/server/email/recipient', async (orig) => {
+  const actual = await orig<typeof import('@/lib/server/email/recipient')>()
+  return {
+    ...actual,
+    // Mirrors the real resolver against the fixture's rows rather than
+    // inventing addresses: a teammate with no address must stay unreachable, or
+    // the fan-out assertion stops meaning anything.
+    resolveContactRecipients: vi.fn(async (ids: string[]) => {
+      const byId = new Map(teamRows.map((t) => [t.principalId, t.email]))
+      return new Map(
+        ids.flatMap((id) => {
+          const email = byId.get(id)
+          return email ? [[id, email] as const] : []
+        })
+      )
+    }),
+  }
+})
+
 vi.mock('@/lib/server/db', async (importOriginal) => {
   // A thenable chain. `.where()` resolves to the team rows (so a bare await on
   // the where() builder yields the array); `.limit()` resolves to the single

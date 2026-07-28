@@ -201,12 +201,22 @@ export async function notifyVisitorMessage(opts: {
       if (!ctx) return
       const ctaUrl = `${ctx.portalBaseUrl.replace(/\/$/, '')}/admin/inbox?i=${opts.conversation.id}`
       const { sendConversationMessageEmail } = await import('@quackback/email')
+      // Contact class: the only link is an /admin/inbox URL, which carries no
+      // capability — the session does. So a teammate reachable only via their
+      // contact address is correctly included, which the old truthiness filter
+      // on the account address would have dropped.
+      const { resolveContactRecipients, mailContact } = await import('@/lib/server/email/recipient')
+      const teamEmails = await resolveContactRecipients(
+        team.map((t) => t.principalId as PrincipalId)
+      )
       await Promise.allSettled(
         team
-          .filter((t) => t.email)
+          .flatMap((t) => {
+            const to = teamEmails.get(t.principalId as PrincipalId)
+            return to ? [{ ...t, to }] : []
+          })
           .map((t) =>
-            sendConversationMessageEmail({
-              to: t.email!,
+            mailContact(sendConversationMessageEmail, t.to, {
               direction: 'visitor_message',
               senderName: opts.authorName,
               messagePreview: body,

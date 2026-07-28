@@ -1,3 +1,4 @@
+import type { ContactEmail } from '@/lib/server/email/recipient'
 /**
  * Hook system types.
  *
@@ -119,7 +120,16 @@ export interface HookTarget {
  * Email hook target and config.
  */
 export interface EmailTarget {
-  email: string
+  /**
+   * Resolved at CONSTRUCTION, in targets.ts, through resolveContactRecipients.
+   *
+   * Note the honest limit: hook targets are JSON-serialised through the outbox,
+   * so the brand does not survive the round trip and the delivery handler casts
+   * it back. The guarantee is about where the address came from, not about the
+   * type at the far end. Resolving at delivery time instead would cost a query
+   * per recipient per fan-out and break payload-based idempotency.
+   */
+  email: ContactEmail
   name?: string
   unsubscribeUrl: string
 }
