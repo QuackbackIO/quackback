@@ -14,10 +14,11 @@ checklist.
   timelines, backfill, and audit.
 - **verb** MUST come from the fixed vocabulary (CI-checked):
   - generic lifecycle: `created` · `updated` · `deleted` · `restored` · `archived`
-  - semantic (curated): `status_changed`, `assigned`, `priority_changed`,
-    `merged`, `unmerged`, `mentioned`, `published`, `replied`, `handed_off`,
-    `csat_submitted`, `breached`, `external_status_changed` (a linked tracker
-    issue moved upstream), … (add new ones to the list _on purpose_).
+  - semantic (curated): `status_changed`, `assigned`, `owner_assigned`,
+    `priority_changed`, `merged`, `unmerged`, `mentioned`, `published`,
+    `replied`, `handed_off`, `csat_submitted`, `breached`,
+    `external_status_changed` (a linked tracker issue moved upstream), …
+    (add new ones to the list _on purpose_).
 - A new verb is a deliberate decision, not a drive-by string. Adding one and
   forgetting the list turns CI red.
 - Legacy compound verbs (`status.incident_created`) are grandfathered; new

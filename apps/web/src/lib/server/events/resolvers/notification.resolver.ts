@@ -21,6 +21,7 @@ import {
   getStatusSubscriberTargets,
   getConversationAssignedTargets,
   getTicketAssignedTargets,
+  getPostOwnerAssignedTargets,
   getAssistantHandedOffTargets,
   getConversationNoteMentionedTargets,
   getTicketStatusChangedTargets,
@@ -59,6 +60,7 @@ type BellBuilder = (event: EventData) => Promise<HookTarget | null> | HookTarget
 const BELL_BUILDERS: Record<string, BellBuilder> = {
   'conversation.assigned': getConversationAssignedTargets,
   'ticket.assigned': getTicketAssignedTargets,
+  'post.owner_assigned': getPostOwnerAssignedTargets,
   'assistant.handed_off': getAssistantHandedOffTargets,
   'conversation.note_mentioned': getConversationNoteMentionedTargets,
   'ticket.status_changed': getTicketStatusChangedTargets,

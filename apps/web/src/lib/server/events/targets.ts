@@ -791,6 +791,24 @@ export async function getAssistantHandedOffTargets(event: EventData): Promise<Ho
 }
 
 /**
+ * Notification target for `post.owner_assigned`: the newly-assigned owner,
+ * excluding the actor (never self-notify — a teammate assigning a post to
+ * themselves gets no bell). The payload is self-contained, so this trusts it
+ * outright — no DB round-trip, mirroring `getConversationNoteMentionedTargets`
+ * below. Exported for direct unit testing.
+ */
+export function getPostOwnerAssignedTargets(event: EventData): HookTarget | null {
+  if (event.type !== 'post.owner_assigned') return null
+  const { postId, postTitle, boardSlug, postUrl, ownerPrincipalId } = event.data
+  if (ownerPrincipalId === event.actor.principalId) return null
+  return {
+    type: 'notification',
+    target: { principalIds: [ownerPrincipalId as PrincipalId] },
+    config: { postId: postId as PostId, postTitle, boardSlug, postUrl },
+  }
+}
+
+/**
  * Notification target for `conversation.note_mentioned` (WO-3 slice 3):
  * `mentionedPrincipalIds` is already eligibility-filtered (team-only) and
  * author-excluded by the emit site (sync-conversation-mentions.ts), so this

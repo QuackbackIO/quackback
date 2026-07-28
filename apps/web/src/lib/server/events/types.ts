@@ -38,6 +38,7 @@ export const EVENT_TYPES = [
   'post.merged',
   'post.unmerged',
   'post.mentioned',
+  'post.owner_assigned',
   'comment.created',
   'comment.updated',
   'comment.deleted',
@@ -163,6 +164,20 @@ export interface EventPostMentionedData {
 export interface PostUpdatedPayload {
   post: EventPostRef
   changedFields: string[]
+}
+
+/**
+ * Payload for post.owner_assigned — fired when a post's owner is set to a
+ * different principal. Self-contained (no DB round-trip needed downstream),
+ * mirroring post.mentioned's shape rather than nesting an EventPostRef.
+ */
+export interface PostOwnerAssignedPayload {
+  postId: string
+  postTitle: string
+  boardSlug: string
+  postUrl: string
+  ownerPrincipalId: string
+  previousOwnerPrincipalId: string | null
 }
 
 export interface PostDeletedPayload {
@@ -629,6 +644,9 @@ export interface StatusComponentChangedEvent extends EventBase<'status.component
 export interface PostMentionedEvent extends EventBase<'post.mentioned'> {
   data: EventPostMentionedData
 }
+export interface PostOwnerAssignedEvent extends EventBase<'post.owner_assigned'> {
+  data: PostOwnerAssignedPayload
+}
 
 export interface ConversationCreatedEvent extends EventBase<'conversation.created'> {
   data: ConversationCreatedPayload
@@ -717,6 +735,7 @@ export type EventData =
   | PostMergedEvent
   | PostUnmergedEvent
   | PostMentionedEvent
+  | PostOwnerAssignedEvent
   | CommentCreatedEvent
   | CommentUpdatedEvent
   | CommentDeletedEvent

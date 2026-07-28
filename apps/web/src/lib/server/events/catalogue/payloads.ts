@@ -88,6 +88,14 @@ export const P = {
     mentioningPrincipalId: id,
     excerpt: z.string(),
   }),
+  'post.owner_assigned': z.looseObject({
+    postId: id,
+    postTitle: z.string(),
+    boardSlug: z.string(),
+    postUrl: z.string(),
+    ownerPrincipalId: id,
+    previousOwnerPrincipalId: nullableStr,
+  }),
   // comment family
   'comment.created': z.looseObject({ comment: commentData, post: postRef }),
   'comment.updated': z.looseObject({ comment: commentData, post: postRef }),
