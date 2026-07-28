@@ -77,11 +77,17 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // visibility could be checked and no permission that would mean anything.
   // Abuse is bounded by the rate limiter rather than by authorization, because
   // the risk is mailing a stranger, not reading someone else's data.
-  'lib/server/functions/contact-email.ts::requestContactEmailFn': END_USER(
-    'signed-in person supplying their own address; principal comes from the session'
+  'lib/server/functions/contact-email.ts::getEmailChangeStateFn': END_USER(
+    'reads only the caller own address state'
   ),
-  'lib/server/functions/contact-email.ts::getContactEmailStatusFn': END_USER(
-    'reads only whether the caller has an address on file'
+  'lib/server/functions/contact-email.ts::sendCurrentAddressCodeFn': END_USER(
+    'sends a code to the caller own current address; no input is taken'
+  ),
+  'lib/server/functions/contact-email.ts::requestEmailChangeFn': END_USER(
+    'signed-in person claiming an address for their own account'
+  ),
+  'lib/server/functions/contact-email.ts::confirmEmailChangeFn': END_USER(
+    'writes the caller own address, gated on a code proving they hold it'
   ),
   // Assistant proposals are item-scoped after authentication. Reads/rejections
   // require visibility of the concrete parent; approval additionally checks

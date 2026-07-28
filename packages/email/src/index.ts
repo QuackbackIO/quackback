@@ -31,7 +31,7 @@ import { StatusIncidentPublishedEmail } from './templates/status-incident-publis
 import type { IncidentImpact } from './templates/status-incident-published'
 import { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-scheduled'
 import { CsatRequestEmail } from './templates/csat-request'
-import { ConfirmContactEmail } from './templates/confirm-contact-email'
+import { VerifyAddressEmail } from './templates/verify-address'
 
 /**
  * Get environment variable at runtime.
@@ -1209,36 +1209,30 @@ export { StatusMaintenanceScheduledEmail } from './templates/status-maintenance-
 export { CsatRequestEmail, CSAT_FACES as CSAT_REQUEST_EMAIL_FACES } from './templates/csat-request'
 
 // ============================================================================
-// Contact-email confirmation
+// Address verification (add or change)
 // ============================================================================
 
-export interface SendConfirmContactEmailParams {
+export interface SendVerifyAddressEmailParams {
   to: string
-  confirmUrl: string
+  code: string
   workspaceName?: string
   logoUrl?: string
 }
 
 /**
- * Proof-of-control for an address someone asked us to send their notifications
- * to. They signed in through a provider that releases no email, so their
- * account holds an undeliverable placeholder and this is the only route to
- * reaching them.
- *
- * Anyone can type any address, which is why nothing is written until this is
- * confirmed: `contactEmail` is a delivery target, so an unverified value would
- * be a way to point somebody else's replies at an address they do not own.
+ * Proof of control for an address someone is adding to, or moving, their
+ * account. Contact class: the code proves the address, it does not grant
+ * anything on its own.
  */
-export async function sendConfirmContactEmail(
-  params: SendConfirmContactEmailParams
+export async function sendVerifyAddressEmail(
+  params: SendVerifyAddressEmailParams
 ): Promise<EmailResult> {
-  const { to, confirmUrl, workspaceName, logoUrl } = params
-
-  log.debug('sending contact-email confirmation')
+  const { to, code, workspaceName, logoUrl } = params
+  log.debug('sending address verification code')
   return sendEmail({
     to,
     subject: 'Confirm your email address',
-    react: ConfirmContactEmail({ confirmUrl, workspaceName, logoUrl }),
-    emailType: 'ConfirmContactEmail',
+    react: VerifyAddressEmail({ code, workspaceName, logoUrl }),
+    emailType: 'VerifyAddressEmail',
   })
 }

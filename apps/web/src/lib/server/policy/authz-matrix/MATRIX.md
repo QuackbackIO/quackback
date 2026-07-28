@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 586 surfaces
+### Server functions (`requireAuth`) — 588 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -286,8 +286,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/companies.ts`::createCompanyAttributeFn | company.manage |
 | `lib/server/functions/companies.ts`::updateCompanyAttributeFn | company.manage |
 | `lib/server/functions/companies.ts`::deleteCompanyAttributeFn | company.manage |
-| `lib/server/functions/contact-email.ts`::requestContactEmailFn | END_USER (any authenticated) |
-| `lib/server/functions/contact-email.ts`::getContactEmailStatusFn | END_USER (any authenticated) |
+| `lib/server/functions/contact-email.ts`::getEmailChangeStateFn | END_USER (any authenticated) |
+| `lib/server/functions/contact-email.ts`::sendCurrentAddressCodeFn | END_USER (any authenticated) |
+| `lib/server/functions/contact-email.ts`::requestEmailChangeFn | END_USER (any authenticated) |
+| `lib/server/functions/contact-email.ts`::confirmEmailChangeFn | END_USER (any authenticated) |
 | `lib/server/functions/conversation-attributes.ts`::listConversationAttributesFn | conversation.view |
 | `lib/server/functions/conversation-attributes.ts`::createConversationAttributeFn | conversation.manage |
 | `lib/server/functions/conversation-attributes.ts`::updateConversationAttributeFn | conversation.manage |
@@ -887,7 +889,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-182 of 876 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+181 of 877 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -903,7 +905,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/changelog.ts`::listPublicChangelogsFn | server-fn |
 | `lib/server/functions/comments.ts`::canPinCommentFn | server-fn |
 | `lib/server/functions/comments.ts`::getCommentPermissionsFn | server-fn |
-| `lib/server/functions/contact-email.ts`::confirmContactEmailFn | server-fn |
 | `lib/server/functions/conversation.ts`::getConversationPresenceFn | server-fn |
 | `lib/server/functions/conversation.ts`::getMessengerUnreadFn | server-fn |
 | `lib/server/functions/conversation.ts`::getMyConversationFn | server-fn |

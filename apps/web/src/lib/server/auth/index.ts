@@ -52,8 +52,19 @@ const otpStash = makeStash<string>()
 
 export const storeMagicLinkToken = (email: string, token: string) =>
   magicLinkStash.set(email, token)
-export const storeOTP = (email: string, otp: string) => otpStash.set(email, otp)
-export const getOTP = (email: string) => otpStash.take(email)
+/**
+ * OTP purposes the plugin issues. Keyed together with the address because a
+ * sign-in code and an email-verification code can be live for the same address
+ * at the same time — keying on the address alone let the second overwrite the
+ * first, and whichever drained the stash got the wrong code.
+ */
+export type OtpPurpose = 'sign-in' | 'email-verification' | 'forget-password'
+
+const otpKey = (purpose: OtpPurpose, email: string) => `${purpose}:${email}`
+
+export const storeOTP = (purpose: OtpPurpose, email: string, otp: string) =>
+  otpStash.set(otpKey(purpose, email), otp)
+export const getOTP = (purpose: OtpPurpose, email: string) => otpStash.take(otpKey(purpose, email))
 
 // Lazy-initialized auth instance
 // This prevents client bundling of database code
@@ -515,11 +526,35 @@ async function createAuth() {
       }),
 
       emailOTP({
-        async sendVerificationOTP({ email, otp }) {
-          storeOTP(email, otp)
+        async sendVerificationOTP({ email, otp, type }) {
+          // Sign-in codes are stashed and drained by `requestEmailSignin`,
+          // which combines them with a magic link in one email. Every other
+          // purpose has no such caller, so it is sent from here.
+          if (type === 'sign-in') {
+            storeOTP('sign-in', email, otp)
+            return
+          }
+          storeOTP(type as OtpPurpose, email, otp)
+          const { sendVerifyAddressEmail } = await import('@quackback/email')
+          const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
+          const settings = await db.query.settings.findFirst({
+            columns: { name: true, logoKey: true },
+          })
+          await sendVerifyAddressEmail({
+            to: email,
+            code: otp,
+            workspaceName: settings?.name ?? undefined,
+            logoUrl: getEmailSafeUrl(settings?.logoKey) ?? undefined,
+          })
         },
         otpLength: 6,
         expiresIn: 600,
+        // Changing an address is a two-step proof, but `verifyCurrentEmail` is a
+        // static boolean and turning it on would demand a code at an address
+        // that cannot receive one — locking out exactly the people whose
+        // provider releases no email. The current-address step is therefore
+        // enforced conditionally in the server function instead.
+        changeEmail: { enabled: true, verifyCurrentEmail: false },
       }),
 
       // One-time token plugin for cross-domain session transfer.

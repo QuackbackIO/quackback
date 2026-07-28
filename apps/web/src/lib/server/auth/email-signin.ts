@@ -51,7 +51,7 @@ export async function requestEmailSignin(opts: {
     db.query.settings.findFirst({ columns: { logoKey: true } }),
   ])
 
-  const otp = getOTP(opts.email)
+  const otp = getOTP('sign-in', opts.email)
   if (!otp) throw new Error('OTP was not captured')
 
   if (!isEmailConfigured()) {

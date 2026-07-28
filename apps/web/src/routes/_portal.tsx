@@ -16,7 +16,6 @@ import type { PermissionKey } from '@/lib/shared/permissions'
 import { PortalHeader } from '@/components/public/portal-header'
 import { AuthPopoverProvider } from '@/components/auth/auth-popover-context'
 import { AuthDialog } from '@/components/auth/auth-dialog'
-import { ContactEmailPrompt } from '@/components/portal/contact-email-prompt'
 import { PortalAccessGate } from '@/components/portal/portal-access-gate'
 import type { PortalAccessGateError } from '@/lib/shared/types/portal-gate-error'
 import { DEFAULT_AUTH_CONFIG } from '@/lib/shared/types/settings'
@@ -394,12 +393,6 @@ function PortalLayout() {
                 <Outlet />
               </main>
               <AuthDialog authConfig={authConfig} workspaceName={workspaceName} />
-              {/* Only renders for someone whose provider released no address,
-                  which the session already tells us without a round trip. */}
-              <ContactEmailPrompt
-                accountEmail={session?.user?.email}
-                isAuthenticated={isAuthenticated}
-              />
             </div>
           </PortalPreviewProvider>
         </AuthPopoverProvider>

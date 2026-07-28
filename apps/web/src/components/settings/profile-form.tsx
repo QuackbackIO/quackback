@@ -14,7 +14,7 @@ import { useUploadAvatar, useDeleteAvatar } from '@/lib/client/mutations/avatar'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { PasswordForm } from '@/components/settings/password-form'
 import { getInitials } from '@/lib/shared/utils'
-import { realEmail } from '@/lib/shared/anonymous-email'
+import { EmailField } from '@/components/settings/email-field'
 
 interface ProfileFormProps {
   user: {
@@ -239,21 +239,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium">
-                  Email
-                </label>
-                {/* A provider that releases no address gets a minted
-                    placeholder on the account. It is not the person's address
-                    and must never be shown back to them. */}
-                <Input
-                  id="email"
-                  type="email"
-                  defaultValue={realEmail(user.email) ?? ''}
-                  disabled
-                  placeholder="No email"
-                />
-              </div>
+              <EmailField />
             </div>
             <div className="flex justify-end">
               <Button type="submit" disabled={isSubmitting}>

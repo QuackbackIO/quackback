@@ -34,7 +34,9 @@ const MAIL_CLASS: Record<string, 'account' | 'sealed' | 'contact' | 'unused'> = 
   sendStatusIncidentPublishedEmail: 'contact',
   sendStatusMaintenanceScheduledEmail: 'contact',
   sendTicketEventEmail: 'contact',
-  sendConfirmContactEmail: 'contact',
+  // Proves control of an address someone is claiming. The code confirms the
+  // address; it grants nothing on its own, so it is not a capability.
+  sendVerifyAddressEmail: 'contact',
 
   // Exported with no production caller. Classified rather than deleted so the
   // decision to remove them is a separate, deliberate change.
