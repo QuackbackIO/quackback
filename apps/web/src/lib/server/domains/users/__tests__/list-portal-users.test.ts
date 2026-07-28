@@ -79,7 +79,10 @@ function createChain(resolveValue: unknown = []) {
   return chain
 }
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real module first so every table the users domain transitively
+// pulls in stays defined, then override the handful this suite asserts on.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: vi.fn(() => {
       selectCallCount.count++
@@ -152,7 +155,8 @@ vi.mock('@/lib/server/db', () => ({
   isNotNull: () => 'is_not_null_result',
 }))
 
-vi.mock('@quackback/ids', () => ({
+vi.mock('@quackback/ids', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@quackback/ids')>()),
   generateId: vi.fn((p: string) => `${p}_generated123`),
 }))
 

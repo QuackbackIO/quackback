@@ -14,6 +14,7 @@ import {
   db,
   eq,
   and,
+  ne,
   or,
   ilike,
   inArray,
@@ -34,6 +35,10 @@ import {
   visitorDevices,
 } from '@/lib/server/db'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
+import {
+  DELETED_USER_PRINCIPAL_ID,
+  reattributeAuthoredContent,
+} from '@/lib/server/domains/principals/principal-reattribute'
 import { NotFoundError, InternalError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
 import { logger } from '@/lib/server/logger'
@@ -390,12 +395,28 @@ export async function listPortalUsers(
  * "account created" dates). The FK is `principal.userId -> user` with
  * onDelete cascade, so deleting the principal does NOT remove the user; a
  * returning sign-in re-provisions a principal via the SSO hooks or lazily.
+ *
+ * Their authored content — posts, comments, conversation threads — is
+ * re-attributed to the deleted-user placeholder first, in the same
+ * transaction: those FKs are ON DELETE RESTRICT, so the delete cannot proceed
+ * while the person still owns a row, and discarding the content would tear
+ * discussions other people are part of out of context. Everything the schema
+ * declares CASCADE or SET NULL (votes, subscriptions, moderation stamps) is
+ * left to Postgres. See principals/principal-reattribute.ts for the registry
+ * and the audit that keeps it complete.
  */
 export async function removePortalUser(principalId: PrincipalId): Promise<void> {
   try {
     // Verify principal exists and has role='user'
     const existingPrincipal = await db.query.principal.findFirst({
-      where: and(eq(principal.id, principalId), eq(principal.role, 'user')),
+      where: and(
+        eq(principal.id, principalId),
+        eq(principal.role, 'user'),
+        // The placeholder shares role='user' but is not a person. Removing it
+        // would re-attribute its content to itself and then strand every
+        // earlier removal's content on a deleted row.
+        ne(principal.id, DELETED_USER_PRINCIPAL_ID)
+      ),
     })
 
     if (!existingPrincipal) {
@@ -405,11 +426,15 @@ export async function removePortalUser(principalId: PrincipalId): Promise<void> 
       )
     }
 
-    // Delete principal record (user record will be deleted via CASCADE since user is org-scoped)
-    await db.delete(principal).where(eq(principal.id, principalId))
+    await db.transaction(async (tx) => {
+      await reattributeAuthoredContent(tx, principalId)
+      // Delete principal record (user record is retained; the FK cascades the
+      // other way, from user to principal)
+      await tx.delete(principal).where(eq(principal.id, principalId))
+    })
   } catch (error) {
     if (error instanceof NotFoundError) throw error
-    log.error({ err: error }, 'failed to remove portal user')
+    log.error({ err: error, principalId }, 'failed to remove portal user')
     throw new InternalError('DATABASE_ERROR', 'Failed to remove portal user', error)
   }
 }
