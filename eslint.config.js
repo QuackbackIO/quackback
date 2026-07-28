@@ -11,6 +11,53 @@ const dbReexportFiles = [
   '**/scripts/**',
 ]
 
+// `no-restricted-imports` fragments, shared because flat config REPLACES a
+// rule's options rather than merging them. A later block that configures the
+// rule with only its own concern silently switches off every earlier one for
+// the files it matches, so each block below restates everything that should
+// apply to its file set.
+const noDirectDbImport = {
+  group: ['@quackback/db', '@quackback/db/*'],
+  message: "Import from '@/lib/server/db' (server) or '@/lib/shared/db-types' (client) instead.",
+}
+const noComponentsFromLib = {
+  group: ['@/components/*', '@/components/**'],
+  message: 'lib/ must not import from components/.',
+}
+
+// Capability-bearing mail must never follow a user-settable address.
+// `principal.contactEmail` has two unverified writers (agent capture, pre-chat
+// capture), so a reset that fell back to it would be a takeover path.
+// Recipients come from `lib/server/email/recipient.ts`.
+const noSecuritySenders = {
+  name: '@quackback/email',
+  importNames: [
+    'sendPasswordResetEmail',
+    'sendMagicLinkEmail',
+    'sendNewSignInEmail',
+    'sendRecoveryCodeUsedEmail',
+    'sendInvitationEmail',
+    'sendPortalInviteEmail',
+  ],
+  message:
+    'Capability-bearing mail must resolve its recipient through lib/server/email/recipient.ts (resolveAccountRecipient or sealedRecipient) and send via mailSecure.',
+}
+
+// The files that legitimately name one. This catches STATIC imports only; most
+// of these sites use `await import('@quackback/email')`, which the rule cannot
+// see. The backstop for those is the source scan in
+// `lib/server/__tests__/security-mail-recipients.test.ts`, and the two
+// allow-lists must be kept in step.
+const securityMailFiles = [
+  '**/src/lib/server/auth/index.ts',
+  '**/src/lib/server/auth/hooks.ts',
+  '**/src/lib/server/auth/email-signin.ts',
+  '**/src/lib/server/functions/recovery-codes-consume.ts',
+  '**/src/lib/server/functions/admin.ts',
+  '**/src/lib/server/functions/portal-invites.ts',
+  '**/__tests__/**',
+]
+
 // Existing domain hotspots are an explicit, shrink-only debt baseline. New
 // domain files fail at 400 lines; removing an entry promotes that file to the
 // enforced limit without changing the rule for the rest of the tree.
@@ -104,18 +151,7 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['@quackback/db', '@quackback/db/*'],
-              message:
-                "Import from '@/lib/server/db' (server) or '@/lib/shared/db-types' (client) instead.",
-            },
-          ],
-        },
-      ],
+      'no-restricted-imports': ['error', { patterns: [noDirectDbImport] }],
       // Sizing standard (MENU-FILTER-SIZING-STANDARD.md): menu items render at
       // 13px via the shadcn primitives, so a smaller text override on one of
       // them is drift. Catches text-xs / text-[<=12px] on the item components.
@@ -152,63 +188,30 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': [
         'error',
-        {
-          patterns: [
-            {
-              group: ['@quackback/db', '@quackback/db/*'],
-              message:
-                "Import from '@/lib/server/db' (server) or '@/lib/shared/db-types' (client) instead.",
-            },
-            {
-              group: ['@/components/*', '@/components/**'],
-              message: 'lib/ must not import from components/.',
-            },
-          ],
-        },
+        { patterns: [noDirectDbImport, noComponentsFromLib] },
       ],
     },
   },
-  // Capability-bearing mail must never follow a user-settable address.
-  // `principal.contactEmail` has two unverified writers (agent capture,
-  // pre-chat capture), so a reset that fell back to it would be a takeover
-  // path. Recipients come from `lib/server/email/recipient.ts`.
-  //
-  // This catches STATIC imports only. Most of these sites use
-  // `await import('@quackback/email')`, which `no-restricted-imports` cannot
-  // see — the backstop for those is the source scan in
-  // `lib/server/__tests__/security-mail-recipients.test.ts`, and the two
-  // allow-lists must be kept in step.
+  // The security-sender ban (see `noSecuritySenders`), added to whatever
+  // already applies. Two blocks, because the set of patterns differs between
+  // lib/ and the rest and flat config cannot merge them for us.
   {
     files: ['**/src/**/*.{ts,tsx}'],
-    ignores: [
-      '**/src/lib/server/auth/index.ts',
-      '**/src/lib/server/auth/hooks.ts',
-      '**/src/lib/server/auth/email-signin.ts',
-      '**/src/lib/server/functions/recovery-codes-consume.ts',
-      '**/src/lib/server/functions/admin.ts',
-      '**/src/lib/server/functions/portal-invites.ts',
-      '**/__tests__/**',
-    ],
+    ignores: [...securityMailFiles, ...dbReexportFiles],
     rules: {
       'no-restricted-imports': [
         'error',
-        {
-          paths: [
-            {
-              name: '@quackback/email',
-              importNames: [
-                'sendPasswordResetEmail',
-                'sendMagicLinkEmail',
-                'sendNewSignInEmail',
-                'sendRecoveryCodeUsedEmail',
-                'sendInvitationEmail',
-                'sendPortalInviteEmail',
-              ],
-              message:
-                'Capability-bearing mail must resolve its recipient through lib/server/email/recipient.ts (resolveAccountRecipient or sealedRecipient) and send via mailSecure.',
-            },
-          ],
-        },
+        { patterns: [noDirectDbImport], paths: [noSecuritySenders] },
+      ],
+    },
+  },
+  {
+    files: ['**/src/lib/**/*.{ts,tsx}'],
+    ignores: [...securityMailFiles, ...dbReexportFiles],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [noDirectDbImport, noComponentsFromLib], paths: [noSecuritySenders] },
       ],
     },
   },

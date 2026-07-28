@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /**
  * Capability-bearing mail must never follow a user-settable address.
@@ -43,7 +44,10 @@ const ALLOWED = new Set([
   'lib/server/functions/portal-invites.ts', // portal invite create + resend — sealed class
 ])
 
-const SRC = join(process.cwd(), 'src')
+// Anchored to this file, not to `process.cwd()`: the suite runs from the repo
+// root as well as from `apps/web`, and a cwd-relative root either throws (no
+// such directory) or, worse, scans the wrong tree and passes vacuously.
+const SRC = resolve(fileURLToPath(import.meta.url), '../../../..')
 
 function sources(dir: string): string[] {
   const out: string[] = []
@@ -72,6 +76,15 @@ const filesNaming = (symbol: string): string[] =>
     .map((f) => relative(SRC, f))
 
 describe('security mail cannot follow a settable address', () => {
+  it('actually scans the tree', () => {
+    // Without this the suite has a silent failure mode: a scan that walks the
+    // wrong directory finds no offenders and reports success. Every assertion
+    // below is only as good as this one.
+    const all = sources(SRC)
+    expect(all.length).toBeGreaterThan(500)
+    expect(all.some((f) => f.endsWith('lib/server/auth/index.ts'))).toBe(true)
+  })
+
   it('only allow-listed files name a security sender', () => {
     const offenders: string[] = []
     for (const sender of SECURITY_SENDERS) {

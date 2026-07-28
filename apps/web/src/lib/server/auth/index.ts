@@ -53,12 +53,18 @@ const otpStash = makeStash<string>()
 export const storeMagicLinkToken = (email: string, token: string) =>
   magicLinkStash.set(email, token)
 /**
- * OTP purposes the plugin issues. Keyed together with the address because a
- * sign-in code and an email-verification code can be live for the same address
- * at the same time — keying on the address alone let the second overwrite the
- * first, and whichever drained the stash got the wrong code.
+ * OTP purposes the plugin issues.
+ *
+ * Only sign-in codes are stashed: they are the one purpose whose code has to
+ * survive the callback, because `requestEmailSignin` combines it with a magic
+ * link in a single email. Everything else is sent from the callback itself.
+ *
+ * The key still carries the purpose. Two purposes can be live for one address
+ * at the same moment, so an address-only key would let the second overwrite the
+ * first and hand whoever drained the stash the wrong code — a footgun waiting
+ * for the next purpose that needs stashing rather than a live bug today.
  */
-export type OtpPurpose = 'sign-in' | 'email-verification' | 'forget-password'
+export type OtpPurpose = 'sign-in' | 'email-verification' | 'forget-password' | 'change-email'
 
 const otpKey = (purpose: OtpPurpose, email: string) => `${purpose}:${email}`
 
@@ -534,7 +540,22 @@ async function createAuth() {
             storeOTP('sign-in', email, otp)
             return
           }
-          storeOTP(type as OtpPurpose, email, otp)
+
+          // A password-reset code is a capability: it is redeemable for a new
+          // password, so it must not go out under "Confirm your email" copy,
+          // and it must not reach an address this flow did not verify. Nothing
+          // wires it here today (the app uses core `requestPasswordReset`), and
+          // this refuses loudly rather than mailing the wrong thing if
+          // something ever does.
+          if (type === 'forget-password') {
+            throw new Error(
+              'forget-password OTP is not wired through emailOTP; use requestPasswordReset'
+            )
+          }
+
+          // `email-verification` (adding a first address) and `change-email`
+          // (moving to a new one) both mean the same thing to the recipient:
+          // prove you hold this address.
           const { sendVerifyAddressEmail } = await import('@quackback/email')
           const { getEmailSafeUrl } = await import('@/lib/server/storage/s3')
           const settings = await db.query.settings.findFirst({

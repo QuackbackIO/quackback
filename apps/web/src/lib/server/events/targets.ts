@@ -29,7 +29,6 @@ import {
 } from '@/lib/server/db'
 import {
   resolveContactRecipients,
-  resolveContactRecipients as resolvePrincipalEmails,
   contactRecipientFrom,
   type ContactEmail,
 } from '@/lib/server/email/recipient'
@@ -317,7 +316,7 @@ async function buildEmailTargets(
   // against the actor, so it is read, never overwritten. The delivery address is
   // resolved separately and may differ — a placeholder account reachable only
   // via its contact address is the case that motivates this.
-  const emailMap = await resolveContactRecipients(principalIds)
+  const emailMap = await resolveContactRecipients(eligibleSubscribers.map((s) => s.principalId))
 
   return eligibleSubscribers.flatMap((subscriber) => {
     const to = emailMap.get(subscriber.principalId)
@@ -1319,7 +1318,7 @@ export async function getTicketCreatedEmailTargets(
   if (!requesterPrincipalId || title == null) return []
 
   const requester = requesterPrincipalId as PrincipalId
-  const emailMap = await resolvePrincipalEmails([requester])
+  const emailMap = await resolveContactRecipients([requester])
   const email = emailMap.get(requester)
   if (!email) return []
 
@@ -1370,7 +1369,7 @@ export async function getTicketRepliedEmailTargets(
   if (watchers.length === 0) return []
 
   const [emailMap, eligible] = await Promise.all([
-    resolvePrincipalEmails(watchers),
+    resolveContactRecipients(watchers),
     filterByEmailPreference(watchers, 'ticket_replied'),
   ])
   const recipients = watchers.filter((id) => emailMap.has(id) && eligible.has(id))
@@ -1440,7 +1439,7 @@ export async function getTicketResolvedEmailTargets(
 
   const ids = [...recipientIds]
   const [emailMap, eligible] = await Promise.all([
-    resolvePrincipalEmails(ids),
+    resolveContactRecipients(ids),
     filterByEmailPreference(ids, 'ticket_status_changed'),
   ])
   const recipients = ids.filter((id) => emailMap.has(id) && eligible.has(id))
@@ -1499,7 +1498,7 @@ export async function getTicketAssignedEmailTargets(
 
   const ids = [...kindById.keys()]
   const [emailMap, eligible] = await Promise.all([
-    resolvePrincipalEmails(ids),
+    resolveContactRecipients(ids),
     filterByEmailPreference(ids, 'ticket_assigned'),
   ])
   const recipients = ids.filter((id) => emailMap.has(id) && eligible.has(id))
@@ -1575,7 +1574,7 @@ export async function getSlaEmailTargets(
     event.type === 'sla.approaching_breach' ? ('sla_warning' as const) : ('sla_breach' as const)
 
   const [emailMap, eligible] = await Promise.all([
-    resolvePrincipalEmails(recipientIds),
+    resolveContactRecipients(recipientIds),
     filterByEmailPreference(recipientIds, kind),
   ])
   const recipients = recipientIds.filter((id) => emailMap.has(id) && eligible.has(id))

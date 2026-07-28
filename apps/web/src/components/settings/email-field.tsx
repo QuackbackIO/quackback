@@ -11,7 +11,16 @@ import {
   confirmEmailChangeFn,
 } from '@/lib/server/functions/contact-email'
 
-type Step = 'idle' | 'current-code' | 'new-code' | 'done'
+/**
+ * `current-code` and `claim` are the two ways to name an address — with a proof
+ * of the old one, or without because there is nothing to prove. Both end at
+ * `verify`, where the address is fixed and only the code is outstanding.
+ *
+ * There is no way back from `verify` to the address field, because the
+ * current-address code is spent by the request that got us here. Changing the
+ * address means starting over, which is what Cancel does.
+ */
+type Step = 'idle' | 'current-code' | 'claim' | 'verify'
 
 const message = (err: unknown, fallback: string) =>
   err instanceof Error && err.message ? err.message : fallback
@@ -26,7 +35,7 @@ const message = (err: unknown, fallback: string) =>
  * proves the current address first so a stolen session cannot silently rebind
  * it.
  */
-export function EmailField({ onChanged }: { onChanged?: () => void }) {
+export function EmailField() {
   const { data, refetch } = useQuery({
     queryKey: ['email-change-state'],
     queryFn: () => getEmailChangeStateFn(),
@@ -61,7 +70,7 @@ export function EmailField({ onChanged }: { onChanged?: () => void }) {
   // address is asked for straight away.
   const begin = async () => {
     if (!requiresCurrentCode) {
-      setStep('new-code')
+      setStep('claim')
       return
     }
     setBusy(true)
@@ -81,7 +90,7 @@ export function EmailField({ onChanged }: { onChanged?: () => void }) {
       await requestEmailChangeFn({
         data: { email: newEmail, ...(requiresCurrentCode ? { currentCode } : {}) },
       })
-      setStep('new-code')
+      setStep('verify')
     } catch (err) {
       toast.error(message(err, 'Could not send a code to that address.'))
     } finally {
@@ -100,7 +109,6 @@ export function EmailField({ onChanged }: { onChanged?: () => void }) {
       toast.success('Email updated.')
       reset()
       await refetch()
-      onChanged?.()
     } catch (err) {
       toast.error(message(err, 'Could not confirm that code.'))
     } finally {
@@ -135,46 +143,21 @@ export function EmailField({ onChanged }: { onChanged?: () => void }) {
         </>
       )}
 
-      {step === 'current-code' && (
+      {(step === 'current-code' || step === 'claim') && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            We sent a code to {currentEmail}. Enter it, then tell us the new address.
+            {step === 'current-code'
+              ? `We sent a code to ${currentEmail}. Enter it, then tell us the new address.`
+              : 'Enter the address you want to use.'}
           </p>
-          <Input
-            aria-label="Code sent to your current address"
-            value={currentCode}
-            onChange={(e) => setCurrentCode(e.target.value)}
-            placeholder="6-digit code"
-            disabled={busy}
-          />
-          <Input
-            aria-label="New email address"
-            type="email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            placeholder="New email address"
-            disabled={busy}
-          />
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={sendToNewAddress}
-              disabled={busy || !currentCode.trim() || !newEmail.trim()}
-            >
-              Send verification code
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={reset} disabled={busy}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 'new-code' && (
-        <div className="space-y-2">
-          {!requiresCurrentCode && !newEmail && (
-            <p className="text-sm text-muted-foreground">Enter your new email address.</p>
+          {step === 'current-code' && (
+            <Input
+              aria-label="Code sent to your current address"
+              value={currentCode}
+              onChange={(e) => setCurrentCode(e.target.value)}
+              placeholder="6-digit code"
+              disabled={busy}
+            />
           )}
           <Input
             aria-label="New email address"
@@ -189,7 +172,9 @@ export function EmailField({ onChanged }: { onChanged?: () => void }) {
               type="button"
               size="sm"
               onClick={sendToNewAddress}
-              disabled={busy || !newEmail.trim()}
+              disabled={
+                busy || !newEmail.trim() || (step === 'current-code' && !currentCode.trim())
+              }
             >
               Send verification code
             </Button>
@@ -197,8 +182,13 @@ export function EmailField({ onChanged }: { onChanged?: () => void }) {
               Cancel
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            We&apos;ll send a code to that address. Enter it below once it arrives.
+        </div>
+      )}
+
+      {step === 'verify' && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            We sent a code to {newEmail}. Enter it to finish.
           </p>
           <Input
             aria-label="Code sent to the new address"
@@ -207,14 +197,14 @@ export function EmailField({ onChanged }: { onChanged?: () => void }) {
             placeholder="6-digit code"
             disabled={busy}
           />
-          <Button
-            type="button"
-            size="sm"
-            onClick={confirm}
-            disabled={busy || !newCode.trim() || !newEmail.trim()}
-          >
-            Confirm
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" onClick={confirm} disabled={busy || !newCode.trim()}>
+              Confirm
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={reset} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
     </div>

@@ -113,11 +113,6 @@ export async function resolveContactRecipients(
   return out
 }
 
-/** Single-principal convenience over {@link resolveContactRecipients}. */
-export async function resolveContactRecipient(id: PrincipalId): Promise<ContactEmail | null> {
-  return (await resolveContactRecipients([id])).get(id) ?? null
-}
-
 type Sender<P extends { to: string }> = (params: P) => Promise<{ sent: boolean }>
 
 /**

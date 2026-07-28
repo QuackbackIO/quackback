@@ -28,6 +28,10 @@ import { getRequestHeaders } from '@tanstack/react-start/server'
 import { requireAuth } from './auth-helpers'
 import { ValidationError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { logger } from '@/lib/server/logger'
+import { safeEmail } from '@/lib/shared/utils/string'
+
+const log = logger.child({ component: 'email-change' })
 
 const confirmSchema = z.object({ email: z.string().max(320), code: z.string().min(1).max(16) })
 
@@ -73,11 +77,24 @@ export const sendCurrentAddressCodeFn = createServerFn({ method: 'POST' }).handl
   if (!current) {
     throw new ValidationError('NO_CURRENT_EMAIL', 'This account has no confirmed address yet.')
   }
+
+  // Rate limited like its sibling. Better Auth's own OTP limits are declared as
+  // path matchers on the HTTP router, so calling `auth.api.*` in process goes
+  // straight past them — without this, one session could emit unbounded mail
+  // and burn the workspace's sending reputation.
+  const { getClientIp } = await import('@/lib/server/domains/api/rate-limit')
+  const { checkContactEmailSendRateLimit } = await import('@/lib/server/auth/signin-rate-limit')
+  const headers = getRequestHeaders()
+  const limit = await checkContactEmailSendRateLimit(getClientIp(headers), row.id)
+  if (!limit.allowed) {
+    throw new ValidationError('RATE_LIMITED', 'Too many attempts. Try again a little later.')
+  }
+
   const { getAuth } = await import('@/lib/server/auth')
   const auth = await getAuth()
   await auth.api.sendVerificationOTP({
     body: { email: current, type: 'email-verification' },
-    headers: getRequestHeaders(),
+    headers,
   })
   return { ok: true as const }
 })
@@ -129,26 +146,27 @@ export const requestEmailChangeFn = createServerFn({ method: 'POST' })
           () => false
         )
       if (!ok) throw new ValidationError('INVALID_CODE', 'That code is not right or has expired.')
+
+      // `checkVerificationOTP` is deliberately non-consuming — it is built for
+      // "is this code good?" polling — so the row survives a successful check
+      // and stays valid for the rest of its TTL. Left alone, one observed code
+      // would authorise an unlimited run of these calls, each mailing an
+      // address of the caller's choosing. Burn it here so it is genuinely
+      // one-shot.
+      const baCtx = await auth.$context
+      await baCtx.internalAdapter.deleteVerificationByIdentifier(
+        `email-verification-otp-${current.toLowerCase()}`
+      )
     }
 
-    // Whether the address is already held is deliberately NOT reported back.
-    // The reply is visible to whoever asked, and they may not own the address.
-    const { db, user, sql } = await import('@/lib/server/db')
-    const holder = await db.query.user.findFirst({
-      // `user_email_idx` is case-SENSITIVE while addresses are normalised
-      // lowercase, so an equality match would miss a mixed-case duplicate and
-      // let a second identity exist for one address.
-      where: sql`LOWER(${user.email}) = ${email}`,
-      columns: { id: true },
-    })
-    if (holder && holder.id !== row.id) {
-      return { ok: true as const }
-    }
-
-    await auth.api.sendVerificationOTP({
-      body: { email, type: 'email-verification' },
-      headers,
-    })
+    // Better Auth owns the send, the code and its storage. It must be THIS
+    // endpoint rather than `sendVerificationOTP`: the code is keyed on the pair
+    // (current address, new address), which is what `changeEmailEmailOTP` looks
+    // up in step 2, and a plain verification code is keyed on the address alone
+    // and would never be found. It also declines to send to an address another
+    // account already holds, returning the same shape either way, so whether
+    // the address is taken is not reported back to a caller who may not own it.
+    await auth.api.requestEmailChangeEmailOTP({ body: { newEmail: email }, headers })
     return { ok: true as const }
   })
 
@@ -166,6 +184,18 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
     const email = acceptableContactEmail(data.email)
     if (!email) throw new ValidationError('VALIDATION_ERROR', 'Enter a valid email address.')
 
+    // Better Auth's own uniqueness gate lowercases the address it searches FOR
+    // but compares it against stored values as-is, and `user_email_idx` is
+    // case-sensitive too, so a stored `Foo@x.com` is invisible to both and one
+    // address would end up with two identities. This is the only check that
+    // sees it.
+    const { db, user, sql } = await import('@/lib/server/db')
+    const holder = await db.query.user.findFirst({
+      where: sql`LOWER(${user.email}) = ${email}`,
+      columns: { id: true },
+    })
+    if (holder) return { ok: false as const, reason: 'invalid_or_taken' as const }
+
     const { getAuth } = await import('@/lib/server/auth')
     const auth = await getAuth()
     try {
@@ -173,10 +203,12 @@ export const confirmEmailChangeFn = createServerFn({ method: 'POST' })
         body: { newEmail: email, otp: data.code },
         headers: getRequestHeaders(),
       })
-    } catch {
+    } catch (err) {
       // Either the code is wrong or the address was claimed inside the window.
-      // Both are "try again", and distinguishing them would leak whether an
-      // account holds the address.
+      // Both are "try again" to the caller, and distinguishing them would leak
+      // whether an account holds the address. The log is not so constrained,
+      // and without it a misconfigured plugin looks exactly like a typo.
+      log.warn({ email_masked: safeEmail(email), error: err }, 'email change confirmation failed')
       return { ok: false as const, reason: 'invalid_or_taken' as const }
     }
     return { ok: true as const, email }
