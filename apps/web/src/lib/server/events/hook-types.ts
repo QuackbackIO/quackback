@@ -188,3 +188,22 @@ export interface TicketEmailConfig {
   logoUrl?: string
   preferencesUrl?: string
 }
+
+/**
+ * Internal-note @-mention email config. Its own shape rather than a widened
+ * EmailConfig (which is post-specific) or TicketEmailConfig (a note mention is
+ * conversation-scoped and carries no ticket), matching how every other
+ * non-post branch of the email hook casts.
+ */
+export interface NoteMentionEmailConfig {
+  workspaceName: string
+  conversationId: string
+  /** Display name of the teammate who wrote the note. */
+  authorName: string
+  /** Plain-text note preview, already truncated at the emit site. */
+  preview: string
+  /** Admin inbox deep link — the note body is internal, so never the portal. */
+  ctaUrl: string
+  logoUrl?: string
+  preferencesUrl?: string
+}

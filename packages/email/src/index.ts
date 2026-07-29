@@ -26,6 +26,7 @@ import { StatusChangeEmail } from './templates/status-change'
 import { NewCommentEmail } from './templates/new-comment'
 import { ConversationMessageEmail } from './templates/conversation-message'
 import { PostMentionEmail } from './templates/post-mention'
+import { NoteMentionEmail } from './templates/note-mention'
 import { TicketEventEmail } from './templates/ticket-event'
 import { ChangelogPublishedEmail } from './templates/changelog-published'
 import { FeedbackLinkedEmail } from './templates/feedback-linked'
@@ -942,6 +943,65 @@ export async function sendPostMentionEmail(args: SendPostMentionEmailArgs): Prom
     }),
     emailType: 'PostMentionEmail',
     preview: { postUrl },
+  })
+}
+
+// ============================================================================
+// Note Mention Email
+// ============================================================================
+
+export interface SendNoteMentionEmailArgs {
+  to: string
+  /** Teammate who wrote the note. */
+  authorName: string
+  /** Plain-text note preview. Empty string suppresses the quote block. */
+  preview: string
+  /** Admin inbox deep link. */
+  conversationUrl: string
+  workspaceName: string
+  preferencesUrl?: string
+  logoUrl?: string
+  /** RFC 5322 threading: this mail's own Message-ID (bare or bracketed). */
+  messageId?: string
+  /** RFC 5322 threading: the note-thread root this alert replies to. */
+  inReplyTo?: string
+  /** RFC 5322 threading: the full References chain (oldest first). */
+  references?: string[]
+}
+
+/** Alert a teammate @-mentioned in an internal note on a conversation. */
+export async function sendNoteMentionEmail(args: SendNoteMentionEmailArgs): Promise<EmailResult> {
+  const {
+    to,
+    authorName,
+    preview,
+    conversationUrl,
+    workspaceName,
+    preferencesUrl,
+    logoUrl,
+    messageId,
+    inReplyTo,
+    references,
+  } = args
+
+  const displayName = authorName || 'A teammate'
+
+  return sendEmail({
+    to,
+    subject: `${displayName} mentioned you in an internal note`,
+    react: NoteMentionEmail({
+      authorName,
+      preview,
+      conversationUrl,
+      workspaceName,
+      preferencesUrl,
+      logoUrl,
+    }),
+    messageId,
+    inReplyTo,
+    references,
+    emailType: 'NoteMentionEmail',
+    preview: { conversationUrl },
   })
 }
 

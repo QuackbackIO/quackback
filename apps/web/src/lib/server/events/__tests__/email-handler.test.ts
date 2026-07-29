@@ -7,6 +7,7 @@ vi.mock('@quackback/email', () => ({
   sendChangelogPublishedEmail: vi.fn(),
   sendPostMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
   sendTicketEventEmail: vi.fn().mockResolvedValue({ sent: true }),
+  sendNoteMentionEmail: vi.fn().mockResolvedValue({ sent: true }),
 }))
 
 // Threading helpers are pure but read env-derived domains; force a known domain
@@ -19,14 +20,21 @@ import {
   sendNewCommentEmail,
   sendPostMentionEmail,
   sendTicketEventEmail,
+  sendNoteMentionEmail,
 } from '@quackback/email'
-import type { EmailTarget, EmailConfig, TicketEmailConfig } from '../hook-types'
+import type {
+  EmailTarget,
+  EmailConfig,
+  TicketEmailConfig,
+  NoteMentionEmailConfig,
+} from '../hook-types'
 import type { EventData } from '../types'
 
 const mockStatusChangeEmail = vi.mocked(sendStatusChangeEmail)
 const mockNewCommentEmail = vi.mocked(sendNewCommentEmail)
 const mockPostMentionEmail = vi.mocked(sendPostMentionEmail)
 const mockTicketEventEmail = vi.mocked(sendTicketEventEmail)
+const mockNoteMentionEmail = vi.mocked(sendNoteMentionEmail)
 
 // The email handler only reads event.type, so data is irrelevant for these tests
 const statusChangedEvent = {
@@ -330,5 +338,86 @@ describe('emailHook — ticket + SLA lifecycle', () => {
     )
     expect(result.success).toBe(false)
     expect(result.error).toContain('Unsupported event type')
+  })
+})
+
+describe('emailHook — conversation.note_mentioned', () => {
+  const noteMentionedEvent = {
+    id: 'evt-note-mention',
+    type: 'conversation.note_mentioned',
+    timestamp: new Date().toISOString(),
+    actor: { type: 'user', principalId: 'principal_author', displayName: 'Jane' },
+    data: {
+      conversationId: 'conversation_1',
+      conversationMessageId: 'conversation_msg_1',
+      mentionedPrincipalIds: ['principal_one'],
+      authorName: 'Jane',
+      preview: 'can you take a look at the refund policy here?',
+    },
+  } as unknown as EventData
+
+  const noteMentionConfig: NoteMentionEmailConfig & Record<string, unknown> = {
+    workspaceName: 'Acme Support',
+    conversationId: 'conversation_1',
+    authorName: 'Jane',
+    preview: 'can you take a look at the refund policy here?',
+    ctaUrl: 'https://w.example/admin/inbox?i=conversation_1',
+    preferencesUrl: 'https://w.example/settings/preferences',
+  }
+
+  beforeEach(() => {
+    mockNoteMentionEmail.mockClear()
+    mockNoteMentionEmail.mockResolvedValue({ sent: true })
+  })
+
+  it('sends the note-mention alert with the author, preview and inbox link', async () => {
+    const result = await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
+
+    expect(result).toEqual({ success: true })
+    expect(mockNoteMentionEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'user@example.com',
+        authorName: 'Jane',
+        preview: 'can you take a look at the refund policy here?',
+        conversationUrl: 'https://w.example/admin/inbox?i=conversation_1',
+        workspaceName: 'Acme Support',
+        preferencesUrl: 'https://w.example/settings/preferences',
+        logoUrl: undefined,
+      })
+    )
+  })
+
+  it('mints a fresh Message-ID and References the conversation note-thread root', async () => {
+    await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
+    const args = mockNoteMentionEmail.mock.calls[0][0]
+    expect(args.messageId).toMatch(/^note\.1\..+@acme\.test$/)
+    expect(args.inReplyTo).toBe('note.1@acme.test')
+    expect(args.references).toEqual(['note.1@acme.test'])
+  })
+
+  it('threads every alert on one conversation together while keeping ids unique', async () => {
+    await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
+    await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
+    const [first, second] = mockNoteMentionEmail.mock.calls.map((c) => c[0])
+    expect(first.messageId).not.toBe(second.messageId)
+    expect(first.references).toEqual(second.references)
+  })
+
+  it('threads on nothing when the config carries no conversation id', async () => {
+    await emailHook.run(noteMentionedEvent, baseTarget, {
+      ...noteMentionConfig,
+      conversationId: '',
+    })
+    const args = mockNoteMentionEmail.mock.calls[0][0]
+    expect(args.messageId).toBeUndefined()
+    expect(args.inReplyTo).toBeUndefined()
+    expect(args.references).toBeUndefined()
+  })
+
+  it('reports success without sending when email is not configured', async () => {
+    mockNoteMentionEmail.mockResolvedValue({ sent: false })
+    expect(await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)).toEqual({
+      success: true,
+    })
   })
 })

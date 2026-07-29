@@ -43,7 +43,7 @@ import {
   type NotificationEventType,
 } from '@/lib/server/domains/subscriptions/subscription.service'
 import { shouldNotify } from '@/lib/server/domains/subscriptions/notification-matrix'
-import type { HookTarget, EmailTarget } from './hook-types'
+import type { HookTarget, EmailTarget, NoteMentionEmailConfig } from './hook-types'
 import { stripHtml, truncate } from './hook-utils'
 import { type HookContext } from './hook-context'
 import type { EventData, EventActor, PostMergedPayload, PostUnmergedPayload } from './types'
@@ -825,6 +825,50 @@ export function getConversationNoteMentionedTargets(event: EventData): HookTarge
     target: { principalIds: mentionedPrincipalIds as PrincipalId[] },
     config: { conversationId, conversationMessageId, authorName, preview },
   }
+}
+
+/**
+ * Email targets for `conversation.note_mentioned` — one per mentioned teammate
+ * who has a reachable address and allows `chat_mention` mail.
+ *
+ * A mention is a direct ask, so it is the one internal-note event that reaches
+ * a teammate who is not looking at the inbox. The recipient set is taken
+ * straight from the payload for the same reason the bell above does: the emit
+ * site has already narrowed it to teammates and dropped the author, so a
+ * self-mention never mails itself. `resolveEligibleRecipients` supplies both
+ * remaining gates — an address to send to, and the per-type x per-channel
+ * preference (which subsumes the global emailMuted kill switch), so muting the
+ * mention row on the notification-preferences surface silences this mail while
+ * leaving the bell alone.
+ *
+ * The CTA is the admin inbox, never the portal: the note body is internal and
+ * its audience is agents.
+ */
+export async function getConversationNoteMentionedEmailTargets(
+  event: EventData,
+  context: HookContext
+): Promise<HookTarget[]> {
+  if (event.type !== 'conversation.note_mentioned') return []
+  const { conversationId, mentionedPrincipalIds, authorName, preview } = event.data
+  if (mentionedPrincipalIds.length === 0) return []
+
+  const { recipients, emailMap } = await resolveEligibleRecipients(
+    mentionedPrincipalIds as PrincipalId[],
+    'chat_mention'
+  )
+  if (recipients.length === 0) return []
+
+  const config = {
+    workspaceName: context.workspaceName,
+    conversationId,
+    authorName,
+    preview,
+    ctaUrl: inboxUrl(context.portalBaseUrl, conversationId),
+    logoUrl: context.logoUrl ?? undefined,
+    preferencesUrl: `${context.portalBaseUrl}/settings/preferences`,
+  } satisfies NoteMentionEmailConfig
+
+  return recipients.map((id) => emailTarget(emailMap.get(id)!, '', { ...config }))
 }
 
 /**

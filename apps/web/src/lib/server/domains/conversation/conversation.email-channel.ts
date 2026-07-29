@@ -161,6 +161,43 @@ export function mintOutboundMessageId(
 }
 
 // ============================================================================
+// Internal-note threading. An @-mention alert is agent-facing mail about a
+// conversation, so it threads on its own `note.` namespace rather than the
+// customer-facing `c.` ids above. The two namespaces are disjoint by
+// construction, which is what keeps an internal note out of the thread the
+// customer sees — and keeps a note alert unroutable by the inbound map, whose
+// authority is the recorded `c.` ids alone.
+// ============================================================================
+
+/** Deterministic Message-ID for a conversation's internal-note email thread
+ *  root: every note alert References this id, so repeated mentions on one
+ *  conversation collapse into a single thread in the teammate's client.
+ *  Stateless (derived from the conversation id). Null when no sending domain is
+ *  known, in which case the alert threads on nothing. */
+export function noteThreadRootMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  return `note.${conversationId.slice(CONVERSATION_PREFIX.length)}@${domain}`
+}
+
+/** Fresh per-send Message-ID for an internal-note alert, bare (no angle
+ *  brackets — the send layer wraps it). Unique per recipient and per send, so
+ *  no two alerts claim the same id. */
+export function mintNoteOutboundMessageId(
+  conversationId: ConversationId,
+  env: EnvLike = process.env
+): string | null {
+  const domain = outboundMessageIdDomain(env)
+  if (!domain) return null
+  const suffix = conversationId.slice(CONVERSATION_PREFIX.length)
+  const nonce = randomBytes(6).toString('base64url')
+  return `note.${suffix}.${nonce}@${domain}`
+}
+
+// ============================================================================
 // Ticket reply-to addressing. Same grammar and signing secret as the
 // conversation addresses above, with a `tkt-` marker so the two route
 // unambiguously: `reply+tkt-<id-suffix>.<sig>@<inbound-domain>`. A ticket
