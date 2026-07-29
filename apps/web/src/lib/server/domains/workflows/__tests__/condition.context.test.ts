@@ -13,6 +13,8 @@ import {
   type SegmentId,
   type ConversationTagId,
   type CompanyId,
+  type TicketId,
+  type TicketTypeId,
 } from '@quackback/ids'
 
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
@@ -26,6 +28,10 @@ import {
   principal,
   teams,
   companies,
+  tickets,
+  ticketTypes,
+  ticketStatuses,
+  ticketConversations,
 } from '@/lib/server/db'
 import { ANON_EMAIL_DOMAIN } from '@quackback/email/anon'
 
@@ -83,6 +89,36 @@ async function seedPrincipal(
     companyId: opts.companyId ?? null,
   })
   return principalId
+}
+
+/** One live ticket type in the customer category — what `ticket.type`
+ *  compares against (the registry id, not the coarse category). */
+async function seedTicketType(name: string): Promise<TicketTypeId> {
+  const [type] = await testDb
+    .insert(ticketTypes)
+    .values({ name, slug: `${name.toLowerCase()}-${suffix()}`, category: 'customer' })
+    .returning()
+  return type.id
+}
+
+/** A customer ticket paired 1:1 with `conversationId`. `ticketTypeId` null
+ *  seeds the legacy shape: a ticket from before the type registry existed. */
+async function seedCustomerTicket(
+  conversationId: ConversationId,
+  ticketTypeId: TicketTypeId | null
+): Promise<TicketId> {
+  const [status] = await testDb
+    .insert(ticketStatuses)
+    .values({ name: 'Open', slug: `open-${suffix()}` })
+    .returning()
+  const [ticket] = await testDb
+    .insert(tickets)
+    .values({ title: `Ticket-${suffix()}`, statusId: status.id, type: 'customer', ticketTypeId })
+    .returning()
+  await testDb
+    .insert(ticketConversations)
+    .values({ ticketId: ticket.id, conversationId, ticketType: 'customer' })
+  return ticket.id
 }
 
 /** An unidentified visitor: no user row, so both attribute stores miss. */
@@ -300,6 +336,64 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(ctx!.company).toBeNull()
     // person.segments is a separate, unconditional resolution — unaffected.
     expect(ctx!.person!.segmentIds).toEqual([])
+  })
+
+  it("resolves the paired customer ticket's type for ticket.type", async () => {
+    const principalId = await seedPrincipal()
+    const [conv] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: principalId, channel: 'messenger' })
+      .returning()
+    const ticketTypeId = await seedTicketType('Bug')
+    await seedCustomerTicket(conv.id, ticketTypeId)
+
+    const ctx = await resolveConditionContext(conv.id)
+    expect(ctx!.ticket).toEqual({ typeId: ticketTypeId })
+    expect(evaluateCondition({ field: 'ticket.type', op: 'eq', value: ticketTypeId }, ctx!)).toBe(
+      true
+    )
+    expect(
+      evaluateCondition({ field: 'ticket.type', op: 'eq', value: createId('ticket_type') }, ctx!)
+    ).toBe(false)
+  })
+
+  it('leaves ticket unresolved for a conversation with no customer ticket, and for a ticket predating the type registry', async () => {
+    const principalId = await seedPrincipal()
+    const [bare] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: principalId, channel: 'messenger' })
+      .returning()
+
+    const bareCtx = await resolveConditionContext(bare.id)
+    expect(bareCtx!.ticket).toBeNull()
+    expect(evaluateCondition({ field: 'ticket.type', op: 'is_empty' }, bareCtx!)).toBe(true)
+    expect(evaluateCondition({ field: 'ticket.type', op: 'is_set' }, bareCtx!)).toBe(false)
+
+    const [typed] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: principalId, channel: 'messenger' })
+      .returning()
+    await seedCustomerTicket(typed.id, null)
+
+    const untypedCtx = await resolveConditionContext(typed.id)
+    expect(untypedCtx!.ticket).toEqual({ typeId: null })
+    expect(evaluateCondition({ field: 'ticket.type', op: 'is_empty' }, untypedCtx!)).toBe(true)
+  })
+
+  it('resolveTicket: false skips the ticket lookup entirely — ticket.type reads unresolved even though the pair exists', async () => {
+    const principalId = await seedPrincipal()
+    const [conv] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: principalId, channel: 'messenger' })
+      .returning()
+    const ticketTypeId = await seedTicketType('Question')
+    await seedCustomerTicket(conv.id, ticketTypeId)
+
+    const ctx = await resolveConditionContext(conv.id, { resolveTicket: false })
+    expect(ctx!.ticket).toBeNull()
+    expect(evaluateCondition({ field: 'ticket.type', op: 'eq', value: ticketTypeId }, ctx!)).toBe(
+      false
+    )
   })
 
   it('sanitizes the synthetic anonymous placeholder email — person.email resolves MISSING, never the placeholder', async () => {

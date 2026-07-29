@@ -46,6 +46,7 @@ import {
   newTree,
   RATING_LABELS,
   resolveConditionField,
+  STATIC_CONDITION_FIELD_GROUPS,
   toAttributeFieldDefs,
   treeToGraph,
   TRIGGER_LABELS,
@@ -1012,6 +1013,46 @@ describe('attribute condition fields', () => {
         value: 'team_support',
       })
       expect(draftToCondition(draft)).toEqual(leaf)
+    })
+  })
+
+  describe('ticket.type — dynamic ticket-type options', () => {
+    const ticketTypeLabels = new Map([
+      ['ticket_type_bug', '🐞 Bug'],
+      ['ticket_type_billing', 'Billing question'],
+    ])
+    const resolve = (field: 'ticket.type') =>
+      resolveConditionField(field, undefined, undefined, undefined, undefined, ticketTypeLabels)
+
+    it('resolveConditionField fills options in from the live ticket-type map', () => {
+      const resolved = resolve('ticket.type')
+      expect(resolved.label).toBe('Ticket type')
+      expect(resolved.kind).toBe('choice')
+      expect(resolved.operators).toEqual(['eq', 'neq', 'is_set', 'is_empty'])
+      expect(resolved.options).toEqual([
+        { value: 'ticket_type_bug', label: '🐞 Bug' },
+        { value: 'ticket_type_billing', label: 'Billing question' },
+      ])
+    })
+
+    it('has no static options when no ticket-type map is supplied', () => {
+      expect(resolveConditionField('ticket.type').options).toEqual([])
+    })
+
+    it('is offered in the field picker under its own Ticket group', () => {
+      const group = STATIC_CONDITION_FIELD_GROUPS.find((g) => g.label === 'Ticket')
+      expect(group?.fields).toEqual(['ticket.type'])
+    })
+
+    it('conditionSummary renders the type name, and falls back to the raw id for an archived one', () => {
+      const named: GraphCondition = { field: 'ticket.type', op: 'eq', value: 'ticket_type_bug' }
+      expect(
+        conditionSummary(named, undefined, undefined, undefined, undefined, ticketTypeLabels)
+      ).toBe('Ticket type is 🐞 Bug')
+      const gone: GraphCondition = { field: 'ticket.type', op: 'eq', value: 'ticket_type_gone' }
+      expect(
+        conditionSummary(gone, undefined, undefined, undefined, undefined, ticketTypeLabels)
+      ).toBe('Ticket type is ticket_type_gone')
     })
   })
 })

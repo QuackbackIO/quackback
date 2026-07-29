@@ -72,6 +72,18 @@ vi.mock('@/lib/server/functions/conversation-tags', () => ({
 vi.mock('@/lib/server/functions/sla', () => ({
   listSlaPolicyOptionsFn: vi.fn(async () => []),
 }))
+vi.mock('@/lib/client/queries/inbox', () => ({
+  ticketQueries: {
+    statuses: () => ({ queryKey: ['test', 'ticket-statuses'], queryFn: async () => [] }),
+    types: () => ({
+      queryKey: ['test', 'ticket-types'],
+      queryFn: async () => [
+        { id: 'ticket_type_bug', name: 'Bug', category: 'customer', icon: '🐞' },
+        { id: 'ticket_type_task', name: 'Internal task', category: 'back_office', icon: null },
+      ],
+    }),
+  },
+}))
 vi.mock('@/lib/client/queries/conversation-attributes', () => ({
   conversationAttributeQueries: {
     live: () => ({ queryKey: ['test', 'attributes'], queryFn: async () => ATTRIBUTES }),
@@ -219,6 +231,35 @@ describe('ConditionEditor — conversation.team field', () => {
 
   it('hides the value input for is_empty ("no team assigned")', async () => {
     renderEditor({ field: 'conversation.team', op: 'is_empty' })
+    expect(document.querySelectorAll('select, input')).toHaveLength(2)
+  })
+})
+
+describe('ConditionEditor — ticket.type field', () => {
+  it('lists Ticket type in the static field picker', async () => {
+    renderEditor()
+    fireEvent.click(await screen.findByText('Add rule'))
+    expect(within(fieldSelect()).getByText('Ticket type')).toBeInTheDocument()
+  })
+
+  it('offers a live ticket-type picker for the value, customer-category types only', async () => {
+    renderEditor({ field: 'ticket.type', op: 'eq', value: 'ticket_type_bug' })
+
+    const opLabels = within(operatorSelect())
+      .getAllByRole('option')
+      .map((o) => o.textContent)
+    expect(opLabels).toEqual(['is', 'is not', 'is set', 'is empty'])
+
+    const valueSelect = document.querySelectorAll('select')[2] as HTMLSelectElement
+    await within(valueSelect).findByText('🐞 Bug')
+    expect(valueSelect.value).toBe('ticket_type_bug')
+    // A back-office type can never be the ticket paired with a conversation,
+    // so it is not offered.
+    expect(within(valueSelect).queryByText('Internal task')).not.toBeInTheDocument()
+  })
+
+  it('hides the value input for is_empty ("no ticket type")', async () => {
+    renderEditor({ field: 'ticket.type', op: 'is_empty' })
     expect(document.querySelectorAll('select, input')).toHaveLength(2)
   })
 })

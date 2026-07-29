@@ -360,7 +360,8 @@ function buildStepNodeData(
           ctx.labels.attributes,
           ctx.labels.teams,
           ctx.labels.personAttributes,
-          ctx.labels.companyAttributes
+          ctx.labels.companyAttributes,
+          ctx.labels.ticketTypes
         ),
       }
     case 'branch': {
@@ -519,7 +520,8 @@ function triggerSections(
             labels.attributes,
             labels.teams,
             labels.personAttributes,
-            labels.companyAttributes
+            labels.companyAttributes,
+            labels.ticketTypes
           ),
         },
       ],
@@ -537,7 +539,8 @@ export function describeBranchPath(
   attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
   teams: ReadonlyMap<string, string> = new Map(),
   personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map()
+  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
+  ticketTypes: ReadonlyMap<string, string> = new Map()
 ): RulePart[] {
   const draft = conditionToDraft(condition)
   if (draft.kind === 'advanced') {
@@ -545,13 +548,31 @@ export function describeBranchPath(
     // truly opaque one) — conditionSummary already tells those apart instead
     // of this pill hardcoding "Custom condition" for both.
     return [
-      { text: conditionSummary(condition, attributes, teams, personAttributes, companyAttributes) },
+      {
+        text: conditionSummary(
+          condition,
+          attributes,
+          teams,
+          personAttributes,
+          companyAttributes,
+          ticketTypes
+        ),
+      },
     ]
   }
   if (draft.rules.length === 0) return [{ text: 'No conditions · matches everything' }]
   if (draft.rules.length > 1) {
     return [
-      { text: conditionSummary(condition, attributes, teams, personAttributes, companyAttributes) },
+      {
+        text: conditionSummary(
+          condition,
+          attributes,
+          teams,
+          personAttributes,
+          companyAttributes,
+          ticketTypes
+        ),
+      },
     ]
   }
 
@@ -561,7 +582,8 @@ export function describeBranchPath(
     attributes,
     teams,
     personAttributes,
-    companyAttributes
+    companyAttributes,
+    ticketTypes
   )
   const op = OPERATOR_LABELS[rule.op]
   if (VALUELESS_OPERATORS.has(rule.op)) {
@@ -598,7 +620,8 @@ function fanPathParts(
   attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
   teams: ReadonlyMap<string, string> = new Map(),
   personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map()
+  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
+  ticketTypes: ReadonlyMap<string, string> = new Map()
 ): RulePart[] {
   if (step.kind === 'branch') {
     const branchPath = step.paths.find((p) => p.key === path.key)
@@ -608,7 +631,8 @@ function fanPathParts(
           attributes,
           teams,
           personAttributes,
-          companyAttributes
+          companyAttributes,
+          ticketTypes
         )
       : []
   }
@@ -694,7 +718,8 @@ function emitLane(
               input.labels.attributes,
               input.labels.teams,
               input.labels.personAttributes,
-              input.labels.companyAttributes
+              input.labels.companyAttributes,
+              input.labels.ticketTypes
             ),
           },
         }

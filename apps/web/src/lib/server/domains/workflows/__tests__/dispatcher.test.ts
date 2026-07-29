@@ -435,3 +435,60 @@ describe('dispatchWorkflowTrigger — person/company context gating', () => {
     )
   })
 })
+
+describe('dispatchWorkflowTrigger — ticket context gating', () => {
+  it('skips the ticket lookup when no live workflow references ticket.type', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('bg1', 'background', {
+        audience: { field: 'conversation.status', op: 'eq', value: 'open' },
+      }),
+    ])
+    await dispatchWorkflowTrigger(trigger({ triggerType: 'ticket.created' }))
+    expect(resolveConditionContext).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({ resolveTicket: false })
+    )
+  })
+
+  it('resolves the ticket when a BRANCH path routes on ticket.type', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      {
+        id: 'bg1',
+        class: 'background',
+        triggerSettings: {},
+        graph: {
+          nodes: [
+            {
+              id: 'b1',
+              type: 'branch',
+              branches: [
+                {
+                  key: 'bug',
+                  condition: { field: 'ticket.type', op: 'eq', value: 'ticket_type_bug' },
+                },
+              ],
+            },
+          ],
+        },
+      } as never,
+    ])
+    await dispatchWorkflowTrigger(trigger({ triggerType: 'ticket.created' }))
+    expect(resolveConditionContext).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({ resolveTicket: true })
+    )
+  })
+
+  it('resolves the ticket when a workflow AUDIENCE references ticket.type', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('bg1', 'background', {
+        audience: { field: 'ticket.type', op: 'is_set' },
+      }),
+    ])
+    await dispatchWorkflowTrigger(trigger())
+    expect(resolveConditionContext).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({ resolveTicket: true })
+    )
+  })
+})

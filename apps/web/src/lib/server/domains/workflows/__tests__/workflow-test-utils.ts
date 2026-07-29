@@ -9,11 +9,12 @@ import type { ConditionContext } from '../condition.evaluator'
 /**
  * Build a fully-populated ConditionContext for tests, with sensible defaults
  * (a real message, an identified person with a segment/company, a high-
- * priority open conversation with a few tags/attributes) that a test
- * overrides only the fields it cares about. `overrides.conversation` merges
- * shallowly onto the default conversation (so `{ conversation: { status:
- * 'closed' } }` keeps every other conversation field); every other top-level
- * key (message/person/company/officeHours/csatRating) replaces wholesale
+ * priority open conversation with a few tags/attributes, a paired customer
+ * ticket) that a test overrides only the fields it cares about.
+ * `overrides.conversation` merges shallowly onto the default conversation (so
+ * `{ conversation: { status: 'closed' } }` keeps every other conversation
+ * field); every other top-level key
+ * (message/person/company/ticket/officeHours/csatRating) replaces wholesale
  * when explicitly present in `overrides` (an omitted key keeps the default;
  * `null` means "explicitly absent" — the evaluator's unresolved-subject
  * contract treats that as meaningfully different from a populated value, so
@@ -50,6 +51,7 @@ export function makeConditionContext(overrides: Partial<ConditionContext> = {}):
       'company' in overrides
         ? overrides.company
         : { attributes: { plan: 'enterprise', arr: 50000 } },
+    ticket: 'ticket' in overrides ? overrides.ticket : { typeId: 'ticket_type_bug' },
     officeHours: overrides.officeHours,
     csatRating: overrides.csatRating,
     conversation: { ...defaultConversation, ...overrides.conversation },

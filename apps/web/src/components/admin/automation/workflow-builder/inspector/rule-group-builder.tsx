@@ -100,6 +100,7 @@ export function RuleGroupBuilder({
   const companyAttributeFieldDefs =
     labels.companyAttributes ?? new Map<string, PersonCompanyAttributeFieldDef>()
   const teams = labels.teams ?? new Map<string, string>()
+  const ticketTypes = labels.ticketTypes ?? new Map<string, string>()
   const draft = conditionToGroupDraft(condition)
 
   if (draft.kind === 'advanced') {
@@ -148,6 +149,7 @@ export function RuleGroupBuilder({
             personAttributeItems={personAttributes}
             companyAttributeItems={companyAttributes}
             teams={teams}
+            ticketTypes={ticketTypes}
             removable={draft.groups.length > 1}
             onChange={(g) => updateGroup(i, g)}
             onRemoveGroup={() => removeGroup(i)}
@@ -178,6 +180,7 @@ function RuleGroup({
   personAttributeItems,
   companyAttributeItems,
   teams,
+  ticketTypes,
   removable,
   onChange,
   onRemoveGroup,
@@ -191,6 +194,7 @@ function RuleGroup({
   personAttributeItems: PersonCompanyAttributeFieldDef[]
   companyAttributeItems: PersonCompanyAttributeFieldDef[]
   teams: ReadonlyMap<string, string>
+  ticketTypes: ReadonlyMap<string, string>
   removable: boolean
   onChange: (group: RuleGroupDraft) => void
   onRemoveGroup: () => void
@@ -242,6 +246,7 @@ function RuleGroup({
           personAttributeItems={personAttributeItems}
           companyAttributeItems={companyAttributeItems}
           teams={teams}
+          ticketTypes={ticketTypes}
           onChange={(r) => updateRule(i, r)}
           onRemove={() => onChange({ ...group, rules: group.rules.filter((_, j) => j !== i) })}
         />
@@ -281,6 +286,7 @@ function RuleRow({
   personAttributeItems,
   companyAttributeItems,
   teams,
+  ticketTypes,
   onChange,
   onRemove,
 }: {
@@ -292,6 +298,7 @@ function RuleRow({
   personAttributeItems: PersonCompanyAttributeFieldDef[]
   companyAttributeItems: PersonCompanyAttributeFieldDef[]
   teams: ReadonlyMap<string, string>
+  ticketTypes: ReadonlyMap<string, string>
   onChange: (rule: ConditionRuleDraft) => void
   onRemove: () => void
 }) {
@@ -300,7 +307,8 @@ function RuleRow({
     attributeFieldDefs,
     teams,
     personAttributeFieldDefs,
-    companyAttributeFieldDefs
+    companyAttributeFieldDefs,
+    ticketTypes
   )
   const operators = meta.operators
   const needsValue = !VALUELESS_OPERATORS.has(rule.op)
@@ -343,7 +351,14 @@ function RuleRow({
     }
     // resolveConditionField (not the raw static meta) so conversation.team's
     // live-loaded options pick a real default instead of always landing on ''.
-    const fieldMeta = resolveConditionField(field, attributeFieldDefs, teams)
+    const fieldMeta = resolveConditionField(
+      field,
+      attributeFieldDefs,
+      teams,
+      undefined,
+      undefined,
+      ticketTypes
+    )
     const op = OPERATORS_BY_KIND[fieldMeta.kind][0]!
     const value =
       fieldMeta.kind === 'choice'
@@ -447,6 +462,7 @@ function RuleRow({
             personAttributeFieldDefs={personAttributeFieldDefs}
             companyAttributeFieldDefs={companyAttributeFieldDefs}
             teams={teams}
+            ticketTypes={ticketTypes}
             onChange={onChange}
           />
         )}
@@ -461,6 +477,7 @@ function RuleValueEditor({
   personAttributeFieldDefs,
   companyAttributeFieldDefs,
   teams,
+  ticketTypes,
   onChange,
 }: {
   rule: ConditionRuleDraft
@@ -468,6 +485,7 @@ function RuleValueEditor({
   personAttributeFieldDefs: ReadonlyMap<string, PersonCompanyAttributeFieldDef>
   companyAttributeFieldDefs: ReadonlyMap<string, PersonCompanyAttributeFieldDef>
   teams: ReadonlyMap<string, string>
+  ticketTypes: ReadonlyMap<string, string>
   onChange: (rule: ConditionRuleDraft) => void
 }) {
   if (isAttributeField(rule.field)) {
@@ -482,7 +500,14 @@ function RuleValueEditor({
     return <PersonCompanyAttributeRuleValueEditor rule={rule} defs={defs} onChange={onChange} />
   }
 
-  const meta = resolveConditionField(rule.field, undefined, teams)
+  const meta = resolveConditionField(
+    rule.field,
+    undefined,
+    teams,
+    undefined,
+    undefined,
+    ticketTypes
+  )
   const set = (value: string) => onChange({ ...rule, value })
 
   if (meta.kind === 'choice') {

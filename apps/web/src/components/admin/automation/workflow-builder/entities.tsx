@@ -42,8 +42,10 @@ export interface WorkflowEntities {
    *  picker reads (lib/client/queries/inbox.ts's ticketQueries.statuses). */
   ticketStatuses: EntityOption[]
   /** The live ticket-types registry (convergence Phase 4), for the
-   *  convert_to_ticket action's optional type picker — customer-category
-   *  types only (the action files customer tickets). */
+   *  convert_to_ticket action's optional type picker and the `ticket.type`
+   *  condition field's value picker — customer-category types only (the
+   *  action files customer tickets, and only a customer ticket is ever paired
+   *  with the conversation a condition reads). */
   ticketTypes: EntityOption[]
   /** Live attribute definitions (full shape: the value editor needs field
    *  type + options, not just id/name). */
@@ -98,7 +100,10 @@ export function WorkflowEntitiesProvider({ children }: { children: ReactNode }) 
     const ticketStatusOptions = (ticketStatuses ?? []).map((s) => ({ id: s.id, name: s.name }))
     // convert_to_ticket files CUSTOMER tickets — the picker offers only
     // customer-category types (a back-office/tracker type would fail the
-    // executor's category guard at run time).
+    // executor's category guard at run time). The same restriction is right
+    // for the `ticket.type` condition: back-office and tracker tickets are
+    // never conversation-linked, so one can never be the ticket a condition
+    // resolves.
     const ticketTypeOptions = (registryTicketTypes ?? [])
       .filter((t) => t.category === 'customer')
       .map((t) => ({ id: t.id, name: t.icon ? `${t.icon} ${t.name}` : t.name }))
