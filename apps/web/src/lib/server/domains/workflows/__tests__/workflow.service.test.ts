@@ -21,6 +21,7 @@ import {
   updateWorkflow,
   setWorkflowStatus,
   softDeleteWorkflow,
+  reorderWorkflows,
   listLiveWorkflowsForTrigger,
   getLiveWorkflowReferencedAttributeKeys,
   __resetLiveWorkflowReferencedAttributeKeysCache,
@@ -128,6 +129,57 @@ describe.skipIf(!fixture.available)('workflow.service (real DB, rolled back)', (
     expect(forMsg.map((w) => w.id)).toEqual([liveB.id, liveA.id])
     expect(forMsg.some((w) => w.id === draft.id)).toBe(false)
     expect(forMsg.some((w) => w.id === otherTrigger.id)).toBe(false)
+  })
+
+  it('reorder hands the customer-facing first-match slot to the dragged workflow', async () => {
+    const trigger = 'reorder.first-match'
+    const made = []
+    for (const [i, name] of ['Welcome tour', 'Billing triage', 'VIP escalation'].entries()) {
+      const wf = await createWorkflow({
+        name,
+        class: 'customer_facing',
+        triggerType: trigger,
+        sortOrder: i,
+      })
+      await setWorkflowStatus(wf.id, 'live')
+      made.push(wf)
+    }
+    const [first, second, third] = made
+    const order = async () => (await listLiveWorkflowsForTrigger(trigger)).map((w) => w.id)
+    expect(await order()).toEqual([first.id, second.id, third.id])
+
+    // Drag the last one to the top: the dispatcher's first-match slot is
+    // whatever this list returns first.
+    await reorderWorkflows([third.id, first.id, second.id])
+    expect(await order()).toEqual([third.id, first.id, second.id])
+  })
+
+  it('reorder leaves workflows outside the dragged group untouched', async () => {
+    const other = await createWorkflow({
+      name: 'Untouched',
+      class: 'background',
+      triggerType: 'reorder.other',
+      sortOrder: 7,
+    })
+    const a = await createWorkflow({
+      name: 'A',
+      class: 'customer_facing',
+      triggerType: 'reorder.group',
+      sortOrder: 0,
+    })
+    const b = await createWorkflow({
+      name: 'B',
+      class: 'customer_facing',
+      triggerType: 'reorder.group',
+      sortOrder: 1,
+    })
+    await reorderWorkflows([b.id, a.id])
+    expect((await getWorkflow(other.id))?.sortOrder).toBe(7)
+    expect((await getWorkflow(b.id))?.sortOrder).toBe(0)
+    expect((await getWorkflow(a.id))?.sortOrder).toBe(1)
+    // The manager lists each row's last edit; priority is a property of the
+    // group, not an edit of either workflow, so no timestamp moves.
+    expect((await getWorkflow(a.id))?.updatedAt).toEqual(a.updatedAt)
   })
 
   it('getLiveWorkflowReferencedAttributeKeys reads only LIVE, non-deleted workflows', async () => {
