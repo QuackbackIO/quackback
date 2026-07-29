@@ -17,3 +17,9 @@ export const postRestored = decl('post.restored', 'post', { webhook: true, activ
 export const postMerged = decl('post.merged', 'post', { webhook: true, activity: A }, S)
 export const postUnmerged = decl('post.unmerged', 'post', { webhook: true, activity: A }, S)
 export const postMentioned = decl('post.mentioned', 'post', { notification: 'mention' }, S)
+export const postOwnerAssigned = decl(
+  'post.owner_assigned',
+  'post',
+  { notification: 'post_owner_assigned', activity: A },
+  S
+)

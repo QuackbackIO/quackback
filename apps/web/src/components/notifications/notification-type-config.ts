@@ -39,6 +39,11 @@ export const notificationTypeConfigs: Record<NotificationType, NotificationTypeC
     iconClass: 'text-amber-500',
     bgClass: 'bg-amber-500/10',
   },
+  post_owner_assigned: {
+    icon: InboxArrowDownIcon,
+    iconClass: 'text-lime-500',
+    bgClass: 'bg-lime-500/10',
+  },
   changelog_published: {
     icon: NewspaperIcon,
     iconClass: 'text-green-500',

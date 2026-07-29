@@ -37,6 +37,7 @@ vi.mock('@/lib/server/domains/teams', () => ({
 const {
   getConversationAssignedTargets,
   getTicketAssignedTargets,
+  getPostOwnerAssignedTargets,
   getAssistantHandedOffTargets,
   getConversationNoteMentionedTargets,
 } = await import('../targets')
@@ -300,6 +301,44 @@ describe('getTicketAssignedTargets', () => {
     } as EventData
 
     expect(await getTicketAssignedTargets(event)).toBeNull()
+  })
+})
+
+describe('getPostOwnerAssignedTargets', () => {
+  const base = {
+    postId: 'post_1',
+    postTitle: 'Dark mode',
+    boardSlug: 'feedback',
+    postUrl: 'https://example.com/b/feedback/posts/post_1',
+  }
+
+  it('targets the newly-assigned owner', () => {
+    const event = {
+      id: 'evt-owner-1',
+      type: 'post.owner_assigned',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: { ...base, ownerPrincipalId: 'principal_teammate', previousOwnerPrincipalId: null },
+    } as EventData
+
+    const target = getPostOwnerAssignedTargets(event)
+    expect(target).toEqual({
+      type: 'notification',
+      target: { principalIds: ['principal_teammate'] },
+      config: base,
+    })
+  })
+
+  it('is a no-op when a teammate assigns the post to themselves (never self-notify)', () => {
+    const event = {
+      id: 'evt-owner-2',
+      type: 'post.owner_assigned',
+      timestamp: '2026-01-01T00:00:00Z',
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: { ...base, ownerPrincipalId: 'principal_actor', previousOwnerPrincipalId: null },
+    } as EventData
+
+    expect(getPostOwnerAssignedTargets(event)).toBeNull()
   })
 })
 

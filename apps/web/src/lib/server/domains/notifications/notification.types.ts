@@ -19,6 +19,7 @@ export type NotificationType =
   | 'chat_mention'
   | 'ticket_status_changed'
   | 'conversation_assigned'
+  | 'post_owner_assigned'
   | 'ticket_assigned'
   | 'ticket_replied'
   | 'ticket_note_added'

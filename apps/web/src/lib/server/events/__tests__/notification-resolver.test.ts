@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   getStatusSubscriberTargets: vi.fn(),
   getConversationAssignedTargets: vi.fn(),
   getTicketAssignedTargets: vi.fn(),
+  getPostOwnerAssignedTargets: vi.fn(),
   getAssistantHandedOffTargets: vi.fn(),
   getConversationNoteMentionedTargets: vi.fn(),
   getTicketStatusChangedTargets: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('../targets', () => ({
   getStatusSubscriberTargets: h.getStatusSubscriberTargets,
   getConversationAssignedTargets: h.getConversationAssignedTargets,
   getTicketAssignedTargets: h.getTicketAssignedTargets,
+  getPostOwnerAssignedTargets: h.getPostOwnerAssignedTargets,
   getAssistantHandedOffTargets: h.getAssistantHandedOffTargets,
   getConversationNoteMentionedTargets: h.getConversationNoteMentionedTargets,
   getTicketStatusChangedTargets: h.getTicketStatusChangedTargets,
@@ -149,6 +151,14 @@ describe('notification resolver routing (WO-8c)', () => {
     const out = await notificationResolver.resolve(evt('message.created'))
     expect(out.map((t) => t.type)).toEqual(['message_bell'])
     expect(h.getMessageCreatedTargets).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes post.owner_assigned to the owner-assigned bell', async () => {
+    h.getPostOwnerAssignedTargets.mockResolvedValue(T('post_owner_bell')[0])
+    const out = await notificationResolver.resolve(evt('post.owner_assigned'))
+    expect(out.map((t) => t.type)).toEqual(['post_owner_bell'])
+    expect(h.getPostOwnerAssignedTargets).toHaveBeenCalledTimes(1)
+    expect(notificationResolver.interestedIn('post.owner_assigned')).toBe(true)
   })
 
   it('routes ticket.created to the email builder only (no bell for it)', async () => {

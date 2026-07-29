@@ -58,6 +58,13 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeMeta[] = [
     group: 'feedback',
     surfaces: ['admin', 'portal'],
   },
+  {
+    type: 'post_owner_assigned',
+    label: 'Post assigned',
+    description: 'A post is assigned to you',
+    group: 'feedback',
+    surfaces: ['admin'],
+  },
   // Support
   {
     type: 'chat_message',

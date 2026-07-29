@@ -3,6 +3,7 @@ import type { PostId, PrincipalId, PostStatusId, PostTagId } from '@quackback/id
 
 const createActivity = vi.fn()
 const dispatchPostStatusChanged = vi.fn()
+const dispatchPostOwnerAssigned = vi.fn()
 const buildEventActor = vi.fn((actor) => actor)
 
 const mockPostsFindFirst = vi.fn()
@@ -53,6 +54,7 @@ vi.mock('@/lib/server/events/dispatch', () => ({
   dispatchPostCreated: vi.fn(),
   dispatchPostStatusChanged,
   dispatchPostUpdated: vi.fn(),
+  dispatchPostOwnerAssigned,
   buildEventActor,
 }))
 
@@ -68,6 +70,7 @@ describe('post.service updatePost', () => {
   beforeEach(() => {
     createActivity.mockClear()
     dispatchPostStatusChanged.mockClear()
+    dispatchPostOwnerAssigned.mockClear()
     buildEventActor.mockClear()
     mockPostsFindFirst.mockReset()
     mockBoardsFindFirst.mockReset()
@@ -169,6 +172,17 @@ describe('post.service updatePost', () => {
         }),
       })
     )
+    expect(dispatchPostOwnerAssigned).toHaveBeenCalledTimes(1)
+    expect(dispatchPostOwnerAssigned).toHaveBeenCalledWith(
+      { principalId: 'principal_actor' },
+      expect.objectContaining({
+        postId: 'post_123',
+        postTitle: 'Original title',
+        boardSlug: 'feedback',
+        ownerPrincipalId: 'principal_next',
+        previousOwnerPrincipalId: 'principal_prev',
+      })
+    )
     expect(createActivity).toHaveBeenCalledWith(
       expect.objectContaining({
         principalId: 'principal_actor',
@@ -183,6 +197,42 @@ describe('post.service updatePost', () => {
         metadata: { tagNames: ['Old tag'] },
       })
     )
+  })
+
+  it('does not notify a teammate who assigns a post to themselves', async () => {
+    mockPostsFindFirst.mockResolvedValueOnce({
+      id: 'post_123' as PostId,
+      title: 'Original title',
+      content: 'Original content',
+      contentJson: null,
+      boardId: 'board_123',
+      statusId: 'post_status_open',
+      ownerPrincipalId: null,
+      updatedAt: new Date(),
+    })
+    updateReturning.mockResolvedValueOnce([
+      {
+        id: 'post_123' as PostId,
+        title: 'Original title',
+        content: 'Original content',
+        contentJson: null,
+        boardId: 'board_123',
+        statusId: 'post_status_open',
+        ownerPrincipalId: 'principal_actor' as PrincipalId,
+        updatedAt: new Date(),
+      },
+    ])
+
+    const { updatePost } = await import('../post.service')
+
+    await updatePost(
+      'post_123' as PostId,
+      { ownerPrincipalId: 'principal_actor' as PrincipalId },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+
+    expect(createActivity).toHaveBeenCalledWith(expect.objectContaining({ type: 'owner.assigned' }))
+    expect(dispatchPostOwnerAssigned).not.toHaveBeenCalled()
   })
 
   it('writes the eta when set', async () => {

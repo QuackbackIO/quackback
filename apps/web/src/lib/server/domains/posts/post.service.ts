@@ -38,6 +38,7 @@ import { type PostId, type PrincipalId, type UserId, type PostTagId } from '@qua
 import {
   dispatchPostStatusChanged,
   dispatchPostUpdated,
+  dispatchPostOwnerAssigned,
   buildEventActor,
 } from '@/lib/server/events/dispatch'
 import { announcePublishedPost } from './post.announce'
@@ -487,6 +488,17 @@ export async function updatePost(
             ...(oldOwner ? { previousOwnerName: prevOwnerRow?.displayName ?? null } : {}),
           },
         })
+        // Never notify a teammate who assigned the post to themselves.
+        if (newOwner !== actor.principalId) {
+          dispatchPostOwnerAssigned(buildEventActor(actor), {
+            postId: updatedPost.id,
+            postTitle: updatedPost.title,
+            boardSlug: board.slug,
+            postUrl: buildPostUrl(getBaseUrl(), board.slug, updatedPost.id),
+            ownerPrincipalId: newOwner,
+            previousOwnerPrincipalId: oldOwner ?? null,
+          })
+        }
       } else {
         const prevOwnerRow = oldOwner ? await resolveName(oldOwner) : null
         createActivity({

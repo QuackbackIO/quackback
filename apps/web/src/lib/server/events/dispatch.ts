@@ -192,6 +192,33 @@ export async function dispatchPostMentioned(
   })
 }
 
+export interface PostOwnerAssignedInput {
+  postId: PostId
+  postTitle: string
+  boardSlug: string
+  postUrl: string
+  ownerPrincipalId: PrincipalId
+  previousOwnerPrincipalId: PrincipalId | null
+}
+
+export async function dispatchPostOwnerAssigned(
+  actor: EventActor,
+  input: PostOwnerAssignedInput
+): Promise<void> {
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.owner_assigned',
+    data: {
+      postId: input.postId,
+      postTitle: input.postTitle,
+      boardSlug: input.boardSlug,
+      postUrl: input.postUrl,
+      ownerPrincipalId: input.ownerPrincipalId,
+      previousOwnerPrincipalId: input.previousOwnerPrincipalId,
+    },
+  })
+}
+
 export async function dispatchPostUpdated(
   actor: EventActor,
   post: EventPostRef,

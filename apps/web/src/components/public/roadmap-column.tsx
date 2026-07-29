@@ -97,6 +97,7 @@ export function RoadmapColumn({
                     id={post.id}
                     title={post.title}
                     voteCount={post.voteCount}
+                    commentCount={post.commentCount}
                     board={{ slug: post.board.slug, name: post.board.name }}
                     eta={post.eta}
                   />

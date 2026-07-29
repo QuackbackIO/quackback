@@ -220,6 +220,50 @@ describe('notificationHook — comment.created', () => {
 // type. Target resolution (who ends up in principalIds) is covered by
 // targets-assignment.test.ts; these assert the notification content the
 // hook builds once a target already exists.
+describe('notificationHook — post.owner_assigned', () => {
+  it('notifies the assigned teammate that a post was assigned to them', async () => {
+    const event = {
+      id: 'evt-post-owner-assigned-1',
+      type: 'post.owner_assigned',
+      timestamp: new Date().toISOString(),
+      actor: { type: 'user', principalId: 'principal_actor' },
+      data: {
+        postId: 'post_1',
+        postTitle: 'Dark mode',
+        boardSlug: 'feedback',
+        postUrl: 'https://example.com/b/feedback/posts/post_1',
+        ownerPrincipalId: 'principal_teammate',
+        previousOwnerPrincipalId: null,
+      },
+    } as EventData
+
+    const target: NotificationTarget = { principalIds: ['principal_teammate' as never] }
+    const config = {
+      postId: 'post_1',
+      postTitle: 'Dark mode',
+      boardSlug: 'feedback',
+      postUrl: 'https://example.com/b/feedback/posts/post_1',
+    }
+
+    await notificationHook.run(event, target, config)
+    const batch = batchSpy.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(batch).toEqual([
+      expect.objectContaining({
+        principalId: 'principal_teammate',
+        type: 'post_owner_assigned',
+        title: 'You were assigned a post',
+        body: '"Dark mode" was assigned to you',
+        postId: 'post_1',
+        metadata: {
+          postTitle: 'Dark mode',
+          boardSlug: 'feedback',
+          postUrl: 'https://example.com/b/feedback/posts/post_1',
+        },
+      }),
+    ])
+  })
+})
+
 describe('notificationHook — conversation.assigned', () => {
   it('creates a "you were assigned" bell for the new assignee', async () => {
     const event = {

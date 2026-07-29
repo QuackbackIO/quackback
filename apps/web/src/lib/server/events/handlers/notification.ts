@@ -245,6 +245,17 @@ function buildNotifications(
     }))
   }
 
+  if (event.type === 'post.owner_assigned') {
+    return principalIds.map((principalId) => ({
+      principalId,
+      type: 'post_owner_assigned' as NotificationType,
+      title: 'You were assigned a post',
+      body: postTitle ? `"${postTitle}" was assigned to you` : undefined,
+      postId,
+      metadata: { postTitle, boardSlug, postUrl },
+    }))
+  }
+
   if (event.type === 'conversation.assigned') {
     const { conversationId, assignedAgentPrincipalId } = config
     return principalIds.map((principalId) => {

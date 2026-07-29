@@ -629,6 +629,7 @@ export const fetchPublicRoadmapPosts = createServerFn({ method: 'GET' })
         id: String(item.id),
         title: item.title,
         voteCount: item.voteCount,
+        commentCount: item.commentCount,
         statusId: item.statusId ? String(item.statusId) : null,
         eta: toIsoStringOrNull(item.eta),
         board: { id: String(item.board.id), name: item.board.name, slug: item.board.slug },

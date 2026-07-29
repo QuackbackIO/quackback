@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { ChevronUpIcon, Squares2X2Icon, CalendarIcon } from '@heroicons/react/24/solid'
+import { ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import { Badge } from '@/components/ui/badge'
 import { formatMonthYear } from '@/lib/shared/utils'
 
@@ -7,6 +8,7 @@ interface RoadmapCardProps {
   id: string
   title: string
   voteCount: number
+  commentCount: number
   board: {
     slug: string
     name: string
@@ -19,6 +21,7 @@ export function RoadmapCard({
   id,
   title,
   voteCount,
+  commentCount,
   board,
   eta,
 }: RoadmapCardProps): React.ReactElement {
@@ -35,7 +38,7 @@ export function RoadmapCard({
       </div>
       <div className="roadmap-card__content flex-1 min-w-0 p-3">
         <p className="text-sm font-medium text-foreground line-clamp-2">{title}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-1">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <Badge variant="secondary" className="text-[11px] inline-flex items-center gap-0.5">
             <Squares2X2Icon className="h-3 w-3 text-muted-foreground/40" />
             {board.name}
@@ -45,6 +48,15 @@ export function RoadmapCard({
               <CalendarIcon className="h-3 w-3 text-muted-foreground/40" />
               {etaLabel}
             </Badge>
+          )}
+          {commentCount > 0 && (
+            <span
+              data-testid="roadmap-card-comment-count"
+              className="ms-auto flex items-center gap-0.5"
+            >
+              <ChatBubbleLeftIcon className="h-3 w-3" />
+              {commentCount}
+            </span>
           )}
         </div>
       </div>

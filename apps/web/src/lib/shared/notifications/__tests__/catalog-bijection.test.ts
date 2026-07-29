@@ -14,6 +14,7 @@ const ALL_TYPES: Record<NotificationType, true> = {
   post_status_changed: true,
   comment_created: true,
   post_mentioned: true,
+  post_owner_assigned: true,
   changelog_published: true,
   status_incident: true,
   chat_message: true,
