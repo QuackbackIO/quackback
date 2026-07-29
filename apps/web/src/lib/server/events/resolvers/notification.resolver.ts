@@ -34,6 +34,7 @@ import {
   getTicketResolvedEmailTargets,
   getTicketAssignedEmailTargets,
   getSlaEmailTargets,
+  getConversationNoteMentionedEmailTargets,
 } from '../targets'
 import type { SinkResolver } from './registry'
 import type { DomainEvent } from '../envelope'
@@ -71,20 +72,22 @@ const BELL_BUILDERS: Record<string, BellBuilder> = {
 }
 
 /**
- * Ticket + SLA lifecycle EMAIL builders (support platform). Unlike the bells,
- * these fan out one `type: 'email'` target per recipient and need the hook
- * context (portalBaseUrl/workspaceName/logoUrl), so they're kept in their own
- * table — built once per resolve, shared by every matching builder. A type can
- * appear in both tables (ticket.replied → bell + email); their targets concat.
+ * Per-recipient EMAIL builders. Unlike the bells, these fan out one
+ * `type: 'email'` target per recipient and need the hook context
+ * (portalBaseUrl/workspaceName/logoUrl), so they're kept in their own table —
+ * built once per resolve, shared by every matching builder. A type can appear
+ * in both tables (ticket.replied and conversation.note_mentioned each resolve
+ * a bell AND emails); their targets concat.
  */
 type EmailBuilder = (event: EventData, context: HookContext) => Promise<HookTarget[]>
-const TICKET_EMAIL_BUILDERS: Record<string, EmailBuilder> = {
+const EMAIL_BUILDERS: Record<string, EmailBuilder> = {
   'ticket.created': getTicketCreatedEmailTargets,
   'ticket.replied': getTicketRepliedEmailTargets,
   'ticket.status_changed': getTicketResolvedEmailTargets,
   'ticket.assigned': getTicketAssignedEmailTargets,
   'sla.approaching_breach': getSlaEmailTargets,
   'sla.breached': getSlaEmailTargets,
+  'conversation.note_mentioned': getConversationNoteMentionedEmailTargets,
 }
 
 export const notificationResolver: SinkResolver = {
@@ -95,17 +98,17 @@ export const notificationResolver: SinkResolver = {
       MENTION_SET.has(type) ||
       STATUS_NOTIFY_SET.has(type) ||
       type in BELL_BUILDERS ||
-      type in TICKET_EMAIL_BUILDERS
+      type in EMAIL_BUILDERS
     )
   },
   async resolve(event: DomainEvent): Promise<HookTarget[]> {
     const legacy = toLegacyEvent(event)
     const out: HookTarget[] = []
 
-    // Subscriber/mention/status fan-outs and the ticket/SLA email builders all
-    // need the hook context; the bells resolve a single recipient from the
+    // Subscriber/mention/status fan-outs and the per-recipient email builders
+    // all need the hook context; the bells resolve a single recipient from the
     // payload/DB and don't. Build it ONCE, shared by every matching builder.
-    const emailBuilder = TICKET_EMAIL_BUILDERS[event.type]
+    const emailBuilder = EMAIL_BUILDERS[event.type]
     const needsContext =
       SUBSCRIBER_SET.has(event.type) ||
       MENTION_SET.has(event.type) ||

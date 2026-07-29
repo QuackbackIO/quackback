@@ -11,6 +11,7 @@ import {
   sendStatusIncidentPublishedEmail,
   sendStatusMaintenanceScheduledEmail,
   sendTicketEventEmail,
+  sendNoteMentionEmail,
 } from '@quackback/email'
 import type { IncidentImpact } from '@quackback/email'
 import type { TicketId } from '@quackback/ids'
@@ -20,6 +21,7 @@ import type {
   EmailTarget,
   EmailConfig,
   TicketEmailConfig,
+  NoteMentionEmailConfig,
 } from '../hook-types'
 import type { EventData, EventPostMentionedData } from '../types'
 import {
@@ -115,6 +117,17 @@ export const emailHook: HookHandler = {
           unsubscribeUrl,
           preferencesUrl: cfg.preferencesUrl,
           logoUrl: cfg.logoUrl,
+        })
+      } else if (event.type === 'conversation.note_mentioned') {
+        const c = config as unknown as NoteMentionEmailConfig
+        result = await sendNoteMentionEmail({
+          to: email,
+          authorName: c.authorName,
+          preview: c.preview,
+          conversationUrl: c.ctaUrl,
+          workspaceName: c.workspaceName,
+          preferencesUrl: c.preferencesUrl,
+          logoUrl: c.logoUrl,
         })
       } else if (event.type === 'changelog.published') {
         const changelogCfg = config as Record<string, unknown>

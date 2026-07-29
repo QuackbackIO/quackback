@@ -7,11 +7,11 @@
  *  - Mentions are TEAM-ONLY: a note is agent-facing, so only admin/member
  *    principals are eligible. Visitors (role 'user') and service principals are
  *    dropped server-side, defending against a tampered client.
- *  - Alerts are in-app only (a `chat_mention` notification), routed through the
- *    `conversation.note_mentioned` event/hook pipeline (WO-3 slice 3) so they
- *    pass the same in-app preference gate as everything else — no email/webhook
- *    fan-out is implied by that move, matching the rest of the
- *    conversation-notify surface.
+ *  - Alerts ride the `conversation.note_mentioned` event/hook pipeline and fan
+ *    out on two channels: a `chat_mention` in-app notification and an email to
+ *    the same teammates. Each channel is gated independently by the
+ *    `chat_mention` row of the notification preference matrix, so muting one
+ *    leaves the other alone.
  *
  * The inserted rows power the inbox "Mentions" view; the notification hook
  * (events/handlers/notification.ts) powers the notification bell and, on
@@ -79,11 +79,12 @@ export async function syncConversationMessageMentions(
 
     // Notify everyone newly mentioned except the author (you can mention
     // yourself in a note — the row persists for the Mentions view — but never
-    // ping yourself). The bell itself — and the notifiedAt watermark — now
-    // ride the conversation.note_mentioned event/hook pipeline: the hook's
-    // batch insert applies the same in-app preference gate as every other
-    // notification, then calls markConversationMentionsNotified below once
-    // delivery actually happened.
+    // ping yourself). This is THE recipient narrowing: the
+    // conversation.note_mentioned resolvers trust the payload outright, so a
+    // self-mention that survived here would both ring and mail its own author.
+    // The bell, the mail, and the notifiedAt watermark all ride the event/hook
+    // pipeline from here; the notification hook calls
+    // markConversationMentionsNotified below once the bell actually landed.
     const toNotify = inserted.map((r) => r.principalId).filter((id) => id !== authorPrincipalId)
     if (toNotify.length === 0) return
 

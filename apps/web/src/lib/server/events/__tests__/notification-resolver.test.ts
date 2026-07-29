@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   getTicketResolvedEmailTargets: vi.fn(),
   getTicketAssignedEmailTargets: vi.fn(),
   getSlaEmailTargets: vi.fn(),
+  getConversationNoteMentionedEmailTargets: vi.fn(),
 }))
 vi.mock('../hook-context', () => ({ buildHookContext: h.buildHookContext }))
 vi.mock('../targets', () => ({
@@ -48,6 +49,7 @@ vi.mock('../targets', () => ({
   getTicketResolvedEmailTargets: h.getTicketResolvedEmailTargets,
   getTicketAssignedEmailTargets: h.getTicketAssignedEmailTargets,
   getSlaEmailTargets: h.getSlaEmailTargets,
+  getConversationNoteMentionedEmailTargets: h.getConversationNoteMentionedEmailTargets,
 }))
 
 import { createId } from '@quackback/ids'
@@ -88,6 +90,7 @@ describe('notification resolver routing (WO-8c)', () => {
     h.getTicketResolvedEmailTargets.mockResolvedValue([])
     h.getTicketAssignedEmailTargets.mockResolvedValue([])
     h.getSlaEmailTargets.mockResolvedValue([])
+    h.getConversationNoteMentionedEmailTargets.mockResolvedValue([])
   })
 
   it('interestedIn covers subscriber, mention, status-publish, and bell types', () => {
@@ -188,6 +191,15 @@ describe('notification resolver routing (WO-8c)', () => {
     h.getTicketAssignedEmailTargets.mockResolvedValue(T('assigned_email'))
     const out = await notificationResolver.resolve(evt('ticket.assigned'))
     expect(out.map((t) => t.type)).toEqual(['assigned_email', 'assigned_bell'])
+  })
+
+  it('concats bell + email targets for conversation.note_mentioned', async () => {
+    h.getConversationNoteMentionedTargets.mockResolvedValue(T('note_mention_bell')[0])
+    h.getConversationNoteMentionedEmailTargets.mockResolvedValue(T('note_mention_email'))
+    const out = await notificationResolver.resolve(evt('conversation.note_mentioned'))
+    expect(out.map((t) => t.type)).toEqual(['note_mention_email', 'note_mention_bell'])
+    expect(h.getConversationNoteMentionedEmailTargets).toHaveBeenCalledTimes(1)
+    expect(notificationResolver.interestedIn('conversation.note_mentioned')).toBe(true)
   })
 
   it('routes SLA events to the SLA email builder', async () => {
