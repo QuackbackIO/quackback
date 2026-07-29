@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ChartBarIcon,
+  ExclamationTriangleIcon,
   EyeIcon,
   HandThumbDownIcon,
   HandThumbUpIcon,
@@ -17,8 +18,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/shared/empty-state'
+import { AnalyticsStatRow } from '@/components/admin/analytics/analytics-stat-row'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
 import { Route } from '@/routes/admin/help-center'
+import type { ArticlePerformanceRow } from '@/lib/server/domains/help-center/help-center.article-performance.query'
 import type { KbArticleId } from '@quackback/ids'
 
 /**
@@ -34,9 +37,38 @@ function helpfulRate(helpful: number, notHelpful: number): number | null {
 
 const numberFormatter = new Intl.NumberFormat('en-US')
 
+/**
+ * Fleet-wide totals plus the single worst-received article, derived from the
+ * same rows the table renders. This is the synthesis an admin would
+ * otherwise have to do by eye across every row -- surfaced once, above the
+ * row-level detail, instead of left as an exercise for the reader.
+ */
+function summarizePerformance(rows: ArticlePerformanceRow[]) {
+  const totalViews = rows.reduce((sum, row) => sum + row.viewCount, 0)
+  const totalHelpful = rows.reduce((sum, row) => sum + row.helpfulCount, 0)
+  const totalNotHelpful = rows.reduce((sum, row) => sum + row.notHelpfulCount, 0)
+  const overallRate = helpfulRate(totalHelpful, totalNotHelpful)
+
+  // The worst-reacted article is the lowest helpful rate among articles that
+  // have actually received votes -- an unvoted article has no reaction to be
+  // worst at, so it never wins this slot by defaulting to 0%. Ties broken by
+  // vote count so a confident bad signal outranks a single stray downvote.
+  const worst = rows
+    .filter((row) => row.helpfulCount + row.notHelpfulCount > 0)
+    .map((row) => ({
+      article: row,
+      rate: helpfulRate(row.helpfulCount, row.notHelpfulCount) as number,
+      votes: row.helpfulCount + row.notHelpfulCount,
+    }))
+    .sort((a, b) => a.rate - b.rate || b.votes - a.votes)[0]
+
+  return { totalViews, totalHelpful, totalNotHelpful, overallRate, worst: worst ?? null }
+}
+
 export function ArticlePerformanceTable() {
   const navigate = useNavigate({ from: Route.fullPath })
   const { data: rows, isLoading } = useQuery(helpCenterQueries.articlePerformance())
+  const summary = rows && rows.length > 0 ? summarizePerformance(rows) : null
 
   const handleOpen = (id: KbArticleId) => {
     void navigate({ to: '/admin/help-center/articles/$articleId', params: { articleId: id } })
@@ -47,6 +79,63 @@ export function ArticlePerformanceTable() {
       <div className="flex items-center gap-2 px-1 py-3">
         <h1 className="text-lg font-semibold">Article performance</h1>
       </div>
+
+      {isLoading ? (
+        <div className="rounded-xl border border-border/50 bg-card overflow-hidden mb-4">
+          <div className="grid grid-cols-2 divide-x divide-border/50 sm:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="px-5 py-4">
+                <Skeleton className="h-3 w-16 mb-3" />
+                <Skeleton className="h-7 w-12" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        summary && (
+          <div className="rounded-xl border border-border/50 bg-card overflow-hidden mb-4">
+            <AnalyticsStatRow
+              stats={[
+                { label: 'Total views', value: numberFormatter.format(summary.totalViews) },
+                { label: 'Helpful votes', value: numberFormatter.format(summary.totalHelpful) },
+                {
+                  label: 'Not helpful votes',
+                  value: numberFormatter.format(summary.totalNotHelpful),
+                },
+                {
+                  label: 'Overall helpful rate',
+                  value: summary.overallRate === null ? '—' : `${summary.overallRate}%`,
+                },
+              ]}
+            />
+          </div>
+        )
+      )}
+
+      {summary?.worst && (
+        <button
+          type="button"
+          data-testid="article-performance-worst"
+          onClick={() => handleOpen(summary.worst!.article.id as KbArticleId)}
+          className="w-full mb-4 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-left transition-colors hover:bg-amber-500/10"
+        >
+          <ExclamationTriangleIcon className="size-5 shrink-0 text-amber-600 dark:text-amber-500" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-500">
+              Needs attention
+            </p>
+            <p className="truncate text-[13px] text-foreground">
+              <span className="font-medium">{summary.worst.article.title}</span>
+              <span className="text-muted-foreground">
+                {' '}
+                is at {summary.worst.rate}% helpful ({summary.worst.article.notHelpfulCount} not
+                helpful vote{summary.worst.article.notHelpfulCount === 1 ? '' : 's'})
+              </span>
+            </p>
+          </div>
+        </button>
+      )}
+
       <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
