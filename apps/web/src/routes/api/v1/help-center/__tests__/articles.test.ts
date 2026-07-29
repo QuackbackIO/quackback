@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ApiAuthContext } from '@/lib/server/domains/api/auth'
 import type { ApiKeyId } from '@/lib/server/domains/api-keys'
 import type { HelpCenterArticleWithCategory } from '@/lib/server/domains/help-center/help-center.types'
-import type { KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
+import type { KbArticleFeedbackId, KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
 
 // --- Mocks ---
 
@@ -569,7 +569,9 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
   })
 
   it('records helpful=true feedback', async () => {
-    vi.mocked(recordArticleFeedback).mockResolvedValue(undefined)
+    vi.mocked(recordArticleFeedback).mockResolvedValue(
+      'kb_article_feedback_1' as KbArticleFeedbackId
+    )
 
     const body = { helpful: true }
     const request = createRequest(
@@ -589,7 +591,9 @@ describe('POST /api/v1/help-center/articles/:id/feedback', () => {
   })
 
   it('records helpful=false feedback', async () => {
-    vi.mocked(recordArticleFeedback).mockResolvedValue(undefined)
+    vi.mocked(recordArticleFeedback).mockResolvedValue(
+      'kb_article_feedback_1' as KbArticleFeedbackId
+    )
 
     const body = { helpful: false }
     const request = createRequest(

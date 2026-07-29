@@ -161,6 +161,10 @@ export function HelpCenterList() {
             onShowDeletedChange={(showDeleted) =>
               setFilters({ showDeleted: showDeleted ?? undefined })
             }
+            showPerformance={filters.showPerformance}
+            onShowPerformanceChange={(showPerformance) =>
+              setFilters({ showPerformance: showPerformance ?? undefined })
+            }
           />
         }
         hasActiveFilters={hasActiveFilters}

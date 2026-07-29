@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { HelpCenterListItem } from './help-center-list-item'
+import { ArticlePerformanceTable } from './article-performance-table'
 import { CreateArticleDialog } from './create-article-dialog'
 import type { CategoryActions } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
@@ -70,6 +71,10 @@ export function HelpCenterFinder(props: HelpCenterFinderProps) {
 
   if (search.deleted) {
     return <DeletedItemsView />
+  }
+
+  if (search.performance) {
+    return <ArticlePerformanceTable />
   }
 
   return <LiveHelpCenterFinder {...props} />

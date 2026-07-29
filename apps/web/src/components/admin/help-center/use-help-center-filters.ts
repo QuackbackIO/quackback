@@ -10,6 +10,7 @@ export interface HelpCenterFilters {
   search?: string
   sort: 'newest' | 'oldest'
   showDeleted?: boolean
+  showPerformance?: boolean
 }
 
 export function useHelpCenterFilters() {
@@ -23,8 +24,9 @@ export function useHelpCenterFilters() {
       search: search.search,
       sort: search.sort ?? 'newest',
       showDeleted: search.deleted,
+      showPerformance: search.performance,
     }),
-    [search.status, search.category, search.search, search.sort, search.deleted]
+    [search.status, search.category, search.search, search.sort, search.deleted, search.performance]
   )
 
   const setFilters = useCallback(
@@ -47,6 +49,13 @@ export function useHelpCenterFilters() {
           }),
           ...('showDeleted' in updates && {
             deleted: updates.showDeleted || undefined,
+            // Deleted items and the performance table are alternate full-page
+            // views layered over the same route -- only one can be active.
+            performance: updates.showDeleted ? undefined : search.performance,
+          }),
+          ...('showPerformance' in updates && {
+            performance: updates.showPerformance || undefined,
+            deleted: updates.showPerformance ? undefined : search.deleted,
           }),
         },
         replace: true,
@@ -65,9 +74,19 @@ export function useHelpCenterFilters() {
 
   const hasActiveFilters = useMemo(() => {
     return (
-      filters.status !== 'all' || !!filters.search || !!filters.showDeleted || !!filters.category
+      filters.status !== 'all' ||
+      !!filters.search ||
+      !!filters.showDeleted ||
+      !!filters.showPerformance ||
+      !!filters.category
     )
-  }, [filters.status, filters.search, filters.showDeleted, filters.category])
+  }, [
+    filters.status,
+    filters.search,
+    filters.showDeleted,
+    filters.showPerformance,
+    filters.category,
+  ])
 
   return {
     filters,

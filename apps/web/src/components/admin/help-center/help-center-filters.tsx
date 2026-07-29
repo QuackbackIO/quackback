@@ -15,6 +15,8 @@ interface HelpCenterFiltersProps {
   categoryActions: CategoryActions
   showDeleted?: boolean
   onShowDeletedChange?: (showDeleted: boolean | undefined) => void
+  showPerformance?: boolean
+  onShowPerformanceChange?: (showPerformance: boolean | undefined) => void
 }
 
 const ARTICLE_STATUSES = [
@@ -31,6 +33,8 @@ export function HelpCenterFiltersPanel({
   categoryActions,
   showDeleted,
   onShowDeletedChange,
+  showPerformance,
+  onShowPerformanceChange,
 }: HelpCenterFiltersProps) {
   const { data: categories = [] } = useQuery(helpCenterQueries.categories())
 
@@ -81,10 +85,20 @@ export function HelpCenterFiltersPanel({
 
       <FilterSection title="Other">
         <FilterList
-          items={[{ id: 'deleted', name: 'Deleted items' }]}
-          selectedIds={showDeleted ? ['deleted'] : []}
-          onSelect={() => {
-            onShowDeletedChange?.(!showDeleted || undefined)
+          items={[
+            { id: 'performance', name: 'Article performance' },
+            { id: 'deleted', name: 'Deleted items' },
+          ]}
+          selectedIds={[
+            ...(showPerformance ? ['performance'] : []),
+            ...(showDeleted ? ['deleted'] : []),
+          ]}
+          onSelect={(id) => {
+            if (id === 'deleted') {
+              onShowDeletedChange?.(!showDeleted || undefined)
+            } else {
+              onShowPerformanceChange?.(!showPerformance || undefined)
+            }
           }}
         />
       </FilterSection>

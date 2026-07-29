@@ -40,7 +40,6 @@ function createUpdateChain() {
 
 const mockCategoryFindFirst = vi.fn()
 const mockArticleFindFirst = vi.fn()
-const mockFeedbackFindFirst = vi.fn()
 const mockPrincipalFindFirst = vi.fn()
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -54,9 +53,6 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
       helpCenterArticles: {
         findFirst: (...args: unknown[]) => mockArticleFindFirst(...args),
         findMany: vi.fn(),
-      },
-      helpCenterArticleFeedback: {
-        findFirst: (...args: unknown[]) => mockFeedbackFindFirst(...args),
       },
       principal: {
         findFirst: (...args: unknown[]) => mockPrincipalFindFirst(...args),
@@ -109,7 +105,6 @@ let publishArticle: typeof import('../help-center.article.service').publishArtic
 let unpublishArticle: typeof import('../help-center.article.service').unpublishArticle
 let deleteArticle: typeof import('../help-center.article.service').deleteArticle
 let restoreArticle: typeof import('../help-center.article.service').restoreArticle
-let recordArticleFeedback: typeof import('../help-center.article.service').recordArticleFeedback
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -125,7 +120,6 @@ beforeEach(async () => {
   unpublishArticle = mod.unpublishArticle
   deleteArticle = mod.deleteArticle
   restoreArticle = mod.restoreArticle
-  recordArticleFeedback = mod.recordArticleFeedback
 })
 
 describe('getArticleById', () => {
@@ -654,29 +648,6 @@ describe('updateArticle with position and description', () => {
     const setValues = updateSetCalls[0][0] as Record<string, unknown>
     expect(setValues.position).toBe(3)
     expect(setValues.description).toBe('Updated desc')
-  })
-})
-
-describe('recordArticleFeedback', () => {
-  it('inserts new feedback when no existing feedback', async () => {
-    mockFeedbackFindFirst.mockResolvedValue(null)
-
-    await recordArticleFeedback('kb_article_1' as KbArticleId, true, 'principal_1' as PrincipalId)
-
-    expect(insertValuesCalls.length).toBeGreaterThan(0)
-  })
-
-  it('returns early when feedback is unchanged', async () => {
-    mockFeedbackFindFirst.mockResolvedValue({
-      id: 'kb_article_feedback_1',
-      articleId: 'kb_article_1',
-      principalId: 'principal_1',
-      helpful: true,
-    })
-
-    await recordArticleFeedback('kb_article_1' as KbArticleId, true, 'principal_1' as PrincipalId)
-
-    expect(insertValuesCalls).toHaveLength(0)
   })
 })
 

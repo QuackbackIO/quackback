@@ -9,9 +9,12 @@ import { CategoryIcon } from '@/components/help-center/category-icon'
 import {
   ArrowTopRightOnSquareIcon,
   EllipsisHorizontalIcon,
+  HandThumbDownIcon,
   LanguageIcon,
 } from '@heroicons/react/24/outline'
 import { ArticleTranslationsDialog } from '@/components/admin/help-center/article-translations-dialog'
+import { ArticleFeedbackReasonsDialog } from '@/components/admin/help-center/article-feedback-reasons-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -62,6 +65,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   const { upload: uploadImage } = useImageUpload({ prefix: 'help-center' })
   const [contentJson, setContentJson] = useState<JSONContent | null>(null)
   const [translationsOpen, setTranslationsOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const hasInitialized = useRef(false)
 
   const updateArticleMutation = useUpdateArticle()
@@ -240,6 +244,22 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                 </SelectContent>
               </Select>
 
+              {article.notHelpfulCount > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFeedbackOpen(true)}
+                  className="h-8 rounded-full text-xs px-3"
+                >
+                  <HandThumbDownIcon className="h-3.5 w-3.5" />
+                  Unhelpful
+                  <Badge size="sm" shape="pill" variant="secondary">
+                    {article.notHelpfulCount}
+                  </Badge>
+                </Button>
+              )}
+
               <Button
                 type="button"
                 variant="outline"
@@ -403,6 +423,11 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
         articleId={articleId}
         open={translationsOpen}
         onOpenChange={setTranslationsOpen}
+      />
+      <ArticleFeedbackReasonsDialog
+        articleId={articleId}
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
       />
     </Form>
   )

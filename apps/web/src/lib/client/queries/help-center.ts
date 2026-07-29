@@ -10,10 +10,12 @@ import {
   listCategoriesFn,
   listPublicCategoriesFn,
   listArticlesFn,
+  listArticlePerformanceFn,
   listPublicArticlesFn,
   listPublicArticlesForCategoryFn,
   getArticleFn,
   getPublicArticleBySlugFn,
+  listArticleFeedbackReasonsFn,
 } from '@/lib/server/functions/help-center'
 
 const STALE_TIME_SHORT = 30 * 1000
@@ -33,8 +35,11 @@ export const helpCenterKeys = {
     sort?: string
     showDeleted?: boolean
   }) => [...helpCenterKeys.articleLists(), filters] as const,
+  articlePerformance: () => [...helpCenterKeys.articles(), 'performance'] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
   articleDetail: (id: KbArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
+  articleFeedbackReasons: (id: KbArticleId) =>
+    [...helpCenterKeys.articleDetail(id), 'feedback-reasons'] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,
   publicArticleList: (categoryId?: string) =>
     [...helpCenterKeys.public(), 'list', categoryId] as const,
@@ -82,10 +87,24 @@ export const helpCenterQueries = {
       placeholderData: keepPreviousData,
     }),
 
+  articlePerformance: () =>
+    queryOptions({
+      queryKey: helpCenterKeys.articlePerformance(),
+      queryFn: () => listArticlePerformanceFn({ data: {} }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
   articleDetail: (id: KbArticleId) =>
     queryOptions({
       queryKey: helpCenterKeys.articleDetail(id),
       queryFn: () => getArticleFn({ data: { id } }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  articleFeedbackReasons: (id: KbArticleId) =>
+    queryOptions({
+      queryKey: helpCenterKeys.articleFeedbackReasons(id),
+      queryFn: () => listArticleFeedbackReasonsFn({ data: { articleId: id } }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

@@ -3,7 +3,7 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
-import type { KbCategoryId, KbArticleId, PrincipalId } from '@quackback/ids'
+import type { KbCategoryId, KbArticleId, KbArticleFeedbackId, PrincipalId } from '@quackback/ids'
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import {
@@ -22,6 +22,7 @@ import {
   deleteCategory,
   restoreCategory,
   listArticles,
+  listArticlePerformance,
   listPublicArticles,
   listPopularPublicArticles,
   getArticleById,
@@ -32,6 +33,8 @@ import {
   deleteArticle,
   restoreArticle,
   recordArticleFeedback,
+  attachArticleFeedbackReason,
+  listArticleFeedbackReasons,
 } from '@/lib/server/domains/help-center/help-center.service'
 import {
   listCategoriesSchema,
@@ -44,10 +47,13 @@ import {
   getArticleSchema,
   deleteArticleSchema,
   listArticlesSchema,
+  listArticlePerformanceSchema,
   listPublicArticlesSchema,
   publishArticleSchema,
   unpublishArticleSchema,
   articleFeedbackSchema,
+  articleFeedbackReasonSchema,
+  listArticleFeedbackReasonsSchema,
   getCategoryBySlugSchema,
   getArticleBySlugSchema,
   restoreCategorySchema,
@@ -187,6 +193,13 @@ export const listArticlesFn = createServerFn({ method: 'GET' })
       ...result,
       items: result.items.map(serializeArticle),
     }
+  })
+
+export const listArticlePerformanceFn = createServerFn({ method: 'GET' })
+  .validator(listArticlePerformanceSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    return listArticlePerformance(data.limit)
   })
 
 export const restoreCategoryFn = createServerFn({ method: 'POST' })
@@ -374,12 +387,33 @@ export const recordArticleFeedbackFn = createServerFn({ method: 'POST' })
   .validator(articleFeedbackSchema)
   .handler(async ({ data }) => {
     const auth = await getOptionalAuth()
-    await recordArticleFeedback(
+    const feedbackId = await recordArticleFeedback(
       data.articleId as KbArticleId,
       data.helpful,
       (auth?.principal?.id as PrincipalId) ?? null
     )
+    // The id is the visitor's handle on their own vote, and the only one an
+    // anonymous visitor has for attaching a reason to it afterwards.
+    return { success: true, feedbackId }
+  })
+
+export const submitArticleFeedbackReasonFn = createServerFn({ method: 'POST' })
+  .validator(articleFeedbackReasonSchema)
+  .handler(async ({ data }) => {
+    await attachArticleFeedbackReason(data.feedbackId as KbArticleFeedbackId, data.reason)
     return { success: true }
+  })
+
+export const listArticleFeedbackReasonsFn = createServerFn({ method: 'GET' })
+  .validator(listArticleFeedbackReasonsSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    const reasons = await listArticleFeedbackReasons(data.articleId as KbArticleId, data.limit)
+    return reasons.map((entry) => ({
+      id: entry.id,
+      reason: entry.reason,
+      createdAt: toIsoString(entry.createdAt),
+    }))
   })
 
 // ============================================================================

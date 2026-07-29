@@ -97,6 +97,10 @@ export const listPublicArticlesSchema = z.object({
   limit: z.number().int().positive().max(100).optional(),
 })
 
+export const listArticlePerformanceSchema = z.object({
+  limit: z.number().int().positive().max(200).optional(),
+})
+
 export const publishArticleSchema = z.object({
   id: z.string().min(1),
 })
@@ -104,6 +108,24 @@ export const publishArticleSchema = z.object({
 export const articleFeedbackSchema = z.object({
   articleId: z.string().min(1),
   helpful: z.boolean(),
+})
+
+/** Longest reason accepted from a visitor, in characters. */
+export const ARTICLE_FEEDBACK_REASON_MAX_LENGTH = 1000
+
+/**
+ * A visitor explaining the unhelpful vote identified by `feedbackId`. The id is
+ * the handle on their own vote: an anonymous visitor has no principal the
+ * server could look the row back up by.
+ */
+export const articleFeedbackReasonSchema = z.object({
+  feedbackId: z.string().min(1),
+  reason: z.string().trim().min(1).max(ARTICLE_FEEDBACK_REASON_MAX_LENGTH),
+})
+
+export const listArticleFeedbackReasonsSchema = z.object({
+  articleId: z.string().min(1),
+  limit: z.number().int().positive().max(100).optional(),
 })
 
 export const getCategoryBySlugSchema = z.object({

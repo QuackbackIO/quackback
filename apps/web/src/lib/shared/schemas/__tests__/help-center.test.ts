@@ -12,6 +12,8 @@ import {
   updateArticleSchema,
   listArticlesSchema,
   articleFeedbackSchema,
+  articleFeedbackReasonSchema,
+  ARTICLE_FEEDBACK_REASON_MAX_LENGTH,
 } from '../help-center'
 
 describe('createCategorySchema', () => {
@@ -260,6 +262,38 @@ describe('articleFeedbackSchema', () => {
       articleId: 'kb_article_1',
       helpful: 'yes',
     })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('articleFeedbackReasonSchema', () => {
+  it('trims the reason it accepts', () => {
+    const result = articleFeedbackReasonSchema.safeParse({
+      feedbackId: 'kb_article_feedback_1',
+      reason: '  The steps stop before the deploy part.  ',
+    })
+    expect(result.success).toBe(true)
+    expect(result.data?.reason).toBe('The steps stop before the deploy part.')
+  })
+
+  it('rejects a whitespace-only reason', () => {
+    const result = articleFeedbackReasonSchema.safeParse({
+      feedbackId: 'kb_article_feedback_1',
+      reason: '   ',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a reason past the maximum length', () => {
+    const result = articleFeedbackReasonSchema.safeParse({
+      feedbackId: 'kb_article_feedback_1',
+      reason: 'x'.repeat(ARTICLE_FEEDBACK_REASON_MAX_LENGTH + 1),
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a missing feedbackId', () => {
+    const result = articleFeedbackReasonSchema.safeParse({ reason: 'Too vague' })
     expect(result.success).toBe(false)
   })
 })
