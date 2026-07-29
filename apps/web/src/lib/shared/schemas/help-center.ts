@@ -97,6 +97,10 @@ export const listPublicArticlesSchema = z.object({
   limit: z.number().int().positive().max(100).optional(),
 })
 
+export const listArticlePerformanceSchema = z.object({
+  limit: z.number().int().positive().max(200).optional(),
+})
+
 export const publishArticleSchema = z.object({
   id: z.string().min(1),
 })

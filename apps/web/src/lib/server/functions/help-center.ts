@@ -22,6 +22,7 @@ import {
   deleteCategory,
   restoreCategory,
   listArticles,
+  listArticlePerformance,
   listPublicArticles,
   listPopularPublicArticles,
   getArticleById,
@@ -46,6 +47,7 @@ import {
   getArticleSchema,
   deleteArticleSchema,
   listArticlesSchema,
+  listArticlePerformanceSchema,
   listPublicArticlesSchema,
   publishArticleSchema,
   unpublishArticleSchema,
@@ -191,6 +193,13 @@ export const listArticlesFn = createServerFn({ method: 'GET' })
       ...result,
       items: result.items.map(serializeArticle),
     }
+  })
+
+export const listArticlePerformanceFn = createServerFn({ method: 'GET' })
+  .validator(listArticlePerformanceSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    return listArticlePerformance(data.limit)
   })
 
 export const restoreCategoryFn = createServerFn({ method: 'POST' })

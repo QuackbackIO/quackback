@@ -10,6 +10,7 @@ import {
   listCategoriesFn,
   listPublicCategoriesFn,
   listArticlesFn,
+  listArticlePerformanceFn,
   listPublicArticlesFn,
   listPublicArticlesForCategoryFn,
   getArticleFn,
@@ -34,6 +35,7 @@ export const helpCenterKeys = {
     sort?: string
     showDeleted?: boolean
   }) => [...helpCenterKeys.articleLists(), filters] as const,
+  articlePerformance: () => [...helpCenterKeys.articles(), 'performance'] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
   articleDetail: (id: KbArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
   articleFeedbackReasons: (id: KbArticleId) =>
@@ -83,6 +85,13 @@ export const helpCenterQueries = {
       // cursor available server-side (see help-center.article.query.ts).
       staleTime: STALE_TIME_SHORT,
       placeholderData: keepPreviousData,
+    }),
+
+  articlePerformance: () =>
+    queryOptions({
+      queryKey: helpCenterKeys.articlePerformance(),
+      queryFn: () => listArticlePerformanceFn({ data: {} }),
+      staleTime: STALE_TIME_MEDIUM,
     }),
 
   articleDetail: (id: KbArticleId) =>

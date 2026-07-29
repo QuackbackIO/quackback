@@ -8,6 +8,7 @@ const searchSchema = z.object({
   search: z.string().optional(),
   sort: z.enum(['newest', 'oldest']).optional(),
   deleted: z.boolean().optional(),
+  performance: z.boolean().optional(),
 })
 
 export const Route = createFileRoute('/admin/help-center')({
