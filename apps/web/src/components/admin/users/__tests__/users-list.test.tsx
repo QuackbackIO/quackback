@@ -279,6 +279,15 @@ describe('<UsersList> bulk segment selection', () => {
   })
 })
 
+describe('<UsersList> metric column headers', () => {
+  it('labels the post, comment and vote counts as scannable table columns', () => {
+    renderList()
+    expect(screen.getByText('Posts')).toBeInTheDocument()
+    expect(screen.getByText('Comments')).toBeInTheDocument()
+    expect(screen.getByText('Votes')).toBeInTheDocument()
+  })
+})
+
 describe('<UsersList> column picker', () => {
   it('does not show the Country field until the column is turned on', () => {
     renderList()

@@ -138,4 +138,36 @@ describe('<UserCard>', () => {
     )
     expect(screen.getByText('-')).toBeInTheDocument()
   })
+
+  it('shows the post, comment and vote counts as labelled values, not bare icons', () => {
+    render(
+      <UserCard
+        user={{ ...USER, postCount: 3, commentCount: 5, voteCount: 2 }}
+        isSelected={false}
+        onClick={vi.fn()}
+        canManage
+        checked={false}
+        onToggleCheck={vi.fn()}
+      />
+    )
+    expect(screen.getByTitle('Posts')).toHaveTextContent('3')
+    expect(screen.getByTitle('Comments')).toHaveTextContent('5')
+    expect(screen.getByTitle('Votes')).toHaveTextContent('2')
+  })
+
+  it('shows the counts even when they are zero, so the column stays scannable across rows', () => {
+    render(
+      <UserCard
+        user={USER}
+        isSelected={false}
+        onClick={vi.fn()}
+        canManage
+        checked={false}
+        onToggleCheck={vi.fn()}
+      />
+    )
+    expect(screen.getByTitle('Posts')).toHaveTextContent('0')
+    expect(screen.getByTitle('Comments')).toHaveTextContent('0')
+    expect(screen.getByTitle('Votes')).toHaveTextContent('0')
+  })
 })
