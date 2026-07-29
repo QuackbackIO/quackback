@@ -762,7 +762,7 @@ export function UserDetail({
               open={removeDialogOpen}
               onOpenChange={setRemoveDialogOpen}
               title={`Remove ${user.name || 'this user'}?`}
-              description="This will remove the user from your portal. They will lose access to vote and comment but their existing activity will remain. Their global account is preserved and they can sign up again."
+              description="This will remove the user from your portal. They lose access to vote and comment, and their votes are withdrawn. Their posts, comments and conversations stay, reattributed to “Deleted user”. Their global account is preserved and they can sign up again."
               confirmLabel="Remove"
               variant="destructive"
               isPending={isRemovePending}

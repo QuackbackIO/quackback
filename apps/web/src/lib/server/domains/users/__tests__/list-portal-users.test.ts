@@ -42,6 +42,7 @@ const mockUserRows = [
     postCount: 3,
     commentCount: 5,
     voteCount: 10,
+    country: 'US',
   },
 ]
 
@@ -79,7 +80,10 @@ function createChain(resolveValue: unknown = []) {
   return chain
 }
 
-vi.mock('@/lib/server/db', () => ({
+// Spread the real module first so every table the users domain transitively
+// pulls in stays defined, then override the handful this suite asserts on.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     select: vi.fn(() => {
       selectCallCount.count++
@@ -121,6 +125,7 @@ vi.mock('@/lib/server/db', () => ({
     metadata: 'user.metadata',
     createdAt: 'user.created_at',
     updatedAt: 'user.updated_at',
+    country: 'user.country',
   },
   posts: { principalId: 'posts.principal_id', deletedAt: 'posts.deleted_at' },
   postComments: {
@@ -152,7 +157,8 @@ vi.mock('@/lib/server/db', () => ({
   isNotNull: () => 'is_not_null_result',
 }))
 
-vi.mock('@quackback/ids', () => ({
+vi.mock('@quackback/ids', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@quackback/ids')>()),
   generateId: vi.fn((p: string) => `${p}_generated123`),
 }))
 
@@ -215,6 +221,13 @@ describe('listPortalUsers', () => {
     expect(typeof item.postCount).toBe('number')
     expect(typeof item.commentCount).toBe('number')
     expect(typeof item.voteCount).toBe('number')
+  })
+
+  it('should include country in results', async () => {
+    const { listPortalUsers } = await import('../user.service')
+    const result = await listPortalUsers()
+
+    expect(result.items[0]?.country).toBe('US')
   })
 
   it('should include segments array in results', async () => {

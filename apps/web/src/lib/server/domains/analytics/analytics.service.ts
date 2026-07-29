@@ -12,6 +12,7 @@ import {
   lte,
   and,
   isNull,
+  isNotNull,
   inArray,
   count,
   ne,
@@ -78,7 +79,11 @@ export async function refreshAnalytics(): Promise<void> {
           gte(principal.createdAt, dayStart),
           lte(principal.createdAt, dayEnd),
           ne(principal.type, 'anonymous'),
-          eq(principal.role, 'user')
+          eq(principal.role, 'user'),
+          // A signup is a person with an account. The accountless principals
+          // that share role='user' — the deleted-user placeholder authored
+          // content is re-attributed to — are bookkeeping, not arrivals.
+          isNotNull(principal.userId)
         )
       ),
     db

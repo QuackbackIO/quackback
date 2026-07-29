@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { PlusIcon, UsersIcon } from '@heroicons/react/24/solid'
+import { PlusIcon, UsersIcon, ViewColumnsIcon } from '@heroicons/react/24/solid'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { useAssignUsersToSegment, useRemoveUsersFromSegment } from '@/lib/client/mutations'
@@ -11,8 +11,15 @@ import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { MENU_ICON, MENU_LABEL } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
-import { UserCard } from '@/components/admin/users/user-card'
+import { UserCard, METRIC_COLUMN_WIDTH } from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
 import { UsersBulkSegmentBar } from '@/components/admin/users/users-bulk-segment-bar'
 import { MobileSegmentSelector } from '@/components/admin/users/users-segment-nav'
@@ -134,6 +141,9 @@ export function UsersList({
 }: UsersListProps) {
   const intl = useIntl()
   const sort = filters.sort || 'newest'
+  // Column picker — extra fields a teammate can opt into per row. Starts
+  // empty so the default list stays exactly as dense as it's always been.
+  const [showCountry, setShowCountry] = useState(false)
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
     onChange: (value) => onFiltersChange({ search: value }),
@@ -322,6 +332,19 @@ export function UsersList({
           ))}
         </div>
         <div className="flex-1" />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <ViewColumnsIcon className={MENU_ICON} />
+              Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuCheckboxItem checked={showCountry} onCheckedChange={setShowCountry}>
+              Country
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {onNewPerson && (
           <Button size="sm" className="h-8 text-xs gap-1.5" onClick={onNewPerson}>
             <PlusIcon className="h-3.5 w-3.5" />
@@ -393,23 +416,39 @@ export function UsersList({
 
       {/* User List */}
       <div className="p-3">
-        <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
-          {users.map((user, index) => (
-            <div
-              key={user.principalId}
-              className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
-              style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
-            >
-              <UserCard
-                user={user}
-                isSelected={user.principalId === selectedUserId}
-                onClick={() => onSelectUser(user.principalId)}
-                canManage={canManage}
-                checked={selectedIds.has(user.principalId)}
-                onToggleCheck={() => toggleSelect(user.principalId)}
-              />
+        <div className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50">
+          {/* Column headers for the metric values below — kept in sync with each
+              row's checkbox/avatar spacer and METRIC_COLUMN_WIDTH so the labels
+              land directly above the numbers they describe. */}
+          <div className="flex items-center gap-3 border-b border-border/50 px-3 py-2">
+            {canManage && <div className="size-4 shrink-0" aria-hidden="true" />}
+            <div className="h-10 w-10 shrink-0" aria-hidden="true" />
+            <div className="min-w-0 flex-1" />
+            <div className="flex shrink-0 items-center gap-3">
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Posts</span>
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Comments</span>
+              <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Votes</span>
             </div>
-          ))}
+          </div>
+          <div className="divide-y divide-border/50">
+            {users.map((user, index) => (
+              <div
+                key={user.principalId}
+                className="animate-in fade-in slide-in-from-bottom-1 duration-200 fill-mode-backwards"
+                style={{ animationDelay: `${Math.min(index * 30, 150)}ms` }}
+              >
+                <UserCard
+                  user={user}
+                  isSelected={user.principalId === selectedUserId}
+                  onClick={() => onSelectUser(user.principalId)}
+                  canManage={canManage}
+                  checked={selectedIds.has(user.principalId)}
+                  onToggleCheck={() => toggleSelect(user.principalId)}
+                  showCountry={showCountry}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

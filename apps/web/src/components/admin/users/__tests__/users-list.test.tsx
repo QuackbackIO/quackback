@@ -37,6 +37,7 @@ function makeUser(i: number): PortalUserListItemView {
     isLead: false,
     contactEmail: null,
     lastSeenAt: null,
+    country: i === 1 ? 'US' : null,
   }
 }
 
@@ -275,5 +276,49 @@ describe('<UsersList> bulk segment selection', () => {
   it('hides checkboxes and the bulk bar when canManage is false', () => {
     renderList(USERS, { canManage: false })
     expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+})
+
+describe('<UsersList> metric column headers', () => {
+  it('labels the post, comment and vote counts as scannable table columns', () => {
+    renderList()
+    expect(screen.getByText('Posts')).toBeInTheDocument()
+    expect(screen.getByText('Comments')).toBeInTheDocument()
+    expect(screen.getByText('Votes')).toBeInTheDocument()
+  })
+})
+
+describe('<UsersList> column picker', () => {
+  it('does not show the Country field until the column is turned on', () => {
+    renderList()
+    expect(screen.queryByText('United States')).toBeNull()
+  })
+
+  it('shows the Country field for every row once turned on from the Columns menu', async () => {
+    renderList()
+    // Radix DropdownMenuTrigger opens on pointerDown (not click).
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
+    expect(await screen.findByText('United States')).toBeInTheDocument()
+  })
+
+  it('turning the column back off hides it again', async () => {
+    renderList()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
+    expect(await screen.findByText('United States')).toBeInTheDocument()
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
+    expect(screen.queryByText('United States')).toBeNull()
   })
 })

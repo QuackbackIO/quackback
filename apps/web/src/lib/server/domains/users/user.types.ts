@@ -43,6 +43,8 @@ export interface PortalUserListItem {
   contactEmail: string | null
   /** Freshest activity signal: session touch or device beacon; null = none. */
   lastSeenAt: Date | null
+  /** ISO-3166-1 alpha-2 country code captured at sign-up; null when no geo-aware proxy header was present. */
+  country: string | null
 }
 
 /**
@@ -64,6 +66,7 @@ export interface PortalUserListItemView {
   isLead: boolean
   contactEmail: string | null
   lastSeenAt: Date | string | null
+  country: string | null
 }
 
 /**

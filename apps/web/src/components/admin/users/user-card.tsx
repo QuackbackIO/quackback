@@ -1,15 +1,18 @@
-import {
-  CheckCircleIcon,
-  ChatBubbleLeftIcon,
-  DocumentTextIcon,
-  HandThumbUpIcon,
-} from '@heroicons/react/24/solid'
+import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { Avatar } from '@/components/ui/avatar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { countryName, countryFlag } from '@/lib/shared/country'
 import type { PortalUserListItemView } from '@/lib/shared/types'
 import { CompactSegmentBadges } from '@/components/admin/users/user-segments'
+
+/**
+ * Fixed width shared by each metric column and its header cell in
+ * `UsersList`, so the Posts/Comments/Votes values line up under their
+ * labels instead of drifting with row content.
+ */
+export const METRIC_COLUMN_WIDTH = 'w-14'
 
 interface UserCardProps {
   user: PortalUserListItemView
@@ -19,6 +22,8 @@ interface UserCardProps {
   canManage: boolean
   checked: boolean
   onToggleCheck: () => void
+  /** Shows the optional Country field, toggled from the list's column picker. */
+  showCountry?: boolean
 }
 
 export function UserCard({
@@ -28,8 +33,8 @@ export function UserCard({
   canManage,
   checked,
   onToggleCheck,
+  showCountry = false,
 }: UserCardProps) {
-  const totalActivity = user.postCount + user.commentCount + user.voteCount
   // Both fields are sanitised in the DTO (`user.service.ts`), so a placeholder
   // is already null by the time it reaches here.
   const displayEmail = user.email ?? user.contactEmail
@@ -97,26 +102,16 @@ export function UserCard({
           )}
         </div>
 
-        {/* Activity summary */}
-        {totalActivity > 0 && (
-          <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-            {user.postCount > 0 && (
+        {/* Country - opt-in via the list's column picker */}
+        {showCountry && (
+          <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
+            {user.country ? (
               <span className="flex items-center gap-1">
-                <DocumentTextIcon className="h-3 w-3" />
-                {user.postCount}
+                <span aria-hidden="true">{countryFlag(user.country)}</span>
+                <span>{countryName(user.country)}</span>
               </span>
-            )}
-            {user.commentCount > 0 && (
-              <span className="flex items-center gap-1">
-                <ChatBubbleLeftIcon className="h-3 w-3" />
-                {user.commentCount}
-              </span>
-            )}
-            {user.voteCount > 0 && (
-              <span className="flex items-center gap-1">
-                <HandThumbUpIcon className="h-3 w-3" />
-                {user.voteCount}
-              </span>
+            ) : (
+              <span>-</span>
             )}
           </div>
         )}
@@ -127,6 +122,22 @@ export function UserCard({
             <CompactSegmentBadges segments={user.segments} maxVisible={3} />
           </div>
         )}
+      </div>
+
+      {/* Post/comment/vote counts, as fixed-width columns that line up under the
+          Posts/Comments/Votes headers in `UsersList` — always shown (rather than
+          hidden when zero) so the column stays put and can be scanned straight
+          down instead of decoded row by row. */}
+      <div className="flex shrink-0 items-center gap-3 self-center text-xs tabular-nums text-muted-foreground">
+        <span className={cn(METRIC_COLUMN_WIDTH, 'text-right')} title="Posts">
+          {user.postCount}
+        </span>
+        <span className={cn(METRIC_COLUMN_WIDTH, 'text-right')} title="Comments">
+          {user.commentCount}
+        </span>
+        <span className={cn(METRIC_COLUMN_WIDTH, 'text-right')} title="Votes">
+          {user.voteCount}
+        </span>
       </div>
     </div>
   )
