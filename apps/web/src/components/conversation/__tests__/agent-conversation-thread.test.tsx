@@ -196,70 +196,86 @@ vi.mock('@/lib/server/functions/blocking', () => ({
   unblockPersonFn: vi.fn(),
 }))
 
-const { mockTicket, mockTicketThread, mockTicketVariants, mockTicketLink, mockTicketStatuses } =
-  vi.hoisted(() => {
-    const mockTicket = {
-      id: 'ticket_1',
-      number: 1,
-      reference: '#1',
-      type: 'customer',
-      ticketType: null,
-      title: 'Cannot log in',
-      status: { id: 'ticket_status_1', name: 'Open', color: '#22c55e', category: 'open' },
-      stage: { slot: null, label: null },
-      priority: 'none',
-      requester: null,
-      assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
-      company: null,
-      firstResponseAt: null,
-      dueAt: null,
-      resolvedAt: null,
-      sla: null,
-      createdAt: '2026-07-03T00:00:00.000Z',
-      updatedAt: '2026-07-03T00:00:00.000Z',
-      reopenedCount: 0,
-      customAttributes: {},
-      lastMessagePreview: 'Help please',
-      lastMessageAt: '2026-07-03T00:00:00.000Z',
-    } as TicketDTO
-    const mockTicketThread = {
-      hasMore: false,
-      messages: [
-        {
-          id: 'conversation_msg_1',
-          conversationId: null,
-          ticketId: 'ticket_1',
-          senderType: 'visitor',
-          content: 'Help please',
-          createdAt: '2026-07-03T00:00:00.000Z',
-          author: null,
-          attachments: [],
-          citations: [],
-          isAssistant: false,
-          isInternal: false,
-          contentJson: null,
-          viaEmail: false,
-          systemEvent: null,
-          reactions: [],
-          flaggedAt: null,
-          postSuggestion: null,
-          translatedFrom: null,
-        },
-      ],
-    }
-    // Per-id ticket-detail overrides for tests that need a variant (e.g. a
-    // closed-category status) to survive the mount refetch — seeding the query
-    // cache alone gets overwritten by the mocked queryFn's canonical row.
-    const mockTicketVariants: Record<string, Partial<TicketDTO>> = {}
-    // The linked-ticket summary the conversationTicketLink queryFn hands back
-    // (null = no linked ticket) and the status catalogue the statuses queryFn
-    // serves — object refs so individual tests can flip them per render.
-    const mockTicketLink: { value: LinkedTicketSummary | null } = { value: null }
-    const mockTicketStatuses: {
-      value: { id: string; slug: string; category: string; isDefault: boolean }[]
-    } = { value: [] }
-    return { mockTicket, mockTicketThread, mockTicketVariants, mockTicketLink, mockTicketStatuses }
-  })
+const {
+  mockTicket,
+  mockTicketThread,
+  mockTicketVariants,
+  mockTicketLink,
+  mockTicketStatuses,
+  mockProvenanceCount,
+} = vi.hoisted(() => {
+  const mockTicket = {
+    id: 'ticket_1',
+    number: 1,
+    reference: '#1',
+    type: 'customer',
+    ticketType: null,
+    title: 'Cannot log in',
+    status: { id: 'ticket_status_1', name: 'Open', color: '#22c55e', category: 'open' },
+    stage: { slot: null, label: null },
+    priority: 'none',
+    requester: null,
+    assignee: { principalId: null, displayName: null, teamId: null, teamName: null },
+    company: null,
+    firstResponseAt: null,
+    dueAt: null,
+    resolvedAt: null,
+    sla: null,
+    createdAt: '2026-07-03T00:00:00.000Z',
+    updatedAt: '2026-07-03T00:00:00.000Z',
+    reopenedCount: 0,
+    customAttributes: {},
+    lastMessagePreview: 'Help please',
+    lastMessageAt: '2026-07-03T00:00:00.000Z',
+  } as TicketDTO
+  const mockTicketThread = {
+    hasMore: false,
+    messages: [
+      {
+        id: 'conversation_msg_1',
+        conversationId: null,
+        ticketId: 'ticket_1',
+        senderType: 'visitor',
+        content: 'Help please',
+        createdAt: '2026-07-03T00:00:00.000Z',
+        author: null,
+        attachments: [],
+        citations: [],
+        isAssistant: false,
+        isInternal: false,
+        contentJson: null,
+        viaEmail: false,
+        systemEvent: null,
+        reactions: [],
+        flaggedAt: null,
+        postSuggestion: null,
+        translatedFrom: null,
+      },
+    ],
+  }
+  // Per-id ticket-detail overrides for tests that need a variant (e.g. a
+  // closed-category status) to survive the mount refetch — seeding the query
+  // cache alone gets overwritten by the mocked queryFn's canonical row.
+  const mockTicketVariants: Record<string, Partial<TicketDTO>> = {}
+  // The linked-ticket summary the conversationTicketLink queryFn hands back
+  // (null = no linked ticket) and the status catalogue the statuses queryFn
+  // serves — object refs so individual tests can flip them per render.
+  const mockTicketLink: { value: LinkedTicketSummary | null } = { value: null }
+  const mockTicketStatuses: {
+    value: { id: string; slug: string; category: string; isDefault: boolean }[]
+  } = { value: [] }
+  // How many conversations the open ticket was opened from — decides whether
+  // the composer offers to share a note at all.
+  const mockProvenanceCount = { value: 0 }
+  return {
+    mockTicket,
+    mockTicketThread,
+    mockTicketVariants,
+    mockTicketLink,
+    mockTicketStatuses,
+    mockProvenanceCount,
+  }
+})
 
 vi.mock('@/lib/server/functions/tickets', () => ({
   sendTicketMessageFn: vi.fn(),
@@ -292,6 +308,10 @@ vi.mock('@/lib/client/queries/inbox', async (importOriginal) => ({
       queryKey: ['ticket-statuses'],
       queryFn: () => Promise.resolve(mockTicketStatuses.value),
     }),
+    provenanceConversations: (id: string) => ({
+      queryKey: ['ticket-provenance-conversations', id],
+      queryFn: () => Promise.resolve({ count: mockProvenanceCount.value }),
+    }),
   },
 }))
 vi.mock('@/lib/client/queries/conversation-inbox', () => ({
@@ -315,6 +335,7 @@ import { setTicketStatusFn } from '@/lib/server/functions/tickets'
 afterEach(() => {
   mockTicketLink.value = null
   mockTicketStatuses.value = []
+  mockProvenanceCount.value = 0
   routeContextState.permissions = ['ticket.view', 'ticket.set_status']
   vi.clearAllMocks()
 })
@@ -423,6 +444,32 @@ describe('AgentConversationThread — ticket capability wiring', () => {
     const trigger = await screen.findByRole('button', { name: 'Reply' })
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
     expect(await screen.findByRole('menuitemradio', { name: 'Note' })).toBeInTheDocument()
+  })
+
+  it('offers no share control on a back-office ticket opened from nothing', async () => {
+    mockTicketVariants['ticket_bo_solo'] = { type: 'back_office' }
+    mockProvenanceCount.value = 0
+    renderThread({ kind: 'ticket', id: 'ticket_bo_solo' })
+
+    await screen.findByTestId('editor')
+    // Nothing to share to, so the choice is never put in front of the agent.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /share with conversation/i })).toBeNull()
+    )
+  })
+
+  it('starts a back-office note unshared and only shares it when asked', async () => {
+    mockTicketVariants['ticket_bo_linked'] = { type: 'back_office' }
+    mockProvenanceCount.value = 1
+    renderThread({ kind: 'ticket', id: 'ticket_bo_linked' })
+
+    const share = await screen.findByRole('button', { name: /share with conversation/i })
+    // Ticket-only is where every note starts: the control is an unpressed
+    // offer, not a mode the composer is already in.
+    expect(share).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(share)
+    expect(share).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('renders the ticket header controls + type badge', async () => {

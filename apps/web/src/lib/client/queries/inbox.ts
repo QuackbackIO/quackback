@@ -25,6 +25,7 @@ import {
   getTicketStageLabelsFn,
   listTicketMessagesFn,
   getTicketLinksFn,
+  getTicketProvenanceConversationsFn,
   fetchTicketExternalLinksFn,
   getTicketWatchStatusFn,
   listTicketWatchersFn,
@@ -72,6 +73,9 @@ export const ticketKeys = {
   links: (id: TicketId) => [...ticketKeys.all(), 'links', id] as const,
   /** A single ticket's external issue links (GitHub). */
   externalLinks: (id: TicketId) => [...ticketKeys.all(), 'external-links', id] as const,
+  /** How many conversations a ticket was opened from (its provenance links). */
+  provenanceConversations: (id: TicketId) =>
+    [...ticketKeys.all(), 'provenance-conversations', id] as const,
   /** The caller's own watch status on a ticket (watching/reason/mutedUntil). */
   watch: (id: TicketId) => [...ticketKeys.all(), 'watch', id] as const,
   /** A ticket's full watcher list (admin watch control). */
@@ -129,6 +133,15 @@ export const ticketQueries = {
       queryKey: ticketKeys.externalLinks(id),
       queryFn: () => fetchTicketExternalLinksFn({ data: { ticketId: id } }),
       staleTime: 30_000,
+    }),
+
+  /** How many conversations a ticket was opened from — the note composer's
+   *  share control is offered only when there is somewhere to share to. */
+  provenanceConversations: (id: TicketId) =>
+    queryOptions({
+      queryKey: ticketKeys.provenanceConversations(id),
+      queryFn: () => getTicketProvenanceConversationsFn({ data: { ticketId: id } }),
+      staleTime: 60_000,
     }),
 
   /** The caller's own watch status on a ticket, for the watch control's trigger. */

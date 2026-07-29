@@ -13,12 +13,12 @@
  *
  *   1. `insertTicketMessage` (agent reply, requester reply):
  *      - `isInternal` → stays `ticket_id`-parented; `addTicketNote` never
- *        redirects. A ticket linked to a conversation as PROVENANCE
- *        (back-office/tracker) additionally carries a COPY of the note onto
- *        that conversation — `crossPostTicketNote` in
- *        ticket-conversation-link.service.ts, which owns the pair exclusion
- *        and the loop stamp. A copy, never a re-parent: the note's home is
- *        still the ticket thread.
+ *        redirects. A note whose author ASKS to share it
+ *        (`shareWithConversation`, off by default) additionally carries a COPY
+ *        onto each conversation the ticket links to as PROVENANCE —
+ *        `crossPostTicketNote` in ticket-conversation-link.service.ts, which
+ *        owns the pair exclusion and the loop stamp. A copy, never a
+ *        re-parent: the note's home is still the ticket thread.
  *      - a CUSTOMER ticket with a linked conversation (resolved via
  *        `ticket_conversations`, ticket_type='customer') → the write lands on
  *        the CONVERSATION (`conversation_id`), running the FULL conversation
@@ -170,6 +170,25 @@ export interface SendTicketMessageInput {
    *  message is caught by the (metadata->>'emailMessageId') partial unique index
    *  the conversation path already relies on; the portal reply path omits it. */
   metadata?: Record<string, unknown>
+}
+
+/**
+ * An internal note, plus the one choice its author makes about where it goes.
+ *
+ * A note belongs to its ticket and nowhere else unless the author says
+ * otherwise: `shareWithConversation` is the per-note ask that carries a COPY
+ * back along the ticket's provenance links (`crossPostTicketNote`). Absent or
+ * false — the default every caller gets by writing nothing — keeps the note on
+ * the ticket thread alone. A back-office thread is mostly the specialist's own
+ * working chatter, and the conversation it was spun off from is the customer's
+ * record, so the traffic only moves when someone decides it is worth the other
+ * team's attention.
+ */
+export interface AddTicketNoteInput extends SendTicketMessageInput {
+  /** Carry a copy of this note onto the conversations the ticket was opened
+   *  from. Off unless asked; the pair exclusion and the loop stamp still
+   *  govern where an asked-for copy may actually land. */
+  shareWithConversation?: boolean
 }
 
 function assertCan(actor: Actor, permission: PermissionKey, action: string): void {
@@ -400,7 +419,7 @@ export async function sendTicketMessage(
 /** Agent-only internal note on a ticket thread (never customer-visible). */
 export async function addTicketNote(
   actor: Actor,
-  input: SendTicketMessageInput
+  input: AddTicketNoteInput
 ): Promise<{ message: ConversationMessageDTO }> {
   assertCan(actor, PERMISSIONS.TICKET_NOTE, 'add a note to this ticket')
   const principalId = requireAgentPrincipal(actor)
@@ -411,22 +430,26 @@ export async function addTicketNote(
     actor,
   })
   // The note stays the ticket's own (the redirect above never touches an
-  // internal note), and a copy travels back along the ticket's provenance
-  // links so the conversation an internal task was opened from shows what came
-  // of it. The pair exclusion and the loop stamp both live in the cross-post
-  // itself — see ticket-conversation-link.service.ts. Best-effort there, so
-  // this await cannot fail the note.
-  await crossPostTicketNote(
-    ticket,
-    {
-      // The stored text, not the raw input: a rich note resolves its plain
-      // fallback in insertTicketMessage.
-      content: message.content,
-      authorPrincipalId: principalId,
-      metadata: input.metadata as ConversationMessageMetadata | undefined,
-    },
-    actor
-  )
+  // internal note). Only when its author ASKS does a copy travel back along
+  // the ticket's provenance links, so the conversation an internal task was
+  // opened from shows what came of it — a deliberate hand-off, not a running
+  // transcript of the specialist's working notes. The pair exclusion and the
+  // loop stamp still bound where an asked-for copy may land, and both live in
+  // the cross-post itself (ticket-conversation-link.service.ts). Best-effort
+  // there, so this await cannot fail the note.
+  if (input.shareWithConversation) {
+    await crossPostTicketNote(
+      ticket,
+      {
+        // The stored text, not the raw input: a rich note resolves its plain
+        // fallback in insertTicketMessage.
+        content: message.content,
+        authorPrincipalId: principalId,
+        metadata: input.metadata as ConversationMessageMetadata | undefined,
+      },
+      actor
+    )
+  }
   void emitTicketNoteAdded(actor, ticket, message)
   return { message }
 }

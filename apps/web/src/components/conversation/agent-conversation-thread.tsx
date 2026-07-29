@@ -301,6 +301,12 @@ export function AgentConversationThread({
   // send (an empty controlled value leaves a stale `<p></p>` that traps the
   // cursor) and to re-seed + focus after a text insert.
   const [noteMode, setNoteMode] = useState(false)
+  // A note belongs to its ticket alone unless the author says otherwise: this
+  // is the per-note ask that also carries it onto the conversations the ticket
+  // was opened from. Off for every fresh note (reset after each send, below) —
+  // a back-office thread is mostly working chatter, and sharing is a decision
+  // about one note rather than a mode the composer stays in.
+  const [shareNoteWithConversation, setShareNoteWithConversation] = useState(false)
   const [replyDraft, setReplyDraft] = useState<ComposerDraft>(EMPTY_DRAFT)
   const [noteDraft, setNoteDraft] = useState<ComposerDraft>(EMPTY_DRAFT)
   const [replyKey, setReplyKey] = useState(0)
@@ -369,6 +375,17 @@ export function AgentConversationThread({
     ...inboxQueries.ticketDetail(ticketId ?? INACTIVE_TICKET_ID),
     enabled: isTicket,
   })
+
+  // Whether this ticket was opened from any conversation. The composer's
+  // share-this-note control exists only when there is somewhere to share to;
+  // a standalone internal task, and the customer pair (one thread already, so
+  // the service refuses to carry across it), both leave it off the composer
+  // entirely rather than offering a choice that does nothing.
+  const { data: provenanceConversations } = useQuery({
+    ...ticketQueries.provenanceConversations(ticketId ?? INACTIVE_TICKET_ID),
+    enabled: isTicket && !!ticketId && ticket?.type !== 'customer',
+  })
+  const canShareNote = (provenanceConversations?.count ?? 0) > 0
 
   // The linked customer ticket (unified inbox §2.1's one-row rule): a plain
   // conversation may wear a ticket chip/status pill even though it renders
@@ -871,6 +888,9 @@ export function AgentConversationThread({
               content: vars.content,
               contentJson: vars.contentJson,
               attachments: vars.attachments,
+              // Only ever true when the control was offered AND pressed; the
+              // server treats an absent ask as ticket-only regardless.
+              shareWithConversation: canShareNote && shareNoteWithConversation,
             },
           })
         : addConversationNoteFn({
@@ -883,6 +903,8 @@ export function AgentConversationThread({
           }),
     onSuccess: (res) => {
       clearAttachments()
+      // Sharing is decided per note, so the next one starts private again.
+      setShareNoteWithConversation(false)
       pendingOwnSendScroll.current = true
       appendToThread(res)
     },
@@ -1938,6 +1960,25 @@ export function AgentConversationThread({
                   className="size-8"
                   onSelect={(emoji) => insertText(noteMode ? 'note' : 'reply', emoji)}
                 />
+              )}
+              {/* Send this one note back to the conversation the ticket was
+                  opened from, as an internal note there too. Note mode only,
+                  and only when the ticket has somewhere to send it — pressed
+                  state reads as on, and it releases itself after each send so
+                  the choice is never inherited by the next note. */}
+              {(noteMode || !capabilities.reply) && canShareNote && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={shareNoteWithConversation ? 'secondary' : 'ghost'}
+                  aria-pressed={shareNoteWithConversation}
+                  onClick={() => setShareNoteWithConversation((on) => !on)}
+                >
+                  <ChatBubbleLeftRightIcon className="size-4" />
+                  {(provenanceConversations?.count ?? 0) > 1
+                    ? `Share with ${provenanceConversations?.count} conversations`
+                    : 'Share with conversation'}
+                </Button>
               )}
               {capabilities.macros && !noteMode && conversationId && (
                 <MacroPicker

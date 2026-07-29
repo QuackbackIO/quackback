@@ -4,15 +4,19 @@
  * Runs inside the db-test-fixture rollback transaction.
  *
  * The rule under test: a ticket opened FROM a conversation keeps that
- * conversation, and the work recorded on it comes back — a note on the ticket
- * lands on the conversation as an internal note of its own, so the teammate
- * reading the customer thread sees what happened to the task spun off it.
+ * conversation, and the work recorded on it can be sent back — a note the
+ * author SHARES lands on the conversation as an internal note of its own, so
+ * the teammate reading the customer thread sees what happened to the task spun
+ * off it.
  *
- * Three edges:
+ * Four edges:
+ *  - TICKET-ONLY IS THE DEFAULT. A note carries nowhere unless its author asks
+ *    it to. A back-office thread is mostly the specialist's own working
+ *    chatter, and none of that belongs on the customer's conversation.
  *  - LOOP SAFETY. Every carried note is stamped with the ticket it came from,
- *    and a stamped note is never carried again. A note that finds its way back
- *    onto the ticket (a relay, an integration replaying it) lands once and
- *    stops there instead of bouncing.
+ *    and a stamped note is never carried again however loudly the write asks.
+ *    A note that finds its way back onto the ticket (a relay, an integration
+ *    replaying it) lands once and stops there instead of bouncing.
  *  - THE PAIR IS EXCLUDED. A customer ticket and its conversation are already
  *    one thread through the union read, so carrying a note across that link
  *    would show it twice.
@@ -215,6 +219,28 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
   afterEach(fixture.rollback)
   afterAll(fixture.close)
 
+  it('keeps a note on the ticket alone unless the author asks to share it', async () => {
+    const statusId = await seedStatus()
+    const agentP = await seedPrincipal()
+    const ticketId = await seedTicket(statusId, 'back_office')
+    const conversationId = await seedConversation()
+    await link(ticketId, conversationId, 'back_office')
+
+    // The specialist's own working chatter: written with no sharing choice at
+    // all, which is the overwhelming majority of what lands on a back-office
+    // thread.
+    await addTicketNote(agentActor(agentP), {
+      ticketId,
+      content: 'Checked the export, the second column is off by one.',
+    })
+
+    expect(await ticketNotesOf(ticketId)).toHaveLength(1)
+    // Ticket-only is the default, so the customer thread stays clean and the
+    // agent channel never carries a copy it was not asked for.
+    expect(await conversationMessagesOf(conversationId)).toHaveLength(0)
+    expect(realtime.publishAgentConversationEvent).not.toHaveBeenCalled()
+  })
+
   it('carries a back-office ticket note onto the conversation it was opened from', async () => {
     const statusId = await seedStatus()
     const agentP = await seedPrincipal()
@@ -225,6 +251,7 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
     await addTicketNote(agentActor(agentP), {
       ticketId,
       content: 'Rerun the billing job, it cleared on the second pass.',
+      shareWithConversation: true,
     })
 
     // The note is still the ticket's own — carrying it never moves it.
@@ -251,7 +278,11 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
     const conversationId = await seedConversation()
     await link(ticketId, conversationId, 'back_office')
 
-    await addTicketNote(agentActor(agentP), { ticketId, content: 'Waiting on the vendor.' })
+    await addTicketNote(agentActor(agentP), {
+      ticketId,
+      content: 'Waiting on the vendor.',
+      shareWithConversation: true,
+    })
 
     // Both halves of the team-only rule: the stored row every visitor read path
     // filters, and a broadcast that never touches the visitor's own channel.
@@ -266,15 +297,23 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
     const conversationId = await seedConversation()
     await link(ticketId, conversationId, 'back_office')
 
-    await addTicketNote(agentActor(agentP), { ticketId, content: 'Refund issued.' })
+    await addTicketNote(agentActor(agentP), {
+      ticketId,
+      content: 'Refund issued.',
+      shareWithConversation: true,
+    })
     const [carried] = await conversationMessagesOf(conversationId)
 
     // The carried note makes the round trip back onto the ticket, carrying its
-    // origin stamp — what a relay or an integration replaying it would write.
+    // origin stamp — what a relay or an integration replaying it would write,
+    // asking to share as eagerly as the note it is echoing. The stamp outranks
+    // the ask: sharing is what a human chose once, not a licence to keep
+    // re-sharing the copy.
     await addTicketNote(agentActor(agentP), {
       ticketId,
       content: carried.content,
       metadata: carried.metadata as Record<string, unknown>,
+      shareWithConversation: true,
     })
 
     // It lands on the ticket thread once and stops: no second copy on the
@@ -290,10 +329,14 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
     const conversationId = await seedConversation()
     await link(ticketId, conversationId, 'customer')
 
-    await addTicketNote(agentActor(agentP), { ticketId, content: 'Checked their plan.' })
+    await addTicketNote(agentActor(agentP), {
+      ticketId,
+      content: 'Checked their plan.',
+      shareWithConversation: true,
+    })
 
     // The pair is one thread already (the union read serves both parents), so
-    // a carried copy would show the note twice.
+    // a carried copy would show the note twice — asking for it changes nothing.
     expect(await ticketNotesOf(ticketId)).toHaveLength(1)
     expect(await conversationMessagesOf(conversationId)).toHaveLength(0)
   })
@@ -303,7 +346,11 @@ describe.skipIf(!fixture.available)('ticket note cross-post (real DB, rolled bac
     const agentP = await seedPrincipal()
     const ticketId = await seedTicket(statusId, 'back_office')
 
-    await addTicketNote(agentActor(agentP), { ticketId, content: 'No conversation behind this.' })
+    await addTicketNote(agentActor(agentP), {
+      ticketId,
+      content: 'No conversation behind this.',
+      shareWithConversation: true,
+    })
 
     expect(await ticketNotesOf(ticketId)).toHaveLength(1)
     expect(realtime.publishAgentConversationEvent).not.toHaveBeenCalled()

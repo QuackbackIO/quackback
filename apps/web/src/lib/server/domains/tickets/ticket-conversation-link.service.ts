@@ -47,15 +47,17 @@
  * internal task would measure that promise against work the customer never
  * asked for.
  *
- * NOTES TRAVEL BACK ALONG A PROVENANCE LINK (`crossPostTicketNote`). Keeping
- * the originating conversation is only half of what makes a spun-off task
- * useful: the teammate who later reads that conversation needs to know what
- * came of the task. So an internal note on a provenance-linked ticket is
- * carried onto each conversation it was opened from, as an internal note of
- * its own. The pair is excluded — a customer ticket and its conversation are
- * one thread through the union read, so a carried copy would show twice — and
- * every carried note is stamped with its origin ticket, which is what stops a
- * note travelling in circles.
+ * A NOTE CAN BE SENT BACK ALONG A PROVENANCE LINK (`crossPostTicketNote`).
+ * Keeping the originating conversation is only half of what makes a spun-off
+ * task useful: the teammate who later reads that conversation needs to know
+ * what came of the task. So an internal note on a provenance-linked ticket can
+ * be carried onto each conversation it was opened from, as an internal note of
+ * its own — a per-note choice its author makes, never the default, since a
+ * back-office thread is mostly the specialist's own working chatter and the
+ * conversation is the customer's record. The pair is excluded — a customer
+ * ticket and its conversation are one thread through the union read, so a
+ * carried copy would show twice — and every carried note is stamped with its
+ * origin ticket, which is what stops a note travelling in circles.
  */
 import {
   db,
@@ -236,8 +238,10 @@ export async function resolveProvenanceConversationIds(
 }
 
 /**
- * Carry a ticket's internal note back along its provenance links: the note
- * lands on each conversation the ticket was opened from as an internal note of
+ * Carry a ticket's internal note back along its provenance links, on its
+ * author's explicit ask (`addTicketNote`'s `shareWithConversation` — a note is
+ * the ticket's own until someone decides otherwise). The note lands on each
+ * conversation the ticket was opened from as an internal note of
  * its own, authored by the same teammate, written through the conversation
  * domain's own note path (`addAgentNote`) so it gets the whole note pipeline —
  * the updatedAt touch, the agent-channel broadcast, the note event — rather
@@ -250,10 +254,12 @@ export async function resolveProvenanceConversationIds(
  * copy there would show the note twice.
  *
  * LOOP SAFETY. Every carried copy is stamped `crossPostedFromTicketId`, and a
- * note that already carries the stamp is never carried again. A copy that
- * finds its way back onto a ticket thread — a relay, an integration replaying
- * it — therefore lands once and stops, instead of the two threads bouncing it
- * between them.
+ * note that already carries the stamp is never carried again — the stamp
+ * outranks the ask, since sharing is a choice a human makes about an original
+ * and not a licence the copy inherits. A copy that finds its way back onto a
+ * ticket thread — a relay, an integration replaying it, either of them asking
+ * to share as eagerly as the note it echoes — therefore lands once and stops,
+ * instead of the two threads bouncing it between them.
  *
  * Best-effort per conversation, like the link announcement: the note has
  * already landed on the ticket, so a copy that fails (the conversation was
