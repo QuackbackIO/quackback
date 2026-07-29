@@ -221,11 +221,20 @@ function useSourceFilter(principalId: string | undefined, visibleTypes: SourceTy
 
 /** The turn-scoped qualifiers every usage event carries. `internalSourced` is
  *  omitted (not asserted `false`) on an unfinalized turn — the final frame
- *  that carries the server-derived signal never arrived. */
-function turnMeta(turn: CopilotTurn): Pick<CopilotEventInput, 'answerType' | 'internalSourced'> {
+ *  that carries the server-derived signal never arrived. `citedSourceIds` is
+ *  the article ids off this turn's own citation list, so the Copilot usage
+ *  report can attribute an insert/feedback event back to the specific
+ *  sources the answer being acted on actually cited (analytics/
+ *  copilot-usage.ts's per-source insert rate); omitted when the turn cited
+ *  no article. */
+function turnMeta(
+  turn: CopilotTurn
+): Pick<CopilotEventInput, 'answerType' | 'internalSourced' | 'citedSourceIds'> {
+  const citedSourceIds = turn.citations.filter((c) => c.type === 'article').map((c) => c.id)
   return {
     answerType: turn.answerType,
     ...(turn.finalized ? { internalSourced: turn.internalSourced } : {}),
+    ...(citedSourceIds.length > 0 ? { citedSourceIds } : {}),
   }
 }
 

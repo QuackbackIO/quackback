@@ -48,6 +48,14 @@ const recordCopilotEventSchema = z
      *  no server-derived leak-gate signal to report, and the handler stores
      *  the field only when present — never coerced to false. */
     internalSourced: z.boolean().optional(),
+    /** Article ids the finalized turn's own `citations` cited (the panel's
+     *  `turnMeta` derives this from `CopilotTurn.citations`, never a
+     *  server-side re-lookup), so the Copilot usage report can compute each
+     *  cited source's own insert rate (analytics/copilot-usage.ts). Optional
+     *  and possibly absent on a turn that cited nothing; capped well above
+     *  any real answer's citation count, the same defensive ceiling a
+     *  fire-and-forget client write gets even though the caller is gated. */
+    citedSourceIds: z.array(z.string()).max(50).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.eventType === 'feedback' && !value.rating) {
@@ -112,6 +120,8 @@ export const recordCopilotEventFn = createServerFn({ method: 'POST' })
         ...(data.reason !== undefined && { reason: data.reason }),
         ...(data.answerType !== undefined && { answerType: data.answerType }),
         ...(data.internalSourced !== undefined && { internalSourced: data.internalSourced }),
+        ...(data.citedSourceIds !== undefined &&
+          data.citedSourceIds.length > 0 && { citedSourceIds: data.citedSourceIds }),
       },
     })
 

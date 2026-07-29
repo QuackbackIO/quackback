@@ -58,6 +58,15 @@
  *    logged metadata, so a rename is reflected immediately and a since-
  *    deleted article silently drops off the leaderboard instead of linking
  *    nowhere.
+ *  - `assistant_events.metadata.citedSourceIds` (the copilot panel's
+ *    `turnMeta`, set from the finalized turn's own `citations` at the moment
+ *    an insert/feedback event fires) says which article ids the SPECIFIC
+ *    answer being inserted had cited. Each top-cited source's `insertRate`
+ *    filters this same table down to `*_inserted` events naming that id and
+ *    divides by the source's own `questions` — a per-source echo of the
+ *    card's overall `insertRate`, not a re-derivation of it. Rows logged
+ *    before this field existed carry no `citedSourceIds` and so never count
+ *    toward any source's rate (null, not zero — see `CopilotCitedSourceCount`).
  *
  * Multiple attempts of the SAME logical turn (a synthesis retry) each log
  * their own `ai_usage_log` row, so a turn that needed a retry is counted more
@@ -130,6 +139,15 @@ export interface CopilotCitedSourceCount {
   url: string
   /** Distinct Copilot turns whose answer cited this article in the range. */
   questions: number
+  /** Of `questions`, the share whose answer was actually inserted (any
+   *  `*_inserted` event tagged with this source's id in `citedSourceIds` —
+   *  see `turnMeta` in copilot-panel.tsx), 0-100. Null when no in-range
+   *  insert ever carried this source's id, including an insert logged
+   *  before that field existed (same graceful-absence handling this module
+   *  already gives `principalId`). The content-fix signal alongside volume:
+   *  a popular source sitting at a low or null rate is answering questions
+   *  but not landing the reply. */
+  insertRate: number | null
 }
 
 export interface CopilotUsageMetrics {
@@ -261,8 +279,10 @@ const isCopilotSurface = sql`${aiUsageLog.metadata}->>'surface' = 'copilot'`
  * Query + summarize Copilot usage over [from, to). Seven independent scans
  * (questions count, transforms grouped by kind, summaries count, pending
  * actions grouped by outcome bucket, insert/feedback outcome events bucket,
- * per-teammate top 10, top-10 cited articles) run in parallel; see this
- * module's doc comment for the indexes each rides.
+ * per-teammate top 10, top-10 cited articles) run in parallel, followed by
+ * two more scoped to the top-10 article ids that scan resolves (article
+ * titles, per-source insert counts — see this module's doc comment for the
+ * indexes each rides).
  */
 export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<CopilotUsageMetrics> {
   // Every ai_usage_log query below bounds on this same [from, to) window;
@@ -405,22 +425,56 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
   // ai_usage_log metadata, so a rename shows up immediately and a deleted
   // article drops out of the report instead of linking nowhere.
   const citedArticleIds = citedSourceRows.map((row) => row.id as KbArticleId)
-  const articles = citedArticleIds.length
-    ? await db
-        .select({ id: helpCenterArticles.id, title: helpCenterArticles.title })
-        .from(helpCenterArticles)
-        .where(inArray(helpCenterArticles.id, citedArticleIds))
-    : []
+  const [articles, sourceInsertRows] = await Promise.all([
+    citedArticleIds.length
+      ? db
+          .select({ id: helpCenterArticles.id, title: helpCenterArticles.title })
+          .from(helpCenterArticles)
+          .where(inArray(helpCenterArticles.id, citedArticleIds))
+      : Promise.resolve([]),
+    // Per-source insert counts: every `*_inserted` event (matched by the same
+    // suffix rule INSERT_EVENT_TYPES derives, so LIKE stands in for a
+    // hand-listed IN) whose `citedSourceIds` (set client-side from the
+    // finalized turn's own citation list — see `turnMeta` in
+    // copilot-panel.tsx) names one of the top-cited article ids, unnested and
+    // grouped the same jsonb_array_elements shape the citedSources scan above
+    // uses. An insert logged before `citedSourceIds` existed simply has no
+    // entry here, the same graceful-absence handling this module already
+    // gives a missing `principalId`.
+    citedArticleIds.length
+      ? (db.execute(sql`
+          SELECT elem AS id, count(*)::int AS n
+          FROM assistant_events
+          CROSS JOIN LATERAL jsonb_array_elements_text(
+            CASE WHEN jsonb_typeof(metadata->'citedSourceIds') = 'array'
+                 THEN metadata->'citedSourceIds'
+                 ELSE '[]'::jsonb
+            END
+          ) AS elem
+          WHERE event_type LIKE '%\\_inserted'
+            AND created_at >= ${from.toISOString()}
+            AND created_at < ${to.toISOString()}
+            AND elem = ANY(ARRAY[${sql.join(
+              citedArticleIds.map((id) => sql`${id}`),
+              sql`, `
+            )}]::text[])
+          GROUP BY elem
+        `) as unknown as Promise<Array<{ id: string; n: number }>>)
+      : Promise.resolve([]),
+  ])
   const articleTitleById = new Map(articles.map((a) => [a.id, a.title]))
+  const sourceInsertsById = new Map(sourceInsertRows.map((row) => [row.id, row.n]))
   const topCitedSources: CopilotCitedSourceCount[] = citedSourceRows
     .filter((row) => articleTitleById.has(row.id as KbArticleId))
     .map((row) => {
       const id = row.id as KbArticleId
+      const inserted = sourceInsertsById.get(row.id)
       return {
         id,
         title: articleTitleById.get(id)!,
         url: `/admin/help-center/articles/${id}`,
         questions: row.n,
+        insertRate: inserted === undefined ? null : ratePctOrNull(inserted, row.n),
       }
     })
 

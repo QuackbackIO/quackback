@@ -509,12 +509,14 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
         title: 'Resetting your password',
         url: `/admin/help-center/articles/${popular}`,
         questions: 2,
+        insertRate: null,
       })
       expect(metrics.topCitedSources[1]).toEqual({
         id: rare,
         title: 'Exporting a report',
         url: `/admin/help-center/articles/${rare}`,
         questions: 1,
+        insertRate: null,
       })
     })
 
@@ -535,6 +537,7 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
           title: 'Two links, one turn',
           url: `/admin/help-center/articles/${article}`,
           questions: 1,
+          insertRate: null,
         },
       ])
     })
@@ -571,6 +574,104 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
 
       const metrics = await getCopilotUsageMetrics(FROM, TO)
       expect(metrics.topCitedSources).toEqual([])
+    })
+  })
+
+  describe('topCitedSources insertRate', () => {
+    it('computes the per-source insert rate from *_inserted events carrying citedSourceIds', async () => {
+      const article = await seedArticle('Resetting your password')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedAssistantEvent('answer_inserted', {
+        destination: 'reply',
+        citedSourceIds: [article],
+      })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources).toEqual([
+        {
+          id: article,
+          title: 'Resetting your password',
+          url: `/admin/help-center/articles/${article}`,
+          questions: 4,
+          insertRate: 25,
+        },
+      ])
+    })
+
+    it('counts every *_inserted kind, keyed off the same suffix-derived list as the overall rate', async () => {
+      const article = await seedArticle('Exporting a report')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedAssistantEvent('answer_inserted', {
+        destination: 'reply',
+        citedSourceIds: [article],
+      })
+      await seedAssistantEvent('transform_inserted', {
+        destination: 'note',
+        citedSourceIds: [article],
+      })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources[0].insertRate).toBe(200) // 2 inserts / 1 question
+    })
+
+    it('ignores feedback events and events citing a different source', async () => {
+      const article = await seedArticle('Two-factor setup')
+      const other = await seedArticle('Billing FAQ')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedAssistantEvent('feedback', { rating: 'up', citedSourceIds: [article] })
+      await seedAssistantEvent('answer_inserted', { destination: 'reply', citedSourceIds: [other] })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources[0].insertRate).toBeNull()
+    })
+
+    it('ignores insert events outside the date range', async () => {
+      const article = await seedArticle('Outside range')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedAssistantEvent(
+        'answer_inserted',
+        { destination: 'reply', citedSourceIds: [article] },
+        BEFORE_RANGE
+      )
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources[0].insertRate).toBeNull()
+    })
+
+    it('is null when no inserted event carried citedSourceIds for that source (pre-attribution rows)', async () => {
+      const article = await seedArticle('Legacy citation')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: article }],
+      })
+      await seedAssistantEvent('answer_inserted', { destination: 'reply' })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources[0].insertRate).toBeNull()
     })
   })
 })

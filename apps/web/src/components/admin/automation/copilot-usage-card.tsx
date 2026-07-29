@@ -134,13 +134,15 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
           </h3>
           <p className="mb-2 text-xs text-muted-foreground">
             Help Center articles Copilot answers cited most, ranked by how many questions drew on
-            them — the ones worth reviewing first.
+            them, with how often the citing answer actually got copied into a reply — a popular
+            source with a low copied rate is the one worth reviewing first.
           </p>
           <Table aria-labelledby="copilot-cited-sources-heading">
             <TableHeader>
               <TableRow>
                 <TableHead>Source</TableHead>
                 <TableHead className="text-end">Questions</TableHead>
+                <TableHead className="text-end">Copied</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -153,6 +155,9 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
                   </TableCell>
                   <TableCell className="text-end tabular-nums text-muted-foreground">
                     {source.questions}
+                  </TableCell>
+                  <TableCell className="text-end tabular-nums text-muted-foreground">
+                    {pct(asRate(source.insertRate))}
                   </TableCell>
                 </TableRow>
               ))}
