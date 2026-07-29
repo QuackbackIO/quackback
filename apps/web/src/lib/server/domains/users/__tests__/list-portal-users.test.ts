@@ -42,6 +42,7 @@ const mockUserRows = [
     postCount: 3,
     commentCount: 5,
     voteCount: 10,
+    country: 'US',
   },
 ]
 
@@ -124,6 +125,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
     metadata: 'user.metadata',
     createdAt: 'user.created_at',
     updatedAt: 'user.updated_at',
+    country: 'user.country',
   },
   posts: { principalId: 'posts.principal_id', deletedAt: 'posts.deleted_at' },
   postComments: {
@@ -219,6 +221,13 @@ describe('listPortalUsers', () => {
     expect(typeof item.postCount).toBe('number')
     expect(typeof item.commentCount).toBe('number')
     expect(typeof item.voteCount).toBe('number')
+  })
+
+  it('should include country in results', async () => {
+    const { listPortalUsers } = await import('../user.service')
+    const result = await listPortalUsers()
+
+    expect(result.items[0]?.country).toBe('US')
   })
 
   it('should include segments array in results', async () => {

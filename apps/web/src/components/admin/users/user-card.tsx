@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui/avatar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { cn } from '@/lib/shared/utils'
+import { countryName, countryFlag } from '@/lib/shared/country'
 import type { PortalUserListItemView } from '@/lib/shared/types'
 import { CompactSegmentBadges } from '@/components/admin/users/user-segments'
 
@@ -19,6 +20,8 @@ interface UserCardProps {
   canManage: boolean
   checked: boolean
   onToggleCheck: () => void
+  /** Shows the optional Country field, toggled from the list's column picker. */
+  showCountry?: boolean
 }
 
 export function UserCard({
@@ -28,6 +31,7 @@ export function UserCard({
   canManage,
   checked,
   onToggleCheck,
+  showCountry = false,
 }: UserCardProps) {
   const totalActivity = user.postCount + user.commentCount + user.voteCount
   // Both fields are sanitised in the DTO (`user.service.ts`), so a placeholder
@@ -96,6 +100,20 @@ export function UserCard({
             </span>
           )}
         </div>
+
+        {/* Country - opt-in via the list's column picker */}
+        {showCountry && (
+          <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
+            {user.country ? (
+              <span className="flex items-center gap-1">
+                <span aria-hidden="true">{countryFlag(user.country)}</span>
+                <span>{countryName(user.country)}</span>
+              </span>
+            ) : (
+              <span>-</span>
+            )}
+          </div>
+        )}
 
         {/* Activity summary */}
         {totalActivity > 0 && (

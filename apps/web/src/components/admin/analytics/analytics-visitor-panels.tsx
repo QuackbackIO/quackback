@@ -1,23 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { countryName, countryFlag } from '@/lib/shared/country'
 import { AnalyticsBarList, type BarListRow } from './analytics-bar-list'
 import { AnalyticsEmpty } from './analytics-empty'
 
 type TopBreakdowns = Record<string, Array<{ label: string; count: number }>>
-
-const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
-
-function countryName(code: string): string {
-  try {
-    return regionNames.of(code) ?? code
-  } catch {
-    return code
-  }
-}
-
-/** ISO-2 country code to its flag emoji (regional indicator pair). */
-function countryFlag(code: string): string {
-  return String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65))
-}
 
 const PANELS: Array<{
   dimension: string

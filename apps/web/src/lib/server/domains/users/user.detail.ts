@@ -105,6 +105,7 @@ export async function getPortalUserDetail(
         metadata: user.metadata,
         principalType: principal.type,
         contactEmail: principal.contactEmail,
+        country: user.country,
         joinedAt: principal.createdAt,
         createdAt: user.createdAt,
       })
@@ -330,6 +331,7 @@ export async function getPortalUserDetail(
       metadata: principalData.metadata,
       isLead: principalData.principalType === 'anonymous',
       contactEmail: realEmail(principalData.contactEmail),
+      country: principalData.country,
       joinedAt: principalData.joinedAt,
       lastSeenAt,
       createdAt: principalData.createdAt,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { PlusIcon, UsersIcon } from '@heroicons/react/24/solid'
+import { PlusIcon, UsersIcon, ViewColumnsIcon } from '@heroicons/react/24/solid'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { useAssignUsersToSegment, useRemoveUsersFromSegment } from '@/lib/client/mutations'
@@ -11,6 +11,13 @@ import { Spinner } from '@/components/shared/spinner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { MENU_ICON } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
 import { UserCard } from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
@@ -134,6 +141,9 @@ export function UsersList({
 }: UsersListProps) {
   const intl = useIntl()
   const sort = filters.sort || 'newest'
+  // Column picker — extra fields a teammate can opt into per row. Starts
+  // empty so the default list stays exactly as dense as it's always been.
+  const [showCountry, setShowCountry] = useState(false)
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
     onChange: (value) => onFiltersChange({ search: value }),
@@ -322,6 +332,19 @@ export function UsersList({
           ))}
         </div>
         <div className="flex-1" />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <ViewColumnsIcon className={MENU_ICON} />
+              Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuCheckboxItem checked={showCountry} onCheckedChange={setShowCountry}>
+              Country
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {onNewPerson && (
           <Button size="sm" className="h-8 text-xs gap-1.5" onClick={onNewPerson}>
             <PlusIcon className="h-3.5 w-3.5" />
@@ -407,6 +430,7 @@ export function UsersList({
                 canManage={canManage}
                 checked={selectedIds.has(user.principalId)}
                 onToggleCheck={() => toggleSelect(user.principalId)}
+                showCountry={showCountry}
               />
             </div>
           ))}
