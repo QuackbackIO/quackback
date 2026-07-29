@@ -15,8 +15,9 @@
  * components' own behavior, and several of them fire unconditional queries
  * that would otherwise hit real server functions.
  */
+import { createRef } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { TicketDTO } from '@/lib/server/domains/tickets'
 import type { ConversationDTO, AgentConversationMessageDTO } from '@/lib/shared/conversation/types'
@@ -132,12 +133,26 @@ vi.mock('@/components/admin/inbox/ticket-controls', () => ({
   TicketAssigneeControl: () => <div data-testid="ticket-assignee-control" />,
   TicketPriorityControl: () => <div data-testid="ticket-priority-control" />,
 }))
-vi.mock('@/components/ui/rich-text-editor', () => ({
-  RichTextEditor: ({ placeholder }: { placeholder?: string }) => (
-    <textarea data-testid="editor" placeholder={placeholder} readOnly />
-  ),
-  RichTextContent: () => null,
-}))
+// The editor stub keeps the real `editorRef` contract: whichever instance is
+// mounted publishes a focus handle, so the composer-focus tests below assert
+// against real DOM focus rather than a spy.
+vi.mock('@/components/ui/rich-text-editor', async () => {
+  const { useImperativeHandle, useRef } = await import('react')
+  return {
+    RichTextEditor: ({
+      placeholder,
+      editorRef,
+    }: {
+      placeholder?: string
+      editorRef?: React.RefObject<{ focus: () => void } | null>
+    }) => {
+      const areaRef = useRef<HTMLTextAreaElement>(null)
+      useImperativeHandle(editorRef, () => ({ focus: () => areaRef.current?.focus() }))
+      return <textarea ref={areaRef} data-testid="editor" placeholder={placeholder} readOnly />
+    },
+    RichTextContent: () => null,
+  }
+})
 vi.mock('@/components/shared/composer-attachment-tray', () => ({
   ComposerAttachmentTray: () => null,
 }))
@@ -309,6 +324,7 @@ vi.mock('@/lib/client/queries/conversation-inbox', () => ({
 }))
 
 import { AgentConversationThread } from '../agent-conversation-thread'
+import type { ThreadComposerHandle } from '../agent-conversation-thread'
 import { setConversationStatusFn } from '@/lib/server/functions/conversation'
 import { setTicketStatusFn } from '@/lib/server/functions/tickets'
 
@@ -607,5 +623,86 @@ describe('AgentConversationThread — B24 ticket-permission gating', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close conversation only' }))
     await waitFor(() => expect(setConversationStatusFn).toHaveBeenCalled())
     expect(setTicketStatusFn).not.toHaveBeenCalled()
+  })
+})
+
+describe('AgentConversationThread — composer focus handle', () => {
+  function renderWithHandle(item: { kind: 'conversation' | 'ticket'; id: string }) {
+    const composerRef = createRef<ThreadComposerHandle>()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={item as never}
+          targetMessageId={null}
+          onChanged={vi.fn()}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+          composerRef={composerRef}
+        />
+      </QueryClientProvider>
+    )
+    return composerRef
+  }
+
+  it('focusComposer("note") switches the thread into note mode and focuses the note editor', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const reply = await screen.findByTestId('editor')
+    expect(reply).toHaveAttribute('placeholder', 'Type your reply…')
+
+    act(() => composerRef.current?.focusComposer('note'))
+
+    // The note editor replaces the reply editor in the same commit; the focus
+    // lands on the newly mounted one, not the unmounted reply editor.
+    const note = screen.getByTestId('editor')
+    expect(note).toHaveAttribute('placeholder', 'Add an internal note for your team…')
+    expect(document.activeElement).toBe(note)
+  })
+
+  it('focusComposer("reply") focuses the reply editor already showing, leaving the mode alone', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+
+    act(() => composerRef.current?.focusComposer('reply'))
+
+    const editor = screen.getByTestId('editor')
+    expect(editor).toHaveAttribute('placeholder', 'Type your reply…')
+    expect(document.activeElement).toBe(editor)
+  })
+
+  it('a note-only ticket coerces focusComposer("reply") onto the note composer', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['ticket-detail', 'ticket_tracker'], {
+      ...mockTicket,
+      id: 'ticket_tracker',
+      type: 'tracker',
+    })
+    client.setQueryData(['ticket-thread', 'ticket_tracker'], mockTicketThread)
+    const composerRef = createRef<ThreadComposerHandle>()
+    render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'ticket', id: 'ticket_tracker' } as never}
+          targetMessageId={null}
+          onChanged={vi.fn()}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+          composerRef={composerRef}
+        />
+      </QueryClientProvider>
+    )
+    await screen.findByTestId('editor')
+
+    act(() => composerRef.current?.focusComposer('reply'))
+
+    const editor = screen.getByTestId('editor')
+    expect(editor).toHaveAttribute('placeholder', 'Add an internal note for your team…')
+    expect(document.activeElement).toBe(editor)
   })
 })

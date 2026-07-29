@@ -17,6 +17,7 @@ describe('INBOX_ACTIONS registry', () => {
     const ids = INBOX_ACTIONS.map((a) => a.id)
     for (const id of [
       'reply',
+      'note',
       'copilot',
       'assign',
       'assign_team',
@@ -33,14 +34,22 @@ describe('INBOX_ACTIONS registry', () => {
     }
   })
 
-  it('omits the still-deferred actions (note, macro)', () => {
+  it('omits the still-deferred actions (macro)', () => {
     const ids = INBOX_ACTIONS.map((a) => a.id)
-    expect(ids).not.toContain('note')
     expect(ids).not.toContain('macro')
   })
 
+  it('keys the internal note on n, next to reply in the Reply group', () => {
+    const note = byId('note')
+    expect(note.shortcut).toBe('n')
+    expect(note.group).toBe('Reply')
+    // The palette shows Reply first, then Note, then Copilot.
+    const replyGroup = INBOX_ACTIONS.filter((a) => a.group === 'Reply').map((a) => a.id)
+    expect(replyGroup.indexOf('note')).toBe(replyGroup.indexOf('reply') + 1)
+  })
+
   it('assigns the contract scopes', () => {
-    for (const id of ['reply', 'copilot', 'next', 'prev']) {
+    for (const id of ['reply', 'note', 'copilot', 'next', 'prev']) {
       expect(byId(id).scope).toBe('active')
     }
     for (const id of [
@@ -85,6 +94,24 @@ describe('isInboxActionEnabled', () => {
     expect(isInboxActionEnabled(active, { hasActiveConversation: false, hasSelection: true })).toBe(
       false
     )
+  })
+
+  it('note needs an open thread and is never gated on a selection', () => {
+    const note = byId('note')
+    expect(isInboxActionEnabled(note, { hasActiveConversation: true, hasSelection: false })).toBe(
+      true
+    )
+    expect(isInboxActionEnabled(note, { hasActiveConversation: false, hasSelection: true })).toBe(
+      false
+    )
+    // A ticket target is still a thread: notes work on either item kind.
+    expect(
+      isInboxActionEnabled(note, {
+        hasActiveConversation: true,
+        hasSelection: false,
+        hasTicketTarget: true,
+      })
+    ).toBe(true)
   })
 
   it('selection scope needs a selection', () => {
