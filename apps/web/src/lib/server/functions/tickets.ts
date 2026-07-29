@@ -466,8 +466,10 @@ export const unlinkTicketIssueFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Link a freshly created customer ticket back to the conversation it came
- * from (unified inbox §M5's create-ticket flow, step 2 after createTicketFn).
+ * Link a freshly created ticket back to the conversation it came from (unified
+ * inbox §M5's create-ticket flow, step 2 after createTicketFn). A customer
+ * ticket links as the conversation's pair; any other type keeps the
+ * conversation as provenance (the service owns that split).
  * Gated on ticket.create — same permission the create step itself required.
  */
 export const linkTicketToConversationFn = createServerFn({ method: 'POST' })

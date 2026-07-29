@@ -1,9 +1,12 @@
 /**
  * Real-DB coverage for the conversation-link side of the create-ticket flow
- * (unified inbox §M5): inserting the `ticket_conversations` row, the
- * customer-only guard, the friendly conflict on a second link attempt (the
- * partial-unique index), and the system-event announcement posted onto the
- * conversation thread. Runs inside the fixture rollback.
+ * (unified inbox §M5): inserting the `ticket_conversations` row, the friendly
+ * conflict on a second link attempt (the partial-unique indexes and the
+ * composite primary key), the system-event announcement posted onto the
+ * conversation thread, and the split between a CUSTOMER link (the pair: shared
+ * thread, first-response backfill, SLA handoff, customer-visible marker) and a
+ * non-customer link (provenance: the join row plus a team-only note, nothing
+ * else). Runs inside the fixture rollback.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import { createId, type PrincipalId, type ConversationId, type UserId } from '@quackback/ids'
@@ -37,8 +40,13 @@ vi.mock('../ticket.webhooks', () => ({
 vi.mock('@/lib/server/realtime/conversation-channels', () => ({
   publishTicketEvent: vi.fn(),
   publishConversationEvent: vi.fn(),
+  publishAgentConversationEvent: vi.fn(),
 }))
 
+import {
+  publishConversationEvent,
+  publishAgentConversationEvent,
+} from '@/lib/server/realtime/conversation-channels'
 import { createTicket } from '../ticket.service'
 import { linkTicketToConversation } from '../ticket-conversation-link.service'
 import { ConflictError } from '@/lib/shared/errors'
@@ -125,6 +133,7 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
     const actor = await seedAdminActor()
     const ticket = await createTicket({ type: 'customer', title: 'From a conversation' }, actor)
     const conversationId = await seedConversation()
+    vi.mocked(publishConversationEvent).mockClear()
 
     await linkTicketToConversation(ticket.id, conversationId, actor)
 
@@ -146,19 +155,168 @@ describe.skipIf(!fixture.available)('linkTicketToConversation (real DB, rolled b
       .where(eq(conversationMessages.conversationId, conversationId))
     expect(announcements).toHaveLength(1)
     expect(announcements[0].senderType).toBe('system')
+    // The pair's conversion marker is customer-visible on the shared thread —
+    // stored non-internal and broadcast on the visitor's own channel.
+    expect(announcements[0].isInternal).toBe(false)
     expect(announcements[0].content).toContain(ticket.reference)
+    expect(publishConversationEvent).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects a non-customer ticket', async () => {
+  // --- Non-customer links: provenance only (the pair semantics stay
+  // customer-only). A back-office ticket spun off a conversation keeps the
+  // conversation it came from, and the customer never learns of it. ---
+
+  it('links a back-office ticket to the conversation it was created from', async () => {
     await seedSettings()
     await seedStatuses()
     const actor = await seedAdminActor()
     const ticket = await createTicket({ type: 'back_office', title: 'Internal task' }, actor)
     const conversationId = await seedConversation()
 
-    await expect(linkTicketToConversation(ticket.id, conversationId, actor)).rejects.toThrow(
-      /customer/i
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+
+    const [link] = await testDb
+      .select()
+      .from(ticketConversations)
+      .where(
+        and(
+          eq(ticketConversations.ticketId, ticket.id),
+          eq(ticketConversations.conversationId, conversationId)
+        )
+      )
+    expect(link).toBeDefined()
+    // The denormalized type is the ticket's own — a back-office link must not
+    // masquerade as the conversation's customer pair.
+    expect(link.ticketType).toBe('back_office')
+  })
+
+  it('announces a back-office ticket as a team-only note, never to the customer', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const ticket = await createTicket(
+      { type: 'back_office', title: 'Check the billing job' },
+      actor
     )
+    const conversationId = await seedConversation()
+    vi.mocked(publishConversationEvent).mockClear()
+    vi.mocked(publishAgentConversationEvent).mockClear()
+
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+
+    const [note] = await testDb
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, conversationId))
+    expect(note.senderType).toBe('system')
+    expect(note.isInternal).toBe(true)
+    expect(note.content).toContain(ticket.reference)
+    // Both halves of the team-only rule: the stored row every visitor read
+    // path filters, and the broadcast that never touches the visitor's own
+    // conversation channel.
+    expect(publishAgentConversationEvent).toHaveBeenCalledTimes(1)
+    expect(publishConversationEvent).not.toHaveBeenCalled()
+  })
+
+  it('leaves the customer pair free after a back-office link', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const backOffice = await createTicket({ type: 'back_office', title: 'Side task' }, actor)
+    const customer = await createTicket({ type: 'customer', title: 'The ask' }, actor)
+    const conversationId = await seedConversation()
+
+    await linkTicketToConversation(backOffice.id, conversationId, actor)
+    // The 1:1 partial uniques are customer-only, so the conversation can still
+    // take its pair after carrying a context link.
+    await linkTicketToConversation(customer.id, conversationId, actor)
+
+    const links = await testDb
+      .select()
+      .from(ticketConversations)
+      .where(eq(ticketConversations.conversationId, conversationId))
+    expect(links.map((l) => l.ticketType).sort()).toEqual(['back_office', 'customer'])
+  })
+
+  it('links one back-office ticket to several conversations (the 1:1 is customer-only)', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const ticket = await createTicket({ type: 'back_office', title: 'Shared task' }, actor)
+    const firstConversationId = await seedConversation()
+    const secondConversationId = await seedConversation()
+
+    await linkTicketToConversation(ticket.id, firstConversationId, actor)
+    await linkTicketToConversation(ticket.id, secondConversationId, actor)
+
+    const links = await testDb
+      .select()
+      .from(ticketConversations)
+      .where(eq(ticketConversations.ticketId, ticket.id))
+    expect(links).toHaveLength(2)
+  })
+
+  it('surfaces a friendly conflict when the same pair is linked twice', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const ticket = await createTicket({ type: 'back_office', title: 'Double click' }, actor)
+    const conversationId = await seedConversation()
+
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+
+    // No partial unique covers a non-customer link, so the composite primary
+    // key is what a repeat trips — it still reads as ALREADY_LINKED.
+    const err = await linkTicketToConversation(ticket.id, conversationId, actor).catch((e) => e)
+    expect(err).toBeInstanceOf(ConflictError)
+    expect((err as ConflictError).code).toBe('ALREADY_LINKED')
+  })
+
+  it('does not backfill first_response_at on a back-office ticket', async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const conversationId = await seedConversation()
+    await testDb.insert(conversationMessages).values({
+      conversationId,
+      principalId: actor.principalId,
+      senderType: 'agent',
+      content: 'reply to the customer',
+      createdAt: new Date('2026-07-01T10:00:00Z'),
+    })
+    const ticket = await createTicket({ type: 'back_office', title: 'Internal follow-up' }, actor)
+
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+
+    // The conversation's response answered the CUSTOMER, not this internal
+    // task — the back-office ticket's own response clock stays unstarted.
+    const [row] = await testDb
+      .select({ firstResponseAt: tickets.firstResponseAt })
+      .from(tickets)
+      .where(eq(tickets.id, ticket.id))
+    expect(row.firstResponseAt).toBeNull()
+  })
+
+  it("does not hand the conversation's SLA to a back-office ticket", async () => {
+    await seedSettings()
+    await seedStatuses()
+    const actor = await seedAdminActor()
+    const conversationId = await seedConversation()
+    const policy = await createSlaPolicy({ name: 'Resolve fast', timeToResolveTargetSecs: 7200 })
+    await applySlaToConversation(conversationId, policy.id, new Date('2026-01-05T10:00:00Z'))
+    const ticket = await createTicket({ type: 'back_office', title: 'Internal chase' }, actor)
+
+    await linkTicketToConversation(ticket.id, conversationId, actor)
+
+    // The conversation keeps the customer promise: an internal task must not
+    // start a second clock against it.
+    const [row] = await testDb
+      .select({ slaApplied: tickets.slaApplied })
+      .from(tickets)
+      .where(eq(tickets.id, ticket.id))
+    expect(row.slaApplied).toBeNull()
+    const events = await testDb.select().from(slaEvents).where(eq(slaEvents.ticketId, ticket.id))
+    expect(events).toHaveLength(0)
   })
 
   it('surfaces a friendly conflict when the conversation already has a linked ticket', async () => {

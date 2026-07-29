@@ -674,9 +674,11 @@ export interface ConversationSystemEvent {
   trackerReference?: string
   /** Ticket reference (e.g. "#42") for 'ticket_created' (unified inbox M5's
    *  create-ticket flow). CONVERGENCE: on the shared conversation↔ticket
-   *  thread this is the customer-visible conversion marker (Intercom-style),
-   *  localized client-side from this event — the visitor it renders for is
-   *  the ticket's own requester. */
+   *  thread this is the customer-visible conversion marker, localized
+   *  client-side from this event — the visitor it renders for is the ticket's
+   *  own requester. The same kind carries a non-customer ticket opened from a
+   *  conversation, where the row is internal and the audience is the team; the
+   *  audience rides `isInternal`, not the kind. */
   ticketReference?: string
   /** External issue reference (e.g. "acme/widgets#142") for
    *  'external_linked' / 'external_unlinked' — team-only. */
