@@ -19,7 +19,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { MENU_ICON, MENU_LABEL } from '@/components/ui/menu'
 import { cn } from '@/lib/shared/utils'
-import { UserCard, METRIC_COLUMN_WIDTH } from '@/components/admin/users/user-card'
+import {
+  UserCard,
+  METRIC_COLUMN_WIDTH,
+  EMAIL_COLUMN_WIDTH,
+  JOINED_COLUMN_WIDTH,
+  COUNTRY_COLUMN_WIDTH,
+} from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
 import { UsersBulkSegmentBar } from '@/components/admin/users/users-bulk-segment-bar'
 import { MobileSegmentSelector } from '@/components/admin/users/users-segment-nav'
@@ -68,14 +74,11 @@ function UserListSkeleton() {
     <div className="p-3">
       <div className="rounded-xl overflow-hidden shadow-sm divide-y divide-border/50 bg-card border border-border/50">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex items-start gap-3 p-3">
-            <Skeleton className="h-10 w-10 rounded-full shrink-0" />
-            <div className="flex-1 min-w-0">
-              <Skeleton className="h-4 w-32 mb-1.5" />
-              <Skeleton className="h-3 w-48 mb-1" />
-              <Skeleton className="h-3 w-24 mb-1.5" />
-              <Skeleton className="h-3 w-20" />
-            </div>
+          <div key={i} className="flex items-center gap-3 px-3 py-2">
+            <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+            <Skeleton className="h-4 flex-1 min-w-0" />
+            <Skeleton className={cn('h-3', EMAIL_COLUMN_WIDTH)} />
+            <Skeleton className={cn('h-3', JOINED_COLUMN_WIDTH)} />
           </div>
         ))}
       </div>
@@ -417,13 +420,19 @@ export function UsersList({
       {/* User List */}
       <div className="p-3">
         <div className="rounded-xl overflow-hidden shadow-sm bg-card border border-border/50">
-          {/* Column headers for the metric values below — kept in sync with each
-              row's checkbox/avatar spacer and METRIC_COLUMN_WIDTH so the labels
-              land directly above the numbers they describe. */}
+          {/* Column headers — kept in sync with each row's checkbox/avatar
+              spacer and the column-width constants in `user-card.tsx` so every
+              label lands directly above the field it describes, giving the
+              list a vertical lane to scan down instead of a stacked cell. */}
           <div className="flex items-center gap-3 border-b border-border/50 px-3 py-2">
             {canManage && <div className="size-4 shrink-0" aria-hidden="true" />}
-            <div className="h-10 w-10 shrink-0" aria-hidden="true" />
-            <div className="min-w-0 flex-1" />
+            <div className="h-8 w-8 shrink-0" aria-hidden="true" />
+            <span className={cn('min-w-0 flex-1', MENU_LABEL)}>Name</span>
+            <span className={cn(EMAIL_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Email</span>
+            <span className={cn(JOINED_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Joined</span>
+            {showCountry && (
+              <span className={cn(COUNTRY_COLUMN_WIDTH, MENU_LABEL, 'shrink-0')}>Country</span>
+            )}
             <div className="flex shrink-0 items-center gap-3">
               <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Posts</span>
               <span className={cn(METRIC_COLUMN_WIDTH, MENU_LABEL, 'text-right')}>Comments</span>

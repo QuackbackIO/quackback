@@ -170,4 +170,18 @@ describe('<UserCard>', () => {
     expect(screen.getByTitle('Comments')).toHaveTextContent('0')
     expect(screen.getByTitle('Votes')).toHaveTextContent('0')
   })
+
+  it('surfaces last-seen as a tooltip on the joined cell rather than a second visible line', () => {
+    render(
+      <UserCard
+        user={{ ...USER, lastSeenAt: '2026-02-01T00:00:00.000Z' }}
+        isSelected={false}
+        onClick={vi.fn()}
+        canManage
+        checked={false}
+        onToggleCheck={vi.fn()}
+      />
+    )
+    expect(screen.getByTitle(/Last seen/)).toBeInTheDocument()
+  })
 })

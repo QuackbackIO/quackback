@@ -286,6 +286,24 @@ describe('<UsersList> metric column headers', () => {
     expect(screen.getByText('Comments')).toBeInTheDocument()
     expect(screen.getByText('Votes')).toBeInTheDocument()
   })
+
+  it('labels every field with a column header, not just the numeric columns', () => {
+    renderList()
+    expect(screen.getByText('Name')).toBeInTheDocument()
+    expect(screen.getByText('Email')).toBeInTheDocument()
+    expect(screen.getByText('Joined')).toBeInTheDocument()
+  })
+
+  it('adds a Country column header once the field is turned on', async () => {
+    renderList()
+    expect(screen.queryByText('Country')).toBeNull()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
+    expect(await screen.findAllByText('Country')).not.toHaveLength(0)
+  })
 })
 
 describe('<UsersList> column picker', () => {
