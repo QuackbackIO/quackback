@@ -1,5 +1,5 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
-import type { BoardId, PostStatusId, PostTagId, SegmentId } from '@quackback/ids'
+import type { BoardId, PostStatusId, PostTagId, SegmentId, TicketId } from '@quackback/ids'
 import type { boards, roadmaps, roadmapColumns, postTags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
 import type {
@@ -832,6 +832,11 @@ export interface ConversationMessageMetadata {
   /** The structured reply this visitor-authored message carries, when it was
    *  sent in answer to a block. Null/absent for an ordinary message. */
   blockReply?: BlockReplyMetadata
+  /** The ticket whose internal note this message carries, set on the copy a
+   *  provenance-linked ticket lands on the conversation it was opened from.
+   *  A note carrying it is never carried again, so a copy that finds its way
+   *  back onto a ticket thread stops there. */
+  crossPostedFromTicketId?: TicketId
 }
 
 /** See `ConversationMessageMetadata.translatedFrom`. */

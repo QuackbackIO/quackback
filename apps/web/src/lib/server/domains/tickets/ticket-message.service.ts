@@ -12,8 +12,13 @@
  * appendix "Write (Phase 1)"):
  *
  *   1. `insertTicketMessage` (agent reply, requester reply):
- *      - `isInternal` → stays `ticket_id`-parented (internal notes are
- *        Intercom's ticket notes — `addTicketNote` never redirects).
+ *      - `isInternal` → stays `ticket_id`-parented; `addTicketNote` never
+ *        redirects. A ticket linked to a conversation as PROVENANCE
+ *        (back-office/tracker) additionally carries a COPY of the note onto
+ *        that conversation — `crossPostTicketNote` in
+ *        ticket-conversation-link.service.ts, which owns the pair exclusion
+ *        and the loop stamp. A copy, never a re-parent: the note's home is
+ *        still the ticket thread.
  *      - a CUSTOMER ticket with a linked conversation (resolved via
  *        `ticket_conversations`, ticket_type='customer') → the write lands on
  *        the CONVERSATION (`conversation_id`), running the FULL conversation
@@ -95,6 +100,7 @@ import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 // has no import edge back into this domain (verified — no cycle).
 import { enrichMessagesForAgent } from '../conversation/conversation.query'
 import { listPairThreadMessages, resolvePairConversationId } from './pair-thread.service'
+import { crossPostTicketNote } from './ticket-conversation-link.service'
 import { firstResponseStamp } from './ticket.lifecycle'
 import { loadTicketOr404 } from './ticket.service'
 import { emitTicketReplied, emitTicketNoteAdded } from './ticket.webhooks'
@@ -404,6 +410,23 @@ export async function addTicketNote(
     stampFirstResponse: false,
     actor,
   })
+  // The note stays the ticket's own (the redirect above never touches an
+  // internal note), and a copy travels back along the ticket's provenance
+  // links so the conversation an internal task was opened from shows what came
+  // of it. The pair exclusion and the loop stamp both live in the cross-post
+  // itself — see ticket-conversation-link.service.ts. Best-effort there, so
+  // this await cannot fail the note.
+  await crossPostTicketNote(
+    ticket,
+    {
+      // The stored text, not the raw input: a rich note resolves its plain
+      // fallback in insertTicketMessage.
+      content: message.content,
+      authorPrincipalId: principalId,
+      metadata: input.metadata as ConversationMessageMetadata | undefined,
+    },
+    actor
+  )
   void emitTicketNoteAdded(actor, ticket, message)
   return { message }
 }

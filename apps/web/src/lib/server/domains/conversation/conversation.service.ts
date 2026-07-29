@@ -809,6 +809,10 @@ export async function sendAgentMessage(
  * isInternal=true, published only to the agent inbox channel, excluded from
  * visitor read paths + unread counts, and it does not bump the visitor-facing
  * last-message preview. @mentions notify teammates.
+ *
+ * `metadata` is provenance carried onto the stored row, the same slot
+ * `sendAgentMessage` takes: a note written on behalf of another thread records
+ * where it came from there.
  */
 export async function addAgentNote(
   conversationId: ConversationId,
@@ -816,7 +820,8 @@ export async function addAgentNote(
   agent: ConversationAuthorInput,
   actor: Actor,
   contentJson?: TiptapContent | null,
-  attachments?: ConversationAttachment[]
+  attachments?: ConversationAttachment[],
+  metadata?: ConversationMessageMetadata
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -848,6 +853,7 @@ export async function addAgentNote(
         contentJson: safeContentJson,
         // Image/file attachments on the note (agent-only, like the note itself).
         attachments: noteAttachments,
+        metadata,
       })
       .returning()
     // Touch updatedAt only — internal notes don't change the visitor-facing

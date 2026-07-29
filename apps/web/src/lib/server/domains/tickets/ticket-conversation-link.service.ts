@@ -46,10 +46,21 @@
  * conversation still owns the customer promise, and a second clock on an
  * internal task would measure that promise against work the customer never
  * asked for.
+ *
+ * NOTES TRAVEL BACK ALONG A PROVENANCE LINK (`crossPostTicketNote`). Keeping
+ * the originating conversation is only half of what makes a spun-off task
+ * useful: the teammate who later reads that conversation needs to know what
+ * came of the task. So an internal note on a provenance-linked ticket is
+ * carried onto each conversation it was opened from, as an internal note of
+ * its own. The pair is excluded — a customer ticket and its conversation are
+ * one thread through the union read, so a carried copy would show twice — and
+ * every carried note is stamped with its origin ticket, which is what stops a
+ * note travelling in circles.
  */
 import {
   db,
   eq,
+  ne,
   and,
   asc,
   isNull,
@@ -57,8 +68,10 @@ import {
   conversationMessages,
   ticketConversations,
   tickets,
+  type Ticket,
+  type ConversationMessageMetadata,
 } from '@/lib/server/db'
-import type { ConversationId, TicketId } from '@quackback/ids'
+import type { ConversationId, PrincipalId, TicketId } from '@quackback/ids'
 import { can } from '@/lib/server/policy/authorize'
 import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -199,6 +212,92 @@ export async function linkTicketToConversation(
     { ticket_id: ticketId, conversation_id: conversationId, ticket_type: ticket.type },
     'ticket linked to conversation'
   )
+}
+
+/**
+ * The conversations a ticket links to as PROVENANCE — the ones it was opened
+ * from. The customer pair is excluded by the `ticket_type` predicate, the same
+ * denormalized column every pair reader keys off; provenance links are
+ * free-form, so a ticket may carry several.
+ */
+export async function resolveProvenanceConversationIds(
+  ticketId: TicketId
+): Promise<ConversationId[]> {
+  const links = await db
+    .select({ conversationId: ticketConversations.conversationId })
+    .from(ticketConversations)
+    .where(
+      and(
+        eq(ticketConversations.ticketId, ticketId),
+        ne(ticketConversations.ticketType, 'customer')
+      )
+    )
+  return links.map((link) => link.conversationId)
+}
+
+/**
+ * Carry a ticket's internal note back along its provenance links: the note
+ * lands on each conversation the ticket was opened from as an internal note of
+ * its own, authored by the same teammate, written through the conversation
+ * domain's own note path (`addAgentNote`) so it gets the whole note pipeline —
+ * the updatedAt touch, the agent-channel broadcast, the note event — rather
+ * than a bare row insert. The note itself never moves: the ticket thread stays
+ * its home, and the conversation gets a copy that names the ticket it came
+ * from.
+ *
+ * PAIR EXCLUSION. A customer ticket's notes are never carried. The pair is one
+ * thread already (pair-thread.service's union read serves both parents), so a
+ * copy there would show the note twice.
+ *
+ * LOOP SAFETY. Every carried copy is stamped `crossPostedFromTicketId`, and a
+ * note that already carries the stamp is never carried again. A copy that
+ * finds its way back onto a ticket thread — a relay, an integration replaying
+ * it — therefore lands once and stops, instead of the two threads bouncing it
+ * between them.
+ *
+ * Best-effort per conversation, like the link announcement: the note has
+ * already landed on the ticket, so a copy that fails (the conversation was
+ * deleted, the author may note tickets but not act as an agent on
+ * conversations) is logged, never surfaced to the caller.
+ */
+export async function crossPostTicketNote(
+  ticket: Ticket,
+  note: {
+    content: string
+    authorPrincipalId: PrincipalId
+    metadata?: ConversationMessageMetadata
+  },
+  actor: Actor
+): Promise<void> {
+  if (ticket.type === 'customer') return
+  if (note.metadata?.crossPostedFromTicketId) return
+  const conversationIds = await resolveProvenanceConversationIds(ticket.id)
+  if (conversationIds.length === 0) return
+
+  // Dynamic, the same precedent the link announcement sets: the conversation
+  // domain imports nothing from this one, and the lazy edge keeps it that way.
+  const { addAgentNote } = await import('@/lib/server/domains/conversation/conversation.service')
+  const reference = formatTicketNumber(ticket.number)
+  for (const conversationId of conversationIds) {
+    try {
+      await addAgentNote(
+        conversationId,
+        `Note on internal ticket ${reference}: ${note.content}`,
+        { principalId: note.authorPrincipalId },
+        actor,
+        // Plain text: the copy is an echo for context, and the ticket thread
+        // keeps the note's full fidelity (rich doc, mentions, attachments).
+        null,
+        undefined,
+        { crossPostedFromTicketId: ticket.id }
+      )
+    } catch (err) {
+      log.warn(
+        { err, ticket_id: ticket.id, conversation_id: conversationId },
+        'ticket note cross-post failed (note already landed)'
+      )
+    }
+  }
 }
 
 /**

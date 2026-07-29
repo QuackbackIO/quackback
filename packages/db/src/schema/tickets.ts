@@ -18,8 +18,9 @@
  * customer-visible exception is the inert legacy edge 0218 deliberately
  * skipped (standalone customer tickets with no requester, or soft-deleted),
  * which the union loader keeps reading forever. Back-office and tracker
- * tickets keep their own ticket-scoped internal-notes thread and are never
- * conversation-linked.
+ * tickets keep their own ticket-scoped thread; they link to a conversation as
+ * PROVENANCE only (the one they were opened from), which shares no thread —
+ * their notes are copied onto it, not re-parented.
  *
  * Three kinds share one table (`type`): a `customer` ticket is the
  * customer-visible request (at most one per conversation); a `back_office`
