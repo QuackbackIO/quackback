@@ -97,6 +97,18 @@ export interface ChangelogEntryWithDetails {
   categories: ChangelogCategorySummary[]
   /** Computed status based on publishedAt */
   status: 'draft' | 'scheduled' | 'published'
+  /** In-app view count. Email open/click tracking is out of scope. */
+  viewCount: number
+}
+
+/**
+ * A published entry's rank in the admin "Top viewed" table.
+ */
+export interface TopViewedChangelogEntry {
+  id: ChangelogId
+  title: string
+  viewCount: number
+  publishedAt: Date
 }
 
 /**

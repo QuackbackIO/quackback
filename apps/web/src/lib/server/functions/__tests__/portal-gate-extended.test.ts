@@ -37,6 +37,7 @@
  *   5  getPublicChangelogFn
  *   6  listPublicChangelogsFn
  *   7  searchShippedPostsFn
+ *   8  topViewedChangelogsFn
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -205,6 +206,7 @@ vi.mock('@/lib/server/domains/changelog/changelog.service', () => ({
 
 vi.mock('@/lib/server/domains/changelog/changelog.query', () => ({
   listChangelogs: vi.fn(),
+  listTopViewedChangelogs: vi.fn(),
   searchShippedPosts: vi.fn(),
 }))
 
@@ -215,6 +217,7 @@ vi.mock('@/lib/shared/schemas/changelog', () => ({
   getChangelogSchema: { parse: (v: unknown) => v },
   deleteChangelogSchema: { parse: (v: unknown) => v },
   listPublicChangelogsSchema: { parse: (v: unknown) => v },
+  topViewedChangelogsSchema: { parse: (v: unknown) => v },
 }))
 
 vi.mock('@/lib/shared/utils', () => ({

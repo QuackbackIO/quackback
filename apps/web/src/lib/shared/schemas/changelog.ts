@@ -71,6 +71,13 @@ export const deleteChangelogSchema = z.object({
 })
 
 /**
+ * Top-viewed changelogs params schema
+ */
+export const topViewedChangelogsSchema = z.object({
+  limit: z.number().int().positive().max(20).optional(),
+})
+
+/**
  * List public changelogs params schema
  */
 export const listPublicChangelogsSchema = z.object({

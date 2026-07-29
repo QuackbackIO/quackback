@@ -11,6 +11,7 @@ import {
   getChangelogFn,
   listPublicChangelogsFn,
   getPublicChangelogFn,
+  topViewedChangelogsFn,
 } from '@/lib/server/functions/changelog'
 import { listChangelogCategoriesFn } from '@/lib/server/functions/changelog-categories'
 import { fetchChangelogSettingsFn } from '@/lib/server/functions/settings'
@@ -27,6 +28,7 @@ export const changelogKeys = {
   list: (filters: { status?: string }) => [...changelogKeys.lists(), filters] as const,
   details: () => [...changelogKeys.all, 'detail'] as const,
   detail: (id: ChangelogId) => [...changelogKeys.details(), id] as const,
+  topViewed: () => [...changelogKeys.all, 'top-viewed'] as const,
   public: () => [...changelogKeys.all, 'public'] as const,
   publicList: () => [...changelogKeys.public(), 'list'] as const,
   publicDetail: (id: ChangelogId) => [...changelogKeys.public(), 'detail', id] as const,
@@ -85,6 +87,14 @@ export const changelogQueries = {
     queryOptions({
       queryKey: changelogKeys.detail(id),
       queryFn: () => getChangelogFn({ data: { id } }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  /** Top-viewed published entries, ranked by in-app view count. */
+  topViewed: () =>
+    queryOptions({
+      queryKey: changelogKeys.topViewed(),
+      queryFn: () => topViewedChangelogsFn({ data: {} }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

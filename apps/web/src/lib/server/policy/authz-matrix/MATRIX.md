@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 588 surfaces
+### Server functions (`requireAuth`) — 589 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -255,6 +255,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/changelog.ts`::getChangelogFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::listChangelogsFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::searchShippedPostsFn | changelog.manage |
+| `lib/server/functions/changelog.ts`::topViewedChangelogsFn | changelog.view_draft |
 | `lib/server/functions/channel-accounts.ts`::getEmailChannelConfigFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::createInboundRouteFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::createSendingAddressFn | channel_account.manage |
@@ -889,7 +890,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-181 of 877 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+181 of 878 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
