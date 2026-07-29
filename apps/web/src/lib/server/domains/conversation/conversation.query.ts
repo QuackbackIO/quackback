@@ -68,6 +68,8 @@ import {
   type KeysetColumn,
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
+import { conversationRelevanceSql } from './conversation-relevance'
+import type { SQL } from 'drizzle-orm'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
@@ -1179,6 +1181,33 @@ function orderByForSort(sort: ConversationSort) {
 }
 
 /**
+ * ORDER BY clause list for a searched list: best match first, then most-recent
+ * activity, then `id` so keyset never dupes/skips. Two rows with the same score
+ * are equally good answers to the term, so activity decides between them.
+ */
+function relevanceOrderBy(relevance: SQL<number>) {
+  return [sql`${relevance} DESC`, desc(conversations.lastMessageAt), desc(conversations.id)]
+}
+
+/**
+ * Keyset cursor comparison for a relevance-ordered list, mirroring
+ * `relevanceOrderBy`. The score is a float8, but both sides are produced by the
+ * same expression against the same clock anchor within one request, so the
+ * equality arm compares identical doubles rather than merely close ones.
+ */
+function relevanceCursorCondition(relevance: SQL<number>, score: number, c: Conversation) {
+  const scoreCol: KeysetColumn = {
+    equal: sql`${relevance} = ${score}::float8`,
+    strict: sql`${relevance} < ${score}::float8`,
+  }
+  return buildKeysetCondition([
+    scoreCol,
+    descColumn(conversations.lastMessageAt, c.lastMessageAt),
+    descColumn(conversations.id, c.id),
+  ])
+}
+
+/**
  * Keyset cursor comparison for a sort: rows strictly after the cursor row in
  * the sort's order, assembled by the shared `buildKeysetCondition` (a
  * generic OR-of-ANDs "lexicographic successor" builder — see
@@ -1392,20 +1421,6 @@ export async function listConversationsForAgent(
 ): Promise<ConversationListPage> {
   const limit = Math.min(filter.limit ?? INBOX_PAGE_SIZE, 100)
   const sort = filter.sort ?? 'recent'
-  // Keyset cursor = the previous page's last conversation id. Re-read the exact
-  // row from the DB rather than trusting a client-supplied string, so the sort's
-  // ordering columns (which vary per sort) + ties are handled deterministically
-  // (mirrors listMessages). An unknown id → first page, and a malformed cursor
-  // can no longer reach a date parse / 500 the list.
-  let cursor: Conversation | null = null
-  if (filter.before) {
-    const [row] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, filter.before as ConversationId))
-      .limit(1)
-    if (row) cursor = row
-  }
   const search = filter.search?.trim()
   // Match the visitor's name or any non-deleted message content. EXISTS keeps
   // the select shape (conversations only) — no join row fan-out. The term is
@@ -1425,6 +1440,31 @@ export async function listConversationsForAgent(
           )
         )`
     : undefined
+  // A searched list orders by relevance instead of the active sort: "most
+  // recent" is the right default for browsing an inbox and the wrong one for
+  // finding a thread. One clock instant anchors the score's recency term for
+  // the whole request, so the cursor row and the page rows are scored alike.
+  const relevance = search ? conversationRelevanceSql(search, new Date()) : null
+
+  // Keyset cursor = the previous page's last conversation id. Re-read the exact
+  // row from the DB rather than trusting a client-supplied string, so the sort's
+  // ordering columns (which vary per sort) + ties are handled deterministically
+  // (mirrors listMessages). An unknown id → first page, and a malformed cursor
+  // can no longer reach a date parse / 500 the list. Relevance-ordered pages
+  // additionally need the cursor row's score, recomputed by the same expression.
+  let cursor: Conversation | null = null
+  let cursorRelevance = 0
+  if (filter.before) {
+    const [row] = await db
+      .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
+      .from(conversations)
+      .where(eq(conversations.id, filter.before as ConversationId))
+      .limit(1)
+    if (row) {
+      cursor = row.row
+      cursorRelevance = Number(row.relevance)
+    }
+  }
 
   const rows = await db
     // Explicit projection of only the columns the list DTO consumes
@@ -1585,12 +1625,16 @@ export async function listConversationsForAgent(
         // can't keep listing. The shared fragment keeps this view and the
         // inbox nav's pair badge in lockstep.
         filter.hasLinkedCustomerTicket ? hasLinkedCustomerTicketSql() : undefined,
-        // Keyset comparison for the active sort (re-resolved cursor row). id is
+        // Keyset comparison for the active order (re-resolved cursor row). id is
         // always the final tiebreak so a page boundary never dupes or skips.
-        cursor ? cursorConditionForSort(sort, cursor) : undefined
+        cursor
+          ? relevance
+            ? relevanceCursorCondition(relevance, cursorRelevance, cursor)
+            : cursorConditionForSort(sort, cursor)
+          : undefined
       )
     )
-    .orderBy(...orderByForSort(sort))
+    .orderBy(...(relevance ? relevanceOrderBy(relevance) : orderByForSort(sort)))
     .limit(limit + 1)
 
   const hasMore = rows.length > limit

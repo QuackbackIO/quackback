@@ -291,6 +291,71 @@ describe('mergeInboxBranches', () => {
     })
   })
 
+  describe('relevanceOrdered (a searched list)', () => {
+    it('keeps the conversation branch in the order it arrived, ignoring activity', () => {
+      // Arrives best-match-first; activity ascends, so an activity re-sort
+      // would reverse it.
+      const items = [
+        conversationItem({ id: 'conversation_best', lastMessageAt: '2026-01-01T00:00:00.000Z' }),
+        conversationItem({ id: 'conversation_mid', lastMessageAt: '2026-01-02T00:00:00.000Z' }),
+        conversationItem({ id: 'conversation_worst', lastMessageAt: '2026-01-03T00:00:00.000Z' }),
+      ]
+      const result = mergeInboxBranches({
+        conversation: branch(items),
+        ticket: branch([]),
+        sort: 'recent',
+        limit: 10,
+        relevanceOrdered: true,
+      })
+      expect(ids(result.items)).toEqual([
+        'conversation_best',
+        'conversation_mid',
+        'conversation_worst',
+      ])
+    })
+
+    it('fuses the two branches by within-branch position', () => {
+      const result = mergeInboxBranches({
+        conversation: branch([
+          conversationItem({ id: 'conversation_1', lastMessageAt: '2026-01-01T00:00:00.000Z' }),
+          conversationItem({ id: 'conversation_2', lastMessageAt: '2026-01-09T00:00:00.000Z' }),
+        ]),
+        ticket: branch([
+          ticketItem({ id: 'ticket_1', updatedAt: '2026-01-05T00:00:00.000Z' }),
+          ticketItem({ id: 'ticket_2', updatedAt: '2026-01-04T00:00:00.000Z' }),
+        ]),
+        sort: 'recent',
+        limit: 10,
+        relevanceOrdered: true,
+      })
+      expect(ids(result.items)).toEqual([
+        'conversation_1',
+        'ticket_1',
+        'conversation_2',
+        'ticket_2',
+      ])
+    })
+
+    it('still derives each branch cursor from the last emitted item of that kind', () => {
+      const result = mergeInboxBranches({
+        conversation: branch(
+          [
+            conversationItem({ id: 'conversation_1', lastMessageAt: '2026-01-01T00:00:00.000Z' }),
+            conversationItem({ id: 'conversation_2', lastMessageAt: '2026-01-02T00:00:00.000Z' }),
+          ],
+          { hasMore: true }
+        ),
+        ticket: branch([ticketItem({ id: 'ticket_1', updatedAt: '2026-01-05T00:00:00.000Z' })]),
+        sort: 'recent',
+        limit: 2,
+        relevanceOrdered: true,
+      })
+      expect(ids(result.items)).toEqual(['conversation_1', 'ticket_1'])
+      const decoded = JSON.parse(Buffer.from(result.cursor as string, 'base64url').toString('utf8'))
+      expect(decoded).toEqual({ c: 'conversation_1', t: 'ticket_1' })
+    })
+  })
+
   it('treats an empty branch (RBAC-skipped or kind-excluded) as permanently exhausted', () => {
     const t1 = ticketItem({ id: 'ticket_1', updatedAt: '2026-01-01T00:00:00.000Z' })
     const result = mergeInboxBranches({
