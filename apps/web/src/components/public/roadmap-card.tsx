@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { ChevronUpIcon, Squares2X2Icon, CalendarIcon } from '@heroicons/react/24/solid'
+import { ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import { Badge } from '@/components/ui/badge'
 import { formatMonthYear } from '@/lib/shared/utils'
 
@@ -7,6 +8,7 @@ interface RoadmapCardProps {
   id: string
   title: string
   voteCount: number
+  commentCount: number
   board: {
     slug: string
     name: string
@@ -19,6 +21,7 @@ export function RoadmapCard({
   id,
   title,
   voteCount,
+  commentCount,
   board,
   eta,
 }: RoadmapCardProps): React.ReactElement {
@@ -32,6 +35,15 @@ export function RoadmapCard({
       <div className="roadmap-card__vote flex flex-col items-center justify-center w-12 shrink-0 border-e border-[var(--post-card-border)]/30 text-muted-foreground">
         <ChevronUpIcon className="h-5 w-5" />
         <span className="text-sm font-semibold text-foreground">{voteCount}</span>
+        {commentCount > 0 && (
+          <span
+            data-testid="roadmap-card-comment-count"
+            className="mt-1 flex items-center gap-0.5 text-[11px] text-muted-foreground"
+          >
+            <ChatBubbleLeftIcon className="h-3 w-3" />
+            {commentCount}
+          </span>
+        )}
       </div>
       <div className="roadmap-card__content flex-1 min-w-0 p-3">
         <p className="text-sm font-medium text-foreground line-clamp-2">{title}</p>

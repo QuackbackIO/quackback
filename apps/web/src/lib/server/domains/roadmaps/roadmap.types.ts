@@ -67,6 +67,7 @@ export interface RoadmapViewPost {
   id: import('@quackback/ids').PostId
   title: string
   voteCount: number
+  commentCount: number
   statusId: PostStatusId | null
   /** Target ship date (time-based roadmap); serialized across the RPC boundary. */
   eta: Date | string | null

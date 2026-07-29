@@ -159,6 +159,7 @@ async function queryRoadmapPosts(
           id: posts.id,
           title: posts.title,
           voteCount: posts.voteCount,
+          commentCount: posts.commentCount,
           statusId: posts.statusId,
           eta: posts.eta,
         },
