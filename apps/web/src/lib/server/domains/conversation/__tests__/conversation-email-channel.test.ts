@@ -6,6 +6,8 @@ import {
   conversationIdFromInboundAddress,
   signConversationId,
   mintOutboundMessageId,
+  mintNoteOutboundMessageId,
+  noteThreadRootMessageId,
   outboundMessageIdDomain,
   ownEmailDomains,
 } from '../conversation.email-channel'
@@ -137,6 +139,44 @@ describe('outbound Message-ID threading', () => {
   it('collects our own sending domains from EMAIL_FROM and the inbound domain', () => {
     const domains = ownEmailDomains({ ...FROM_ENV, EMAIL_INBOUND_DOMAIN: 'x.resend.app' })
     expect(domains).toEqual(new Set(['acme.example', 'x.resend.app']))
+  })
+})
+
+describe('internal-note Message-ID threading', () => {
+  const FROM_ENV = { EMAIL_FROM: 'Support <noreply@acme.example>' }
+
+  it('derives a deterministic note-thread root for a conversation', () => {
+    expect(noteThreadRootMessageId(REAL_ID, FROM_ENV)).toBe(
+      'note.01kw8qxn1eeh4t2rek7varh032@acme.example'
+    )
+    expect(noteThreadRootMessageId(REAL_ID, FROM_ENV)).toBe(
+      noteThreadRootMessageId(REAL_ID, FROM_ENV)
+    )
+  })
+
+  it('mints a fresh per-send note Message-ID under the same root suffix', () => {
+    const id = mintNoteOutboundMessageId(REAL_ID, FROM_ENV)!
+    expect(id).toMatch(/^note\.01kw8qxn1eeh4t2rek7varh032\.[A-Za-z0-9_-]+@acme\.example$/)
+    expect(id).not.toMatch(/[<>]/)
+    expect(mintNoteOutboundMessageId(REAL_ID, FROM_ENV)).not.toBe(
+      mintNoteOutboundMessageId(REAL_ID, FROM_ENV)
+    )
+  })
+
+  it('keeps the note namespace disjoint from the customer-facing conversation ids', () => {
+    const noteIds = [
+      noteThreadRootMessageId(REAL_ID, FROM_ENV)!,
+      mintNoteOutboundMessageId(REAL_ID, FROM_ENV)!,
+    ]
+    for (const id of noteIds) {
+      expect(id).not.toMatch(/^c\./)
+      expect(id).not.toBe(mintOutboundMessageId(REAL_ID, FROM_ENV))
+    }
+  })
+
+  it('returns null when no sending domain is configured', () => {
+    expect(noteThreadRootMessageId(REAL_ID, {})).toBeNull()
+    expect(mintNoteOutboundMessageId(REAL_ID, {})).toBeNull()
   })
 })
 

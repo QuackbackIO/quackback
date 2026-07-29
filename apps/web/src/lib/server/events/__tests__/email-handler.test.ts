@@ -374,15 +374,44 @@ describe('emailHook — conversation.note_mentioned', () => {
     const result = await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
 
     expect(result).toEqual({ success: true })
-    expect(mockNoteMentionEmail).toHaveBeenCalledWith({
-      to: 'user@example.com',
-      authorName: 'Jane',
-      preview: 'can you take a look at the refund policy here?',
-      conversationUrl: 'https://w.example/admin/inbox?i=conversation_1',
-      workspaceName: 'Acme Support',
-      preferencesUrl: 'https://w.example/settings/preferences',
-      logoUrl: undefined,
+    expect(mockNoteMentionEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'user@example.com',
+        authorName: 'Jane',
+        preview: 'can you take a look at the refund policy here?',
+        conversationUrl: 'https://w.example/admin/inbox?i=conversation_1',
+        workspaceName: 'Acme Support',
+        preferencesUrl: 'https://w.example/settings/preferences',
+        logoUrl: undefined,
+      })
+    )
+  })
+
+  it('mints a fresh Message-ID and References the conversation note-thread root', async () => {
+    await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
+    const args = mockNoteMentionEmail.mock.calls[0][0]
+    expect(args.messageId).toMatch(/^note\.1\..+@acme\.test$/)
+    expect(args.inReplyTo).toBe('note.1@acme.test')
+    expect(args.references).toEqual(['note.1@acme.test'])
+  })
+
+  it('threads every alert on one conversation together while keeping ids unique', async () => {
+    await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
+    await emailHook.run(noteMentionedEvent, baseTarget, noteMentionConfig)
+    const [first, second] = mockNoteMentionEmail.mock.calls.map((c) => c[0])
+    expect(first.messageId).not.toBe(second.messageId)
+    expect(first.references).toEqual(second.references)
+  })
+
+  it('threads on nothing when the config carries no conversation id', async () => {
+    await emailHook.run(noteMentionedEvent, baseTarget, {
+      ...noteMentionConfig,
+      conversationId: '',
     })
+    const args = mockNoteMentionEmail.mock.calls[0][0]
+    expect(args.messageId).toBeUndefined()
+    expect(args.inReplyTo).toBeUndefined()
+    expect(args.references).toBeUndefined()
   })
 
   it('reports success without sending when email is not configured', async () => {

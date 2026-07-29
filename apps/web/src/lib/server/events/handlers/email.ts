@@ -27,7 +27,10 @@ import type { EventData, EventPostMentionedData } from '../types'
 import {
   ticketRootMessageId,
   mintTicketOutboundMessageId,
+  noteThreadRootMessageId,
+  mintNoteOutboundMessageId,
 } from '@/lib/server/domains/conversation/conversation.email-channel'
+import type { ConversationId } from '@quackback/ids'
 import { isRetryableError } from '../hook-utils'
 import { logger } from '@/lib/server/logger'
 
@@ -63,6 +66,29 @@ function ticketThreading(cfg: TicketEmailConfig): {
   }
   return {
     messageId: mintTicketOutboundMessageId(ticketId) ?? undefined,
+    inReplyTo: root ?? undefined,
+    references: root ? [root] : undefined,
+  }
+}
+
+/**
+ * Threading headers for an internal-note @-mention alert. Each send mints its
+ * own Message-ID and References the conversation's deterministic note-thread
+ * root, so every mention on one conversation lands in a single thread in the
+ * teammate's client instead of a stack of unrelated mails. The root lives in a
+ * namespace of its own, disjoint from the customer-facing conversation ids, so
+ * an internal alert never joins the thread the customer sees.
+ */
+function noteMentionThreading(cfg: NoteMentionEmailConfig): {
+  messageId?: string
+  inReplyTo?: string
+  references?: string[]
+} {
+  if (!cfg.conversationId) return {}
+  const conversationId = cfg.conversationId as ConversationId
+  const root = noteThreadRootMessageId(conversationId)
+  return {
+    messageId: mintNoteOutboundMessageId(conversationId) ?? undefined,
     inReplyTo: root ?? undefined,
     references: root ? [root] : undefined,
   }
@@ -128,6 +154,7 @@ export const emailHook: HookHandler = {
           workspaceName: c.workspaceName,
           preferencesUrl: c.preferencesUrl,
           logoUrl: c.logoUrl,
+          ...noteMentionThreading(c),
         })
       } else if (event.type === 'changelog.published') {
         const changelogCfg = config as Record<string, unknown>

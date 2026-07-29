@@ -66,6 +66,47 @@ describe('sendNoteMentionEmail', () => {
     expect(call.html).not.toContain('/unsubscribe')
   })
 
+  it('stamps the RFC 5322 threading headers so repeat alerts collapse into one thread', async () => {
+    await sendNoteMentionEmail({
+      to: 'agent@example.com',
+      authorName: 'Jane',
+      preview: 'can you take a look?',
+      conversationUrl: 'https://w.example/admin/inbox?i=conversation_1',
+      workspaceName: 'Acme Support',
+      messageId: 'note.abc.nonce@example.com',
+      inReplyTo: 'note.abc@example.com',
+      references: ['note.abc@example.com'],
+    })
+
+    const call = sendMailMock.mock.calls[0][0] as {
+      messageId?: string
+      inReplyTo?: string
+      references?: string
+    }
+    expect(call.messageId).toBe('<note.abc.nonce@example.com>')
+    expect(call.inReplyTo).toBe('<note.abc@example.com>')
+    expect(call.references).toBe('<note.abc@example.com>')
+  })
+
+  it('sends without threading headers when no ids are supplied', async () => {
+    await sendNoteMentionEmail({
+      to: 'agent@example.com',
+      authorName: 'Jane',
+      preview: 'can you take a look?',
+      conversationUrl: 'https://w.example/admin/inbox?i=conversation_1',
+      workspaceName: 'Acme Support',
+    })
+
+    const call = sendMailMock.mock.calls[0][0] as {
+      messageId?: string
+      inReplyTo?: string
+      references?: string
+    }
+    expect(call.messageId).toBeUndefined()
+    expect(call.inReplyTo).toBeUndefined()
+    expect(call.references).toBeUndefined()
+  })
+
   it('sends without a quote block when the note carries no preview text', async () => {
     await sendNoteMentionEmail({
       to: 'agent@example.com',

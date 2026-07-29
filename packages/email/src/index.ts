@@ -961,11 +961,28 @@ export interface SendNoteMentionEmailArgs {
   workspaceName: string
   preferencesUrl?: string
   logoUrl?: string
+  /** RFC 5322 threading: this mail's own Message-ID (bare or bracketed). */
+  messageId?: string
+  /** RFC 5322 threading: the note-thread root this alert replies to. */
+  inReplyTo?: string
+  /** RFC 5322 threading: the full References chain (oldest first). */
+  references?: string[]
 }
 
 /** Alert a teammate @-mentioned in an internal note on a conversation. */
 export async function sendNoteMentionEmail(args: SendNoteMentionEmailArgs): Promise<EmailResult> {
-  const { to, authorName, preview, conversationUrl, workspaceName, preferencesUrl, logoUrl } = args
+  const {
+    to,
+    authorName,
+    preview,
+    conversationUrl,
+    workspaceName,
+    preferencesUrl,
+    logoUrl,
+    messageId,
+    inReplyTo,
+    references,
+  } = args
 
   const displayName = authorName || 'A teammate'
 
@@ -980,6 +997,9 @@ export async function sendNoteMentionEmail(args: SendNoteMentionEmailArgs): Prom
       preferencesUrl,
       logoUrl,
     }),
+    messageId,
+    inReplyTo,
+    references,
     emailType: 'NoteMentionEmail',
     preview: { conversationUrl },
   })
