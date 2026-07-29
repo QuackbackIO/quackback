@@ -75,6 +75,7 @@ import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
 import { truncate } from '@/lib/shared/utils/string'
+import { keywordInContext, type TermSegment } from '@/lib/shared/utils/keyword-context'
 import type { JsonValue } from '@/lib/shared/json'
 import type {
   ConversationAuthorDTO,
@@ -1415,6 +1416,61 @@ export interface ConversationListPage {
 }
 
 /**
+ * The message-side half of an inbox search: a live message whose content
+ * contains the term. Shared by the list's filter and the results' excerpts, so
+ * a row can never come back matched on a message the excerpt won't consider.
+ * The term is parameter-bound, so `%`/`_` are wildcards and nothing else is.
+ * Internal notes count — an agent searching their own notes expects to find
+ * them, and the excerpt is only ever rendered on the agent-side inbox.
+ */
+function messageMatchesSearch(term: string): SQL {
+  return sql`${conversationMessages.deletedAt} IS NULL
+      AND ${conversationMessages.content} ILIKE ${'%' + term + '%'}`
+}
+
+/**
+ * Keyword-in-context excerpts for a searched page, keyed by conversation.
+ *
+ * A searched row has to answer "why did this match?", and the list's own
+ * preview cannot: it shows the NEWEST message, while the term usually lives in
+ * an older one. Each entry is therefore the most recent matching message,
+ * windowed around the term and split for highlighting.
+ *
+ * One batched query for the whole page — the list never pays a query per row.
+ * A conversation that matched only on its visitor's name has no entry, and its
+ * row keeps the ordinary preview.
+ */
+export async function loadConversationSearchSnippets(
+  conversationIds: readonly ConversationId[],
+  term: string
+): Promise<Map<ConversationId, TermSegment[]>> {
+  const snippets = new Map<ConversationId, TermSegment[]>()
+  const needle = term.trim()
+  if (!needle || conversationIds.length === 0) return snippets
+
+  const rows = await db
+    .selectDistinctOn([conversationMessages.conversationId], {
+      conversationId: conversationMessages.conversationId,
+      content: conversationMessages.content,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        inArray(conversationMessages.conversationId, [...conversationIds]),
+        messageMatchesSearch(needle)
+      )
+    )
+    .orderBy(conversationMessages.conversationId, desc(conversationMessages.createdAt))
+
+  for (const row of rows) {
+    if (!row.conversationId) continue
+    const segments = keywordInContext(row.content, needle)
+    if (segments) snippets.set(row.conversationId, segments)
+  }
+  return snippets
+}
+
+/**
  * Inbox feed for agents: conversations newest-activity-first with unread
  * counts, scoped by `conversationFilter(actor)` (UNIFIED-INBOX-SPEC.md §6 —
  * wiring this is a deliberate behavior change: a bare `conversation.view`
@@ -1443,10 +1499,9 @@ export async function listConversationsForAgent(
               AND p.display_name ILIKE ${'%' + search + '%'}
           )
           OR EXISTS (
-            SELECT 1 FROM ${conversationMessages} m
-            WHERE m.conversation_id = ${conversations.id}
-              AND m.deleted_at IS NULL
-              AND m.content ILIKE ${'%' + search + '%'}
+            SELECT 1 FROM ${conversationMessages}
+            WHERE ${conversationMessages.conversationId} = ${conversations.id}
+              AND ${messageMatchesSearch(search)}
           )
         )`
     : undefined

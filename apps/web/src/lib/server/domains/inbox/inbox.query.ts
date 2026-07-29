@@ -335,7 +335,7 @@ async function fetchConversationBranch(
   limit: number,
   cursor: ConversationId | null
 ): Promise<InboxBranchFetch> {
-  const { listConversationsForAgent } =
+  const { listConversationsForAgent, loadConversationSearchSnippets } =
     await import('@/lib/server/domains/conversation/conversation.query')
   const assignedAgentPrincipalId: PrincipalId | undefined =
     filter.assignee === 'me'
@@ -364,11 +364,19 @@ async function fetchConversationBranch(
     actor
   )
 
-  const linkedTickets = await loadLinkedCustomerTicketSummaries(page.conversations.map((c) => c.id))
+  const ids = page.conversations.map((c) => c.id)
+  // A searched page carries the keyword-in-context excerpt that says why each
+  // row matched; an unsearched one never runs the extra query.
+  const term = filter.search?.trim()
+  const [linkedTickets, snippets] = await Promise.all([
+    loadLinkedCustomerTicketSummaries(ids),
+    term ? loadConversationSearchSnippets(ids, term) : Promise.resolve(null),
+  ])
   const items: InboxItemDTO[] = page.conversations.map((conversation) => ({
     kind: 'conversation',
     conversation,
     linkedTicket: linkedTickets.get(conversation.id) ?? null,
+    searchSnippet: snippets?.get(conversation.id) ?? null,
   }))
   return { items, hasMore: page.hasMore, cursor }
 }

@@ -13,6 +13,7 @@ import {
 } from '@/lib/shared/conversation/views'
 import type { TicketType } from '@/lib/shared/db-types'
 import { NewConversationDialog } from '@/components/admin/conversation/new-conversation-dialog'
+import { SearchSnippet } from '@/components/admin/conversation/search-snippet'
 import { priorityMeta } from '@/lib/shared/conversation/priority-meta'
 import { PriorityDot, PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import {
@@ -635,7 +636,9 @@ const ConversationRow = memo(function ConversationRow({
     >
       {/* Rows keep a fixed anatomy (name / linked-ticket line / preview + time)
           so the list scans uniformly — the sometimes-present decorations
-          (priority dot, SLA, channel, tags) live on the thread, not here. */}
+          (priority dot, SLA, channel, tags) live on the thread, not here. A
+          result row swaps the preview for the matched excerpt and moves the
+          time up beside the name, so the excerpt gets the full row width. */}
       <button
         type="button"
         onClick={() => onSelect(id)}
@@ -651,11 +654,18 @@ const ConversationRow = memo(function ConversationRow({
             <span className="truncate text-sm font-medium">
               {c.visitor.displayName ?? 'Visitor'}
             </span>
-            {c.unreadCount > 0 && (
-              <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
-                {c.unreadCount}
-              </span>
-            )}
+            <span className="flex shrink-0 items-center gap-1.5">
+              {c.unreadCount > 0 && (
+                <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
+                  {c.unreadCount}
+                </span>
+              )}
+              {item.searchSnippet && (
+                <span className="text-xs text-muted-foreground">
+                  {relativeTime(c.lastMessageAt)}
+                </span>
+              )}
+            </span>
           </div>
           {item.linkedTicket && (
             <div className="mt-0.5 flex items-center gap-1 text-xs">
@@ -664,14 +674,20 @@ const ConversationRow = memo(function ConversationRow({
               <span className="truncate text-muted-foreground">· {item.linkedTicket.title}</span>
             </div>
           )}
-          <div className="mt-0.5 flex items-center justify-between gap-2">
-            <p className="min-w-0 truncate text-xs text-muted-foreground">
-              {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
+          {item.searchSnippet ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+              <SearchSnippet segments={item.searchSnippet} />
             </p>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {relativeTime(c.lastMessageAt)}
-            </span>
-          </div>
+          ) : (
+            <div className="mt-0.5 flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-xs text-muted-foreground">
+                {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
+              </p>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {relativeTime(c.lastMessageAt)}
+              </span>
+            </div>
+          )}
         </div>
       </button>
     </RowShell>

@@ -48,7 +48,7 @@ function conversationItem(over: {
     customAttributes: {},
     translation: null,
   } as unknown as ConversationDTO
-  return { kind: 'conversation', conversation, linkedTicket: null }
+  return { kind: 'conversation', conversation, linkedTicket: null, searchSnippet: null }
 }
 
 function ticketItem(over: {

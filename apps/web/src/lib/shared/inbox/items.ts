@@ -11,6 +11,7 @@ import type { ConversationId, TicketId } from '@quackback/ids'
 import type { ConversationDTO, ConversationStatus } from '@/lib/shared/conversation/types'
 import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { TicketDTO } from '@/lib/server/domains/tickets/ticket.types'
+import type { TermSegment } from '@/lib/shared/utils/keyword-context'
 
 // ---------------------------------------------------------------------------
 // Sorts
@@ -56,6 +57,11 @@ export type InboxItemDTO =
       kind: 'conversation'
       conversation: ConversationDTO
       linkedTicket: LinkedTicketSummary | null
+      /** Keyword-in-context excerpt of the message the search term matched,
+       *  split into runs so the row can highlight the term. A property of the
+       *  RESULT, not of the conversation: null on any unsearched list, and on a
+       *  row that matched only on its visitor's name. */
+      searchSnippet: TermSegment[] | null
     }
   | { kind: 'ticket'; ticket: TicketDTO; unreadCount: number }
 
