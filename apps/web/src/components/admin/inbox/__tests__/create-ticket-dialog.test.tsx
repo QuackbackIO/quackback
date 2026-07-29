@@ -4,7 +4,10 @@
  * (category default preselected), the type swap exchanging the dynamic field
  * set, inline validation against the chosen type's fields, and the submit
  * payload carrying ticketTypeId + validated customAttributes (never a bare
- * category alongside a registry type). Phase 5 adds the copilot auto-fill:
+ * category alongside a registry type), and the from-a-conversation flow
+ * offering the whole registry — a back-office type opened there keeps the
+ * conversation through the same link step the customer pair uses. Phase 5 adds
+ * the copilot auto-fill:
  * the "✨ Auto-fill" affordance (flag-gated, from-a-conversation only),
  * suggestion markers + undo, the not-suggested state, the quiet unavailable
  * fallback, and submits carrying edited suggestions.
@@ -96,6 +99,20 @@ const refundType: TicketTypeDTO = {
   archived: false,
 }
 
+const taskType: TicketTypeDTO = {
+  id: 'ticket_type_task',
+  name: 'Internal task',
+  slug: 'internal_task',
+  category: 'back_office',
+  icon: '🛠️',
+  color: '#8b5cf6',
+  fields: [],
+  isDefault: true,
+  position: 2,
+  intakeVisible: false,
+  archived: false,
+}
+
 const outageType: TicketTypeDTO = {
   id: 'ticket_type_outage',
   name: 'Outage',
@@ -145,7 +162,7 @@ beforeEach(() => {
   mocks.toastInfo.mockReset()
   mocks.routeContext = { settings: { featureFlags: { inboxAi: true } } }
   mocks.listTicketTypesFn.mockReset()
-  mocks.listTicketTypesFn.mockResolvedValue([bugType, refundType, outageType])
+  mocks.listTicketTypesFn.mockResolvedValue([bugType, refundType, taskType, outageType])
 })
 
 afterEach(cleanup)
@@ -203,13 +220,40 @@ describe('CreateTicketDialog — Phase 4 type picker', () => {
     expect(input.type).toBeUndefined()
   })
 
-  it('limits the picker to customer-category types in the from-a-conversation flow', async () => {
+  it('offers back-office types from a conversation, with the customer default preselected', async () => {
     renderDialog({ conversationId: 'conversation_1' as never })
+    // The customer default still leads: spinning internal work off a
+    // conversation is a deliberate pick, never what the dialog opens on.
+    expect(await screen.findByText('Bug report')).toBeInTheDocument()
     const trigger = await screen.findByRole('combobox')
     trigger.focus()
     fireEvent.keyDown(trigger, { key: 'ArrowDown' })
-    expect(await screen.findByRole('option', { name: /Bug report/ })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /Outage/ })).toBeNull()
+    expect(await screen.findByRole('option', { name: /Internal task/ })).toBeInTheDocument()
+  })
+
+  it('links a back-office ticket opened from a conversation back to it', async () => {
+    mocks.linkTicketToConversationFn.mockResolvedValue({ success: true })
+    renderDialog({ conversationId: 'conversation_1' as never })
+    await pickSelectOption(await screen.findByRole('combobox'), 'Internal task')
+    fireEvent.change(await screen.findByPlaceholderText('Summarize the request…'), {
+      target: { value: 'Check the billing job' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create ticket' }))
+
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalledTimes(1))
+    const [input, handlers] = mocks.mutate.mock.calls[0]
+    expect(input).toMatchObject({
+      ticketTypeId: 'ticket_type_task',
+      sourceConversationId: 'conversation_1',
+    })
+    expect(input.type).toBeUndefined()
+
+    // The link step runs for every type — the conversation is kept whether the
+    // ticket is the customer's pair or internal work spun off it.
+    await handlers.onSuccess({ id: 'ticket_1' })
+    expect(mocks.linkTicketToConversationFn).toHaveBeenCalledWith({
+      data: { ticketId: 'ticket_1', conversationId: 'conversation_1' },
+    })
   })
 })
 

@@ -1,5 +1,5 @@
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm'
-import type { BoardId, PostStatusId, PostTagId, SegmentId } from '@quackback/ids'
+import type { BoardId, PostStatusId, PostTagId, SegmentId, TicketId } from '@quackback/ids'
 import type { boards, roadmaps, roadmapColumns, postTags } from './schema/boards'
 import type { postStatuses } from './schema/statuses'
 import type {
@@ -674,9 +674,11 @@ export interface ConversationSystemEvent {
   trackerReference?: string
   /** Ticket reference (e.g. "#42") for 'ticket_created' (unified inbox M5's
    *  create-ticket flow). CONVERGENCE: on the shared conversation↔ticket
-   *  thread this is the customer-visible conversion marker (Intercom-style),
-   *  localized client-side from this event — the visitor it renders for is
-   *  the ticket's own requester. */
+   *  thread this is the customer-visible conversion marker, localized
+   *  client-side from this event — the visitor it renders for is the ticket's
+   *  own requester. The same kind carries a non-customer ticket opened from a
+   *  conversation, where the row is internal and the audience is the team; the
+   *  audience rides `isInternal`, not the kind. */
   ticketReference?: string
   /** External issue reference (e.g. "acme/widgets#142") for
    *  'external_linked' / 'external_unlinked' — team-only. */
@@ -830,6 +832,11 @@ export interface ConversationMessageMetadata {
   /** The structured reply this visitor-authored message carries, when it was
    *  sent in answer to a block. Null/absent for an ordinary message. */
   blockReply?: BlockReplyMetadata
+  /** The ticket whose internal note this message carries, set on the copy a
+   *  provenance-linked ticket lands on the conversation it was opened from.
+   *  A note carrying it is never carried again, so a copy that finds its way
+   *  back onto a ticket thread stops there. */
+  crossPostedFromTicketId?: TicketId
 }
 
 /** See `ConversationMessageMetadata.translatedFrom`. */

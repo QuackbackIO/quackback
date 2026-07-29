@@ -809,6 +809,10 @@ export async function sendAgentMessage(
  * isInternal=true, published only to the agent inbox channel, excluded from
  * visitor read paths + unread counts, and it does not bump the visitor-facing
  * last-message preview. @mentions notify teammates.
+ *
+ * `metadata` is provenance carried onto the stored row, the same slot
+ * `sendAgentMessage` takes: a note written on behalf of another thread records
+ * where it came from there.
  */
 export async function addAgentNote(
   conversationId: ConversationId,
@@ -816,7 +820,8 @@ export async function addAgentNote(
   agent: ConversationAuthorInput,
   actor: Actor,
   contentJson?: TiptapContent | null,
-  attachments?: ConversationAttachment[]
+  attachments?: ConversationAttachment[],
+  metadata?: ConversationMessageMetadata
 ): Promise<SendAgentMessageResult> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -848,6 +853,7 @@ export async function addAgentNote(
         contentJson: safeContentJson,
         // Image/file attachments on the note (agent-only, like the note itself).
         attachments: noteAttachments,
+        metadata,
       })
       .returning()
     // Touch updatedAt only — internal notes don't change the visitor-facing
@@ -1073,12 +1079,21 @@ export async function endConversation(
  * Exported so sibling domains (e.g. the create-ticket flow's conversation
  * announcement) can post the same shape without duplicating the insert +
  * publish plumbing.
+ *
+ * `internal: true` makes the event team-only for the events the customer has
+ * no business hearing about (an internal task spun off their conversation):
+ * the row is stored `isInternal`, which every visitor read path filters, and
+ * the broadcast goes to the agent inbox channel ONLY — the same two-part rule
+ * `addAgentNote` follows, since channel separation and the read filter each
+ * cover a path the other does not.
  */
 export async function emitSystemMessage(
   conversationId: ConversationId,
   content: string,
-  systemEvent?: ConversationSystemEvent
+  systemEvent?: ConversationSystemEvent,
+  opts?: { internal?: boolean }
 ): Promise<void> {
+  const internal = opts?.internal === true
   try {
     const [message] = await db
       .insert(conversationMessages)
@@ -1088,18 +1103,19 @@ export async function emitSystemMessage(
         principalId: null,
         senderType: 'system',
         content,
-        isInternal: false,
+        isInternal: internal,
         // The structured event lets clients localize the notice; `content` stays
         // as the stored (English) fallback for legacy rows / unknown kinds.
         metadata: systemEvent ? { systemEvent } : null,
       })
       .returning()
     const messageDTO = toMessageDTO(message, null)
-    publishConversationEvent(conversationId, {
-      kind: 'message',
-      conversationId,
-      message: messageDTO,
-    })
+    const event = { kind: 'message' as const, conversationId, message: messageDTO }
+    if (internal) {
+      publishAgentConversationEvent(event)
+    } else {
+      publishConversationEvent(conversationId, event)
+    }
   } catch (err) {
     log.warn({ err }, 'emit system message failed')
   }

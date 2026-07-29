@@ -645,6 +645,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::setTicketStageLabelsFn | ticket.manage_types |
 | `lib/server/functions/tickets.ts`::sendTicketMessageFn | ticket.reply |
 | `lib/server/functions/tickets.ts`::addTicketNoteFn | ticket.note |
+| `lib/server/functions/tickets.ts`::getTicketProvenanceConversationsFn | ticket.view |
 | `lib/server/functions/tickets.ts`::listTicketMessagesFn | ticket.view |
 | `lib/server/functions/tickets.ts`::markTicketUnreadFromMessageFn | ticket.view |
 | `lib/server/functions/tickets.ts`::markTicketReadFn | ticket.view |

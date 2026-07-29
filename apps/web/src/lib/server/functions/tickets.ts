@@ -466,8 +466,10 @@ export const unlinkTicketIssueFn = createServerFn({ method: 'POST' })
   })
 
 /**
- * Link a freshly created customer ticket back to the conversation it came
- * from (unified inbox §M5's create-ticket flow, step 2 after createTicketFn).
+ * Link a freshly created ticket back to the conversation it came from (unified
+ * inbox §M5's create-ticket flow, step 2 after createTicketFn). A customer
+ * ticket links as the conversation's pair; any other type keeps the
+ * conversation as provenance (the service owns that split).
  * Gated on ticket.create — same permission the create step itself required.
  */
 export const linkTicketToConversationFn = createServerFn({ method: 'POST' })
@@ -646,8 +648,15 @@ export const sendTicketMessageFn = createServerFn({ method: 'POST' })
     })
   })
 
+const addTicketNoteSchema = sendTicketMessageSchema.extend({
+  /** The author's per-note ask to carry a copy onto the conversations this
+   *  ticket was opened from. Ticket-only is the default — an omitted field is
+   *  a note that goes nowhere else. */
+  shareWithConversation: z.boolean().optional(),
+})
+
 export const addTicketNoteFn = createServerFn({ method: 'POST' })
-  .validator(sendTicketMessageSchema)
+  .validator(addTicketNoteSchema)
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.TICKET_NOTE })
     const actor = await policyActorFromAuth(ctx)
@@ -657,7 +666,22 @@ export const addTicketNoteFn = createServerFn({ method: 'POST' })
       content: data.content,
       contentJson: data.contentJson ?? null,
       attachments: data.attachments as ConversationAttachment[] | undefined,
+      shareWithConversation: data.shareWithConversation,
     })
+  })
+
+/** How many conversations this ticket was opened FROM (its provenance links) —
+ *  the only thing the note composer needs to know to decide whether sharing a
+ *  note is even on offer. The pair link is not one of them: a customer ticket
+ *  and its conversation are one thread already. Reads on TICKET_VIEW. */
+export const getTicketProvenanceConversationsFn = createServerFn({ method: 'GET' })
+  .validator(z.object({ ticketId: z.string() }))
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.TICKET_VIEW })
+    const { resolveProvenanceConversationIds } =
+      await import('@/lib/server/domains/tickets/ticket-conversation-link.service')
+    const ids = await resolveProvenanceConversationIds(data.ticketId as TicketId)
+    return { count: ids.length }
   })
 
 export const listTicketMessagesFn = createServerFn({ method: 'GET' })

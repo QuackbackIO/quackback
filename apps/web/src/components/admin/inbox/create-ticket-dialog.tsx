@@ -64,7 +64,7 @@ export interface CreateTicketDialogProps {
   onCreated: (ticketId: TicketId) => void
   /** Set when opened from a conversation (unified inbox §M5's create-ticket
    *  flow: header icon, the panel's Ticket card empty slot, or the command
-   *  bar with a conversation active). Locks the type picker to the CUSTOMER
+   *  bar with a conversation active). Defaults the type to the customer
    *  category, fixes the requester to the conversation's visitor (no picker),
    *  and links the new ticket back to this conversation on success. */
   conversationId?: ConversationId
@@ -94,9 +94,11 @@ function preselectedType(candidates: TicketTypeDTO[]): TicketTypeDTO | null {
  * Open a ticket. Standalone (no `conversationId`): pick a type + title, and
  * optionally attach a requester — the general-purpose flow (command bar with
  * no conversation active, or the pre-unified tickets page). From a
- * conversation (`conversationId` set): the picker is limited to CUSTOMER
- * types, the requester is fixed to the conversation's visitor, and a
- * successful create links the ticket back to the conversation
+ * conversation (`conversationId` set): the type defaults to the customer
+ * category but the whole registry stays on offer (a back-office task spun off
+ * the conversation keeps it as provenance — the service decides pair vs
+ * provenance from the type), the requester is fixed to the conversation's
+ * visitor, and a successful create links the ticket back to the conversation
  * (`linkTicketToConversationFn`) — a friendly conflict (one customer ticket
  * per conversation, already linked) still counts as "created", just not
  * (re-)linked.
@@ -159,13 +161,16 @@ export function CreateTicketDialog({
     settings?: { featureFlags?: FeatureFlags } | null
   }
 
-  // The registry types the picker offers (live rows only). From a conversation
-  // the pair rule locks the category to customer, so the picker does too.
+  // The registry types the picker offers (live rows only) — the same set in
+  // both flows. From a conversation a customer type opens the pair, while a
+  // back-office or tracker type opens internal work that keeps this
+  // conversation as its provenance; the preselection below still lands on
+  // customer, which is the common case.
   const { data: registryTypes } = useQuery(ticketQueries.types())
-  const candidates = useMemo(() => {
-    const live = (registryTypes ?? []).filter((t) => !t.archived)
-    return fromConversation ? live.filter((t) => t.category === 'customer') : live
-  }, [registryTypes, fromConversation])
+  const candidates = useMemo(
+    () => (registryTypes ?? []).filter((t) => !t.archived),
+    [registryTypes]
+  )
   // The shared intake plumbing; the agent path resolves its selection through
   // its own preselection effects (no implicit fallback) and validates the
   // type's FULL field set (customer-hidden fields included).
@@ -316,7 +321,7 @@ export function CreateTicketDialog({
       {
         // A chosen registry type DERIVES the category server-side (the legacy
         // bare-category path only remains for a typeless workspace).
-        type: selectedType ? undefined : fromConversation ? 'customer' : type,
+        type: selectedType ? undefined : type,
         ticketTypeId: (selectedType?.id ?? undefined) as TicketTypeId | undefined,
         title: title.trim(),
         description: description || undefined,
@@ -384,7 +389,7 @@ export function CreateTicketDialog({
         <div className="space-y-4">
           {/* The type picker: registry types when the workspace has them
               (always, post-0215 — unless every one is archived), else the
-              legacy bare-category picker in the standalone flow. */}
+              legacy bare-category picker. */}
           {candidates.length > 0 ? (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -414,11 +419,9 @@ export function CreateTicketDialog({
                       <span className="flex items-center gap-2">
                         <span aria-hidden>{t.icon}</span>
                         <span>{t.name}</span>
-                        {!fromConversation && (
-                          <span className="text-muted-foreground">
-                            · {ticketTypeLabel(t.category)}
-                          </span>
-                        )}
+                        <span className="text-muted-foreground">
+                          · {ticketTypeLabel(t.category)}
+                        </span>
                       </span>
                     </SelectItem>
                   ))}
@@ -426,23 +429,21 @@ export function CreateTicketDialog({
               </Select>
             </div>
           ) : (
-            !fromConversation && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Type</label>
-                <Select value={type} onValueChange={(v) => setType(v as TicketType)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TICKET_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {ticketTypeLabel(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Type</label>
+              <Select value={type} onValueChange={(v) => setType(v as TicketType)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TICKET_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {ticketTypeLabel(t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           <div className="space-y-1.5">
