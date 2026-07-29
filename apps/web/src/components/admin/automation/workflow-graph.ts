@@ -342,6 +342,10 @@ export const CONDITION_FIELD_META: Record<ConditionField, ConditionFieldMeta> = 
     kind: 'text',
     placeholder: 'name@example.com',
   },
+  // The workspace's ticket-type registry is live, so — like conversation.team
+  // above — resolveConditionField fills `options` in from the `ticketTypes`
+  // map it's passed rather than any fixed set here.
+  'ticket.type': { label: 'Ticket type', kind: 'choice' },
   office_hours: { label: 'Within office hours', kind: 'boolean' },
   'csat.rating': { label: 'CSAT rating', kind: 'number' },
 }
@@ -351,8 +355,8 @@ export const CONDITION_FIELD_LIST = Object.keys(CONDITION_FIELD_META) as StaticC
 /**
  * The static field picker organized by entity group (RuleGroupBuilder,
  * consumed by condition-editor.tsx / branch-editor.tsx's paths / the
- * trigger's Audience section): Conversation / Message / Person / Availability
- * — the dynamic attribute groups (Conversation attribute / Person attribute /
+ * trigger's Audience section): Conversation / Message / Person / Ticket /
+ * Availability — the dynamic attribute groups (Conversation attribute / Person attribute /
  * Company attribute) render as their own SelectGroups alongside these, keyed
  * off the live registries instead of this static catalogue. A Record (not a
  * loop over CONDITION_FIELD_LIST) so a newly added static field fails
@@ -371,6 +375,7 @@ export const STATIC_CONDITION_FIELD_GROUP: Record<StaticConditionField, string> 
   'message.sender': 'Message',
   'person.segments': 'Person',
   'person.email': 'Person',
+  'ticket.type': 'Ticket',
   office_hours: 'Availability',
 }
 
@@ -381,6 +386,7 @@ export const CONDITION_FIELD_GROUP_ORDER = [
   'Conversation',
   'Message',
   'Person',
+  'Ticket',
   'Availability',
 ] as const
 
@@ -596,15 +602,17 @@ export interface ResolvedConditionField {
 /** Field metadata for the static catalogue and all three attribute-field
  *  groups, the single place the visual editor and the canvas/outline
  *  summaries resolve a field's label / operators / value options from.
- *  `teams` fills in conversation.team's options (id -> name, from the live
- *  team list) since it — unlike the rest of the static catalogue — has no
- *  fixed option set. */
+ *  `teams` and `ticketTypes` fill in conversation.team's and ticket.type's
+ *  options (id -> name, from the live team list / ticket-type registry) since
+ *  they — unlike the rest of the static catalogue — have no fixed option
+ *  set. */
 export function resolveConditionField(
   field: ConditionField,
   attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
   teams: ReadonlyMap<string, string> = new Map(),
   personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map()
+  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
+  ticketTypes: ReadonlyMap<string, string> = new Map()
 ): ResolvedConditionField {
   if (isAttributeField(field)) {
     const key = attributeKeyFromField(field)
@@ -644,10 +652,11 @@ export function resolveConditionField(
     }
   }
   const meta = CONDITION_FIELD_META[field]
-  const options =
-    field === 'conversation.team'
-      ? Array.from(teams, ([value, label]) => ({ value, label }))
-      : meta.options
+  const liveOptions =
+    field === 'conversation.team' ? teams : field === 'ticket.type' ? ticketTypes : null
+  const options = liveOptions
+    ? Array.from(liveOptions, ([value, label]) => ({ value, label }))
+    : meta.options
   return {
     label: meta.label,
     kind: meta.kind,
@@ -2387,14 +2396,16 @@ function ruleSummary(
   attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
   teams: ReadonlyMap<string, string> = new Map(),
   personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map()
+  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
+  ticketTypes: ReadonlyMap<string, string> = new Map()
 ): string {
   const meta = resolveConditionField(
     rule.field,
     attributes,
     teams,
     personAttributes,
-    companyAttributes
+    companyAttributes,
+    ticketTypes
   )
   const op = OPERATOR_LABELS[rule.op]
   if (VALUELESS_OPERATORS.has(rule.op)) return `${meta.label} ${op}`
@@ -2423,10 +2434,18 @@ function ruleGroupSummary(
   attributes: ReadonlyMap<string, AttributeFieldDef>,
   teams: ReadonlyMap<string, string>,
   personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef>,
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef>
+  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef>,
+  ticketTypes: ReadonlyMap<string, string>
 ): string {
   if (group.rules.length === 0) return 'matches everything'
-  const first = ruleSummary(group.rules[0]!, attributes, teams, personAttributes, companyAttributes)
+  const first = ruleSummary(
+    group.rules[0]!,
+    attributes,
+    teams,
+    personAttributes,
+    companyAttributes,
+    ticketTypes
+  )
   if (group.rules.length === 1) return first
   return `${first} +${group.rules.length - 1} more`
 }
@@ -2443,7 +2462,8 @@ export function conditionSummary(
   attributes: ReadonlyMap<string, AttributeFieldDef> = new Map(),
   teams: ReadonlyMap<string, string> = new Map(),
   personAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
-  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map()
+  companyAttributes: ReadonlyMap<string, PersonCompanyAttributeFieldDef> = new Map(),
+  ticketTypes: ReadonlyMap<string, string> = new Map()
 ): string {
   const draft = conditionToGroupDraft(condition)
   if (draft.kind === 'advanced') return 'Custom condition'
@@ -2452,7 +2472,7 @@ export function conditionSummary(
   }
   const only = draft.groups[0]
   if (!only || only.rules.length === 0) return 'Matches everything'
-  return ruleGroupSummary(only, attributes, teams, personAttributes, companyAttributes)
+  return ruleGroupSummary(only, attributes, teams, personAttributes, companyAttributes, ticketTypes)
 }
 
 export const WAIT_UNITS = [
@@ -2900,7 +2920,8 @@ function stepLabel(step: TreeStep, labels: EntityLabels): string {
         labels.attributes,
         labels.teams,
         labels.personAttributes,
-        labels.companyAttributes
+        labels.companyAttributes,
+        labels.ticketTypes
       )
     case 'wait':
       return waitSummary(step.seconds)

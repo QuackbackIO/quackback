@@ -10,10 +10,10 @@ import { walkWorkflow, type WorkflowGraph } from '../graph'
 import type { ConditionContext, BlockAnswer, AssistantOutcome } from '../condition.evaluator'
 import { makeConditionContext } from './workflow-test-utils'
 
-// This suite only ever branches on conversation.priority (see every `field:`
-// literal below), so the shared builder's message/person/company/attributes
-// defaults are inert here — passed through unread, same as the previous
-// hand-rolled literal that omitted them (undefined) entirely.
+// This suite only ever branches on conversation.priority and ticket.type (see
+// every `field:` literal below), so the shared builder's
+// message/person/company/attributes defaults are inert here — passed through
+// unread, same as a hand-rolled literal omitting them entirely would be.
 const ctx = (over: Partial<ConditionContext['conversation']> = {}): ConditionContext =>
   makeConditionContext({
     conversation: {
@@ -55,6 +55,54 @@ describe('walkWorkflow', () => {
     const res = walkWorkflow(graph, ctx())
     expect(res.status).toBe('completed')
     expect(res.actions).toEqual([{ type: 'set_priority', priority: 'urgent' }, { type: 'close' }])
+  })
+
+  it('a branch routes on the triggering ticket type, and halts when there is no ticket', () => {
+    const graph: WorkflowGraph = {
+      nodes: [
+        { id: 't', type: 'trigger' },
+        {
+          id: 'b',
+          type: 'branch',
+          branches: [
+            { key: 'bug', condition: { field: 'ticket.type', op: 'eq', value: 'ticket_type_bug' } },
+            {
+              key: 'billing',
+              condition: { field: 'ticket.type', op: 'eq', value: 'ticket_type_billing' },
+            },
+          ],
+        },
+        {
+          id: 'a_bug',
+          type: 'action',
+          action: { type: 'assign_team', teamId: 'team_eng' as never },
+        },
+        {
+          id: 'a_billing',
+          type: 'action',
+          action: { type: 'assign_team', teamId: 'team_finance' as never },
+        },
+      ],
+      edges: [
+        { from: 't', to: 'b' },
+        { from: 'b', to: 'a_bug', branch: 'bug' },
+        { from: 'b', to: 'a_billing', branch: 'billing' },
+      ],
+    }
+    const withTicket = (ticket: ConditionContext['ticket']) => ({ ...ctx(), ticket })
+
+    expect(walkWorkflow(graph, withTicket({ typeId: 'ticket_type_bug' }))).toMatchObject({
+      status: 'completed',
+      actions: [{ type: 'assign_team', teamId: 'team_eng' }],
+    })
+    expect(walkWorkflow(graph, withTicket({ typeId: 'ticket_type_billing' }))).toMatchObject({
+      status: 'completed',
+      actions: [{ type: 'assign_team', teamId: 'team_finance' }],
+    })
+    // No paired ticket at all (a conversation trigger, or a ticket-less
+    // conversation): every path is a non-match, so the walk halts rather than
+    // falling into an arbitrary branch.
+    expect(walkWorkflow(graph, withTicket(null))).toMatchObject({ status: 'halted' })
   })
 
   it('a condition gate continues when it holds and halts when it does not', () => {

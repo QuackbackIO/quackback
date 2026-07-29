@@ -17,8 +17,24 @@
  * absent subject, so no special-casing is needed here beyond returning an
  * attribute-less snapshot. That join is skippable (`opts.resolvePersonCompany`
  * below) when the caller already knows nothing will ever read it.
+ *
+ * `ticket` (ticket.type) is resolved the same way, from the conversation's
+ * paired CUSTOMER ticket (resolveTicketContext below) and behind its own
+ * skip flag (`opts.resolveTicket`). Resolving it from the conversation rather
+ * than from the trigger's payload is what makes it survive a resume: a run
+ * parked at a wait re-resolves its snapshot from the conversation alone.
  */
-import { db, eq, conversations, principal, user, companies } from '@/lib/server/db'
+import {
+  db,
+  and,
+  eq,
+  conversations,
+  principal,
+  user,
+  companies,
+  tickets,
+  ticketConversations,
+} from '@/lib/server/db'
 import type { ConversationId, PrincipalId } from '@quackback/ids'
 import { listTagsForConversation } from '@/lib/server/domains/conversation/conversation-tag.service'
 import { segmentIdsForPrincipal } from '@/lib/server/domains/segments/segment-membership.service'
@@ -74,6 +90,35 @@ async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
 }
 
 /**
+ * The CUSTOMER ticket paired with `conversationId`, as the snapshot's `ticket`
+ * branch. The pair is 1:1 (ticket_conversations' two partial unique indexes —
+ * see pair-thread.service.ts's PAIR RULE), so for a ticket trigger — whose
+ * conversation was itself resolved FROM the ticket — this reads back the very
+ * ticket that fired the workflow, and it keeps reading it on a resume, where
+ * the trigger's own payload is long gone. One indexed lookup on
+ * ticket_conversations' conversation index, joined to the ticket for its type.
+ * Null when the conversation has no customer ticket.
+ */
+async function resolveTicketContext(
+  conversationId: ConversationId
+): Promise<ConditionContext['ticket']> {
+  const [row] = await db
+    .select({ ticketTypeId: tickets.ticketTypeId })
+    .from(ticketConversations)
+    .innerJoin(tickets, eq(tickets.id, ticketConversations.ticketId))
+    .where(
+      and(
+        eq(ticketConversations.conversationId, conversationId),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
+    .limit(1)
+  // A ticket predating the type registry has no ticketTypeId; `ticket.type`
+  // reads unresolved either way, so the two cases need no distinction.
+  return row ? { typeId: row.ticketTypeId } : null
+}
+
+/**
  * Build the condition snapshot for a conversation at instant `at` (default now).
  * Returns null when the conversation is gone. `opts.message` is the triggering
  * message body, if the trigger carried one.
@@ -103,10 +148,21 @@ export async function resolveConditionContext(
      * NEW join this flag controls.
      */
     resolvePersonCompany?: boolean
+    /**
+     * Whether to look the paired customer ticket up at all. Default true.
+     * Same shape and same rationale as `resolvePersonCompany` above: the
+     * dispatcher already holds every live workflow for this trigger, so it
+     * skips the lookup when none of them reads `ticket.type` — an unpaired
+     * snapshot is indistinguishable from a conversation with no customer
+     * ticket, which the evaluator's unresolved-subject contract already
+     * handles.
+     */
+    resolveTicket?: boolean
   } = {}
 ): Promise<ConditionContext | null> {
   const at = opts.at ?? new Date()
   const resolvePersonCompany = opts.resolvePersonCompany ?? true
+  const resolveTicket = opts.resolveTicket ?? true
   const [conv] = await db
     .select({
       status: conversations.status,
@@ -126,13 +182,14 @@ export async function resolveConditionContext(
   // Independent reads — run them together. Office hours come from the
   // workspace settings-blob schedule (the canonical hours source), evaluated
   // 24/7-open when disabled.
-  const [tags, segmentIds, officeHoursSchedule, personCompany] = await Promise.all([
+  const [tags, segmentIds, officeHoursSchedule, personCompany, ticket] = await Promise.all([
     listTagsForConversation(conversationId),
     segmentIdsForPrincipal(conv.visitorPrincipalId),
     getOfficeHoursSchedule(),
     resolvePersonCompany
       ? resolvePersonCompanyContext(conv.visitorPrincipalId)
       : Promise.resolve(UNRESOLVED_PERSON_COMPANY),
+    resolveTicket ? resolveTicketContext(conversationId) : Promise.resolve(null),
   ])
   const officeHours = isWithinOfficeHours(officeHoursSchedule, at)
 
@@ -159,6 +216,7 @@ export async function resolveConditionContext(
       attributes: personCompany.person.attributes,
     },
     company: personCompany.company,
+    ticket,
     officeHours,
     csatRating: conv.csatRating ?? null,
     blockAnswer: opts.blockAnswer ?? null,

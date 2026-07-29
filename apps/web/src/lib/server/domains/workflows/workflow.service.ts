@@ -9,9 +9,10 @@
  * SPEC.md Phase 2): the assistant domain's cost gate for the mid-conversation
  * attribute re-check — see that function's doc.
  */
-import { db, eq, and, isNull, asc, workflows, type Workflow } from '@/lib/server/db'
+import { db, eq, and, isNull, inArray, asc, workflows, type Workflow } from '@/lib/server/db'
 import type { WorkflowClass, WorkflowStatus } from '@/lib/server/db'
 import type { WorkflowId, PrincipalId } from '@quackback/ids'
+import { positionCaseSql } from '@/lib/server/utils'
 import type { WorkflowGraph, WorkflowNode } from './graph'
 import { ATTRIBUTE_FIELD_PREFIX, type WorkflowCondition } from './condition.evaluator'
 import {
@@ -159,6 +160,32 @@ export async function setWorkflowStatus(id: WorkflowId, status: WorkflowStatus):
     .returning()
   invalidateHasLiveWorkflowCache()
   return row
+}
+
+/**
+ * Rewrite `sortOrder` to match the given order, in one batch UPDATE. This is
+ * the drag-reorder write behind the manager's priority list, and it is what
+ * decides which customer_facing workflow wins the exclusive first-match slot
+ * for a trigger (see listLiveWorkflowsForTrigger and the dispatcher).
+ *
+ * `ids` is one trigger group as the manager displays it, so positions are
+ * dense within that group only: sortOrder is compared per trigger by every
+ * reader that cares, never across triggers, so two groups holding the same
+ * positions is meaningless rather than ambiguous. Workflows outside `ids`
+ * keep the sortOrder they have.
+ *
+ * No version snapshot: order is not a graph state anyone rolls back to (see
+ * updateWorkflow's doc, which skips versioning a sortOrder-only patch for the
+ * same reason). `updatedAt` holds still for the same reason — the manager
+ * shows it as each workflow's last edit, and priority belongs to the group
+ * rather than to any workflow whose definition it leaves untouched.
+ */
+export async function reorderWorkflows(ids: WorkflowId[]): Promise<void> {
+  if (ids.length === 0) return
+  await db
+    .update(workflows)
+    .set({ sortOrder: positionCaseSql(workflows.id, ids) })
+    .where(and(inArray(workflows.id, ids), isNull(workflows.deletedAt)))
 }
 
 /** Soft-delete: runs cascade on a hard delete, so soft-delete preserves history. */

@@ -67,6 +67,13 @@ export interface ConditionContext {
      *  person.attributes. */
     attributes?: Record<string, unknown>
   } | null
+  /** The CUSTOMER ticket paired with the conversation — for a ticket trigger,
+   *  the very ticket that fired the workflow (the pair is 1:1, so resolving it
+   *  back from the conversation the trigger resolved cannot land on a
+   *  different ticket). Null when the conversation has no customer ticket, or
+   *  when the caller skipped the resolution; either way `ticket.type` reads as
+   *  unresolved (MISSING). */
+  ticket?: { typeId: string | null } | null
   /** Whether the workspace is within office hours at evaluation time. */
   officeHours?: boolean | null
   /** The conversation's last CSAT rating (1-5), or null. */
@@ -130,8 +137,8 @@ export type WorkflowCondition = ConditionLeaf | ConditionGroup
  * Recursively test whether ANY leaf field in a condition tree (leaf or
  * all/any group, arbitrarily nested) satisfies `predicate` — shared by
  * anything that needs to know IF a condition tree references a certain KIND
- * of field without caring which specific one (e.g. dispatcher.ts's
- * person/company join gate). Kept here rather than duplicated per caller so
+ * of field without caring which specific one (e.g. dispatcher.ts's gates on
+ * the optional pieces of the snapshot). Kept here rather than duplicated per caller so
  * a future group shape (this module's own recursion) can't drift from
  * evaluateCondition's own walk.
  */
@@ -163,6 +170,7 @@ export const CONDITION_FIELDS = [
   'message.sender',
   'person.segments',
   'person.email',
+  'ticket.type',
   'office_hours',
   'csat.rating',
 ] as const
@@ -232,6 +240,12 @@ function resolveField(field: string, ctx: ConditionContext): unknown {
     // isUnresolved — either way `person.email` is a non-match except is_empty.
     case 'person.email':
       return ctx.person?.email
+    // The workspace-defined ticket type (ticket_types.id), not the coarse
+    // category axis. No paired ticket, and a ticket predating the type
+    // registry, both resolve null — one unresolved subject either way, so
+    // `is_empty` is the way to test "no ticket type".
+    case 'ticket.type':
+      return ctx.ticket?.typeId ?? null
     case 'office_hours':
       return ctx.officeHours ?? null
     case 'csat.rating':

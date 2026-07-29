@@ -14,6 +14,24 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Bars3Icon } from '@heroicons/react/24/solid'
+import {
   ArrowPathIcon,
   BoltIcon,
   ChatBubbleLeftRightIcon,
@@ -39,6 +57,7 @@ import {
   useCreateWorkflow,
   useSetWorkflowStatus,
   useDeleteWorkflow,
+  useReorderWorkflows,
 } from '@/lib/client/mutations/workflows'
 import {
   collectStepIssues,
@@ -51,6 +70,7 @@ import { WorkflowTemplateGallery } from './workflow-template-gallery'
 import type { WorkflowTemplate } from './workflow-templates'
 import { WorkflowRunsSheet } from './workflow-runs-sheet'
 import { cn } from '@/lib/shared/utils'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -204,6 +224,38 @@ type EffectivenessMetrics = {
 }
 type EffectivenessMap = Map<string, EffectivenessMetrics>
 
+/**
+ * The group's ids after dropping `activeId` onto `overId`, or null when the
+ * drop is a no-op (same slot, or an id the group doesn't hold) and there is
+ * nothing to persist.
+ */
+export function reorderGroup(
+  ids: readonly string[],
+  activeId: string,
+  overId: string
+): string[] | null {
+  const from = ids.indexOf(activeId)
+  const to = ids.indexOf(overId)
+  if (from === -1 || to === -1 || from === to) return null
+  return arrayMove([...ids], from, to)
+}
+
+/**
+ * Each workflow's position in the race for a trigger's single customer-facing
+ * first-match slot: the dispatcher tries live customer-facing workflows in
+ * stored order and stops at the first that runs, so only those are ranked.
+ * A paused or draft workflow can't win the slot and a background workflow
+ * never competes for it, so neither takes a rank. Empty below two contenders,
+ * where a lone winner has no priority worth showing.
+ */
+export function firstMatchRanks(items: readonly WorkflowDTO[]): Map<string, number> {
+  const ranks = new Map<string, number>()
+  const contenders = items.filter((wf) => wf.class === 'customer_facing' && wf.status === 'live')
+  if (contenders.length < 2) return ranks
+  contenders.forEach((wf, i) => ranks.set(wf.id, i + 1))
+  return ranks
+}
+
 export function WorkflowsManager() {
   const navigate = useNavigate()
   const { data: workflows } = useQuery(workflowsQuery())
@@ -211,6 +263,11 @@ export function WorkflowsManager() {
   const create = useCreateWorkflow()
   const setStatus = useSetWorkflowStatus()
   const del = useDeleteWorkflow()
+  const reorder = useReorderWorkflows()
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'any' | StatusValue>('any')
@@ -291,6 +348,23 @@ export function WorkflowsManager() {
       onSuccess: () => setDeleting(null),
       onError: () => toast.error('Could not delete workflow'),
     })
+  }
+
+  // A narrowed list shows a subset of each group in the same visual order, so a
+  // drop inside it would silently decide the priority of rows it isn't showing.
+  // Reordering is therefore only offered on the unfiltered list.
+  const isFiltered = search.trim() !== '' || statusFilter !== 'any' || typeFilter !== 'any'
+
+  const handleDragEnd = (items: WorkflowDTO[], event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over) return
+    const ids = reorderGroup(
+      items.map((wf) => wf.id),
+      String(active.id),
+      String(over.id)
+    )
+    if (!ids) return
+    reorder.mutate({ ids }, { onError: () => toast.error('Could not save the new priority') })
   }
 
   const hasAnyWorkflows = (workflows?.length ?? 0) > 0
@@ -378,24 +452,47 @@ export function WorkflowsManager() {
           No workflows match these filters.
         </div>
       ) : (
-        groups.map((group) => (
-          <div key={group.trigger.value}>
-            <GroupHeader trigger={group.trigger} count={group.items.length} />
-            <div className="divide-y rounded-lg border">
-              {group.items.map((wf) => (
-                <WorkflowRow
-                  key={wf.id}
-                  workflow={wf}
-                  metrics={metricsByWorkflow.get(wf.id)}
-                  onNavigate={goToBuilder}
-                  onSetStatus={handleSetStatus}
-                  onDelete={setDeleting}
-                  onViewRuns={setRunsWorkflow}
-                />
-              ))}
+        groups.map((group) => {
+          const ranks = firstMatchRanks(group.items)
+          return (
+            <div key={group.trigger.value}>
+              <GroupHeader
+                trigger={group.trigger}
+                count={group.items.length}
+                contested={ranks.size > 0}
+              />
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event) => handleDragEnd(group.items, event)}
+              >
+                <SortableContext
+                  items={group.items.map((wf) => wf.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="divide-y rounded-lg border">
+                    {group.items.map((wf) => (
+                      <WorkflowRow
+                        key={wf.id}
+                        workflow={wf}
+                        metrics={metricsByWorkflow.get(wf.id)}
+                        rank={ranks.get(wf.id)}
+                        contested={ranks.size > 0}
+                        reorder={
+                          group.items.length < 2 ? 'none' : isFiltered ? 'filtered' : 'enabled'
+                        }
+                        onNavigate={goToBuilder}
+                        onSetStatus={handleSetStatus}
+                        onDelete={setDeleting}
+                        onViewRuns={setRunsWorkflow}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
-          </div>
-        ))
+          )
+        })
       )}
 
       <WorkflowTemplateGallery
@@ -427,7 +524,17 @@ export function WorkflowsManager() {
   )
 }
 
-function GroupHeader({ trigger, count }: { trigger: TriggerMeta; count: number }) {
+function GroupHeader({
+  trigger,
+  count,
+  contested,
+}: {
+  trigger: TriggerMeta
+  count: number
+  /** Two or more live customer-facing workflows share this trigger's single
+   *  first-match slot, so their order is a rule and not just a listing. */
+  contested: boolean
+}) {
   const Icon = trigger.icon
   return (
     <div className="mt-6 mb-2 flex items-center gap-2 text-sm font-semibold first:mt-0">
@@ -438,6 +545,11 @@ function GroupHeader({ trigger, count }: { trigger: TriggerMeta; count: number }
       </span>
       {trigger.label}
       <span className="font-normal text-muted-foreground">· {count}</span>
+      {contested && (
+        <span className="ml-auto text-xs font-normal text-muted-foreground">
+          Customer-facing: first match wins · drag to set priority
+        </span>
+      )}
     </div>
   )
 }
@@ -459,6 +571,9 @@ function rowIssue(graph: unknown, workflowClass: WorkflowDTO['class']): string |
 function WorkflowRow({
   workflow,
   metrics,
+  rank,
+  contested,
+  reorder,
   onNavigate,
   onSetStatus,
   onDelete,
@@ -466,6 +581,15 @@ function WorkflowRow({
 }: {
   workflow: WorkflowDTO
   metrics: EffectivenessMetrics | undefined
+  /** First-match priority within the trigger group, when this workflow is in
+   *  the race for the slot at all (see firstMatchRanks). */
+  rank: number | undefined
+  /** The group ranks its contenders, so unranked rows hold the rank slot open
+   *  and every name in the group stays on one line. */
+  contested: boolean
+  /** 'none' for a group of one, which has no order to set; 'filtered' while the
+   *  list is narrowed, where a drop would silently reprioritize hidden rows. */
+  reorder: 'enabled' | 'filtered' | 'none'
   onNavigate: (id: string) => void
   onSetStatus: (id: string, status: StatusValue) => void
   onDelete: (workflow: WorkflowDTO) => void
@@ -478,19 +602,67 @@ function WorkflowRow({
   const started = metrics?.started ?? 0
   const completed = metrics?.completed ?? 0
   const isCustomerFacing = workflow.class === 'customer_facing'
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: workflow.id,
+    disabled: reorder !== 'enabled',
+  })
 
   return (
     <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       role="button"
       tabIndex={0}
       onClick={() => onNavigate(workflow.id)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') onNavigate(workflow.id)
       }}
-      className="grid cursor-pointer grid-cols-[minmax(0,1fr)_92px_130px_110px_36px] items-center gap-3 px-4 py-3 hover:bg-muted/40"
+      className={cn(
+        // The funnel line under the run count sets the metrics column width:
+        // it reads as one line or not at all.
+        'group relative grid cursor-pointer grid-cols-[20px_minmax(0,1fr)_92px_130px_210px_36px] items-center gap-3 bg-background px-4 py-3 hover:bg-muted/40',
+        isDragging && 'z-10 shadow-lg'
+      )}
     >
+      {/* The handle carries the drag listeners, not the row: the row itself is
+          the click target for the builder. The empty slot a group of one keeps
+          holds every group's columns on the same grid. */}
+      {reorder === 'none' ? (
+        <span aria-hidden />
+      ) : (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+          disabled={reorder === 'filtered'}
+          aria-label={`Reorder ${workflow.name}`}
+          title={reorder === 'filtered' ? 'Clear the filters to reorder' : 'Drag to set priority'}
+          className="flex size-5 touch-none items-center justify-center rounded text-muted-foreground/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground/50 enabled:cursor-grab enabled:hover:bg-muted enabled:active:cursor-grabbing"
+        >
+          <Bars3Icon className="size-3.5" />
+        </button>
+      )}
+
       <div className="min-w-0">
         <div className="flex items-center gap-2">
+          {rank !== undefined ? (
+            <Badge
+              data-testid="first-match-rank"
+              size="sm"
+              variant={rank === 1 ? 'default' : 'secondary'}
+              className="size-5 shrink-0 px-0 tabular-nums"
+              title={
+                rank === 1
+                  ? 'First match for this trigger'
+                  : `Runs only if the ${rank - 1} above it do not match`
+              }
+            >
+              {rank}
+            </Badge>
+          ) : (
+            contested && <span aria-hidden className="size-5 shrink-0" />
+          )}
           <span className="truncate text-sm font-semibold">{workflow.name}</span>
           {issue && (
             <span

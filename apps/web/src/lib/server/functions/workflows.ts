@@ -20,6 +20,7 @@ import {
   updateWorkflow,
   setWorkflowStatus,
   softDeleteWorkflow,
+  reorderWorkflows,
 } from '@/lib/server/domains/workflows/workflow.service'
 import {
   listWorkflowVersions,
@@ -108,6 +109,7 @@ const updateSchema = z.object({
 })
 const setStatusSchema = z.object({ id: z.string(), status: z.enum(['draft', 'live', 'paused']) })
 const idSchema = z.object({ id: z.string() })
+const reorderSchema = z.object({ ids: z.array(z.string()).min(1) })
 
 export const listWorkflowsFn = createServerFn({ method: 'GET' }).handler(async () => {
   await requireAuth({ permission: PERMISSIONS.ROUTING_MANAGE })
@@ -199,6 +201,19 @@ export const setWorkflowStatusFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<WorkflowDTO> => {
     await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
     return serializeWorkflow(await setWorkflowStatus(data.id as WorkflowId, data.status))
+  })
+
+/**
+ * Persist one trigger group's drag order. Ordering is what picks the winner of
+ * the exclusive customer-facing first-match slot, so this is a `workflow.manage`
+ * write like any other lifecycle change.
+ */
+export const reorderWorkflowsFn = createServerFn({ method: 'POST' })
+  .validator(reorderSchema)
+  .handler(async ({ data }): Promise<{ ids: string[] }> => {
+    await requireAuth({ permission: PERMISSIONS.WORKFLOW_MANAGE })
+    await reorderWorkflows(data.ids as WorkflowId[])
+    return { ids: data.ids }
   })
 
 export const deleteWorkflowFn = createServerFn({ method: 'POST' })

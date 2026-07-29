@@ -105,6 +105,36 @@ describe('evaluateCondition — leaves', () => {
     ok({ field: 'conversation.team', op: 'is_empty' }, unassigned)
   })
 
+  it('ticket.type: eq / neq / is_set / is_empty on the triggering ticket', () => {
+    ok({ field: 'ticket.type', op: 'eq', value: 'ticket_type_bug' })
+    no({ field: 'ticket.type', op: 'eq', value: 'ticket_type_billing' })
+    ok({ field: 'ticket.type', op: 'neq', value: 'ticket_type_billing' })
+    no({ field: 'ticket.type', op: 'neq', value: 'ticket_type_bug' })
+    ok({ field: 'ticket.type', op: 'is_set' })
+    no({ field: 'ticket.type', op: 'is_empty' })
+    ok({ field: 'ticket.type', op: 'includes_any', value: ['ticket_type_bug', 'ticket_type_ask'] })
+    no({ field: 'ticket.type', op: 'includes_any', value: ['ticket_type_ask'] })
+  })
+
+  it('ticket.type is unresolved with no ticket, and for a ticket carrying no type', () => {
+    // A conversation-triggered workflow on a conversation with no customer
+    // ticket: per the null contract every operator is a non-match — including
+    // neq, so a ticket rule never silently fires off a ticketless run — and
+    // is_empty is the deliberate "no ticket type" test.
+    const noTicket = baseCtx({ ticket: null })
+    no({ field: 'ticket.type', op: 'eq', value: 'ticket_type_bug' }, noTicket)
+    no({ field: 'ticket.type', op: 'neq', value: 'ticket_type_bug' }, noTicket)
+    no({ field: 'ticket.type', op: 'is_set' }, noTicket)
+    ok({ field: 'ticket.type', op: 'is_empty' }, noTicket)
+
+    // A ticket predating the type registry carries no type id at all — the
+    // same unresolved subject as having no ticket.
+    const untyped = baseCtx({ ticket: { typeId: null } })
+    no({ field: 'ticket.type', op: 'eq', value: 'ticket_type_bug' }, untyped)
+    no({ field: 'ticket.type', op: 'neq', value: 'ticket_type_bug' }, untyped)
+    ok({ field: 'ticket.type', op: 'is_empty' }, untyped)
+  })
+
   it('is defensive: unknown field and type-mismatched compares never match', () => {
     no({ field: 'nope.unknown', op: 'eq', value: 'x' })
     no({ field: 'conversation.status', op: 'gt', value: 3 }) // 'open' is not numeric

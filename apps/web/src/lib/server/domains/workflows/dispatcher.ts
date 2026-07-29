@@ -53,17 +53,23 @@ import type { WorkflowNode } from './graph'
 
 const log = logger.child({ component: 'workflow-dispatcher' })
 
-/** Whether `field` names one of the fields condition.context.ts's NEW
+/** Whether `field` names one of the fields condition.context.ts's
  *  person/company join (resolvePersonCompanyContext) is the only resolver
- *  for. Deliberately excludes `person.segments` — that's a pre-existing,
- *  separate, unconditional resolution (segmentIdsForPrincipal), not part of
- *  what this gate controls. */
+ *  for. Deliberately excludes `person.segments` — that's a separate,
+ *  unconditional resolution (segmentIdsForPrincipal), not part of what this
+ *  gate controls. */
 function needsPersonOrCompanyJoin(field: string): boolean {
   return (
     field === 'person.email' ||
     field.startsWith(PERSON_ATTRIBUTE_FIELD_PREFIX) ||
     field.startsWith(COMPANY_ATTRIBUTE_FIELD_PREFIX)
   )
+}
+
+/** Whether `field` names one of the fields condition.context.ts's paired-
+ *  ticket lookup (resolveTicketContext) is the only resolver for. */
+function needsTicketLookup(field: string): boolean {
+  return field === 'ticket.type'
 }
 
 /** Read a stored graph defensively, same "malformed shape contributes
@@ -76,16 +82,13 @@ function readGraphNodes(graph: unknown): WorkflowNode[] {
 }
 
 /** Whether ANY node in `graph` (a standalone `condition` gate, or any branch
- *  of a `branch` node) references a person/company field the join above
- *  resolves. */
-function graphReferencesPersonOrCompany(graph: unknown): boolean {
+ *  of a `branch` node) references a field `predicate` names. */
+function graphReferencesField(graph: unknown, predicate: (field: string) => boolean): boolean {
   for (const node of readGraphNodes(graph)) {
-    if (node.type === 'condition' && someConditionField(node.condition, needsPersonOrCompanyJoin)) {
-      return true
-    }
+    if (node.type === 'condition' && someConditionField(node.condition, predicate)) return true
     if (
       node.type === 'branch' &&
-      node.branches.some((b) => someConditionField(b.condition, needsPersonOrCompanyJoin))
+      node.branches.some((b) => someConditionField(b.condition, predicate))
     ) {
       return true
     }
@@ -94,15 +97,19 @@ function graphReferencesPersonOrCompany(graph: unknown): boolean {
 }
 
 /**
- * Whether resolving THIS batch of live workflows ever needs
- * condition.context.ts's person/company join — walked once per dispatch
- * (not cached: `live` is already a fresh, small, per-trigger read) across
- * each workflow's audience condition and its graph's condition/branch nodes.
- * A workflow with neither never reads `person.attr.*` / `company.attr.*` /
- * `person.email`, so the join is pure waste for it; this lets the dispatcher
- * skip it entirely when NONE of the live workflows for a trigger do.
+ * Whether resolving THIS batch of live workflows ever reads a field
+ * `predicate` names — walked once per dispatch (not cached: `live` is already
+ * a fresh, small, per-trigger read) across each workflow's audience condition
+ * and its graph's condition/branch nodes. Each optional piece of the
+ * condition snapshot costs its own query, so a workflow that never names one
+ * of its fields must not pay for it; this is how the dispatcher decides to
+ * skip a resolution entirely when NONE of the live workflows for a trigger
+ * reads it.
  */
-function anyWorkflowNeedsPersonOrCompanyContext(live: readonly Workflow[]): boolean {
+function anyWorkflowReferencesField(
+  live: readonly Workflow[],
+  predicate: (field: string) => boolean
+): boolean {
   return live.some((wf) => {
     const audience = wf.triggerSettings?.audience
     if (
@@ -110,11 +117,11 @@ function anyWorkflowNeedsPersonOrCompanyContext(live: readonly Workflow[]): bool
       audience !== null &&
       typeof audience === 'object' &&
       !Array.isArray(audience) &&
-      someConditionField(audience as WorkflowCondition, needsPersonOrCompanyJoin)
+      someConditionField(audience as WorkflowCondition, predicate)
     ) {
       return true
     }
-    return graphReferencesPersonOrCompany(wf.graph)
+    return graphReferencesField(wf.graph, predicate)
   })
 }
 
@@ -239,14 +246,16 @@ export async function dispatchWorkflowTrigger(
   // when there are customer_facing workflows, probe the exclusive lock — both are
   // independent, so run them together. The hint (see DispatchWorkflowTriggerOpts)
   // skips the probe entirely when the caller already knows the answer. Whether
-  // to pay for the person/company join is decided off THIS batch of live
-  // workflows (see anyWorkflowNeedsPersonOrCompanyContext) — cheap and pure,
-  // so it doesn't need to join the Promise.all below.
-  const resolvePersonCompany = anyWorkflowNeedsPersonOrCompanyContext(live)
+  // to pay for the person/company join and the paired-ticket lookup is decided
+  // off THIS batch of live workflows (see anyWorkflowReferencesField) — cheap
+  // and pure, so neither needs to join the Promise.all below.
+  const resolvePersonCompany = anyWorkflowReferencesField(live, needsPersonOrCompanyJoin)
+  const resolveTicket = anyWorkflowReferencesField(live, needsTicketLookup)
   const [ctx, alreadyLocked] = await Promise.all([
     resolveConditionContext(trigger.conversationId, {
       message: trigger.message,
       resolvePersonCompany,
+      resolveTicket,
     }),
     customerFacing.length === 0
       ? Promise.resolve(false)

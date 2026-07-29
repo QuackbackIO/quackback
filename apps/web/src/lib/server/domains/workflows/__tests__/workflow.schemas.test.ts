@@ -239,6 +239,23 @@ describe('workflowGraphSchema', () => {
     expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
   })
 
+  it('accepts a branch node routing on ticket.type', () => {
+    const graph = {
+      nodes: [
+        {
+          id: 'b',
+          type: 'branch',
+          branches: [
+            { key: 'bug', condition: { field: 'ticket.type', op: 'eq', value: 'ticket_type_1' } },
+            { key: 'other', condition: { field: 'ticket.type', op: 'is_empty' } },
+          ],
+        },
+      ],
+      edges: [],
+    }
+    expect(workflowGraphSchema.safeParse(graph).success).toBe(true)
+  })
+
   it('rejects a condition with a typo/unknown field', () => {
     const typo = {
       nodes: [
