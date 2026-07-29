@@ -662,6 +662,16 @@ describe('AgentConversationThread — composer focus handle', () => {
     expect(document.activeElement).toBe(note)
   })
 
+  it('marks the composer box so the inbox Escape binding can find it from the editor', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const editor = await screen.findByTestId('editor')
+    expect(editor.closest('[data-inbox-composer]')).not.toBeNull()
+
+    // The marker follows the note composer too — the modes share one box.
+    act(() => composerRef.current?.focusComposer('note'))
+    expect(screen.getByTestId('editor').closest('[data-inbox-composer]')).not.toBeNull()
+  })
+
   it('focusComposer("reply") focuses the reply editor already showing, leaving the mode alone', async () => {
     const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
     await screen.findByTestId('editor')

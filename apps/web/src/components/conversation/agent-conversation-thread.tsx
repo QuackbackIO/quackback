@@ -1868,6 +1868,10 @@ export function AgentConversationThread({
               control, instead of a separate mode toggle floating above it.
               Enter sends; Shift+Enter inserts a newline. */}
           <div
+            // The host's keyboard layer scopes its Esc "leave the composer"
+            // binding to this box, so the marker has to enclose both editor
+            // modes and every control that can hold focus alongside them.
+            data-inbox-composer=""
             className={cn(
               'rounded-lg border px-3 py-2 focus-within:ring-2',
               noteMode || !capabilities.reply
