@@ -45,16 +45,28 @@ describe('<ChangelogTopViewed>', () => {
     expect(title.className).not.toMatch(/text-2xl|text-3xl/)
   })
 
-  it('keeps the remaining entries as compact detail rows below the headline tier', async () => {
+  it('shows only the entries that fit the headline card treatment, dropping the rest', async () => {
     hoisted.topViewedChangelogsFn.mockResolvedValue(ENTRIES)
     renderWithClient(<ChangelogTopViewed />)
 
     await screen.findByText('5,000')
-    expect(screen.getByText('Fourth entry')).toBeInTheDocument()
-    expect(screen.getByText('Fifth entry')).toBeInTheDocument()
-    // Detail rows still show their view counts, just not at headline size.
-    const detailCount = screen.getByText('400')
-    expect(detailCount.className).not.toMatch(/text-2xl|text-3xl/)
+    // Every rendered entry gets the same oversized-number card treatment,
+    // so entries that don't fit that layout are left off rather than
+    // rendered with a second, smaller encoding.
+    expect(screen.queryByText('Fourth entry')).not.toBeInTheDocument()
+    expect(screen.queryByText('Fifth entry')).not.toBeInTheDocument()
+    expect(screen.queryByText('400')).not.toBeInTheDocument()
+    expect(screen.queryByText('120')).not.toBeInTheDocument()
+  })
+
+  it('never mixes card and row encodings for entries within the same module', async () => {
+    hoisted.topViewedChangelogsFn.mockResolvedValue(ENTRIES)
+    const { container } = renderWithClient(<ChangelogTopViewed />)
+
+    await screen.findByText('5,000')
+    // A rank-numbered row layout is a different encoding than the headline
+    // cards; the module must not render both at once.
+    expect(container.querySelector('table')).not.toBeInTheDocument()
   })
 
   it('renders nothing while loading or when there is no data', () => {

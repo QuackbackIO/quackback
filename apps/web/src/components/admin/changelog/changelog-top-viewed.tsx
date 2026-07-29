@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { EyeIcon } from '@heroicons/react/24/outline'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/shared/utils'
 import { changelogQueries } from '@/lib/client/queries/changelog'
 import type { ChangelogId } from '@quackback/ids'
@@ -9,7 +8,12 @@ interface ChangelogTopViewedProps {
   onSelect?: (id: ChangelogId) => void
 }
 
-/** Number of entries promoted to the oversized headline tier. */
+/**
+ * Number of entries the headline card treatment can hold. Entries beyond
+ * this are left off the module rather than falling back to a second,
+ * smaller encoding — every entry shown here reads at the same visual
+ * weight.
+ */
 const HEADLINE_COUNT = 3
 
 const HEADLINE_GRID_CLASS: Record<number, string> = {
@@ -20,12 +24,11 @@ const HEADLINE_GRID_CLASS: Record<number, string> = {
 
 /**
  * Published changelog entries ranked by in-app view count, most-viewed
- * first. The top entries are promoted to a headline tier with an oversized
- * count so the highest view numbers read at a glance, before the remaining
- * entries are listed as compact detail rows. Draft/scheduled entries never
- * appear — a view can only be recorded once an entry is publicly reachable.
- * Email open/click tracking isn't counted here; it requires provider
- * webhooks the in-app counter doesn't have.
+ * first, rendered as a fixed-size row of oversized headline cards so every
+ * entry shares one visual encoding. Draft/scheduled entries never appear —
+ * a view can only be recorded once an entry is publicly reachable. Email
+ * open/click tracking isn't counted here; it requires provider webhooks
+ * the in-app counter doesn't have.
  */
 export function ChangelogTopViewed({ onSelect }: ChangelogTopViewedProps) {
   const { data, isLoading } = useQuery(changelogQueries.topViewed())
@@ -35,7 +38,6 @@ export function ChangelogTopViewed({ onSelect }: ChangelogTopViewedProps) {
   }
 
   const headline = data.slice(0, HEADLINE_COUNT)
-  const detail = data.slice(HEADLINE_COUNT)
 
   return (
     <div className="rounded-xl border border-border/50 bg-card overflow-hidden">
@@ -45,13 +47,7 @@ export function ChangelogTopViewed({ onSelect }: ChangelogTopViewedProps) {
         </span>
       </div>
 
-      <div
-        className={cn(
-          'grid divide-x divide-border/50',
-          HEADLINE_GRID_CLASS[headline.length],
-          detail.length > 0 && 'border-b border-border/50'
-        )}
-      >
+      <div className={cn('grid divide-x divide-border/50', HEADLINE_GRID_CLASS[headline.length])}>
         {headline.map((entry) => (
           <button
             key={entry.id}
@@ -72,35 +68,6 @@ export function ChangelogTopViewed({ onSelect }: ChangelogTopViewedProps) {
           </button>
         ))}
       </div>
-
-      {detail.length > 0 && (
-        <table className="w-full">
-          <tbody className="divide-y divide-border/50">
-            {detail.map((entry, index) => (
-              <tr
-                key={entry.id}
-                className="group cursor-pointer hover:bg-muted/20 transition-colors"
-                onClick={() => onSelect?.(entry.id)}
-              >
-                <td className="w-10 pl-4 py-2.5 text-sm tabular-nums text-muted-foreground/60">
-                  {HEADLINE_COUNT + index + 1}
-                </td>
-                <td className="py-2.5 pr-3 text-sm text-foreground truncate max-w-0 w-full">
-                  <span className="truncate block group-hover:underline underline-offset-2">
-                    {entry.title}
-                  </span>
-                </td>
-                <td className="pr-4 py-2.5 text-right">
-                  <Badge size="sm" variant="subtle" shape="pill">
-                    <EyeIcon className="size-2.5" />
-                    {entry.viewCount.toLocaleString()}
-                  </Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </div>
   )
 }
