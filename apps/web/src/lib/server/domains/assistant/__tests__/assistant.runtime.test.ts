@@ -1169,6 +1169,53 @@ describe('runAssistantTurn', () => {
       citationCandidates: 1,
       completionDisposition: 'answer',
     })
+    expect(lastLoggedMetadata?.citedSources).toEqual([{ type: 'article', id: 'kb_article_1' }])
+  })
+
+  it('logs citedSources with one entry per distinct source actually cited, dropping a hallucinated id', async () => {
+    mockRetrieve.mockResolvedValue([makeKbArticle('kb_article_1'), makeKbArticle('kb_article_2')])
+    mockChat.mockImplementation(
+      (opts: {
+        tools: Array<{ name: string; execute: (args: unknown, o: unknown) => Promise<unknown> }>
+        context: unknown
+      }) =>
+        (async function* () {
+          const search = opts.tools.find((t) => t.name === 'search')!
+          await search.execute(
+            { query: 'reset password' },
+            { context: opts.context, emitCustomEvent: () => {} }
+          )
+          const object = {
+            text: 'Use the reset link. [1][2][3]',
+            citations: [
+              { type: 'article', id: 'kb_article_1' },
+              // A duplicate reference to the same source collapses to one entry.
+              { type: 'article', id: 'kb_article_1' },
+              // A hallucinated id the ledger never surfaced is dropped.
+              { type: 'article', id: 'kb_article_missing' },
+            ],
+          }
+          yield { type: 'TEXT_MESSAGE_CONTENT', delta: JSON.stringify(object) }
+          yield { type: 'CUSTOM', name: 'structured-output.complete', value: { object } }
+          yield { type: 'RUN_FINISHED', usage: undefined }
+        })()
+    )
+
+    await runAssistantTurn({
+      ...baseInput,
+      messages: customerAsks('how do I reset my password?'),
+    })
+
+    expect(lastLoggedMetadata?.citedSources).toEqual([{ type: 'article', id: 'kb_article_1' }])
+  })
+
+  it('omits citedSources from the logged metadata when nothing was cited', async () => {
+    mockRetrieve.mockResolvedValue([])
+    mockChat.mockImplementation(() => chunkStream(completeRun({ text: 'Hello!', citations: [] })))
+
+    await runAssistantTurn({ ...baseInput, messages: customerAsks('hi') })
+
+    expect(lastLoggedMetadata).not.toHaveProperty('citedSources')
   })
 
   it('logs answerKind "no_sources" when retrieval never surfaced a citation candidate', async () => {

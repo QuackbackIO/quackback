@@ -1,13 +1,17 @@
 /**
  * Copilot usage + outcome reporting (P2-D.2): questions asked, transforms
- * run, on-demand summaries, the insert/feedback outcomes, and the
- * propose-approve-execute actions funnel, over the last 30 days. Read-only
- * reporting; gated server-side on analytics.view like the rest of the Quinn
- * performance surface. Mounted whenever inboxAi is on (see
+ * run, on-demand summaries, the insert/feedback outcomes, the cited-sources
+ * leaderboard, and the propose-approve-execute actions funnel, over the last
+ * 30 days. Read-only reporting; gated server-side on analytics.view like the
+ * rest of the Quinn performance surface. Mounted whenever inboxAi is on (see
  * automation.assistant.tsx); only the actions funnel additionally needs
  * assistantTools — the pending-actions funnel this section reports on doesn't
  * exist otherwise — so the page passes that flag as `showActionsFunnel`
  * rather than gating the whole card on it.
+ *
+ * "Top teammates" answers who uses Copilot; "Cited sources" answers what's
+ * carrying the answers — the two views over the same question volume a
+ * content owner and an admin each care about.
  */
 import { useQuery } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
@@ -54,6 +58,7 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
 
   const transforms = data?.transformsByKind ?? []
   const teammates = data?.perTeammate ?? []
+  const citedSources = data?.topCitedSources ?? []
 
   return (
     <SettingsCard
@@ -113,6 +118,26 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
           </div>
         </div>
       </div>
+
+      {citedSources.length > 0 && (
+        <div className="mt-6">
+          <h3 className="mb-2 text-sm font-medium">Cited sources</h3>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Help Center articles Copilot answers cited most, ranked by how many questions drew on
+            them — the ones worth reviewing first.
+          </p>
+          <ul className="space-y-1.5">
+            {citedSources.map((source) => (
+              <li key={source.id} className="flex items-center justify-between gap-2 text-sm">
+                <a href={source.url} className="truncate underline-offset-2 hover:underline">
+                  {source.title}
+                </a>
+                <span className="tabular-nums text-muted-foreground">{source.questions}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2">
         <div>

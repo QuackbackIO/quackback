@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, within, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const METRICS = {
@@ -40,6 +40,20 @@ const METRICS = {
   perTeammate: [
     { principalId: 'principal_1', displayName: 'Alice', questions: 30 },
     { principalId: 'principal_2', displayName: null, questions: 12 },
+  ],
+  topCitedSources: [
+    {
+      id: 'kb_article_1',
+      title: 'Resetting your password',
+      url: '/admin/help-center/articles/kb_article_1',
+      questions: 18,
+    },
+    {
+      id: 'kb_article_2',
+      title: 'Exporting a report',
+      url: '/admin/help-center/articles/kb_article_2',
+      questions: 4,
+    },
   ],
 }
 
@@ -124,6 +138,33 @@ describe('CopilotUsageCard', () => {
     expect(screen.getByText('30')).toBeInTheDocument()
     expect(screen.getByText('Unknown teammate')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
+  })
+
+  it('renders the cited-sources table ranked by question volume, linking each article', async () => {
+    hoisted.getCopilotUsageMetricsFn.mockResolvedValue(METRICS)
+    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+
+    expect(await screen.findByText('Cited sources')).toBeInTheDocument()
+    const topRow = (await screen.findByText('Resetting your password')).closest('li')!
+    expect(within(topRow).getByRole('link')).toHaveAttribute(
+      'href',
+      '/admin/help-center/articles/kb_article_1'
+    )
+    expect(within(topRow).getByText('18')).toBeInTheDocument()
+    const secondRow = screen.getByText('Exporting a report').closest('li')!
+    expect(within(secondRow).getByRole('link')).toHaveAttribute(
+      'href',
+      '/admin/help-center/articles/kb_article_2'
+    )
+    expect(within(secondRow).getByText('4')).toBeInTheDocument()
+  })
+
+  it('omits the cited-sources table when no source was cited', async () => {
+    hoisted.getCopilotUsageMetricsFn.mockResolvedValue({ ...METRICS, topCitedSources: [] })
+    renderWithClient(<CopilotUsageCard showActionsFunnel />)
+
+    await screen.findByText('Outcomes')
+    expect(screen.queryByText('Cited sources')).not.toBeInTheDocument()
   })
 
   it('renders the per-kind transform breakdown with a friendly label', async () => {

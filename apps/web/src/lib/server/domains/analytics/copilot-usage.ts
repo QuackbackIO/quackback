@@ -47,6 +47,17 @@
  *    `executed`/`failed` (only an `approved` row can reach either — see
  *    `settleApprovedAction`), since the report cares whether a human said
  *    yes, not whether the tool call that followed happened to succeed.
+ *  - `ai_usage_log.metadata.citedSources` (assistant.runtime.ts's
+ *    `deriveAttemptMetadata`) is the `{type, id}` list of sources that
+ *    actually survived into a copilot turn's answer (hallucinated ids and
+ *    duplicates already dropped there). `topCitedSources` unnests this array
+ *    across every in-range copilot row, keeps only `type: 'article'`, and
+ *    groups by id — the content-owner counterpart to `perTeammate`: not who
+ *    asked, but which article is carrying the answers. Titles/urls are
+ *    resolved live off `helpCenterArticles` rather than trusted from the
+ *    logged metadata, so a rename is reflected immediately and a since-
+ *    deleted article silently drops off the leaderboard instead of linking
+ *    nowhere.
  *
  * Multiple attempts of the SAME logical turn (a synthesis retry) each log
  * their own `ai_usage_log` row, so a turn that needed a retry is counted more
@@ -78,14 +89,19 @@ import {
   aiUsageLog,
   assistantEvents,
   assistantPendingActions,
+  helpCenterArticles,
 } from '@/lib/server/db'
-import type { PrincipalId } from '@quackback/ids'
+import type { KbArticleId, PrincipalId } from '@quackback/ids'
 import { loadAuthors } from '@/lib/server/domains/principals/principal-display'
 import { COPILOT_EVENT_TYPES } from '@/lib/shared/assistant/copilot-contract'
 import { ratePctOrNull } from '@/lib/shared/percent'
 
 /** Cap on the per-teammate leaderboard — a glance-level card, not a full report. */
 const TOP_TEAMMATES_LIMIT = 10
+
+/** Cap on the cited-sources leaderboard — same glance-level cap as the
+ *  per-teammate list, not a full content audit. */
+const TOP_CITED_SOURCES_LIMIT = 10
 
 /** The `*_inserted` event kinds, derived from the shared vocabulary (never
  *  hand-listed) so a new insert kind is counted here the day the contract
@@ -104,6 +120,15 @@ export interface CopilotTransformKindCount {
 export interface CopilotTeammateQuestionCount {
   principalId: PrincipalId
   displayName: string | null
+  questions: number
+}
+
+export interface CopilotCitedSourceCount {
+  id: KbArticleId
+  title: string
+  /** Admin-facing edit path, so a content owner can jump straight to fixing it. */
+  url: string
+  /** Distinct Copilot turns whose answer cited this article in the range. */
   questions: number
 }
 
@@ -157,6 +182,13 @@ export interface CopilotUsageMetrics {
   feedbackDownWithReason: number
   /** Top teammates by question volume, most first, capped at 10. */
   perTeammate: CopilotTeammateQuestionCount[]
+  /** Help Center articles Copilot answers cited most, ranked by how many
+   *  questions drew on them (most first, capped at 10) — the content-owner
+   *  view of the same data perTeammate gives the "who uses it" view: which
+   *  article is carrying the most answers, so it's the one worth reviewing
+   *  first. Scoped to `article` citations only; post/snippet/summary
+   *  citations aren't reported here (see getCopilotUsageMetrics). */
+  topCitedSources: CopilotCitedSourceCount[]
 }
 
 interface PendingActionBucketRow {
@@ -192,7 +224,8 @@ export function summarizeCopilotUsage(
   totalSummaries: number,
   actionBucket: PendingActionBucketRow,
   eventBucket: AssistantEventBucketRow,
-  perTeammate: CopilotTeammateQuestionCount[]
+  perTeammate: CopilotTeammateQuestionCount[],
+  topCitedSources: CopilotCitedSourceCount[] = []
 ): CopilotUsageMetrics {
   const totalTransforms = transformsByKind.reduce((sum, row) => sum + row.count, 0)
   return {
@@ -216,6 +249,7 @@ export function summarizeCopilotUsage(
     feedbackDown: eventBucket.feedbackDown,
     feedbackDownWithReason: eventBucket.feedbackDownWithReason,
     perTeammate,
+    topCitedSources,
   }
 }
 
@@ -224,104 +258,138 @@ export function summarizeCopilotUsage(
 const isCopilotSurface = sql`${aiUsageLog.metadata}->>'surface' = 'copilot'`
 
 /**
- * Query + summarize Copilot usage over [from, to). Six independent scans
+ * Query + summarize Copilot usage over [from, to). Seven independent scans
  * (questions count, transforms grouped by kind, summaries count, pending
  * actions grouped by outcome bucket, insert/feedback outcome events bucket,
- * per-teammate top 10) run in parallel; see this module's doc comment for the
- * indexes each rides.
+ * per-teammate top 10, top-10 cited articles) run in parallel; see this
+ * module's doc comment for the indexes each rides.
  */
 export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<CopilotUsageMetrics> {
   // Every ai_usage_log query below bounds on this same [from, to) window;
   // computed once since the column and range never vary across them.
   const usageLogInRange = and(gte(aiUsageLog.createdAt, from), lt(aiUsageLog.createdAt, to))
 
-  const [questionsRows, transformRows, summariesRows, actionRows, eventRows, teammateRows] =
-    await Promise.all([
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(aiUsageLog)
-        .where(and(eq(aiUsageLog.pipelineStep, 'assistant'), isCopilotSurface, usageLogInRange)),
+  const [
+    questionsRows,
+    transformRows,
+    summariesRows,
+    actionRows,
+    eventRows,
+    teammateRows,
+    citedSourceRows,
+  ] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(aiUsageLog)
+      .where(and(eq(aiUsageLog.pipelineStep, 'assistant'), isCopilotSurface, usageLogInRange)),
 
-      db
-        .select({
-          transform: sql<string>`metadata->>'transform'`,
-          n: sql<number>`count(*)::int`,
-        })
-        .from(aiUsageLog)
-        .where(
-          and(
-            eq(aiUsageLog.pipelineStep, 'copilot_transform'),
-            sql`metadata->>'transform' IS NOT NULL`,
-            usageLogInRange
-          )
+    db
+      .select({
+        transform: sql<string>`metadata->>'transform'`,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(aiUsageLog)
+      .where(
+        and(
+          eq(aiUsageLog.pipelineStep, 'copilot_transform'),
+          sql`metadata->>'transform' IS NOT NULL`,
+          usageLogInRange
         )
-        .groupBy(sql`metadata->>'transform'`),
+      )
+      .groupBy(sql`metadata->>'transform'`),
 
-      db
-        .select({ n: sql<number>`count(*)::int` })
-        .from(aiUsageLog)
-        .where(and(eq(aiUsageLog.pipelineStep, 'copilot_summary'), usageLogInRange)),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(aiUsageLog)
+      .where(and(eq(aiUsageLog.pipelineStep, 'copilot_summary'), usageLogInRange)),
 
-      db
-        .select({
-          total: sql<number>`count(*)::int`,
-          approved: sql<number>`count(*) filter (where ${assistantPendingActions.status} in ('approved','executed','failed'))::int`,
-          rejected: sql<number>`count(*) filter (where ${assistantPendingActions.status} = 'rejected')::int`,
-          expired: sql<number>`count(*) filter (where ${assistantPendingActions.status} = 'expired')::int`,
-        })
-        .from(assistantPendingActions)
-        .where(
-          and(
-            gte(assistantPendingActions.proposedAt, from),
-            lt(assistantPendingActions.proposedAt, to)
-          )
-        ),
-
-      // The outcomes bucket (sixth scan): per-kind inserted counts, the
-      // destination (reply vs note) split across every inserted kind, and the
-      // feedback rating split — one pass over assistant_events. The WHERE
-      // names the contract's event types (COPILOT_EVENT_TYPES, never a
-      // hand-written list) so the (event_type, created_at) index serves the
-      // range; the destination/rating/reason splits are FILTERs over those rows.
-      db
-        .select({
-          answersInserted: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'answer_inserted')::int`,
-          transformsInserted: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'transform_inserted')::int`,
-          summariesInserted: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'summary_inserted')::int`,
-          totalInserted: sql<number>`count(*) filter (where ${inArray(assistantEvents.eventType, [...INSERT_EVENT_TYPES])})::int`,
-          insertedReplies: sql<number>`count(*) filter (where ${inArray(assistantEvents.eventType, [...INSERT_EVENT_TYPES])} and metadata->>'destination' = 'reply')::int`,
-          insertedNotes: sql<number>`count(*) filter (where ${inArray(assistantEvents.eventType, [...INSERT_EVENT_TYPES])} and metadata->>'destination' = 'note')::int`,
-          feedbackUp: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'feedback' and metadata->>'rating' = 'up')::int`,
-          feedbackDown: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'feedback' and metadata->>'rating' = 'down')::int`,
-          feedbackDownWithReason: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'feedback' and metadata->>'rating' = 'down' and coalesce(metadata->>'reason', '') <> '')::int`,
-        })
-        .from(assistantEvents)
-        .where(
-          and(
-            inArray(assistantEvents.eventType, [...COPILOT_EVENT_TYPES]),
-            gte(assistantEvents.createdAt, from),
-            lt(assistantEvents.createdAt, to)
-          )
-        ),
-
-      db
-        .select({
-          principalId: sql<string>`metadata->>'principalId'`,
-          n: sql<number>`count(*)::int`,
-        })
-        .from(aiUsageLog)
-        .where(
-          and(
-            eq(aiUsageLog.pipelineStep, 'assistant'),
-            isCopilotSurface,
-            sql`metadata->>'principalId' IS NOT NULL`,
-            usageLogInRange
-          )
+    db
+      .select({
+        total: sql<number>`count(*)::int`,
+        approved: sql<number>`count(*) filter (where ${assistantPendingActions.status} in ('approved','executed','failed'))::int`,
+        rejected: sql<number>`count(*) filter (where ${assistantPendingActions.status} = 'rejected')::int`,
+        expired: sql<number>`count(*) filter (where ${assistantPendingActions.status} = 'expired')::int`,
+      })
+      .from(assistantPendingActions)
+      .where(
+        and(
+          gte(assistantPendingActions.proposedAt, from),
+          lt(assistantPendingActions.proposedAt, to)
         )
-        .groupBy(sql`metadata->>'principalId'`)
-        .orderBy(sql`count(*) DESC`, sql`metadata->>'principalId' ASC`)
-        .limit(TOP_TEAMMATES_LIMIT),
-    ])
+      ),
+
+    // The outcomes bucket (sixth scan): per-kind inserted counts, the
+    // destination (reply vs note) split across every inserted kind, and the
+    // feedback rating split — one pass over assistant_events. The WHERE
+    // names the contract's event types (COPILOT_EVENT_TYPES, never a
+    // hand-written list) so the (event_type, created_at) index serves the
+    // range; the destination/rating/reason splits are FILTERs over those rows.
+    db
+      .select({
+        answersInserted: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'answer_inserted')::int`,
+        transformsInserted: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'transform_inserted')::int`,
+        summariesInserted: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'summary_inserted')::int`,
+        totalInserted: sql<number>`count(*) filter (where ${inArray(assistantEvents.eventType, [...INSERT_EVENT_TYPES])})::int`,
+        insertedReplies: sql<number>`count(*) filter (where ${inArray(assistantEvents.eventType, [...INSERT_EVENT_TYPES])} and metadata->>'destination' = 'reply')::int`,
+        insertedNotes: sql<number>`count(*) filter (where ${inArray(assistantEvents.eventType, [...INSERT_EVENT_TYPES])} and metadata->>'destination' = 'note')::int`,
+        feedbackUp: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'feedback' and metadata->>'rating' = 'up')::int`,
+        feedbackDown: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'feedback' and metadata->>'rating' = 'down')::int`,
+        feedbackDownWithReason: sql<number>`count(*) filter (where ${assistantEvents.eventType} = 'feedback' and metadata->>'rating' = 'down' and coalesce(metadata->>'reason', '') <> '')::int`,
+      })
+      .from(assistantEvents)
+      .where(
+        and(
+          inArray(assistantEvents.eventType, [...COPILOT_EVENT_TYPES]),
+          gte(assistantEvents.createdAt, from),
+          lt(assistantEvents.createdAt, to)
+        )
+      ),
+
+    db
+      .select({
+        principalId: sql<string>`metadata->>'principalId'`,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(aiUsageLog)
+      .where(
+        and(
+          eq(aiUsageLog.pipelineStep, 'assistant'),
+          isCopilotSurface,
+          sql`metadata->>'principalId' IS NOT NULL`,
+          usageLogInRange
+        )
+      )
+      .groupBy(sql`metadata->>'principalId'`)
+      .orderBy(sql`count(*) DESC`, sql`metadata->>'principalId' ASC`)
+      .limit(TOP_TEAMMATES_LIMIT),
+
+    // Cited-sources leaderboard (seventh scan): every `citedSources` entry
+    // an in-range copilot turn logged (assistant.runtime.ts's
+    // deriveAttemptMetadata), unnested via jsonb_array_elements and grouped
+    // by article id — the CROSS JOIN LATERAL shape guidance-stats.ts's
+    // per-rule scan already uses for the same "array field on ai_usage_log"
+    // access pattern. Scoped to type='article': the only citable kind with
+    // both a content owner and a stable admin fix-it URL (see
+    // CopilotUsageMetrics.topCitedSources).
+    db.execute(sql`
+        SELECT elem->>'id' AS id, count(DISTINCT ai_usage_log.id)::int AS n
+        FROM ai_usage_log
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(metadata->'citedSources') = 'array'
+               THEN metadata->'citedSources'
+               ELSE '[]'::jsonb
+          END
+        ) AS elem
+        WHERE pipeline_step = 'assistant'
+          AND metadata->>'surface' = 'copilot'
+          AND elem->>'type' = 'article'
+          AND created_at >= ${from.toISOString()}
+          AND created_at < ${to.toISOString()}
+        GROUP BY elem->>'id'
+        ORDER BY count(DISTINCT ai_usage_log.id) DESC, elem->>'id' ASC
+        LIMIT ${TOP_CITED_SOURCES_LIMIT}
+      `) as unknown as Promise<Array<{ id: string; n: number }>>,
+  ])
 
   const authors = await loadAuthors(teammateRows.map((row) => row.principalId as PrincipalId))
   const perTeammate: CopilotTeammateQuestionCount[] = teammateRows.map((row) => {
@@ -332,6 +400,29 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
       questions: row.n,
     }
   })
+
+  // Title/url are resolved live off the articles table rather than carried in
+  // ai_usage_log metadata, so a rename shows up immediately and a deleted
+  // article drops out of the report instead of linking nowhere.
+  const citedArticleIds = citedSourceRows.map((row) => row.id as KbArticleId)
+  const articles = citedArticleIds.length
+    ? await db
+        .select({ id: helpCenterArticles.id, title: helpCenterArticles.title })
+        .from(helpCenterArticles)
+        .where(inArray(helpCenterArticles.id, citedArticleIds))
+    : []
+  const articleTitleById = new Map(articles.map((a) => [a.id, a.title]))
+  const topCitedSources: CopilotCitedSourceCount[] = citedSourceRows
+    .filter((row) => articleTitleById.has(row.id as KbArticleId))
+    .map((row) => {
+      const id = row.id as KbArticleId
+      return {
+        id,
+        title: articleTitleById.get(id)!,
+        url: `/admin/help-center/articles/${id}`,
+        questions: row.n,
+      }
+    })
 
   const actionBucket: PendingActionBucketRow = actionRows[0] ?? {
     total: 0,
@@ -358,6 +449,7 @@ export async function getCopilotUsageMetrics(from: Date, to: Date): Promise<Copi
     summariesRows[0]?.n ?? 0,
     actionBucket,
     eventBucket,
-    perTeammate
+    perTeammate,
+    topCitedSources
   )
 }
