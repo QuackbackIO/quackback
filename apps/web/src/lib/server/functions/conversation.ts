@@ -1367,6 +1367,10 @@ const bulkConversationActionSchema = z.discriminatedUnion('type', [
   }),
   // until: ISO wake time, or null = snooze until the customer next replies.
   z.object({ type: z.literal('snooze'), until: z.string().datetime().nullable() }),
+  // Add an EXISTING label to each conversation. Minting taxonomy needs
+  // conversation.manage_tags and stays on the single-conversation add fn, so a
+  // batch can only apply a label that already exists.
+  z.object({ type: z.literal('tag'), tagId: z.string() }),
   z.object({ type: z.literal('close') }),
   z.object({ type: z.literal('reopen') }),
 ])
@@ -1381,16 +1385,17 @@ const bulkUpdateConversationsSchema = z.object({
 
 /** Gate a bulk action on the SAME permission its single-conversation fn uses:
  *  (re)assignment mirrors assignConversationFn/assignConversationTeamFn
- *  (conversation.assign); status/priority/snooze mirror the set-status fns. */
+ *  (conversation.assign); labelling mirrors addConversationTagFn
+ *  (conversation.set_tags); status/priority/snooze mirror the set-status fns. */
 function permissionForBulkAction(type: BulkConversationAction['type']) {
-  return type === 'assign' || type === 'assign_team'
-    ? PERMISSIONS.CONVERSATION_ASSIGN
-    : PERMISSIONS.CONVERSATION_SET_STATUS
+  if (type === 'assign' || type === 'assign_team') return PERMISSIONS.CONVERSATION_ASSIGN
+  if (type === 'tag') return PERMISSIONS.CONVERSATION_SET_TAGS
+  return PERMISSIONS.CONVERSATION_SET_STATUS
 }
 
 /**
  * Apply one inbox action to many conversations in a single call (support platform
- * §4.6: assign, priority, snooze, close). The required permission depends on the
+ * §4.6: assign, priority, snooze, tag, close). The required permission depends on the
  * action (assign vs status), so the gate is bare and the per-action permission is
  * asserted at runtime — matching the field-scoped PATCH pattern; the closed set is
  * declared in the authz-matrix classifications. Per-item isolation: each
@@ -1414,6 +1419,7 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
     } = await import('@/lib/server/domains/conversation/conversation.service')
     const { assertRequiredAttributesForClose } =
       await import('@/lib/server/domains/conversation-attributes/close-guard')
+    const { attachTag } = await import('@/lib/server/domains/conversation/conversation-tag.service')
 
     // Resolve the action into a single per-conversation op once, up front — the
     // acting agent, snooze wake-time, and assignee are computed a single time,
@@ -1435,6 +1441,12 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
         case 'snooze': {
           const until = action.until ? new Date(action.until) : null
           return (id) => snoozeConversation(id, until, actor)
+        }
+        case 'tag': {
+          // attachTag is idempotent (onConflictDoNothing), so a conversation
+          // that already carries the label succeeds rather than failing.
+          const tagId = action.tagId as ConversationTagId
+          return (id) => attachTag(id, tagId)
         }
         case 'close':
           // Teammate bulk close honors required-to-close per conversation;

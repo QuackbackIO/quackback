@@ -1160,6 +1160,17 @@ export function createEmojiExtension() {
   })
 }
 
+/**
+ * The imperative seam a host uses to move focus into a mounted editor —
+ * keyboard shortcuts that open a composer, "insert then keep typing" flows.
+ * Exposed through `editorRef` so callers never reach for the ProseMirror DOM
+ * node, whose class names are an editor internal.
+ */
+export interface RichTextEditorHandle {
+  /** Focus the editing surface, placing the cursor at `position` (default 'end'). */
+  focus: (position?: 'start' | 'end' | number) => void
+}
+
 interface RichTextEditorProps {
   value?: string | JSONContent
   onChange?: (json: JSONContent, html: string, markdown: string) => void
@@ -1190,6 +1201,9 @@ interface RichTextEditorProps {
    * refreshed by setOptions, so an unstable callback leaves Enter firing the
    * first render's stale closure forever. */
   onSubmit?: () => void
+  /** Publishes the imperative focus seam. Mutually exclusive editors may share
+   * one ref object: whichever instance is mounted owns it. */
+  editorRef?: React.RefObject<RichTextEditorHandle | null>
 }
 
 // ============================================================================
@@ -1209,6 +1223,7 @@ function RichTextEditorBase({
   features = {},
   onImageUpload,
   onSubmit,
+  editorRef,
 }: RichTextEditorProps) {
   // Memoize extensions keyed on individual feature flags.
   // TipTap v3's useEditor calls editor.setOptions() whenever the extensions
@@ -1300,6 +1315,18 @@ function RichTextEditorBase({
     },
     editorProps,
   })
+
+  // The imperative focus seam. `withLiveEditor` guards the window where the
+  // editor is still null or already torn down, so a stale host reference can
+  // never chain off a destroyed editor.
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      focus: (position: 'start' | 'end' | number = 'end') =>
+        withLiveEditor(editor, (live) => live.commands.focus(position)),
+    }),
+    [editor]
+  )
 
   // Sync external value changes into the editor.
   // Skipped when the value is the exact object/string we just emitted via onUpdate.
@@ -1561,7 +1588,8 @@ export const RichTextEditor = memo(RichTextEditorBase, (prev, next) => {
     prev.minHeight !== next.minHeight ||
     prev.borderless !== next.borderless ||
     prev.toolbarPosition !== next.toolbarPosition ||
-    prev.className !== next.className
+    prev.className !== next.className ||
+    prev.editorRef !== next.editorRef
   )
     return false
   const pf = prev.features ?? {}

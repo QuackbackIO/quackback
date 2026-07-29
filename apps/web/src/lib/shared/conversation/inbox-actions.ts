@@ -15,6 +15,7 @@
 
 export type InboxActionId =
   | 'reply'
+  | 'note'
   | 'copilot'
   | 'assign'
   | 'assign_team'
@@ -61,12 +62,15 @@ export const INBOX_ACTION_GROUP_ORDER: readonly InboxActionGroup[] = [
  * Ordered registry. Order here is the order the palette shows within a group.
  * Every key char lives here and nowhere else.
  *
- * Note (n) and macro (m) return once the thread exposes a composer imperative
- * handle (next wave); until then they're omitted so the palette, keyboard, and
- * help panel never advertise a half-wired action.
+ * Macro (m) arrives with its own picker seam; until then it's omitted so the
+ * palette, keyboard, and help panel never advertise a half-wired action.
  */
 export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
   { id: 'reply', label: 'Reply', group: 'Reply', scope: 'active', shortcut: 'r' },
+  // Focuses the note composer, switching the thread out of reply mode first.
+  // A note-only thread (back_office/tracker tickets) has nothing else to
+  // switch from, so the key is a plain focus there.
+  { id: 'note', label: 'Add internal note', group: 'Reply', scope: 'active', shortcut: 'n' },
   // q for Quinn. Additionally gated on `copilotAvailable` (flag + copilot.use
   // + the ≥xl viewport that shows the detail panel) — see isInboxActionEnabled.
   { id: 'copilot', label: 'Ask Copilot', group: 'Reply', scope: 'active', shortcut: 'q' },

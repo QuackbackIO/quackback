@@ -17,11 +17,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { useRouteContext } from '@tanstack/react-router'
 import {
@@ -150,7 +152,7 @@ import { usePersonBlockStatus } from '@/components/admin/users/block-person-cont
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { RequiredAttributesDialog } from '@/components/admin/conversation/required-attributes-dialog'
 import { downloadTranscriptFile } from '@/components/admin/conversation/export-transcript-button'
-import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor'
 import {
   CONVERSATION_EDITOR_FEATURES,
   CONVERSATION_NOTE_FEATURES,
@@ -172,6 +174,7 @@ import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useConversationComposerAttachments } from '@/lib/client/hooks/use-conversation-composer-attachments'
 import { useDebouncedValue } from '@/lib/client/hooks/use-debounced-value'
 import { useCopilotInsert } from '@/lib/client/hooks/use-copilot-insert'
+import { useComposerFocus } from '@/lib/client/hooks/use-composer-focus'
 import { usePermissions } from '@/lib/client/use-permissions'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
@@ -230,6 +233,21 @@ const MAX_JUMP_PAGES = 20
 const INACTIVE_CONVERSATION_ID = '' as ConversationId
 const INACTIVE_TICKET_ID = '' as TicketId
 
+/**
+ * The thread's imperative seam for the inbox's keyboard-first actions
+ * (`r` / `n` and their command-palette rows). The host owns neither the
+ * composer's mode nor its editor, so "put the cursor in the note composer" has
+ * to be asked for rather than reached for.
+ */
+export interface ThreadComposerHandle {
+  /**
+   * Switch to `mode` if needed and focus its composer. A thread that cannot
+   * reply (back_office/tracker tickets, §2.5) has only the note composer, so
+   * a 'reply' request lands there instead of leaving focus nowhere.
+   */
+  focusComposer: (mode: ComposerMode) => void
+}
+
 export function AgentConversationThread({
   item,
   targetMessageId,
@@ -241,6 +259,7 @@ export function AgentConversationThread({
   isOtherAgentTyping,
   createTicketToken,
   openCopilotToken,
+  composerRef,
 }: {
   /** The open item, discriminated by kind — drives both the data adapter and
    *  the derived `ThreadCapabilities`. */
@@ -270,6 +289,9 @@ export function AgentConversationThread({
    *  when the value changes (and reads 0 as "no pending bump", the route's own
    *  reset sentinel). Both item kinds. */
   openCopilotToken?: number
+  /** Publishes the composer seam the host's keyboard shortcuts and command
+   *  palette drive. Both item kinds. */
+  composerRef?: RefObject<ThreadComposerHandle | null>
 }) {
   const queryClient = useQueryClient()
   const isTicket = item.kind === 'ticket'
@@ -1309,6 +1331,24 @@ export function AgentConversationThread({
     replyComposerRef: replyInsertRef,
   })
 
+  // Reply and note render the SAME editor slot, one at a time, so they share
+  // one handle ref: whichever is mounted owns it.
+  const activeEditorRef = useRef<RichTextEditorHandle | null>(null)
+  const focusComposerMode = useComposerFocus({
+    noteMode,
+    setNoteMode,
+    composerRef: activeEditorRef,
+  })
+  // A note-only thread has no reply composer to focus, so every request lands
+  // on the note one (matching the forced `noteMode` above).
+  useImperativeHandle(
+    composerRef,
+    () => ({
+      focusComposer: (mode: ComposerMode) => focusComposerMode(capabilities.reply ? mode : 'note'),
+    }),
+    [focusComposerMode, capabilities.reply]
+  )
+
   const getComposerText = useCallback(
     (mode: ComposerMode) =>
       mode === 'note' ? noteDraftRef.current.markdown : replyDraftRef.current.markdown,
@@ -1850,6 +1890,10 @@ export function AgentConversationThread({
               control, instead of a separate mode toggle floating above it.
               Enter sends; Shift+Enter inserts a newline. */}
           <div
+            // The host's keyboard layer scopes its Esc "leave the composer"
+            // binding to this box, so the marker has to enclose both editor
+            // modes and every control that can hold focus alongside them.
+            data-inbox-composer=""
             className={cn(
               'rounded-lg border px-3 py-2 focus-within:ring-2',
               noteMode || !capabilities.reply
@@ -1912,6 +1956,7 @@ export function AgentConversationThread({
             {noteMode || !capabilities.reply ? (
               <RichTextEditor
                 key={`note-${noteKey}`}
+                editorRef={activeEditorRef}
                 value={noteDraft.json ?? ''}
                 features={CONVERSATION_NOTE_FEATURES}
                 borderless
@@ -1927,6 +1972,7 @@ export function AgentConversationThread({
             ) : (
               <RichTextEditor
                 key={`reply-${replyKey}`}
+                editorRef={activeEditorRef}
                 value={replyDraft.json ?? ''}
                 features={CONVERSATION_EDITOR_FEATURES}
                 borderless

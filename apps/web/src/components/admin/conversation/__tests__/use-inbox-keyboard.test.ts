@@ -1,17 +1,36 @@
-import { describe, it, expect } from 'vitest'
-import { resolveShortcut, isEditableTarget, type ResolvableKeyEvent } from '../use-inbox-keyboard'
+// @vitest-environment happy-dom
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { renderHook, act, cleanup } from '@testing-library/react'
+import {
+  resolveShortcut,
+  isEditableTarget,
+  isComposerTarget,
+  useInboxKeyboard,
+  INBOX_GLOBAL_SHORTCUTS,
+  COMPOSER_MARKER_SELECTOR,
+  type ResolvableKeyEvent,
+} from '../use-inbox-keyboard'
 
-/** Build a minimal event-like object; `tag` sets a fake target element. */
+/**
+ * Build a minimal event-like object; `tag` sets a fake target element and
+ * `composer` makes that element answer the composer marker lookup.
+ */
 function ev(
   key: string,
-  opts: Partial<ResolvableKeyEvent> & { tag?: string; contentEditable?: boolean } = {}
+  opts: Partial<ResolvableKeyEvent> & {
+    tag?: string
+    contentEditable?: boolean
+    composer?: boolean
+  } = {}
 ): ResolvableKeyEvent {
-  const { tag, contentEditable, ...rest } = opts
+  const { tag, contentEditable, composer, ...rest } = opts
   const target =
-    tag || contentEditable
+    tag || contentEditable || composer
       ? ({
           tagName: tag ?? 'DIV',
           isContentEditable: contentEditable ?? false,
+          closest: (selector: string) =>
+            composer && selector === COMPOSER_MARKER_SELECTOR ? {} : null,
         } as unknown as EventTarget)
       : null
   return { key, target, ...rest }
@@ -95,5 +114,128 @@ describe('resolveShortcut — input-focus suppression', () => {
     expect(resolveShortcut(ev('r', { metaKey: true }))).toBeNull()
     expect(resolveShortcut(ev('r', { altKey: true }))).toBeNull()
     expect(resolveShortcut(ev('r', { shiftKey: true }))).toBeNull()
+  })
+})
+
+describe('isComposerTarget', () => {
+  it('is true only inside the marked composer', () => {
+    expect(isComposerTarget(ev('Escape', { composer: true, contentEditable: true }).target)).toBe(
+      true
+    )
+    expect(isComposerTarget(ev('Escape', { contentEditable: true }).target)).toBe(false)
+    expect(isComposerTarget(null)).toBe(false)
+  })
+
+  it('is false for a target with no closest lookup (plain objects, window)', () => {
+    expect(isComposerTarget({ tagName: 'DIV' } as unknown as EventTarget)).toBe(false)
+  })
+})
+
+describe('resolveShortcut — Escape leaves the composer', () => {
+  it('returns blur-composer for Escape inside the composer', () => {
+    expect(resolveShortcut(ev('Escape', { composer: true, contentEditable: true }))).toEqual({
+      type: 'blur-composer',
+    })
+  })
+
+  it('ignores Escape in an editable outside the composer (list search keeps its own handling)', () => {
+    expect(resolveShortcut(ev('Escape', { tag: 'INPUT' }))).toBeNull()
+  })
+
+  it('ignores Escape outside any editable, so nothing else that listens is swallowed', () => {
+    expect(resolveShortcut(ev('Escape'))).toBeNull()
+  })
+
+  it('ignores Escape with a modifier held', () => {
+    expect(
+      resolveShortcut(ev('Escape', { composer: true, contentEditable: true, metaKey: true }))
+    ).toBeNull()
+    expect(
+      resolveShortcut(ev('Escape', { composer: true, contentEditable: true, shiftKey: true }))
+    ).toBeNull()
+  })
+
+  it('yields to the editor when it already handled Escape (slash/emoji menu dismissal)', () => {
+    expect(
+      resolveShortcut(
+        ev('Escape', { composer: true, contentEditable: true, defaultPrevented: true })
+      )
+    ).toBeNull()
+  })
+})
+
+describe('INBOX_GLOBAL_SHORTCUTS', () => {
+  it('documents Escape so the help panel advertises the way out', () => {
+    expect(INBOX_GLOBAL_SHORTCUTS.map((s) => s.keys)).toContain('Esc')
+  })
+})
+
+describe('useInboxKeyboard — Escape blurs the composer', () => {
+  afterEach(() => {
+    cleanup()
+    document.body.innerHTML = ''
+  })
+
+  /** Mount a marked composer box holding a contenteditable editing surface. */
+  function mountComposer() {
+    const box = document.createElement('div')
+    box.setAttribute('data-inbox-composer', '')
+    const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true')
+    editor.tabIndex = 0
+    box.appendChild(editor)
+    document.body.appendChild(box)
+    return editor
+  }
+
+  function bind() {
+    const onAction = vi.fn()
+    renderHook(() =>
+      useInboxKeyboard({
+        enabled: true,
+        onAction,
+        onOpenCommandBar: vi.fn(),
+        onOpenHelp: vi.fn(),
+      })
+    )
+    return onAction
+  }
+
+  it('blurs the note editor on Escape, so the single-key actions fire again', () => {
+    const onAction = bind()
+    const editor = mountComposer()
+    editor.focus()
+    expect(document.activeElement).toBe(editor)
+
+    // Typing a bound char while in the composer must stay inert.
+    act(() => {
+      editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }))
+    })
+    expect(onAction).not.toHaveBeenCalled()
+
+    act(() => {
+      editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(document.activeElement).not.toBe(editor)
+
+    act(() => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }))
+    })
+    expect(onAction).toHaveBeenCalledWith('next')
+  })
+
+  it('leaves focus alone when the editor already handled Escape', () => {
+    bind()
+    const editor = mountComposer()
+    editor.focus()
+
+    // The editor's own menu handling marks the event handled first.
+    editor.addEventListener('keydown', (e) => e.preventDefault())
+    act(() => {
+      editor.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      )
+    })
+    expect(document.activeElement).toBe(editor)
   })
 })

@@ -21,7 +21,11 @@ import {
   type ConversationSort,
   type ConversationViewDTO,
 } from '@/lib/shared/conversation/views'
-import { AgentConversationThread } from '@/components/conversation/agent-conversation-thread'
+import {
+  AgentConversationThread,
+  type ThreadComposerHandle,
+} from '@/components/conversation/agent-conversation-thread'
+import type { ComposerMode } from '@/components/conversation/composer-ai-actions'
 import {
   agentEventChangesInboxCounts,
   agentEventChangesInboxList,
@@ -53,6 +57,8 @@ import {
   setConversationStatusFn,
   snoozeConversationFn,
 } from '@/lib/server/functions/conversation'
+import { addConversationTagFn } from '@/lib/server/functions/conversation-tags'
+import { CONVERSATION_TAGS_KEY } from '@/lib/client/hooks/use-conversation-tags'
 import { assignConversationTeamFn } from '@/lib/server/functions/teams'
 import { bulkUpdateTicketsFn, type BulkTicketActionInput } from '@/lib/server/functions/tickets'
 import {
@@ -891,8 +897,9 @@ function InboxPage() {
   }
   // Anchor for shift-click range selection.
   const selectAnchor = useRef<string | null>(null)
-  // The thread wrapper, so the reply action can focus the open composer.
-  const threadContainerRef = useRef<HTMLDivElement>(null)
+  // The open thread's composer seam, so the reply/note actions can put the
+  // cursor in the right composer. Null whenever no thread is open.
+  const composerHandleRef = useRef<ThreadComposerHandle | null>(null)
   const bulk = useBulkConversationUpdate()
   // Solo (no-selection) ticket mutations route through these shared hooks
   // rather than the raw server fns, so a change to the open ticket seeds
@@ -1137,6 +1144,35 @@ function InboxPage() {
     [hasSelection, selectedRef, runConversationOnlyBulk, runSolo]
   )
 
+  // Tagging has no ticket-row equivalent either (tickets carry no tags), so the
+  // bar disables its trigger whenever the target includes a ticket
+  // (`hasTicketTarget`) and this only ever runs against conversation ids. The
+  // bulk mutation refreshes the tag taxonomy + counts itself; the solo path goes
+  // through the single-conversation add fn, so it refreshes the open thread and
+  // the counts here.
+  const applyTag = useCallback(
+    async (tagId: string) => {
+      if (hasSelection) {
+        await runConversationOnlyBulk({ type: 'tag', tagId }, 'Tagged')
+        refreshInbox()
+        return
+      }
+      if (!selectedRef || selectedRef.kind === 'ticket') return
+      const conversationId = selectedRef.id
+      return runSolo(
+        async () => {
+          await addConversationTagFn({ data: { conversationId, tagId } })
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentThread(conversationId),
+          })
+          void queryClient.invalidateQueries({ queryKey: CONVERSATION_TAGS_KEY })
+        },
+        { success: 'Tag added', error: 'Failed to add tag' }
+      )
+    },
+    [hasSelection, selectedRef, runConversationOnlyBulk, runSolo, refreshInbox, queryClient]
+  )
+
   const applyClose = useCallback(async () => {
     const closedStatusId = resolveDefaultClosedStatusId(ticketStatusList)
     if (hasSelection) {
@@ -1231,14 +1267,12 @@ function InboxPage() {
     )
   }, [hasSelection, selectedRef, runConversationOnlyBulk, runSolo])
 
-  // Focus the open thread's composer (the single contenteditable inside it). The
-  // `.ProseMirror` selector couples to the editor's internals; the proper fix is a
-  // composer imperative handle (next wave). Works for either thread kind since
-  // both use the same rich-text editor.
-  const focusComposer = useCallback(() => {
-    threadContainerRef.current
-      ?.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]')
-      ?.focus()
+  // Focus the open thread's composer in a given mode, switching the thread into
+  // that mode first when it isn't already there. The thread owns both the mode
+  // and the editor, so this goes through its imperative handle rather than a
+  // DOM lookup. Works for either thread kind.
+  const focusComposer = useCallback((mode: ComposerMode) => {
+    composerHandleRef.current?.focusComposer(mode)
   }, [])
 
   // j / k: move the open item to the next / previous row in the list.
@@ -1268,7 +1302,10 @@ function InboxPage() {
       const needsTarget = hasSelection || hasActiveConversation
       switch (id) {
         case 'reply':
-          focusComposer()
+          focusComposer('reply')
+          break
+        case 'note':
+          focusComposer('note')
           break
         case 'next':
           moveSelection(1)
@@ -1426,10 +1463,7 @@ function InboxPage() {
 
       {/* Thread / detail pane. Both kinds render the unified thread, which
           mounts the one unified `InboxDetailPanel` internally (§2.7, M5). */}
-      <div
-        ref={threadContainerRef}
-        className={cn('min-w-0 flex-1', !selectedRef && 'hidden md:block')}
-      >
+      <div className={cn('min-w-0 flex-1', !selectedRef && 'hidden md:block')}>
         {selectedRef?.kind === 'ticket' ? (
           <AgentConversationThread
             key={selectedRef.id}
@@ -1442,6 +1476,7 @@ function InboxPage() {
             isVisitorTyping={false}
             isOtherAgentTyping={false}
             openCopilotToken={openCopilotToken}
+            composerRef={composerHandleRef}
           />
         ) : selectedRef?.kind === 'conversation' ? (
           <AgentConversationThread
@@ -1456,6 +1491,7 @@ function InboxPage() {
             isOtherAgentTyping={otherAgentTyping}
             createTicketToken={createTicketToken}
             openCopilotToken={openCopilotToken}
+            composerRef={composerHandleRef}
           />
         ) : (
           <div className="hidden h-full items-center justify-center md:flex">
@@ -1484,8 +1520,10 @@ function InboxPage() {
           onAssignTeam={applyAssignTeam}
           onPriority={applyPriority}
           onSnooze={applySnooze}
+          onTag={applyTag}
           onClose={applyClose}
           disableSnooze={hasTicketTarget}
+          disableTag={hasTicketTarget}
         />
       )}
 
