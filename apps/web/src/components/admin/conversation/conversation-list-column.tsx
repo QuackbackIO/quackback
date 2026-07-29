@@ -6,7 +6,9 @@ import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons
 import { TicketIcon, BuildingOffice2Icon, RectangleStackIcon } from '@heroicons/react/24/outline'
 import {
   CONVERSATION_SORTS,
+  TERMLESS_CONVERSATION_SORTS,
   CONVERSATION_SORT_LABELS,
+  defaultConversationSort,
   type ConversationSort,
 } from '@/lib/shared/conversation/views'
 import type { TicketType } from '@/lib/shared/db-types'
@@ -218,6 +220,9 @@ export function ConversationListColumn({
   const { userRole } = useRouteContext({ from: '__root__' })
   const readinessAction = useReadinessAction()
   const [composeOpen, setComposeOpen] = useState(false)
+  // Whether the list is a search, which decides both the implicit sort and
+  // whether the term-scored sort is offered at all.
+  const searching = searchInput.trim().length > 0
   const allSelected = items.length > 0 && items.every((it) => selectedIds.has(itemId(it)))
   const someSelected = items.some((it) => selectedIds.has(itemId(it)))
   return (
@@ -263,7 +268,10 @@ export function ConversationListColumn({
         />
       </div>
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none px-3 py-2">
-        {/* Sort applies to every scope (including Mentions + custom views). */}
+        {/* Sort applies to every scope (including Mentions + custom views). Best
+            match ranks a searched list by default and is offered only while a
+            term is active — the rest of the list stays selectable, so the
+            matches can also be scanned chronologically. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -271,7 +279,7 @@ export function ConversationListColumn({
               aria-label="Sort the inbox"
               className={cn(
                 'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[13px] font-medium transition-colors',
-                sort !== 'recent'
+                sort !== defaultConversationSort(searching)
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-muted'
               )}
@@ -281,7 +289,7 @@ export function ConversationListColumn({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {CONVERSATION_SORTS.map((s) => (
+            {(searching ? CONVERSATION_SORTS : TERMLESS_CONVERSATION_SORTS).map((s) => (
               <DropdownMenuItem
                 key={s}
                 onClick={() => onSort(s)}

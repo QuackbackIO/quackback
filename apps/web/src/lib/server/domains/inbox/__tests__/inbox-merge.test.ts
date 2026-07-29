@@ -9,7 +9,12 @@ import type { ConversationId, TicketId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { TicketDTO } from '@/lib/server/domains/tickets/ticket.types'
 import type { InboxItemDTO } from '@/lib/shared/inbox/items'
-import { mergeInboxBranches, type InboxBranchFetch, type InboxSort } from '../inbox.query'
+import {
+  mergeInboxBranches,
+  resolveInboxSort,
+  type InboxBranchFetch,
+  type InboxSort,
+} from '../inbox.query'
 
 function conversationItem(over: {
   id: string
@@ -334,6 +339,17 @@ describe('mergeInboxBranches', () => {
         'conversation_2',
         'ticket_2',
       ])
+    })
+
+    it('is chosen by the resolved sort, so a pinned sort turns rank fusion off', () => {
+      // Relevance is the searched list's DEFAULT order, not an override.
+      expect(resolveInboxSort(undefined, 'refund')).toBe('relevance')
+      expect(resolveInboxSort('oldest', 'refund')).toBe('oldest')
+      expect(resolveInboxSort('recent', 'refund')).toBe('recent')
+      // No term to score against — relevance degrades to the activity order.
+      expect(resolveInboxSort(undefined, undefined)).toBe('recent')
+      expect(resolveInboxSort('relevance', '   ')).toBe('recent')
+      expect(resolveInboxSort('priority', undefined)).toBe('priority')
     })
 
     it('still derives each branch cursor from the last emitted item of that kind', () => {

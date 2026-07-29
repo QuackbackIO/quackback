@@ -16,6 +16,8 @@ import { coerceTicketTypeId } from '@/lib/shared/tickets'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import {
   isConversationSort,
+  defaultConversationSort,
+  explicitConversationSort,
   type ConversationSort,
   type ConversationViewDTO,
 } from '@/lib/shared/conversation/views'
@@ -282,7 +284,7 @@ export const Route = createFileRoute('/admin/inbox')({
     const facet: InboxTriageFacet = deps.status ?? 'open'
     const priority = deps.priority ?? 'all'
     const search = (deps.q ?? '').trim()
-    const sort = deps.sort ?? 'recent'
+    const sort = deps.sort ?? defaultConversationSort(!!search)
     const isSaved = nav.kind === 'view' && nav.view === 'saved'
     // A custom view's list depends on its rule set (loaded client-side from the
     // views list), so — like Saved — it hydrates client-side, not here.
@@ -515,9 +517,20 @@ function InboxPage() {
     (id: string | undefined) => updateSearch({ ttype: id, i: undefined, m: undefined }),
     [updateSearch]
   )
+  // Search is a live local input mirrored (debounced) into the URL `q`. It sits
+  // above the sort control because which sort is implicit depends on it.
+  const [searchInput, setSearchInput] = useState(urlQ ?? '')
+  const search = useDebouncedValue(searchInput.trim(), 300)
+  useEffect(() => {
+    updateSearch({ q: search || undefined })
+  }, [search, updateSearch])
+
+  // Only a sort OTHER than the list's implicit default reaches the URL, and a
+  // searched list's implicit default is relevance — so pinning "Most recent"
+  // while searching is an explicit choice that has to be recorded.
   const setSort = useCallback(
-    (s: ConversationSort) => updateSearch({ sort: s === 'recent' ? undefined : s }),
-    [updateSearch]
+    (s: ConversationSort) => updateSearch({ sort: explicitConversationSort(s, !!search) }),
+    [updateSearch, search]
   )
   // The active selection, discriminated by kind (a conversation or a ticket).
   const selectedRef = useMemo(() => (urlI ? inboxItemRefFromId(urlI) : null), [urlI])
@@ -566,8 +579,9 @@ function InboxPage() {
   const activeView: ConversationViewDTO | undefined =
     nav.kind === 'custom' ? navViews?.find((v) => v.id === nav.viewId) : undefined
   const showRefinements = nav.kind !== 'custom' && !(nav.kind === 'view' && nav.view === 'mentions')
-  // Ordering: URL sort wins; else a custom view's saved sort; else the default.
-  const sort: ConversationSort = urlSort ?? activeView?.sort ?? 'recent'
+  // Ordering: URL sort wins; else a custom view's saved sort; else the list's
+  // implicit default (relevance while searching, most-recent otherwise).
+  const sort: ConversationSort = urlSort ?? activeView?.sort ?? defaultConversationSort(!!search)
 
   // Custom-view dialog (create / edit), reachable from the nav "+" and per-view
   // menu. The route owns it so a save can select the new view.
@@ -581,13 +595,6 @@ function InboxPage() {
     setEditingView(v)
     setViewDialogOpen(true)
   }, [])
-
-  // Search is a live local input mirrored (debounced) into the URL `q`.
-  const [searchInput, setSearchInput] = useState(urlQ ?? '')
-  const search = useDebouncedValue(searchInput.trim(), 300)
-  useEffect(() => {
-    updateSearch({ q: search || undefined })
-  }, [search, updateSearch])
 
   // The "Saved for later" view shows flagged MESSAGES, not conversations, so the
   // conversation-list query is idle there. The query options come from the shared

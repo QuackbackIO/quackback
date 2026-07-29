@@ -18,7 +18,11 @@ import type {
   ConversationViewListParams,
   ConversationViewFilters,
 } from '@/lib/shared/conversation/views'
-import { viewHasTicketRules, viewFiltersToInboxParams } from '@/lib/shared/conversation/views'
+import {
+  viewHasTicketRules,
+  viewFiltersToInboxParams,
+  explicitConversationSort,
+} from '@/lib/shared/conversation/views'
 import type { TicketType, TicketStage } from '@/lib/shared/db-types'
 import {
   facetToConversationStatus,
@@ -131,7 +135,8 @@ export interface InboxSearch {
   /** The tickets-branch registry-type dropdown (convergence Phase 4): a
    *  `ticket_type` TypeID. Only applied on the Tickets-section scopes. */
   ttype?: string
-  /** Inbox ordering; omitted = the default 'recent'. */
+  /** Inbox ordering; omitted = the list's implicit default ('relevance' while
+   *  `q` is set, 'recent' otherwise). */
   sort?: ConversationSort
   q?: string
   /** Company refinement (deep-linked from the conversation CompanyCard): restrict
@@ -178,9 +183,10 @@ export function buildListParams(
   const statusParam = status === 'all' ? undefined : status
   const q = search || undefined
   const company = companyId || undefined
-  // The default sort is implicit server-side, so omit it to keep query keys +
-  // params byte-stable with the pre-sort behavior.
-  const sortParam = sort && sort !== 'recent' ? sort : undefined
+  // The implicit default is dropped to keep query keys + params byte-stable.
+  // Which sort IS implicit depends on whether a term is active (relevance ranks
+  // a searched list), so a pinned 'recent' is an explicit choice there.
+  const sortParam = explicitConversationSort(sort, !!q)
   if (nav.kind === 'custom')
     return { ...(customParams ?? {}), search: q, companyId: company, sort: sortParam }
   if (nav.kind === 'team')
@@ -273,7 +279,7 @@ export function facetToStatusFilter(facet: InboxTriageFacet): StatusFilter {
  *  equivalent (§3.1 documents they'd rank ticket rows by activity) — the
  *  endpoint's zod schema simply rejects them today, so the client must clamp
  *  rather than forward and 400. */
-const INBOX_UNIFIED_SORTS = new Set(['recent', 'oldest', 'created', 'priority'])
+const INBOX_UNIFIED_SORTS = new Set(['recent', 'oldest', 'created', 'priority', 'relevance'])
 
 export interface InboxListParams {
   facet: InboxTriageFacet
@@ -293,7 +299,7 @@ export interface InboxListParams {
   assignee?: string
   teamId?: string
   companyId?: string
-  sort?: 'recent' | 'oldest' | 'created' | 'priority'
+  sort?: 'recent' | 'oldest' | 'created' | 'priority' | 'relevance'
 }
 
 /**
@@ -345,10 +351,11 @@ export function buildInboxListParams(
   const priority = priorityFilter === 'all' ? undefined : priorityFilter
   const searchParam = search || undefined
   const company = companyId || undefined
+  // Same implicit-default rule as `buildListParams`, then the endpoint's own
+  // clamp for the conversation-only sorts its schema rejects.
+  const pinned = explicitConversationSort(sort, !!searchParam)
   const sortParam: InboxListParams['sort'] =
-    sort && sort !== 'recent' && INBOX_UNIFIED_SORTS.has(sort)
-      ? (sort as InboxListParams['sort'])
-      : undefined
+    pinned && INBOX_UNIFIED_SORTS.has(pinned) ? (pinned as InboxListParams['sort']) : undefined
 
   if (nav.kind === 'custom' && activeViewFilters) {
     const view = viewFiltersToInboxParams(activeViewFilters)

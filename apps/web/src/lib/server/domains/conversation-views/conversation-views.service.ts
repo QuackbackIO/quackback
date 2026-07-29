@@ -22,7 +22,7 @@ import type { ConversationViewId, PrincipalId } from '@quackback/ids'
 import type {
   ConversationViewDTO,
   ConversationViewFilters,
-  ConversationSort,
+  TermlessConversationSort,
 } from '@/lib/shared/conversation/views'
 
 function toDTO(row: {
@@ -37,7 +37,7 @@ function toDTO(row: {
     id: row.id,
     name: row.name,
     filters: row.filters,
-    sort: (row.sort as ConversationSort | null) ?? null,
+    sort: (row.sort as TermlessConversationSort | null) ?? null,
     isShared: row.isShared,
     isPinned: row.isPinned,
   }
@@ -97,7 +97,7 @@ export async function listViewsForPrincipal(
 export interface CreateViewInput {
   name: string
   filters: ConversationViewFilters
-  sort?: ConversationSort | null
+  sort?: TermlessConversationSort | null
   isShared?: boolean
 }
 
@@ -121,7 +121,7 @@ export async function createView(
 export interface UpdateViewInput {
   name?: string
   filters?: ConversationViewFilters
-  sort?: ConversationSort | null
+  sort?: TermlessConversationSort | null
   isShared?: boolean
 }
 

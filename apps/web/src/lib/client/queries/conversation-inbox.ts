@@ -28,7 +28,11 @@ import {
 } from '@/lib/client/conversation/inbox-scope'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
-import type { ConversationSort, ConversationViewListParams } from '@/lib/shared/conversation/views'
+import {
+  explicitConversationSort,
+  type ConversationSort,
+  type ConversationViewListParams,
+} from '@/lib/shared/conversation/views'
 
 export const conversationInboxQueries = {
   /** The conversation list for a scope + status/priority/search refinement,
@@ -59,9 +63,12 @@ export const conversationInboxQueries = {
       search
     )
     // Append the non-default sort then the company (fixed order) — both stay
-    // under the agentConversations() prefix SSE invalidations target.
+    // under the agentConversations() prefix SSE invalidations target. Which
+    // sort is the default depends on the search term, mirroring buildListParams
+    // so the key and the params it encodes never disagree.
     const key = [...baseKey]
-    if (sort && sort !== 'recent') key.push(`sort:${sort}`)
+    const pinnedSort = explicitConversationSort(sort, !!search)
+    if (pinnedSort) key.push(`sort:${pinnedSort}`)
     if (companyId) key.push(companyId)
     if (aiBucket) key.push(`ai:${aiBucket}`)
     return queryOptions({

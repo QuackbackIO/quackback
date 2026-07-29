@@ -9,14 +9,14 @@ import {
 } from '@/lib/server/functions/conversation-views'
 import { conversationKeys } from '@/lib/client/queries/conversation-keys'
 import {
-  CONVERSATION_SORTS,
+  TERMLESS_CONVERSATION_SORTS,
   CONVERSATION_SORT_LABELS,
   CONVERSATION_VIEW_RULE_FIELDS,
   TICKET_VIEW_RULE_FIELDS,
   VALUELESS_ATTRIBUTE_OPERATORS,
   MAX_VIEW_RULES,
   conversationViewFiltersSchema,
-  type ConversationSort,
+  type TermlessConversationSort,
   type ConversationViewDTO,
   type ConversationViewRule,
   type ConversationViewRuleField,
@@ -259,7 +259,7 @@ export function ConversationViewDialog({ open, onOpenChange, editing, onSaved }:
 
   const [name, setName] = useState('')
   const [rules, setRules] = useState<DraftRule[]>([])
-  const [sort, setSort] = useState<ConversationSort | ''>('')
+  const [sort, setSort] = useState<TermlessConversationSort | ''>('')
   const [isShared, setIsShared] = useState(true)
 
   // Seed from the edited view on open (or reset for a create).
@@ -446,12 +446,15 @@ export function ConversationViewDialog({ open, onOpenChange, editing, onSaved }:
             <Label htmlFor="view-sort" className="shrink-0">
               Sort
             </Label>
-            <Select value={sort || 'recent'} onValueChange={(v) => setSort(v as ConversationSort)}>
+            <Select
+              value={sort || 'recent'}
+              onValueChange={(v) => setSort(v as TermlessConversationSort)}
+            >
               <SelectTrigger id="view-sort" className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CONVERSATION_SORTS.map((s) => (
+                {TERMLESS_CONVERSATION_SORTS.map((s) => (
                   <SelectItem key={s} value={s}>
                     {CONVERSATION_SORT_LABELS[s]}
                   </SelectItem>

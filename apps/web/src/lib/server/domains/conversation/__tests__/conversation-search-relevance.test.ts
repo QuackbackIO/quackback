@@ -25,6 +25,7 @@ vi.mock('@/lib/server/config', () => ({
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { conversations, conversationMessages, principal, user, PERMISSIONS } from '@/lib/server/db'
 import type { PermissionKey } from '@/lib/server/db'
+import type { ConversationSort } from '@/lib/shared/conversation/views'
 import { listConversationsForAgent } from '../conversation.query'
 import { escapePosixRegex } from '../conversation-relevance'
 import type { Actor } from '@/lib/server/policy/types'
@@ -98,11 +99,12 @@ async function seedConversation(opts: {
   return id
 }
 
-/** Ids of the seeded rows a search returns, in the order the query produced. */
+/** Ids of the seeded rows a search returns, in the order the query produced.
+ *  `sort` omitted = the list pins no sort, so relevance ranks it. */
 async function searchOrder(
   search: string,
   seeded: readonly ConversationId[],
-  sort: 'recent' | 'oldest' = 'recent'
+  sort?: ConversationSort
 ): Promise<ConversationId[]> {
   const page = await listConversationsForAgent({ search, sort, limit: 50 }, AGENT)
   const known = new Set<string>(seeded)
@@ -163,7 +165,7 @@ describe.skipIf(!fixture.available)('relevance-ranked inbox search (real DB, rol
     expect(await searchOrder(name, [mentioned, named])).toEqual([named, mentioned])
   })
 
-  it('breaks an otherwise even match on recency, against an oldest-first sort', async () => {
+  it('breaks an otherwise even match on recency', async () => {
     const term = `wibblex${suffix().replace(/[^a-z0-9]/g, '')}`
     const older = await seedConversation({
       name: 'Dana Okoye',
@@ -176,8 +178,7 @@ describe.skipIf(!fixture.available)('relevance-ranked inbox search (real DB, rol
       messages: [`the ${term} report is wrong`],
     })
 
-    // The 'oldest' sort would lead with `older`; relevance breaks the tie on recency.
-    expect(await searchOrder(term, [older, newer], 'oldest')).toEqual([newer, older])
+    expect(await searchOrder(term, [older, newer])).toEqual([newer, older])
   })
 
   it('keeps a substring-only match in the results, ranked last', async () => {
@@ -237,6 +238,75 @@ describe.skipIf(!fixture.available)('relevance-ranked inbox search (real DB, rol
       older,
       newer,
     ])
+  })
+
+  it('lets an explicitly pinned sort outrank relevance on a searched list', async () => {
+    const term = `brindle${suffix().replace(/[^a-z0-9]/g, '')}`
+    // The densest match is also the oldest, so relevance and chronology disagree.
+    const dense = await seedConversation({
+      name: 'Dana Okoye',
+      at: new Date(Date.now() - 200 * DAY),
+      messages: [`${term} ${term} ${term} ${term} ${term} broke the export again`],
+    })
+    const fresh = await seedConversation({
+      name: 'Priya Raman',
+      at: new Date(),
+      messages: [`a passing mention of ${term}`],
+    })
+
+    // Pinning nothing keeps relevance in charge.
+    expect(await searchOrder(term, [dense, fresh])).toEqual([dense, fresh])
+    // Pinning a sort makes the list chronological again — the way to find the
+    // earliest report of a recurring problem among the matches.
+    expect(await searchOrder(term, [dense, fresh], 'oldest')).toEqual([dense, fresh])
+    expect(await searchOrder(term, [dense, fresh], 'recent')).toEqual([fresh, dense])
+  })
+
+  it('falls back to the activity order when relevance is pinned without a term', async () => {
+    const older = await seedConversation({
+      name: 'Dana Okoye',
+      at: new Date(Date.now() - 5 * DAY),
+      messages: ['first'],
+    })
+    const newer = await seedConversation({
+      name: 'Priya Raman',
+      at: new Date(),
+      messages: ['second'],
+    })
+
+    const page = await listConversationsForAgent({ sort: 'relevance', limit: 50 }, AGENT)
+    const seen = new Set<string>([older, newer])
+    expect(page.conversations.map((c) => c.id).filter((id) => seen.has(id))).toEqual([newer, older])
+  })
+
+  it('pages a pinned-sort search without duplicating or skipping a row', async () => {
+    const term = `craddock${suffix().replace(/[^a-z0-9]/g, '')}`
+    const ids: ConversationId[] = []
+    // Ascending age, so the expected 'oldest' order is the reverse of seed order.
+    for (let i = 0; i < 4; i++) {
+      ids.push(
+        await seedConversation({
+          name: `Case ${i}`,
+          at: new Date(Date.now() - i * DAY),
+          messages: [`${`${term} `.repeat(6 - i)}about the account`],
+        })
+      )
+    }
+    const expected = [...ids].reverse()
+
+    const collected: ConversationId[] = []
+    let before: ConversationId | undefined
+    for (let guard = 0; guard < 6; guard++) {
+      const page = await listConversationsForAgent(
+        { search: term, sort: 'oldest', limit: 2, before },
+        AGENT
+      )
+      collected.push(...page.conversations.map((c) => c.id as ConversationId))
+      if (!page.hasMore) break
+      before = page.nextCursor as ConversationId
+    }
+    const known = new Set<string>(ids)
+    expect(collected.filter((id) => known.has(id))).toEqual(expected)
   })
 
   it('pages a relevance-ordered search without duplicating or skipping a row', async () => {

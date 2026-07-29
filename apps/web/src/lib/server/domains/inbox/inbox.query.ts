@@ -54,18 +54,20 @@ import type { TicketAssigneeFilter } from '@/lib/server/domains/tickets/ticket.t
 import {
   facetToConversationStatus,
   facetToTicketStatusCategory,
+  resolveInboxSort,
   type InboxItemDTO,
+  type InboxSort,
   type InboxTriageFacet,
   type LinkedTicketSummary,
 } from '@/lib/shared/inbox/items'
 
+// The sort vocabulary + its resolution live in the shared inbox module; both
+// are re-exported here so callers keep one import for the list contract.
+export { resolveInboxSort, type InboxSort }
+
 // ---------------------------------------------------------------------------
 // Filter + page contracts
 // ---------------------------------------------------------------------------
-
-/** The unified inbox's sorts — a subset of both `ConversationSort` and
- *  `TicketSort` so it type-checks as either branch's `sort` param directly. */
-export type InboxSort = 'recent' | 'oldest' | 'created' | 'priority'
 
 export interface InboxListFilter {
   facet: InboxTriageFacet
@@ -393,7 +395,9 @@ async function fetchTicketBranch(
       teamId: filter.teamId,
       companyId: filter.companyId,
       search: filter.search,
-      sort,
+      // Ticket rows carry no relevance score, so this branch runs its own
+      // default order and the merge fuses the two by within-branch rank.
+      sort: sort === 'relevance' ? 'recent' : sort,
       cursor: cursor ?? undefined,
       limit,
       // One-row rule (§2.1): a linked customer ticket renders as its
@@ -465,7 +469,7 @@ export async function listInboxItems(
   filter: InboxListFilter
 ): Promise<InboxListPage> {
   const limit = Math.min(Math.max(filter.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
-  const sort: InboxSort = filter.sort ?? 'recent'
+  const sort = resolveInboxSort(filter.sort, filter.search)
   const cursorState = decodeInboxCursor(filter.cursor)
 
   const wantConversations = !filter.kinds || filter.kinds.includes('conversation')
@@ -487,9 +491,9 @@ export async function listInboxItems(
     ticket: ticketBranch,
     sort,
     limit,
-    // A searched conversation branch comes back relevance-ordered, so the
-    // merge must not re-sort it on activity.
-    relevanceOrdered: !!filter.search?.trim(),
+    // A relevance-ordered conversation branch comes back best-match-first, so
+    // the merge must not re-sort it on activity.
+    relevanceOrdered: sort === 'relevance',
   })
 }
 

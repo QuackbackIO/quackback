@@ -49,10 +49,11 @@ import {
   type TeamId,
   type TicketId,
 } from '@quackback/ids'
-import type {
-  ConversationSort,
-  ConversationAttributeFilterParam,
-  ConversationAttributeOperator,
+import {
+  defaultConversationSort,
+  type ConversationSort,
+  type ConversationAttributeFilterParam,
+  type ConversationAttributeOperator,
 } from '@/lib/shared/conversation/views'
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
@@ -1094,7 +1095,8 @@ export interface ConversationListFilter {
    *  standalone ticket rows from the ticket branch. Never set by the plain
    *  conversation scopes (their rows are unrestricted). */
   hasLinkedCustomerTicket?: boolean
-  /** Inbox ordering (default 'recent'). Keyset pagination adapts per sort. */
+  /** Inbox ordering. Omitted = 'relevance' on a searched list, 'recent'
+   *  otherwise; a pinned sort always wins. Keyset pagination adapts per sort. */
   sort?: ConversationSort
   /** Cursor: the previous page's last conversation id, re-resolved per sort. */
   before?: string
@@ -1124,6 +1126,10 @@ export function sortDescriptorFor(sort: ConversationSort = 'recent'): SortDescri
       return { primary: 'priorityRank', direction: 'desc' }
     case 'sla':
       return { primary: 'slaDueAt', direction: 'asc' }
+    // 'relevance' has no descriptor of its own: it orders on a score computed
+    // from the search term, not on a column, and degrades to most-recent
+    // activity on a list that carries no term to score against.
+    case 'relevance':
     case 'recent':
     default:
       return { primary: 'lastMessageAt', direction: 'desc' }
@@ -1420,8 +1426,12 @@ export async function listConversationsForAgent(
   actor: Actor
 ): Promise<ConversationListPage> {
   const limit = Math.min(filter.limit ?? INBOX_PAGE_SIZE, 100)
-  const sort = filter.sort ?? 'recent'
   const search = filter.search?.trim()
+  // Relevance is the DEFAULT order for a searched list, never an override:
+  // "most recent" is the right default for browsing an inbox and the wrong one
+  // for finding a thread, but a pinned sort still wins so the matches can be
+  // scanned chronologically.
+  const sort = filter.sort ?? defaultConversationSort(!!search)
   // Match the visitor's name or any non-deleted message content. EXISTS keeps
   // the select shape (conversations only) — no join row fan-out. The term is
   // parameter-bound, so `%`/`_` are treated as literals-plus-wildcards, not SQLi.
@@ -1440,11 +1450,11 @@ export async function listConversationsForAgent(
           )
         )`
     : undefined
-  // A searched list orders by relevance instead of the active sort: "most
-  // recent" is the right default for browsing an inbox and the wrong one for
-  // finding a thread. One clock instant anchors the score's recency term for
-  // the whole request, so the cursor row and the page rows are scored alike.
-  const relevance = search ? conversationRelevanceSql(search, new Date()) : null
+  // The relevance score, live only when the list both carries a term and is
+  // ordered by it. One clock instant anchors the score's recency term for the
+  // whole request, so the cursor row and the page rows are scored alike.
+  const relevance =
+    search && sort === 'relevance' ? conversationRelevanceSql(search, new Date()) : null
 
   // Keyset cursor = the previous page's last conversation id. Re-read the exact
   // row from the DB rather than trusting a client-supplied string, so the sort's
