@@ -14,6 +14,7 @@ import {
   listPublicArticlesForCategoryFn,
   getArticleFn,
   getPublicArticleBySlugFn,
+  listArticleFeedbackReasonsFn,
 } from '@/lib/server/functions/help-center'
 
 const STALE_TIME_SHORT = 30 * 1000
@@ -35,6 +36,8 @@ export const helpCenterKeys = {
   }) => [...helpCenterKeys.articleLists(), filters] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
   articleDetail: (id: KbArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
+  articleFeedbackReasons: (id: KbArticleId) =>
+    [...helpCenterKeys.articleDetail(id), 'feedback-reasons'] as const,
   public: () => [...helpCenterKeys.all, 'public'] as const,
   publicArticleList: (categoryId?: string) =>
     [...helpCenterKeys.public(), 'list', categoryId] as const,
@@ -86,6 +89,13 @@ export const helpCenterQueries = {
     queryOptions({
       queryKey: helpCenterKeys.articleDetail(id),
       queryFn: () => getArticleFn({ data: { id } }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  articleFeedbackReasons: (id: KbArticleId) =>
+    queryOptions({
+      queryKey: helpCenterKeys.articleFeedbackReasons(id),
+      queryFn: () => listArticleFeedbackReasonsFn({ data: { articleId: id } }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

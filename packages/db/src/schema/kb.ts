@@ -170,9 +170,21 @@ export const helpCenterArticleFeedback = pgTable(
       onDelete: 'set null',
     }),
     helpful: boolean('helpful').notNull(),
+    /**
+     * Free-text explanation of an unhelpful vote. Null on helpful votes and on
+     * unhelpful votes whose author never elaborated -- a reason belongs to the
+     * unhelpful vote it explains, so flipping a vote to helpful clears it.
+     */
+    reason: text('reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [uniqueIndex('kb_article_feedback_unique_idx').on(table.articleId, table.principalId)]
+  (table) => [
+    uniqueIndex('kb_article_feedback_unique_idx').on(table.articleId, table.principalId),
+    // Backs the admin-side reason list for one article (newest first).
+    index('kb_article_feedback_reason_idx')
+      .on(table.articleId, table.createdAt)
+      .where(sql`${table.reason} IS NOT NULL`),
+  ]
 )
 
 // ============================================

@@ -1,8 +1,14 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { FormattedMessage } from 'react-intl'
-import { recordArticleFeedbackFn } from '@/lib/server/functions/help-center'
-import type { KbArticleId } from '@quackback/ids'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  recordArticleFeedbackFn,
+  submitArticleFeedbackReasonFn,
+} from '@/lib/server/functions/help-center'
+import { ARTICLE_FEEDBACK_REASON_MAX_LENGTH } from '@/lib/shared/schemas/help-center'
+import type { KbArticleFeedbackId, KbArticleId } from '@quackback/ids'
 
 interface HelpCenterArticleFeedbackProps {
   articleId: string
@@ -14,8 +20,15 @@ export function HelpCenterArticleFeedback({
   articleId,
   supportHref,
 }: HelpCenterArticleFeedbackProps) {
+  const intl = useIntl()
   const [feedback, setFeedback] = useState<'helpful' | 'not-helpful' | null>(null)
   const [isPending, setIsPending] = useState(false)
+  // Handle on the vote just cast. An anonymous visitor has no principal, so
+  // this id is the only thing tying a reason back to their own vote.
+  const [feedbackId, setFeedbackId] = useState<KbArticleFeedbackId | null>(null)
+  const [reason, setReason] = useState('')
+  const [reasonSent, setReasonSent] = useState(false)
+  const [isSendingReason, setIsSendingReason] = useState(false)
 
   const handleFeedback = async (helpful: boolean) => {
     if (isPending) return
@@ -23,14 +36,33 @@ export function HelpCenterArticleFeedback({
     if (feedback === newFeedback) return
     setIsPending(true)
     try {
-      await recordArticleFeedbackFn({
+      // The vote lands on the click, before any typing: a visitor who never
+      // writes a word still counts, and the reason stays optional.
+      const result = await recordArticleFeedbackFn({
         data: { articleId: articleId as KbArticleId, helpful },
       })
       setFeedback(newFeedback)
+      setFeedbackId((result.feedbackId as KbArticleFeedbackId) ?? null)
+      setReason('')
+      setReasonSent(false)
     } catch {
       // non-critical
     } finally {
       setIsPending(false)
+    }
+  }
+
+  const handleSendReason = async () => {
+    const trimmed = reason.trim()
+    if (trimmed.length === 0 || !feedbackId || isSendingReason) return
+    setIsSendingReason(true)
+    try {
+      await submitArticleFeedbackReasonFn({ data: { feedbackId, reason: trimmed } })
+      setReasonSent(true)
+    } catch {
+      // non-critical
+    } finally {
+      setIsSendingReason(false)
     }
   }
 
@@ -40,6 +72,8 @@ export function HelpCenterArticleFeedback({
       : feedback === 'helpful'
         ? 'Thanks — glad it landed.'
         : "Noted. We'll revisit this article."
+
+  const showReasonBox = feedback === 'not-helpful' && feedbackId !== null && !reasonSent
 
   return (
     <div className="mt-10 rounded-xl border border-border/50 bg-card px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
@@ -73,6 +107,49 @@ export function HelpCenterArticleFeedback({
           👎 No
         </button>
       </div>
+      {showReasonBox && (
+        <div className="w-full border-t border-border/50 pt-3">
+          <label
+            htmlFor="hc-article-feedback-reason"
+            className="text-sm font-medium text-foreground"
+          >
+            <FormattedMessage
+              id="portal.hc.articleFeedback.reasonPrompt"
+              defaultMessage="What were you looking for?"
+            />
+          </label>
+          <Textarea
+            id="hc-article-feedback-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            maxLength={ARTICLE_FEEDBACK_REASON_MAX_LENGTH}
+            rows={3}
+            className="mt-2 text-sm"
+            placeholder={intl.formatMessage({
+              id: 'portal.hc.articleFeedback.reasonPlaceholder',
+              defaultMessage: 'Optional, but it tells us what to fix.',
+            })}
+          />
+          <div className="mt-2 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSendReason}
+              disabled={reason.trim().length === 0 || isSendingReason}
+            >
+              <FormattedMessage id="portal.hc.articleFeedback.reasonSend" defaultMessage="Send" />
+            </Button>
+          </div>
+        </div>
+      )}
+      {reasonSent && (
+        <div className="w-full border-t border-border/50 pt-3 text-sm text-muted-foreground">
+          <FormattedMessage
+            id="portal.hc.articleFeedback.reasonThanks"
+            defaultMessage="Thanks — that goes to whoever maintains this article."
+          />
+        </div>
+      )}
       {feedback === 'not-helpful' && supportHref && (
         <div className="w-full border-t border-border/50 pt-3 text-sm">
           <span className="text-muted-foreground">

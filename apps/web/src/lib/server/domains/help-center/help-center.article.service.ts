@@ -2,7 +2,6 @@ import {
   db,
   helpCenterCategories,
   helpCenterArticles,
-  helpCenterArticleFeedback,
   principal,
   eq,
   and,
@@ -346,59 +345,4 @@ export async function restoreArticle(id: KbArticleId): Promise<HelpCenterArticle
   }
 
   return resolveArticleWithCategory(restored)
-}
-
-// ============================================================================
-// Article Feedback
-// ============================================================================
-
-export async function recordArticleFeedback(
-  articleId: KbArticleId,
-  helpful: boolean,
-  principalId?: PrincipalId | null
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    if (principalId) {
-      const existing = await tx.query.helpCenterArticleFeedback.findFirst({
-        where: and(
-          eq(helpCenterArticleFeedback.articleId, articleId),
-          eq(helpCenterArticleFeedback.principalId, principalId)
-        ),
-      })
-
-      if (existing) {
-        if (existing.helpful === helpful) return
-        await tx
-          .update(helpCenterArticleFeedback)
-          .set({ helpful })
-          .where(eq(helpCenterArticleFeedback.id, existing.id))
-        await tx
-          .update(helpCenterArticles)
-          .set({
-            helpfulCount: helpful
-              ? sql`${helpCenterArticles.helpfulCount} + 1`
-              : sql`${helpCenterArticles.helpfulCount} - 1`,
-            notHelpfulCount: helpful
-              ? sql`${helpCenterArticles.notHelpfulCount} - 1`
-              : sql`${helpCenterArticles.notHelpfulCount} + 1`,
-          })
-          .where(eq(helpCenterArticles.id, articleId))
-        return
-      }
-    }
-
-    await tx.insert(helpCenterArticleFeedback).values({
-      articleId,
-      principalId: principalId ?? null,
-      helpful,
-    })
-    await tx
-      .update(helpCenterArticles)
-      .set(
-        helpful
-          ? { helpfulCount: sql`${helpCenterArticles.helpfulCount} + 1` }
-          : { notHelpfulCount: sql`${helpCenterArticles.notHelpfulCount} + 1` }
-      )
-      .where(eq(helpCenterArticles.id, articleId))
-  })
 }
