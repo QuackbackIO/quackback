@@ -867,7 +867,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
     const actor = await policyActorFromAuth(ctx)
-    const { listConversationsForAgent } =
+    const { listConversationsForAgent, loadConversationSearchSnippets } =
       await import('@/lib/server/domains/conversation/conversation.query')
     // assignee is 'all' | 'mine' | 'unassigned' | a teammate principal id. A
     // specific id is honored only when it's a well-formed principal id, so a
@@ -882,7 +882,7 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
             isValidTypeId(assignee, 'principal')
           ? (assignee as PrincipalId)
           : undefined
-    return await listConversationsForAgent(
+    const page = await listConversationsForAgent(
       {
         status: data.status,
         priority: data.priority,
@@ -912,6 +912,19 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
       },
       actor
     )
+    // Keyword-in-context excerpts ride alongside the page rather than inside
+    // the shared list DTO: they belong to this search, not to the conversation,
+    // and the REST/MCP callers of the same query have no term to excerpt.
+    // Keyed by conversation id, and absent entirely on an unsearched list.
+    const searchSnippets = data.search
+      ? Object.fromEntries(
+          await loadConversationSearchSnippets(
+            page.conversations.map((c) => c.id),
+            data.search
+          )
+        )
+      : {}
+    return { ...page, searchSnippets }
   })
 
 /** Conversation counts per Quinn-inbox bucket (Resolved / Escalated / Pending),

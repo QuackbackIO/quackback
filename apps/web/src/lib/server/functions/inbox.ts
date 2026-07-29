@@ -21,7 +21,7 @@ import { requireAuth, policyActorFromAuth } from './auth-helpers'
 const ticketTypeSchema = z.enum(TICKET_TYPES)
 const ticketStageSchema = z.enum(TICKET_STAGES)
 const prioritySchema = z.enum(CONVERSATION_PRIORITIES)
-const inboxSortSchema = z.enum(['recent', 'oldest', 'created', 'priority'])
+const inboxSortSchema = z.enum(['recent', 'oldest', 'created', 'priority', 'relevance'])
 
 export const listInboxItemsSchema = z.object({
   facet: z.enum(INBOX_TRIAGE_FACETS),

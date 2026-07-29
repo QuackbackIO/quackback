@@ -11,6 +11,25 @@ import type { ConversationId, TicketId } from '@quackback/ids'
 import type { ConversationDTO, ConversationStatus } from '@/lib/shared/conversation/types'
 import type { TicketStatusCategory } from '@/lib/shared/db-types'
 import type { TicketDTO } from '@/lib/server/domains/tickets/ticket.types'
+import type { TermSegment } from '@/lib/shared/utils/keyword-context'
+
+// ---------------------------------------------------------------------------
+// Sorts
+// ---------------------------------------------------------------------------
+
+/** The unified inbox's sorts. All but 'relevance' are a subset of both
+ *  `ConversationSort` and `TicketSort`, so they type-check as either branch's
+ *  `sort` param directly (see `resolveInboxSort` for 'relevance'). */
+export type InboxSort = 'recent' | 'oldest' | 'created' | 'priority' | 'relevance'
+
+/** The order a unified list actually runs in. Relevance is the DEFAULT for a
+ *  searched list, never an override: a pinned sort still wins, so a team can
+ *  scan the matching rows chronologically. Without a term there is nothing to
+ *  score against, so relevance degrades to the activity order. */
+export function resolveInboxSort(sort: InboxSort | undefined, search?: string): InboxSort {
+  if (search?.trim()) return sort ?? 'relevance'
+  return sort && sort !== 'relevance' ? sort : 'recent'
+}
 
 // ---------------------------------------------------------------------------
 // Item refs + DTOs
@@ -38,6 +57,11 @@ export type InboxItemDTO =
       kind: 'conversation'
       conversation: ConversationDTO
       linkedTicket: LinkedTicketSummary | null
+      /** Keyword-in-context excerpt of the message the search term matched,
+       *  split into runs so the row can highlight the term. A property of the
+       *  RESULT, not of the conversation: null on any unsearched list, and on a
+       *  row that matched only on its visitor's name. */
+      searchSnippet: TermSegment[] | null
     }
   | { kind: 'ticket'; ticket: TicketDTO; unreadCount: number }
 

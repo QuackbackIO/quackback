@@ -146,6 +146,25 @@ describe('buildListParams', () => {
     ).toBeUndefined()
   })
 
+  it('swaps which sort is implicit once a search term is active', () => {
+    // Relevance is the DEFAULT order for a searched list, so it is the value
+    // that drops out — and 'recent' becomes an explicit choice that has to
+    // reach the server, or a chronological scan of the matches is impossible.
+    expect(buildListParams(view('all'), 'open', 'all', 'refund', undefined, 'recent').sort).toBe(
+      'recent'
+    )
+    expect(buildListParams(view('all'), 'open', 'all', 'refund', undefined, 'oldest').sort).toBe(
+      'oldest'
+    )
+    expect(
+      buildListParams(view('all'), 'open', 'all', 'refund', undefined, 'relevance').sort
+    ).toBeUndefined()
+    // Without a term relevance has nothing to score, so it drops out too.
+    expect(
+      buildListParams(view('all'), 'open', 'all', '', undefined, 'relevance').sort
+    ).toBeUndefined()
+  })
+
   it('maps a team scope to a teamId filter', () => {
     expect(buildListParams({ kind: 'team', teamId }, 'open', 'high', 'bug')).toMatchObject({
       teamId,
@@ -375,6 +394,31 @@ describe('buildInboxListParams', () => {
     expect(
       buildInboxListParams({ kind: 'view', view: 'all' }, 'open', 'all', '', undefined, 'recent')
         .sort
+    ).toBeUndefined()
+  })
+
+  it('swaps which sort is implicit once a search term is active', () => {
+    // Same contract as the legacy builder: relevance is the searched-list
+    // default (so it drops out) and a pinned 'recent' must survive.
+    expect(
+      buildInboxListParams(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        'refund',
+        undefined,
+        'recent'
+      ).sort
+    ).toBe('recent')
+    expect(
+      buildInboxListParams(
+        { kind: 'view', view: 'all' },
+        'open',
+        'all',
+        'refund',
+        undefined,
+        'relevance'
+      ).sort
     ).toBeUndefined()
   })
 

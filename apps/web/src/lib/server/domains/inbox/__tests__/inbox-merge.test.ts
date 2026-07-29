@@ -9,7 +9,12 @@ import type { ConversationId, TicketId } from '@quackback/ids'
 import type { ConversationDTO } from '@/lib/shared/conversation/types'
 import type { TicketDTO } from '@/lib/server/domains/tickets/ticket.types'
 import type { InboxItemDTO } from '@/lib/shared/inbox/items'
-import { mergeInboxBranches, type InboxBranchFetch, type InboxSort } from '../inbox.query'
+import {
+  mergeInboxBranches,
+  resolveInboxSort,
+  type InboxBranchFetch,
+  type InboxSort,
+} from '../inbox.query'
 
 function conversationItem(over: {
   id: string
@@ -43,7 +48,7 @@ function conversationItem(over: {
     customAttributes: {},
     translation: null,
   } as unknown as ConversationDTO
-  return { kind: 'conversation', conversation, linkedTicket: null }
+  return { kind: 'conversation', conversation, linkedTicket: null, searchSnippet: null }
 }
 
 function ticketItem(over: {
@@ -288,6 +293,82 @@ describe('mergeInboxBranches', () => {
       // Conversation cursor advanced to the last emitted conversation; ticket
       // cursor stayed at its input (null — it never got to emit t1).
       expect(decoded).toEqual({ c: 'conversation_2', t: null })
+    })
+  })
+
+  describe('relevanceOrdered (a searched list)', () => {
+    it('keeps the conversation branch in the order it arrived, ignoring activity', () => {
+      // Arrives best-match-first; activity ascends, so an activity re-sort
+      // would reverse it.
+      const items = [
+        conversationItem({ id: 'conversation_best', lastMessageAt: '2026-01-01T00:00:00.000Z' }),
+        conversationItem({ id: 'conversation_mid', lastMessageAt: '2026-01-02T00:00:00.000Z' }),
+        conversationItem({ id: 'conversation_worst', lastMessageAt: '2026-01-03T00:00:00.000Z' }),
+      ]
+      const result = mergeInboxBranches({
+        conversation: branch(items),
+        ticket: branch([]),
+        sort: 'recent',
+        limit: 10,
+        relevanceOrdered: true,
+      })
+      expect(ids(result.items)).toEqual([
+        'conversation_best',
+        'conversation_mid',
+        'conversation_worst',
+      ])
+    })
+
+    it('fuses the two branches by within-branch position', () => {
+      const result = mergeInboxBranches({
+        conversation: branch([
+          conversationItem({ id: 'conversation_1', lastMessageAt: '2026-01-01T00:00:00.000Z' }),
+          conversationItem({ id: 'conversation_2', lastMessageAt: '2026-01-09T00:00:00.000Z' }),
+        ]),
+        ticket: branch([
+          ticketItem({ id: 'ticket_1', updatedAt: '2026-01-05T00:00:00.000Z' }),
+          ticketItem({ id: 'ticket_2', updatedAt: '2026-01-04T00:00:00.000Z' }),
+        ]),
+        sort: 'recent',
+        limit: 10,
+        relevanceOrdered: true,
+      })
+      expect(ids(result.items)).toEqual([
+        'conversation_1',
+        'ticket_1',
+        'conversation_2',
+        'ticket_2',
+      ])
+    })
+
+    it('is chosen by the resolved sort, so a pinned sort turns rank fusion off', () => {
+      // Relevance is the searched list's DEFAULT order, not an override.
+      expect(resolveInboxSort(undefined, 'refund')).toBe('relevance')
+      expect(resolveInboxSort('oldest', 'refund')).toBe('oldest')
+      expect(resolveInboxSort('recent', 'refund')).toBe('recent')
+      // No term to score against — relevance degrades to the activity order.
+      expect(resolveInboxSort(undefined, undefined)).toBe('recent')
+      expect(resolveInboxSort('relevance', '   ')).toBe('recent')
+      expect(resolveInboxSort('priority', undefined)).toBe('priority')
+    })
+
+    it('still derives each branch cursor from the last emitted item of that kind', () => {
+      const result = mergeInboxBranches({
+        conversation: branch(
+          [
+            conversationItem({ id: 'conversation_1', lastMessageAt: '2026-01-01T00:00:00.000Z' }),
+            conversationItem({ id: 'conversation_2', lastMessageAt: '2026-01-02T00:00:00.000Z' }),
+          ],
+          { hasMore: true }
+        ),
+        ticket: branch([ticketItem({ id: 'ticket_1', updatedAt: '2026-01-05T00:00:00.000Z' })]),
+        sort: 'recent',
+        limit: 2,
+        relevanceOrdered: true,
+      })
+      expect(ids(result.items)).toEqual(['conversation_1', 'ticket_1'])
+      const decoded = JSON.parse(Buffer.from(result.cursor as string, 'base64url').toString('utf8'))
+      expect(decoded).toEqual({ c: 'conversation_1', t: 'ticket_1' })
     })
   })
 

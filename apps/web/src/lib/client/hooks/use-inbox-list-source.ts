@@ -135,6 +135,7 @@ export function useInboxListSource({
       kind: 'conversation' as const,
       conversation,
       linkedTicket: null,
+      searchSnippet: legacyData?.searchSnippets?.[conversation.id] ?? null,
     }))
   }, [useUnified, unifiedData, legacyData])
 

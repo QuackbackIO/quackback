@@ -12,9 +12,14 @@ import { createServerFn } from '@tanstack/react-start'
 import type { ConversationViewId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
-import { conversationViewFiltersSchema, CONVERSATION_SORTS } from '@/lib/shared/conversation/views'
+import {
+  conversationViewFiltersSchema,
+  TERMLESS_CONVERSATION_SORTS,
+} from '@/lib/shared/conversation/views'
 
-const sortSchema = z.enum(CONVERSATION_SORTS)
+// A view saves a filter set, not a search term, so it can never be pinned to
+// the term-scored sort.
+const sortSchema = z.enum(TERMLESS_CONVERSATION_SORTS)
 
 const createViewSchema = z.object({
   name: z.string().min(1).max(80),

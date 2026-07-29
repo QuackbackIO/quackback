@@ -5,8 +5,12 @@ import {
   viewHasTicketRules,
   viewFiltersToInboxParams,
   isConversationSort,
+  defaultConversationSort,
+  explicitConversationSort,
   MAX_VIEW_RULES,
   CONVERSATION_SORTS,
+  TERMLESS_CONVERSATION_SORTS,
+  DEFAULT_CONVERSATION_SORT,
   CONVERSATION_ATTRIBUTE_OPERATORS,
   type ConversationViewFilters,
 } from '../views'
@@ -287,6 +291,42 @@ describe('viewFiltersToInboxParams', () => {
       ],
     })
     expect(result.kinds).toEqual(['ticket'])
+  })
+})
+
+describe('defaultConversationSort', () => {
+  it('ranks a searched list by relevance and an unsearched one by activity', () => {
+    expect(defaultConversationSort(true)).toBe('relevance')
+    expect(defaultConversationSort(false)).toBe(DEFAULT_CONVERSATION_SORT)
+  })
+
+  it('never defaults to relevance without a term, which has nothing to score', () => {
+    expect(defaultConversationSort(false)).not.toBe('relevance')
+  })
+})
+
+describe('explicitConversationSort', () => {
+  it('drops a sort that only restates the list implicit default', () => {
+    expect(explicitConversationSort('recent', false)).toBeUndefined()
+    expect(explicitConversationSort('relevance', true)).toBeUndefined()
+    expect(explicitConversationSort(undefined, true)).toBeUndefined()
+  })
+
+  it('keeps a pinned sort that overrides the searched list relevance default', () => {
+    expect(explicitConversationSort('recent', true)).toBe('recent')
+    expect(explicitConversationSort('oldest', true)).toBe('oldest')
+  })
+
+  it('drops a term-scored sort on a list with no term to score against', () => {
+    expect(explicitConversationSort('relevance', false)).toBeUndefined()
+  })
+})
+
+describe('TERMLESS_CONVERSATION_SORTS', () => {
+  it('is every sort except the one that needs a search term to score against', () => {
+    expect([...TERMLESS_CONVERSATION_SORTS]).toEqual(
+      CONVERSATION_SORTS.filter((s) => s !== 'relevance')
+    )
   })
 })
 

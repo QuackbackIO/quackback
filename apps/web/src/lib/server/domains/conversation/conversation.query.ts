@@ -49,10 +49,11 @@ import {
   type TeamId,
   type TicketId,
 } from '@quackback/ids'
-import type {
-  ConversationSort,
-  ConversationAttributeFilterParam,
-  ConversationAttributeOperator,
+import {
+  defaultConversationSort,
+  type ConversationSort,
+  type ConversationAttributeFilterParam,
+  type ConversationAttributeOperator,
 } from '@/lib/shared/conversation/views'
 import { nextSlaDue } from '@/lib/shared/conversation/sla'
 import type { SlaApplied } from '@/lib/server/domains/sla/sla.service'
@@ -68,10 +69,13 @@ import {
   type KeysetColumn,
 } from '@/lib/server/db/keyset'
 import { PRIORITY_RANK } from '@/lib/shared/conversation/priority-meta'
+import { conversationRelevanceSql } from './conversation-relevance'
+import type { SQL } from 'drizzle-orm'
 import { loadAuthors, fallbackAuthor } from '../principals/principal-display'
 import { toMessageDTO } from '@/lib/server/messages/message-core'
 import { aggregateReactions } from '@/lib/shared'
 import { truncate } from '@/lib/shared/utils/string'
+import { keywordInContext, type TermSegment } from '@/lib/shared/utils/keyword-context'
 import type { JsonValue } from '@/lib/shared/json'
 import type {
   ConversationAuthorDTO,
@@ -1092,7 +1096,8 @@ export interface ConversationListFilter {
    *  standalone ticket rows from the ticket branch. Never set by the plain
    *  conversation scopes (their rows are unrestricted). */
   hasLinkedCustomerTicket?: boolean
-  /** Inbox ordering (default 'recent'). Keyset pagination adapts per sort. */
+  /** Inbox ordering. Omitted = 'relevance' on a searched list, 'recent'
+   *  otherwise; a pinned sort always wins. Keyset pagination adapts per sort. */
   sort?: ConversationSort
   /** Cursor: the previous page's last conversation id, re-resolved per sort. */
   before?: string
@@ -1122,6 +1127,10 @@ export function sortDescriptorFor(sort: ConversationSort = 'recent'): SortDescri
       return { primary: 'priorityRank', direction: 'desc' }
     case 'sla':
       return { primary: 'slaDueAt', direction: 'asc' }
+    // 'relevance' has no descriptor of its own: it orders on a score computed
+    // from the search term, not on a column, and degrades to most-recent
+    // activity on a list that carries no term to score against.
+    case 'relevance':
     case 'recent':
     default:
       return { primary: 'lastMessageAt', direction: 'desc' }
@@ -1176,6 +1185,33 @@ function orderByForSort(sort: ConversationSort) {
         idTie,
       ]
   }
+}
+
+/**
+ * ORDER BY clause list for a searched list: best match first, then most-recent
+ * activity, then `id` so keyset never dupes/skips. Two rows with the same score
+ * are equally good answers to the term, so activity decides between them.
+ */
+function relevanceOrderBy(relevance: SQL<number>) {
+  return [sql`${relevance} DESC`, desc(conversations.lastMessageAt), desc(conversations.id)]
+}
+
+/**
+ * Keyset cursor comparison for a relevance-ordered list, mirroring
+ * `relevanceOrderBy`. The score is a float8, but both sides are produced by the
+ * same expression against the same clock anchor within one request, so the
+ * equality arm compares identical doubles rather than merely close ones.
+ */
+function relevanceCursorCondition(relevance: SQL<number>, score: number, c: Conversation) {
+  const scoreCol: KeysetColumn = {
+    equal: sql`${relevance} = ${score}::float8`,
+    strict: sql`${relevance} < ${score}::float8`,
+  }
+  return buildKeysetCondition([
+    scoreCol,
+    descColumn(conversations.lastMessageAt, c.lastMessageAt),
+    descColumn(conversations.id, c.id),
+  ])
 }
 
 /**
@@ -1380,6 +1416,61 @@ export interface ConversationListPage {
 }
 
 /**
+ * The message-side half of an inbox search: a live message whose content
+ * contains the term. Shared by the list's filter and the results' excerpts, so
+ * a row can never come back matched on a message the excerpt won't consider.
+ * The term is parameter-bound, so `%`/`_` are wildcards and nothing else is.
+ * Internal notes count — an agent searching their own notes expects to find
+ * them, and the excerpt is only ever rendered on the agent-side inbox.
+ */
+function messageMatchesSearch(term: string): SQL {
+  return sql`${conversationMessages.deletedAt} IS NULL
+      AND ${conversationMessages.content} ILIKE ${'%' + term + '%'}`
+}
+
+/**
+ * Keyword-in-context excerpts for a searched page, keyed by conversation.
+ *
+ * A searched row has to answer "why did this match?", and the list's own
+ * preview cannot: it shows the NEWEST message, while the term usually lives in
+ * an older one. Each entry is therefore the most recent matching message,
+ * windowed around the term and split for highlighting.
+ *
+ * One batched query for the whole page — the list never pays a query per row.
+ * A conversation that matched only on its visitor's name has no entry, and its
+ * row keeps the ordinary preview.
+ */
+export async function loadConversationSearchSnippets(
+  conversationIds: readonly ConversationId[],
+  term: string
+): Promise<Map<ConversationId, TermSegment[]>> {
+  const snippets = new Map<ConversationId, TermSegment[]>()
+  const needle = term.trim()
+  if (!needle || conversationIds.length === 0) return snippets
+
+  const rows = await db
+    .selectDistinctOn([conversationMessages.conversationId], {
+      conversationId: conversationMessages.conversationId,
+      content: conversationMessages.content,
+    })
+    .from(conversationMessages)
+    .where(
+      and(
+        inArray(conversationMessages.conversationId, [...conversationIds]),
+        messageMatchesSearch(needle)
+      )
+    )
+    .orderBy(conversationMessages.conversationId, desc(conversationMessages.createdAt))
+
+  for (const row of rows) {
+    if (!row.conversationId) continue
+    const segments = keywordInContext(row.content, needle)
+    if (segments) snippets.set(row.conversationId, segments)
+  }
+  return snippets
+}
+
+/**
  * Inbox feed for agents: conversations newest-activity-first with unread
  * counts, scoped by `conversationFilter(actor)` (UNIFIED-INBOX-SPEC.md §6 —
  * wiring this is a deliberate behavior change: a bare `conversation.view`
@@ -1391,22 +1482,12 @@ export async function listConversationsForAgent(
   actor: Actor
 ): Promise<ConversationListPage> {
   const limit = Math.min(filter.limit ?? INBOX_PAGE_SIZE, 100)
-  const sort = filter.sort ?? 'recent'
-  // Keyset cursor = the previous page's last conversation id. Re-read the exact
-  // row from the DB rather than trusting a client-supplied string, so the sort's
-  // ordering columns (which vary per sort) + ties are handled deterministically
-  // (mirrors listMessages). An unknown id → first page, and a malformed cursor
-  // can no longer reach a date parse / 500 the list.
-  let cursor: Conversation | null = null
-  if (filter.before) {
-    const [row] = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, filter.before as ConversationId))
-      .limit(1)
-    if (row) cursor = row
-  }
   const search = filter.search?.trim()
+  // Relevance is the DEFAULT order for a searched list, never an override:
+  // "most recent" is the right default for browsing an inbox and the wrong one
+  // for finding a thread, but a pinned sort still wins so the matches can be
+  // scanned chronologically.
+  const sort = filter.sort ?? defaultConversationSort(!!search)
   // Match the visitor's name or any non-deleted message content. EXISTS keeps
   // the select shape (conversations only) — no join row fan-out. The term is
   // parameter-bound, so `%`/`_` are treated as literals-plus-wildcards, not SQLi.
@@ -1418,13 +1499,37 @@ export async function listConversationsForAgent(
               AND p.display_name ILIKE ${'%' + search + '%'}
           )
           OR EXISTS (
-            SELECT 1 FROM ${conversationMessages} m
-            WHERE m.conversation_id = ${conversations.id}
-              AND m.deleted_at IS NULL
-              AND m.content ILIKE ${'%' + search + '%'}
+            SELECT 1 FROM ${conversationMessages}
+            WHERE ${conversationMessages.conversationId} = ${conversations.id}
+              AND ${messageMatchesSearch(search)}
           )
         )`
     : undefined
+  // The relevance score, live only when the list both carries a term and is
+  // ordered by it. One clock instant anchors the score's recency term for the
+  // whole request, so the cursor row and the page rows are scored alike.
+  const relevance =
+    search && sort === 'relevance' ? conversationRelevanceSql(search, new Date()) : null
+
+  // Keyset cursor = the previous page's last conversation id. Re-read the exact
+  // row from the DB rather than trusting a client-supplied string, so the sort's
+  // ordering columns (which vary per sort) + ties are handled deterministically
+  // (mirrors listMessages). An unknown id → first page, and a malformed cursor
+  // can no longer reach a date parse / 500 the list. Relevance-ordered pages
+  // additionally need the cursor row's score, recomputed by the same expression.
+  let cursor: Conversation | null = null
+  let cursorRelevance = 0
+  if (filter.before) {
+    const [row] = await db
+      .select({ row: conversations, relevance: relevance ?? sql<number>`0::float8` })
+      .from(conversations)
+      .where(eq(conversations.id, filter.before as ConversationId))
+      .limit(1)
+    if (row) {
+      cursor = row.row
+      cursorRelevance = Number(row.relevance)
+    }
+  }
 
   const rows = await db
     // Explicit projection of only the columns the list DTO consumes
@@ -1585,12 +1690,16 @@ export async function listConversationsForAgent(
         // can't keep listing. The shared fragment keeps this view and the
         // inbox nav's pair badge in lockstep.
         filter.hasLinkedCustomerTicket ? hasLinkedCustomerTicketSql() : undefined,
-        // Keyset comparison for the active sort (re-resolved cursor row). id is
+        // Keyset comparison for the active order (re-resolved cursor row). id is
         // always the final tiebreak so a page boundary never dupes or skips.
-        cursor ? cursorConditionForSort(sort, cursor) : undefined
+        cursor
+          ? relevance
+            ? relevanceCursorCondition(relevance, cursorRelevance, cursor)
+            : cursorConditionForSort(sort, cursor)
+          : undefined
       )
     )
-    .orderBy(...orderByForSort(sort))
+    .orderBy(...(relevance ? relevanceOrderBy(relevance) : orderByForSort(sort)))
     .limit(limit + 1)
 
   const hasMore = rows.length > limit

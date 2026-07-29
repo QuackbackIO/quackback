@@ -28,8 +28,10 @@ import {
 
 // ── Sorts ──────────────────────────────────────────────────────────────────
 
-/** The inbox sorts. 'recent' (last activity, newest first) is the default. */
+/** The inbox sorts. 'relevance' orders a searched list by how well each row
+ *  answers the term; every other sort orders on a column of the row itself. */
 export const CONVERSATION_SORTS = [
+  'relevance',
   'recent',
   'oldest',
   'created',
@@ -40,12 +42,53 @@ export const CONVERSATION_SORTS = [
 export type ConversationSort = (typeof CONVERSATION_SORTS)[number]
 export const DEFAULT_CONVERSATION_SORT: ConversationSort = 'recent'
 
+/** The sorts that stand on their own without a search term. 'relevance' scores
+ *  rows against a term, so it is only offered — and only honored — while one is
+ *  active; a saved view, which carries no term, cannot be pinned to it. Kept in
+ *  lockstep with `CONVERSATION_SORTS` by a parity test. */
+export const TERMLESS_CONVERSATION_SORTS = [
+  'recent',
+  'oldest',
+  'created',
+  'waiting',
+  'priority',
+  'sla',
+] as const satisfies readonly ConversationSort[]
+export type TermlessConversationSort = (typeof TERMLESS_CONVERSATION_SORTS)[number]
+
 export function isConversationSort(v: unknown): v is ConversationSort {
   return typeof v === 'string' && (CONVERSATION_SORTS as readonly string[]).includes(v)
 }
 
+/**
+ * The order a list falls back to when the caller pins no sort: relevance ranks
+ * a searched list, most-recent activity ranks an unsearched one. Relevance is
+ * a DEFAULT, never an override — an explicitly pinned sort always wins, so a
+ * team can still scan the matches chronologically.
+ */
+export function defaultConversationSort(searching: boolean): ConversationSort {
+  return searching ? 'relevance' : DEFAULT_CONVERSATION_SORT
+}
+
+/**
+ * The sort worth putting on the wire (and in a query key): a sort that merely
+ * restates the list's implicit default drops out, keeping params byte-stable,
+ * and so does a term-scored sort on a list with no term — that is not a choice
+ * the server can act on. Everything else is an explicit pin the server must
+ * honor, including a 'recent' pinned over a searched list's relevance default.
+ */
+export function explicitConversationSort(
+  sort: ConversationSort | undefined,
+  searching: boolean
+): ConversationSort | undefined {
+  if (!sort) return undefined
+  if (!searching && sort === 'relevance') return undefined
+  return sort === defaultConversationSort(searching) ? undefined : sort
+}
+
 /** English labels for the sort picker (no locale catalogue yet; see report). */
 export const CONVERSATION_SORT_LABELS: Record<ConversationSort, string> = {
+  relevance: 'Best match',
   recent: 'Most recent',
   oldest: 'Oldest',
   created: 'Recently created',
@@ -177,7 +220,7 @@ export interface ConversationViewDTO {
   id: ConversationViewId
   name: string
   filters: ConversationViewFilters
-  sort: ConversationSort | null
+  sort: TermlessConversationSort | null
   isShared: boolean
   isPinned: boolean
 }

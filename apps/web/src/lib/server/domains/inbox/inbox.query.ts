@@ -54,18 +54,20 @@ import type { TicketAssigneeFilter } from '@/lib/server/domains/tickets/ticket.t
 import {
   facetToConversationStatus,
   facetToTicketStatusCategory,
+  resolveInboxSort,
   type InboxItemDTO,
+  type InboxSort,
   type InboxTriageFacet,
   type LinkedTicketSummary,
 } from '@/lib/shared/inbox/items'
 
+// The sort vocabulary + its resolution live in the shared inbox module; both
+// are re-exported here so callers keep one import for the list contract.
+export { resolveInboxSort, type InboxSort }
+
 // ---------------------------------------------------------------------------
 // Filter + page contracts
 // ---------------------------------------------------------------------------
-
-/** The unified inbox's sorts — a subset of both `ConversationSort` and
- *  `TicketSort` so it type-checks as either branch's `sort` param directly. */
-export type InboxSort = 'recent' | 'oldest' | 'created' | 'priority'
 
 export interface InboxListFilter {
   facet: InboxTriageFacet
@@ -153,6 +155,14 @@ export interface MergeInboxBranchesInput {
   ticket: InboxBranchFetch
   sort: InboxSort
   limit: number
+  /**
+   * True when the list is a search. Each branch then arrives in its own
+   * best-match-first order (see the conversation list's relevance score), and
+   * those orders are not on a shared numeric scale, so the merge fuses them by
+   * within-branch position instead of re-deriving an activity key — which
+   * would throw the ranking away.
+   */
+  relevanceOrdered?: boolean
 }
 
 export interface MergeInboxBranchesResult {
@@ -202,18 +212,15 @@ interface KeyedInboxItem {
 }
 
 /**
- * Total ordering across both branches for one sort: primary value per
- * direction (desc for recent/created/priority, asc for oldest), tie-broken by
- * kind then id so the comparator is deterministic (required for a stable
- * merge + reproducible cursor derivation). Takes each side's precomputed
- * `key` (see `sortValue`) rather than the raw item, so no date parsing
- * happens inside the comparator itself.
+ * Total ordering across both branches: primary value in the given direction
+ * (desc for recent/created/priority, asc for oldest and for rank fusion),
+ * tie-broken by kind then id so the comparator is deterministic (required for
+ * a stable merge + reproducible cursor derivation). Takes each side's
+ * precomputed `key` rather than the raw item, so no date parsing happens
+ * inside the comparator itself.
  */
-function compareKeyedInboxItems(a: KeyedInboxItem, b: KeyedInboxItem, sort: InboxSort): number {
-  if (a.key !== b.key) {
-    const ascending = sort === 'oldest'
-    return ascending ? a.key - b.key : b.key - a.key
-  }
+function compareKeyedInboxItems(a: KeyedInboxItem, b: KeyedInboxItem, ascending: boolean): number {
+  if (a.key !== b.key) return ascending ? a.key - b.key : b.key - a.key
   const aItem = a.item
   const bItem = b.item
   if (aItem.kind !== bItem.kind) return aItem.kind < bItem.kind ? -1 : 1
@@ -231,22 +238,24 @@ function lastIdOfKind(items: InboxItemDTO[], kind: 'conversation' | 'ticket'): s
 }
 
 /**
- * Pure merge of the two branches' pages into one activity-ordered page (§3.1).
+ * Pure merge of the two branches' pages into one page (§3.1), ordered by
+ * activity — or, on a searched list, by rank fusion (see `relevanceOrdered`).
  * DB-free: takes already-fetched DTOs + each branch's own hasMore/cursor and
  * derives the combined page + the next opaque cursor. See the module's
  * CURSOR CONTRACT note for why the emitted cursor carries both branches'
  * native cursors rather than a single last-item pointer.
  */
 export function mergeInboxBranches(input: MergeInboxBranchesInput): MergeInboxBranchesResult {
-  const { conversation, ticket, sort, limit } = input
+  const { conversation, ticket, sort, limit, relevanceOrdered } = input
   // Precompute each item's numeric sort key once (up front) rather than
   // re-deriving it (a `new Date(...).getTime()` or priority-rank lookup) on
-  // every comparator call during the sort.
-  const keyed: KeyedInboxItem[] = [...conversation.items, ...ticket.items].map((item) => ({
-    item,
-    key: sortValue(item, sort),
-  }))
-  keyed.sort((a, b) => compareKeyedInboxItems(a, b, sort))
+  // every comparator call during the sort. On a searched list the key is the
+  // item's position within its own branch instead (see `relevanceOrdered`).
+  const keyed: KeyedInboxItem[] = relevanceOrdered
+    ? [conversation.items, ticket.items].flatMap((b) => b.map((item, key) => ({ item, key })))
+    : [...conversation.items, ...ticket.items].map((item) => ({ item, key: sortValue(item, sort) }))
+  // Rank fusion ascends (position 0 = best match), as does the oldest sort.
+  keyed.sort((a, b) => compareKeyedInboxItems(a, b, relevanceOrdered || sort === 'oldest'))
   const combined = keyed.map((k) => k.item)
   const truncated = combined.length > limit ? combined.slice(0, limit) : combined
   const overflowed = combined.length > limit
@@ -326,7 +335,7 @@ async function fetchConversationBranch(
   limit: number,
   cursor: ConversationId | null
 ): Promise<InboxBranchFetch> {
-  const { listConversationsForAgent } =
+  const { listConversationsForAgent, loadConversationSearchSnippets } =
     await import('@/lib/server/domains/conversation/conversation.query')
   const assignedAgentPrincipalId: PrincipalId | undefined =
     filter.assignee === 'me'
@@ -355,11 +364,19 @@ async function fetchConversationBranch(
     actor
   )
 
-  const linkedTickets = await loadLinkedCustomerTicketSummaries(page.conversations.map((c) => c.id))
+  const ids = page.conversations.map((c) => c.id)
+  // A searched page carries the keyword-in-context excerpt that says why each
+  // row matched; an unsearched one never runs the extra query.
+  const term = filter.search?.trim()
+  const [linkedTickets, snippets] = await Promise.all([
+    loadLinkedCustomerTicketSummaries(ids),
+    term ? loadConversationSearchSnippets(ids, term) : Promise.resolve(null),
+  ])
   const items: InboxItemDTO[] = page.conversations.map((conversation) => ({
     kind: 'conversation',
     conversation,
     linkedTicket: linkedTickets.get(conversation.id) ?? null,
+    searchSnippet: snippets?.get(conversation.id) ?? null,
   }))
   return { items, hasMore: page.hasMore, cursor }
 }
@@ -386,7 +403,9 @@ async function fetchTicketBranch(
       teamId: filter.teamId,
       companyId: filter.companyId,
       search: filter.search,
-      sort,
+      // Ticket rows carry no relevance score, so this branch runs its own
+      // default order and the merge fuses the two by within-branch rank.
+      sort: sort === 'relevance' ? 'recent' : sort,
       cursor: cursor ?? undefined,
       limit,
       // One-row rule (§2.1): a linked customer ticket renders as its
@@ -446,8 +465,10 @@ export function canViewInboxAtAll(actor: Actor): boolean {
 /**
  * The unified inbox list (UNIFIED-INBOX-SPEC.md §3.1): merges the
  * conversation and ticket branches, each scoped by its own RBAC predicate and
- * paginated with its own native keyset cursor, into one activity-ordered
- * page. An actor lacking a kind's view permission entirely (or who excluded
+ * paginated with its own native keyset cursor, into one activity-ordered page
+ * — or, when the filter carries a search term, one relevance-ordered page
+ * (the branches' own rankings are fused, never re-sorted on activity). An
+ * actor lacking a kind's view permission entirely (or who excluded
  * it via `filter.kinds`) never runs that branch's query — it's treated as
  * permanently exhausted, not queried-and-empty.
  */
@@ -456,7 +477,7 @@ export async function listInboxItems(
   filter: InboxListFilter
 ): Promise<InboxListPage> {
   const limit = Math.min(Math.max(filter.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT)
-  const sort: InboxSort = filter.sort ?? 'recent'
+  const sort = resolveInboxSort(filter.sort, filter.search)
   const cursorState = decodeInboxCursor(filter.cursor)
 
   const wantConversations = !filter.kinds || filter.kinds.includes('conversation')
@@ -473,7 +494,15 @@ export async function listInboxItems(
       : Promise.resolve(EMPTY_BRANCH(cursorState.t)),
   ])
 
-  return mergeInboxBranches({ conversation: conversationBranch, ticket: ticketBranch, sort, limit })
+  return mergeInboxBranches({
+    conversation: conversationBranch,
+    ticket: ticketBranch,
+    sort,
+    limit,
+    // A relevance-ordered conversation branch comes back best-match-first, so
+    // the merge must not re-sort it on activity.
+    relevanceOrdered: sort === 'relevance',
+  })
 }
 
 // ---------------------------------------------------------------------------
