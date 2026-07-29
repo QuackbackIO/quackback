@@ -18,7 +18,11 @@ import {
   deleteChangelog,
   getChangelogById,
 } from '@/lib/server/domains/changelog/changelog.service'
-import { listChangelogs, searchShippedPosts } from '@/lib/server/domains/changelog/changelog.query'
+import {
+  listChangelogs,
+  listTopViewedChangelogs,
+  searchShippedPosts,
+} from '@/lib/server/domains/changelog/changelog.query'
 import {
   getPublicChangelogById,
   listPublicChangelogs,
@@ -33,6 +37,7 @@ import {
   getChangelogSchema,
   deleteChangelogSchema,
   listPublicChangelogsSchema,
+  topViewedChangelogsSchema,
 } from '@/lib/shared/schemas/changelog'
 import { toIsoString, toIsoStringOrNull } from '@/lib/shared/utils'
 import { logger } from '@/lib/server/logger'
@@ -280,4 +285,27 @@ export const searchShippedPostsFn = createServerFn({ method: 'GET' })
       boardId: data.boardId as BoardId | undefined,
       limit: data.limit,
     })
+  })
+
+// ============================================================================
+// Analytics (Admin, Auth Required)
+// ============================================================================
+
+/**
+ * Rank published changelog entries by in-app view count (admin "Top viewed"
+ * table). Same view gate as the list — a member who can see drafts can see
+ * which published entries readers actually engaged with.
+ */
+export const topViewedChangelogsFn = createServerFn({ method: 'GET' })
+  .validator(topViewedChangelogsSchema)
+  .handler(async ({ data }) => {
+    log.debug({ limit: data.limit }, 'list top viewed changelogs')
+    await requireAuth({ permission: PERMISSIONS.CHANGELOG_VIEW_DRAFT })
+
+    const entries = await listTopViewedChangelogs({ limit: data.limit })
+
+    return entries.map((entry) => ({
+      ...entry,
+      publishedAt: toIsoString(entry.publishedAt),
+    }))
   })

@@ -11,7 +11,8 @@
  * and guidance-stats.test.ts's real-DB house pattern.
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest'
-import type { ConversationId, PrincipalId } from '@quackback/ids'
+import { createId } from '@quackback/ids'
+import type { ConversationId, KbArticleId, KbCategoryId, PrincipalId } from '@quackback/ids'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -24,6 +25,8 @@ import {
   assistantEvents,
   assistantPendingActions,
   conversations,
+  helpCenterArticles,
+  helpCenterCategories,
   principal,
 } from '@/lib/server/db'
 import {
@@ -37,6 +40,7 @@ const fixture = await createDbTestFixture({
     await db.select({ id: aiUsageLog.id }).from(aiUsageLog).limit(0)
     await db.select({ id: assistantPendingActions.id }).from(assistantPendingActions).limit(0)
     await db.select({ id: assistantEvents.id }).from(assistantEvents).limit(0)
+    await db.select({ id: helpCenterArticles.id }).from(helpCenterArticles).limit(0)
   },
 })
 
@@ -69,6 +73,30 @@ async function seedPrincipal(displayName: string): Promise<PrincipalId> {
     .values({ role: 'member', type: 'user', displayName, createdAt: new Date() })
     .returning()
   return row.id
+}
+
+async function seedArticle(title: string): Promise<KbArticleId> {
+  const [author] = await testDb
+    .insert(principal)
+    .values({ role: 'member', type: 'user', displayName: 'Author', createdAt: new Date() })
+    .returning()
+  const categoryId = createId('kb_category') as KbCategoryId
+  await testDb.insert(helpCenterCategories).values({
+    id: categoryId,
+    slug: `cat-${categoryId}`,
+    name: 'Category',
+  })
+  const [article] = await testDb
+    .insert(helpCenterArticles)
+    .values({
+      categoryId,
+      slug: `article-${title.toLowerCase().replace(/\s+/g, '-')}`,
+      title,
+      content: 'Body',
+      principalId: author.id,
+    })
+    .returning()
+  return article.id
 }
 
 async function seedConversation(): Promise<ConversationId> {
@@ -455,6 +483,94 @@ describe.skipIf(!fixture.available)('getCopilotUsageMetrics (real DB)', () => {
 
       const metrics = await getCopilotUsageMetrics(FROM, TO)
       expect(metrics.perTeammate).toHaveLength(10)
+    })
+  })
+
+  describe('topCitedSources', () => {
+    it('ranks cited articles by question volume, most first, joined to their title', async () => {
+      const popular = await seedArticle('Resetting your password')
+      const rare = await seedArticle('Exporting a report')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: popular }],
+      })
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: popular }],
+      })
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: rare }],
+      })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources[0]).toEqual({
+        id: popular,
+        title: 'Resetting your password',
+        url: `/admin/help-center/articles/${popular}`,
+        questions: 2,
+      })
+      expect(metrics.topCitedSources[1]).toEqual({
+        id: rare,
+        title: 'Exporting a report',
+        url: `/admin/help-center/articles/${rare}`,
+        questions: 1,
+      })
+    })
+
+    it('counts one turn citing the same article twice as a single question', async () => {
+      const article = await seedArticle('Two links, one turn')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [
+          { type: 'article', id: article },
+          { type: 'article', id: article },
+        ],
+      })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources).toEqual([
+        {
+          id: article,
+          title: 'Two links, one turn',
+          url: `/admin/help-center/articles/${article}`,
+          questions: 1,
+        },
+      ])
+    })
+
+    it('excludes non-article citations and rows outside the date range', async () => {
+      const article = await seedArticle('In range article')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'snippet', id: 'assistant_snippet_1' }],
+      })
+      await seedUsageLog(
+        'assistant',
+        { surface: 'copilot', citedSources: [{ type: 'article', id: article }] },
+        BEFORE_RANGE
+      )
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources).toEqual([])
+    })
+
+    it('drops a cited article that no longer exists rather than linking nowhere', async () => {
+      const deletedId = createId('kb_article')
+      await seedUsageLog('assistant', {
+        surface: 'copilot',
+        citedSources: [{ type: 'article', id: deletedId }],
+      })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources).toEqual([])
+    })
+
+    it('is empty when no copilot turn cited a source', async () => {
+      await seedUsageLog('assistant', { surface: 'copilot' })
+
+      const metrics = await getCopilotUsageMetrics(FROM, TO)
+      expect(metrics.topCitedSources).toEqual([])
     })
   })
 })

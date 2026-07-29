@@ -473,6 +473,20 @@ export function assembleCitations(
 }
 
 /**
+ * The model's raw `citations` field for this attempt, tolerant of a
+ * malformed or absent shape (a mid-stream salvage, an invalid attempt): parse
+ * failure reads as no citations rather than throwing, since this only feeds
+ * telemetry, never the answer itself.
+ */
+function parseAttemptCitations(
+  final: unknown
+): Array<{ type: 'article' | 'post' | 'snippet' | 'summary'; id: string }> {
+  if (!final || typeof final !== 'object' || !('citations' in final)) return []
+  const parsed = z.array(citationInputSchema).safeParse((final as { citations: unknown }).citations)
+  return parsed.success ? parsed.data : []
+}
+
+/**
  * Rewrite the model's inline `[n]` citation markers so each references the FINAL
  * assembled citation list (after hallucinated ids are dropped and duplicates are
  * merged), removing markers whose source didn't survive. The widget renders each
@@ -1136,27 +1150,41 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       },
     },
     deriveAnswerKind: (attempt) => deriveAnswerKind(attempt, toolContext),
-    deriveAttemptMetadata: (attempt) => ({
-      // Durable, privacy-minimal agent trace: names and counts only. Tool args,
-      // results, and customer text stay out of ai_usage_log metadata.
-      toolCalls: [...toolContext.ledger.toolCalls],
-      toolOutcomes: [...toolContext.ledger.toolOutcomes],
-      searchCalls: toolContext.ledger.searchCalls,
-      citationCandidates: toolContext.ledger.sources.size,
-      completionDisposition: attempt.validationError
-        ? 'invalid'
-        : toolContext.ledger.handoffRequest
-          ? 'handoff'
-          : toolContext.ledger.inabilityReport
-            ? 'inability'
-            : 'answer',
-      ...(toolContext.ledger.handoffRequest
-        ? { handoffReason: toolContext.ledger.handoffRequest.reason }
-        : {}),
-      ...(toolContext.ledger.inabilityReport
-        ? { inabilityReason: toolContext.ledger.inabilityReport.reason }
-        : {}),
-    }),
+    deriveAttemptMetadata: (attempt) => {
+      // The ids the model actually cited, dropping hallucinated ones and
+      // duplicates the same way the final answer's citation list does
+      // (assembleCitations) — so a source only counts here when it survived
+      // into what the teammate saw. type+id only: title/url are resolved
+      // live from the source's own table by the reporting query
+      // (analytics/copilot-usage.ts), never duplicated into this
+      // privacy-minimal trace.
+      const citedSources = assembleCitations(
+        parseAttemptCitations(attempt.final),
+        toolContext.ledger.sources
+      ).map((c) => ({ type: c.type, id: c.id }))
+      return {
+        // Durable, privacy-minimal agent trace: names and counts only. Tool args,
+        // results, and customer text stay out of ai_usage_log metadata.
+        toolCalls: [...toolContext.ledger.toolCalls],
+        toolOutcomes: [...toolContext.ledger.toolOutcomes],
+        searchCalls: toolContext.ledger.searchCalls,
+        citationCandidates: toolContext.ledger.sources.size,
+        completionDisposition: attempt.validationError
+          ? 'invalid'
+          : toolContext.ledger.handoffRequest
+            ? 'handoff'
+            : toolContext.ledger.inabilityReport
+              ? 'inability'
+              : 'answer',
+        ...(toolContext.ledger.handoffRequest
+          ? { handoffReason: toolContext.ledger.handoffRequest.reason }
+          : {}),
+        ...(toolContext.ledger.inabilityReport
+          ? { inabilityReason: toolContext.ledger.inabilityReport.reason }
+          : {}),
+        ...(citedSources.length > 0 ? { citedSources } : {}),
+      }
+    },
     // Structural conformance only. Semantic grounding lives in the system
     // prompt and the tools' in-loop authority; there is no post-hoc judge.
     validateFinal: (final) => {

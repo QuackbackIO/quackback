@@ -1,16 +1,28 @@
 /**
  * Copilot usage + outcome reporting (P2-D.2): questions asked, transforms
- * run, on-demand summaries, the insert/feedback outcomes, and the
- * propose-approve-execute actions funnel, over the last 30 days. Read-only
- * reporting; gated server-side on analytics.view like the rest of the Quinn
- * performance surface. Mounted whenever inboxAi is on (see
+ * run, on-demand summaries, the insert/feedback outcomes, the cited-sources
+ * leaderboard, and the propose-approve-execute actions funnel, over the last
+ * 30 days. Read-only reporting; gated server-side on analytics.view like the
+ * rest of the Quinn performance surface. Mounted whenever inboxAi is on (see
  * automation.assistant.tsx); only the actions funnel additionally needs
  * assistantTools — the pending-actions funnel this section reports on doesn't
  * exist otherwise — so the page passes that flag as `showActionsFunnel`
  * rather than gating the whole card on it.
+ *
+ * "Top teammates" answers who uses Copilot; "Cited sources" answers what's
+ * carrying the answers — the two views over the same question volume a
+ * content owner and an admin each care about.
  */
 import { useQuery } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { MetricTile, useLast30DaysRange, pct, asRate } from './metric-tile'
 import { copilotUsageMetricsQuery } from '@/lib/client/queries/assistant-copilot-analytics'
 
@@ -54,6 +66,7 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
 
   const transforms = data?.transformsByKind ?? []
   const teammates = data?.perTeammate ?? []
+  const citedSources = data?.topCitedSources ?? []
 
   return (
     <SettingsCard
@@ -73,7 +86,7 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
         )}
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 border-t border-border/50 pt-6">
         <h3 className="mb-2 text-sm font-medium">Outcomes</h3>
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
@@ -114,7 +127,41 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+      {citedSources.length > 0 && (
+        <div className="mt-6 border-t border-border/50 pt-6">
+          <h3 id="copilot-cited-sources-heading" className="mb-2 text-sm font-medium">
+            Cited sources
+          </h3>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Help Center articles Copilot answers cited most, ranked by how many questions drew on
+            them — the ones worth reviewing first.
+          </p>
+          <Table aria-labelledby="copilot-cited-sources-heading">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Source</TableHead>
+                <TableHead className="text-end">Questions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {citedSources.map((source) => (
+                <TableRow key={source.id}>
+                  <TableCell className="max-w-64 truncate">
+                    <a href={source.url} className="underline-offset-2 hover:underline">
+                      {source.title}
+                    </a>
+                  </TableCell>
+                  <TableCell className="text-end tabular-nums text-muted-foreground">
+                    {source.questions}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <div className="mt-6 grid gap-6 border-t border-border/50 pt-6 sm:grid-cols-2">
         <div>
           <h3 className="mb-2 text-sm font-medium">Top teammates</h3>
           {teammates.length === 0 ? (
@@ -137,7 +184,9 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
 
           {transforms.length > 0 && (
             <>
-              <h3 className="mt-4 mb-2 text-sm font-medium">Transforms by kind</h3>
+              <h3 className="mt-4 mb-2 text-sm font-medium border-t border-border/50 pt-4">
+                Transforms by kind
+              </h3>
               <ul className="space-y-1.5">
                 {transforms.map((row) => (
                   <li
@@ -156,7 +205,7 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
         </div>
 
         {showActionsFunnel && (
-          <div>
+          <div className="sm:border-l sm:border-border/50 sm:pl-6">
             <h3 className="mb-2 text-sm font-medium">Actions funnel</h3>
             <ul className="space-y-1.5 text-sm">
               <CountRow label="Proposed" value={data?.actionsProposed} />

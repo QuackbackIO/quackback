@@ -27,6 +27,7 @@ import type {
   ChangelogEntryWithDetails,
   ChangelogListResult,
   ChangelogAuthor,
+  TopViewedChangelogEntry,
 } from './changelog.types'
 
 /**
@@ -163,6 +164,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       displayDate: entry.displayDate,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
+      viewCount: entry.viewCount,
       author: entry.principalId ? (authorMap.get(entry.principalId) ?? null) : null,
       linkedPosts: entryLinkedPosts.map((lp) => ({
         id: lp.post.id,
@@ -249,4 +251,38 @@ export async function searchShippedPosts(params: {
     .limit(limit)
 
   return results
+}
+
+/**
+ * Rank published changelog entries by in-app view count, most-viewed first.
+ * Drafts and scheduled entries are excluded — they've never been publicly
+ * viewable, so their view_count is always zero and would only pad a ranking
+ * that's meant to surface what readers actually engaged with.
+ *
+ * @param params - Ranking parameters
+ * @returns Top entries ordered by view_count descending
+ */
+export async function listTopViewedChangelogs(
+  params: { limit?: number } = {}
+): Promise<TopViewedChangelogEntry[]> {
+  const { limit = 5 } = params
+  const now = new Date()
+
+  const entries = await db.query.changelogEntries.findMany({
+    where: and(
+      isNull(changelogEntries.deletedAt),
+      isNotNull(changelogEntries.publishedAt),
+      lte(changelogEntries.publishedAt, now)
+    ),
+    orderBy: [desc(changelogEntries.viewCount), desc(changelogEntries.id)],
+    limit,
+    columns: { id: true, title: true, viewCount: true, publishedAt: true },
+  })
+
+  return entries.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    viewCount: entry.viewCount,
+    publishedAt: entry.publishedAt as Date,
+  }))
 }

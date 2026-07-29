@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 590 surfaces
+### Server functions (`requireAuth`) — 589 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -255,6 +255,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/changelog.ts`::getChangelogFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::listChangelogsFn | changelog.view_draft |
 | `lib/server/functions/changelog.ts`::searchShippedPostsFn | changelog.manage |
+| `lib/server/functions/changelog.ts`::topViewedChangelogsFn | changelog.view_draft |
 | `lib/server/functions/channel-accounts.ts`::getEmailChannelConfigFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::createInboundRouteFn | channel_account.manage |
 | `lib/server/functions/channel-accounts.ts`::createSendingAddressFn | channel_account.manage |
@@ -387,7 +388,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/help-center.ts`::updateCategoryFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::deleteCategoryFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::listArticlesFn | help_center.manage |
-| `lib/server/functions/help-center.ts`::listArticlePerformanceFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::restoreCategoryFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::restoreArticleFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::getArticleFn | help_center.manage |
@@ -396,7 +396,6 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/help-center.ts`::publishArticleFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::unpublishArticleFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::deleteArticleFn | help_center.manage |
-| `lib/server/functions/help-center.ts`::listArticleFeedbackReasonsFn | help_center.manage |
 | `lib/server/functions/inbox.ts`::listInboxItemsFn | DYNAMIC (conversation.view | conversation.view_all | ticket.view | ticket.view_all) |
 | `lib/server/functions/inbox.ts`::fetchInboxCountsFn | DYNAMIC (conversation.view | conversation.view_all | ticket.view | ticket.view_all) |
 | `lib/server/functions/inbox.ts`::getConversationTicketLinkFn | conversation.view |
@@ -891,7 +890,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-182 of 880 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+181 of 878 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -927,7 +926,6 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/help-center.ts`::listPublicCategoryEditorsFn | server-fn |
 | `lib/server/functions/help-center.ts`::recordArticleFeedbackFn | server-fn |
 | `lib/server/functions/help-center.ts`::searchPublicArticlesFn | server-fn |
-| `lib/server/functions/help-center.ts`::submitArticleFeedbackReasonFn | server-fn |
 | `lib/server/functions/instant-sso.ts`::resolveInstantSsoRedirectFn | server-fn |
 | `lib/server/functions/invitations.ts`::acceptInvitationFn | server-fn |
 | `lib/server/functions/invitations.ts`::getInvitationDetailsFn | server-fn |

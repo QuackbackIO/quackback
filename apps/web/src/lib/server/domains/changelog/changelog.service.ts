@@ -402,6 +402,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     displayDate: entry.displayDate,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    viewCount: entry.viewCount,
     author,
     linkedPosts,
     categories,
