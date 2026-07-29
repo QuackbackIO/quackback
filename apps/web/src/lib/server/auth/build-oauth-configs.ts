@@ -132,7 +132,7 @@ export async function buildGenericOAuthConfigs({
       pkce: true,
       // Force the account picker so an admin typing a specific email isn't
       // silently signed in as whoever the IdP already has a session for.
-      prompt: 'select_account',
+      prompt: 'login',
       // Better-Auth's JIT block. When false, the OAuth callback aborts in
       // handleOAuthUserInfo before any user/session is created. Existing
       // users still link via accountLinking.trustedProviders.
