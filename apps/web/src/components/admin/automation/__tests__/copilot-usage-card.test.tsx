@@ -145,18 +145,30 @@ describe('CopilotUsageCard', () => {
     renderWithClient(<CopilotUsageCard showActionsFunnel />)
 
     expect(await screen.findByText('Cited sources')).toBeInTheDocument()
-    const topRow = (await screen.findByText('Resetting your password')).closest('li')!
+
+    // A real table, not a bare list: column headers a content owner can
+    // scan for, plus the rows underneath them.
+    const table = screen.getByRole('table', { name: /cited sources/i })
+    expect(within(table).getByRole('columnheader', { name: 'Source' })).toBeInTheDocument()
+    expect(within(table).getByRole('columnheader', { name: 'Questions' })).toBeInTheDocument()
+
+    const topRow = (await within(table).findByText('Resetting your password')).closest('tr')!
     expect(within(topRow).getByRole('link')).toHaveAttribute(
       'href',
       '/admin/help-center/articles/kb_article_1'
     )
     expect(within(topRow).getByText('18')).toBeInTheDocument()
-    const secondRow = screen.getByText('Exporting a report').closest('li')!
+    const secondRow = within(table).getByText('Exporting a report').closest('tr')!
     expect(within(secondRow).getByRole('link')).toHaveAttribute(
       'href',
       '/admin/help-center/articles/kb_article_2'
     )
     expect(within(secondRow).getByText('4')).toBeInTheDocument()
+
+    // Ranked by question volume: the higher-volume article leads.
+    const rows = within(table).getAllByRole('row')
+    expect(within(rows[1]).getByText('Resetting your password')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('Exporting a report')).toBeInTheDocument()
   })
 
   it('omits the cited-sources table when no source was cited', async () => {

@@ -15,6 +15,14 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { MetricTile, useLast30DaysRange, pct, asRate } from './metric-tile'
 import { copilotUsageMetricsQuery } from '@/lib/client/queries/assistant-copilot-analytics'
 
@@ -78,7 +86,7 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
         )}
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 border-t border-border/50 pt-6">
         <h3 className="mb-2 text-sm font-medium">Outcomes</h3>
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
@@ -120,26 +128,40 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
       </div>
 
       {citedSources.length > 0 && (
-        <div className="mt-6">
-          <h3 className="mb-2 text-sm font-medium">Cited sources</h3>
+        <div className="mt-6 border-t border-border/50 pt-6">
+          <h3 id="copilot-cited-sources-heading" className="mb-2 text-sm font-medium">
+            Cited sources
+          </h3>
           <p className="mb-2 text-xs text-muted-foreground">
             Help Center articles Copilot answers cited most, ranked by how many questions drew on
             them — the ones worth reviewing first.
           </p>
-          <ul className="space-y-1.5">
-            {citedSources.map((source) => (
-              <li key={source.id} className="flex items-center justify-between gap-2 text-sm">
-                <a href={source.url} className="truncate underline-offset-2 hover:underline">
-                  {source.title}
-                </a>
-                <span className="tabular-nums text-muted-foreground">{source.questions}</span>
-              </li>
-            ))}
-          </ul>
+          <Table aria-labelledby="copilot-cited-sources-heading">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Source</TableHead>
+                <TableHead className="text-end">Questions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {citedSources.map((source) => (
+                <TableRow key={source.id}>
+                  <TableCell className="max-w-64 truncate">
+                    <a href={source.url} className="underline-offset-2 hover:underline">
+                      {source.title}
+                    </a>
+                  </TableCell>
+                  <TableCell className="text-end tabular-nums text-muted-foreground">
+                    {source.questions}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+      <div className="mt-6 grid gap-6 border-t border-border/50 pt-6 sm:grid-cols-2">
         <div>
           <h3 className="mb-2 text-sm font-medium">Top teammates</h3>
           {teammates.length === 0 ? (
@@ -162,7 +184,9 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
 
           {transforms.length > 0 && (
             <>
-              <h3 className="mt-4 mb-2 text-sm font-medium">Transforms by kind</h3>
+              <h3 className="mt-4 mb-2 text-sm font-medium border-t border-border/50 pt-4">
+                Transforms by kind
+              </h3>
               <ul className="space-y-1.5">
                 {transforms.map((row) => (
                   <li
@@ -181,7 +205,7 @@ export function CopilotUsageCard({ showActionsFunnel }: CopilotUsageCardProps) {
         </div>
 
         {showActionsFunnel && (
-          <div>
+          <div className="sm:border-l sm:border-border/50 sm:pl-6">
             <h3 className="mb-2 text-sm font-medium">Actions funnel</h3>
             <ul className="space-y-1.5 text-sm">
               <CountRow label="Proposed" value={data?.actionsProposed} />
