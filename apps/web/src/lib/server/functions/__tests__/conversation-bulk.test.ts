@@ -40,6 +40,7 @@ const hoisted = vi.hoisted(() => ({
   setConversationStatus: vi.fn(),
   snoozeConversation: vi.fn(),
   assertRequiredAttributesForClose: vi.fn(),
+  attachTag: vi.fn(),
   log: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -88,6 +89,10 @@ vi.mock('@/lib/server/domains/conversation-attributes/close-guard', () => ({
   assertRequiredAttributesForClose: hoisted.assertRequiredAttributesForClose,
 }))
 
+vi.mock('@/lib/server/domains/conversation/conversation-tag.service', () => ({
+  attachTag: hoisted.attachTag,
+}))
+
 import { bulkUpdateConversationsFn } from '../conversation'
 
 const AUTH = {
@@ -111,6 +116,7 @@ beforeEach(() => {
   hoisted.setConversationStatus.mockResolvedValue({})
   hoisted.snoozeConversation.mockResolvedValue({})
   hoisted.assertRequiredAttributesForClose.mockResolvedValue(undefined)
+  hoisted.attachTag.mockResolvedValue([])
 })
 
 describe('bulkUpdateConversationsFn — per-item isolation', () => {
@@ -229,6 +235,31 @@ describe('bulkUpdateConversationsFn — gating', () => {
     expect(hoisted.assignTeam).not.toHaveBeenCalled()
   })
 
+  it('gates tag on conversation.set_tags, not on set_status', async () => {
+    // A teammate who may change status but not labels must not bulk-tag.
+    hoisted.requireAuth.mockResolvedValue({
+      ...AUTH,
+      permissions: [PERMISSIONS.CONVERSATION_SET_STATUS, PERMISSIONS.CONVERSATION_ASSIGN],
+    })
+    await expect(
+      call({
+        conversationIds: ['conversation_c1'],
+        action: { type: 'tag', tagId: 'conversation_tag_1' },
+      })
+    ).rejects.toThrow(/conversation\.set_tags/)
+    expect(hoisted.attachTag).not.toHaveBeenCalled()
+
+    hoisted.requireAuth.mockResolvedValue({
+      ...AUTH,
+      permissions: [PERMISSIONS.CONVERSATION_SET_TAGS],
+    })
+    const res = await call({
+      conversationIds: ['conversation_c1'],
+      action: { type: 'tag', tagId: 'conversation_tag_1' },
+    })
+    expect(res.succeeded).toEqual(['conversation_c1'])
+  })
+
   it('allows status actions for a role that holds conversation.set_status', async () => {
     // admin holds every permission; status actions go through with no gate throw.
     for (const action of [
@@ -292,6 +323,36 @@ describe('bulkUpdateConversationsFn — action routing', () => {
       action: { type: 'snooze', until: null },
     })
     expect(hoisted.snoozeConversation).toHaveBeenCalledWith('conversation_c1', null, ACTOR)
+  })
+
+  it('routes tag to attachTag for every conversation in the batch', async () => {
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2', 'conversation_c3'],
+      action: { type: 'tag', tagId: 'conversation_tag_1' },
+    })
+    expect(result).toEqual({
+      succeeded: ['conversation_c1', 'conversation_c2', 'conversation_c3'],
+      failed: [],
+    })
+    expect(hoisted.attachTag).toHaveBeenCalledTimes(3)
+    expect(hoisted.attachTag).toHaveBeenNthCalledWith(1, 'conversation_c1', 'conversation_tag_1')
+    expect(hoisted.attachTag).toHaveBeenNthCalledWith(2, 'conversation_c2', 'conversation_tag_1')
+    expect(hoisted.attachTag).toHaveBeenNthCalledWith(3, 'conversation_c3', 'conversation_tag_1')
+  })
+
+  it('isolates a tag failure to its own item and tags the rest', async () => {
+    hoisted.attachTag.mockImplementation(async (id: string) => {
+      if (id === 'conversation_c2') throw new Error('tag is archived')
+      return []
+    })
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2', 'conversation_c3'],
+      action: { type: 'tag', tagId: 'conversation_tag_1' },
+    })
+    expect(result).toEqual({
+      succeeded: ['conversation_c1', 'conversation_c3'],
+      failed: [{ id: 'conversation_c2', reason: 'tag is archived' }],
+    })
   })
 
   it('maps close/reopen onto setConversationStatus closed/open', async () => {

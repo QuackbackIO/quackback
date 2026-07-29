@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { PlusIcon, CheckIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -8,15 +8,16 @@ import { TagChip } from '@/components/shared/tag-chip'
 import type { ConversationTagDTO, ConversationDTO } from '@/lib/shared/conversation/types'
 import type { ConversationId, ConversationTagId } from '@quackback/ids'
 import {
-  fetchConversationTagsFn,
   addConversationTagFn,
   removeConversationTagFn,
   updateConversationTagFn,
   deleteConversationTagFn,
 } from '@/lib/server/functions/conversation-tags'
+import {
+  useConversationTags,
+  CONVERSATION_TAGS_KEY,
+} from '@/lib/client/hooks/use-conversation-tags'
 import { ColorSwatches, DEFAULT_TAG_COLOR } from '@/components/shared/color-swatches'
-
-const CONVERSATION_TAGS_KEY = ['admin', 'inbox', 'conversation-tags'] as const
 
 /** The slice of the thread query cache this editor writes (it owns `tags`). */
 type ThreadCache = { conversation: ConversationDTO; messages: unknown[]; hasMore?: boolean }
@@ -58,12 +59,7 @@ export function ConversationTagsEditor({
   const threadKey = ['admin', 'inbox', 'thread', conversationId] as const
 
   // Only fetch the full label list when the picker is open.
-  const { data: allTags } = useQuery({
-    queryKey: CONVERSATION_TAGS_KEY,
-    queryFn: () => fetchConversationTagsFn(),
-    enabled: open,
-    staleTime: 60_000,
-  })
+  const { data: allTags } = useConversationTags({ enabled: open })
 
   // Write the conversation's tag list straight into the thread cache
   // (authoritative — the chips reflect the server response without waiting on a

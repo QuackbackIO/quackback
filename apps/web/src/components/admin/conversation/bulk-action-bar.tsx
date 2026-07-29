@@ -2,8 +2,8 @@
  * The floating bulk-action bar (support platform §4.6): appears while a
  * multi-selection is active (or while a value menu is being surfaced for the
  * single open conversation) and applies one action — assign, team, priority,
- * snooze, or close — to the whole target set. It owns no server logic: the inbox
- * route wires each control to the bulk mutation (many rows) or the single
+ * snooze, label, or close — to the whole target set. It owns no server logic: the
+ * inbox route wires each control to the bulk mutation (many rows) or the single
  * conversation fns (the active thread), and toasts the summary.
  *
  * The value menus are controlled (`openMenu`) so the command bar / keyboard layer
@@ -12,6 +12,7 @@
 import { XMarkIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
+import { useConversationTags } from '@/lib/client/hooks/use-conversation-tags'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import { AssigneeMenuItems } from '@/components/admin/conversation/assignee-control'
@@ -26,7 +27,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 
 /** The value menus the bar can pop open on demand. */
-export type BulkMenuId = 'assign' | 'assign_team' | 'priority' | 'snooze'
+export type BulkMenuId = 'assign' | 'assign_team' | 'priority' | 'snooze' | 'tag'
 
 export interface BulkActionBarProps {
   /** Number of conversations the action targets. */
@@ -43,11 +44,16 @@ export interface BulkActionBarProps {
   onAssignTeam: (teamId: string) => void
   onPriority: (priority: ConversationPriority) => void
   onSnooze: (until: string | null) => void
+  /** Apply an existing label to the whole target set. */
+  onTag: (tagId: string) => void
   onClose: () => void
   /** True when the target includes at least one ticket — snooze has no
    *  ticket-row equivalent (UNIFIED-INBOX-SPEC.md §2.5), so its trigger is
    *  disabled rather than silently no-op'd. */
   disableSnooze?: boolean
+  /** True when the target includes at least one ticket — tickets carry no
+   *  labels, so the trigger is disabled for the same reason as snooze. */
+  disableTag?: boolean
 }
 
 const triggerClass =
@@ -64,11 +70,15 @@ export function BulkActionBar({
   onAssignTeam,
   onPriority,
   onSnooze,
+  onTag,
   onClose,
   disableSnooze,
+  disableTag,
 }: BulkActionBarProps) {
   const { data: members } = useTeamMembers()
   const { data: teams } = useInboxTeams()
+  // Only fetch the label taxonomy once its menu is actually open.
+  const { data: tags } = useConversationTags({ enabled: openMenu === 'tag' })
 
   // Controlled open/close for one menu, so the command bar can pop it open.
   const menuOpen = (id: BulkMenuId) => ({
@@ -148,6 +158,43 @@ export function BulkActionBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top">
             <PriorityMenuItems onSelect={onPriority} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Tag. Applies an EXISTING tag to every target — creating taxonomy
+            stays in the per-conversation editor, which holds the color picker
+            and the manage_tags-gated create. Tickets carry no tags, so the
+            trigger is disabled rather than silently no-op'd. */}
+        <DropdownMenu {...menuOpen('tag')}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={pending || disableTag}
+              title={disableTag ? 'Not available for tickets' : undefined}
+              className={triggerClass}
+            >
+              Tag
+              <ChevronUpIcon className="size-3" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" side="top" className="max-h-72 overflow-y-auto">
+            {tags && tags.length > 0 ? (
+              tags.map((t) => (
+                <DropdownMenuItem
+                  key={t.id}
+                  onClick={() => onTag(t.id)}
+                  className="flex items-center gap-2"
+                >
+                  <span
+                    className="inline-block size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: t.color }}
+                  />
+                  <span className="truncate">{t.name}</span>
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <DropdownMenuItem disabled>No tags</DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

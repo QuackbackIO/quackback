@@ -55,6 +55,8 @@ import {
   setConversationStatusFn,
   snoozeConversationFn,
 } from '@/lib/server/functions/conversation'
+import { addConversationTagFn } from '@/lib/server/functions/conversation-tags'
+import { CONVERSATION_TAGS_KEY } from '@/lib/client/hooks/use-conversation-tags'
 import { assignConversationTeamFn } from '@/lib/server/functions/teams'
 import { bulkUpdateTicketsFn, type BulkTicketActionInput } from '@/lib/server/functions/tickets'
 import {
@@ -1135,6 +1137,35 @@ function InboxPage() {
     [hasSelection, selectedRef, runConversationOnlyBulk, runSolo]
   )
 
+  // Tagging has no ticket-row equivalent either (tickets carry no tags), so the
+  // bar disables its trigger whenever the target includes a ticket
+  // (`hasTicketTarget`) and this only ever runs against conversation ids. The
+  // bulk mutation refreshes the tag taxonomy + counts itself; the solo path goes
+  // through the single-conversation add fn, so it refreshes the open thread and
+  // the counts here.
+  const applyTag = useCallback(
+    async (tagId: string) => {
+      if (hasSelection) {
+        await runConversationOnlyBulk({ type: 'tag', tagId }, 'Tagged')
+        refreshInbox()
+        return
+      }
+      if (!selectedRef || selectedRef.kind === 'ticket') return
+      const conversationId = selectedRef.id
+      return runSolo(
+        async () => {
+          await addConversationTagFn({ data: { conversationId, tagId } })
+          void queryClient.invalidateQueries({
+            queryKey: conversationKeys.agentThread(conversationId),
+          })
+          void queryClient.invalidateQueries({ queryKey: CONVERSATION_TAGS_KEY })
+        },
+        { success: 'Tag added', error: 'Failed to add tag' }
+      )
+    },
+    [hasSelection, selectedRef, runConversationOnlyBulk, runSolo, refreshInbox, queryClient]
+  )
+
   const applyClose = useCallback(async () => {
     const closedStatusId = resolveDefaultClosedStatusId(ticketStatusList)
     if (hasSelection) {
@@ -1482,8 +1513,10 @@ function InboxPage() {
           onAssignTeam={applyAssignTeam}
           onPriority={applyPriority}
           onSnooze={applySnooze}
+          onTag={applyTag}
           onClose={applyClose}
           disableSnooze={hasTicketTarget}
+          disableTag={hasTicketTarget}
         />
       )}
 

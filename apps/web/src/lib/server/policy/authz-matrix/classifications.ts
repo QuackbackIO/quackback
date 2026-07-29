@@ -258,12 +258,16 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
     'field-scoped post PATCH — assertApiPermissions authorizes per changed field'
   ),
 
-  // Bulk inbox action: the permission depends on the action (assign vs status),
-  // so the gate is bare and the per-action permission is asserted at runtime,
-  // identical to performing each action through its single-conversation fn.
+  // Bulk inbox action: the permission depends on the action (assign vs tag vs
+  // status), so the gate is bare and the per-action permission is asserted at
+  // runtime, identical to performing each action through its single-conversation fn.
   'lib/server/functions/conversation.ts::bulkUpdateConversationsFn': DYNAMIC_PERMISSION(
-    [PERMISSIONS.CONVERSATION_ASSIGN, PERMISSIONS.CONVERSATION_SET_STATUS],
-    'bulk action — assign/assign_team require conversation.assign, the rest conversation.set_status'
+    [
+      PERMISSIONS.CONVERSATION_ASSIGN,
+      PERMISSIONS.CONVERSATION_SET_TAGS,
+      PERMISSIONS.CONVERSATION_SET_STATUS,
+    ],
+    'bulk action — assign/assign_team require conversation.assign, tag requires conversation.set_tags, the rest conversation.set_status'
   ),
 
   // Ticket-axis counterpart of the bulk inbox action above: same dynamic
