@@ -17,6 +17,7 @@ import {
   ticketStatuses,
   eq,
   and,
+  desc,
   inArray,
   isNull,
   type Ticket,
@@ -143,6 +144,71 @@ export async function getRequesterTicketSummaries(
     })
   }
   return map
+}
+
+/**
+ * A row in the requester's own-tickets list (the widget Tickets tab): the
+ * reference, title, current public stage, and last activity stamp. Same
+ * projection rule as ConversationTicketSummary — the displayed state keys off
+ * the TICKET's stage, never an internal status detail.
+ */
+export interface MyTicketSummary {
+  ticketId: TicketId
+  reference: string
+  title: string
+  stage: TicketStageRef
+  updatedAt: string
+}
+
+/**
+ * The requester's own customer tickets, newest-activity first. Ownership IS
+ * the scope (the where clause is the requester id — no ticket.* permission
+ * anywhere on this path), so a requester only ever sees their own tickets;
+ * internal-only statuses project to a null stage instead of leaking.
+ */
+export async function listMyTicketSummaries(
+  requesterPrincipalId: PrincipalId
+): Promise<MyTicketSummary[]> {
+  const rows = await db
+    .select({
+      ticketId: tickets.id,
+      number: tickets.number,
+      title: tickets.title,
+      statusId: tickets.statusId,
+      updatedAt: tickets.updatedAt,
+    })
+    .from(tickets)
+    .where(
+      and(
+        eq(tickets.type, 'customer'),
+        eq(tickets.requesterPrincipalId, requesterPrincipalId),
+        isNull(tickets.deletedAt)
+      )
+    )
+    .orderBy(desc(tickets.updatedAt))
+    .limit(50)
+  if (rows.length === 0) return []
+  const statusIds = [...new Set(rows.map((r) => r.statusId))]
+  const [statusRows, stageLabels] = await Promise.all([
+    db.select().from(ticketStatuses).where(inArray(ticketStatuses.id, statusIds)),
+    getStageLabels(),
+  ])
+  const statuses = new Map(statusRows.map((s) => [s.id, s]))
+  return rows.map((r) => {
+    const status = statuses.get(r.statusId)
+    const slot = status ? resolveStage(status) : null
+    return {
+      ticketId: r.ticketId,
+      reference: formatTicketNumber(r.number),
+      title: r.title,
+      stage: {
+        slot,
+        label: slot ? stageLabels[slot] : null,
+        closed: status?.category === 'closed',
+      },
+      updatedAt: r.updatedAt.toISOString(),
+    }
+  })
 }
 
 /**
