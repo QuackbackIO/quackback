@@ -26,6 +26,16 @@ export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' |
  * Secret/PII paths stripped from every log line. Redaction is a backstop —
  * the primary rule is "log IDs, not payloads". `remove: true` drops the key
  * entirely so secrets never reach the log store.
+ *
+ * Two limits of Pino's matcher bound what this list can do, and both are
+ * reasons the "log IDs, not payloads" rule still has to hold:
+ *   - segments match exactly, so a key whose name is assembled at runtime
+ *     (a provider or vendor name spliced into `X_<NAME>_SECRET`) cannot be
+ *     expressed here at all;
+ *   - `*` matches exactly one level, so `*.clientSecret` covers a value one
+ *     object deep and nothing below it.
+ * Callers holding a map of credentials keyed by name must therefore mask it
+ * themselves before it reaches a log call.
  */
 const REDACT_PATHS = [
   'password',
@@ -64,6 +74,39 @@ const REDACT_PATHS = [
   'request.headers["set-cookie"]',
   'res.headers["set-cookie"]',
   'response.headers["set-cookie"]',
+  // Credential field names used by OAuth apps, signed webhooks and bots. None
+  // of them contain `secret` or `token` as a whole path segment, so every one
+  // slips past the exact-match entries above.
+  'clientSecret',
+  '*.clientSecret',
+  'signingSecret',
+  '*.signingSecret',
+  'botToken',
+  '*.botToken',
+  // Wrapper field names. The realistic leak is not a hand-picked secret key,
+  // it is a reflexive `log.error({ input }, 'validation failed')` that ships
+  // the whole submitted object. Drop the container: whatever a caller nests
+  // inside it cannot be enumerated in advance.
+  'values',
+  '*.values',
+  'fields',
+  '*.fields',
+  'draft',
+  '*.draft',
+  'input',
+  '*.input',
+  'payload',
+  '*.payload',
+  'sealedPayload',
+  '*.sealedPayload',
+  // Bracket notation for credential keys that are not valid identifiers:
+  // hyphenated object-storage keys and the dot-prefixed registry pull secret.
+  '["access-key-id"]',
+  '*["access-key-id"]',
+  '["secret-access-key"]',
+  '*["secret-access-key"]',
+  '[".dockerconfigjson"]',
+  '*[".dockerconfigjson"]',
 ]
 
 /**
