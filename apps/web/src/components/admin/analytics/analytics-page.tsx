@@ -19,7 +19,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
 import { ChartBarIcon, FunnelIcon, CalendarDaysIcon } from '@heroicons/react/24/solid'
-import { CHART_HEIGHT_CLASS } from './analytics-constants'
+import { CHART_HEIGHT_CLASS, channelLabel } from './analytics-constants'
 import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
 import { AnalyticsSummaryCards, type MetricKey } from './analytics-summary-cards'
@@ -46,6 +46,11 @@ const AnalyticsStatusChart = lazy(() =>
 )
 const AnalyticsVisitorChart = lazy(() =>
   import('./analytics-visitor-chart').then((m) => ({ default: m.AnalyticsVisitorChart }))
+)
+const AnalyticsConversationVolumeChart = lazy(() =>
+  import('./analytics-conversation-volume-chart').then((m) => ({
+    default: m.AnalyticsConversationVolumeChart,
+  }))
 )
 
 /** A section card matching the Overview: a divided headline stat row, then the
@@ -100,6 +105,17 @@ function AiOutcomeBreakdown({
 /** Integer average, guarding divide-by-zero, with thousands separators. */
 function avgPerItem(total: number, count: number): string {
   return count > 0 ? Math.round(total / count).toLocaleString() : '0'
+}
+
+/** Period total per channel, in the series' volume-desc channel order. */
+function channelTotals(volume: {
+  channels: string[]
+  days: Array<Record<string, string | number>>
+}): Array<{ channel: string; total: number }> {
+  return volume.channels.map((channel) => ({
+    channel,
+    total: volume.days.reduce((sum, d) => sum + (Number(d[channel]) || 0), 0),
+  }))
 }
 
 /** Format a median resolution time (in days) as a stat value + unit suffix.
@@ -350,27 +366,51 @@ export function AnalyticsPage() {
                   </div>
                 )}
 
-                {section === 'support' &&
-                  (data.csat.responseCount === 0 ? (
-                    <Card className="overflow-hidden">
-                      <AnalyticsEmpty message="No CSAT responses for this period" />
-                    </Card>
-                  ) : (
+                {section === 'support' && (
+                  <div className="flex flex-col gap-6">
                     <StatSection
                       stats={[
                         {
-                          label: 'Avg rating',
-                          value: data.csat.avgRating.toFixed(1),
-                          suffix: '/ 5',
-                          delta: data.csat.avgRatingDelta,
+                          label: 'New conversations',
+                          value: data.conversationVolume.total.toLocaleString(),
+                          delta: data.conversationVolume.delta,
                         },
-                        { label: 'Responses', value: data.csat.responseCount.toLocaleString() },
-                        { label: 'Response rate', value: `${data.csat.responseRate}%` },
+                        // Per-channel totals for the top channels, in the same
+                        // volume-desc order the stack below uses.
+                        ...channelTotals(data.conversationVolume)
+                          .slice(0, 3)
+                          .map((c) => ({
+                            label: channelLabel(c.channel),
+                            value: c.total.toLocaleString(),
+                          })),
                       ]}
                     >
-                      <AnalyticsCsatDistribution distribution={data.csat.distribution} />
+                      <Suspense fallback={<ChartSkeleton />}>
+                        <AnalyticsConversationVolumeChart volume={data.conversationVolume} />
+                      </Suspense>
                     </StatSection>
-                  ))}
+                    {data.csat.responseCount === 0 ? (
+                      <Card className="overflow-hidden">
+                        <AnalyticsEmpty message="No CSAT responses for this period" />
+                      </Card>
+                    ) : (
+                      <StatSection
+                        stats={[
+                          {
+                            label: 'Avg rating',
+                            value: data.csat.avgRating.toFixed(1),
+                            suffix: '/ 5',
+                            delta: data.csat.avgRatingDelta,
+                          },
+                          { label: 'Responses', value: data.csat.responseCount.toLocaleString() },
+                          { label: 'Response rate', value: `${data.csat.responseRate}%` },
+                        ]}
+                      >
+                        <AnalyticsCsatDistribution distribution={data.csat.distribution} />
+                      </StatSection>
+                    )}
+                  </div>
+                )}
 
                 {section === 'ai' &&
                   (data.ai.involved === 0 ? (
