@@ -54,6 +54,8 @@ import { getPortalConfig } from '@/lib/server/domains/settings/settings.service'
 import { startOfUtcMonth } from '@/lib/shared/utils/date'
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
+import { validatePostCustomFieldValues } from '@/lib/shared/post-custom-fields'
+import type { CustomFieldValues } from '@/lib/shared/db-types'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
 import { getBaseUrl } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
@@ -143,6 +145,19 @@ export async function createPost(
     throw new NotFoundError('BOARD_NOT_FOUND', `Board with ID ${input.boardId} not found`)
   }
 
+  // Validate submitted custom-field answers against the board's declared
+  // fields. Unknown keys are dropped by the validator; a missing required
+  // field rejects the submission before any row is written.
+  const boardCustomFields = board.settings?.customFields ?? []
+  let customFieldValues: CustomFieldValues | null = null
+  if (boardCustomFields.length > 0) {
+    const parsed = validatePostCustomFieldValues(boardCustomFields, input.customFields ?? {})
+    if (!parsed.ok) {
+      throw new ValidationError('VALIDATION_ERROR', parsed.errors[0].message)
+    }
+    customFieldValues = parsed.values
+  }
+
   // Workspace moderation gate. Submissions matching the configured
   // requireApproval category land in 'pending' instead of 'published'.
   // Team always bypasses.
@@ -225,6 +240,7 @@ export async function createPost(
         statusId,
         principalId: author.principalId,
         widgetMetadata: input.widgetMetadata ?? null,
+        customFieldValues,
         trackedByPrincipalId: input.trackedByPrincipalId ?? null,
         voteCount: 1,
         moderationState,

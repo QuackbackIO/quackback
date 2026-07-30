@@ -28,6 +28,9 @@ export interface CreatePostInput {
   createdAt?: Date
   /** The team member who initiated this post on the customer's behalf. */
   trackedByPrincipalId?: PrincipalId | null
+  /** Answers to the board's configured custom fields (boards.settings.customFields),
+   *  keyed by field key. Validated against the board's declaration on write. */
+  customFields?: Record<string, unknown>
 }
 
 /**
