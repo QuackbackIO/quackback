@@ -54,6 +54,7 @@ const loadHelpCategory = () => import('@/components/widget/widget-help-category'
 const loadHelpDetail = () => import('@/components/widget/widget-help-detail')
 const loadMessenger = () => import('@/components/widget/widget-messenger')
 const loadMessagesView = () => import('@/components/widget/widget-messages')
+const loadTicketsView = () => import('@/components/widget/widget-tickets')
 
 const WidgetPostDetail = lazy(() => loadPostDetail().then((m) => ({ default: m.WidgetPostDetail })))
 const WidgetChangelog = lazy(() => loadChangelog().then((m) => ({ default: m.WidgetChangelog })))
@@ -67,6 +68,7 @@ const WidgetHelpCategory = lazy(() =>
 const WidgetHelpDetail = lazy(() => loadHelpDetail().then((m) => ({ default: m.WidgetHelpDetail })))
 const WidgetMessenger = lazy(() => loadMessenger().then((m) => ({ default: m.WidgetMessenger })))
 const WidgetMessages = lazy(() => loadMessagesView().then((m) => ({ default: m.WidgetMessages })))
+const WidgetTickets = lazy(() => loadTicketsView().then((m) => ({ default: m.WidgetTickets })))
 
 const LAZY_VIEW_LOADERS = [
   loadPostDetail,
@@ -77,6 +79,7 @@ const LAZY_VIEW_LOADERS = [
   loadHelpDetail,
   loadMessenger,
   loadMessagesView,
+  loadTicketsView,
 ]
 
 const searchSchema = z.object({
@@ -247,6 +250,9 @@ export const Route = createFileRoute('/widget/')({
         // persisted config names the messenger surface `messenger`; the widget
         // speaks `messages`.
         messages: messengerTabEnabled || ticketsEnabled,
+        // The requester's own-tickets list — projected already AND-ed with the
+        // supportTickets flag in the public widget config (fail-closed).
+        tickets: settings?.publicWidgetConfig?.tabs?.tickets ?? false,
         // Admin opt-out for the aggregated Home tab (defaults to shown).
         home: settings?.publicWidgetConfig?.tabs?.home ?? true,
       },
@@ -516,10 +522,16 @@ function WidgetPage() {
         tabs.messages
       ) {
         openMessenger()
-      } else if (opts.view === 'tickets' && tabs.messages) {
-        // Legacy SDK target: ticket threads now live in the Messages list.
-        setActiveTab('messages')
-        setView('messages')
+      } else if (opts.view === 'tickets') {
+        // The requester's own-tickets list lives on the Tickets tab; on
+        // workspaces without it, ticket threads are listed in Messages.
+        if (tabs.tickets) {
+          setActiveTab('tickets')
+          setView('tickets')
+        } else if (tabs.messages) {
+          setActiveTab('messages')
+          setView('messages')
+        }
       } else if ((opts.view === 'home' || opts.view === 'overview') && homeEnabled(tabs)) {
         setActiveTab('home')
         setView('overview')
@@ -581,6 +593,7 @@ function WidgetPage() {
       backTarget &&
       (view === 'overview' ||
         view === 'messages' ||
+        view === 'tickets' ||
         view === 'feedback' ||
         view === 'help' ||
         view === 'changelog')
@@ -601,6 +614,8 @@ function WidgetPage() {
     } else if (tab === 'messages') {
       setConversationTarget(null)
       setView('messages')
+    } else if (tab === 'tickets') {
+      setView('tickets')
     } else if (tab === 'feedback') {
       setSelectedPostId(null)
       setView('feedback')
@@ -665,7 +680,8 @@ function WidgetPage() {
     view === 'feedback' ||
     view === 'changelog' ||
     view === 'help' ||
-    view === 'messages'
+    view === 'messages' ||
+    view === 'tickets'
   const shellOnBack = !isRootView || backTarget ? handleBack : undefined
 
   // Messenger thread header lives in the SHELL's top bar (single header row):
@@ -783,6 +799,12 @@ function WidgetPage() {
             canStartConversation={messengerEnabled}
             onOpenMessenger={openMessenger}
           />
+        </ViewTransition>
+      )}
+
+      {view === 'tickets' && (
+        <ViewTransition id="tickets" kind="root">
+          <WidgetTickets />
         </ViewTransition>
       )}
 

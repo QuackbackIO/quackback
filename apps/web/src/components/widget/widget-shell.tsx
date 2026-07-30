@@ -10,6 +10,7 @@ import {
   LightBulbIcon,
   NewspaperIcon,
   QuestionMarkCircleIcon,
+  TicketIcon,
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -36,6 +37,12 @@ const TAB_CONFIG: {
     icon: ChatBubbleLeftRightIcon,
     labelId: 'widget.shell.tab.messages',
     defaultLabel: 'Messages',
+  },
+  {
+    tab: 'tickets',
+    icon: TicketIcon,
+    labelId: 'widget.shell.tab.tickets',
+    defaultLabel: 'Tickets',
   },
   {
     tab: 'feedback',
@@ -241,6 +248,8 @@ export function WidgetShell({
               />
             ) : activeTab === 'messages' ? (
               <FormattedMessage id="widget.shell.heading.messages" defaultMessage="Messages" />
+            ) : activeTab === 'tickets' ? (
+              <FormattedMessage id="widget.shell.heading.tickets" defaultMessage="Your tickets" />
             ) : activeTab === 'help' ? (
               <FormattedMessage id="widget.shell.heading.help" defaultMessage="Help & Support" />
             ) : (
