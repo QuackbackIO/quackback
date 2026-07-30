@@ -12,13 +12,18 @@
  *   - Selection never outlives the currently-visible (filtered) rows
  *   - Checkboxes/bulk bar are gated behind canManage, matching the per-user editor
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntlProvider } from 'react-intl'
 import { UsersList } from '../users-list'
+import { installInMemoryLocalStorage } from '@/test/local-storage'
 import type { PortalUserListItemView, UsersFilters } from '@/lib/shared/types'
 import type { PrincipalId, SegmentId } from '@quackback/ids'
+
+beforeAll(() => {
+  installInMemoryLocalStorage()
+})
 
 function makeUser(i: number): PortalUserListItemView {
   return {
@@ -123,6 +128,7 @@ function renderList(
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
   assignMutateAsync.mockResolvedValue({ assigned: 2 })
   removeMutateAsync.mockResolvedValue({
     removed: 2,
@@ -321,6 +327,40 @@ describe('<UsersList> column picker', () => {
     })
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
     expect(await screen.findByText('United States')).toBeInTheDocument()
+  })
+
+  it('remembers the Country column choice across remounts', async () => {
+    const first = renderList()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
+    expect(await screen.findByText('United States')).toBeInTheDocument()
+
+    first.unmount()
+    renderList()
+    expect(screen.getByText('United States')).toBeInTheDocument()
+  })
+
+  it('remembers turning the column back off across remounts', async () => {
+    const first = renderList()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
+    expect(await screen.findByText('United States')).toBeInTheDocument()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Columns' }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Country' }))
+    expect(screen.queryByText('United States')).toBeNull()
+
+    first.unmount()
+    renderList()
+    expect(screen.queryByText('United States')).toBeNull()
   })
 
   it('turning the column back off hides it again', async () => {

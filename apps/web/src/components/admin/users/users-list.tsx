@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
 import { PlusIcon, UsersIcon, ViewColumnsIcon } from '@heroicons/react/24/solid'
@@ -68,6 +68,35 @@ const SORT_OPTIONS = [
   { value: 'most_votes', label: 'Most Votes' },
   { value: 'name', label: 'Name A-Z' },
 ] as const
+
+const SHOW_COUNTRY_STORAGE_KEY = 'quackback:users-list:show-country'
+
+/**
+ * The Country column opt-in persists per teammate in localStorage, so the
+ * table keeps the shape each teammate picked across sessions. The initial
+ * state reads storage synchronously via a lazy initializer instead of
+ * hydrating in a mount effect.
+ */
+function useShowCountryColumn(): [boolean, (next: boolean) => void] {
+  const [showCountry, setShowCountry] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(SHOW_COUNTRY_STORAGE_KEY) === '1'
+    } catch {
+      // Unavailable storage (SSR, private browsing) — the column starts hidden.
+      return false
+    }
+  })
+  const setPersisted = useCallback((next: boolean) => {
+    setShowCountry(next)
+    try {
+      window.localStorage.setItem(SHOW_COUNTRY_STORAGE_KEY, next ? '1' : '0')
+    } catch {
+      // Storage may be unavailable — the in-memory choice still applies for
+      // this session.
+    }
+  }, [])
+  return [showCountry, setPersisted]
+}
 
 function UserListSkeleton() {
   return (
@@ -146,7 +175,7 @@ export function UsersList({
   const sort = filters.sort || 'newest'
   // Column picker — extra fields a teammate can opt into per row. Starts
   // empty so the default list stays exactly as dense as it's always been.
-  const [showCountry, setShowCountry] = useState(false)
+  const [showCountry, setShowCountry] = useShowCountryColumn()
   const { value: searchValue, setValue: setSearchValue } = useDebouncedSearch({
     externalValue: filters.search,
     onChange: (value) => onFiltersChange({ search: value }),
