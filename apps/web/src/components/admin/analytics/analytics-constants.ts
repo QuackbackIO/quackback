@@ -25,8 +25,11 @@ export function channelLabel(channel: string): string {
   )
 }
 
-/** Known channels paint with their `--metric-<channel>` token; anything else
- *  falls back to the generic chart palette by position. */
+/** Known channels paint with their `--metric-<channel>` token (channel keys
+ *  carry underscores, CSS tokens hyphens); anything else falls back to the
+ *  generic chart palette by position. */
 export function channelColor(channel: string, index: number): string {
-  return channel in CHANNEL_LABELS ? `var(--metric-${channel})` : `var(--chart-${(index % 5) + 1})`
+  return channel in CHANNEL_LABELS
+    ? `var(--metric-${channel.replace(/_/g, '-')})`
+    : `var(--chart-${(index % 5) + 1})`
 }
