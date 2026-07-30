@@ -14,6 +14,21 @@ export { ensurePageViewPartitions, dropExpiredPageViewPartitions } from './src/p
 // Visitor analytics rollup (hourly recompute of visitor_stats_daily + visitor_top_stats)
 export { refreshVisitorAnalytics, VISITOR_PERIODS } from './src/visitor-rollup'
 
+// External side-effect ledger: per-column restore policy (pure data + the
+// guard's detection helpers) and the entry point a restore path calls so
+// already-sent mail, webhooks and announcements are not sent again.
+export * from './src/side-effect-ledger'
+export {
+  settleExternalSideEffects,
+  planSideEffectSettlement,
+  RESTORE_SETTLEMENT_AUDIT_EVENT,
+  type SettlementStep,
+  type AppliedSettlementStep,
+  type SettlementReport,
+  type SettlementAction,
+  type SettleExternalSideEffectsOptions,
+} from './src/settle-external-side-effects'
+
 // Migration ledger status (bundled journal vs applied rows; readiness probe)
 export { getMigrationStatus, type MigrationStatus } from './src/migration-status'
 

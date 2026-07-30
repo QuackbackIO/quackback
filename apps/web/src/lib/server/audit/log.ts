@@ -141,6 +141,11 @@ export type AuditEventType =
   // that lets an operator assert it without the user proving ownership emits
   // one of these.
   | 'user.email_verified.asserted' // per-user: admin contact creation, REST identify
+  // Restore hygiene. Written by settleExternalSideEffects (@quackback/db) when
+  // a restore stamps the external side-effect ledger so already-sent mail,
+  // webhooks and announcements are not sent a second time. The metadata
+  // carries the restore instant and the per-column outcome.
+  | 'restore.side_effects_settled'
 
 /**
  * The subset of {@link AuditEventType} the AI config changelog reads back
