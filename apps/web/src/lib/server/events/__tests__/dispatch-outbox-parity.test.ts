@@ -181,6 +181,7 @@ const cases: Array<{ type: string; run: () => Promise<void> }> = [
         id: createId('changelog'),
         title: 't',
         contentPreview: 'p',
+        contentHtml: '<p>p</p>',
         publishedAt: new Date('2026-01-01'),
         linkedPostCount: 2,
       }),

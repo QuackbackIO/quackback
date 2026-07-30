@@ -1014,6 +1014,10 @@ interface SendChangelogPublishedParams {
   changelogTitle: string
   changelogUrl: string
   contentPreview: string
+  /** The entry's full body as pre-rendered, sanitized HTML. When present it
+   *  replaces the truncated `contentPreview` so the reader gets the whole
+   *  update — formatting and images — inline. */
+  contentHtml?: string
   workspaceName: string
   unsubscribeUrl: string
   preferencesUrl?: string
@@ -1031,6 +1035,7 @@ export async function sendChangelogPublishedEmail(
     changelogTitle,
     changelogUrl,
     contentPreview,
+    contentHtml,
     workspaceName,
     unsubscribeUrl,
     preferencesUrl,
@@ -1045,6 +1050,7 @@ export async function sendChangelogPublishedEmail(
       changelogTitle,
       changelogUrl,
       contentPreview,
+      bodyHtml: contentHtml,
       organizationName: workspaceName,
       unsubscribeUrl,
       preferencesUrl,

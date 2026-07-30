@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- notifyChangelogPublished builds the full email
+   body payload alongside the existing claim/release writes */
 /**
  * Changelog Service - Core CRUD operations
  *
@@ -27,6 +29,7 @@ import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
 import { NotFoundError, ValidationError } from '@/lib/shared/errors'
 import { markdownToTiptapJson, projectContentJsonToMarkdown } from '@/lib/server/markdown-tiptap'
 import { rehostExternalImages } from '@/lib/server/content/rehost-images'
+import { changelogBodyHtml } from './changelog-email-body'
 import {
   buildEventActor,
   dispatchChangelogPublished,
@@ -485,6 +488,7 @@ export async function notifyChangelogPublished(
         id: claimed.id,
         title: claimed.title,
         contentPreview: claimed.content.slice(0, 200),
+        contentHtml: changelogBodyHtml(claimed.content, claimed.contentJson),
         publishedAt: claimed.publishedAt!,
         linkedPostCount: linkedPosts.length,
       },
