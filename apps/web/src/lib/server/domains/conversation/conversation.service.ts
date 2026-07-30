@@ -24,6 +24,7 @@ import {
   user,
   type Conversation,
   type ConversationSystemEvent,
+  withWorkflowAttribution,
   type AssistantPendingActionSurface,
   type ConversationMessageMetadata,
 } from '@/lib/server/db'
@@ -909,7 +910,8 @@ export async function addAgentNote(
 export async function setConversationStatus(
   conversationId: ConversationId,
   status: ConversationStatus,
-  actor: Actor
+  actor: Actor,
+  attribution?: SystemNoticeAttribution
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -932,9 +934,19 @@ export async function setConversationStatus(
   // Mark the lifecycle change in the transcript for both sides (author-less).
   if (status !== previous) {
     if (status === 'closed') {
-      await emitSystemMessage(conversationId, 'Conversation ended', { kind: 'chat_ended' })
+      await emitSystemMessage(
+        conversationId,
+        'Conversation ended',
+        { kind: 'chat_ended' },
+        { workflowName: attribution?.workflowName }
+      )
     } else if (previous === 'closed') {
-      await emitSystemMessage(conversationId, 'Conversation reopened', { kind: 'chat_reopened' })
+      await emitSystemMessage(
+        conversationId,
+        'Conversation reopened',
+        { kind: 'chat_reopened' },
+        { workflowName: attribution?.workflowName }
+      )
     }
   }
   const dto = await conversationToDTO(updated, 'agent')
@@ -1071,6 +1083,16 @@ export async function endConversation(
 }
 
 /**
+ * Attribution for a system notice posted by automation: the name of the
+ * workflow whose run fired the action. Threaded from the workflow engine
+ * through the conversation-write seams into the stored systemEvent, so the
+ * rendered notice names the firing workflow. Undefined for a manual action.
+ */
+export interface SystemNoticeAttribution {
+  workflowName?: string
+}
+
+/**
  * Insert + broadcast an author-less 'system' status event (assignment, chat
  * ended/reopened, ticket created, …). It carries senderType 'system' with no
  * principal, so it renders as a centered notice on both sides, never counts as
@@ -1086,14 +1108,21 @@ export async function endConversation(
  * the broadcast goes to the agent inbox channel ONLY — the same two-part rule
  * `addAgentNote` follows, since channel separation and the read filter each
  * cover a path the other does not.
+ *
+ * `workflowName` attributes the notice to the workflow whose run posted it;
+ * it rides the structured event (never the free-text content) so every client
+ * localizes the attribution the same way.
  */
 export async function emitSystemMessage(
   conversationId: ConversationId,
   content: string,
   systemEvent?: ConversationSystemEvent,
-  opts?: { internal?: boolean }
+  opts?: { internal?: boolean; workflowName?: string }
 ): Promise<void> {
   const internal = opts?.internal === true
+  const attributedEvent = systemEvent
+    ? withWorkflowAttribution(systemEvent, opts?.workflowName)
+    : systemEvent
   try {
     const [message] = await db
       .insert(conversationMessages)
@@ -1106,7 +1135,7 @@ export async function emitSystemMessage(
         isInternal: internal,
         // The structured event lets clients localize the notice; `content` stays
         // as the stored (English) fallback for legacy rows / unknown kinds.
-        metadata: systemEvent ? { systemEvent } : null,
+        metadata: attributedEvent ? { systemEvent: attributedEvent } : null,
       })
       .returning()
     const messageDTO = toMessageDTO(message, null)
@@ -1124,7 +1153,8 @@ export async function emitSystemMessage(
 /** "Conversation assigned to <agent>" status event (best-effort, author-less). */
 async function emitAssignmentSystemMessage(
   conversationId: ConversationId,
-  agentPrincipalId: PrincipalId
+  agentPrincipalId: PrincipalId,
+  attribution?: SystemNoticeAttribution
 ): Promise<void> {
   let name = 'an agent'
   try {
@@ -1137,10 +1167,15 @@ async function emitAssignmentSystemMessage(
   } catch {
     // Fall back to the generic name; the notice still posts.
   }
-  await emitSystemMessage(conversationId, `Conversation assigned to ${name}`, {
-    kind: 'assigned',
-    agentName: name,
-  })
+  await emitSystemMessage(
+    conversationId,
+    `Conversation assigned to ${name}`,
+    {
+      kind: 'assigned',
+      agentName: name,
+    },
+    { workflowName: attribution?.workflowName }
+  )
 }
 
 /** "Conversation assigned to the <team> team" status event (author-less). */
@@ -1184,7 +1219,8 @@ async function assignRoutedConversation(conversation: Conversation): Promise<Pri
 export async function assignConversation(
   conversationId: ConversationId,
   agentPrincipalId: PrincipalId | null,
-  actor: Actor
+  actor: Actor,
+  attribution?: SystemNoticeAttribution
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -1221,7 +1257,7 @@ export async function assignConversation(
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
   if (agentPrincipalId) {
-    await emitAssignmentSystemMessage(conversationId, agentPrincipalId)
+    await emitAssignmentSystemMessage(conversationId, agentPrincipalId, attribution)
   }
   if (updated.assignedAgentPrincipalId !== existing.assignedAgentPrincipalId) {
     // This action never touches the team column — "previous" is the
@@ -1248,7 +1284,8 @@ export async function assignConversation(
 export async function assignTeam(
   conversationId: ConversationId,
   teamId: TeamId | null,
-  actor: Actor
+  actor: Actor,
+  attribution?: SystemNoticeAttribution
 ): Promise<Conversation> {
   const decision = canActAsAgent(actor)
   if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
@@ -1292,7 +1329,7 @@ export async function assignTeam(
     await emitTeamAssignmentSystemMessage(conversationId, team.name)
   }
   if (distributedAgentId && distributedAgentId !== existing.assignedAgentPrincipalId) {
-    await emitAssignmentSystemMessage(conversationId, distributedAgentId)
+    await emitAssignmentSystemMessage(conversationId, distributedAgentId, attribution)
   }
 
   if (

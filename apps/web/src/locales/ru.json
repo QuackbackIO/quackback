@@ -531,6 +531,7 @@
   "widget.messenger.system.ticketClosed": "Тикет закрыт",
   "widget.messenger.system.ticketCreated": "Тикет {reference} создан из этого диалога",
   "widget.messenger.system.ticketStatus": "Статус обновлён: {stageLabel}",
+  "widget.messenger.system.viaWorkflow": "через {workflowName}",
   "widget.messenger.typing": "{name} печатает…",
   "widget.messenger.upload.failed": "Не удалось загрузить изображение. Попробуйте ещё раз.",
   "widget.messenger.you": "Вы",

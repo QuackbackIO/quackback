@@ -531,6 +531,7 @@
   "widget.messenger.system.ticketClosed": "工单已关闭",
   "widget.messenger.system.ticketCreated": "已从此对话创建工单 {reference}",
   "widget.messenger.system.ticketStatus": "状态已更新为 {stageLabel}",
+  "widget.messenger.system.viaWorkflow": "通过 {workflowName}",
   "widget.messenger.typing": "{name} 正在输入…",
   "widget.messenger.upload.failed": "图片上传失败，请重试。",
   "widget.messenger.you": "你",

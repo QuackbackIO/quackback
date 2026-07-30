@@ -296,6 +296,7 @@ async function applyPlanAndSettle(
           actor: actionActor,
           runId: run.id,
           workflowId: workflow.id,
+          workflowName: workflow.name,
           subjectPrincipalId,
           resolvedBlockDeps,
         })

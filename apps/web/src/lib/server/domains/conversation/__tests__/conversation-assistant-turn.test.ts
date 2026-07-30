@@ -191,6 +191,7 @@ vi.mock('@/lib/server/db', () => {
       }
       return { strings, values }
     },
+    withWorkflowAttribution: (event: unknown) => event,
   }
 })
 

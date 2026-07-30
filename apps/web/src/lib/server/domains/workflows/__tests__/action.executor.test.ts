@@ -264,12 +264,12 @@ describe('applyAction', () => {
     expect(
       await applyAction({ type: 'assign_agent', principalId: 'principal_x' as PrincipalId }, ctx)
     ).toMatchObject({ label: 'assigned' })
-    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor)
+    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, undefined)
 
     expect(
       await applyAction({ type: 'assign_team', teamId: 'team_1' as TeamId }, ctx)
     ).toMatchObject({ label: 'assigned to team' })
-    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor)
+    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, undefined)
 
     expect(
       await applyAction({ type: 'add_tag', tagId: 'ctag_1' as ConversationTagId }, ctx)
@@ -287,10 +287,31 @@ describe('applyAction', () => {
     expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
 
     expect(await applyAction({ type: 'close' }, ctx)).toMatchObject({ label: 'closed' })
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor)
+    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, undefined)
 
     expect(await applyAction({ type: 'reopen' }, ctx)).toMatchObject({ label: 'reopened' })
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor)
+    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
+  })
+
+  it('threads ctx.workflowName as system-notice attribution into the notice-posting service calls', async () => {
+    const attributedCtx: WorkflowContext = { ...ctx, workflowName: 'Auto-close after CSAT' }
+    await applyAction({ type: 'close' }, attributedCtx)
+    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, {
+      workflowName: 'Auto-close after CSAT',
+    })
+
+    await applyAction(
+      { type: 'assign_agent', principalId: 'principal_x' as PrincipalId },
+      attributedCtx
+    )
+    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, {
+      workflowName: 'Auto-close after CSAT',
+    })
+
+    await applyAction({ type: 'assign_team', teamId: 'team_1' as TeamId }, attributedCtx)
+    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, {
+      workflowName: 'Auto-close after CSAT',
+    })
   })
 
   describe('reopen (SF4)', () => {
@@ -298,7 +319,7 @@ describe('applyAction', () => {
       setConversationStatus.mockResolvedValueOnce({ id: conversationId, status: 'open' })
       const result = await applyAction({ type: 'reopen' }, ctx)
       expect(result).toMatchObject({ label: 'reopened' })
-      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor)
+      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
     })
 
     it('delegates unconditionally (no pre-check) when the conversation is already open, exactly like `close` does for an already-closed one', async () => {
@@ -312,7 +333,7 @@ describe('applyAction', () => {
       const result = await applyAction({ type: 'reopen' }, ctx)
       expect(result).toMatchObject({ label: 'reopened' })
       expect(setConversationStatus).toHaveBeenCalledTimes(1)
-      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor)
+      expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'open', actor, undefined)
     })
   })
 
