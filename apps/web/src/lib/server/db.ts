@@ -294,6 +294,7 @@ export {
   apps,
   // Schema tables - audit log
   auditLog,
+  RESTORE_SETTLEMENT_AUDIT_EVENT,
   // Schema tables - sso recovery codes
   ssoRecoveryCode,
   // Schema tables - segments
