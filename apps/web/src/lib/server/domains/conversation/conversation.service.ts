@@ -963,8 +963,8 @@ export async function setConversationStatus(
 /**
  * Agent action: snooze a conversation until `until` (a wake time), or until the
  * customer next replies when `until` is null. Snoozing is a queue discipline —
- * it never notifies the customer and posts no transcript notice; it only defers
- * the thread on the team's side. Publishes the same inbox/realtime update a
+ * it never notifies the customer; its transcript notice is an internal,
+ * team-only system event. Publishes the same inbox/realtime update a
  * manual status change does so every agent's list reflects it immediately.
  */
 export async function snoozeConversation(
@@ -986,6 +986,7 @@ export async function snoozeConversation(
     .returning()
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
+  await emitSnoozeSystemMessage(conversationId, actor.principalId, until)
   if (updated.status !== previous) {
     void emitConversationStatusChanged(actor, updated, previous)
   }
@@ -1149,6 +1150,65 @@ async function emitTeamAssignmentSystemMessage(
   teamName: string
 ): Promise<void> {
   await emitSystemMessage(conversationId, `Conversation assigned to the ${teamName} team`)
+}
+
+/** Actor display name for a team-only status event; generic fallback for a
+ *  principal-less actor (system sweep) or a failed lookup (the notice must
+ *  still post). */
+async function resolveEventActorName(actorPrincipalId: PrincipalId | null): Promise<string> {
+  if (!actorPrincipalId) return 'An agent'
+  try {
+    const [agent] = await db
+      .select({ displayName: principal.displayName })
+      .from(principal)
+      .where(eq(principal.id, actorPrincipalId))
+      .limit(1)
+    return agent?.displayName ?? 'An agent'
+  } catch {
+    return 'An agent'
+  }
+}
+
+/**
+ * "<name> changed the priority to <priority>" status event (author-less,
+ * internal): priority is team-side triage state the visitor never sees, so
+ * the row is stored isInternal and broadcast to the agent channel only.
+ */
+async function emitPriorityChangeSystemMessage(
+  conversationId: ConversationId,
+  actorPrincipalId: PrincipalId | null,
+  priority: ConversationPriority
+): Promise<void> {
+  const name = await resolveEventActorName(actorPrincipalId)
+  await emitSystemMessage(
+    conversationId,
+    `${name} changed the priority to ${priority}`,
+    { kind: 'priority_changed', priority, agentName: name },
+    { internal: true }
+  )
+}
+
+/**
+ * "<name> snoozed the conversation …" status event (author-less, internal):
+ * snoozing is a queue discipline the visitor never sees (the docstring on
+ * snoozeConversation), so the row is stored isInternal and broadcast to the
+ * agent channel only.
+ */
+async function emitSnoozeSystemMessage(
+  conversationId: ConversationId,
+  actorPrincipalId: PrincipalId | null,
+  until: Date | null
+): Promise<void> {
+  const name = await resolveEventActorName(actorPrincipalId)
+  const content = until
+    ? `${name} snoozed the conversation until ${until.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+    : `${name} snoozed the conversation until the customer replies`
+  await emitSystemMessage(
+    conversationId,
+    content,
+    { kind: 'snoozed', agentName: name },
+    { internal: true }
+  )
 }
 
 /**
@@ -1417,6 +1477,7 @@ export async function setConversationPriority(
   const dto = await conversationToDTO(updated, 'agent')
   publishConversationUpdate(conversationId, dto)
   if (updated.priority !== existing.priority) {
+    await emitPriorityChangeSystemMessage(conversationId, actor.principalId, updated.priority)
     void emitConversationPriorityChanged(actor, updated, existing.priority)
   }
   if (wake) void emitConversationStatusChanged(actor, updated, existing.status)
@@ -1589,6 +1650,17 @@ export async function recordCsat(
   // Emit after the transaction commits so a rolled-back write never webhooks.
   if (isFirstSubmission) void emitConversationCsatSubmitted(actor, updated)
   if (commentJustAdded) void emitConversationCsatCommentAdded(actor, updated)
+
+  // The rating is team-visible signal the visitor already knows they gave, so
+  // the thread marker is internal-only and only posts once per survey.
+  if (isFirstSubmission) {
+    await emitSystemMessage(
+      conversationId,
+      `The customer rated this conversation ${updated.csatRating ?? rating} out of 5`,
+      { kind: 'csat_submitted', rating: updated.csatRating ?? rating },
+      { internal: true }
+    )
+  }
 
   // Mirror the CSAT rating onto Quinn's involvement when it was the last handler
   // (best-effort — never fails the rating; the assistant domain owns it). The
