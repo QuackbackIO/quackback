@@ -72,7 +72,7 @@ function validateOptionsForType(fieldType: string, options: { label: string }[] 
 
 /**
  * AI classification (`aiDetect`/`detectOnClose`) is `select`-only, matching
- * both competitor references (Intercom/Featurebase classify enum attributes
+ * both competitor references (which classify enum attributes only) —
  * only) — `multi_select` is a deliberate v1 exclusion, not yet supported by
  * the classifier. Only checked when a caller actually sets one of the flags
  * true, so a plain text/number/etc. attribute update untouched by this

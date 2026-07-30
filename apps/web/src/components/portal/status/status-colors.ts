@@ -23,7 +23,7 @@ export interface StatusColorStyle {
   /** Tailwind class for a soft background chip (`bg-*-500/10`). */
   soft: string
   /** Tailwind class for a solid banner surface (`bg-*-600`) that carries
-   *  white text — the Statuspage-style status/incident header bar. */
+   *  white text — the status/incident header bar. */
   solid: string
   /** Raw hex, for the admin palette (`status-admin-colors.ts`) and inline styles. */
   hex: string

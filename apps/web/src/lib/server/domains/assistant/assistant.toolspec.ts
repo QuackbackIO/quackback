@@ -266,7 +266,7 @@ export interface AssistantToolContext {
    * true) always previews instead of running: there is no conversation to
    * attach a claim, approval, or denial to.
    * 'execute' (customer_support real turns) runs the write autonomously,
-   * after its permission check — Featurebase-style autonomous execution, no
+   * after its permission check — autonomous execution, no teammate approval
    * teammate approval in the loop.
    * 'propose' (P2-C.4, the copilot Q&A surface) resolves every write to a
    * pending-action proposal. From a Copilot chat the proposal card itself is

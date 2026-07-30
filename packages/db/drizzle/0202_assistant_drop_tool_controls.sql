@@ -1,5 +1,5 @@
 -- Drop the per-tool control-mode dial from assistant_config.
---   End-user-triggered write tools now execute autonomously (Featurebase-style);
+--   End-user-triggered write tools now execute autonomously (no approval step);
 --   there is no admin-configurable approval/autonomous/disabled mode per tool.
 --   Strip the stored `toolControls` object from every settings row and the
 --   assistant_config column default. The copilot proposal-card flow and the

@@ -3,7 +3,7 @@
  * monitoring): "how many conversations, created in the last N days, carry
  * each option value of this attribute" — the lightweight per-attribute
  * breakdown both competitor references show on their equivalent screens
- * (Intercom's Train screen, Featurebase's reporting). Not wired to the
+ * training/reporting screens. Not wired to the
  * analytics materialized-view pipeline (that's a heavier, hourly-refreshed
  * mechanism for cross-entity dashboards); this is a cheap, live, single-
  * attribute aggregate, read straight off `conversations.custom_attributes`.

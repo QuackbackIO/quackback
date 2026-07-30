@@ -43,7 +43,7 @@ export function StatusIncidentTimeline({
 }: StatusIncidentTimelineProps) {
   const intl = useIntl()
   // `updates` arrives oldest-first from the server; the timeline reads
-  // newest-first (mirrors the approved mockup and Statuspage convention).
+  // newest-first (mirrors the approved mockup and status-page convention).
   const sorted = useMemo(() => [...updates].reverse(), [updates])
 
   if (compact) {

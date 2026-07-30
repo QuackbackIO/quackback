@@ -17,7 +17,7 @@
  *  - chat_ended / chat_reopened / assigned / assistant_handoff — the
  *    messenger's original four (copy unchanged).
  *  - ticket_created (B17) — the create-ticket flow's conversion marker on the
- *    converged shared thread (Intercom-style): "Ticket #N created from this
+ *    converged shared thread: "Ticket #N created from this
  *    conversation". The visitor it renders for is the ticket's own requester.
  *  - ticket_status_changed (B25) — a public-stage crossing: "Status updated
  *    to {stageLabel}" (the label is the write-time workspace label, a

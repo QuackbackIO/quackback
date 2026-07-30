@@ -11,6 +11,7 @@
     "start": "bun --env-file=../../.env .output/server/index.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "generate:platform-schema": "bun scripts/generate-platform-schema.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

@@ -57,18 +57,18 @@ describe('AssistantIdentityCard', () => {
 
   it('uses an explicit save and sends the complete identity with its revision', async () => {
     updateIdentity.mockResolvedValue({
-      config: { ...config, identity: { ...config.identity, name: 'Fibi' } },
+      config: { ...config, identity: { ...config.identity, name: 'Mallard' } },
       revision: 4,
     })
     renderCard()
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Fibi' } })
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Mallard' } })
     expect(updateIdentity).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
       expect(updateIdentity).toHaveBeenCalledWith({
         data: {
           expectedRevision: 3,
-          identity: { name: 'Fibi', avatarUrl: null },
+          identity: { name: 'Mallard', avatarUrl: null },
         },
       })
     )

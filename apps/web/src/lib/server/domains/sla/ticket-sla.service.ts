@@ -33,7 +33,7 @@
  * time-to-close: the FIRST resolution settles TTR permanently. A reopen does
  * NOT re-arm the clock (the stamp's resolvedAt is never cleared), so a
  * reopened ticket can't breach again or re-report — reopenedCount on the
- * ticket row stays the quality signal for reopen churn, matching Intercom's
+ * ticket row stays the quality signal for reopen churn — time to resolution
  * "time to resolution is measured to first close" semantics.
  */
 import { db, and, eq, isNull, sql, tickets, ticketStatuses, slaEvents } from '@/lib/server/db'

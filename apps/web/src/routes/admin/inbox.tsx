@@ -114,7 +114,7 @@ import {
   type FeatureFlags,
 } from '@/lib/shared/types/settings'
 
-/** Quinn-view outcome sub-filter (Fin's All / Pending / Escalated / Resolved). */
+/** Quinn-view outcome sub-filter. */
 const QUINN_BUCKETS: {
   value: 'resolved' | 'escalated' | 'pending' | undefined
   label: string
@@ -1377,7 +1377,7 @@ function InboxPage() {
           onSelectNav={setNav}
           scopeLabel={scopeLabel}
           showRefinements={showRefinements}
-          // Quinn view: the outcome sub-filter chips (Fin's Resolved/Escalated/
+          // Quinn view: the outcome sub-filter chips (Resolved/Escalated/
           // Pending). Otherwise the company picker, shown only when the workspace
           // has companies to filter by.
           headerSlot={

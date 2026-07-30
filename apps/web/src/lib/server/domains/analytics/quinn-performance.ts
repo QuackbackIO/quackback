@@ -1,6 +1,6 @@
 /**
  * Quinn performance summary — the "Analyze" headline for the AI assistant
- * (mirrors Fin's Analyze summary): involvement, resolution, and escalation
+ * involvement, resolution, and escalation
  * rates, the confirmed-vs-assumed resolution split, and actions taken via
  * tool calls, over a date range. Involvement volume is low (like CSAT — see
  * csat-summary.ts), so the caller selects the raw involvement rows for the

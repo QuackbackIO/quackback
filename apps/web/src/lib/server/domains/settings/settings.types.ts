@@ -781,7 +781,7 @@ export const DEFAULT_HELP_CENTER_LOCALE_CHROME: HelpCenterLocaleChromeStrings = 
  * `homepageDescription` above -- it needs no chrome entry of its own.
  * Additional locales are URL-prefixed (`/hc/{locale}/...`) and require a
  * `chrome` entry with a non-empty `homepageTitle` before they can be
- * enabled (Intercom-style validation): a locale with no title strings has
+ * enabled: a locale with no title strings has
  * nothing to show on its own homepage.
  */
 export interface HelpCenterLocalesConfig {

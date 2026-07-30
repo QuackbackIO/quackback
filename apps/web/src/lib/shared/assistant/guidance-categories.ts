@@ -2,7 +2,7 @@
  * Guidance-rule categories. Purely a grouping/labeling catalogue for the admin
  * guidance-rules UI (and future prompt-assembly reasoning about rule intent);
  * it does not change how a rule is matched or folded into a prompt. Mirrors
- * Fin's five guidance categories. Client-safe: the settings UI renders the
+ * Client-safe: the settings UI renders the
  * catalogue directly.
  */
 export const ASSISTANT_GUIDANCE_CATEGORIES = [

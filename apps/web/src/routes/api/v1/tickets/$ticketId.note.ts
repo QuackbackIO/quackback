@@ -28,7 +28,7 @@ export const Route = createFileRoute('/api/v1/tickets/$ticketId/note')({
     handlers: {
       /** POST /api/v1/tickets/:id/note — agent-only internal note (never
        *  customer-visible). Notes stay ticket-scoped by design even on a
-       *  conversation-linked pair (Intercom's ticket-notes semantics) — only
+       *  conversation-linked pair — only
        *  customer-visible writes redirect to the shared thread. */
       POST: async ({ request, params }) => {
         try {

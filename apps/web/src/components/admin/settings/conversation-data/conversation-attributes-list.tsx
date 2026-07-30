@@ -76,7 +76,7 @@ const SOURCE_HINTS = [
 const isSelectType = (t: FieldType) => t === 'select' || t === 'multi_select'
 
 /** AI detection is select-only (enforced again at the service layer) — both
- *  competitors we benchmarked against (Intercom Fin, Featurebase Fibi) are
+ *  incumbent assistants we benchmarked against are enum-only too;
  *  enum-only too; multi_select is a possible future extension, not v1. */
 const supportsAiDetect = (t: FieldType) => t === 'select'
 

@@ -1,5 +1,5 @@
 /**
- * Quinn performance server function (mirrors Fin's Analyze headline):
+ * Quinn performance server function:
  * involvement, resolution, and escalation rates over a date range, for the
  * automation/assistant page. Read-only, gated on analytics.view like the rest
  * of the analytics surface.

@@ -74,7 +74,7 @@ export function ticketTypeForView(view: TypedTicketInboxView): TicketType {
   return TICKET_VIEW_TYPE[view]
 }
 
-/** Quinn-inbox sub-filter by involvement outcome (Fin's Resolved/Escalated/Pending). */
+/** Quinn-inbox sub-filter by involvement outcome. */
 export type AiBucket = 'resolved' | 'escalated' | 'pending'
 
 /**
