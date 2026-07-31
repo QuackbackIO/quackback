@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -6,6 +6,7 @@ import { contentPreview } from '@/lib/shared/utils/string'
 import { cn } from '@/lib/shared/utils'
 import { publicChangelogQueries, changelogCategoryQueries } from '@/lib/client/queries/changelog'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
+import { markChangelogSeen } from './changelog-unread'
 import { NewspaperIcon } from '@heroicons/react/24/outline'
 import type { ChangelogCategoryId } from '@quackback/ids'
 
@@ -31,6 +32,14 @@ export function WidgetChangelog({ teamName, onEntrySelect }: WidgetChangelogProp
   const [activeCategoryId, setActiveCategoryId] = useState<ChangelogCategoryId | null>(null)
 
   const allEntries = data?.pages.flatMap((page) => page.items) ?? []
+
+  // Entries on screen are seen: advance the visitor's marker to the newest
+  // loaded entry so the launcher badge clears. The list is newest-first, so
+  // the first entry carries the max publishedAt.
+  useEffect(() => {
+    const newest = allEntries[0]?.publishedAt
+    if (newest) markChangelogSeen(newest)
+  }, [allEntries])
 
   const categoriesInUse = useMemo(() => {
     const usedIds = new Set(allEntries.flatMap((e) => e.categories.map((c) => c.id)))
