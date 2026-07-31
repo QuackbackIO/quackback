@@ -7,6 +7,8 @@ import type { PostId, PrincipalId } from '@quackback/ids'
 
 // --- Mock tracking ---
 const mockDbExecute = vi.fn()
+const mockSelectRows: { current: unknown[] } = { current: [] }
+const mockDispatchPostVoted = vi.fn()
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
   const { sql: realSql } = await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
@@ -16,6 +18,15 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
     db: {
       execute: (...args: unknown[]) => mockDbExecute(...args),
+      select: () => {
+        const chain: Record<string, unknown> = {}
+        chain.from = () => chain
+        chain.innerJoin = () => chain
+        chain.leftJoin = () => chain
+        chain.where = () => chain
+        chain.limit = async () => mockSelectRows.current
+        return chain
+      },
     },
     sql: realSql,
     eq: vi.fn(),
@@ -23,6 +34,11 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
     desc: vi.fn(),
   }
 })
+
+vi.mock('@/lib/server/events/dispatch', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/events/dispatch')>()),
+  dispatchPostVoted: (...args: unknown[]) => mockDispatchPostVoted(...args),
+}))
 
 vi.mock('@/lib/server/utils', () => ({
   getExecuteRows: vi.fn((result: unknown) => result as unknown[]),
@@ -282,5 +298,79 @@ describe('voteOnPost — toggle-off (delete) branch guards post/board existence'
     )
     expect(deleteClause).toMatch(/EXISTS\s*\(\s*SELECT 1 FROM post_check\s*\)/i)
     expect(deleteClause).toMatch(/EXISTS\s*\(\s*SELECT 1 FROM board_check\s*\)/i)
+  })
+})
+
+describe('voteOnPost — post.voted webhook event', () => {
+  const voterRow = {
+    title: 'Add dark mode',
+    boardId: 'board_01',
+    boardSlug: 'feedback',
+    voterName: 'Ada Lovelace',
+    voterEmail: 'ada@example.com',
+    voterType: 'user',
+  }
+
+  beforeEach(() => {
+    mockDbExecute.mockReset()
+    mockDispatchPostVoted.mockReset()
+    mockSelectRows.current = [voterRow]
+  })
+
+  it('emits post.voted with the post ref, voter, and new count when a vote is cast', async () => {
+    mockDbExecute.mockResolvedValue([
+      { post_exists: true, board_exists: true, newly_voted: true, vote_count: 3 },
+    ])
+
+    const result = await voteOnPost(POST_ID, PRINCIPAL_ID)
+
+    expect(result).toEqual({ voted: true, voteCount: 3 })
+    expect(mockDispatchPostVoted).toHaveBeenCalledTimes(1)
+    const [actor, input] = mockDispatchPostVoted.mock.calls[0]
+    expect(actor).toMatchObject({ type: 'user', principalId: PRINCIPAL_ID })
+    expect(input).toEqual({
+      id: POST_ID,
+      title: 'Add dark mode',
+      boardId: 'board_01',
+      boardSlug: 'feedback',
+      voterEmail: 'ada@example.com',
+      voterName: 'Ada Lovelace',
+      voteCount: 3,
+    })
+  })
+
+  it('emits nothing when the toggle removes a vote', async () => {
+    mockDbExecute.mockResolvedValue([
+      { post_exists: true, board_exists: true, newly_voted: false, vote_count: 2 },
+    ])
+
+    await voteOnPost(POST_ID, PRINCIPAL_ID)
+
+    expect(mockDispatchPostVoted).not.toHaveBeenCalled()
+  })
+
+  it("strips an anonymous voter's identity from the payload", async () => {
+    mockSelectRows.current = [{ ...voterRow, voterType: 'anonymous' }]
+    mockDbExecute.mockResolvedValue([
+      { post_exists: true, board_exists: true, newly_voted: true, vote_count: 1 },
+    ])
+
+    await voteOnPost(POST_ID, PRINCIPAL_ID)
+
+    const [, input] = mockDispatchPostVoted.mock.calls[0]
+    expect(input.voterEmail).toBeNull()
+    expect(input.voterName).toBeNull()
+  })
+
+  it('a failed event lookup never breaks the vote itself', async () => {
+    mockSelectRows.current = []
+    Object.assign(mockSelectRows, { boom: true })
+    mockDbExecute.mockResolvedValue([
+      { post_exists: true, board_exists: true, newly_voted: true, vote_count: 5 },
+    ])
+    // No row found for the post lookup -> the emit is skipped, the vote stands.
+    const result = await voteOnPost(POST_ID, PRINCIPAL_ID)
+    expect(result).toEqual({ voted: true, voteCount: 5 })
+    expect(mockDispatchPostVoted).not.toHaveBeenCalled()
   })
 })

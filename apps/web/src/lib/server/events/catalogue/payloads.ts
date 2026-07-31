@@ -80,6 +80,12 @@ export const P = {
   'post.restored': z.looseObject({ post: postRef }),
   'post.merged': z.looseObject({ duplicatePost: postRef, canonicalPost: postRef }),
   'post.unmerged': z.looseObject({ post: postRef, formerCanonicalPost: postRef }),
+  'post.voted': z.looseObject({
+    post: postRef,
+    voterEmail: nullableStr,
+    voterName: nullableStr,
+    voteCount: z.number(),
+  }),
   'post.mentioned': z.looseObject({
     postId: id,
     postTitle: z.string(),

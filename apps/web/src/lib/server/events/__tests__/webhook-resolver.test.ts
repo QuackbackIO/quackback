@@ -27,6 +27,7 @@ function evt(type: string, payload: Record<string, unknown>): DomainEvent {
 describe('webhook resolver (WO-8a)', () => {
   it('interestedIn is catalogue-derived (exposure.webhook)', () => {
     expect(webhookResolver.interestedIn('post.created')).toBe(true)
+    expect(webhookResolver.interestedIn('post.voted')).toBe(true)
     // post.mentioned + status.* are not webhook-exposed
     expect(webhookResolver.interestedIn('post.mentioned')).toBe(false)
     expect(webhookResolver.interestedIn('status.component_changed')).toBe(false)
@@ -68,6 +69,18 @@ describe('webhook resolver (WO-8a)', () => {
     expect(webhookMatches({ events: ['post.created'], boardIds: [b2] }, 'post.created', [b1])).toBe(
       false
     )
+    // post.voted delivers to every endpoint subscribed to it, board filter
+    // applies via the payload's post.boardId like every post event
+    expect(webhookMatches({ events: ['post.voted'], boardIds: null }, 'post.voted', [b1])).toBe(
+      true
+    )
+    expect(webhookMatches({ events: ['post.created'], boardIds: null }, 'post.voted', [b1])).toBe(
+      false
+    )
+    expect(webhookMatches({ events: ['post.voted'], boardIds: [b2] }, 'post.voted', [b1])).toBe(
+      false
+    )
+    expect(boardIdsFromEvent(evt('post.voted', { post: { boardId: b1 } }))).toEqual([b1])
     // board-bearing filter but board-less event -> match on type alone
     expect(
       webhookMatches(
