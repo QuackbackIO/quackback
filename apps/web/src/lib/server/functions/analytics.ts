@@ -32,6 +32,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
 import { buildConversationVolume } from '@/lib/server/domains/analytics/conversation-volume'
 import { buildFirstResponseTimes } from '@/lib/server/domains/analytics/first-response'
+import { buildTimeToClose } from '@/lib/server/domains/analytics/time-to-close'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
@@ -92,6 +93,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       newLeadsRows,
       conversationCreatedRows,
       firstResponseRows,
+      timeToCloseRows,
     ] = await Promise.all([
       // Daily stats for current + previous periods (one scan, split in memory).
       db
@@ -348,6 +350,15 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
           AND m.deleted_at IS NULL
         GROUP BY c.id, c.created_at
       `),
+
+      // Time-to-close per conversation (live query; chat volume is low, like
+      // CSAT, so no rollup table). One row per conversation that reached a
+      // terminal status in the window — resolved_at is the close moment.
+      // Still-open conversations never reach the chart.
+      db
+        .select({ createdAt: conversations.createdAt, closedAt: conversations.resolvedAt })
+        .from(conversations)
+        .where(and(isNotNull(conversations.resolvedAt), gte(conversations.resolvedAt, start))),
     ])
 
     // -- Period split for the daily-stats rollup --
@@ -519,6 +530,14 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       nowStr
     )
 
+    // -- Time-to-close: per-day median series over the current window, bucketed
+    // on the close day. Same no-delta polarity reasoning as first response. --
+    const timeToClose = buildTimeToClose(
+      timeToCloseRows as Array<{ createdAt: Date; closedAt: Date }>,
+      startStr,
+      nowStr
+    )
+
     // -- Quinn AI metrics (queries started above) folded into the shared
     // Resolved/Escalated/Pending buckets via AI_INBOX_BUCKETS, so the bucket
     // vocabulary lives in one place (also used by the inbox filter + counts). --
@@ -562,6 +581,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         delta: delta(conversationVolume.total, prevConversationCount),
       },
       firstResponse,
+      timeToClose,
       changelog: {
         totalViews,
         publishedCount: changelogPublishedCount,
