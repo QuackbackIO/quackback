@@ -1829,6 +1829,7 @@ export async function getChangelogSubscriberTargets(
             changelogTitle: event.data.changelog.title,
             changelogUrl,
             contentPreview: event.data.changelog.contentPreview,
+            contentHtml: event.data.changelog.contentHtml,
             eventType: 'changelog.published',
             from,
           }

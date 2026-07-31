@@ -109,6 +109,7 @@ export const P = {
       id,
       title: z.string(),
       contentPreview: z.string(),
+      contentHtml: z.string(),
       publishedAt: z.string(),
       linkedPostCount: z.number(),
     }),

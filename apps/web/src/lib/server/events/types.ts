@@ -214,6 +214,7 @@ export interface ChangelogPublishedPayload {
     id: string
     title: string
     contentPreview: string
+    contentHtml: string
     publishedAt: string
     linkedPostCount: number
   }

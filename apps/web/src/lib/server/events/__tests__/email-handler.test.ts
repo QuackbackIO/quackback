@@ -18,6 +18,7 @@ import { emailHook } from '../handlers/email'
 import {
   sendStatusChangeEmail,
   sendNewCommentEmail,
+  sendChangelogPublishedEmail,
   sendPostMentionEmail,
   sendTicketEventEmail,
   sendNoteMentionEmail,
@@ -32,6 +33,7 @@ import type { EventData } from '../types'
 
 const mockStatusChangeEmail = vi.mocked(sendStatusChangeEmail)
 const mockNewCommentEmail = vi.mocked(sendNewCommentEmail)
+const mockChangelogPublishedEmail = vi.mocked(sendChangelogPublishedEmail)
 const mockPostMentionEmail = vi.mocked(sendPostMentionEmail)
 const mockTicketEventEmail = vi.mocked(sendTicketEventEmail)
 const mockNoteMentionEmail = vi.mocked(sendNoteMentionEmail)
@@ -119,6 +121,35 @@ describe('emailHook', () => {
         unsubscribeUrl: 'https://example.com/unsubscribe',
         logoUrl: 'https://example.com/logo.png',
       })
+    })
+    it('sends changelog published email with the full rendered body and returns success', async () => {
+      mockChangelogPublishedEmail.mockResolvedValue({ sent: true })
+      const changelogPublishedEvent = {
+        id: 'evt-test',
+        type: 'changelog.published',
+        timestamp: new Date().toISOString(),
+        actor: { type: 'user', displayName: 'Test User' },
+      } as EventData
+
+      const result = await emailHook.run(changelogPublishedEvent, baseTarget, {
+        workspaceName: 'TestWorkspace',
+        logoUrl: 'https://example.com/logo.png',
+        changelogTitle: 'May Release',
+        changelogUrl: 'https://example.com/changelog/changelog_01',
+        contentPreview: 'short preview',
+        contentHtml: '<p>Intro</p><p><img src="https://example.com/x.png" alt="Shot" /></p>',
+      })
+
+      expect(result).toEqual({ success: true })
+      expect(mockChangelogPublishedEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'user@example.com',
+          changelogTitle: 'May Release',
+          changelogUrl: 'https://example.com/changelog/changelog_01',
+          contentPreview: 'short preview',
+          contentHtml: '<p>Intro</p><p><img src="https://example.com/x.png" alt="Shot" /></p>',
+        })
+      )
     })
   })
 

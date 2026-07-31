@@ -315,6 +315,9 @@ export interface ChangelogPublishedInput {
   id: ChangelogId
   title: string
   contentPreview: string
+  /** Full body as sanitized HTML; the email renders it inline, other target
+   *  kinds keep using the plain-text `contentPreview`. */
+  contentHtml: string
   publishedAt: Date
   linkedPostCount: number
 }
@@ -333,6 +336,7 @@ export async function dispatchChangelogPublished(
           id: changelog.id,
           title: changelog.title,
           contentPreview: changelog.contentPreview,
+          contentHtml: changelog.contentHtml,
           publishedAt: changelog.publishedAt.toISOString(),
           linkedPostCount: changelog.linkedPostCount,
         },

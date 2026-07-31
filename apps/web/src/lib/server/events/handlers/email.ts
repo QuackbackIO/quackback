@@ -163,6 +163,7 @@ export const emailHook: HookHandler = {
           changelogTitle: changelogCfg.changelogTitle as string,
           changelogUrl: changelogCfg.changelogUrl as string,
           contentPreview: (changelogCfg.contentPreview as string) ?? '',
+          contentHtml: (changelogCfg.contentHtml as string) ?? '',
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
           preferencesUrl: cfg.preferencesUrl,

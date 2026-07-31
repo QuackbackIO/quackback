@@ -76,6 +76,10 @@ vi.mock('@/lib/server/events/scheduler', () => ({
   scheduleDispatch: vi.fn().mockResolvedValue(undefined),
   cancelScheduledDispatch: vi.fn().mockResolvedValue(undefined),
 }))
+vi.mock('@/lib/server/config', () => ({
+  config: { s3PublicUrl: undefined, baseUrl: 'http://localhost:3000' },
+  getBaseUrl: () => 'http://localhost:3000',
+}))
 
 function baseEntry(overrides: Record<string, unknown> = {}) {
   return {
@@ -129,6 +133,66 @@ describe('notifyChangelogPublished (atomic claim)', () => {
       }),
       { rethrow: true }
     )
+  })
+
+  it('dispatches the full body as rendered HTML with the image email-proxy hint', async () => {
+    mockClaimResult = [
+      baseEntry({
+        content: 'See ![Shot](/api/storage/changelog-images/a.png)',
+        contentJson: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'See ' },
+                { type: 'text', text: 'bold', marks: [{ type: 'bold' }] },
+              ],
+            },
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'image',
+                  attrs: { src: '/api/storage/changelog-images/a.png', alt: 'Shot' },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ]
+    const { notifyChangelogPublished } = await import('../changelog.service')
+    const { dispatchChangelogPublished } = await import('@/lib/server/events/dispatch')
+
+    await notifyChangelogPublished(ENTRY_ID, ACTOR)
+
+    const payload = vi.mocked(dispatchChangelogPublished).mock.calls[0][1] as {
+      contentHtml: string
+    }
+    expect(payload.contentHtml).toContain('<strong>bold</strong>')
+    expect(payload.contentHtml).toContain(
+      'http://localhost:3000/api/storage/changelog-images/a.png?email=1'
+    )
+  })
+
+  it('renders the markdown content column when no contentJson is stored', async () => {
+    mockClaimResult = [
+      baseEntry({
+        content: 'Intro\n\n![Shot](https://cdn.example.com/b.png)',
+        contentJson: null,
+      }),
+    ]
+    const { notifyChangelogPublished } = await import('../changelog.service')
+    const { dispatchChangelogPublished } = await import('@/lib/server/events/dispatch')
+
+    await notifyChangelogPublished(ENTRY_ID, ACTOR)
+
+    const payload = vi.mocked(dispatchChangelogPublished).mock.calls[0][1] as {
+      contentHtml: string
+    }
+    expect(payload.contentHtml).toContain('<p>Intro</p>')
+    expect(payload.contentHtml).toContain('https://cdn.example.com/b.png')
   })
 
   it('does not dispatch and returns false when the claim matches nothing', async () => {
