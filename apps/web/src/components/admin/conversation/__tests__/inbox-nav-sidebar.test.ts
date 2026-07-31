@@ -14,6 +14,7 @@ describe('isInboxView', () => {
       { view: 'mine', label: 'Assigned to me' },
       { view: 'unassigned', label: 'Unassigned' },
       { view: 'mentions', label: 'Mentions' },
+      { view: 'created_by_me', label: 'Created by me' },
       { view: 'saved', label: 'Saved messages' },
       { view: 'spam', label: 'Spam' },
     ])
