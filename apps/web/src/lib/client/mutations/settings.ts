@@ -13,6 +13,8 @@ import {
   updateHeaderDisplayNameFn,
   saveLogoKeyFn,
   saveHeaderLogoKeyFn,
+  saveFaviconKeyFn,
+  deleteFaviconFn,
   saveWidgetHeroImageKeyFn,
   deleteWidgetHeroImageFn,
   updatePortalConfigFn,
@@ -43,6 +45,7 @@ import {
   getLogoUploadUrlFn,
   getHeaderLogoUploadUrlFn,
   getWidgetHeroUploadUrlFn,
+  getFaviconUploadUrlFn,
 } from '@/lib/server/functions/uploads'
 import { settingsQueries } from '@/lib/client/queries/settings'
 
@@ -93,6 +96,57 @@ export function useDeleteWorkspaceLogo() {
     mutationFn: () => deleteLogoFn(),
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: settingsQueries.logo().queryKey })
+    },
+  })
+}
+
+// ============================================================================
+// Favicon Mutation Hooks
+// ============================================================================
+
+export function useUploadFavicon() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (file: Blob) => {
+      // 1. Get presigned URL from server
+      const { uploadUrl, key } = await getFaviconUploadUrlFn({
+        data: {
+          filename: (file as File).name || 'favicon.png',
+          contentType: file.type,
+          fileSize: file.size,
+        },
+      })
+
+      // 2. Upload directly to S3
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload favicon to storage')
+      }
+
+      // 3. Save the S3 key to the database
+      await saveFaviconKeyFn({ data: { key } })
+    },
+    onSuccess: () => {
+      queryClient.refetchQueries({ queryKey: settingsQueries.favicon().queryKey })
+    },
+  })
+}
+
+export function useDeleteFavicon() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => deleteFaviconFn(),
+    onSuccess: () => {
+      queryClient.refetchQueries({ queryKey: settingsQueries.favicon().queryKey })
     },
   })
 }

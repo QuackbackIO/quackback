@@ -2,7 +2,11 @@ import { createServerFn } from '@tanstack/react-start'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'settings-utils' })
-import { getSettingsLogoData, getSettingsHeaderLogoData } from '@/lib/server/settings-utils'
+import {
+  getSettingsLogoData,
+  getSettingsHeaderLogoData,
+  getSettingsFaviconData,
+} from '@/lib/server/settings-utils'
 
 /**
  * Server functions for settings utilities (logo/branding data).
@@ -26,5 +30,15 @@ export const fetchSettingsHeaderLogoData = createServerFn({ method: 'GET' }).han
   log.debug('fetching settings header logo data')
   const data = await getSettingsHeaderLogoData()
   log.debug({ has_header_logo: !!data }, 'settings header logo data fetched')
+  return data
+})
+
+/**
+ * Fetch favicon data for settings
+ */
+export const fetchSettingsFaviconData = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetching settings favicon data')
+  const data = await getSettingsFaviconData()
+  log.debug({ has_favicon: !!data }, 'settings favicon data fetched')
   return data
 })

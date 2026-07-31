@@ -31,6 +31,7 @@ import { listRolesFn } from '@/lib/server/functions/roles'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
+  fetchSettingsFaviconData,
 } from '@/lib/server/functions/settings-utils'
 
 const STALE_TIME_SHORT = 30 * 1000
@@ -84,6 +85,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'headerLogo'],
       queryFn: fetchSettingsHeaderLogoData,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  favicon: () =>
+    queryOptions({
+      queryKey: ['settings', 'favicon'],
+      queryFn: fetchSettingsFaviconData,
       staleTime: STALE_TIME_LONG,
     }),
 

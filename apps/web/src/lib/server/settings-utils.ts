@@ -48,6 +48,19 @@ export interface HeaderLogoData {
 }
 
 /**
+ * Get favicon data for the settings.
+ */
+export async function getSettingsFaviconData(): Promise<LogoData | null> {
+  const record = await getSettingsRecord()
+  if (!record) return null
+
+  const url = getPublicUrlOrNull(record.faviconKey)
+  if (!url) return null
+
+  return { url }
+}
+
+/**
  * Get header logo data for the settings.
  */
 export async function getSettingsHeaderLogoData(): Promise<HeaderLogoData | null> {

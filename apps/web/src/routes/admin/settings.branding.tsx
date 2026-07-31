@@ -59,10 +59,12 @@ import {
   type ThemeConfig,
   type ThemeMode,
 } from '@/lib/shared/theme'
-import { useSettingsLogo } from '@/lib/client/hooks/use-settings-queries'
+import { useSettingsLogo, useSettingsFavicon } from '@/lib/client/hooks/use-settings-queries'
 import {
   useUploadWorkspaceLogo,
   useDeleteWorkspaceLogo,
+  useUploadFavicon,
+  useDeleteFavicon,
   useUpdatePortalConfig,
 } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -108,6 +110,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
+      context.queryClient.ensureQueryData(settingsQueries.favicon()),
       context.queryClient.ensureQueryData(settingsQueries.customCss()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
     ])
@@ -313,6 +316,7 @@ function BrandingPage() {
           >
             <div className="flex flex-wrap items-start gap-6">
               <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
+              <FaviconUploader workspaceName={workspaceName} />
             </div>
           </SettingsCard>
 
@@ -765,6 +769,85 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
           title="Crop your logo"
         />
       )}
+    </div>
+  )
+}
+
+function FaviconUploader({ workspaceName }: { workspaceName: string }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { data: faviconData } = useSettingsFavicon()
+  const uploadMutation = useUploadFavicon()
+  const deleteMutation = useDeleteFavicon()
+
+  const faviconUrl = faviconData?.url ?? null
+  const hasCustomFavicon = !!faviconUrl
+
+  // Favicons render at 16–32px, so no cropper — the file uploads as picked.
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
+      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File too large. Maximum size is 5MB')
+      return
+    }
+
+    uploadMutation.mutate(file, {
+      onSuccess: () => toast.success('Favicon updated'),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : 'Failed to upload favicon'),
+    })
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploadMutation.isPending}
+        className="relative group cursor-pointer"
+        aria-label="Change workspace favicon"
+      >
+        {faviconUrl ? (
+          <img
+            src={faviconUrl}
+            alt={`${workspaceName} favicon`}
+            className="h-14 w-14 rounded-xl object-contain border border-border p-2 transition-opacity group-hover:opacity-80"
+          />
+        ) : (
+          <div className="h-14 w-14 rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground transition-opacity group-hover:opacity-80">
+            <CameraIcon className="h-5 w-5" />
+          </div>
+        )}
+        <UploaderOverlay busy={uploadMutation.isPending} />
+      </button>
+      <span className="text-[11px] text-muted-foreground">Favicon</span>
+      {hasCustomFavicon && (
+        <RemoveAssetButton
+          pending={deleteMutation.isPending}
+          onClick={() =>
+            deleteMutation.mutate(undefined, {
+              onSuccess: () => toast.success('Favicon removed'),
+              onError: (error) =>
+                toast.error(error instanceof Error ? error.message : 'Failed to remove favicon'),
+            })
+          }
+        />
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   )
 }

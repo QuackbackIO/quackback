@@ -23,6 +23,8 @@ import {
   deleteLogoKey,
   saveHeaderLogoKey,
   deleteHeaderLogoKey,
+  saveFaviconKey,
+  deleteFaviconKey,
   updateHeaderDisplayMode,
   updateHeaderDisplayName,
   updateWorkspaceName,
@@ -613,6 +615,20 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
   log.info('delete header logo')
   await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
   return await deleteHeaderLogoKey()
+})
+
+export const saveFaviconKeyFn = createServerFn({ method: 'POST' })
+  .validator(saveLogoKeySchema)
+  .handler(async ({ data }) => {
+    log.info({ key: data.key }, 'save favicon key')
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await saveFaviconKey(data.key)
+  })
+
+export const deleteFaviconFn = createServerFn({ method: 'POST' }).handler(async () => {
+  log.info('delete favicon')
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  return await deleteFaviconKey()
 })
 
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })
