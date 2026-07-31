@@ -31,6 +31,7 @@ import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
 import { buildConversationVolume } from '@/lib/server/domains/analytics/conversation-volume'
+import { buildFirstResponseTimes } from '@/lib/server/domains/analytics/first-response'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
@@ -90,6 +91,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       closedRows,
       newLeadsRows,
       conversationCreatedRows,
+      firstResponseRows,
     ] = await Promise.all([
       // Daily stats for current + previous periods (one scan, split in memory).
       db
@@ -330,6 +332,22 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         .select({ createdAt: conversations.createdAt, source: conversations.source })
         .from(conversations)
         .where(gte(conversations.createdAt, previousStart)),
+
+      // First response per conversation (live query; chat volume is low, like
+      // CSAT, so no rollup table). One row per conversation that received at
+      // least one non-internal agent reply — human or assistant, both post as
+      // sender_type 'agent'. Unanswered conversations drop out of the JOIN and
+      // are reflected as a gap day, not a zero.
+      db.execute<{ createdAt: Date; firstResponseAt: Date }>(sql`
+        SELECT c.created_at AS "createdAt", MIN(m.created_at) AS "firstResponseAt"
+        FROM conversations c
+        JOIN conversation_messages m ON m.conversation_id = c.id
+        WHERE c.created_at >= ${sinceIso}::timestamptz
+          AND m.sender_type = 'agent'
+          AND m.is_internal = false
+          AND m.deleted_at IS NULL
+        GROUP BY c.id, c.created_at
+      `),
     ])
 
     // -- Period split for the daily-stats rollup --
@@ -491,6 +509,16 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       (r) => r.createdAt >= previousStart && r.createdAt < start
     ).length
 
+    // -- First-response time: per-day median series over the current window.
+    // No period-over-period delta: the shared trend badge reads up as good,
+    // which is the wrong polarity for a wait time (same reason the median
+    // resolve-time stat carries none). --
+    const firstResponse = buildFirstResponseTimes(
+      Array.from(firstResponseRows as Iterable<{ createdAt: Date; firstResponseAt: Date }>),
+      startStr,
+      nowStr
+    )
+
     // -- Quinn AI metrics (queries started above) folded into the shared
     // Resolved/Escalated/Pending buckets via AI_INBOX_BUCKETS, so the bucket
     // vocabulary lives in one place (also used by the inbox filter + counts). --
@@ -533,6 +561,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         ...conversationVolume,
         delta: delta(conversationVolume.total, prevConversationCount),
       },
+      firstResponse,
       changelog: {
         totalViews,
         publishedCount: changelogPublishedCount,

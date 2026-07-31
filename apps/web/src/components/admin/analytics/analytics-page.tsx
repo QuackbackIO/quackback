@@ -19,7 +19,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { FilterSection } from '@/components/shared/filter-section'
 import { cn } from '@/lib/shared/utils'
 import { ChartBarIcon, FunnelIcon, CalendarDaysIcon } from '@heroicons/react/24/solid'
-import { CHART_HEIGHT_CLASS, channelLabel } from './analytics-constants'
+import { CHART_HEIGHT_CLASS, channelLabel, formatResponseTime } from './analytics-constants'
 import { SECTION_NAV_ITEMS, type Section } from './analytics-sections'
 import { AnalyticsSectionSelect } from './analytics-section-select'
 import { AnalyticsSummaryCards, type MetricKey } from './analytics-summary-cards'
@@ -50,6 +50,11 @@ const AnalyticsVisitorChart = lazy(() =>
 const AnalyticsConversationVolumeChart = lazy(() =>
   import('./analytics-conversation-volume-chart').then((m) => ({
     default: m.AnalyticsConversationVolumeChart,
+  }))
+)
+const AnalyticsFirstResponseChart = lazy(() =>
+  import('./analytics-first-response-chart').then((m) => ({
+    default: m.AnalyticsFirstResponseChart,
   }))
 )
 
@@ -387,6 +392,23 @@ export function AnalyticsPage() {
                     >
                       <Suspense fallback={<ChartSkeleton />}>
                         <AnalyticsConversationVolumeChart volume={data.conversationVolume} />
+                      </Suspense>
+                    </StatSection>
+                    <StatSection
+                      stats={[
+                        {
+                          label: 'Median first response',
+                          value: formatResponseTime(data.firstResponse.medianMinutes),
+                        },
+                        {
+                          label: 'Answered',
+                          value: data.firstResponse.responded.toLocaleString(),
+                          caption: 'conversations',
+                        },
+                      ]}
+                    >
+                      <Suspense fallback={<ChartSkeleton />}>
+                        <AnalyticsFirstResponseChart days={data.firstResponse.days} />
                       </Suspense>
                     </StatSection>
                     {data.csat.responseCount === 0 ? (

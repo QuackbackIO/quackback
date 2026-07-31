@@ -10,6 +10,7 @@ import { getQueueRedis, REDIS_READY_TIMEOUT_MS } from '@/lib/server/queue/redis-
 import { shouldRunWorkers } from '@/lib/server/queue/role'
 import { getHook } from './registry'
 import { isRetryableError } from './hook-utils'
+import { HOOK_RETRY_ATTEMPTS, hookRetryDelayMs } from './retry-schedule'
 import type { HookResult } from './hook-types'
 import type { EventData } from './types'
 import type { ConversationId, IntegrationId, TicketId, WebhookId } from '@quackback/ids'
@@ -34,7 +35,9 @@ const QUEUE_NAME = '{event-hooks}'
 const CONCURRENCY = 5
 
 const DEFAULT_JOB_OPTS = {
-  attempts: 3,
+  attempts: HOOK_RETRY_ATTEMPTS,
+  // The per-attempt delays live in retry-schedule.ts (the Worker's
+  // backoffStrategy below); this base value only satisfies the option shape.
   backoff: { type: 'exponential' as const, delay: 1000 },
   // Keep last 1000 completed jobs (or 24h, whichever first) for
   // operational visibility. `true` (immediate purge) makes Bull Board
@@ -174,7 +177,17 @@ async function initializeQueue() {
           }
           throw new UnrecoverableError(result.error ?? 'Hook failed (non-retryable)')
         },
-        { connection, concurrency: CONCURRENCY }
+        {
+          connection,
+          concurrency: CONCURRENCY,
+          settings: {
+            // Applies to every retry of every hook job: seconds-fast at
+            // first, one hour before the final attempt, so an endpoint in a
+            // real outage still receives the delivery once it recovers (see
+            // retry-schedule.ts).
+            backoffStrategy: (attemptsMade: number) => hookRetryDelayMs(attemptsMade),
+          },
+        }
       )
     : null
 
