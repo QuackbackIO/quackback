@@ -30,6 +30,7 @@ import { AI_INBOX_BUCKETS } from '@/lib/server/domains/assistant/assistant.invol
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
+import { buildConversationVolume } from '@/lib/server/domains/analytics/conversation-volume'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
@@ -88,6 +89,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       csatRows,
       closedRows,
       newLeadsRows,
+      conversationCreatedRows,
     ] = await Promise.all([
       // Daily stats for current + previous periods (one scan, split in memory).
       db
@@ -319,6 +321,15 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         WHERE role = 'user' AND type = 'anonymous'
           AND created_at >= ${previousStart.toISOString()}
       `),
+
+      // New conversations by arrival channel (live query; chat volume is low,
+      // like CSAT, so no rollup table). Pulls current + previous windows in one
+      // scan; the split into the per-day series and the period-over-period
+      // delta happens in memory below.
+      db
+        .select({ createdAt: conversations.createdAt, source: conversations.source })
+        .from(conversations)
+        .where(gte(conversations.createdAt, previousStart)),
     ])
 
     // -- Period split for the daily-stats rollup --
@@ -468,6 +479,18 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         ? Math.min(100, Math.round((csatSummary.responseCount / closedCount) * 100))
         : 0
 
+    // -- New-conversation volume by arrival channel: current-window rows feed
+    // the per-day series; the previous window only supplies the delta. --
+    const nowStr = toIsoDateOnly(now)
+    const conversationVolume = buildConversationVolume(
+      conversationCreatedRows.filter((r) => r.createdAt >= start),
+      startStr,
+      nowStr
+    )
+    const prevConversationCount = conversationCreatedRows.filter(
+      (r) => r.createdAt >= previousStart && r.createdAt < start
+    ).length
+
     // -- Quinn AI metrics (queries started above) folded into the shared
     // Resolved/Escalated/Pending buckets via AI_INBOX_BUCKETS, so the bucket
     // vocabulary lives in one place (also used by the inbox filter + counts). --
@@ -505,6 +528,10 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         responseCount: csatSummary.responseCount,
         responseRate,
         distribution: csatSummary.distribution,
+      },
+      conversationVolume: {
+        ...conversationVolume,
+        delta: delta(conversationVolume.total, prevConversationCount),
       },
       changelog: {
         totalViews,

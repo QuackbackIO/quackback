@@ -72,6 +72,10 @@
     --metric-visitors: oklch(0.55 0.13 170);
     --metric-pageviews: oklch(0.52 0.13 230);
     --metric-visits: oklch(0.6 0.14 45);
+    /* Conversation arrival channels (support volume chart) */
+    --metric-widget: oklch(0.55 0.15 250);
+    --metric-email: oklch(0.58 0.11 195);
+    --metric-ticket-form: oklch(0.6 0.14 45);
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.886 0.176 86);
@@ -144,6 +148,10 @@
     --metric-visitors: oklch(0.7 0.13 170);
     --metric-pageviews: oklch(0.7 0.13 230);
     --metric-visits: oklch(0.75 0.13 50);
+    /* Conversation arrival channels (support volume chart) */
+    --metric-widget: oklch(0.7 0.14 250);
+    --metric-email: oklch(0.72 0.11 195);
+    --metric-ticket-form: oklch(0.75 0.13 50);
     --sidebar: oklch(0.145 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.886 0.176 86);
