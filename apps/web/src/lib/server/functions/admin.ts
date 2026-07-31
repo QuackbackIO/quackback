@@ -974,6 +974,34 @@ export const deletePortalUserFn = createServerFn({ method: 'POST' })
     return { principalId: data.principalId }
   })
 
+const mergeLeadSchema = z.object({
+  principalId: z.string(),
+  targetPrincipalId: z.string(),
+})
+
+/**
+ * Merge a lead into an identified portal user: the lead's activity is
+ * re-homed on the user and the anonymous identity is torn down.
+ */
+export const mergeLeadIntoUserFn = createServerFn({ method: 'POST' })
+  .validator(mergeLeadSchema)
+  .handler(async ({ data }) => {
+    log.info(
+      { principal_id: data.principalId, target_principal_id: data.targetPrincipalId },
+      'merge lead into portal user'
+    )
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+
+    const { mergeLeadIntoUser } = await import('@/lib/server/domains/users/user.merge')
+    await mergeLeadIntoUser(data.principalId as PrincipalId, data.targetPrincipalId as PrincipalId)
+
+    log.info(
+      { principal_id: data.principalId, target_principal_id: data.targetPrincipalId },
+      'lead merged into portal user'
+    )
+    return { principalId: data.targetPrincipalId }
+  })
+
 // ============================================
 // Invitation Operations
 // ============================================

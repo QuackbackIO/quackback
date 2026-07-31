@@ -89,7 +89,12 @@ export {
 } from './notifications'
 
 // User mutations
-export { useCreatePortalUser, useRemovePortalUser, useUpdatePortalUser } from './users'
+export {
+  useCreatePortalUser,
+  useMergeLeadIntoUser,
+  useRemovePortalUser,
+  useUpdatePortalUser,
+} from './users'
 
 // Avatar mutations
 export { useUploadAvatar, useDeleteAvatar } from './avatar'

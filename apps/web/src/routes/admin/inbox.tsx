@@ -1307,6 +1307,11 @@ function InboxPage() {
         case 'note':
           focusComposer('note')
           break
+        case 'macro':
+          // The thread owns the picker; a note-only thread no-ops (mirrors the
+          // picker's render gate on capabilities.macros).
+          composerHandleRef.current?.openMacros()
+          break
         case 'next':
           moveSelection(1)
           break

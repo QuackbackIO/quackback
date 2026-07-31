@@ -177,6 +177,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::createPortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::findPortalUsersByEmailFn | people.manage |
 | `lib/server/functions/admin.ts`::deletePortalUserFn | people.manage |
+| `lib/server/functions/admin.ts`::mergeLeadIntoUserFn | people.manage |
 | `lib/server/functions/admin.ts`::sendInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::cancelInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::resendInvitationFn | member.manage |

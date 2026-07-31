@@ -246,6 +246,12 @@ export interface ThreadComposerHandle {
    * a 'reply' request lands there instead of leaving focus nowhere.
    */
   focusComposer: (mode: ComposerMode) => void
+  /**
+   * Open the reply composer's macro picker (the inbox's `m` shortcut and its
+   * palette row). No-op where no picker renders: note-only threads, or a
+   * thread currently in note mode is switched back to reply first.
+   */
+  openMacros: () => void
 }
 
 export function AgentConversationThread({
@@ -1341,13 +1347,27 @@ export function AgentConversationThread({
   })
   // A note-only thread has no reply composer to focus, so every request lands
   // on the note one (matching the forced `noteMode` above).
+  const [macroPickerOpen, setMacroPickerOpen] = useState(false)
   useImperativeHandle(
     composerRef,
     () => ({
       focusComposer: (mode: ComposerMode) => focusComposerMode(capabilities.reply ? mode : 'note'),
+      openMacros: () => {
+        // The picker renders only on a reply-capable conversation out of note
+        // mode; where it doesn't render there is nothing to open.
+        if (!capabilities.macros) return
+        setNoteMode(false)
+        setMacroPickerOpen(true)
+      },
     }),
-    [focusComposerMode, capabilities.reply]
+    [focusComposerMode, capabilities.reply, capabilities.macros]
   )
+
+  // The picker only renders out of note mode; switching to a note closes it so
+  // returning to reply never resurrects a stale open picker.
+  useEffect(() => {
+    if (noteMode) setMacroPickerOpen(false)
+  }, [noteMode])
 
   const getComposerText = useCallback(
     (mode: ComposerMode) =>
@@ -2031,6 +2051,8 @@ export function AgentConversationThread({
                   conversationId={conversationId}
                   onInsert={insertMacroBody}
                   onApplied={refreshThread}
+                  open={macroPickerOpen}
+                  onOpenChange={setMacroPickerOpen}
                 />
               )}
               {/* Manual workflow runs (§4.6): no dedicated capability flag

@@ -19,6 +19,7 @@ describe('INBOX_ACTIONS registry', () => {
       'reply',
       'note',
       'copilot',
+      'macro',
       'assign',
       'assign_team',
       'snooze',
@@ -34,9 +35,11 @@ describe('INBOX_ACTIONS registry', () => {
     }
   })
 
-  it('omits the still-deferred actions (macro)', () => {
-    const ids = INBOX_ACTIONS.map((a) => a.id)
-    expect(ids).not.toContain('macro')
+  it('keys the macro picker on m in the Reply group, scoped to an open thread', () => {
+    const macro = byId('macro')
+    expect(macro.shortcut).toBe('m')
+    expect(macro.group).toBe('Reply')
+    expect(macro.scope).toBe('active')
   })
 
   it('keys the internal note on n, next to reply in the Reply group', () => {
@@ -49,7 +52,7 @@ describe('INBOX_ACTIONS registry', () => {
   })
 
   it('assigns the contract scopes', () => {
-    for (const id of ['reply', 'note', 'copilot', 'next', 'prev']) {
+    for (const id of ['reply', 'note', 'copilot', 'macro', 'next', 'prev']) {
       expect(byId(id).scope).toBe('active')
     }
     for (const id of [
