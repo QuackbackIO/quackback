@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 /**
- * Smoke coverage for the Quinn performance card: renders the KPI tiles from
- * getQuinnPerformanceFn (involvement/resolution/escalation rates + actions
- * taken), with the confirmed/assumed split and a loading placeholder before
- * data arrives.
+ * Smoke coverage for the Quinn performance card: renders the five KPI tiles
+ * from getQuinnPerformanceFn (involvement/resolution/escalation rates,
+ * actions taken, and customer satisfaction), with the confirmed/assumed
+ * split and a loading placeholder before data arrives.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ReactElement } from 'react'
@@ -21,6 +21,7 @@ const SUMMARY = {
   handedOff: 1,
   escalationRate: 25,
   actionsTaken: 3,
+  csat: { avgRating: 4.5, responseCount: 2 },
   dailyTrend: [
     { date: '2026-06-01', involvements: 2, resolved: 1 },
     { date: '2026-06-02', involvements: 2, resolved: 1 },
@@ -65,6 +66,21 @@ describe('QuinnPerformanceCard', () => {
   it('shows actions taken', async () => {
     renderWithClient(<QuinnPerformanceCard />)
     expect(await screen.findByText('3')).toBeInTheDocument()
+  })
+
+  it('renders all five KPI tiles', async () => {
+    renderWithClient(<QuinnPerformanceCard />)
+    expect(await screen.findByText('Involvement rate')).toBeInTheDocument()
+    expect(screen.getByText('Resolution rate')).toBeInTheDocument()
+    expect(screen.getByText('Escalation rate')).toBeInTheDocument()
+    expect(screen.getByText('Actions completed')).toBeInTheDocument()
+    expect(screen.getByText('Customer satisfaction')).toBeInTheDocument()
+  })
+
+  it('shows the customer satisfaction average and rating count', async () => {
+    renderWithClient(<QuinnPerformanceCard />)
+    expect(await screen.findByText('4.50 / 5')).toBeInTheDocument()
+    expect(screen.getByText('2 ratings')).toBeInTheDocument()
   })
 
   it('shows a loading placeholder before data arrives', () => {
