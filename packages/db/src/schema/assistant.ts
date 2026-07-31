@@ -63,9 +63,9 @@ export type AssistantInvolvementTrigger = (typeof ASSISTANT_INVOLVEMENT_TRIGGERS
 export type AssistantInvolvementStatus = (typeof ASSISTANT_INVOLVEMENT_STATUSES)[number]
 export type AssistantHandoffReason = (typeof ASSISTANT_HANDOFF_REASONS)[number]
 
-/** One cited source captured on an involvement (a help-center article, a feedback post, an admin-curated snippet, a past-conversation summary, a closed ticket, or a changelog entry). `type` mirrors ASSISTANT_CITATION_TYPES (apps/web citation-types.ts). */
+/** One cited source captured on an involvement (a help-center article, a feedback post, an admin-curated snippet, a past-conversation summary, a closed ticket, a changelog entry, or an uploaded knowledge document). `type` mirrors ASSISTANT_CITATION_TYPES (apps/web citation-types.ts). */
 export interface AssistantInvolvementSource {
-  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog'
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document'
   id: string
   title?: string
   url?: string
@@ -173,6 +173,59 @@ export type AssistantSnippet = typeof assistantSnippets.$inferSelect
 export const assistantSnippetsRelations = relations(assistantSnippets, ({ one }) => ({
   createdBy: one(principal, {
     fields: [assistantSnippets.createdById],
+    references: [principal.id],
+  }),
+}))
+
+/**
+ * Knowledge documents — admin-uploaded files (today: PDFs) whose extracted
+ * text grounds Quinn's answers, alongside the curated snippets above. Unlike
+ * a snippet (a short typed fact), a document is an uploaded artifact: the
+ * extracted full text lives in `content` and is embedded on ingest
+ * (`assistant/document.service.ts`) for the same hybrid retrieval the
+ * changelog source uses (`assistant/documents-retrieval.ts`).
+ *
+ * Documents are admin-curated customer-answerable content, so every non-
+ * deleted row is retrievable at every ceiling — there is no draft state and
+ * no audience column. `storageKey` keeps the original bytes in object storage
+ * when S3 is configured; it is null when storage is not configured (the
+ * extracted text is the grounding source of truth either way).
+ */
+export const assistantDocuments = pgTable(
+  'assistant_documents',
+  {
+    id: typeIdWithDefault('assistant_document')('id').primaryKey(),
+    title: text('title').notNull(),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    /** Object-storage key of the original upload; null when storage is unconfigured. */
+    storageKey: text('storage_key'),
+    /** Text extracted from the upload at ingest time; what retrieval grounds on. */
+    content: text('content').notNull(),
+    embedding: vector('embedding'),
+    embeddingModel: text('embedding_model'),
+    embeddingUpdatedAt: timestamp('embedding_updated_at', { withTimezone: true }),
+    // Nulled on the uploader's deletion — the document outlives them.
+    createdById: typeIdColumnNullable('principal')('created_by_id').references(() => principal.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('assistant_documents_embedding_hnsw_idx')
+      .using('hnsw', sql`${table.embedding} vector_cosine_ops`)
+      .where(sql`${table.embedding} IS NOT NULL`),
+    check('assistant_documents_title_length_check', sql`char_length(${table.title}) <= 200`),
+  ]
+)
+
+export type AssistantDocument = typeof assistantDocuments.$inferSelect
+
+export const assistantDocumentsRelations = relations(assistantDocuments, ({ one }) => ({
+  createdBy: one(principal, {
+    fields: [assistantDocuments.createdById],
     references: [principal.id],
   }),
 }))

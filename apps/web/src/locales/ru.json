@@ -1035,6 +1035,8 @@
   "automation.knowledge.source.tickets.description": "",
   "automation.knowledge.source.changelog.label": "",
   "automation.knowledge.source.changelog.description": "",
+  "automation.knowledge.source.documents.label": "",
+  "automation.knowledge.source.documents.description": "",
   "automation.knowledge.source.status.label": "",
   "automation.knowledge.source.status.description": "",
   "automation.test.agent.label": "",

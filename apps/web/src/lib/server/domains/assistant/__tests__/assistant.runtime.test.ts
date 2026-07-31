@@ -95,6 +95,13 @@ vi.mock('../changelog-retrieval', () => ({
     retrieve: (...args: unknown[]) => mockChangelogRetrieve(...args),
   },
 }))
+const mockDocumentsRetrieve = vi.fn()
+vi.mock('../documents-retrieval', () => ({
+  documentsKnowledgeSource: {
+    sourceType: 'document',
+    retrieve: (...args: unknown[]) => mockDocumentsRetrieve(...args),
+  },
+}))
 
 // `listMessages` backs get_conversation_context (never triggered here);
 // `listConversationMessagesForGrounding` (all: true) backs the conversation
@@ -154,7 +161,13 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
           responseLength: 'balanced' as const,
           additionalInstructions: '',
         },
-        knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+        knowledge: {
+          helpCenter: true,
+          posts: false,
+          changelog: false,
+          documents: true,
+          status: false,
+        },
       },
       copilot: {
         capabilities: { qa: true },
@@ -165,6 +178,7 @@ const DEFAULT_RUNTIME_CONFIG: AssistantRuntimeConfig = {
           internalNotes: true,
           tickets: false,
           changelog: false,
+          documents: true,
           status: true,
         },
       },
@@ -313,6 +327,7 @@ beforeEach(() => {
   mockConversationSummariesRetrieve.mockResolvedValue([])
   mockTicketsRetrieve.mockResolvedValue([])
   mockChangelogRetrieve.mockResolvedValue([])
+  mockDocumentsRetrieve.mockResolvedValue([])
   mockGetAssistantRuntimeConfig.mockResolvedValue(structuredClone(DEFAULT_RUNTIME_CONFIG))
   mockListEnabledGuidanceCandidates.mockResolvedValue([])
   mockSelectApplicableGuidance.mockResolvedValue([])
@@ -351,7 +366,13 @@ describe('mockRuntimeConfig helper', () => {
         agents: {
           agent: {
             voice: DEFAULT_RUNTIME_CONFIG.config.agents.agent.voice,
-            knowledge: { helpCenter: false, posts: true, changelog: true, status: true },
+            knowledge: {
+              helpCenter: false,
+              posts: true,
+              changelog: true,
+              documents: false,
+              status: true,
+            },
           },
         },
       },
@@ -361,6 +382,7 @@ describe('mockRuntimeConfig helper', () => {
       helpCenter: false,
       posts: true,
       changelog: true,
+      documents: false,
       status: true,
     })
   })
@@ -2107,9 +2129,9 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
     expect(mockAssembleAssistantToolset).toHaveBeenCalledWith(
       expect.objectContaining({
         assistantName: 'Nova',
-        // The Agent's default knowledge map (helpCenter only among retrieval
-        // sources) compiles to this snapshot on a customer_support turn.
-        knowledge: { sources: new Set(['article']), status: false },
+        // The Agent's default knowledge map (helpCenter + documents among
+        // retrieval sources) compiles to this snapshot on a customer_support turn.
+        knowledge: { sources: new Set(['article', 'document']), status: false },
       }),
       undefined,
       false,

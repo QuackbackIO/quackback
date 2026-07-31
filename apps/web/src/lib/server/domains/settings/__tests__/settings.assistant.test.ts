@@ -81,7 +81,13 @@ const CONFIG: AssistantConfig = {
         responseLength: 'balanced',
         additionalInstructions: 'Use short replies.',
       },
-      knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+      knowledge: {
+        helpCenter: true,
+        posts: false,
+        changelog: false,
+        documents: true,
+        status: false,
+      },
     },
     copilot: {
       capabilities: { qa: true },
@@ -92,6 +98,7 @@ const CONFIG: AssistantConfig = {
         internalNotes: true,
         tickets: false,
         changelog: false,
+        documents: true,
         status: true,
       },
     },

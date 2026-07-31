@@ -179,6 +179,7 @@ export function resolveAssistantKnowledgeSnapshot(
       if (k.helpCenter) sources.add('article')
       if (k.posts) sources.add('post')
       if (k.changelog) sources.add('changelog')
+      if (k.documents) sources.add('document')
       return { sources, status: k.status }
     }
     case 'copilot': {
@@ -188,6 +189,7 @@ export function resolveAssistantKnowledgeSnapshot(
       if (k.pastConversations) sources.add('summary')
       if (k.tickets) sources.add('ticket')
       if (k.changelog) sources.add('changelog')
+      if (k.documents) sources.add('document')
       return { sources, status: k.status }
     }
     default: {
@@ -205,6 +207,7 @@ const SOURCE_TYPE_PROMPT_LABELS: Record<AssistantCitationType, string> = {
   summary: "this customer's past conversation summaries",
   ticket: 'resolved ticket summaries',
   changelog: 'changelog entries',
+  document: 'uploaded knowledge documents',
 }
 
 /**
@@ -262,6 +265,9 @@ export async function resolveKnowledgeSources(
   }
   if (enabledSet.has('changelog')) {
     sources.push((await import('./changelog-retrieval')).changelogKnowledgeSource)
+  }
+  if (enabledSet.has('document')) {
+    sources.push((await import('./documents-retrieval')).documentsKnowledgeSource)
   }
   return sources
 }
