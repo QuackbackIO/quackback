@@ -200,6 +200,59 @@ export function useChangePostStatusId() {
   })
 }
 
+/**
+ * Per-item outcome of a bulk status change so the toolbar can toast partial
+ * failures: a post that refuses the change (e.g. its status was archived
+ * mid-batch) fails alone without aborting the rest of the selection.
+ */
+export interface BulkPostStatusSummary {
+  succeeded: PostId[]
+  failed: { id: PostId; reason: string }[]
+}
+
+/**
+ * Apply one status to many posts by REUSING the single-post changePostStatusFn:
+ * the fan-out keeps each post on the exact path an individual status change
+ * takes (validation, activity events, subscriber notifications), and a per-item
+ * failure is isolated to that post rather than aborting the batch.
+ */
+export async function bulkChangePostStatuses(
+  postIds: PostId[],
+  statusId: PostStatusId
+): Promise<BulkPostStatusSummary> {
+  const succeeded: PostId[] = []
+  const failed: { id: PostId; reason: string }[] = []
+  for (const postId of postIds) {
+    try {
+      await changePostStatusFn({ data: { id: postId, statusId } })
+      succeeded.push(postId)
+    } catch (err) {
+      failed.push({ id: postId, reason: err instanceof Error ? err.message : 'Unknown error' })
+    }
+  }
+  return { succeeded, failed }
+}
+
+/**
+ * Bulk inbox status change behind the multi-select toolbar. No optimistic
+ * writes (the selection can span pages and filters), so on success every inbox
+ * list is invalidated along with the roadmap column the batch moved into.
+ */
+export function useBulkChangePostStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ postIds, statusId }: { postIds: PostId[]; statusId: PostStatusId }) =>
+      bulkChangePostStatuses(postIds, statusId),
+    onSuccess: (summary, { statusId }) => {
+      queryClient.invalidateQueries({ queryKey: inboxKeys.lists() })
+      for (const postId of summary.succeeded) {
+        queryClient.invalidateQueries({ queryKey: inboxKeys.detail(postId) })
+      }
+      invalidateRoadmapForStatus(queryClient, statusId)
+    },
+  })
+}
+
 export function useSetPostEta() {
   const queryClient = useQueryClient()
   return useMutation({
