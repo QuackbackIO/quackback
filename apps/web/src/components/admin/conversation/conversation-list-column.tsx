@@ -1,6 +1,7 @@
 import { memo, useState, type ReactNode } from 'react'
 import { Link, useRouteContext } from '@tanstack/react-router'
 import type { ConversationDTO, ConversationPriority } from '@/lib/shared/conversation/types'
+import { CONVERSATION_SPAM_FILED_BY_LABELS } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
 import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons/react/24/solid'
 import { TicketIcon, BuildingOffice2Icon, RectangleStackIcon } from '@heroicons/react/24/outline'
@@ -22,6 +23,7 @@ import {
 } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { TicketStatusChip, TICKET_TYPE_CLASS } from '@/components/admin/inbox/ticket-chips'
 import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -728,6 +730,14 @@ export const ConversationRow = memo(function ConversationRow({
                 {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
               </p>
               <span className="flex shrink-0 items-center gap-1.5">
+                {/* The Spam view's one row decoration: which rule or classifier
+                    filed the thread, so an agent scanning the list can spot a
+                    false positive's source without opening it. */}
+                {c.endReason === 'spam' && c.spamReason && (
+                  <Badge size="sm" shape="pill" variant="outline">
+                    {CONVERSATION_SPAM_FILED_BY_LABELS[c.spamReason]}
+                  </Badge>
+                )}
                 <span className="text-xs text-muted-foreground">
                   {relativeTime(c.lastMessageAt)}
                 </span>

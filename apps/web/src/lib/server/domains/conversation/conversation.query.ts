@@ -90,6 +90,7 @@ import type {
   MessageSenderType,
   ConversationStatus,
   ConversationEndReason,
+  ConversationSpamFiledBy,
   ConversationTranslationStateDTO,
 } from '@/lib/shared/conversation/types'
 
@@ -431,6 +432,7 @@ export function toConversationDTO(
     | 'csatRating'
     | 'resolvedAt'
     | 'endReason'
+    | 'spamReason'
   >,
   visitor: ConversationAuthorDTO,
   assignedAgent: ConversationAuthorDTO | null,
@@ -451,7 +453,10 @@ export function toConversationDTO(
   customAttributes: Record<string, JsonValue> = {},
   // Two-way inbox translation state (agent-only); callers pass null on
   // visitor paths — the widget has no UI for this feature.
-  translation: ConversationTranslationStateDTO | null = null
+  translation: ConversationTranslationStateDTO | null = null,
+  // Which rule/classifier filed a spam-ended thread (agent-only); callers
+  // pass null on visitor paths.
+  spamReason: ConversationSpamFiledBy | null = null
 ): ConversationDTO {
   return {
     id: conversation.id,
@@ -475,6 +480,7 @@ export function toConversationDTO(
     // the app constrains writes to the taxonomy, so the cast is safe.
     endReason: (conversation.endReason as ConversationEndReason | null) ?? null,
     endNote,
+    spamReason: (spamReason as ConversationSpamFiledBy | null) ?? null,
     snoozedUntil,
     assignedTeamId,
     tags,
@@ -578,7 +584,9 @@ export async function conversationToDTO(
     side === 'agent' ? (conversation.assignedTeamId ?? null) : null,
     side === 'agent' ? slaDtoFor(conversation) : null,
     side === 'agent' ? ((conversation.customAttributes ?? {}) as Record<string, JsonValue>) : {},
-    side === 'agent' ? translationStateFrom(conversation) : null
+    side === 'agent' ? translationStateFrom(conversation) : null,
+    // App-constrained taxonomy (CONVERSATION_SPAM_FILED_BY), like endReason.
+    side === 'agent' ? ((conversation.spamReason as ConversationSpamFiledBy | null) ?? null) : null
   )
 }
 
@@ -1566,6 +1574,7 @@ export async function listConversationsForAgent(
       resolvedAt: conversations.resolvedAt,
       endReason: conversations.endReason,
       endNote: conversations.endNote,
+      spamReason: conversations.spamReason,
       snoozedUntil: conversations.snoozedUntil,
       visitorEmail: conversations.visitorEmail,
       slaApplied: conversations.slaApplied,
@@ -1795,7 +1804,8 @@ export async function listConversationsForAgent(
         // customAttributes intentionally omitted here (unchanged pre-existing
         // behavior for the inbox list) — the caller's default (`{}`) applies.
         undefined,
-        translationStateFrom(c)
+        translationStateFrom(c),
+        (c.spamReason as ConversationSpamFiledBy | null) ?? null
       )
     ),
     hasMore,

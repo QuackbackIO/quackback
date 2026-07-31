@@ -599,6 +599,21 @@ export const CONVERSATION_END_REASONS = [
 ] as const
 export type ConversationEndReason = (typeof CONVERSATION_END_REASONS)[number]
 
+// Which rule or classifier filed a spam-ended conversation
+// (conversations.spam_reason). The deterministic signal values mirror
+// SPAM_SIGNALS in the conversation domain; 'ai_classifier' is the AI
+// fallback verdict and 'manual' an agent's own filing. A plain-text column
+// whose allowed values live here as the single source of truth for the
+// Spam view's reason badge.
+export const CONVERSATION_SPAM_FILED_BY = [
+  'auto_responder',
+  'sender_auth_failure',
+  'burst_rate',
+  'ai_classifier',
+  'manual',
+] as const
+export type ConversationSpamFiledBy = (typeof CONVERSATION_SPAM_FILED_BY)[number]
+
 // Per-agent manual availability (principal.chat_availability). 'online' = route
 // chats to me when connected; 'away' = connected but opted out of routing.
 export const AGENT_AVAILABILITY_VALUES = ['online', 'away'] as const

@@ -167,7 +167,7 @@ export async function maybeAutoFileSpam(
     if (signal) {
       log.info({ conversation_id: conversationId, signal }, 'spam signal matched; filing')
       const { autoFileConversationAsSpam } = await import('./conversation.service')
-      return await autoFileConversationAsSpam(conversationId)
+      return await autoFileConversationAsSpam(conversationId, signal)
     }
     if (!(await classifyInboundAsSpam(input))) return false
     const { autoFileConversationAsSpam } = await import('./conversation.service')

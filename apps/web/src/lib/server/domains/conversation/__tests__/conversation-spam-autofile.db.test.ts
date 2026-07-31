@@ -168,6 +168,12 @@ async function spamViewIds(): Promise<string[]> {
   return page.conversations.map((c) => c.id)
 }
 
+/** The Spam-view DTO's filing-reason badge field for one conversation. */
+async function spamViewReason(id: string): Promise<string | null> {
+  const page = await listConversationsForAgent({ spamOnly: true }, agentActor())
+  return page.conversations.find((c) => c.id === id)?.spamReason ?? null
+}
+
 describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
   beforeEach(() => vi.clearAllMocks())
@@ -193,8 +199,10 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
-    // And the Spam view is the list that surfaces it.
+    expect(stored?.spamReason).toBe('ai_classifier')
+    // And the Spam view is the list that surfaces it — with the filing reason.
     await expect(spamViewIds()).resolves.toContain(res.conversationId)
+    await expect(spamViewReason(res.conversationId)).resolves.toBe('ai_classifier')
   })
 
   it('leaves a legitimate message in triage untouched', async () => {
@@ -250,7 +258,9 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
+    expect(stored?.spamReason).toBe('auto_responder')
     await expect(spamViewIds()).resolves.toContain(res.conversationId)
+    await expect(spamViewReason(res.conversationId)).resolves.toBe('auto_responder')
     // The deterministic signal filed it; the AI path never ran.
     expect(mockChat).not.toHaveBeenCalled()
   })
@@ -287,6 +297,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
+    expect(stored?.spamReason).toBe('sender_auth_failure')
     expect(mockChat).not.toHaveBeenCalled()
   })
 
@@ -307,6 +318,7 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
+    expect(stored?.spamReason).toBe('burst_rate')
     expect(mockChat).not.toHaveBeenCalled()
   })
 

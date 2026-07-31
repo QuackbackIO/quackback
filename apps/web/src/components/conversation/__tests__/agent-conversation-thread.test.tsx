@@ -382,6 +382,7 @@ function makeConversation(overrides: Partial<ConversationDTO> = {}): Conversatio
     assignedTeamId: null,
     endReason: null,
     endNote: null,
+    spamReason: null,
     tags: [],
     sla: null,
     customAttributes: {},

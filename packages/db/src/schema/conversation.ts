@@ -116,6 +116,11 @@ export const conversations = pgTable(
     // ('resolved','tracked_as_feedback')) / count(all ended EXCLUDING 'spam').
     endReason: text('end_reason'),
     endNote: text('end_note'),
+    // Which rule or classifier filed a spam-ended conversation (the
+    // deterministic signals, the AI classifier, or an agent). App-layer
+    // taxonomy (CONVERSATION_SPAM_FILED_BY); null for non-spam threads and
+    // cleared by restore-from-spam.
+    spamReason: text('spam_reason'),
     // Optional contact email captured from an anonymous visitor for offline
     // follow-up. Agent-only; the principal itself stays anonymous.
     visitorEmail: text('visitor_email'),

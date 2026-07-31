@@ -95,6 +95,7 @@ function conversation(overrides: Partial<ConversationDTO> = {}): ConversationDTO
     assignedTeamId: null,
     endReason: null,
     endNote: null,
+    spamReason: null,
     tags: [],
     sla: null,
     customAttributes: {},

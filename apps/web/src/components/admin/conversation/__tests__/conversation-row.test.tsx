@@ -89,3 +89,21 @@ describe('ConversationRow assignee column', () => {
     expect(unassigned.className).toContain('w-24')
   })
 })
+
+describe('ConversationRow spam filing reason', () => {
+  it('shows the filing-reason badge on a spam-ended row', () => {
+    renderRow(conversation({ status: 'closed', endReason: 'spam', spamReason: 'auto_responder' }))
+    expect(screen.getByText('Auto-responder')).toBeInTheDocument()
+  })
+
+  it('labels an agent-filed spam as manually filed', () => {
+    renderRow(conversation({ status: 'closed', endReason: 'spam', spamReason: 'manual' }))
+    expect(screen.getByText('Manually filed')).toBeInTheDocument()
+  })
+
+  it('renders no badge on a non-spam row', () => {
+    renderRow(conversation({}))
+    expect(screen.queryByText('Auto-responder')).not.toBeInTheDocument()
+    expect(screen.queryByText('Manually filed')).not.toBeInTheDocument()
+  })
+})
