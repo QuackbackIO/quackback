@@ -126,6 +126,9 @@ export const postTags = pgTable(
     name: text('name').notNull().unique(),
     color: text('color').default('#6b7280').notNull(),
     description: text('description'),
+    // Matching rule for AI auto-tagging: new posts are evaluated against every
+    // tag whose prompt is set, and matching tags are assigned automatically.
+    aiPrompt: text('ai_prompt'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

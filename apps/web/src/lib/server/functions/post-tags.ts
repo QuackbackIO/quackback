@@ -30,6 +30,7 @@ const createTagSchema = z.object({
     .optional()
     .default('#6b7280'),
   description: z.string().max(200).optional(),
+  aiPrompt: z.string().max(500).optional(),
 })
 
 const getTagSchema = z.object({
@@ -44,6 +45,7 @@ const updateTagSchema = z.object({
     .regex(/^#[0-9A-Fa-f]{6}$/)
     .optional(),
   description: z.string().max(200).optional().nullable(),
+  aiPrompt: z.string().max(500).optional().nullable(),
 })
 
 const deleteTagSchema = z.object({
@@ -106,6 +108,7 @@ export const createPostTagFn = createServerFn({ method: 'POST' })
       name: data.name,
       color: data.color,
       description: data.description,
+      aiPrompt: data.aiPrompt,
     })
     log.info({ tag_id: tag.id }, 'tag created')
     return tag
@@ -124,6 +127,7 @@ export const updatePostTagFn = createServerFn({ method: 'POST' })
       name: data.name,
       color: data.color,
       description: data.description,
+      aiPrompt: data.aiPrompt,
     })
     log.info({ tag_id: tag.id }, 'tag updated')
     return tag
