@@ -531,6 +531,7 @@
   "widget.messenger.system.ticketClosed": "Ticket cerrado",
   "widget.messenger.system.ticketCreated": "Ticket {reference} creado a partir de esta conversación",
   "widget.messenger.system.ticketStatus": "Estado actualizado a {stageLabel}",
+  "widget.messenger.system.viaWorkflow": "vía {workflowName}",
   "widget.messenger.typing": "{name} está escribiendo…",
   "widget.messenger.upload.failed": "No se pudo subir la imagen. Inténtalo de nuevo.",
   "widget.messenger.you": "Tú",

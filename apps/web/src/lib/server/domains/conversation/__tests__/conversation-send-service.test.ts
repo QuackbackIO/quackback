@@ -143,6 +143,7 @@ vi.mock('@/lib/server/db', () => {
     conversations: { __name: 'conversations', id: 'id' },
     conversationMessages: { __name: 'conversation_messages', id: 'id' },
     principal: { __name: 'principal', id: 'id', displayName: 'display_name' },
+    withWorkflowAttribution: (event: unknown) => event,
   }
 })
 

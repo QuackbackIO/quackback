@@ -531,6 +531,7 @@
   "widget.messenger.system.ticketClosed": "تم إغلاق التذكرة",
   "widget.messenger.system.ticketCreated": "تم إنشاء التذكرة {reference} من هذه المحادثة",
   "widget.messenger.system.ticketStatus": "تم تحديث الحالة إلى {stageLabel}",
+  "widget.messenger.system.viaWorkflow": "عبر {workflowName}",
   "widget.messenger.typing": "{name} يكتب الآن…",
   "widget.messenger.upload.failed": "تعذّر رفع الصورة. يُرجى المحاولة مرة أخرى.",
   "widget.messenger.you": "أنت",

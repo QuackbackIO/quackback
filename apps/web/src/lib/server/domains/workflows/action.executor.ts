@@ -169,6 +169,12 @@ export interface WorkflowContext {
    *  recover them — both already live on the run the engine is holding.
    *  Absent for a macro-applied action, same as runId. */
   workflowId?: string
+  /** The firing workflow's display name, threaded through alongside
+   *  `workflowId` so an action whose write posts a system notice (close,
+   *  reopen, assign) can attribute that notice to this workflow — the thread
+   *  then names the automation instead of reading as a teammate's manual
+   *  action. Absent for a macro-applied action, same as runId. */
+  workflowName?: string
   subjectPrincipalId?: PrincipalId | null
   /** Set only by workflow.engine.ts's applyPlanAndSettle, and only for a plan
    *  with a send_block action — see ResolvedBlockDeps. A macro (which calls
@@ -449,12 +455,20 @@ export async function applyAction(
   ctx: WorkflowContext
 ): Promise<ActionResult> {
   const { conversationId, actor } = ctx
+  // Attribution threaded into every service call whose write posts a system
+  // notice, so the thread names the firing workflow on that notice.
+  const attribution = ctx.workflowName ? { workflowName: ctx.workflowName } : undefined
   switch (action.type) {
     case 'assign_agent':
-      await conversationService.assignConversation(conversationId, action.principalId, actor)
+      await conversationService.assignConversation(
+        conversationId,
+        action.principalId,
+        actor,
+        attribution
+      )
       return label('assigned')
     case 'assign_team':
-      await conversationService.assignTeam(conversationId, action.teamId, actor)
+      await conversationService.assignTeam(conversationId, action.teamId, actor, attribution)
       return label('assigned to team')
     case 'add_tag':
       await tagService.attachTag(conversationId, action.tagId)
@@ -476,7 +490,7 @@ export async function applyAction(
       return label('snoozed')
     }
     case 'close':
-      await conversationService.setConversationStatus(conversationId, 'closed', actor)
+      await conversationService.setConversationStatus(conversationId, 'closed', actor, attribution)
       return label('closed')
     case 'reopen':
       // Same seam as 'close', target 'open' instead. setConversationStatus is
@@ -485,7 +499,7 @@ export async function applyAction(
       // event), so an already-open conversation is a no-op in every
       // OBSERVABLE way — no duplicate transcript notice, no re-fired event —
       // without this case needing its own pre-check.
-      await conversationService.setConversationStatus(conversationId, 'open', actor)
+      await conversationService.setConversationStatus(conversationId, 'open', actor, attribution)
       return label('reopened')
     case 'apply_sla': {
       if (action.target === 'ticket') {

@@ -722,6 +722,25 @@ export interface ConversationSystemEvent {
   priority?: ConversationPriority
   /** CSAT rating (1-5) for 'csat_submitted' — team-only (the row is internal). */
   rating?: number
+  /** Name of the workflow whose run posted this notice, when one did. Lets
+   *  the thread attribute the event to the automation that fired it ("via
+   *  <name>") instead of leaving it indistinguishable from a teammate's
+   *  manual action. Absent on every manually-triggered notice. */
+  workflowName?: string
+}
+
+/**
+ * Stamp workflow attribution onto a system event: a notice posted because a
+ * workflow fired names that workflow. Returns the event unchanged when there
+ * is no workflow to name (a manual/agent action), so callers can thread an
+ * optional name through unconditionally. Never mutates the input.
+ */
+export function withWorkflowAttribution(
+  event: ConversationSystemEvent,
+  workflowName: string | null | undefined
+): ConversationSystemEvent {
+  const name = workflowName?.trim()
+  return name ? { ...event, workflowName: name } : event
 }
 
 // An agent-only suggestion (carried on an internal note) to track a resolved

@@ -25,6 +25,12 @@
  *    generic-close projection instead: "Ticket closed" — posted when a
  *    null-`publicStage` status ("Won't do", "Duplicate") closes the ticket,
  *    so the customer hears the close without the internal status name.
+ *
+ * Workflow attribution: when the stored event carries `workflowName` (the
+ * notice was posted by a workflow run, stamped server-side), the notice gains
+ * a trailing "· via {workflowName}" so the thread names the automation that
+ * fired it. The name is a workspace string (the workflow's display name),
+ * rendered verbatim like the ticket stage label.
  */
 import { FormattedMessage } from 'react-intl'
 import type { ReactNode } from 'react'
@@ -100,10 +106,23 @@ export function SystemEventNotice({
   fallback: string
 }) {
   const notice = (event && noticeText(event)) ?? fallback
+  const workflowName = event?.workflowName?.trim()
   return (
     <div className="flex items-center gap-2 py-1" role="status">
       <span className="h-px flex-1 bg-border/50" />
-      <span className="text-center text-[11px] text-muted-foreground">{notice}</span>
+      <span className="text-center text-[11px] text-muted-foreground">
+        {notice}
+        {workflowName ? (
+          <>
+            {' · '}
+            <FormattedMessage
+              id="widget.messenger.system.viaWorkflow"
+              defaultMessage="via {workflowName}"
+              values={{ workflowName }}
+            />
+          </>
+        ) : null}
+      </span>
       <span className="h-px flex-1 bg-border/50" />
     </div>
   )
