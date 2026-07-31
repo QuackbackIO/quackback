@@ -1,6 +1,6 @@
 import { memo, useState, type ReactNode } from 'react'
 import { Link, useRouteContext } from '@tanstack/react-router'
-import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import type { ConversationDTO, ConversationPriority } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
 import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons/react/24/solid'
 import { TicketIcon, BuildingOffice2Icon, RectangleStackIcon } from '@heroicons/react/24/outline'
@@ -605,7 +605,41 @@ function RowShell({
   )
 }
 
-const ConversationRow = memo(function ConversationRow({
+/** The row's assignee column: a FIXED-width (w-24), left-aligned slot at a
+ *  constant offset from the row's right edge, so assignees align down one
+ *  unbroken vertical scan line whatever the snippet length. An unassigned
+ *  thread renders an explicit "Unassigned" label in the same slot — the
+ *  column is always present, never collapsing with row content. Kept tiny
+ *  and muted so it scans as metadata, never as a second row identity. */
+function assigneeColumn(c: ConversationDTO) {
+  if (!c.assignedAgent) {
+    return (
+      <span className="flex w-24 shrink-0 items-center text-xs text-muted-foreground/70">
+        Unassigned
+      </span>
+    )
+  }
+  const fullName = c.assignedAgent.displayName ?? 'teammate'
+  // First name only: the column is a fixed 96px, so a full name would
+  // ellipsis-truncate into noise; the full name stays one hover away on the
+  // title.
+  const firstName = fullName.split(' ')[0]
+  return (
+    <span
+      title={`Assigned to ${fullName}`}
+      className="flex w-24 shrink-0 items-center gap-1 text-xs text-muted-foreground"
+    >
+      <Avatar
+        src={c.assignedAgent.avatarUrl}
+        name={fullName}
+        className="size-5 shrink-0 text-[11px]"
+      />
+      <span className="truncate">{firstName}</span>
+    </span>
+  )
+}
+
+export const ConversationRow = memo(function ConversationRow({
   item,
   id,
   selected,
@@ -636,7 +670,12 @@ const ConversationRow = memo(function ConversationRow({
     >
       {/* Rows keep a fixed anatomy (name / linked-ticket line / preview + time)
           so the list scans uniformly — the sometimes-present decorations
-          (priority dot, SLA, channel, tags) live on the thread, not here. A
+          (priority dot, SLA, channel, tags) live on the thread, not here. The
+          ONE identity decoration is the assignee column pinned to the row's
+          right edge at a fixed width (a glance must answer "who has this?"
+          without opening the thread, and the fixed slot lets the eye scan
+          assignees down one vertical line); unassigned threads render an
+          explicit "Unassigned" label there, so the scan line never breaks. A
           result row swaps the preview for the matched excerpt and moves the
           time up beside the name, so the excerpt gets the full row width. */}
       <button
@@ -661,9 +700,14 @@ const ConversationRow = memo(function ConversationRow({
                 </span>
               )}
               {item.searchSnippet && (
-                <span className="text-xs text-muted-foreground">
-                  {relativeTime(c.lastMessageAt)}
-                </span>
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    {relativeTime(c.lastMessageAt)}
+                  </span>
+                  {/* Rightmost on the row, so the column's left edge is the
+                      same constant offset from the right edge on every row. */}
+                  {assigneeColumn(c)}
+                </>
               )}
             </span>
           </div>
@@ -683,8 +727,13 @@ const ConversationRow = memo(function ConversationRow({
               <p className="min-w-0 truncate text-xs text-muted-foreground">
                 {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
               </p>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {relativeTime(c.lastMessageAt)}
+              <span className="flex shrink-0 items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">
+                  {relativeTime(c.lastMessageAt)}
+                </span>
+                {/* Rightmost on the row, so the column's left edge is the
+                    same constant offset from the right edge on every row. */}
+                {assigneeColumn(c)}
               </span>
             </div>
           )}

@@ -581,10 +581,12 @@ function InboxPage() {
   // The active custom view (if any): its saved rules become the list-query
   // params, and its own sort is the default until the user re-sorts. The
   // status/priority chips are hidden for a custom view (the view owns them),
-  // as they are for the self-contained Mentions feed.
+  // as they are for the self-contained Mentions/Spam feeds.
   const activeView: ConversationViewDTO | undefined =
     nav.kind === 'custom' ? navViews?.find((v) => v.id === nav.viewId) : undefined
-  const showRefinements = nav.kind !== 'custom' && !(nav.kind === 'view' && nav.view === 'mentions')
+  const showRefinements =
+    nav.kind !== 'custom' &&
+    !(nav.kind === 'view' && (nav.view === 'mentions' || nav.view === 'spam'))
   // Ordering: URL sort wins; else a custom view's saved sort; else the list's
   // implicit default (relevance while searching, most-recent otherwise).
   const sort: ConversationSort = urlSort ?? activeView?.sort ?? defaultConversationSort(!!search)

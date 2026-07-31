@@ -1084,6 +1084,43 @@ export async function endConversation(
 }
 
 /**
+ * Agent action: restore a spam-ended conversation to the open queue. The
+ * inverse of ending with reason 'spam': the thread reopens and the spam
+ * marker (endReason/endNote/resolvedAt) is fully cleared, so the conversation
+ * rejoins every triage list and counts in resolution reporting like any
+ * reopened thread. Only a conversation currently marked spam may be restored
+ * — anything else is a caller bug, rejected loud rather than silently
+ * reopened. Publishes the same inbox/realtime update an end does so every
+ * agent's list reflects it immediately.
+ */
+export async function restoreConversationFromSpam(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<ConversationDTO> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  const existing = await loadConversationOr404(conversationId)
+  if (existing.endReason !== 'spam') {
+    throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
+  }
+  const now = new Date()
+  const [updated] = await db
+    .update(conversations)
+    .set({ status: 'open', resolvedAt: null, endReason: null, endNote: null, updatedAt: now })
+    .where(eq(conversations.id, conversationId))
+    .returning()
+  // Team-only marker: the customer already saw the thread end; the restore is
+  // an inbox-hygiene event, not a customer-facing lifecycle change.
+  await emitSystemMessage(conversationId, 'Conversation restored from spam', undefined, {
+    internal: true,
+  })
+  const dto = await conversationToDTO(updated, 'agent')
+  publishConversationUpdate(conversationId, dto)
+  void emitConversationStatusChanged(actor, updated, existing.status)
+  return dto
+}
+
+/**
  * Attribution for a system notice posted by automation: the name of the
  * workflow whose run fired the action. Threaded from the workflow engine
  * through the conversation-write seams into the stored systemEvent, so the

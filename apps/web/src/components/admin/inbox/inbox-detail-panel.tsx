@@ -608,6 +608,7 @@ export const InboxDetailPanel = memo(function InboxDetailPanel({
                   conversationId={conversation.id}
                   status={conversation.status}
                   snoozedUntil={conversation.snoozedUntil}
+                  endReason={conversation.endReason}
                   onChanged={onChanged}
                 />
               </Row>

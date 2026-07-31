@@ -346,6 +346,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation.ts`::setConversationStatusFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::snoozeConversationFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::endConversationFn | conversation.set_status |
+| `lib/server/functions/conversation.ts`::restoreConversationFromSpamFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::assignConversationFn | conversation.assign |
 | `lib/server/functions/conversation.ts`::setConversationPriorityFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::addMessageReactionFn | conversation.note |

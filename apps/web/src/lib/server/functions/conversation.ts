@@ -167,7 +167,9 @@ const listConversationsSchema = z.object({
   // 'mentions' = only conversations whose internal notes @-mention the
   // requesting agent (the principal is resolved server-side from auth).
   // 'quinn' = only conversations Quinn engaged (see the `ai` bucket).
-  view: z.enum(['all', 'mentions', 'quinn']).optional(),
+  // 'spam' = the Spam view: only spam-ended conversations (every other scope
+  // excludes them).
+  view: z.enum(['all', 'mentions', 'quinn', 'spam']).optional(),
   // Quinn-inbox sub-filter by involvement outcome; omitted = any Quinn-engaged.
   ai: z.enum(['resolved', 'escalated', 'pending']).optional(),
   before: z.string().optional(),
@@ -899,6 +901,8 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         companyId: data.companyId as CompanyId | undefined,
         // Always the requesting agent — never trust a client-supplied id here.
         mentionedPrincipalId: data.view === 'mentions' ? ctx.principal.id : undefined,
+        // Spam view: the only scope that lists spam-ended conversations.
+        spamOnly: data.view === 'spam',
         // Quinn view: a chosen bucket narrows to its statuses; none = any Quinn
         // involvement (every bucket).
         assistantStatuses:
@@ -1275,6 +1279,17 @@ export const endConversationFn = createServerFn({ method: 'POST' })
       data.note,
       actor
     )
+  })
+
+/** Agent action: restore a spam-ended conversation back to the open queue. */
+export const restoreConversationFromSpamFn = createServerFn({ method: 'POST' })
+  .validator(conversationIdSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_SET_STATUS })
+    const actor = await policyActorFromAuth(ctx)
+    const { restoreConversationFromSpam } =
+      await import('@/lib/server/domains/conversation/conversation.service')
+    return await restoreConversationFromSpam(data.conversationId as ConversationId, actor)
   })
 
 export const assignConversationFn = createServerFn({ method: 'POST' })
