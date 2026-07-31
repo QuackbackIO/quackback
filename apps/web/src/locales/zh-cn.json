@@ -111,6 +111,7 @@
   "widget.tickets.new.details": "详情",
   "widget.tickets.new.detailsPlaceholder": "补充任何有助于我们理解问题的信息。",
   "widget.tickets.new.submit": "创建工单",
+  "widget.tickets.blockCard.filed": "工单已创建——我们会从这里跟进。",
   "widget.tickets.new.email": "电子邮件",
   "widget.tickets.new.emailHint": "我们会通过电子邮件向你发送此工单的回复和更新。",
   "widget.tickets.new.emailPlaceholder": "you@example.com",

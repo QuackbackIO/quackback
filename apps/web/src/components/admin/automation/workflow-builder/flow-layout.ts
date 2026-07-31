@@ -34,6 +34,7 @@ import {
   conditionSummary,
   conditionToDraft,
   countSteps,
+  isBlockBodyEmpty,
   isNeedsSetupRef,
   resolveConditionField,
   sendWindowSummary,
@@ -411,6 +412,15 @@ function buildStepNodeData(
         icon: 'message',
         tone: 'pink',
         meta: blockBodyPreview(step.body),
+      }
+    case 'send_ticket_form':
+      return {
+        ...base,
+        eyebrow: 'Message',
+        title: BLOCK_STEP_LABELS.send_ticket_form,
+        icon: 'send_ticket_form',
+        tone: 'pink',
+        meta: isBlockBodyEmpty(step.body) ? 'Ticket intake form' : blockBodyPreview(step.body),
       }
     case 'show_reply_time':
       return {

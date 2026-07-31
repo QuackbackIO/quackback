@@ -506,6 +506,34 @@ describe('applyAction', () => {
       )
     })
 
+    it('posts a ticketForm block with waiting:false (a SEND kind) and the resolved intro fallback', async () => {
+      const result = await applyAction(
+        { type: 'send_block', nodeId: 'n1', block: { kind: 'ticketForm', body } },
+        ctx
+      )
+      expect(result).toMatchObject({
+        label: 'sent ticketForm block',
+        blockMessageId: 'conversation_message_block_1',
+      })
+      expect(appendAssistantReply).toHaveBeenCalledWith(
+        conversationId,
+        'Hi Jane!',
+        { principalId: 'principal_quinn', displayName: 'Quinn', avatarUrl: null },
+        expect.objectContaining({
+          waiting: false,
+          metadata: {
+            block: expect.objectContaining({
+              v: 1,
+              runId: 'workflow_run_1',
+              nodeId: 'n1',
+              waiting: false,
+              kind: 'ticketForm',
+            }),
+          },
+        })
+      )
+    })
+
     it('throws when applied outside a workflow run (no ctx.runId)', async () => {
       await expect(
         applyAction(

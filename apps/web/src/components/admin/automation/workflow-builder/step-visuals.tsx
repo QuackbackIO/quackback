@@ -64,6 +64,7 @@ export const ACTION_ICONS: Record<ActionType, typeof BoltIcon> = {
  *  the internal action/condition/wait/branch steps (see TONE_TILE's 'pink'). */
 export const BLOCK_ICONS: Record<BlockStepKind, typeof BoltIcon> = {
   message: ChatBubbleLeftRightIcon,
+  send_ticket_form: TicketIcon,
   show_reply_time: SignalIcon,
   let_assistant_answer: SparklesIcon,
   disable_composer: NoSymbolIcon,

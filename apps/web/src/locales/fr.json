@@ -111,6 +111,7 @@
   "widget.tickets.new.details": "Détails",
   "widget.tickets.new.detailsPlaceholder": "Ajoutez tout ce qui peut nous aider à comprendre le problème.",
   "widget.tickets.new.submit": "Créer un ticket",
+  "widget.tickets.blockCard.filed": "Ticket créé — nous le suivons à partir d'ici.",
   "widget.tickets.new.email": "E-mail",
   "widget.tickets.new.emailHint": "Nous vous enverrons les réponses et les mises à jour de ce ticket par e-mail.",
   "widget.tickets.new.emailPlaceholder": "vous@exemple.com",

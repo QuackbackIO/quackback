@@ -36,6 +36,26 @@ describe('evaluateCondition — leaves', () => {
     ok({ field: 'message.body', op: 'is_empty' }, noMsg)
   })
 
+  it('contains_any / contains_all on message body (keyword lists, case-insensitive)', () => {
+    // Base body: "My card was double charged".
+    ok({ field: 'message.body', op: 'contains_any', value: ['refund', 'double charged'] })
+    no({ field: 'message.body', op: 'contains_any', value: ['refund', 'exchange'] })
+    ok({ field: 'message.body', op: 'contains_all', value: ['card', 'DOUBLE charged'] })
+    no({ field: 'message.body', op: 'contains_all', value: ['card', 'refund'] })
+    // An empty (or all-blank) keyword list never matches — a misconfigured
+    // rule must not silently pass every message through either branch.
+    no({ field: 'message.body', op: 'contains_any', value: [] })
+    no({ field: 'message.body', op: 'contains_all', value: ['', '  '] })
+    // A bare-string value (JSON-mode authoring) reads as one keyword.
+    ok({ field: 'message.body', op: 'contains_any', value: 'double charged' })
+    // Unresolved subject (no triggering message): non-match, same contract as
+    // every operator except is_empty.
+    const noMsg = baseCtx({ message: null })
+    no({ field: 'message.body', op: 'contains_any', value: ['card'] }, noMsg)
+    no({ field: 'message.body', op: 'contains_all', value: ['card'] }, noMsg)
+    ok({ field: 'message.body', op: 'is_empty' }, noMsg)
+  })
+
   it('numeric comparisons on waiting minutes, with nobody-waiting as a non-match', () => {
     ok({ field: 'conversation.waiting_minutes', op: 'gt', value: 30 })
     ok({ field: 'conversation.waiting_minutes', op: 'gte', value: 45 })

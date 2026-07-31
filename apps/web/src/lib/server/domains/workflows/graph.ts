@@ -85,6 +85,11 @@ export type WorkflowNode =
   | { id: string; type: 'wait'; seconds: number }
   // Conversational block kinds (Phase C, slice C-1) — see the module doc.
   | { id: string; type: 'message'; body: TiptapContent }
+  // The ticket intake form as an in-thread block: posts the form card into
+  // the conversation (visitor files the ticket in-thread — the widget renders
+  // the intake form for block.kind 'ticketForm') and continues immediately,
+  // same SEND-and-continue shape as `message` above.
+  | { id: string; type: 'send_ticket_form'; body: TiptapContent }
   | { id: string; type: 'show_reply_time' }
   | {
       id: string
@@ -247,6 +252,15 @@ export function walkWorkflow(
           type: 'send_block',
           nodeId: node.id,
           block: { kind: 'message', body: node.body },
+        })
+        nextId = successorId(graph, node.id)
+        break
+
+      case 'send_ticket_form':
+        actions.push({
+          type: 'send_block',
+          nodeId: node.id,
+          block: { kind: 'ticketForm', body: node.body },
         })
         nextId = successorId(graph, node.id)
         break
