@@ -1,10 +1,11 @@
 /**
  * Web-source CRUD server fns for the assistant knowledge settings. Gates on
  * assistant.manage, same as snippets (assistant-snippets.ts) and guidance
- * rules (assistant-guidance.ts). Adding a source crawls the URL at write
- * time through the SSRF-guarded fetch (web-source.service.ts). The admin UI
- * card that calls these is deferred — this is the server-side CRUD
- * foundation only.
+ * rules (assistant-guidance.ts). Adding a source fetches the URL at write
+ * time through the SSRF-guarded fetch (web-source.service.ts); with `crawl`
+ * set, same-origin links are followed up to the page cap within the admin's
+ * include/exclude path filters. The admin UI card that calls these is
+ * deferred — this is the server-side CRUD foundation only.
  */
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
@@ -17,6 +18,13 @@ const log = logger.child({ component: 'assistant-web-sources' })
 
 const addWebSourceSchema = z.object({
   url: z.url().max(2048),
+  /** Follow same-origin links from the seed page, up to the page cap. */
+  crawl: z.boolean().optional(),
+  /** Path globs (`*` wildcard) a discovered link must match to be crawled. */
+  includePaths: z.array(z.string().max(500)).max(50).optional(),
+  /** Path globs a discovered link must not match; an exclude always wins. */
+  excludePaths: z.array(z.string().max(500)).max(50).optional(),
+  maxPages: z.number().int().min(1).max(100).optional(),
 })
 
 const webSourceIdSchema = z.object({ id: z.string() })
@@ -41,7 +49,14 @@ export const addWebSourceFn = createServerFn({ method: 'POST' })
     const ctx = await requireAuth({ permission: PERMISSIONS.ASSISTANT_MANAGE })
     const { addWebSourceFromUrl } =
       await import('@/lib/server/domains/assistant/web-source.service')
-    return addWebSourceFromUrl({ url: data.url, createdById: ctx.principal.id })
+    return addWebSourceFromUrl({
+      url: data.url,
+      createdById: ctx.principal.id,
+      crawl: data.crawl,
+      includePaths: data.includePaths,
+      excludePaths: data.excludePaths,
+      maxPages: data.maxPages,
+    })
   })
 
 export const setWebSourceEnabledFn = createServerFn({ method: 'POST' })
