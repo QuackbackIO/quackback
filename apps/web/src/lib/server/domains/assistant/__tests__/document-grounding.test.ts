@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { deflateSync } from 'node:zlib'
+import { zipSync, strToU8 } from 'fflate'
 
 const mockGenerateEmbedding = vi.fn()
 vi.mock('@/lib/server/domains/embeddings/embedding.service', () => ({
@@ -105,6 +106,18 @@ function buildPolicyPdf(): Uint8Array {
   return new Uint8Array(Buffer.from(pdf, 'latin1'))
 }
 
+/** The Word-document sibling of the fact, distinctive enough to prove provenance. */
+const DOCX_FACT = 'Enterprise plans include a 99.9 percent uptime commitment.'
+
+/** The smallest real .docx carrying one paragraph with the fact. */
+function buildPolicyDocx(): Uint8Array {
+  const documentXml =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    `<w:body><w:p><w:r><w:t>${DOCX_FACT}</w:t></w:r></w:p></w:body></w:document>`
+  return zipSync({ 'word/document.xml': strToU8(documentXml) })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockGenerateEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
@@ -194,6 +207,80 @@ describe('knowledge file upload: PDF in, grounded answer out', () => {
         fileName: 'receipt.pdf',
         mimeType: 'application/pdf',
         bytes: pdf,
+        createdById: null,
+      })
+    ).rejects.toThrow(DocumentIngestError)
+    expect(mockInsertValues).not.toHaveBeenCalled()
+  })
+})
+
+describe('knowledge file upload: Word document in, grounded answer out', () => {
+  it('ingests an admin-uploaded .docx: text extracted, row stored, embedding attempted', async () => {
+    insertedRow = {
+      ...insertedRow,
+      fileName: 'sla.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      content: DOCX_FACT,
+    }
+    const row = await ingestAssistantDocument({
+      title: 'Service Level Agreement',
+      fileName: 'sla.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      bytes: buildPolicyDocx(),
+      createdById: null,
+    })
+
+    expect(row.id).toBe('assistant_document_1')
+    // The stored row carries the .docx's extracted text, not the raw zip bytes.
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Service Level Agreement', content: DOCX_FACT })
+    )
+    expect(mockGenerateEmbedding).toHaveBeenCalledWith(
+      expect.stringContaining(DOCX_FACT),
+      expect.objectContaining({ pipelineStep: 'assistant_document_embedding' })
+    )
+  })
+
+  it('answers a customer question grounded on the uploaded Word document', async () => {
+    mockLimit.mockResolvedValue([
+      {
+        id: 'assistant_document_1',
+        title: 'Service Level Agreement',
+        content: DOCX_FACT,
+        score: 0.9,
+        updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+      },
+    ])
+    const snapshot = resolveAssistantKnowledgeSnapshot('agent', DEFAULT_ASSISTANT_CONFIG, 'public')
+
+    const items = await retrieveKnowledge('What uptime do you guarantee?', 'public', {
+      enabledSources: snapshot.sources,
+    })
+
+    const doc = items.find((i) => i.sourceType === 'document')
+    expect(doc).toBeDefined()
+    expect(doc!.excerpt).toContain(DOCX_FACT)
+    expect(doc!.citation).toEqual({
+      type: 'document',
+      id: 'assistant_document_1',
+      title: 'Service Level Agreement',
+      url: '',
+    })
+  })
+
+  it('edge case: a .docx with no text runs is rejected at ingest, never stored', async () => {
+    const documentXml =
+      '<?xml version="1.0"?>' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:body><w:p><w:r><w:drawing/></w:r></w:p></w:body></w:document>'
+    const bytes = zipSync({ 'word/document.xml': strToU8(documentXml) })
+
+    await expect(
+      ingestAssistantDocument({
+        title: 'Image Scan',
+        fileName: 'scan.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        bytes,
         createdById: null,
       })
     ).rejects.toThrow(DocumentIngestError)

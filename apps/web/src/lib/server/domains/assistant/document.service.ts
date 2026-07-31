@@ -1,11 +1,12 @@
 /**
- * Knowledge-document ingest service: admin-uploaded files (today: PDFs)
- * whose extracted text grounds Quinn's answers.
+ * Knowledge-document ingest service: admin-uploaded files (PDFs and Word
+ * documents) whose extracted text grounds Quinn's answers.
  *
- * Ingest is synchronous and small: extract the text layer (`./pdf-text`),
- * store the row, then embed best-effort — mirroring the changelog embedding
- * pattern (embedding failure is logged, never thrown, and only costs semantic
- * ranking: the keyword arm of `documents-retrieval.ts` still finds the row).
+ * Ingest is synchronous and small: extract the text layer (`./pdf-text`,
+ * `./docx-text`), store the row, then embed best-effort — mirroring the
+ * changelog embedding pattern (embedding failure is logged, never thrown,
+ * and only costs semantic ranking: the keyword arm of
+ * `documents-retrieval.ts` still finds the row).
  * When S3 is configured the original bytes are kept under the
  * `assistant-documents/` prefix; the extracted `content` column is the
  * grounding source of truth either way, so storage being unconfigured never
@@ -17,11 +18,14 @@ import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.ser
 import { getEmbeddingModel } from '@/lib/server/domains/ai/models'
 import { isS3Configured, uploadObject, generateStorageKey } from '@/lib/server/storage/s3'
 import { extractPdfText } from './pdf-text'
+import { extractDocxText } from './docx-text'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'assistant-documents' })
 
-export const ASSISTANT_DOCUMENT_MIME_TYPES = ['application/pdf'] as const
+export const DOCX_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+export const ASSISTANT_DOCUMENT_MIME_TYPES = ['application/pdf', DOCX_MIME_TYPE] as const
 export const ASSISTANT_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024
 /** Stored-text ceiling; retrieval trims per row, this caps the whole document. */
 export const ASSISTANT_DOCUMENT_MAX_CONTENT_CHARS = 100_000
@@ -67,23 +71,27 @@ async function embedAssistantDocument(id: AssistantDocumentId, title: string, co
  * Ingest one uploaded document: validate, extract its text, persist the row
  * (plus the original bytes when object storage is configured), and embed.
  * Throws `DocumentIngestError` on anything the admin can act on — a wrong
- * type, an oversize file, or a PDF with no text layer (scanned image) —
+ * type, an oversize file, or a document with no text layer (scanned image) —
  * rather than storing a document Quinn can never ground on.
  */
 export async function ingestAssistantDocument(input: IngestAssistantDocumentInput) {
   const title = input.title.trim()
   if (!title) throw new DocumentIngestError('A title is required.')
   if (!(ASSISTANT_DOCUMENT_MIME_TYPES as readonly string[]).includes(input.mimeType)) {
-    throw new DocumentIngestError(`Unsupported file type: ${input.mimeType}. Upload a PDF.`)
+    throw new DocumentIngestError(
+      `Unsupported file type: ${input.mimeType}. Upload a PDF or Word document.`
+    )
   }
   if (input.bytes.byteLength > ASSISTANT_DOCUMENT_MAX_BYTES) {
     throw new DocumentIngestError('The file is too large. The limit is 5 MB.')
   }
 
-  const content = extractPdfText(input.bytes).slice(0, ASSISTANT_DOCUMENT_MAX_CONTENT_CHARS)
+  const extracted =
+    input.mimeType === DOCX_MIME_TYPE ? extractDocxText(input.bytes) : extractPdfText(input.bytes)
+  const content = extracted.slice(0, ASSISTANT_DOCUMENT_MAX_CONTENT_CHARS)
   if (!content) {
     throw new DocumentIngestError(
-      'No text could be extracted from this PDF. Scanned or image-only PDFs are not supported.'
+      'No text could be extracted from this document. Scanned or image-only files are not supported.'
     )
   }
 
