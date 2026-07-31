@@ -222,6 +222,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-guidance.ts`::reorderGuidanceRulesFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::deleteGuidanceRuleFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::listAssistantToolsFn | assistant.manage |
+| `lib/server/functions/assistant-improve-answer.ts`::improveAssistantAnswerFn | conversation.reply |
 | `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view) |
 | `lib/server/functions/assistant-settings.ts`::getAssistantSettingsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantIdentityFn | assistant.manage |

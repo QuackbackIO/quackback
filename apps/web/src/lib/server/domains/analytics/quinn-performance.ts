@@ -15,12 +15,15 @@ import {
   lt,
   eq,
   sql,
+  exists,
+  isNotNull,
   assistantInvolvements,
   assistantToolCalls,
   conversations,
   type AssistantInvolvementStatus,
 } from '@/lib/server/db'
 import { ratePctOrNull } from '@/lib/shared/percent'
+import { summarizeCsat, type CsatSummary } from './csat-summary'
 
 export interface QuinnInvolvementRow {
   status: AssistantInvolvementStatus
@@ -52,6 +55,13 @@ export interface QuinnPerformanceSummary {
   actionsTaken: number
   /** Involvements opened + resolved per UTC day, ascending by date. */
   dailyTrend: Array<{ date: string; involvements: number; resolved: number }>
+}
+
+/** The full report `getQuinnPerformance` returns: the rate summary plus the
+ *  customer-satisfaction slice over Quinn-handled conversations. */
+export interface QuinnPerformanceReport extends QuinnPerformanceSummary {
+  /** CSAT over rated conversations Quinn was involved in (see getQuinnCsat). */
+  csat: CsatSummary
 }
 
 const isResolved = (status: AssistantInvolvementStatus): boolean =>
@@ -116,13 +126,39 @@ export function summarizeQuinnPerformance(
 }
 
 /**
+ * CSAT over Quinn-handled conversations in [from, to): rated conversations
+ * (csatSubmittedAt in range) that have at least one assistant involvement.
+ * The EXISTS semi-join keeps a re-involved conversation counted once; the
+ * rating math is the shared `summarizeCsat` (csat-summary.ts).
+ */
+export async function getQuinnCsat(from: Date, to: Date): Promise<CsatSummary> {
+  const rows = await db
+    .select({ rating: conversations.csatRating, ratedAt: conversations.csatSubmittedAt })
+    .from(conversations)
+    .where(
+      and(
+        isNotNull(conversations.csatRating),
+        gte(conversations.csatSubmittedAt, from),
+        lt(conversations.csatSubmittedAt, to),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(assistantInvolvements)
+            .where(eq(assistantInvolvements.conversationId, conversations.id))
+        )
+      )
+    )
+  return summarizeCsat(rows as Array<{ rating: number; ratedAt: Date }>)
+}
+
+/**
  * Query + summarize Quinn's performance over [from, to). Three independent
  * scans over the range (involvements, conversation count, succeeded tool
- * calls) — low volume, like CSAT, so no rollup table; the grouping and rate
- * math happen in memory in `summarizeQuinnPerformance` above.
+ * calls) plus the CSAT slice — low volume, like CSAT, so no rollup table; the
+ * grouping and rate math happen in memory in `summarizeQuinnPerformance` above.
  */
-export async function getQuinnPerformance(from: Date, to: Date): Promise<QuinnPerformanceSummary> {
-  const [involvementRows, conversationCountRows, actionRows] = await Promise.all([
+export async function getQuinnPerformance(from: Date, to: Date): Promise<QuinnPerformanceReport> {
+  const [involvementRows, conversationCountRows, actionRows, csat] = await Promise.all([
     db
       .select({
         status: assistantInvolvements.status,
@@ -147,11 +183,15 @@ export async function getQuinnPerformance(from: Date, to: Date): Promise<QuinnPe
           lt(assistantToolCalls.createdAt, to)
         )
       ),
+    getQuinnCsat(from, to),
   ])
 
-  return summarizeQuinnPerformance(
-    involvementRows,
-    conversationCountRows[0]?.n ?? 0,
-    actionRows[0]?.n ?? 0
-  )
+  return {
+    ...summarizeQuinnPerformance(
+      involvementRows,
+      conversationCountRows[0]?.n ?? 0,
+      actionRows[0]?.n ?? 0
+    ),
+    csat,
+  }
 }
