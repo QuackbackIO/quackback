@@ -395,7 +395,8 @@ function toLegacyServerTool(spec: AssistantToolSpec, ctx: AssistantToolContext) 
 export async function assembleAssistantToolset(
   ctx: AssistantToolContext,
   specs?: readonly AssistantToolSpec[],
-  actionsEnabled = false
+  actionsEnabled = false,
+  customActionSpecs: readonly AssistantToolSpec[] = []
 ): Promise<{ tools: ReturnType<typeof toLegacyServerTool>[]; activeSpecs: AssistantToolSpec[] }> {
   // Unified inbox §2.9/§3.3: never even consider a spec whose `parents`
   // excludes this turn's actual parent kind: a conversation-only write tool
@@ -405,27 +406,46 @@ export async function assembleAssistantToolset(
   const availableForTurn = (spec: AssistantToolSpec) =>
     spec.parents.includes(parentKind) && (spec.availableWhen?.(ctx) ?? true)
 
+  // Custom actions (Phase 5, QUINN-TWO-AGENT-SPEC D6) are write-risk and ALWAYS
+  // run through the execution pipeline — their audit ledger and the copilot
+  // propose path are load-bearing — regardless of the built-in `assistantTools`
+  // flag. The caller only ever passes them when the separate
+  // `assistantCustomActions` flag is on and after resolving them for the turn's
+  // agent, so the two rollout gates stay independent.
+  const customActive = customActionSpecs
+    .filter(availableForTurn)
+    .map((spec) => ({ spec, mode: resolveEffectiveToolMode(spec, ctx) }))
+  const customTools = customActive.map(({ spec, mode }) =>
+    spec.definition.server<AssistantToolContext>((args) => runWithPipeline(spec, mode, args, ctx))
+  )
+  const customActiveSpecs = customActive.map((entry) => entry.spec)
+
   if (!actionsEnabled) {
     // Flag off exposes read tools plus core control tools, unwrapped. Write
     // specs must never register without the pipeline, while handoff/inability
     // remain part of Quinn's agent protocol regardless of this feature flag.
+    // Custom actions (when their own flag brought them here) still ride the
+    // pipeline — they are never registered unwrapped.
     const legacySpecs = (specs ?? Object.values(ASSISTANT_TOOL_SPECS)).filter(
       (spec) => spec.risk !== 'write' && availableForTurn(spec)
     )
     return {
-      tools: legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)),
-      activeSpecs: withDynamicPromptGuidance(legacySpecs, ctx),
+      tools: [...legacySpecs.map((spec) => toLegacyServerTool(spec, ctx)), ...customTools],
+      activeSpecs: withDynamicPromptGuidance([...legacySpecs, ...customActiveSpecs], ctx),
     }
   }
 
   const resolvedSpecs = (specs ?? resolveToolSpecs()).filter(availableForTurn)
   return {
-    tools: resolvedSpecs.map((spec) => {
-      const mode = resolveEffectiveToolMode(spec, ctx)
-      return spec.definition.server<AssistantToolContext>((args) =>
-        runWithPipeline(spec, mode, args, ctx)
-      )
-    }),
-    activeSpecs: withDynamicPromptGuidance(resolvedSpecs, ctx),
+    tools: [
+      ...resolvedSpecs.map((spec) => {
+        const mode = resolveEffectiveToolMode(spec, ctx)
+        return spec.definition.server<AssistantToolContext>((args) =>
+          runWithPipeline(spec, mode, args, ctx)
+        )
+      }),
+      ...customTools,
+    ],
+    activeSpecs: withDynamicPromptGuidance([...resolvedSpecs, ...customActiveSpecs], ctx),
   }
 }

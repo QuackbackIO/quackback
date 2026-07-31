@@ -8,7 +8,8 @@ import type { AssistantAgentKind } from '@/lib/shared/assistant/config'
 
 /**
  * A static, read-only audited list of Quinn's built-in tools (QUINN-TWO-AGENT-SPEC
- * D14): built-ins have no admin modes, so this card is presentation-only.
+ * D14): built-ins have no admin modes, so this card is presentation-only next to
+ * the configurable CustomActionsCard.
  */
 export function BuiltInActionsCard({ agent }: { agent: AssistantAgentKind }) {
   const intl = useIntl()

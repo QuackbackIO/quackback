@@ -49,7 +49,9 @@ import type {
   AssistantProposedAction,
   AssistantToolContext,
   AssistantToolOutcome,
+  AssistantToolSpec,
 } from './assistant.toolspec'
+import { listActionSpecsForAgent } from './custom-actions.service'
 import { resolveAssistantKnowledgeSnapshot, type RetrievedItem } from './retrieval-sources'
 import { listEnabledGuidanceCandidates, type AssistantGuidanceRule } from './guidance.service'
 import { selectApplicableGuidance, splitGuidanceCandidates } from './guidance-selector'
@@ -127,6 +129,8 @@ export interface AssistantRuntimeConfig {
   revision: number
   workspaceName: string
   actionsEnabled: boolean
+  /** `assistantCustomActions` flag: gates dynamic custom-action registration (Phase 5). */
+  customActionsEnabled: boolean
   configFallbackReason?: string
 }
 
@@ -822,6 +826,7 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
       revision: 1,
       workspaceName: 'this workspace',
       actionsEnabled: false,
+      customActionsEnabled: false,
       configFallbackReason: 'database_read_failed',
     }
   }
@@ -984,6 +989,22 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     )
   )
 
+  // Custom actions (Phase 5): when the `assistantCustomActions` flag is on,
+  // resolve every enabled definition assigned to THIS turn's agent into a
+  // dynamic write-risk spec. Turn-scoped like the flag/write-policy read below,
+  // so a retry can't change the set mid-turn. A definition assigned to the
+  // other agent, disabled, or resolved for the wrong agent simply never
+  // appears. Best-effort: a load failure drops custom actions for the turn
+  // rather than failing the whole reply.
+  let customActionSpecs: AssistantToolSpec[] = []
+  if (runtimeConfig.customActionsEnabled) {
+    try {
+      customActionSpecs = await listActionSpecsForAgent(roleToAgent(role), execDb)
+    } catch (error) {
+      log.warn({ err: error }, 'custom action load failed; omitting custom actions this turn')
+    }
+  }
+
   // Tool wiring (flag + role-derived write policy) is turn-scoped config, not
   // per-attempt state — assembled once so a retry can't re-read settings and
   // flip gating mid-turn, and shares the same tool set across every attempt.
@@ -992,7 +1013,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   let { tools, activeSpecs } = await assembleAssistantToolset(
     toolContext,
     undefined,
-    runtimeConfig.actionsEnabled
+    runtimeConfig.actionsEnabled,
+    customActionSpecs
   )
   let toolNames = new Set(tools.map((t) => t.name))
 

@@ -61,6 +61,9 @@ export type AssistantConfigFallbackReason = 'invalid_assistant_config'
 export interface AssistantRuntimeConfigState extends AssistantConfigState {
   workspaceName: string
   actionsEnabled: boolean
+  /** `settings.feature_flags.assistantCustomActions` — gates dynamic
+   *  registration of custom actions into an agent's toolset (Phase 5). */
+  customActionsEnabled: boolean
   configFallbackReason?: AssistantConfigFallbackReason
 }
 
@@ -104,6 +107,7 @@ export async function getAssistantRuntimeConfig(): Promise<AssistantRuntimeConfi
     revision: row.assistantConfigRevision,
     workspaceName: row.name,
     actionsEnabled: flags.assistantTools,
+    customActionsEnabled: flags.assistantCustomActions,
   }
   if (parsed.success) return { config: parsed.data, ...runtimeFields }
 
