@@ -683,7 +683,7 @@ describe('<CopilotPanel> empty state', () => {
   })
 
   it('keeps the teammate-facing Copilot identity separate from the customer assistant', async () => {
-    hoisted.widgetConfig = { messenger: { assistant: { name: 'Scout', avatarUrl: '' } } }
+    hoisted.widgetConfig = { messenger: { assistant: { name: 'Quinn', avatarUrl: '' } } }
     vi.stubGlobal('fetch', vi.fn())
     renderPanel()
 
