@@ -5,16 +5,17 @@
  *
  * Converged Messages surface: a requester experiences their ticket AS its
  * conversation pair (one thread, ticket header on top), so this module carries
- * only the reads that decorate that surface (linked-ticket header + list
- * summaries), the watch bell, and the reply-by-email ingest core. Customer
- * ticket CREATION is agent-only; requester replies ride the conversation send
- * path.
+ * the requester's own-ticket create (`createMyTicket`, the widget New-Ticket
+ * form's write), the reads that decorate that surface (linked-ticket header +
+ * list summaries), the watch bell, and the reply-by-email ingest core.
+ * Requester replies ride the conversation send path.
  */
 import {
   db,
   tickets,
   ticketConversations,
   ticketStatuses,
+  principal,
   eq,
   and,
   desc,
@@ -22,14 +23,14 @@ import {
   isNull,
   type Ticket,
 } from '@/lib/server/db'
-import type { ConversationId, TicketId, PrincipalId } from '@quackback/ids'
+import type { ConversationId, TicketId, TicketTypeId, PrincipalId } from '@quackback/ids'
 import type { Actor, PrincipalType } from '@/lib/server/policy/types'
 import type { TiptapContent, ConversationAttachment } from '@/lib/shared/db-types'
 import type { ConversationMessageDTO } from '@/lib/shared/conversation/types'
 import { NotFoundError, ForbiddenError } from '@/lib/shared/errors'
-import { loadTicketOr404, autoReopenOnRequesterReply } from './ticket.service'
+import { loadTicketOr404, createTicketCore, autoReopenOnRequesterReply } from './ticket.service'
 import { emitTicketReplied } from './ticket.webhooks'
-import { buildTicketContext, ticketToDTO } from './ticket.dto'
+import { buildTicketContext, ticketToDTO, toRequesterTicketDTO } from './ticket.dto'
 import { insertTicketMessage, type SendTicketMessageInput } from './ticket-message.service'
 import type { RequesterTicketDTO, TicketStageRef } from './ticket.types'
 import { resolveStage } from './ticket.lifecycle'
@@ -40,6 +41,70 @@ import { formatTicketNumber } from '@/lib/shared/tickets'
 function requireRequester(actor: Actor): PrincipalId {
   if (!actor.principalId) throw new ForbiddenError('FORBIDDEN', 'You must be signed in')
   return actor.principalId
+}
+
+/** Normalize a contact email; returns undefined when it isn't plausibly one. */
+function normalizeContactEmail(raw: string | undefined | null): string | undefined {
+  const email = raw?.trim().toLowerCase() ?? ''
+  if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined
+  return email
+}
+
+/** Whether a raw string is a plausible contact email — the single predicate the
+ *  widget fn gate and the capture path both use, so the two can't drift. */
+export function isPlausibleContactEmail(raw: string | undefined | null): boolean {
+  return normalizeContactEmail(raw) !== undefined
+}
+
+/**
+ * Whether the requester has a durable contact channel that survives their
+ * session. A verified (`user`) principal carries an account email, so it always
+ * qualifies. An `anonymous` principal (a widget visitor whose 7-day token can
+ * expire) qualifies only once a `contactEmail` has been captured onto their
+ * principal. Discriminates on the resolved `Actor.principalType`, never a raw
+ * principal string (auth-helpers warns that collapsing anonymous is a security
+ * bug). `service` principals never reach these requester paths.
+ */
+export async function requesterHasContactChannel(actor: Actor): Promise<boolean> {
+  if (actor.principalType !== 'anonymous') return true
+  if (!actor.principalId) return false
+  const [row] = await db
+    .select({ contactEmail: principal.contactEmail })
+    .from(principal)
+    .where(eq(principal.id, actor.principalId))
+    .limit(1)
+  return Boolean(row?.contactEmail)
+}
+
+/**
+ * Refuse a requester write when there is no durable contact channel — otherwise
+ * an anonymous visitor's ticket has no way to reach them once the 7-day token
+ * expires. Refused with a discriminable `EMAIL_REQUIRED`.
+ */
+async function assertRequesterContactChannel(actor: Actor): Promise<void> {
+  if (await requesterHasContactChannel(actor)) return
+  throw new ForbiddenError('EMAIL_REQUIRED', 'An email address is required to file a ticket')
+}
+
+/**
+ * Overwrite-once capture of a requester's contact email onto their principal —
+ * the same pattern pre-chat capture uses (`UPDATE ... WHERE contact_email IS
+ * NULL`), so a later ticket can never silently replace an address already on
+ * file. A non-plausible email is a no-op (`captured: false`). Returns whether a
+ * new address was written.
+ */
+export async function captureRequesterEmail(
+  principalId: PrincipalId,
+  rawEmail: string
+): Promise<{ captured: boolean }> {
+  const email = normalizeContactEmail(rawEmail)
+  if (!email) return { captured: false }
+  const res = await db
+    .update(principal)
+    .set({ contactEmail: email })
+    .where(and(eq(principal.id, principalId), isNull(principal.contactEmail)))
+    .returning({ id: principal.id })
+  return { captured: res.length > 0 }
 }
 
 /**
@@ -157,6 +222,9 @@ export interface MyTicketSummary {
   reference: string
   title: string
   stage: TicketStageRef
+  /** The pair's conversation — the row's click-through to its thread. Null on
+   *  a legacy standalone ticket (pre-pair rows were never backfilled). */
+  conversationId: ConversationId | null
   updatedAt: string
 }
 
@@ -164,7 +232,9 @@ export interface MyTicketSummary {
  * The requester's own customer tickets, newest-activity first. Ownership IS
  * the scope (the where clause is the requester id — no ticket.* permission
  * anywhere on this path), so a requester only ever sees their own tickets;
- * internal-only statuses project to a null stage instead of leaking.
+ * internal-only statuses project to a null stage instead of leaking. Each row
+ * carries its pair's conversation id so the widget row opens the shared
+ * thread straight from the list.
  */
 export async function listMyTicketSummaries(
   requesterPrincipalId: PrincipalId
@@ -175,9 +245,17 @@ export async function listMyTicketSummaries(
       number: tickets.number,
       title: tickets.title,
       statusId: tickets.statusId,
+      conversationId: ticketConversations.conversationId,
       updatedAt: tickets.updatedAt,
     })
     .from(tickets)
+    .leftJoin(
+      ticketConversations,
+      and(
+        eq(ticketConversations.ticketId, tickets.id),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
     .where(
       and(
         eq(tickets.type, 'customer'),
@@ -206,9 +284,59 @@ export async function listMyTicketSummaries(
         label: slot ? stageLabels[slot] : null,
         closed: status?.category === 'closed',
       },
+      conversationId: r.conversationId,
       updatedAt: r.updatedAt.toISOString(),
     }
   })
+}
+
+/**
+ * The requester opens their own ticket. Forced to the `customer` type and to
+ * the caller as requester, so it can never file for someone else or raise an
+ * internal type. The opt-in enablement (support tickets on) is gated at the fn
+ * layer.
+ *
+ * This is a customer-intake path, so the ticket is born with its backing
+ * conversation + pair link in one transaction (`withBackingConversation` — see
+ * createTicketCore's doc for the transaction contract and the side-effect
+ * gating table), which is what lets the requester's Tickets-tab row click
+ * straight through to its conversation thread.
+ */
+export async function createMyTicket(
+  actor: Actor,
+  input: {
+    title: string
+    description?: string
+    descriptionJson?: TiptapContent | null
+    attachments?: ConversationAttachment[]
+    /** The registry type filed under — already resolved + intake-eligibility-
+     *  checked by the fn layer (live, customer category, intake-visible).
+     *  Null/absent = the legacy typeless shape. */
+    ticketTypeId?: TicketTypeId | null
+    /** Validated intake-form answers, stored on the ticket's customAttributes. */
+    customAttributes?: Record<string, unknown>
+  }
+): Promise<RequesterTicketDTO> {
+  const principalId = requireRequester(actor)
+  // Anonymous requesters must have a durable contact channel (email) on file —
+  // the widget email-capture tier writes it before calling this (defense in
+  // depth: the fn layer enforces the same guard).
+  await assertRequesterContactChannel(actor)
+  const created = await createTicketCore(
+    {
+      type: 'customer',
+      ticketTypeId: input.ticketTypeId,
+      title: input.title,
+      description: input.description,
+      descriptionJson: input.descriptionJson,
+      attachments: input.attachments,
+      customAttributes: input.customAttributes,
+      requesterPrincipalId: principalId,
+      withBackingConversation: true,
+    },
+    actor
+  )
+  return toRequesterTicketDTO(created)
 }
 
 /**

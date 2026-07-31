@@ -161,9 +161,11 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
   // Requester tickets (converged Messages surface): a signed-in requester's
   // ticket surface is their conversation pair; these fns feed the shared
   // thread's ticket header (linked-ticket read, stage labels, intake-form
-  // labels) and the watch bell. Ownership is enforced in the requester
-  // service. Customer ticket creation is agent-only — there is no requester
-  // create/reply/list entry point.
+  // labels) and the watch bell, plus the own-ticket create behind the widget
+  // New-Ticket form. Ownership is enforced in the requester service.
+  'lib/server/functions/tickets.ts::createMyTicketFn': END_USER(
+    'requester files their own customer ticket (flag-gated; forced requester = caller; anonymous tier requires a contact email)'
+  ),
   'lib/server/functions/tickets.ts::getConversationLinkedTicketFn': END_USER(
     "requester reads their own conversation's linked ticket (flag-gated; pair + ownership scoped)"
   ),
