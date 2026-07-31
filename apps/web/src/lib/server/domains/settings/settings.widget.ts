@@ -245,6 +245,7 @@ export async function getPublicWidgetConfig(): Promise<PublicWidgetConfig> {
       defaultBoard: config.defaultBoard,
       position: config.position,
       launcherGreeting: config.launcherGreeting,
+      launcherLabel: config.launcherLabel,
       tabs,
       // Identify is verified-only (backend-signed ssoToken; GH issue #300).
       hmacRequired: true,

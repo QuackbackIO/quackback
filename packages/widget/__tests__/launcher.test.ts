@@ -126,3 +126,67 @@ describe('launcher greeting bubble', () => {
     expect(bubbleOf().style.display).toBe('none')
   })
 })
+
+describe('launcher label', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('is an icon-only circle with no label text by default', () => {
+    const l = make()
+    expect(l.el.textContent).toBe('')
+    expect(l.el.style.width).toBe('48px')
+    expect(l.el.style.borderRadius).toBe('50%')
+  })
+
+  it('setLabel renders the text beside the icon as a pill', () => {
+    const l = make()
+    l.setLabel('Chat with us')
+    expect(l.el.textContent).toContain('Chat with us')
+    expect(l.el.style.width).toBe('auto')
+    expect(l.el.style.borderRadius).toBe('24px')
+  })
+
+  it('the visible label becomes the accessible name', () => {
+    const l = make()
+    l.setLabel('Chat with us')
+    expect(l.el.getAttribute('aria-label')).toBe('Chat with us')
+    l.setLabel(null)
+    expect(l.el.getAttribute('aria-label')).toBe('Open feedback widget')
+  })
+
+  it('clearing the label returns to the icon-only circle', () => {
+    const l = make()
+    l.setLabel('Chat with us')
+    l.setLabel('')
+    expect(l.el.textContent).toBe('')
+    expect(l.el.style.width).toBe('48px')
+    expect(l.el.style.borderRadius).toBe('50%')
+  })
+})
+
+describe('launcher setPlacement', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('moves the button between corners', () => {
+    const l = make()
+    expect(l.el.style.right).toBe('24px')
+    l.setPlacement('left')
+    expect(l.el.style.left).toBe('24px')
+    expect(l.el.style.right).toBe('')
+    l.setPlacement('right')
+    expect(l.el.style.right).toBe('24px')
+    expect(l.el.style.left).toBe('')
+  })
+
+  it('moves the greeting bubble to the same side', () => {
+    const l = make()
+    l.setGreeting('Hi')
+    l.setPlacement('left')
+    const bubble = bubbleOf()
+    expect(bubble.style.left).toBe('24px')
+    expect(bubble.style.right).toBe('')
+  })
+})

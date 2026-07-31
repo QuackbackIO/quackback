@@ -4,6 +4,8 @@ import { cn } from '@/lib/shared/utils'
 
 interface WidgetPreviewProps {
   position: 'bottom-right' | 'bottom-left'
+  /** Launcher button label — the trigger renders as a pill when set. */
+  label?: string
   /** Preview theme — forwarded to the widget iframe as a forced theme. */
   theme?: 'light' | 'dark'
   /**
@@ -20,7 +22,12 @@ interface WidgetPreviewProps {
  * behind it. Only the chrome is simulated; everything inside the panel is the
  * production widget with real settings and content.
  */
-export function WidgetPreview({ position, theme = 'light', refreshKey }: WidgetPreviewProps) {
+export function WidgetPreview({
+  position,
+  label,
+  theme = 'light',
+  refreshKey,
+}: WidgetPreviewProps) {
   const [isOpen, setIsOpen] = useState(true)
 
   // The widget's in-panel close button messages its host (the SDK on a real
@@ -55,18 +62,21 @@ export function WidgetPreview({ position, theme = 'light', refreshKey }: WidgetP
           </div>
         )}
 
-        {/* Trigger button */}
+        {/* Trigger button — mirrors the SDK launcher: icon-only circle, or an
+            icon+label pill when the workspace sets a button label. */}
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            'absolute bottom-4 flex items-center justify-center w-10 h-10 rounded-full',
+            'absolute bottom-4 flex items-center justify-center h-10 rounded-full',
             'bg-primary text-primary-foreground shadow-md',
             'transition-all hover:shadow-lg hover:-translate-y-0.5',
+            label ? 'gap-1.5 ps-2.5 pe-3.5 text-xs font-semibold' : 'w-10',
             position === 'bottom-left' ? 'left-4' : 'right-4'
           )}
         >
-          <ChatBubbleOvalLeftEllipsisIcon className="w-5 h-5" />
+          <ChatBubbleOvalLeftEllipsisIcon className="w-5 h-5 shrink-0" />
+          {label && <span className="max-w-40 truncate">{label}</span>}
         </button>
       </div>
     </div>

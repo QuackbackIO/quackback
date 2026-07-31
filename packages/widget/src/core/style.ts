@@ -1,8 +1,15 @@
 const STYLE_ID = 'quackback-widget-styles'
 
+// The panel CSS is side-specific (corner offset + transform origin), so the
+// element is rewritten when the side changes after creation — e.g. the server
+// config's position landing after an idle-time panel preload.
+let currentSide: 'left' | 'right' | null = null
+
 export function ensureStyles(side: 'left' | 'right'): void {
-  if (document.getElementById(STYLE_ID)) return
-  const el = document.createElement('style')
+  const existing = document.getElementById(STYLE_ID)
+  if (existing && currentSide === side) return
+  currentSide = side
+  const el = existing ?? document.createElement('style')
   el.id = STYLE_ID
   el.textContent = [
     '.quackback-panel{position:fixed;z-index:2147483647;overflow:hidden;pointer-events:none;',
@@ -30,9 +37,10 @@ export function ensureStyles(side: 'left' | 'right'): void {
     '.quackback-backdrop.quackback-open{opacity:1;pointer-events:auto}',
     '@media(min-width:640px){.quackback-backdrop{display:none!important}}',
   ].join('')
-  document.head.appendChild(el)
+  if (!existing) document.head.appendChild(el)
 }
 
 export function removeStyles(): void {
   document.getElementById(STYLE_ID)?.remove()
+  currentSide = null
 }

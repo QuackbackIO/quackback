@@ -30,6 +30,10 @@ export interface PublicServerConfig {
   visitorDeviceTracking?: boolean
   /** Proactive greeting shown beside the closed launcher; empty/unset hides it. */
   launcherGreeting?: string
+  /** Text label on the launcher button; empty/unset keeps the icon-only circle. */
+  launcherLabel?: string
+  /** Launcher corner — the admin `bottom-*` setting mapped to the SDK's side. */
+  position?: 'left' | 'right'
 }
 
 /** Extract CSS variable values from a CSS string */
@@ -140,6 +144,13 @@ export async function getPublicServerConfig(): Promise<{
       // The durable device id is only meaningful with analytics on.
       visitorDeviceTracking: visitorAnalytics && (await isFeatureEnabled('visitorDeviceTracking')),
       launcherGreeting: widgetConfig.launcherGreeting?.trim() || undefined,
+      launcherLabel: widgetConfig.launcherLabel?.trim() || undefined,
+      position:
+        widgetConfig.position === 'bottom-left'
+          ? 'left'
+          : widgetConfig.position === 'bottom-right'
+            ? 'right'
+            : undefined,
     },
   }
 }
