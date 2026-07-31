@@ -28,7 +28,6 @@ import {
 import {
   ensurePrincipalForUser,
   setPrincipalRole,
-  syncPrincipalProfileById,
 } from '@/lib/server/domains/principals/principal.factory'
 import { isAdmin } from '@/lib/shared/roles'
 import { PERMISSIONS } from '@/lib/shared/permissions'
@@ -844,7 +843,8 @@ export const getPortalUserFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * Update a portal user's details (admin-only).
+ * Update a portal user's details (admin-only). For a lead the email write
+ * lands on principal.contactEmail — see domains/users/user.update.
  */
 const updatePortalUserSchema = z.object({
   principalId: z.string(),
@@ -858,46 +858,12 @@ export const updatePortalUserFn = createServerFn({ method: 'POST' })
     log.info({ principal_id: data.principalId }, 'update portal user')
     await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
 
-    // Look up the principal to get userId
-    const p = await db.query.principal.findFirst({
-      where: eq(principal.id, data.principalId as PrincipalId),
-      columns: { userId: true },
+    const { updatePortalUserProfile } = await import('@/lib/server/domains/users/user.update')
+    await updatePortalUserProfile({
+      principalId: data.principalId as PrincipalId,
+      name: data.name,
+      email: data.email,
     })
-    if (!p?.userId) throw new Error('User not found')
-
-    // Build update set
-    const updates: Record<string, unknown> = {}
-    if (data.name !== undefined) updates.name = data.name.trim()
-    if (data.email !== undefined) {
-      // If setting an email, check uniqueness
-      if (data.email !== null) {
-        const normalized = data.email.toLowerCase().trim()
-        const existing = await db
-          .select({ id: user.id })
-          .from(user)
-          .where(eq(user.email, normalized))
-          .limit(1)
-        if (existing.length > 0 && existing[0].id !== p.userId) {
-          throw new Error('Email already in use')
-        }
-        updates.email = normalized
-      } else {
-        updates.email = null
-      }
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return { success: true }
-    }
-
-    await db.update(user).set(updates).where(eq(user.id, p.userId))
-
-    // Sync display name to principal if name changed
-    if (data.name !== undefined) {
-      await syncPrincipalProfileById(data.principalId as PrincipalId, {
-        displayName: data.name.trim(),
-      })
-    }
 
     log.info({ principal_id: data.principalId }, 'portal user updated')
     return { success: true }

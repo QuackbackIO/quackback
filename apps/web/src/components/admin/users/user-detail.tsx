@@ -442,7 +442,9 @@ export function UserDetail({
   const startEditing = () => {
     if (!user) return
     setEditName(user.name || '')
-    setEditEmail(user.email || '')
+    // A lead's editable address is the captured contact email; the account
+    // email behind it is a synthetic placeholder.
+    setEditEmail(user.email ?? user.contactEmail ?? '')
     setIsEditing(true)
   }
 
@@ -461,8 +463,9 @@ export function UserDetail({
     if (trimmedName && trimmedName !== (user.name || '')) {
       updates.name = trimmedName
     }
+    const currentEmail = user.email ?? user.contactEmail ?? null
     const newEmail = trimmedEmail || null
-    if (newEmail !== (user.email || null)) {
+    if (newEmail !== currentEmail) {
       updates.email = newEmail
     }
 
@@ -554,10 +557,9 @@ export function UserDetail({
                   {user.emailVerified && (
                     <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />
                   )}
-                  {/* Leads have no editable account fields: the visible email
-                      is the captured contact email, not user.email, which the
-                      form edits. Editing arrives with the lead merge work. */}
-                  {canManageUsers && !user.isLead && (
+                  {/* For a lead the form edits the captured contact email,
+                      never the placeholder account address. */}
+                  {canManageUsers && (
                     <button
                       type="button"
                       onClick={startEditing}
