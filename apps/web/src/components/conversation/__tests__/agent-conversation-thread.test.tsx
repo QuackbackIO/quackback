@@ -73,7 +73,11 @@ vi.mock('../message-bubble', () => ({
   UnreadDivider: () => <div data-testid="unread-divider" />,
 }))
 
-vi.mock('../macro-picker', () => ({ MacroPicker: () => <div data-testid="macro-picker" /> }))
+vi.mock('../macro-picker', () => ({
+  MacroPicker: ({ open }: { open?: boolean }) => (
+    <div data-testid="macro-picker" data-open={open ? 'true' : 'false'} />
+  ),
+}))
 vi.mock('../composer-ai-actions', () => ({
   ComposerAiActions: ({ activeMode }: { activeMode: string }) => (
     <div data-testid="composer-ai-actions" data-active-mode={activeMode} />
@@ -761,5 +765,58 @@ describe('AgentConversationThread — composer focus handle', () => {
     const editor = screen.getByTestId('editor')
     expect(editor).toHaveAttribute('placeholder', 'Add an internal note for your team…')
     expect(document.activeElement).toBe(editor)
+  })
+
+  it('openMacros() opens the macro picker on the open conversation', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    const picker = await screen.findByTestId('macro-picker')
+    expect(picker).toHaveAttribute('data-open', 'false')
+
+    act(() => composerRef.current?.openMacros())
+
+    expect(screen.getByTestId('macro-picker')).toHaveAttribute('data-open', 'true')
+  })
+
+  it('openMacros() from note mode returns the thread to reply and opens the picker', async () => {
+    const composerRef = renderWithHandle({ kind: 'conversation', id: 'conversation_1' })
+    await screen.findByTestId('editor')
+    act(() => composerRef.current?.focusComposer('note'))
+    expect(screen.queryByTestId('macro-picker')).not.toBeInTheDocument()
+
+    act(() => composerRef.current?.openMacros())
+
+    expect(screen.getByTestId('editor')).toHaveAttribute('placeholder', 'Type your reply…')
+    expect(screen.getByTestId('macro-picker')).toHaveAttribute('data-open', 'true')
+  })
+
+  it('openMacros() is a no-op on a note-only ticket (no picker renders there)', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['ticket-detail', 'ticket_tracker'], {
+      ...mockTicket,
+      id: 'ticket_tracker',
+      type: 'tracker',
+    })
+    client.setQueryData(['ticket-thread', 'ticket_tracker'], mockTicketThread)
+    const composerRef = createRef<ThreadComposerHandle>()
+    render(
+      <QueryClientProvider client={client}>
+        <AgentConversationThread
+          item={{ kind: 'ticket', id: 'ticket_tracker' } as never}
+          targetMessageId={null}
+          onChanged={vi.fn()}
+          onBack={vi.fn()}
+          onSelectItem={vi.fn()}
+          onOpenPost={vi.fn()}
+          isVisitorTyping={false}
+          isOtherAgentTyping={false}
+          composerRef={composerRef}
+        />
+      </QueryClientProvider>
+    )
+    await screen.findByTestId('editor')
+
+    act(() => composerRef.current?.openMacros())
+
+    expect(screen.queryByTestId('macro-picker')).not.toBeInTheDocument()
   })
 })

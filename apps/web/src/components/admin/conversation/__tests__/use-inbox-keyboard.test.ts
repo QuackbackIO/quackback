@@ -77,6 +77,7 @@ describe('resolveShortcut — single-key actions', () => {
   const cases: Array<[string, string]> = [
     ['r', 'reply'],
     ['q', 'copilot'],
+    ['m', 'macro'],
     ['a', 'assign'],
     ['t', 'assign_team'],
     ['s', 'snooze'],

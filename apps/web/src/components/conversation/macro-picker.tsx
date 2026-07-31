@@ -25,14 +25,25 @@ export function MacroPicker({
   onInsert,
   onApplied,
   disabled,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   conversationId: ConversationId
   onInsert: (body: string) => void
   /** Called after a macro's bundled actions run, so the thread can refresh. */
   onApplied?: () => void
   disabled?: boolean
+  /** Controlled open state; when omitted the trigger button owns it. The
+      thread passes both so the inbox's `m` shortcut can open the picker. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = controlledOpen ?? uncontrolledOpen
+  const setOpen = (next: boolean) => {
+    setUncontrolledOpen(next)
+    onOpenChange?.(next)
+  }
   const [applying, setApplying] = useState(false)
   const { data } = useQuery(macrosQuery('support'))
   const macros = data?.macros ?? []

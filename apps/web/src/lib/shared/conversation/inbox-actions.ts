@@ -17,6 +17,7 @@ export type InboxActionId =
   | 'reply'
   | 'note'
   | 'copilot'
+  | 'macro'
   | 'assign'
   | 'assign_team'
   | 'snooze'
@@ -61,9 +62,6 @@ export const INBOX_ACTION_GROUP_ORDER: readonly InboxActionGroup[] = [
 /**
  * Ordered registry. Order here is the order the palette shows within a group.
  * Every key char lives here and nowhere else.
- *
- * Macro (m) arrives with its own picker seam; until then it's omitted so the
- * palette, keyboard, and help panel never advertise a half-wired action.
  */
 export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
   { id: 'reply', label: 'Reply', group: 'Reply', scope: 'active', shortcut: 'r' },
@@ -74,6 +72,9 @@ export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
   // q for Quinn. Additionally gated on `copilotAvailable` (flag + copilot.use
   // + the ≥xl viewport that shows the detail panel) — see isInboxActionEnabled.
   { id: 'copilot', label: 'Ask Copilot', group: 'Reply', scope: 'active', shortcut: 'q' },
+  // Opens the composer's macro picker on the open thread (a note-only thread
+  // has no picker, so the key is a no-op there — see ThreadComposerHandle).
+  { id: 'macro', label: 'Insert macro', group: 'Reply', scope: 'active', shortcut: 'm' },
   { id: 'assign', label: 'Assign to teammate', group: 'Assign', scope: 'both', shortcut: 'a' },
   { id: 'assign_team', label: 'Assign to team', group: 'Assign', scope: 'both', shortcut: 't' },
   { id: 'snooze', label: 'Snooze', group: 'Status', scope: 'both', shortcut: 's' },
