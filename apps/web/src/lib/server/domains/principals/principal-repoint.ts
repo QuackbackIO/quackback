@@ -471,6 +471,8 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'derived token state; cascades with the anon principal by design',
   'conversation_views.created_by_principal_id':
     'saved views are created by team members; the merge source is always anonymous',
+  'post_views.created_by_principal_id':
+    'saved views are created by team members; the merge source is always anonymous',
   'conversation_view_pins.principal_id':
     'view pins belong to team members; the merge source is always anonymous',
   'macros.created_by_principal_id': 'macro authors are team members, never anonymous',

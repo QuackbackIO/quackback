@@ -8,7 +8,8 @@ import { InboxFiltersPanel } from '@/components/admin/feedback/inbox-filters'
 import { FeedbackTableView } from '@/components/admin/feedback/table'
 import { CreatePostDialog } from '@/components/admin/feedback/create-post-dialog'
 import { ModerationPendingBanner } from '@/components/admin/feedback/moderation-pending-banner'
-import { useInboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import { useInboxFilters, type InboxFilters } from '@/components/admin/feedback/use-inbox-filters'
+import { SavedViewsMenu } from '@/components/admin/feedback/saved-views-menu'
 import { useInboxPosts, flattenInboxPosts, inboxKeys } from '@/lib/client/hooks/use-inbox-query'
 import { useSegments } from '@/lib/client/hooks/use-segments-queries'
 import { mergeSuggestionQueries } from '@/lib/client/queries/signals'
@@ -126,6 +127,33 @@ export function InboxContainer({
     })
   }, [queryClient, filters])
 
+  // Applying a saved view REPLACES the filter set: every key the view omits is
+  // explicitly cleared (setFilters clears keys present-with-undefined), so a
+  // previously active filter can't leak into the view. The search term rides
+  // alongside — a view saves a filter set, not a query.
+  const applyView = useCallback(
+    (viewFilters: InboxFilters) => {
+      setFilters({
+        status: undefined,
+        board: undefined,
+        tags: undefined,
+        segmentIds: undefined,
+        owner: undefined,
+        dateFrom: undefined,
+        dateTo: undefined,
+        minVotes: undefined,
+        minComments: undefined,
+        responded: undefined,
+        updatedBefore: undefined,
+        hasDuplicates: undefined,
+        sort: undefined,
+        showDeleted: undefined,
+        ...viewFilters,
+      })
+    },
+    [setFilters]
+  )
+
   return (
     <InboxLayout
       hasActiveFilters={hasActiveFilters}
@@ -164,13 +192,20 @@ export function InboxContainer({
         onToggleSegment={toggleSegment}
         duplicateCountByPostId={duplicateCountByPostId}
         headerAction={
-          <CreatePostDialog
-            boards={boards}
-            tags={tags}
-            statuses={statuses}
-            currentUser={currentUser}
-            onPostCreated={refetchPosts}
-          />
+          <div className="flex items-center gap-2">
+            <SavedViewsMenu
+              filters={filters}
+              hasActiveFilters={hasActiveFilters}
+              onApply={applyView}
+            />
+            <CreatePostDialog
+              boards={boards}
+              tags={tags}
+              statuses={statuses}
+              currentUser={currentUser}
+              onPostCreated={refetchPosts}
+            />
+          </div>
         }
       />
     </InboxLayout>

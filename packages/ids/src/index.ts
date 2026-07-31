@@ -118,6 +118,7 @@ export type {
   TeamMemberId,
   MacroId,
   ConversationViewId,
+  PostViewId,
   ConversationAttributeId,
   AssistantInvolvementId,
   AssistantGuidanceRuleId,
