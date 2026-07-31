@@ -12,12 +12,18 @@ import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { PlusIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DomainsLanguagesTab } from '@/components/admin/settings/help-center/domains-languages-tab'
 import { settingsQueries } from '@/lib/client/queries/settings'
 import { useUpdateHelpCenterConfig } from '@/lib/client/mutations/settings'
 import { useDebouncedSave } from '@/lib/client/hooks/use-debounced-save'
-import { isProductEnabled, type HelpCenterConfig } from '@/lib/shared/types/settings'
+import {
+  isProductEnabled,
+  type HelpCenterConfig,
+  type HelpCenterHeaderLink,
+} from '@/lib/shared/types/settings'
 
 /**
  * Split by concern, matching the Access & Security page's `?tab=` pattern:
@@ -62,6 +68,7 @@ function HelpCenterSettingsPage() {
   const [enabled, setEnabled] = useState(config.enabled)
   const [homepageTitle, setHomepageTitle] = useState(config.homepageTitle)
   const [homepageDescription, setHomepageDescription] = useState(config.homepageDescription)
+  const [headerLinks, setHeaderLinks] = useState<HelpCenterHeaderLink[]>(config.headerLinks ?? [])
   const [saving, setSaving] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -105,6 +112,32 @@ function HelpCenterSettingsPage() {
   function handleDescriptionChange(value: string) {
     setHomepageDescription(value)
     queueDescriptionSave(value)
+  }
+
+  // Header links save explicitly (a list doesn't fit the debounced
+  // single-field pattern); rows where both fields are blank drop on save.
+  const HEADER_LINKS_MAX = 3
+
+  function handleHeaderLinkChange(index: number, patch: Partial<HelpCenterHeaderLink>) {
+    setHeaderLinks((links) => links.map((l, i) => (i === index ? { ...l, ...patch } : l)))
+  }
+
+  function handleHeaderLinkRemove(index: number) {
+    setHeaderLinks((links) => links.filter((_, i) => i !== index))
+  }
+
+  function handleHeaderLinkAdd() {
+    setHeaderLinks((links) =>
+      links.length >= HEADER_LINKS_MAX ? links : [...links, { label: '', url: '' }]
+    )
+  }
+
+  function handleHeaderLinksSave() {
+    const cleaned = headerLinks
+      .map((l) => ({ label: l.label.trim(), url: l.url.trim() }))
+      .filter((l) => l.label !== '' && l.url !== '')
+    setHeaderLinks(cleaned)
+    saveField({ headerLinks: cleaned })
   }
 
   return (
@@ -196,6 +229,62 @@ function HelpCenterSettingsPage() {
                   placeholder="Search our knowledge base or browse by category"
                   disabled={isBusy}
                 />
+              </div>
+            </div>
+          </SettingsCard>
+
+          {/* Header links */}
+          <SettingsCard
+            title="Header links"
+            description="Up to 3 custom links shown in the help center header beside the navigation"
+          >
+            <div className="space-y-3">
+              {headerLinks.map((link, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    value={link.label}
+                    onChange={(e) => handleHeaderLinkChange(index, { label: e.target.value })}
+                    placeholder="Label"
+                    aria-label={`Link ${index + 1} label`}
+                    disabled={isBusy}
+                    className="max-w-48"
+                  />
+                  <Input
+                    value={link.url}
+                    onChange={(e) => handleHeaderLinkChange(index, { url: e.target.value })}
+                    placeholder="https://example.com or /path"
+                    aria-label={`Link ${index + 1} URL`}
+                    disabled={isBusy}
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleHeaderLinkRemove(index)}
+                    disabled={isBusy}
+                    aria-label={`Remove link ${index + 1}`}
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleHeaderLinkAdd}
+                  disabled={isBusy || headerLinks.length >= HEADER_LINKS_MAX}
+                >
+                  <PlusIcon className="me-2 h-4 w-4" />
+                  Add link
+                </Button>
+                <div className="flex items-center gap-2">
+                  <InlineSpinner visible={isBusy} />
+                  <Button size="sm" onClick={handleHeaderLinksSave} disabled={isBusy}>
+                    Save links
+                  </Button>
+                </div>
               </div>
             </div>
           </SettingsCard>

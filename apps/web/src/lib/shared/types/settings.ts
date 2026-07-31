@@ -18,6 +18,7 @@ export type {
   HeaderDisplayMode,
   TenantSettings,
   HelpCenterConfig,
+  HelpCenterHeaderLink,
   HelpCenterDomainConfig,
   HelpCenterSeoConfig,
   HelpCenterLocalesConfig,

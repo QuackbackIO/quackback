@@ -6,6 +6,7 @@ import {
   getSettingsLogoData,
   getSettingsHeaderLogoData,
   getSettingsPortalOgImageData,
+  getSettingsFaviconData,
 } from '@/lib/server/settings-utils'
 
 /**
@@ -44,3 +45,13 @@ export const fetchSettingsPortalOgImageData = createServerFn({ method: 'GET' }).
     return data
   }
 )
+
+/**
+ * Fetch favicon data for settings
+ */
+export const fetchSettingsFaviconData = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('fetching settings favicon data')
+  const data = await getSettingsFaviconData()
+  log.debug({ has_favicon: !!data }, 'settings favicon data fetched')
+  return data
+})

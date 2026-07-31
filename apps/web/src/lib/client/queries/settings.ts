@@ -32,6 +32,7 @@ import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
   fetchSettingsPortalOgImageData,
+  fetchSettingsFaviconData,
 } from '@/lib/server/functions/settings-utils'
 
 const STALE_TIME_SHORT = 30 * 1000
@@ -92,6 +93,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'portalOgImage'],
       queryFn: fetchSettingsPortalOgImageData,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  favicon: () =>
+    queryOptions({
+      queryKey: ['settings', 'favicon'],
+      queryFn: fetchSettingsFaviconData,
       staleTime: STALE_TIME_LONG,
     }),
 
