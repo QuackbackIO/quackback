@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { createServerFn } from '@tanstack/react-start'
-import type { PostTagId } from '@quackback/ids'
+import type { BoardId, PostTagId } from '@quackback/ids'
 import { requireAuth } from './auth-helpers'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import {
@@ -52,6 +52,10 @@ const deleteTagSchema = z.object({
   id: z.string(),
 })
 
+const backfillAiTagsSchema = z.object({
+  boardId: z.string(),
+})
+
 // ============================================
 // Type Exports
 // ============================================
@@ -60,6 +64,7 @@ export type CreateTagInput = z.infer<typeof createTagSchema>
 export type GetTagInput = z.infer<typeof getTagSchema>
 export type UpdateTagInput = z.infer<typeof updateTagSchema>
 export type DeleteTagInput = z.infer<typeof deleteTagSchema>
+export type BackfillAiTagsInput = z.infer<typeof backfillAiTagsSchema>
 
 // ============================================
 // Read Operations
@@ -145,4 +150,20 @@ export const deletePostTagFn = createServerFn({ method: 'POST' })
     await deletePostTag(data.id as PostTagId)
     log.info({ tag_id: data.id }, 'tag deleted')
     return { id: data.id as PostTagId }
+  })
+
+/**
+ * Apply the AI-prompted tags to a board's existing untagged posts in one
+ * action. Batched — the result's `hasMore` tells the caller to run again.
+ */
+export const backfillAiTagsFn = createServerFn({ method: 'POST' })
+  .validator(backfillAiTagsSchema)
+  .handler(async ({ data }) => {
+    log.debug({ board_id: data.boardId }, 'ai tag backfill')
+    await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
+
+    const { backfillAiTagsForBoard } = await import('@/lib/server/domains/posts/post.autotag')
+    const result = await backfillAiTagsForBoard(data.boardId as BoardId)
+    log.info({ board_id: data.boardId, ...result }, 'ai tag backfill applied')
+    return result
   })

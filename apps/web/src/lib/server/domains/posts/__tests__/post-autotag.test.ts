@@ -157,7 +157,7 @@ describe('autoTagPost', () => {
 
   it('never throws when the completion fails — auto-tagging is best-effort', async () => {
     mockChat.mockRejectedValue(new Error('upstream timeout'))
-    await expect(autoTagPost(POST_ID, 'title', 'body')).resolves.toBeUndefined()
+    await expect(autoTagPost(POST_ID, 'title', 'body')).resolves.toEqual([])
     expect(insertedAssignments).toEqual([])
   })
 })

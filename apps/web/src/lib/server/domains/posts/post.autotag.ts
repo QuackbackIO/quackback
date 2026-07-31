@@ -23,8 +23,19 @@
 import { chat } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { z } from 'zod'
-import { db, and, isNull, isNotNull, postTags, postTagAssignments } from '@/lib/server/db'
-import type { PostId, PostTagId } from '@quackback/ids'
+import {
+  db,
+  and,
+  asc,
+  eq,
+  isNull,
+  isNotNull,
+  notExists,
+  posts,
+  postTags,
+  postTagAssignments,
+} from '@/lib/server/db'
+import type { BoardId, PostId, PostTagId } from '@quackback/ids'
 import { config } from '@/lib/server/config'
 import {
   isAiClientConfigured,
@@ -66,10 +77,14 @@ function renderCandidateTags(tags: Array<{ name: string; aiPrompt: string }>): s
 
 /**
  * Evaluate a new post against every tag that carries an AI prompt and assign
- * the matching ones. Resolves without throwing in every fallback case — see
- * the module doc for the contract.
+ * the matching ones. Returns the assigned tag ids — empty in every fallback
+ * case, resolving without throwing; see the module doc for the contract.
  */
-export async function autoTagPost(postId: PostId, title: string, content: string): Promise<void> {
+export async function autoTagPost(
+  postId: PostId,
+  title: string,
+  content: string
+): Promise<PostTagId[]> {
   const candidates = await db
     .select({ id: postTags.id, name: postTags.name, aiPrompt: postTags.aiPrompt })
     .from(postTags)
@@ -78,17 +93,17 @@ export async function autoTagPost(postId: PostId, title: string, content: string
   const prompted = candidates.filter((t): t is typeof t & { aiPrompt: string } =>
     Boolean(t.aiPrompt?.trim())
   )
-  if (prompted.length === 0) return
+  if (prompted.length === 0) return []
 
   const model = getChatModel('classification')
-  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return
+  if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return []
 
   try {
     await enforceAiTokenBudget()
   } catch (err) {
     if (err instanceof TierLimitError) {
       log.info({ post_id: postId }, 'auto-tag skipped: ai token budget exceeded')
-      return
+      return []
     }
     throw err
   }
@@ -129,7 +144,7 @@ export async function autoTagPost(postId: PostId, title: string, content: string
     })
   } catch (err) {
     log.warn({ err, post_id: postId }, 'auto-tag completion failed')
-    return
+    return []
   }
 
   // Validation gate: only verbatim candidate names resolve to assignments —
@@ -139,7 +154,7 @@ export async function autoTagPost(postId: PostId, title: string, content: string
     .map((name) => idByName.get(name))
     .filter((id): id is PostTagId => id !== undefined)
 
-  if (matchedIds.length === 0) return
+  if (matchedIds.length === 0) return []
 
   await db
     .insert(postTagAssignments)
@@ -147,4 +162,57 @@ export async function autoTagPost(postId: PostId, title: string, content: string
     .onConflictDoNothing()
 
   log.info({ post_id: postId, tag_ids: matchedIds }, 'auto-tagged post')
+  return matchedIds
+}
+
+/** One backfill action evaluates at most this many posts, bounding AI spend
+ *  per click; the caller re-runs until `hasMore` comes back false. */
+export const AUTOTAG_BACKFILL_BATCH_SIZE = 50
+
+export interface BackfillAiTagsResult {
+  /** Untagged posts evaluated in this batch. */
+  scanned: number
+  /** Posts that received at least one tag. */
+  tagged: number
+  /** Untagged posts remain beyond this batch. */
+  hasMore: boolean
+}
+
+/**
+ * Apply the AI-prompted tags to a board's existing untagged posts, oldest
+ * first. Every post goes through the same `autoTagPost` gate as a new post,
+ * so a failure on one post never fails the batch.
+ */
+export async function backfillAiTagsForBoard(
+  boardId: BoardId,
+  limit: number = AUTOTAG_BACKFILL_BATCH_SIZE
+): Promise<BackfillAiTagsResult> {
+  // One extra row beyond the batch marks whether untagged posts remain.
+  const untagged = await db
+    .select({ id: posts.id, title: posts.title, content: posts.content })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.boardId, boardId),
+        isNull(posts.deletedAt),
+        notExists(
+          db
+            .select({ postId: postTagAssignments.postId })
+            .from(postTagAssignments)
+            .where(eq(postTagAssignments.postId, posts.id))
+        )
+      )
+    )
+    .orderBy(asc(posts.createdAt))
+    .limit(limit + 1)
+
+  const batch = untagged.slice(0, limit)
+  let tagged = 0
+  for (const post of batch) {
+    const assigned = await autoTagPost(post.id, post.title, post.content)
+    if (assigned.length > 0) tagged++
+  }
+
+  log.info({ board_id: boardId, scanned: batch.length, tagged }, 'ai auto-tag backfill batch')
+  return { scanned: batch.length, tagged, hasMore: untagged.length > batch.length }
 }
