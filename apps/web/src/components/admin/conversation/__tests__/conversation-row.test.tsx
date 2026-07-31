@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 /**
  * The conversation list row carries its assignee in a FIXED-width column at a
  * constant horizontal position on every row (the at-a-glance anatomy: name /

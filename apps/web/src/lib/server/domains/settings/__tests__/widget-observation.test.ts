@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { externalWidgetOriginHostname, WIDGET_OBSERVATION_THROTTLE_MS } from '../settings.widget'
 
 function request(origin?: string, secFetchSite?: string) {
-  const headers = new Headers()
-  if (origin) headers.set('origin', origin)
-  if (secFetchSite) headers.set('sec-fetch-site', secFetchSite)
-  return new Request('https://app.quackback.test/api/widget/config.json', { headers })
+  // happy-dom enforces the forbidden-header list at construction and silently
+  // drops `origin` from init headers; a browser sets the header itself, so set
+  // it on the constructed Request (allowed) to emulate a real cross-origin call.
+  const req = new Request('https://app.quackback.test/api/widget/config.json')
+  if (origin) req.headers.set('origin', origin)
+  if (secFetchSite) req.headers.set('sec-fetch-site', secFetchSite)
+  return req
 }
 
 describe('widget installation observation', () => {

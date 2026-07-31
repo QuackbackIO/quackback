@@ -38,6 +38,15 @@ vi.mock('@/lib/server/storage/s3', () => ({
 
 const { observeExternalWidgetRequest } = await import('../settings.widget')
 
+function requestWithOrigin(origin: string): Request {
+  // happy-dom drops `origin` from init headers (forbidden-header list); set it
+  // after construction to emulate the browser-set header — see
+  // widget-observation.test.ts.
+  const req = new Request('https://app.quackback.test/api/widget/config.json')
+  req.headers.set('origin', origin)
+  return req
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.findSettings.mockResolvedValue({ id: 'workspace_1' })
@@ -48,9 +57,7 @@ describe('observeExternalWidgetRequest writes', () => {
   it('records first and last observation evidence without invalidating settings cache', async () => {
     const now = new Date('2026-07-13T12:00:00.000Z')
     const observed = await observeExternalWidgetRequest(
-      new Request('https://app.quackback.test/api/widget/config.json', {
-        headers: { origin: 'https://Customer.Example:8443' },
-      }),
+      requestWithOrigin('https://Customer.Example:8443'),
       now
     )
 
@@ -77,9 +84,7 @@ describe('observeExternalWidgetRequest writes', () => {
   it('reports a throttled no-op when the conditional update changes no row', async () => {
     hoisted.returning.mockResolvedValue([])
     const observed = await observeExternalWidgetRequest(
-      new Request('https://app.quackback.test/api/widget/config.json', {
-        headers: { origin: 'https://customer.example' },
-      })
+      requestWithOrigin('https://customer.example')
     )
     expect(observed).toBe(false)
     expect(hoisted.setValues).toHaveBeenCalledOnce()
