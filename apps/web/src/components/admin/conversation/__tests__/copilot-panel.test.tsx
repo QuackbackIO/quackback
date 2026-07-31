@@ -37,8 +37,13 @@ const hoisted = vi.hoisted(() => ({
   approveAssistantActionFn: vi.fn(),
   rejectAssistantActionFn: vi.fn(),
   recordCopilotEvent: vi.fn(),
+  runTransform: vi.fn(),
   // Mutable so the configured-name test can swap the assistant's name.
   widgetConfig: { messenger: { assistant: { name: 'Quinn', avatarUrl: '' } } },
+}))
+
+vi.mock('@/lib/client/hooks/use-copilot-transform', () => ({
+  useCopilotTransform: () => hoisted.runTransform,
 }))
 
 vi.mock('@/lib/client/queries/settings', () => ({
@@ -137,6 +142,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   window.localStorage.clear()
   hoisted.widgetConfig = { messenger: { assistant: { name: 'Quinn', avatarUrl: '' } } }
+  hoisted.runTransform.mockResolvedValue('A friendlier answer.')
 })
 
 function proposedActionRow(overrides: Record<string, unknown> = {}) {
@@ -1104,6 +1110,82 @@ describe('<CopilotPanel> proposed actions (P2-C.4)', () => {
       expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument()
     )
     expect(await screen.findByText('Expired')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('<CopilotPanel> answer rewrite menu', () => {
+  it('an insertable answer offers a Modify menu with the shared rewrite rows only', async () => {
+    await askAnswer()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /^modify$/i }))
+
+    expect(await screen.findByRole('menuitem', { name: 'In my tone' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'More friendly' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'More formal' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'More concise' })).toBeInTheDocument()
+    // Composer-Improve-only kinds stay off the answer card.
+    expect(screen.queryByRole('menuitem', { name: 'Expand' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Rephrase' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /fix grammar/i })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('choosing a row redrafts the answer in place before insert, and insert logs transform_inserted', async () => {
+    const onInsert = await askAnswer()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /^modify$/i }))
+    await user.click(await screen.findByRole('menuitem', { name: 'More friendly' }))
+
+    expect(hoisted.runTransform).toHaveBeenCalledWith('more_friendly', DEFAULT_ANSWER)
+    expect(await screen.findByText('A friendlier answer.')).toBeInTheDocument()
+    expect(screen.queryByText(DEFAULT_ANSWER)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
+    expect(onInsert).toHaveBeenCalledWith('A friendlier answer.')
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'transform_inserted', destination: 'reply' })
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('Undo rewrite restores the streamed answer', async () => {
+    await askAnswer()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /^modify$/i }))
+    await user.click(await screen.findByRole('menuitem', { name: 'More concise' }))
+    await screen.findByText('A friendlier answer.')
+
+    fireEvent.click(screen.getByRole('button', { name: /undo rewrite/i }))
+    expect(await screen.findByText(DEFAULT_ANSWER)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /undo rewrite/i })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('an un-rewritten insert still logs answer_inserted (unchanged)', async () => {
+    const onInsert = await askAnswer()
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
+
+    expect(onInsert).toHaveBeenCalledWith(DEFAULT_ANSWER)
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'answer_inserted', destination: 'reply' })
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('read-only answers offer no Modify menu (leak boundary unchanged)', async () => {
+    await askAnswer({ answerType: 'analysis' })
+    expect(screen.queryByRole('button', { name: /^modify$/i })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('read-only internal-sourced answers offer no Modify menu', async () => {
+    await askAnswer({ internalSourced: true })
+    expect(screen.queryByRole('button', { name: /^modify$/i })).not.toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 })

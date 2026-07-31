@@ -25,6 +25,7 @@ import { useRouteContext } from '@tanstack/react-router'
 import {
   ArrowPathIcon,
   BoltIcon,
+  ChevronDownIcon,
   ClipboardDocumentListIcon,
   FunnelIcon,
   PencilSquareIcon,
@@ -48,6 +49,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   AssistantAnswer,
   AssistantWorkingTrace,
 } from '@/components/shared/conversation/assistant-turn'
@@ -59,6 +67,7 @@ import {
   type SourceType,
 } from './copilot-sources'
 import { useAguiTurn } from '@/lib/client/hooks/use-agui-turn'
+import { useCopilotTransform } from '@/lib/client/hooks/use-copilot-transform'
 import { GENERIC_ERROR } from '@/lib/client/utils/http-error'
 import { cn } from '@/lib/shared/utils'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
@@ -67,6 +76,7 @@ import {
   type CopilotCitation,
   type CopilotFinalPayload,
   type CopilotProposedAction,
+  type TransformKind,
 } from '@/lib/shared/assistant/copilot-contract'
 import {
   itemRefBody,
@@ -133,6 +143,16 @@ const QUICK_ACTIONS: ReadonlyArray<{
  *  non-internal-sourced draft ever offers an insert (see `insertableTurn`). */
 type InsertEventMeta = Pick<CopilotEventInput, 'eventType' | 'answerType' | 'internalSourced'>
 
+/** The answer card's Modify menu: the transform kinds shared with the
+ *  composer's Improve menu (TRANSFORM_KINDS' doc); the Improve-only kinds
+ *  (`expand`/`rephrase`/`fix_grammar`) stay off the answer card. */
+const ANSWER_REWRITE_ROWS: ReadonlyArray<{ transform: TransformKind; label: string }> = [
+  { transform: 'my_tone', label: 'In my tone' },
+  { transform: 'more_friendly', label: 'More friendly' },
+  { transform: 'more_formal', label: 'More formal' },
+  { transform: 'more_concise', label: 'More concise' },
+]
+
 export interface CopilotTurn {
   id: string
   question: string
@@ -150,6 +170,13 @@ export interface CopilotTurn {
    *  insertableTurn encodes that. */
   finalized: boolean
   suppressed?: string
+  /** The streamed answer a Modify-menu rewrite replaced, kept so Undo rewrite
+   *  can restore it. Absent when the card shows the unmodified answer; its
+   *  presence is also the signal that an insert logs `transform_inserted`
+   *  rather than `answer_inserted`. */
+  preRewriteAnswer?: string
+  /** True while a Modify-menu rewrite is in flight for this turn. */
+  rewriting?: boolean
   /** Write-tool calls this turn proposed (P2-C.4, act-on-approval); empty
    *  unless the model called a write tool, since every write tool proposes
    *  rather than executes on this surface. */
@@ -422,6 +449,8 @@ export function CopilotPanel({
                 internalSourced: false,
                 finalized: false,
                 suppressed: undefined,
+                preRewriteAnswer: undefined,
+                rewriting: false,
                 proposedActions: [],
                 errorMessage: undefined,
                 status: 'streaming' as const,
@@ -444,9 +473,51 @@ export function CopilotPanel({
 
   const handleAddToComposer = useCallback(
     (turn: CopilotTurn) =>
-      performInsert(turn.answer, { eventType: 'answer_inserted', ...turnMeta(turn) }),
+      performInsert(turn.answer, {
+        // A redrafted answer inserts as the transform result it is.
+        eventType: turn.preRewriteAnswer !== undefined ? 'transform_inserted' : 'answer_inserted',
+        ...turnMeta(turn),
+      }),
     [performInsert]
   )
+
+  const runTransform = useCopilotTransform(item)
+
+  // The Modify menu's rewrite seam: redraft the answer in place (the card
+  // keeps showing the newest draft), never overwriting a turn that changed
+  // underneath the in-flight request. Rewrite is gated on the same
+  // eligibility rule as insert, so a read-only answer stays read-only.
+  const handleRewrite = useCallback(
+    async (turn: CopilotTurn, transform: TransformKind) => {
+      if (!insertableTurn(turn) || turn.rewriting) return
+      const source = turn.answer
+      setTurns((prev) => prev.map((t) => (t.id === turn.id ? { ...t, rewriting: true } : t)))
+      try {
+        const result = await runTransform(transform, source)
+        if (!result) return
+        setTurns((prev) =>
+          prev.map((t) =>
+            t.id === turn.id && t.answer === source
+              ? { ...t, answer: result, preRewriteAnswer: t.preRewriteAnswer ?? source }
+              : t
+          )
+        )
+      } finally {
+        setTurns((prev) => prev.map((t) => (t.id === turn.id ? { ...t, rewriting: false } : t)))
+      }
+    },
+    [runTransform]
+  )
+
+  const handleUndoRewrite = useCallback((turn: CopilotTurn) => {
+    setTurns((prev) =>
+      prev.map((t) =>
+        t.id === turn.id && t.preRewriteAnswer !== undefined
+          ? { ...t, answer: t.preRewriteAnswer, preRewriteAnswer: undefined }
+          : t
+      )
+    )
+  }, [])
 
   // Cmd/Ctrl+Enter anywhere inside the panel (COPILOT_PANEL_SHORTCUTS):
   // trigger the LAST completed answer's primary action — the same handler
@@ -502,6 +573,8 @@ export function CopilotPanel({
                 key={turn.id}
                 turn={turn}
                 onAddToComposer={() => handleAddToComposer(turn)}
+                onRewrite={(transform) => void handleRewrite(turn, transform)}
+                onUndoRewrite={() => handleUndoRewrite(turn)}
                 onRetry={() => retry(turn.id)}
                 onFeedback={(rating, reason) =>
                   logEvent({
@@ -592,11 +665,18 @@ function CopilotEmptyState({
 function CopilotTurnView({
   turn,
   onAddToComposer,
+  onRewrite,
+  onUndoRewrite,
   onRetry,
   onFeedback,
 }: {
   turn: CopilotTurn
   onAddToComposer: () => void
+  /** Run a Modify-menu rewrite over the streamed answer (insertable turns
+   *  only — the menu is withheld alongside the insert affordance). */
+  onRewrite: (transform: TransformKind) => void
+  /** Restore the streamed answer a rewrite replaced. */
+  onUndoRewrite: () => void
   onRetry: () => void
   /** Record a thumbs rating (and an optional thumbs-down reason) for this
    *  turn's answer. Fire-and-forget — the latch below is purely local. */
@@ -635,8 +715,39 @@ function CopilotTurnView({
             {!streaming && turn.answer && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {insertable && (
-                  <Button type="button" size="sm" onClick={onAddToComposer}>
-                    Add to composer
+                  <>
+                    <Button type="button" size="sm" onClick={onAddToComposer}>
+                      Add to composer
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="outline" size="sm" disabled={turn.rewriting}>
+                          {turn.rewriting ? (
+                            <ArrowPathIcon className="size-4 animate-spin" />
+                          ) : (
+                            <SparklesIcon className="size-4" />
+                          )}
+                          {turn.rewriting ? 'Rewriting…' : 'Modify'}
+                          {!turn.rewriting && <ChevronDownIcon className="size-3.5" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuLabel>Rewrite</DropdownMenuLabel>
+                        {ANSWER_REWRITE_ROWS.map((row) => (
+                          <DropdownMenuItem
+                            key={row.transform}
+                            onClick={() => onRewrite(row.transform)}
+                          >
+                            {row.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                )}
+                {turn.preRewriteAnswer !== undefined && (
+                  <Button type="button" variant="ghost" size="sm" onClick={onUndoRewrite}>
+                    Undo rewrite
                   </Button>
                 )}
                 <CopilotTurnFeedback onFeedback={onFeedback} />
