@@ -959,6 +959,22 @@ export const findPortalUsersByEmailFn = createServerFn({ method: 'POST' })
     return await findContactsByEmail(data.email)
   })
 
+// Type-only re-export so client callers of listDuplicateUsersFn can name the
+// result rows without importing from the server-only domains tree.
+export type { DuplicatePrincipalMatch } from '@/lib/server/domains/users/user.dedup'
+
+/**
+ * Possible duplicates of one portal person — shared address or near-identical
+ * name. Backs the profile warning that offers a merge entry point.
+ */
+export const listDuplicateUsersFn = createServerFn({ method: 'GET' })
+  .validator(portalUserByIdSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
+    const { findDuplicatesForPrincipal } = await import('@/lib/server/domains/users/user.dedup')
+    return await findDuplicatesForPrincipal(data.principalId as PrincipalId)
+  })
+
 /**
  * Delete (remove) a portal user.
  */
