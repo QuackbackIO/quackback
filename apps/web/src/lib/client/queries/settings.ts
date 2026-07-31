@@ -13,6 +13,7 @@ import {
   fetchWidgetConfig,
   fetchWidgetSecret,
   fetchWorkflowAbandonedAutoCloseFn,
+  getSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import { getHelpCenterConfigFn } from '@/lib/server/functions/help-center-settings'
 import { getHelpCenterDomainStatusFn } from '@/lib/server/functions/help-center-domain'
@@ -222,6 +223,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'workflowAbandonedAutoClose'],
       queryFn: fetchWorkflowAbandonedAutoCloseFn,
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  spamFilterConfig: () =>
+    queryOptions({
+      queryKey: ['settings', 'spamFilterConfig'],
+      queryFn: getSpamFilterConfigFn,
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

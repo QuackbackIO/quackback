@@ -26,6 +26,7 @@ import {
   updateThemeFn,
   updateCustomCssFn,
   updateWorkflowAbandonedAutoCloseFn,
+  updateSpamFilterConfigFn,
 } from '@/lib/server/functions/settings'
 import {
   updateHelpCenterConfigFn,
@@ -387,6 +388,17 @@ export function useRegenerateWidgetSecret() {
     mutationFn: () => regenerateWidgetSecretFn(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: settingsQueries.widgetSecret().queryKey }),
+  })
+}
+
+export function useUpdateSpamFilterConfig() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: Parameters<typeof updateSpamFilterConfigFn>[0]['data']) =>
+      updateSpamFilterConfigFn({ data }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: settingsQueries.spamFilterConfig().queryKey }),
   })
 }
 

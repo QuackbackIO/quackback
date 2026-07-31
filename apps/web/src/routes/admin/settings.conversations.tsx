@@ -7,11 +7,16 @@ import { ChatBubbleLeftRightIcon, ArrowPathIcon } from '@heroicons/react/24/soli
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { useQuery } from '@tanstack/react-query'
 import { settingsQueries } from '@/lib/client/queries/settings'
-import { useUpdatePortalConfig, useUpdateWidgetConfig } from '@/lib/client/mutations/settings'
+import {
+  useUpdatePortalConfig,
+  useUpdateWidgetConfig,
+  useUpdateSpamFilterConfig,
+} from '@/lib/client/mutations/settings'
 import { getEmailChannelStatusFn } from '@/lib/server/functions/settings'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
+import { TrustedSendersCard } from '@/components/admin/settings/trusted-senders-card'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,6 +28,7 @@ export const Route = createFileRoute('/admin/settings/conversations')({
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.widgetConfig()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
+      context.queryClient.ensureQueryData(settingsQueries.spamFilterConfig()),
     ])
     return {}
   },
@@ -286,6 +292,8 @@ function ConversationsSettingsPage() {
 
       <EmailChannelStatusCard />
 
+      <TrustedSendersSection />
+
       <SettingsCard
         title="Conversation Routing"
         description="Decide how new conversations reach your team."
@@ -314,6 +322,25 @@ function ConversationsSettingsPage() {
         </div>
       </SettingsCard>
     </div>
+  )
+}
+
+/**
+ * Trusted-sender list editor, wired to the spam-filter config query and
+ * mutation. Kept as a section so the page's own state (messenger toggles)
+ * doesn't re-render it.
+ */
+function TrustedSendersSection() {
+  const spamFilterQuery = useSuspenseQuery(settingsQueries.spamFilterConfig())
+  const updateSpamFilterConfig = useUpdateSpamFilterConfig()
+
+  return (
+    <TrustedSendersCard
+      entries={spamFilterQuery.data.trustedSenders}
+      onSave={async (trustedSenders) => {
+        await updateSpamFilterConfig.mutateAsync({ trustedSenders })
+      }}
+    />
   )
 }
 
