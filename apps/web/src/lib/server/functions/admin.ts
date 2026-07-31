@@ -8,7 +8,7 @@ import {
   type PrincipalId,
   type SegmentId,
 } from '@quackback/ids'
-import type { BoardId, PostTagId, RoleId } from '@quackback/ids'
+import type { BoardId, PostTagId, RoleId, UserTagId } from '@quackback/ids'
 import { getSetupState, isOnboardingComplete as checkComplete } from '@/lib/server/db'
 import type { TiptapContent } from '@/lib/shared/schemas/posts'
 import { requireAuth } from './auth-helpers'
@@ -139,6 +139,7 @@ const listPortalUsersSchema = z.object({
   page: z.number().optional(),
   limit: z.number().optional(),
   segmentIds: z.array(z.string()).optional(),
+  tagIds: z.array(z.string()).optional(),
   lifecycle: z.enum(['users', 'leads']).optional(),
 })
 
@@ -797,6 +798,7 @@ export const listPortalUsersFn = createServerFn({ method: 'GET' })
       page: data.page,
       limit: data.limit,
       segmentIds: data.segmentIds as SegmentId[] | undefined,
+      tagIds: data.tagIds as UserTagId[] | undefined,
       lifecycle: data.lifecycle,
     })
 
@@ -939,6 +941,61 @@ export const listDuplicateUsersFn = createServerFn({ method: 'GET' })
     await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
     const { findDuplicatesForPrincipal } = await import('@/lib/server/domains/users/user.dedup')
     return await findDuplicatesForPrincipal(data.principalId as PrincipalId)
+  })
+
+/**
+ * Every live user tag — backs the profile tag picker and the People-list tag
+ * filter dropdown.
+ */
+export const listUserTagsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
+  const { listUserTags } = await import('@/lib/server/domains/users/user-tags.service')
+  return await listUserTags()
+})
+
+/** Tags currently on one portal person (the profile tag control). */
+export const listUserTagsForPrincipalFn = createServerFn({ method: 'GET' })
+  .validator(portalUserByIdSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_VIEW })
+    const { listTagsForPrincipal } = await import('@/lib/server/domains/users/user-tags.service')
+    return await listTagsForPrincipal(data.principalId as PrincipalId)
+  })
+
+const assignUserTagSchema = z.object({
+  principalId: z.string(),
+  /** Existing tag to assign, or a name to get-or-create inline. One required. */
+  tagId: z.string().optional(),
+  name: z.string().min(1).max(100).optional(),
+})
+
+/** Tag a person — by existing tag id, or by name (get-or-create). */
+export const assignUserTagFn = createServerFn({ method: 'POST' })
+  .validator(assignUserTagSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    if (!data.tagId && !data.name) throw new Error('tagId or name is required')
+    const service = await import('@/lib/server/domains/users/user-tags.service')
+    const tagId = data.tagId
+      ? (data.tagId as UserTagId)
+      : (await service.getOrCreateUserTag(data.name!)).id
+    await service.assignUserTag(data.principalId as PrincipalId, tagId)
+    return { tagId: tagId as string }
+  })
+
+const removeUserTagSchema = z.object({
+  principalId: z.string(),
+  tagId: z.string(),
+})
+
+/** Remove a tag from a person. */
+export const removeUserTagFn = createServerFn({ method: 'POST' })
+  .validator(removeUserTagSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.PEOPLE_MANAGE })
+    const { removeUserTag } = await import('@/lib/server/domains/users/user-tags.service')
+    await removeUserTag(data.principalId as PrincipalId, data.tagId as UserTagId)
+    return { success: true }
   })
 
 /**

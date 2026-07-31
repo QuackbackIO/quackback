@@ -92,6 +92,8 @@ export interface UsersFilters {
   search?: string
   /** Segment selection from sidebar (multi-select, like statuses for posts) */
   segmentIds?: string[]
+  /** User tag selection (multi-select, OR logic) */
+  tagIds?: string[]
   verified?: boolean
   dateFrom?: string
   dateTo?: string

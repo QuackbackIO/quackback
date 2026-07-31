@@ -77,6 +77,7 @@ async function fetchPortalUsers(
       page,
       limit: 20,
       segmentIds: filters.segmentIds,
+      tagIds: filters.tagIds,
       // 'companies' swaps the pane to the companies directory; the people
       // query underneath falls back to the default users population.
       lifecycle: filters.lifecycle === 'companies' ? undefined : filters.lifecycle,

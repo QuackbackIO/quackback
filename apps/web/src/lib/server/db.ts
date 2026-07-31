@@ -316,6 +316,11 @@ export {
   type CurrencyCode,
   // Schema tables - user attributes
   userAttributeDefinitions,
+  // Schema tables - user tags
+  userTags,
+  userTagsRelations,
+  userTagAssignments,
+  userTagAssignmentsRelations,
   // Schema tables - company attributes
   companyAttributeDefinitions,
   // Schema tables - merge suggestions

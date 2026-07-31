@@ -32,9 +32,10 @@ import {
   conversationMessages,
   userSegments,
   segments,
+  userTagAssignments,
   visitorDevices,
 } from '@/lib/server/db'
-import type { PrincipalId, SegmentId } from '@quackback/ids'
+import type { PrincipalId, SegmentId, UserTagId } from '@quackback/ids'
 import {
   DELETED_USER_PRINCIPAL_ID,
   reattributeAuthoredContent,
@@ -157,6 +158,7 @@ export async function listPortalUsers(
       page = 1,
       limit = 20,
       segmentIds,
+      tagIds,
       lifecycle = 'users',
     } = params
 
@@ -283,6 +285,19 @@ export async function listPortalUsers(
             .select({ principalId: userSegments.principalId })
             .from(userSegments)
             .where(inArray(userSegments.segmentId, segmentIds as SegmentId[]))
+        )
+      )
+    }
+
+    // Tag filter — OR logic: users carrying ANY of the selected tags
+    if (tagIds && tagIds.length > 0) {
+      conditions.push(
+        inArray(
+          principal.id,
+          db
+            .select({ principalId: userTagAssignments.principalId })
+            .from(userTagAssignments)
+            .where(inArray(userTagAssignments.tagId, tagIds as UserTagId[]))
         )
       )
     }
