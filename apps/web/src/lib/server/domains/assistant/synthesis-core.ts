@@ -22,7 +22,9 @@ import {
   type AgentLoopStrategy,
   type AnyChatMiddleware,
   type AnyTool,
+  type ImagePart,
   type StreamChunk,
+  type TextPart,
 } from '@tanstack/ai'
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible'
 import { jsonrepair } from 'jsonrepair'
@@ -41,7 +43,13 @@ export const DEFAULT_RETRIES = 1
 
 export interface SynthesisMessage {
   role: 'user' | 'assistant'
-  content: string
+  /**
+   * Plain text for ordinary turns; a multi-part array when a caller grounds
+   * the turn on customer images (Quinn vision — assistant/vision.ts builds
+   * the parts and gates them on the model's image-input capability, so an
+   * image part only ever appears here for a vision-capable model).
+   */
+  content: string | Array<TextPart | ImagePart>
 }
 
 /**

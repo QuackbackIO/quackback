@@ -72,3 +72,37 @@ export function getChatModel(feature: ChatFeature): string | null {
 export function getEmbeddingModel(): string | null {
   return resolveModel(undefined, config.aiEmbeddingModel)
 }
+
+/**
+ * Vision gate: whether a chat model accepts image input. BYOK config is an
+ * opaque model string against an OpenAI-compatible endpoint — there is no
+ * provider handshake to query — so capability is a curated name-pattern list
+ * of the mainstream vision-capable families, with `AI_ASSISTANT_VISION=on|off`
+ * as the explicit override for proxied or renamed deployments the patterns
+ * can't see. Callers must treat false as "never stream an image part": a
+ * text-only endpoint rejects or silently drops them.
+ */
+const VISION_MODEL_PATTERNS: RegExp[] = [
+  /\bgpt-4o\b/,
+  /\bgpt-4\.1/,
+  /\bgpt-4[-.]?(turbo|vision)\b/,
+  /\bgpt-5/,
+  /\bchatgpt-4o/,
+  /\bo[134](-mini|-pro)?\b/,
+  /claude[-\w]*(3|4|opus|sonnet|haiku)/,
+  /\bgemini-(1\.5|2|3)/,
+  /\bvision\b/,
+  /\bllava\b/,
+  /\bpixtral\b/,
+  /\bministral\b/,
+  /[-_]vl([-.]|\b)/,
+]
+
+export function isVisionCapableModel(model: string | null): boolean {
+  const override = config.aiAssistantVision?.trim().toLowerCase()
+  if (override === 'on' || override === 'true') return true
+  if (override === 'off' || override === 'false') return false
+  if (!model) return false
+  const normalized = model.toLowerCase()
+  return VISION_MODEL_PATTERNS.some((pattern) => pattern.test(normalized))
+}

@@ -17,7 +17,7 @@ import { config } from '@/lib/server/config'
 import { db, conversations, principal, eq } from '@/lib/server/db'
 import type { Executor } from '@/lib/server/domains/principals/principal.factory'
 import { isAiClientConfigured, stripCodeFences } from '@/lib/server/domains/ai/config'
-import { getChatModel } from '@/lib/server/domains/ai/models'
+import { getChatModel, isVisionCapableModel } from '@/lib/server/domains/ai/models'
 import { createAssistantTracingMiddleware } from '@/lib/server/domains/ai/tracing-middleware'
 import type { AiAnswerKind } from '@/lib/server/domains/ai/usage-log'
 import { getAssistantRuntimeConfig } from '@/lib/server/domains/settings/settings.assistant'
@@ -35,7 +35,10 @@ import {
   type AssistantResponseLength,
 } from '@/lib/shared/assistant/config'
 import { applyGuidanceBudget } from '@/lib/shared/assistant/guidance'
-import type { AssistantActivityStatus } from '@/lib/shared/conversation/types'
+import type {
+  AssistantActivityStatus,
+  ConversationAttachment,
+} from '@/lib/shared/conversation/types'
 import { resolveContentAudience } from './audience'
 import { assembleAssistantToolset } from './assistant.tools'
 import { makeAssistantToolContext, makeAssistantToolLedger } from './assistant.toolspec'
@@ -58,6 +61,7 @@ import {
 } from './assistant.system-prompt'
 import { listBoards } from '@/lib/server/domains/boards/board.service'
 import { runSynthesis, safeJsonRepair, type AttemptOutcome } from './synthesis-core'
+import { buildThreadModelMessages } from './vision'
 import { wrapUntrustedText } from './injection-guard'
 // Read-only reach into the tickets domain (an existing edge — assistant.toolspec.ts's
 // create_ticket tool already imports from it) for the ticket copilot's grounding
@@ -90,6 +94,12 @@ export type AssistantThreadSender = 'customer' | 'assistant' | 'human_agent'
 export interface AssistantThreadMessage {
   sender: AssistantThreadSender
   content: string
+  /**
+   * Image attachments on a customer turn (screenshots from the upload
+   * pipeline), carried by the thread mapper so the vision path (vision.ts)
+   * can stream them to a vision-capable model. Absent on every other turn.
+   */
+  attachments?: ConversationAttachment[]
 }
 
 /** A handoff Quinn requested by calling handoff_to_human. */
@@ -743,13 +753,12 @@ async function loadConversationGroundingContext(
 /** `buildGuidancePrompt`'s result: the composed block plus which rules made it in. */
 // ------------------------------------------------------------------- the loop ---
 
-/** Map thread turns to model messages (human teammate turns read as assistant-side). */
-function toModelMessages(messages: AssistantThreadMessage[]) {
-  return messages.map((m) => ({
-    role: m.sender === 'customer' ? ('user' as const) : ('assistant' as const),
-    content: m.content,
-  }))
-}
+/**
+ * Map thread turns to model messages (human teammate turns read as
+ * assistant-side). Customer turns with image attachments become multi-part
+ * messages on a vision-capable model, or degrade to a textual attachment note
+ * on a text-only one — the mapping and its gate live in vision.ts.
+ */
 
 /**
  * Classify an attempt for the usage log from observed tool state: handoff and
@@ -1033,7 +1042,11 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
   }
 
   const trustedContextParts: string[] = []
-  const modelMessages = toModelMessages(messages)
+  // Vision gate (see vision.ts): customer screenshots stream as image parts
+  // only when the effective assistant chat model accepts image input.
+  const modelMessages = buildThreadModelMessages(messages, {
+    visionCapable: isVisionCapableModel(model),
+  })
   if (ticketGrounding) {
     const status = ticketGrounding.facts.stage
       ? `${ticketGrounding.facts.status} (${ticketGrounding.facts.stage})`
