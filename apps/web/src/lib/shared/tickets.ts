@@ -246,7 +246,9 @@ export function validateTicketIntakeValues(
         break
       }
       case 'number': {
-        const num = typeof raw === 'number' ? raw : Number(raw)
+        // Only a real number or a numeric string coerces — a boolean raw must
+        // not become 0/1 through Number().
+        const num = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
         if (!Number.isFinite(num)) {
           errors.push({ key: field.key, message: `${field.label} must be a number` })
           break
@@ -265,8 +267,19 @@ export function validateTicketIntakeValues(
       }
       case 'date': {
         const str = typeof raw === 'string' ? raw : ''
-        // ISO date (YYYY-MM-DD) or full ISO datetime; must parse to a real date.
-        if (!/^\d{4}-\d{2}-\d{2}/.test(str) || Number.isNaN(Date.parse(str))) {
+        // ISO date (YYYY-MM-DD) or full ISO datetime, matched full-string AND
+        // round-tripped through the calendar: a prefix test plus Date.parse is
+        // not enough — Date.parse rolls impossible dates over (2026-02-31
+        // becomes Mar 3) and tolerates trailing junk (2026-07-18junk).
+        const [y, mo, d] = str.slice(0, 10).split('-').map(Number)
+        const utc = new Date(Date.UTC(y, mo - 1, d))
+        const isRealDate =
+          utc.getUTCFullYear() === y && utc.getUTCMonth() === mo - 1 && utc.getUTCDate() === d
+        const isIso =
+          /^\d{4}-\d{2}-\d{2}$/.test(str) ||
+          (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?$/.test(str) &&
+            !Number.isNaN(Date.parse(str)))
+        if (!isIso || !isRealDate) {
           errors.push({ key: field.key, message: `${field.label} must be a valid date` })
           break
         }
