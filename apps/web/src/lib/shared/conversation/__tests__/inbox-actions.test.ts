@@ -35,11 +35,11 @@ describe('INBOX_ACTIONS registry', () => {
     }
   })
 
-  it('keys the macro picker on m in the Reply group, scoped to an open thread', () => {
+  it('keys the macro action on m in the Reply group, scoped to any target', () => {
     const macro = byId('macro')
     expect(macro.shortcut).toBe('m')
     expect(macro.group).toBe('Reply')
-    expect(macro.scope).toBe('active')
+    expect(macro.scope).toBe('both')
   })
 
   it('keys the internal note on n, next to reply in the Reply group', () => {
@@ -52,7 +52,7 @@ describe('INBOX_ACTIONS registry', () => {
   })
 
   it('assigns the contract scopes', () => {
-    for (const id of ['reply', 'note', 'copilot', 'macro', 'next', 'prev']) {
+    for (const id of ['reply', 'note', 'copilot', 'next', 'prev']) {
       expect(byId(id).scope).toBe('active')
     }
     for (const id of [
@@ -63,6 +63,7 @@ describe('INBOX_ACTIONS registry', () => {
       'close',
       'reopen',
       'create_ticket',
+      'macro',
     ]) {
       expect(byId(id).scope).toBe('both')
     }
@@ -152,6 +153,23 @@ describe('isInboxActionEnabled', () => {
     ).toBe(false)
     expect(
       isInboxActionEnabled(snooze, {
+        hasActiveConversation: false,
+        hasSelection: true,
+        hasTicketTarget: true,
+      })
+    ).toBe(false)
+  })
+
+  it('macro shares the ticket gate — a reply is a conversation message', () => {
+    const macro = byId('macro')
+    expect(isInboxActionEnabled(macro, { hasActiveConversation: true, hasSelection: false })).toBe(
+      true
+    )
+    expect(isInboxActionEnabled(macro, { hasActiveConversation: false, hasSelection: true })).toBe(
+      true
+    )
+    expect(
+      isInboxActionEnabled(macro, {
         hasActiveConversation: false,
         hasSelection: true,
         hasTicketTarget: true,

@@ -77,6 +77,14 @@ vi.mock('@/lib/server/domains/settings/settings.support', () => ({
   isPortalSupportEnabled: () => isPortalSupportEnabled(),
 }))
 
+// The group-thread fan-out (§4.8): which added customers a reply goes out to.
+// Default none — the pre-group-thread assertions below keep their call counts.
+const listParticipantReplyRecipients =
+  vi.fn<(...a: unknown[]) => Promise<Array<{ principalId: PrincipalId; email: string }>>>()
+vi.mock('../conversation-participant.service', () => ({
+  listParticipantReplyRecipients: (...a: unknown[]) => listParticipantReplyRecipients(...a),
+}))
+
 // Spread the real db module (so every table export the notify path touches —
 // including channelAccounts, added with the email channel — is present) and
 // override ONLY the `db` handle. Re-listing tables here is the banned pattern
@@ -146,6 +154,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   buildHookContext.mockResolvedValue(ctx)
   sendConversationMessageEmail.mockResolvedValue(undefined)
+  listParticipantReplyRecipients.mockResolvedValue([])
 })
 
 describe('notifyVisitorMessage', () => {
@@ -366,6 +375,85 @@ describe('notifyAgentReply', () => {
       })
     ).resolves.toBeUndefined()
     expect(sendConversationMessageEmail).not.toHaveBeenCalled()
+  })
+
+  it('emails every added customer the reply too (group thread)', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'v@x.com' }]
+    listParticipantReplyRecipients.mockResolvedValue([
+      { principalId: 'principal_p1' as PrincipalId, email: 'second@example.com' },
+      { principalId: 'principal_p2' as PrincipalId, email: 'third@example.com' },
+    ])
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'the fix is deployed',
+      agentName: 'Agent',
+      channel: 'messenger',
+    })
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(3)
+    const tos = sendConversationMessageEmail.mock.calls.map((c) => c[0].to)
+    expect(tos).toEqual(['v@x.com', 'second@example.com', 'third@example.com'])
+    // The fan-out reads this conversation's participants, excluding the primary
+    // visitor and the address already sent to.
+    expect(listParticipantReplyRecipients).toHaveBeenCalledWith(
+      conversationId,
+      visitorPrincipalId,
+      'v@x.com'
+    )
+  })
+
+  it('still emails participants when the primary visitor is unreachable', async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'anonymous', email: null }]
+    listParticipantReplyRecipients.mockResolvedValue([
+      { principalId: 'principal_p1' as PrincipalId, email: 'second@example.com' },
+    ])
+
+    await notifyAgentReply({
+      conversationId,
+      visitorPrincipalId,
+      content: 'the fix is deployed',
+      agentName: 'Agent',
+      channel: 'messenger',
+      capturedEmail: null,
+    })
+
+    expect(sendConversationMessageEmail).toHaveBeenCalledTimes(1)
+    expect(sendConversationMessageEmail.mock.calls[0][0]).toMatchObject({
+      to: 'second@example.com',
+      direction: 'agent_reply',
+    })
+  })
+
+  it("one participant's send failure never eats the remaining participants", async () => {
+    isPrincipalOnline.mockResolvedValue(false)
+    visitorRows = [{ type: 'user', email: 'v@x.com' }]
+    listParticipantReplyRecipients.mockResolvedValue([
+      { principalId: 'principal_p1' as PrincipalId, email: 'bad@example.com' },
+      { principalId: 'principal_p2' as PrincipalId, email: 'good@example.com' },
+    ])
+    sendConversationMessageEmail.mockImplementation(async (opts: { to?: string }) => {
+      if (opts.to === 'bad@example.com') throw new Error('provider bounce')
+      return undefined
+    })
+
+    await expect(
+      notifyAgentReply({
+        conversationId,
+        visitorPrincipalId,
+        content: 'the fix is deployed',
+        agentName: 'Agent',
+        channel: 'messenger',
+      })
+    ).resolves.toBeUndefined()
+
+    const tos = sendConversationMessageEmail.mock.calls.map((c) => c[0].to)
+    // bad@ retried through the retry budget, good@ still delivered after it.
+    expect(tos[tos.length - 1]).toBe('good@example.com')
+    expect(tos).toContain('v@x.com')
   })
 
   describe('inbound-email Reply-To', () => {

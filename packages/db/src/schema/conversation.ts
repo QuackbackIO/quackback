@@ -460,6 +460,44 @@ export const conversationTagAssignments = pgTable(
 )
 
 /**
+ * Join table: the customers an agent has added to a conversation beyond its
+ * primary visitor (§4.8 group threads). A participant receives every
+ * subsequent agent reply by email (the notify fan-out reads this table). Both
+ * FKs cascade; the adding teammate is attribution only and goes NULL if that
+ * principal is removed.
+ */
+export const conversationParticipants = pgTable(
+  'conversation_participants',
+  {
+    conversationId: typeIdColumn('conversation')('conversation_id').notNull(),
+    principalId: typeIdColumn('principal')('principal_id').notNull(),
+    addedByPrincipalId: typeIdColumnNullable('principal')('added_by_principal_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Constraint names match what the SQL migration created.
+    foreignKey({
+      name: 'conversation_participants_conversation_id_fkey',
+      columns: [table.conversationId],
+      foreignColumns: [conversations.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_participants_principal_id_fkey',
+      columns: [table.principalId],
+      foreignColumns: [principal.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'conversation_participants_added_by_fkey',
+      columns: [table.addedByPrincipalId],
+      foreignColumns: [principal.id],
+    }).onDelete('set null'),
+    uniqueIndex('conversation_participants_pk').on(table.conversationId, table.principalId),
+    index('conversation_participants_conversation_id_idx').on(table.conversationId),
+    index('conversation_participants_principal_id_idx').on(table.principalId),
+  ]
+)
+
+/**
  * Join table: every @-mention of a team member inside a chat message (internal
  * notes only — mentions stay team-internal). Mirrors post_mentions: one row per
  * (message, principal), `notifiedAt` watermarks delivery so re-edits don't

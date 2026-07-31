@@ -62,12 +62,14 @@ describe('applyMacroActions', () => {
     ]
     const applied = await applyMacroActions(conversationId, actions, actor)
 
-    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor)
-    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor)
+    // The trailing arg on assignment/status ops is workflow attribution — a
+    // macro has no workflow name, so it arrives as undefined.
+    expect(assignConversation).toHaveBeenCalledWith(conversationId, 'principal_x', actor, undefined)
+    expect(assignTeam).toHaveBeenCalledWith(conversationId, 'team_1', actor, undefined)
     expect(attachTag).toHaveBeenCalledWith(conversationId, 'ctag_1')
     expect(setConversationPriority).toHaveBeenCalledWith(conversationId, 'high', actor)
     expect(snoozeConversation).toHaveBeenCalledWith(conversationId, expect.any(Date), actor)
-    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor)
+    expect(setConversationStatus).toHaveBeenCalledWith(conversationId, 'closed', actor, undefined)
     expect(applied).toEqual([
       'assigned',
       'assigned to team',

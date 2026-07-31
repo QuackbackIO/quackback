@@ -39,8 +39,12 @@ const hoisted = vi.hoisted(() => ({
   setConversationPriority: vi.fn(),
   setConversationStatus: vi.fn(),
   snoozeConversation: vi.fn(),
+  sendAgentMessage: vi.fn(),
   assertRequiredAttributesForClose: vi.fn(),
   attachTag: vi.fn(),
+  getMacro: vi.fn(),
+  buildMacroContext: vi.fn(),
+  applyMacroActions: vi.fn(),
   log: {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -83,6 +87,20 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   setConversationPriority: hoisted.setConversationPriority,
   setConversationStatus: hoisted.setConversationStatus,
   snoozeConversation: hoisted.snoozeConversation,
+  sendAgentMessage: hoisted.sendAgentMessage,
+}))
+
+vi.mock('@/lib/server/domains/macros', () => ({
+  getMacro: hoisted.getMacro,
+  buildMacroContext: hoisted.buildMacroContext,
+  applyMacroActions: hoisted.applyMacroActions,
+  // renderMacro is pure — exercise the real interpolation so the posted body
+  // assertion covers per-conversation rendering, not a mock echo.
+  renderMacro: (body: string, context: Record<string, string | null | undefined>) =>
+    body.replace(/\{(\w+)\}/g, (_m: string, token: string) => {
+      const value = context[token]
+      return value == null ? '' : String(value)
+    }),
 }))
 
 vi.mock('@/lib/server/domains/conversation-attributes/close-guard', () => ({
@@ -115,8 +133,23 @@ beforeEach(() => {
   hoisted.setConversationPriority.mockResolvedValue({})
   hoisted.setConversationStatus.mockResolvedValue({})
   hoisted.snoozeConversation.mockResolvedValue({})
+  hoisted.sendAgentMessage.mockResolvedValue({})
   hoisted.assertRequiredAttributesForClose.mockResolvedValue(undefined)
   hoisted.attachTag.mockResolvedValue([])
+  hoisted.getMacro.mockResolvedValue({
+    id: 'macro_1',
+    name: 'Greeting',
+    body: 'Hi {firstName}, thanks for reaching out about {conversationTitle}!',
+    scope: 'support',
+    actions: [{ type: 'add_tag', tagId: 'conversation_tag_9' }],
+  })
+  hoisted.buildMacroContext.mockImplementation(async (id: string) => ({
+    firstName: id === 'conversation_c1' ? 'Ada' : 'Grace',
+    lastName: null,
+    email: null,
+    conversationTitle: null,
+  }))
+  hoisted.applyMacroActions.mockResolvedValue(['Tagged'])
 })
 
 describe('bulkUpdateConversationsFn — per-item isolation', () => {
@@ -364,5 +397,106 @@ describe('bulkUpdateConversationsFn — action routing', () => {
     )
     await call({ conversationIds: ['conversation_c1'], action: { type: 'reopen' } })
     expect(hoisted.setConversationStatus).toHaveBeenLastCalledWith('conversation_c1', 'open', ACTOR)
+  })
+})
+
+describe('bulkUpdateConversationsFn — macro reply', () => {
+  it('posts the rendered macro body as a reply to every selected conversation', async () => {
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2'],
+      action: { type: 'macro', macroId: 'macro_1' },
+    })
+    expect(result).toEqual({
+      succeeded: ['conversation_c1', 'conversation_c2'],
+      failed: [],
+    })
+    // The macro is fetched once for the whole batch, then rendered per
+    // conversation against its own visitor context.
+    expect(hoisted.getMacro).toHaveBeenCalledTimes(1)
+    expect(hoisted.getMacro).toHaveBeenCalledWith('macro_1')
+    expect(hoisted.sendAgentMessage).toHaveBeenCalledTimes(2)
+    expect(hoisted.sendAgentMessage).toHaveBeenNthCalledWith(
+      1,
+      'conversation_c1',
+      'Hi Ada, thanks for reaching out about !',
+      expect.objectContaining({ principalId: 'principal_agent1' }),
+      ACTOR
+    )
+    expect(hoisted.sendAgentMessage).toHaveBeenNthCalledWith(
+      2,
+      'conversation_c2',
+      'Hi Grace, thanks for reaching out about !',
+      expect.objectContaining({ principalId: 'principal_agent1' }),
+      ACTOR
+    )
+  })
+
+  it('runs the macro bundled actions after the reply lands', async () => {
+    await call({
+      conversationIds: ['conversation_c1'],
+      action: { type: 'macro', macroId: 'macro_1' },
+    })
+    expect(hoisted.applyMacroActions).toHaveBeenCalledWith(
+      'conversation_c1',
+      [{ type: 'add_tag', tagId: 'conversation_tag_9' }],
+      ACTOR
+    )
+    // Reply first, actions second — a failed action must not eat the reply.
+    const sendOrder = hoisted.sendAgentMessage.mock.invocationCallOrder[0]
+    const actionsOrder = hoisted.applyMacroActions.mock.invocationCallOrder[0]
+    expect(sendOrder).toBeLessThan(actionsOrder)
+  })
+
+  it('gates the macro action on conversation.reply', async () => {
+    hoisted.requireAuth.mockResolvedValue({
+      ...AUTH,
+      permissions: [PERMISSIONS.CONVERSATION_SET_STATUS],
+    })
+    await expect(
+      call({ conversationIds: ['conversation_c1'], action: { type: 'macro', macroId: 'macro_1' } })
+    ).rejects.toThrow(/conversation\.reply/)
+    expect(hoisted.sendAgentMessage).not.toHaveBeenCalled()
+
+    hoisted.requireAuth.mockResolvedValue({
+      ...AUTH,
+      permissions: [PERMISSIONS.CONVERSATION_REPLY],
+    })
+    const res = await call({
+      conversationIds: ['conversation_c1'],
+      action: { type: 'macro', macroId: 'macro_1' },
+    })
+    expect(res.succeeded).toEqual(['conversation_c1'])
+  })
+
+  it('isolates a send failure to its own item and replies to the rest', async () => {
+    hoisted.sendAgentMessage.mockImplementation(async (id: string) => {
+      if (id === 'conversation_c2') throw new Error('conversation is closed')
+      return {}
+    })
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2', 'conversation_c3'],
+      action: { type: 'macro', macroId: 'macro_1' },
+    })
+    expect(result).toEqual({
+      succeeded: ['conversation_c1', 'conversation_c3'],
+      failed: [{ id: 'conversation_c2', reason: 'conversation is closed' }],
+    })
+    expect(hoisted.sendAgentMessage).toHaveBeenCalledTimes(3)
+    // No bundled actions for the failed item.
+    expect(hoisted.applyMacroActions).toHaveBeenCalledTimes(2)
+  })
+
+  it('fails every item when the macro no longer exists', async () => {
+    hoisted.getMacro.mockRejectedValue(new Error('Macro not found'))
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2'],
+      action: { type: 'macro', macroId: 'macro_gone' },
+    })
+    expect(result.succeeded).toEqual([])
+    expect(result.failed).toEqual([
+      { id: 'conversation_c1', reason: 'Macro not found' },
+      { id: 'conversation_c2', reason: 'Macro not found' },
+    ])
+    expect(hoisted.sendAgentMessage).not.toHaveBeenCalled()
   })
 })

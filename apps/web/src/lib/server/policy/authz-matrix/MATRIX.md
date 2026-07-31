@@ -356,7 +356,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation.ts`::removeMessageReactionFn | conversation.note |
 | `lib/server/functions/conversation.ts`::setMessageFlagFn | conversation.note |
 | `lib/server/functions/conversation.ts`::markConversationUnreadFromMessageFn | conversation.view |
-| `lib/server/functions/conversation.ts`::bulkUpdateConversationsFn | DYNAMIC (conversation.assign | conversation.set_tags | conversation.set_status) |
+| `lib/server/functions/conversation.ts`::bulkUpdateConversationsFn | DYNAMIC (conversation.assign | conversation.set_tags | conversation.reply | conversation.set_status) |
+| `lib/server/functions/conversation.ts`::addConversationParticipantFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::removeConversationParticipantFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::listConversationParticipantsFn | conversation.view |
 | `lib/server/functions/conversation.ts`::listFlaggedMessagesFn | conversation.view |
 | `lib/server/functions/conversation.ts`::getLinkedPostsForConversationFn | conversation.view |
 | `lib/server/functions/conversation.ts`::getLinkedConversationsForPostFn | conversation.view |

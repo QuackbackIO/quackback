@@ -357,11 +357,12 @@ export async function notifyAgentReply(opts: {
       // (the inbox can flag conversations with no reply-to address). `channel`
       // discriminates the two severities: on messenger the widget's unread
       // badge still carries the reply, on email nothing does and it is lost.
+      // No early return: on a group thread the participants may still be
+      // reachable even when the primary visitor is not.
       log.warn(
         { conversation_id: opts.conversationId, channel: opts.channel },
         'agent reply undeliverable (no email)'
       )
-      return
     }
 
     const ctx = await buildHookContext()
@@ -371,17 +372,55 @@ export async function notifyAgentReply(opts: {
     // the visitor's own session (or a re-identify in the host app), so the URL
     // only navigates — it carries no capability of its own.
     const ctaUrl = await resolveVisitorConversationLink(ctx.portalBaseUrl, opts.conversationId)
-    await sendVisitorConversationEmail({
-      conversationId: opts.conversationId,
-      visitorPrincipalId: opts.visitorPrincipalId,
-      recipient,
-      direction: 'agent_reply',
-      senderName: opts.agentName,
-      content: opts.content,
-      contentJson: opts.contentJson,
-      ctaUrl,
-      ctx,
-    })
+    if (recipient) {
+      await sendVisitorConversationEmail({
+        conversationId: opts.conversationId,
+        visitorPrincipalId: opts.visitorPrincipalId,
+        recipient,
+        direction: 'agent_reply',
+        senderName: opts.agentName,
+        content: opts.content,
+        contentJson: opts.contentJson,
+        ctaUrl,
+        ctx,
+      })
+    }
+
+    // Group thread (§4.8): every added customer receives the reply too. One
+    // participant's failure never eats the primary send (already delivered
+    // above) nor the remaining participants. Participants always get the mail
+    // — they have no widget session of their own on this thread, so their
+    // mailbox IS the thread regardless of presence.
+    try {
+      const { listParticipantReplyRecipients } = await import('./conversation-participant.service')
+      const participants = await listParticipantReplyRecipients(
+        opts.conversationId,
+        opts.visitorPrincipalId,
+        recipient
+      )
+      for (const participant of participants) {
+        try {
+          await sendVisitorConversationEmail({
+            conversationId: opts.conversationId,
+            visitorPrincipalId: participant.principalId,
+            recipient: participant.email,
+            direction: 'agent_reply',
+            senderName: opts.agentName,
+            content: opts.content,
+            contentJson: opts.contentJson,
+            ctaUrl,
+            ctx,
+          })
+        } catch (err) {
+          log.warn(
+            { err, conversation_id: opts.conversationId, principal_id: participant.principalId },
+            'participant reply email failed'
+          )
+        }
+      }
+    } catch (err) {
+      log.warn({ err, conversation_id: opts.conversationId }, 'participant reply fan-out failed')
+    }
   } catch (err) {
     log.warn({ err }, 'notify agent reply failed')
   }
