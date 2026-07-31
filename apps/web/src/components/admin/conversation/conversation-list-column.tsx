@@ -1,6 +1,6 @@
 import { memo, useState, type ReactNode } from 'react'
 import { Link, useRouteContext } from '@tanstack/react-router'
-import type { ConversationPriority } from '@/lib/shared/conversation/types'
+import type { ConversationDTO, ConversationPriority } from '@/lib/shared/conversation/types'
 import type { InboxItemDTO, InboxTriageFacet } from '@/lib/shared/inbox/items'
 import { ChevronDownIcon, PencilSquareIcon, BarsArrowDownIcon } from '@heroicons/react/24/solid'
 import { TicketIcon, BuildingOffice2Icon, RectangleStackIcon } from '@heroicons/react/24/outline'
@@ -605,7 +605,24 @@ function RowShell({
   )
 }
 
-const ConversationRow = memo(function ConversationRow({
+/** The inline assignee glance for a conversation row: avatar + name, or
+ *  nothing when unassigned (absence reads as "up for grabs"). Kept tiny and
+ *  muted so it scans as metadata, never as a second row identity. */
+function assigneeChip(c: ConversationDTO) {
+  if (!c.assignedAgent) return null
+  const name = c.assignedAgent.displayName ?? 'teammate'
+  return (
+    <span
+      title={`Assigned to ${name}`}
+      className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+    >
+      <Avatar src={c.assignedAgent.avatarUrl} name={name} className="size-5 shrink-0 text-[11px]" />
+      <span className="max-w-24 truncate">{name}</span>
+    </span>
+  )
+}
+
+export const ConversationRow = memo(function ConversationRow({
   item,
   id,
   selected,
@@ -636,9 +653,13 @@ const ConversationRow = memo(function ConversationRow({
     >
       {/* Rows keep a fixed anatomy (name / linked-ticket line / preview + time)
           so the list scans uniformly — the sometimes-present decorations
-          (priority dot, SLA, channel, tags) live on the thread, not here. A
-          result row swaps the preview for the matched excerpt and moves the
-          time up beside the name, so the excerpt gets the full row width. */}
+          (priority dot, SLA, channel, tags) live on the thread, not here. The
+          ONE identity decoration is the assignee chip pinned to the preview
+          line's right edge (a glance must answer "who has this?" without
+          opening the thread); unassigned threads render nothing there, so
+          absence reads as "up for grabs". A result row swaps the preview for
+          the matched excerpt and moves the time up beside the name, so the
+          excerpt gets the full row width. */}
       <button
         type="button"
         onClick={() => onSelect(id)}
@@ -655,6 +676,7 @@ const ConversationRow = memo(function ConversationRow({
               {c.visitor.displayName ?? 'Visitor'}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
+              {item.searchSnippet && assigneeChip(c)}
               {c.unreadCount > 0 && (
                 <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
                   {c.unreadCount}
@@ -683,8 +705,11 @@ const ConversationRow = memo(function ConversationRow({
               <p className="min-w-0 truncate text-xs text-muted-foreground">
                 {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
               </p>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {relativeTime(c.lastMessageAt)}
+              <span className="flex shrink-0 items-center gap-1.5">
+                {assigneeChip(c)}
+                <span className="text-xs text-muted-foreground">
+                  {relativeTime(c.lastMessageAt)}
+                </span>
               </span>
             </div>
           )}
