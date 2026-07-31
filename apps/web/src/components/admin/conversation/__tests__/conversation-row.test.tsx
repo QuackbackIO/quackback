@@ -72,7 +72,8 @@ describe('ConversationRow assignee', () => {
       })
     )
     expect(screen.getByTitle('Assigned to Maya Chen')).toBeInTheDocument()
-    expect(screen.getByText('Maya Chen')).toBeInTheDocument()
+    // The chip renders the first name; the full name is the hover title.
+    expect(screen.getByText('Maya')).toBeInTheDocument()
   })
 
   it('renders no assignee element when the conversation is unassigned', () => {

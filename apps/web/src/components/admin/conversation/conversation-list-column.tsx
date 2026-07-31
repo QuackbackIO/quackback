@@ -610,14 +610,22 @@ function RowShell({
  *  muted so it scans as metadata, never as a second row identity. */
 function assigneeChip(c: ConversationDTO) {
   if (!c.assignedAgent) return null
-  const name = c.assignedAgent.displayName ?? 'teammate'
+  const fullName = c.assignedAgent.displayName ?? 'teammate'
+  // First name only: the chip shares a line with the preview + time, so a
+  // full name would ellipsis-truncate into noise; the full name stays one
+  // hover away on the title.
+  const firstName = fullName.split(' ')[0]
   return (
     <span
-      title={`Assigned to ${name}`}
+      title={`Assigned to ${fullName}`}
       className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
     >
-      <Avatar src={c.assignedAgent.avatarUrl} name={name} className="size-5 shrink-0 text-[11px]" />
-      <span className="max-w-24 truncate">{name}</span>
+      <Avatar
+        src={c.assignedAgent.avatarUrl}
+        name={fullName}
+        className="size-5 shrink-0 text-[11px]"
+      />
+      <span className="max-w-24 truncate">{firstName}</span>
     </span>
   )
 }
