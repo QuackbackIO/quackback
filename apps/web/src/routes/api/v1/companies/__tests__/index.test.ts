@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CompanyId, PrincipalId } from '@quackback/ids'
+import { createId, type CompanyId, type PrincipalId } from '@quackback/ids'
 
 const mockWithApiKeyAuth = vi.fn()
 const mockListCompaniesPage = vi.fn()
@@ -110,18 +110,18 @@ describe('GET /api/v1/companies', () => {
   })
 
   it('passes valid tag_id and segment_id filters to the domain query', async () => {
+    const tagId = createId('user_tag')
+    const segmentId = createId('segment')
     await GET({
-      request: makeRequest(
-        '?tag_id=user_tag_01kqhxq697fvgat0h2def67890&segment_id=segment_01kqhxq697fvgat0h3xyz67890'
-      ),
+      request: makeRequest(`?tag_id=${tagId}&segment_id=${segmentId}`),
     })
     expect(mockListCompaniesPage).toHaveBeenCalledWith({
       search: undefined,
       limit: 20,
       cursor: undefined,
       externalId: undefined,
-      tagId: 'post_tag_01kqhxq697fvgat0h2def67890',
-      segmentId: 'segment_01kqhxq697fvgat0h3xyz67890',
+      tagId,
+      segmentId,
     })
   })
 
