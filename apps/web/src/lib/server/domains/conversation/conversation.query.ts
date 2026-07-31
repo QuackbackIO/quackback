@@ -10,6 +10,7 @@ import {
   eq,
   and,
   or,
+  ne,
   lt,
   gt,
   inArray,
@@ -1096,6 +1097,10 @@ export interface ConversationListFilter {
    *  standalone ticket rows from the ticket branch. Never set by the plain
    *  conversation scopes (their rows are unrestricted). */
   hasLinkedCustomerTicket?: boolean
+  /** "Spam" view: only conversations ended as spam. Spam-ended threads are
+   *  excluded from every other list (the triage facets, queues, and searches
+   *  must never surface them) — this flag is the one opt-in that lists them. */
+  spamOnly?: boolean
   /** Inbox ordering. Omitted = 'relevance' on a searched list, 'recent'
    *  otherwise; a pinned sort always wins. Keyset pagination adapts per sort. */
   sort?: ConversationSort
@@ -1567,6 +1572,11 @@ export async function listConversationsForAgent(
     .where(
       and(
         conversationFilter(actor),
+        // Spam lifecycle: a spam-ended thread is out of every triage view.
+        // The Spam view (spamOnly) is the single list that surfaces them.
+        filter.spamOnly
+          ? and(eq(conversations.status, 'closed'), eq(conversations.endReason, 'spam'))
+          : or(isNull(conversations.endReason), ne(conversations.endReason, 'spam')),
         filter.status ? eq(conversations.status, filter.status) : undefined,
         filter.source ? eq(conversations.source, filter.source) : undefined,
         filter.visitorPrincipalId

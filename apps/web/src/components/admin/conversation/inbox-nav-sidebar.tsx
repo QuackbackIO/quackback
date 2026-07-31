@@ -17,6 +17,7 @@ import {
   TicketIcon,
   BuildingOffice2Icon,
   RectangleStackIcon,
+  NoSymbolIcon,
 } from '@heroicons/react/24/solid'
 import { StarIcon as StarOutlineIcon } from '@heroicons/react/24/outline'
 import type { ConversationTagId, SegmentId, TeamId, ConversationViewId } from '@quackback/ids'
@@ -73,6 +74,9 @@ export const CONVERSATION_VIEWS = [
   { view: 'unassigned', label: 'Unassigned', Icon: InboxArrowDownIcon },
   { view: 'mentions', label: 'Mentions', Icon: AtSymbolIcon },
   { view: 'saved', label: 'Saved messages', Icon: BookmarkIcon },
+  // The spam lifecycle's holding pen: spam-ended threads leave every triage
+  // scope above and land here, restorable from the thread.
+  { view: 'spam', label: 'Spam', Icon: NoSymbolIcon },
 ] as const
 
 const QUINN_VIEW = { view: 'quinn', label: 'Quinn activity', Icon: SparklesIcon } as const
@@ -193,6 +197,8 @@ export function scopeLabelFor(
   switch (nav.view) {
     case 'mentions':
       return 'Mentions'
+    case 'spam':
+      return 'Spam'
     case 'quinn':
       return 'Quinn activity'
     case 'saved':

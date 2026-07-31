@@ -15,6 +15,7 @@ describe('isInboxView', () => {
       { view: 'unassigned', label: 'Unassigned' },
       { view: 'mentions', label: 'Mentions' },
       { view: 'saved', label: 'Saved messages' },
+      { view: 'spam', label: 'Spam' },
     ])
   })
 

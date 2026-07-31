@@ -78,6 +78,7 @@ vi.mock('@/lib/server/db', () => {
     eq: vi.fn(),
     and: vi.fn(),
     or: vi.fn(),
+    ne: vi.fn(),
     lt: vi.fn(),
     gt: vi.fn(),
     isNull: vi.fn(),
@@ -106,7 +107,7 @@ import {
   slaDtoFor,
   translationStateFrom,
 } from '../conversation.query'
-import { isNull, isNotNull, eq } from '@/lib/server/db'
+import { isNull, isNotNull, eq, ne } from '@/lib/server/db'
 import type { Actor } from '@/lib/server/policy/types'
 
 // The RBAC wiring (UNIFIED-INBOX-SPEC.md §6) ANDs conversationFilter(actor)
@@ -410,17 +411,24 @@ describe('loadAuthors', () => {
 })
 
 describe('listConversationsForAgent assignee filter', () => {
-  // isNull is used in this builder ONLY for the unassigned-queue filter; the
-  // empty result short-circuits before any author load, so a call to isNull
-  // unambiguously means the unassigned condition was applied.
+  // isNull is used in this builder for exactly two conditions: the spam
+  // guard (always, on every non-spamOnly call — one isNull on endReason) and
+  // the unassigned-queue filter (one more). The empty result short-circuits
+  // before any author load, so the call count is unambiguous.
   it('adds an "assigned agent IS NULL" condition for the unassigned queue', async () => {
     await listConversationsForAgent({ unassignedOnly: true }, serviceActor)
-    expect(isNull).toHaveBeenCalledTimes(1)
+    expect(isNull).toHaveBeenCalledTimes(2)
   })
 
   it('does not constrain the assignee by default', async () => {
     await listConversationsForAgent({}, serviceActor)
+    expect(isNull).toHaveBeenCalledTimes(1)
+  })
+
+  it('the spam view replaces the spam guard with a closed+spam condition', async () => {
+    await listConversationsForAgent({ spamOnly: true }, serviceActor)
     expect(isNull).not.toHaveBeenCalled()
+    expect(ne).not.toHaveBeenCalled()
   })
 })
 

@@ -73,7 +73,7 @@ describe('inboxNavKey', () => {
 })
 
 describe('buildListParams', () => {
-  const view = (v: 'mine' | 'unassigned' | 'all' | 'mentions'): InboxNavItem => ({
+  const view = (v: 'mine' | 'unassigned' | 'all' | 'mentions' | 'spam'): InboxNavItem => ({
     kind: 'view',
     view: v,
   })
@@ -100,6 +100,13 @@ describe('buildListParams', () => {
     expect(buildListParams(view('mentions'), 'open', 'high', 'hi')).toEqual({
       view: 'mentions',
       search: 'hi',
+    })
+  })
+
+  it('maps the spam view to a self-contained feed (no status/priority/assignee)', () => {
+    expect(buildListParams(view('spam'), 'open', 'high', 'junk')).toEqual({
+      view: 'spam',
+      search: 'junk',
     })
   })
 

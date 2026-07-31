@@ -42,6 +42,7 @@ export type InboxView =
   | 'mentions'
   | 'saved'
   | 'quinn'
+  | 'spam'
   // UNIFIED-INBOX-SPEC.md §2.3: the Tickets nav section. A separate group in
   // the sidebar (see inbox-nav-sidebar.tsx), but the same InboxView/InboxNavItem
   // machinery carries them through the URL + query layer.
@@ -218,6 +219,10 @@ export function buildListParams(
     }
   if (nav.view === 'mentions')
     return { view: 'mentions' as const, search: q, companyId: company, sort: sortParam }
+  // The Spam view is self-contained (like Mentions): the list owns its
+  // spam-only scope, so status/priority chips don't apply within it.
+  if (nav.view === 'spam')
+    return { view: 'spam' as const, search: q, companyId: company, sort: sortParam }
   if (nav.view === 'quinn')
     return {
       view: 'quinn' as const,
@@ -306,7 +311,7 @@ export interface InboxListParams {
  * Whether `nav` is one of the scopes the unified `listInboxItemsFn` endpoint
  * supports (mine/unassigned/all, a per-team inbox, a Tickets-section scope,
  * or a custom saved view carrying a ticket-only rule — §2.8). Everything else
- * (tag/segment/mentions/quinn/saved, and a custom view with NO ticket rules)
+ * (tag/segment/mentions/quinn/saved/spam, and a custom view with NO ticket rules)
  * stays on the legacy conversation-only endpoint via `buildListParams`.
  */
 export function usesUnifiedInboxList(
