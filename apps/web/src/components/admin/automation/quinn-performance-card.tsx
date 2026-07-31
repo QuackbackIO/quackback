@@ -84,7 +84,7 @@ export function QuinnPerformanceCard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <MetricTile
               label={intl.formatMessage({
                 id: 'automation.performance.agent.involvement',
@@ -145,6 +145,39 @@ export function QuinnPerformanceCard() {
                 defaultMessage: 'Actions completed',
               })}
               value={data ? String(data.actionsTaken) : '—'}
+            />
+            <MetricTile
+              label={intl.formatMessage({
+                id: 'automation.performance.agent.csat',
+                defaultMessage: 'Customer satisfaction',
+              })}
+              value={
+                data && data.csat.responseCount > 0
+                  ? intl.formatMessage(
+                      {
+                        id: 'automation.performance.agent.csatValue',
+                        defaultMessage: '{avg} / 5',
+                      },
+                      {
+                        avg: intl.formatNumber(data.csat.avgRating, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }),
+                      }
+                    )
+                  : '—'
+              }
+              sub={
+                data
+                  ? intl.formatMessage(
+                      {
+                        id: 'automation.performance.agent.csatDetail',
+                        defaultMessage: '{count, plural, one {# rating} other {# ratings}}',
+                      },
+                      { count: data.csat.responseCount }
+                    )
+                  : undefined
+              }
             />
           </div>
           <div className="mt-4">
