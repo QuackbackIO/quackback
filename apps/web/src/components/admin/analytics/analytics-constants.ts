@@ -33,3 +33,18 @@ export function channelColor(channel: string, index: number): string {
     ? `var(--metric-${channel.replace(/_/g, '-')})`
     : `var(--chart-${(index % 5) + 1})`
 }
+
+/** Compact duration for response-time stat values and tooltip rows
+ *  ("45m", "2h 15m", "1.5d"). null (nothing answered in the period) renders
+ *  as an em dash. */
+export function formatResponseTime(minutes: number | null): string {
+  if (minutes == null) return '—'
+  if (minutes < 1) return '<1m'
+  if (minutes < 60) return `${Math.round(minutes)}m`
+  if (minutes < 1440) {
+    const h = Math.floor(minutes / 60)
+    const m = Math.round(minutes % 60)
+    return m === 0 ? `${h}h` : `${h}h ${m}m`
+  }
+  return `${(minutes / 1440).toFixed(1)}d`
+}
