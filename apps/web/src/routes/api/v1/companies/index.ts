@@ -33,7 +33,7 @@ export const Route = createFileRoute('/api/v1/companies/')({
           const { isValidTypeId } = await import('@quackback/ids')
           const cursorId =
             cursor && isValidTypeId(cursor, 'company') ? (cursor as CompanyId) : undefined
-          const tagId = tagIdParam && isValidTypeId(tagIdParam, 'post_tag') ? tagIdParam : undefined
+          const tagId = tagIdParam && isValidTypeId(tagIdParam, 'user_tag') ? tagIdParam : undefined
           const segmentId =
             segmentIdParam && isValidTypeId(segmentIdParam, 'segment') ? segmentIdParam : undefined
 

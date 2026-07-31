@@ -64,7 +64,7 @@ registerPath('/companies', {
         in: 'query',
         schema: { type: 'string' },
         description:
-          'Restrict to companies whose members authored posts carrying this post tag. Unknown or malformed IDs return an empty list.',
+          'Restrict to companies with at least one member carrying this user tag. Unknown or malformed IDs return an empty list.',
       },
       {
         name: 'segment_id',

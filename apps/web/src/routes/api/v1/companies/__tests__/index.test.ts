@@ -112,7 +112,7 @@ describe('GET /api/v1/companies', () => {
   it('passes valid tag_id and segment_id filters to the domain query', async () => {
     await GET({
       request: makeRequest(
-        '?tag_id=post_tag_01kqhxq697fvgat0h2def67890&segment_id=segment_01kqhxq697fvgat0h3xyz67890'
+        '?tag_id=user_tag_01kqhxq697fvgat0h2def67890&segment_id=segment_01kqhxq697fvgat0h3xyz67890'
       ),
     })
     expect(mockListCompaniesPage).toHaveBeenCalledWith({

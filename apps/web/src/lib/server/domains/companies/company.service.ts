@@ -18,15 +18,14 @@ import {
   isNull,
   sql,
   companies,
-  postTagAssignments,
-  posts,
   principal,
   user,
   userSegments,
+  userTagAssignments,
   conversations,
   tickets,
 } from '@/lib/server/db'
-import { toUuid, type PostTagId, type PrincipalId, type SegmentId } from '@quackback/ids'
+import { toUuid, type PrincipalId, type SegmentId, type UserTagId } from '@quackback/ids'
 import { emitBestEffort } from '@/lib/server/events/emit'
 import { companyCreated, companyDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
@@ -302,16 +301,15 @@ function companyFilterConditions(filter: CompanyListFilter): ReturnType<typeof s
     )
   }
   if (filter.tagId) {
-    // Members' authorship links companies to the product's tagging primitive.
+    // Members carry principal tags, so a tagged person surfaces their company.
     conditions.push(
       inArray(
         companies.id,
         db
           .select({ companyId: principal.companyId })
           .from(principal)
-          .innerJoin(posts, eq(posts.principalId, principal.id))
-          .innerJoin(postTagAssignments, eq(postTagAssignments.postId, posts.id))
-          .where(eq(postTagAssignments.tagId, filter.tagId as PostTagId))
+          .innerJoin(userTagAssignments, eq(userTagAssignments.principalId, principal.id))
+          .where(eq(userTagAssignments.tagId, filter.tagId as UserTagId))
       )
     )
   }

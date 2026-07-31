@@ -10,10 +10,8 @@ import { createId, type PrincipalId, type TypeId, type UserId } from '@quackback
 type CompanyId = TypeId<'company'>
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
-  boards,
   companies,
   conversations,
-  postTagAssignments,
   postTags,
   posts,
   principal,
@@ -22,6 +20,8 @@ import {
   ticketStatuses,
   user,
   userSegments,
+  userTagAssignments,
+  userTags,
 } from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
@@ -208,24 +208,18 @@ describe.skipIf(!fixture.available)('company directory queries (real DB, rolled 
       expect(await listCompanies({ segmentId: emptySegmentId })).toEqual([])
     })
 
-    it('restricts to companies whose members authored posts carrying the tag', async () => {
+    it('restricts to companies with a member principal carrying the tag', async () => {
       const tag = suffix()
       const tagged = await createCompany({ name: `Tagged ${tag}` })
       const untagged = await createCompany({ name: `Untagged ${tag}` })
 
-      const author = await seedPrincipal()
-      await attachPrincipal(tagged.id as CompanyId, author)
+      const member = await seedPrincipal()
+      await attachPrincipal(tagged.id as CompanyId, member)
       await attachPrincipal(untagged.id as CompanyId, await seedPrincipal())
 
-      const boardId = createId('board')
-      await testDb.insert(boards).values({ id: boardId, slug: `b-${tag}`, name: `Board ${tag}` })
-      const tagId = createId('post_tag')
-      await testDb.insert(postTags).values({ id: tagId, name: `tag-${tag}` })
-      const postId = createId('post')
-      await testDb
-        .insert(posts)
-        .values({ id: postId, boardId, principalId: author, title: `Post ${tag}`, content: '' })
-      await testDb.insert(postTagAssignments).values({ postId, tagId })
+      const tagId = createId('user_tag')
+      await testDb.insert(userTags).values({ id: tagId, name: `tag-${tag}` })
+      await testDb.insert(userTagAssignments).values({ principalId: member, tagId })
 
       const hits = await listCompanies({ tagId })
       const ids = hits.map((c) => c.id)
@@ -233,7 +227,7 @@ describe.skipIf(!fixture.available)('company directory queries (real DB, rolled 
       expect(ids).not.toContain(untagged.id)
 
       // An unknown tag matches nothing.
-      expect(await listCompanies({ tagId: createId('post_tag') })).toEqual([])
+      expect(await listCompanies({ tagId: createId('user_tag') })).toEqual([])
     })
   })
 
