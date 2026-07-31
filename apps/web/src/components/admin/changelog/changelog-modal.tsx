@@ -41,6 +41,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [displayDateTouched, setDisplayDateTouched] = useState(false)
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
+  const [featuredImageTouched, setFeaturedImageTouched] = useState(false)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
 
@@ -73,6 +75,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
       setPublishState(toPublishState(entry.status, entry.publishedAt))
       setDisplayDateOverride(entry.displayDate ? new Date(entry.displayDate) : undefined)
       setDisplayDateTouched(false)
+      setFeaturedImageUrl(entry.featuredImageUrl)
+      setFeaturedImageTouched(false)
       setHasInitialized(true)
     }
   }, [entry, form, hasInitialized])
@@ -97,6 +101,11 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
     setDisplayDateTouched(true)
   }
 
+  function handleFeaturedImageChange(url: string | null) {
+    setFeaturedImageUrl(url)
+    setFeaturedImageTouched(true)
+  }
+
   const handleSubmit = form.handleSubmit((data) => {
     const displayDatePayload = displayDateTouched
       ? displayDateOverride === undefined
@@ -115,6 +124,9 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         publishState,
         notify,
         ...(displayDatePayload !== undefined && { displayDate: displayDatePayload }),
+        // Only send when the admin changed it, so an untouched value isn't
+        // round-tripped and a cleared one is (null clears).
+        ...(featuredImageTouched && { featuredImageUrl }),
       },
       {
         onSuccess: () => {
@@ -188,6 +200,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
             displayDateValue={displayDateOverride}
             onDisplayDateChange={handleDisplayDateChange}
             onDisplayDateClear={handleDisplayDateClear}
+            featuredImageUrl={featuredImageUrl}
+            onFeaturedImageChange={handleFeaturedImageChange}
           />
         </div>
 
@@ -224,6 +238,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
                   displayDateValue={displayDateOverride}
                   onDisplayDateChange={handleDisplayDateChange}
                   onDisplayDateClear={handleDisplayDateClear}
+                  featuredImageUrl={featuredImageUrl}
+                  onFeaturedImageChange={handleFeaturedImageChange}
                 />
               </div>
             </SheetContent>

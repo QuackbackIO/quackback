@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { format } from 'date-fns'
 import {
   DocumentTextIcon,
@@ -27,10 +27,11 @@ import {
 } from '@/components/shared/sidebar-primitives'
 import { ChangelogCategorySelect } from './changelog-category-select'
 import { changelogSettingsQueries } from '@/lib/client/queries/changelog'
+import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { cn, tomorrowAt } from '@/lib/shared/utils'
 import type { PostId, ChangelogCategoryId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
-import { TagIcon, EnvelopeIcon } from '@heroicons/react/24/outline'
+import { TagIcon, EnvelopeIcon, PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 interface ChangelogMetadataSidebarContentProps {
   publishState: PublishState
@@ -46,6 +47,8 @@ interface ChangelogMetadataSidebarContentProps {
   displayDateValue?: Date
   onDisplayDateChange?: (value: Date | undefined) => void
   onDisplayDateClear?: () => void
+  featuredImageUrl?: string | null
+  onFeaturedImageChange?: (url: string | null) => void
 }
 
 const PUBLISH_STATUS_OPTIONS: readonly StatusOption[] = [
@@ -68,9 +71,24 @@ export function ChangelogMetadataSidebarContent({
   displayDateValue,
   onDisplayDateChange = () => {},
   onDisplayDateClear = () => {},
+  featuredImageUrl = null,
+  onFeaturedImageChange = () => {},
 }: ChangelogMetadataSidebarContentProps) {
   const [postsOpen, setPostsOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { upload: uploadFeaturedImage } = useImageUpload({ prefix: 'changelog' })
+  const [featuredImageUploading, setFeaturedImageUploading] = useState(false)
+
+  const handleFeaturedImageFile = async (file: File | undefined) => {
+    if (!file) return
+    setFeaturedImageUploading(true)
+    try {
+      onFeaturedImageChange(await uploadFeaturedImage(file))
+    } finally {
+      setFeaturedImageUploading(false)
+    }
+  }
 
   // Emails-disabled workspace kill switch — the "Send email to
   // subscribers" checkbox is meaningless (and hidden) when nothing can send.
@@ -228,6 +246,58 @@ export function ChangelogMetadataSidebarContent({
           {null}
         </SidebarRow>
         <ChangelogCategorySelect value={categoryIds} onChange={onCategoriesChange} />
+      </div>
+
+      {/* Featured image — hero rendered atop the public entry detail page */}
+      <div className="space-y-2">
+        <SidebarRow icon={<PhotoIcon className="h-4 w-4" />} label="Featured image">
+          <button
+            type="button"
+            disabled={featuredImageUploading}
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              'inline-flex items-center gap-0.5 px-1.5 py-0.5',
+              'rounded-md text-[11px] font-medium',
+              'text-muted-foreground/70 hover:text-muted-foreground',
+              'border border-dashed border-border/60 hover:border-border',
+              'hover:bg-muted/40',
+              'transition-all duration-150',
+              featuredImageUploading && 'opacity-50 pointer-events-none'
+            )}
+          >
+            <PlusIcon className="h-2.5 w-2.5" />
+            {featuredImageUploading ? 'Uploading…' : featuredImageUrl ? 'Replace' : 'Add'}
+          </button>
+        </SidebarRow>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            void handleFeaturedImageFile(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
+        {featuredImageUrl ? (
+          <div className="relative group">
+            <img
+              src={featuredImageUrl}
+              alt="Featured image preview"
+              className="w-full rounded-md border border-border/50 object-cover aspect-[2/1]"
+            />
+            <button
+              type="button"
+              onClick={() => onFeaturedImageChange(null)}
+              aria-label="Remove featured image"
+              className="absolute top-1.5 right-1.5 rounded-full bg-background/80 border border-border/60 p-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <XMarkIcon className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground/60 italic pl-6">No featured image</p>
+        )}
       </div>
 
       {/* Linked Posts - single unified section */}

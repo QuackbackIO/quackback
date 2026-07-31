@@ -31,6 +31,7 @@ interface ChangelogEntryDetailProps {
   content: string
   contentJson: TiptapContent | null
   publishedAt: string
+  featuredImageUrl: string | null
   linkedPosts: LinkedPost[]
   categories?: CategoryBadge[]
 }
@@ -48,6 +49,7 @@ export function ChangelogEntryDetail({
   content,
   contentJson,
   publishedAt,
+  featuredImageUrl,
   linkedPosts,
   categories = [],
 }: ChangelogEntryDetailProps) {
@@ -93,6 +95,15 @@ export function ChangelogEntryDetail({
 
           {/* Title */}
           <h1 className="text-3xl font-bold leading-tight">{title}</h1>
+
+          {/* Featured hero image */}
+          {featuredImageUrl && (
+            <img
+              src={featuredImageUrl}
+              alt={title}
+              className="mt-6 w-full rounded-xl border border-border/40 object-cover aspect-[2/1]"
+            />
+          )}
 
           {/* Rich content body */}
           <div className="mt-6">

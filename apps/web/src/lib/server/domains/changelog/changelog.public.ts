@@ -158,6 +158,7 @@ export async function getPublicChangelogById(
     content: entry.content,
     contentJson: entry.contentJson,
     publishedAt: entry.displayDate ?? entry.publishedAt,
+    featuredImageUrl: entry.featuredImageUrl,
     categories: categories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
     linkedPosts: linkedPostRows.map((lp) => ({
       id: lp.postId,
@@ -297,6 +298,7 @@ export async function listPublicChangelogs(
         content: entry.content,
         contentJson: entry.contentJson,
         publishedAt: entry.displayDate ?? entry.publishedAt!,
+        featuredImageUrl: entry.featuredImageUrl,
         categories: entryCategories.map((c) => ({ id: c.id, name: c.name, color: c.color })),
         linkedPosts: entryLinkedPosts.map((lp) => ({
           id: lp.postId,

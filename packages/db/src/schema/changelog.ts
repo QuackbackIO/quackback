@@ -48,6 +48,8 @@ export const changelogEntries = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     // View count for analytics (incremented on public/widget page load)
     viewCount: integer('view_count').default(0).notNull(),
+    // Optional hero image rendered at the top of the public entry detail page.
+    featuredImageUrl: text('featured_image_url'),
     // Semantic embedding for Quinn grounding (Quinn Phase 4). Embedded on
     // publish/edit; drafts stay null. Track the model version so a re-embed
     // can find rows without losing data (mirrors posts.embedding_model).
