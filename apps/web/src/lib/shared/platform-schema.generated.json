@@ -81,6 +81,12 @@
         "sensitive": false
       },
       {
+        "key": "AI_ASSISTANT_VISION",
+        "kind": "text",
+        "group": "connection",
+        "sensitive": false
+      },
+      {
         "key": "AI_INBOX_TRANSLATION_MODEL",
         "kind": "model",
         "group": "models",
