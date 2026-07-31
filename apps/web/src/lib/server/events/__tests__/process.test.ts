@@ -17,18 +17,23 @@ const mockWorkerClose = vi.fn().mockResolvedValue(undefined)
 // Captured once when the Worker is constructed (module-level singleton)
 let capturedProcessor: ((job: unknown) => Promise<void>) | null = null
 let capturedFailedHandler: ((job: unknown, error: Error) => void) | null = null
+let capturedWorkerOpts: { settings?: { backoffStrategy?: (n: number) => number } } | null = null
+let capturedQueueOpts: { defaultJobOptions?: { attempts?: number } } | null = null
 
 vi.mock('bullmq', () => {
   class MockQueue {
     addBulk = mockQueueAddBulk
     close = mockQueueClose
     waitUntilReady = vi.fn().mockResolvedValue(undefined)
-    constructor() {}
+    constructor(_name: string, opts: unknown) {
+      capturedQueueOpts = opts as typeof capturedQueueOpts
+    }
   }
   class MockWorker {
     close = mockWorkerClose
-    constructor(_name: string, processor: unknown) {
+    constructor(_name: string, processor: unknown, opts: unknown) {
       capturedProcessor = processor as (job: unknown) => Promise<void>
+      capturedWorkerOpts = opts as typeof capturedWorkerOpts
     }
     on(event: string, handler: unknown) {
       if (event === 'failed') {
@@ -147,6 +152,19 @@ describe('Event Processing (BullMQ)', () => {
         await enqueueHookJobsWithIds([{ name: 'init', data: makeJob().data, jobId: 'init:1' }])
       }
     }
+
+    it('retries a failed delivery again at least one hour after the first failure', async () => {
+      await ensureInitialized()
+      // Four total attempts: first try + two fast retries + the slow one.
+      expect(capturedQueueOpts?.defaultJobOptions?.attempts).toBe(4)
+      const backoff = capturedWorkerOpts?.settings?.backoffStrategy
+      expect(backoff).toBeDefined()
+      // Fast retries clear transient blips in seconds…
+      expect(backoff!(1)).toBeLessThan(60_000)
+      expect(backoff!(2)).toBeLessThan(60_000)
+      // …and the final retry waits at least an hour.
+      expect(backoff!(3)).toBeGreaterThanOrEqual(3_600_000)
+    })
 
     it('succeeds silently when hook returns success', async () => {
       await ensureInitialized()
