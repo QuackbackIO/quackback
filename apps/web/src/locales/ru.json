@@ -117,6 +117,7 @@
   "widget.tickets.new.detailsTooLong": "Слишком длинные подробности (макс. {max} символов).",
   "widget.tickets.new.selectPlaceholder": "Выбрать…",
   "widget.tickets.new.type": "Тип",
+  "widget.tickets.recent": "Недавние тикеты",
   "widget.messages.emptyHint": "Вопросы или отзывы? Мы готовы помочь.",
   "widget.messages.resumeAria": "Открыть разговор с {name}",
   "widget.helpDetail.loading": "Загрузка...",

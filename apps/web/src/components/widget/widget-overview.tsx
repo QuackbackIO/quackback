@@ -20,7 +20,9 @@ import { useConversationSummary } from './use-messenger-summary'
 import { useWidgetAuth } from './widget-auth-provider'
 import { firstNameOf } from '@/lib/shared/conversation/personalize'
 import { WidgetResumeCard } from './widget-resume-card'
+import { WidgetRecentTicketsCard } from './widget-recent-tickets'
 import { WidgetChangelogTeaser } from './widget-changelog-teaser'
+import type { ConversationId } from '@quackback/ids'
 import { type EnabledTabs } from './widget-nav'
 
 /** Canonical Home card chrome — every card shares it so the surface reads as
@@ -56,6 +58,8 @@ interface WidgetOverviewProps {
   onStartConversation: () => void
   /** Resume an in-flight conversation (opens the messenger thread directly). */
   onResumeMessenger: () => void
+  /** Open a ticket's conversation thread from the Recent tickets card. */
+  onOpenTicket: (conversationId: ConversationId) => void
   /** Open the full changelog. */
   onSeeChangelog: () => void
   /** Open a single changelog entry from the teaser. */
@@ -94,6 +98,7 @@ export function WidgetOverview({
   canStartConversation = true,
   onStartConversation,
   onResumeMessenger,
+  onOpenTicket,
   onSeeChangelog,
   onOpenChangelogEntry,
 }: WidgetOverviewProps) {
@@ -351,6 +356,18 @@ export function WidgetOverview({
                       onClick={onResumeMessenger}
                     />
                   </div>
+                </motion.div>
+              )}
+
+              {tabs.tickets && (
+                // Requester-scoped like the resume card: a Bearer-token
+                // visitor's tickets can arrive after mount — fade, don't pop.
+                <motion.div
+                  initial={reduceMotion ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <WidgetRecentTicketsCard onOpenTicket={onOpenTicket} />
                 </motion.div>
               )}
 

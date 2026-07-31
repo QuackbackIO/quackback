@@ -763,6 +763,10 @@ function WidgetPage() {
               setBackTarget({ tab: 'home', view: 'overview' })
               openMessenger()
             }}
+            onOpenTicket={(conversationId) => {
+              setBackTarget({ tab: 'home', view: 'overview' })
+              openMessenger(conversationId)
+            }}
             onSeeChangelog={() => crossNavigate('changelog')}
             onOpenChangelogEntry={(id) => {
               setBackTarget({ tab: 'home', view: 'overview' })

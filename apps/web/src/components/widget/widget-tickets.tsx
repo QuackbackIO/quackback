@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { TicketIcon, PlusIcon } from '@heroicons/react/24/solid'
@@ -6,6 +6,7 @@ import type { ConversationId } from '@quackback/ids'
 import { getMyTicketsFn } from '@/lib/server/functions/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
+import { markTicketStagesSeen } from './ticket-stage-seen'
 import { TimeAgo } from '@/components/ui/time-ago'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { StageChip } from '@/components/shared/ticket-stage'
@@ -42,6 +43,12 @@ export function WidgetTickets({
   })
 
   const tickets = data?.tickets ?? []
+
+  // The Tickets tab IS the stage-seen surface: having the list on screen
+  // advances the visitor's stage markers, clearing the launcher badge.
+  useEffect(() => {
+    if (data) markTicketStagesSeen(data.tickets)
+  }, [data])
 
   if (composing) {
     return (

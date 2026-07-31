@@ -117,6 +117,7 @@
   "widget.tickets.new.detailsTooLong": "详情过长（最多 {max} 个字符）。",
   "widget.tickets.new.selectPlaceholder": "选择…",
   "widget.tickets.new.type": "类型",
+  "widget.tickets.recent": "最近的工单",
   "widget.messages.emptyHint": "有问题或反馈？我们随时为您服务。",
   "widget.messages.resumeAria": "打开与 {name} 的对话",
   "widget.helpDetail.loading": "加载中…",

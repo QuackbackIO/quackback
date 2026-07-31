@@ -117,6 +117,7 @@
   "widget.tickets.new.detailsTooLong": "Los detalles son demasiado largos (máx. {max} caracteres).",
   "widget.tickets.new.selectPlaceholder": "Seleccionar…",
   "widget.tickets.new.type": "Tipo",
+  "widget.tickets.recent": "Tickets recientes",
   "widget.messages.emptyHint": "¿Preguntas o comentarios? Estamos aquí para ayudarte.",
   "widget.messages.resumeAria": "Abrir conversación con {name}",
   "widget.helpDetail.loading": "Cargando...",
