@@ -202,6 +202,9 @@ export type AssistantToolCallId = TypeId<'assistant_tool_call'>
 /** Assistant snippet ID - e.g., assistant_snippet_01h455vb4pex5vsknk084sn02q */
 export type AssistantSnippetId = TypeId<'assistant_snippet'>
 
+/** Assistant web source ID - e.g., assistant_web_source_01h455vb4pex5vsknk084sn02q */
+export type AssistantWebSourceId = TypeId<'assistant_web_source'>
+
 /** Assistant usage-event ID - e.g., assistant_event_01h455vb4pex5vsknk084sn02q */
 export type AssistantEventId = TypeId<'assistant_event'>
 
@@ -411,6 +414,7 @@ export interface EntityIdMap {
   assistant_custom_action: AssistantCustomActionId
   assistant_tool_call: AssistantToolCallId
   assistant_snippet: AssistantSnippetId
+  assistant_web_source: AssistantWebSourceId
   assistant_event: AssistantEventId
   ticket: TicketId
   ticket_status: TicketStatusId

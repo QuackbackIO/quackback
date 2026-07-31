@@ -125,6 +125,7 @@ export type {
   AssistantCustomActionId,
   AssistantToolCallId,
   AssistantSnippetId,
+  AssistantWebSourceId,
   TicketId,
   TicketStatusId,
   TicketTypeId,

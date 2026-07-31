@@ -2108,8 +2108,9 @@ describe('runAssistantTurn: V2 prompt and config snapshot', () => {
       expect.objectContaining({
         assistantName: 'Nova',
         // The Agent's default knowledge map (helpCenter only among retrieval
-        // sources) compiles to this snapshot on a customer_support turn.
-        knowledge: { sources: new Set(['article']), status: false },
+        // sources, plus always-on web sources) compiles to this snapshot on a
+        // customer_support turn.
+        knowledge: { sources: new Set(['article', 'webpage']), status: false },
       }),
       undefined,
       false,

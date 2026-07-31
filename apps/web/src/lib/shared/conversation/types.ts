@@ -104,7 +104,7 @@ export interface ConversationMessageCitation {
   // this shared type never imports the server domain leaf. 'ticket'/'changelog'
   // are copilot-only (team ceiling); customer-persisted turns only ever carry
   // 'article'/'post'/'changelog'.
-  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog'
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'webpage'
   id: string
   title: string
   url: string
