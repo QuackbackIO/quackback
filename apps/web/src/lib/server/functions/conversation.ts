@@ -1516,6 +1516,47 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
     return { succeeded, failed }
   })
 
+// ── Conversation participants (group threads, §4.8) ────────────────────────
+
+const addParticipantSchema = z.object({
+  conversationId: z.string(),
+  email: z.string().email().max(320),
+})
+
+/**
+ * Add a second customer to an existing conversation by email address. The
+ * address resolves to a principal (existing account, prior lead, or a freshly
+ * minted lead — the agent's explicit add is the trust decision), the join row
+ * is idempotent, and the added customer receives every subsequent agent reply
+ * by email (the notify fan-out). Gated on conversation.reply, the same
+ * permission replying requires.
+ */
+export const addConversationParticipantFn = createServerFn({ method: 'POST' })
+  .validator(addParticipantSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const actor = await policyActorFromAuth(ctx)
+    const { addConversationParticipantByEmail } =
+      await import('@/lib/server/domains/conversation/conversation-participant.service')
+    return addConversationParticipantByEmail(
+      data.conversationId as ConversationId,
+      data.email,
+      actor
+    )
+  })
+
+/** The customers added to a conversation, for the agent-side display. */
+export const listConversationParticipantsFn = createServerFn({ method: 'GET' })
+  .validator(conversationIdSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.CONVERSATION_VIEW })
+    const { listConversationParticipants } =
+      await import('@/lib/server/domains/conversation/conversation-participant.service')
+    return {
+      participants: await listConversationParticipants(data.conversationId as ConversationId),
+    }
+  })
+
 /** The caller's "Saved for later" feed — their flagged messages (conversation-
  *  or ticket-parented), newest first. */
 export const listFlaggedMessagesFn = createServerFn({ method: 'GET' }).handler(async () => {

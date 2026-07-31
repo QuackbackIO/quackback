@@ -1478,6 +1478,13 @@
       "when": 1785463478792,
       "tag": "0228_assistant_custom_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "7",
+      "when": 1785463478793,
+      "tag": "0234_conversation_participants",
+      "breakpoints": true
     }
   ]
 }

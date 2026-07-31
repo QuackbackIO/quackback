@@ -47,6 +47,7 @@ import {
   LinkIcon,
   ArrowDownTrayIcon,
   ArrowTopRightOnSquareIcon,
+  UserPlusIcon,
 } from '@heroicons/react/24/outline'
 import { toast } from 'sonner'
 import type {
@@ -147,6 +148,7 @@ import { InboxDetailPanel } from '@/components/admin/inbox/inbox-detail-panel'
 import { CreateTicketDialog } from '@/components/admin/inbox/create-ticket-dialog'
 import { ConvertToPostDialog } from '@/components/admin/conversation/convert-to-post-dialog'
 import { EndConversationDialog } from '@/components/admin/conversation/end-conversation-dialog'
+import { AddParticipantDialog } from '@/components/conversation/add-participant-dialog'
 import { SharePostDialog } from '@/components/admin/conversation/share-post-dialog'
 import { usePersonBlockStatus } from '@/components/admin/users/block-person-control'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -356,6 +358,8 @@ export function AgentConversationThread({
   const [shareMsg, setShareMsg] = useState<AgentConversationMessageDTO | null>(null)
   // The end-conversation reason dialog (conversation-only).
   const [endDialogOpen, setEndDialogOpen] = useState(false)
+  // The add-customer (group thread) dialog (conversation-only).
+  const [addParticipantOpen, setAddParticipantOpen] = useState(false)
 
   // "Jump to message" deep-link state (conversation-only). pendingTarget is the
   // message we still need to scroll to (null once resolved); highlightId is the
@@ -1671,6 +1675,12 @@ export function AgentConversationThread({
             </DropdownMenuItem>
           )}
           {!isTicket && conversation && !isClosedConversation && (
+            <DropdownMenuItem onClick={() => setAddParticipantOpen(true)}>
+              <UserPlusIcon className="h-3.5 w-3.5" />
+              Add customer…
+            </DropdownMenuItem>
+          )}
+          {!isTicket && conversation && !isClosedConversation && (
             <DropdownMenuItem onClick={() => setEndDialogOpen(true)}>
               <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
               End conversation
@@ -2105,6 +2115,11 @@ export function AgentConversationThread({
             onOpenChange={setEndDialogOpen}
             conversationId={conversationId}
             onEnded={refreshThread}
+          />
+          <AddParticipantDialog
+            open={addParticipantOpen}
+            onOpenChange={setAddParticipantOpen}
+            conversationId={conversationId}
           />
           <CreateTicketDialog
             open={createTicketOpen}

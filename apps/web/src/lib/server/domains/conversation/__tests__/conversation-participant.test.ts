@@ -1,0 +1,230 @@
+/**
+ * Conversation participants (§4.8 group threads): an agent adds a second
+ * customer to an existing conversation; the added customer then receives every
+ * subsequent agent reply by email. These tests pin the three seams:
+ *
+ * 1. `addConversationParticipantByEmail` resolves the address to a principal —
+ *    an existing user account wins, then a lead we minted from an earlier
+ *    email, then a fresh lead — and records the (conversation, principal) row
+ *    idempotently. Adding the conversation's own visitor is a no-op.
+ * 2. `listParticipantReplyRecipients` turns the participant rows into
+ *    deliverable addresses (account email, else contact email; synthetic
+ *    anonymous placeholders never qualify), excluding the primary visitor and
+ *    any address already being sent to.
+ *
+ * db access is mocked with the thenable-chain pattern from
+ * conversation-notify.test.ts; the principal factory is mocked at its module
+ * boundary (it owns every principal INSERT).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { PrincipalId } from '@quackback/ids'
+import type { Actor } from '@/lib/server/policy/types'
+
+const hoisted = vi.hoisted(() => ({
+  ensurePrincipalForUser: vi.fn(),
+  createPrincipal: vi.fn(),
+  // Programmable query results, consumed FIFO: each entry is the row array one
+  // select...limit() resolves to. Inserts record their values here.
+  selectQueue: [] as unknown[][],
+  insertedRows: [] as unknown[],
+}))
+
+vi.mock('@/lib/server/db', async (importOriginal) => {
+  function chain(): Record<string, unknown> {
+    const c: Record<string, unknown> = {}
+    c.from = () => c
+    c.innerJoin = () => c
+    c.leftJoin = () => c
+    c.where = () => c
+    c.orderBy = () => c
+    c.limit = async () => hoisted.selectQueue.shift() ?? []
+    c.then = (resolve: (v: unknown) => unknown) => resolve(hoisted.selectQueue.shift() ?? [])
+    return c
+  }
+  function insertChain(): Record<string, unknown> {
+    const c: Record<string, unknown> = {}
+    c.values = (v: unknown) => {
+      hoisted.insertedRows.push(v)
+      return c
+    }
+    c.onConflictDoNothing = async () => {}
+    c.then = (resolve: (v: unknown) => unknown) => resolve(undefined)
+    return c
+  }
+  return {
+    ...(await importOriginal<typeof import('@/lib/server/db')>()),
+    db: { select: () => chain(), insert: () => insertChain() },
+  }
+})
+
+vi.mock('@/lib/server/logger', () => {
+  const log = { trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+  const child = () => ({ ...log, child })
+  return { logger: { ...log, child }, createLogger: () => ({ ...log, child }) }
+})
+
+vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
+  ensurePrincipalForUser: hoisted.ensurePrincipalForUser,
+  createPrincipal: hoisted.createPrincipal,
+}))
+
+import {
+  addConversationParticipantByEmail,
+  listParticipantReplyRecipients,
+} from '../conversation-participant.service'
+
+const ACTOR = { principalId: 'principal_agent1' } as unknown as Actor
+const CONVERSATION = 'conversation_c1'
+const VISITOR = 'principal_visitor1'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  hoisted.selectQueue.length = 0
+  hoisted.insertedRows.length = 0
+  // Default conversation lookup: exists, owned by VISITOR.
+  hoisted.selectQueue.push([{ visitorPrincipalId: VISITOR }])
+})
+
+describe('addConversationParticipantByEmail', () => {
+  it('attaches an existing user account by address and records the participant', async () => {
+    hoisted.selectQueue.push([{ id: 'user_9' }]) // user lookup hits
+    hoisted.ensurePrincipalForUser.mockResolvedValue({
+      principal: { id: 'principal_user9' },
+      created: false,
+    })
+
+    const result = await addConversationParticipantByEmail(CONVERSATION, 'Pat@Example.com', ACTOR)
+
+    expect(hoisted.ensurePrincipalForUser).toHaveBeenCalledWith({
+      userId: 'user_9',
+      role: 'user',
+    })
+    expect(hoisted.createPrincipal).not.toHaveBeenCalled()
+    expect(hoisted.insertedRows).toEqual([
+      {
+        conversationId: CONVERSATION,
+        principalId: 'principal_user9',
+        addedByPrincipalId: 'principal_agent1',
+      },
+    ])
+    expect(result).toEqual({ principalId: 'principal_user9' })
+  })
+
+  it('reuses a lead minted from an earlier email instead of minting a second one', async () => {
+    hoisted.selectQueue.push([]) // no user account
+    hoisted.selectQueue.push([{ id: 'principal_lead1' }]) // lead lookup hits
+
+    const result = await addConversationParticipantByEmail(CONVERSATION, 'lead@example.com', ACTOR)
+
+    expect(hoisted.createPrincipal).not.toHaveBeenCalled()
+    expect(hoisted.insertedRows[0]).toMatchObject({ principalId: 'principal_lead1' })
+    expect(result).toEqual({ principalId: 'principal_lead1' })
+  })
+
+  it('mints a standalone lead for an address the workspace has never seen', async () => {
+    hoisted.selectQueue.push([]) // no user account
+    hoisted.selectQueue.push([]) // no existing lead
+    hoisted.createPrincipal.mockResolvedValue({ id: 'principal_newlead' })
+
+    const result = await addConversationParticipantByEmail(CONVERSATION, 'new@example.com', ACTOR)
+
+    expect(hoisted.createPrincipal).toHaveBeenCalledWith({
+      role: 'user',
+      type: 'anonymous',
+      contactEmail: 'new@example.com',
+    })
+    expect(hoisted.insertedRows[0]).toMatchObject({ principalId: 'principal_newlead' })
+    expect(result).toEqual({ principalId: 'principal_newlead' })
+  })
+
+  it('lowercases the address before resolving (display case never forks identity)', async () => {
+    hoisted.selectQueue.push([])
+    hoisted.selectQueue.push([])
+    hoisted.createPrincipal.mockResolvedValue({ id: 'principal_newlead' })
+
+    await addConversationParticipantByEmail(CONVERSATION, 'Mixed.Case@Example.COM', ACTOR)
+
+    expect(hoisted.createPrincipal).toHaveBeenCalledWith(
+      expect.objectContaining({ contactEmail: 'mixed.case@example.com' })
+    )
+  })
+
+  it("adding the conversation's own visitor is a no-op — no participant row", async () => {
+    hoisted.selectQueue.push([{ id: 'user_v' }])
+    hoisted.ensurePrincipalForUser.mockResolvedValue({
+      principal: { id: VISITOR },
+      created: false,
+    })
+
+    const result = await addConversationParticipantByEmail(
+      CONVERSATION,
+      'visitor@example.com',
+      ACTOR
+    )
+
+    expect(hoisted.insertedRows).toEqual([])
+    expect(result).toEqual({ principalId: VISITOR as PrincipalId })
+  })
+
+  it('throws when the conversation does not exist', async () => {
+    hoisted.selectQueue.length = 0
+    hoisted.selectQueue.push([]) // conversation lookup misses
+    await expect(
+      addConversationParticipantByEmail(CONVERSATION, 'x@example.com', ACTOR)
+    ).rejects.toThrow(/not found/i)
+  })
+})
+
+describe('listParticipantReplyRecipients', () => {
+  it('resolves deliverable addresses, skipping placeholders, the visitor, and the primary recipient', async () => {
+    hoisted.selectQueue.length = 0
+    hoisted.selectQueue.push([
+      // Identified account user — account email wins.
+      {
+        principalId: 'principal_p1',
+        type: 'user',
+        userEmail: 'pat@example.com',
+        contactEmail: null,
+      },
+      // Lead — contact email only.
+      {
+        principalId: 'principal_p2',
+        type: 'anonymous',
+        userEmail: null,
+        contactEmail: 'lead@example.com',
+      },
+      // Synthetic anonymous address — never deliverable, dropped.
+      {
+        principalId: 'principal_p3',
+        type: 'anonymous',
+        userEmail: 'temp-123@anon.quackback.io',
+        contactEmail: null,
+      },
+      // The conversation's own visitor, also a participant row — excluded.
+      {
+        principalId: VISITOR,
+        type: 'user',
+        userEmail: 'visitor@example.com',
+        contactEmail: null,
+      },
+      // Same address as the primary recipient — excluded (no double send).
+      {
+        principalId: 'principal_p4',
+        type: 'user',
+        userEmail: 'primary@example.com',
+        contactEmail: null,
+      },
+    ])
+
+    const recipients = await listParticipantReplyRecipients(
+      CONVERSATION as never,
+      VISITOR as never,
+      'primary@example.com'
+    )
+
+    expect(recipients).toEqual([
+      { principalId: 'principal_p1', email: 'pat@example.com' },
+      { principalId: 'principal_p2', email: 'lead@example.com' },
+    ])
+  })
+})

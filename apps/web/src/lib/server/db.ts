@@ -241,6 +241,7 @@ export {
   conversationTagsRelations,
   conversationTagAssignments,
   conversationTagAssignmentsRelations,
+  conversationParticipants,
   conversationMessageMentions,
   conversationMessageMentionsRelations,
   conversationMessageReactions,
