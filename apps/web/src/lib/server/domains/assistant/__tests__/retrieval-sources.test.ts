@@ -158,9 +158,9 @@ describe('kbKnowledgeSource', () => {
 })
 
 describe('resolveAssistantKnowledgeSnapshot', () => {
-  it('compiles the Agent map (public ceiling): helpCenter plus always-on web sources, no snippets, no team-only sources', () => {
+  it('compiles the Agent map (public ceiling): helpCenter plus always-on snippets and web sources, no team-only sources', () => {
     const snap = resolveAssistantKnowledgeSnapshot('agent', DEFAULT_ASSISTANT_CONFIG, 'public')
-    expect([...snap.sources].sort()).toEqual(['article', 'document', 'webpage'])
+    expect([...snap.sources].sort()).toEqual(['article', 'document', 'snippet', 'webpage'])
     expect(snap.status).toBe(false)
   })
 
@@ -174,10 +174,11 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
       status: true,
     }
     const snap = resolveAssistantKnowledgeSnapshot('agent', config, 'public')
-    expect([...snap.sources].sort()).toEqual(['article', 'changelog', 'post', 'webpage'])
+    expect([...snap.sources].sort()).toEqual(['article', 'changelog', 'post', 'snippet', 'webpage'])
     expect(snap.status).toBe(true)
-    // Snippets are never on a public turn.
-    expect(snap.sources.has('snippet')).toBe(false)
+    // Snippets are registered at every ceiling; the snippets source's own
+    // audience predicate restricts a public turn to public-audience rows.
+    expect(snap.sources.has('snippet')).toBe(true)
   })
 
   it('compiles the Copilot map (team ceiling): its enabled sources plus always-on snippets and web sources', () => {

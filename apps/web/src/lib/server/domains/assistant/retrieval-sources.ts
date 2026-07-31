@@ -160,21 +160,30 @@ export interface AssistantKnowledgeSnapshot {
  *
  * `helpCenter → article`, `posts → post`, `pastConversations → summary`
  * (copilot only), `tickets → ticket` (copilot only), `changelog → changelog`.
- * Snippets have no per-agent toggle — they are curated assistant content, so
- * the snippets source is registered whenever the ceiling is team (Copilot) and
- * never on the public Agent turn. Web sources (admin-crawled public pages)
- * likewise have no toggle: public by construction, so registered for both
- * agents at every ceiling — an empty table simply retrieves nothing.
+ * Snippets have no per-agent toggle — they are curated assistant content —
+ * so the snippets source is registered at every ceiling; its own audience
+ * predicate (snippetsVisibilityConditions) restricts a public-ceiling turn to
+ * public-audience rows, so a snippet marked public grounds customer-facing
+ * answers while team/internal snippets stay invisible there. Web sources
+ * (admin-crawled public pages) likewise have no toggle: public by
+ * construction, so registered for both agents at every ceiling — an empty
+ * table simply retrieves nothing.
  */
 export function resolveAssistantKnowledgeSnapshot(
   agent: AssistantAgentKind,
   config: AssistantConfig,
-  audience: ContentAudience
+  // The ceiling is enforced downstream — each source's own visibility
+  // predicate takes it at retrieve time — so the snapshot no longer reads it;
+  // the parameter stays because every call site already passes the resolved
+  // ceiling and a future ceiling-scoped source registration would use it.
+  _audience: ContentAudience
 ): AssistantKnowledgeSnapshot {
   const sources = new Set<AssistantCitationType>()
-  // Snippets: no per-agent toggle. Curated internal assistant content, so they
-  // are available at the team ceiling always and never on a public turn.
-  if (audience !== 'public') sources.add('snippet')
+  // Snippets: no per-agent toggle. Registered at every ceiling — the snippets
+  // source's own audience predicate restricts the turn to rows no more
+  // restricted than the ceiling, so a public turn only ever sees
+  // public-audience snippets and a workspace with none simply retrieves nothing.
+  sources.add('snippet')
   // Web sources: no per-agent toggle either. Admin-curated PUBLIC content
   // (adding the URL is the opt-in; no rows means nothing to retrieve), so
   // they serve both agents at every ceiling.

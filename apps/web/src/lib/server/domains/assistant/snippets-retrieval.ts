@@ -8,8 +8,9 @@
  * semantic (pgvector cosine over `assistantSnippets.embedding`) when a query
  * embedding is available; snippets have no tsvector column, so the fallback
  * is a plain keyword ILIKE over title/content rather than a ts_rank blend.
- * registered per the agent's config-v3 knowledge toggles (resolveAssistantKnowledgeSnapshot)
- * `resolveKnowledgeSources`), default off.
+ * The source is registered at every ceiling (it has no per-agent toggle — see
+ * `resolveKnowledgeSources`); the ceiling-scoped audience predicate below is
+ * what keeps team/internal snippets off customer-facing turns.
  */
 import { db, assistantSnippets, and, desc, eq, ilike, inArray, or, sql } from '@/lib/server/db'
 import { generateEmbedding } from '@/lib/server/domains/embeddings/embedding.service'
@@ -46,9 +47,8 @@ export interface RetrieveSnippetsOptions {
 
 /**
  * The audiences no more restricted than `ceiling`, in `ContentAudience` rank
- * order. A `public`-ceiling caller (a customer-facing surface, in principle
- * — snippets are only ever wired to team/internal-facing surfaces today) only
- * matches `public` rows; an `internal`-ceiling caller matches everything.
+ * order. A `public`-ceiling caller (a customer-facing surface) only matches
+ * `public` rows; an `internal`-ceiling caller matches everything.
  */
 function audiencesUpTo(ceiling: ContentAudience): ContentAudience[] {
   const ceilingRank = CONTENT_AUDIENCE_RANK[ceiling]
