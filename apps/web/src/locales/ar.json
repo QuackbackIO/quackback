@@ -111,6 +111,7 @@
   "widget.tickets.new.details": "التفاصيل",
   "widget.tickets.new.detailsPlaceholder": "أضف أي شيء يساعدنا على فهم المشكلة.",
   "widget.tickets.new.submit": "إنشاء تذكرة",
+  "widget.tickets.blockCard.filed": "تم إنشاء التذكرة — سنتابعها من هنا.",
   "widget.tickets.new.email": "البريد الإلكتروني",
   "widget.tickets.new.emailHint": "سنرسل إليك الردود والتحديثات المتعلقة بهذه التذكرة عبر البريد الإلكتروني.",
   "widget.tickets.new.emailPlaceholder": "you@example.com",

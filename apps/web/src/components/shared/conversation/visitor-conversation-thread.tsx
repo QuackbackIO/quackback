@@ -17,6 +17,7 @@ import {
   BlockCsatRow,
   BlockReplyTimeCaption,
 } from './block-affordance'
+import { BlockTicketForm } from './block-ticket-form'
 import { ConversationPresenceBadge } from './conversation-presence-badge'
 import { SystemEventNotice } from './system-event-notice'
 import { conversationAvailable } from '@/lib/shared/conversation/presence'
@@ -970,6 +971,17 @@ export function VisitorConversationThread({
             embedOpenMode={embedOpenMode}
           />
         )
+        // A send_ticket_form block's card rides below the intro bubble — a
+        // SEND kind with no blockState, so it renders ahead of the
+        // interactive-affordance gate below.
+        if (block?.kind === 'ticketForm') {
+          return (
+            <div className="flex flex-col items-start">
+              {bubble}
+              <BlockTicketForm getAuthHeaders={getAuthHeaders} />
+            </div>
+          )
+        }
         // `message` blocks (and every non-block message) are just the free
         // assistant bubble above — no affordance. Interactive kinds render
         // their affordance below it, gated by the pure-derived `blockState`.

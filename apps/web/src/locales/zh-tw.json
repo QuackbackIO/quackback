@@ -111,6 +111,7 @@
   "widget.tickets.new.details": "詳情",
   "widget.tickets.new.detailsPlaceholder": "補充任何有助於我們理解問題的資訊。",
   "widget.tickets.new.submit": "建立工單",
+  "widget.tickets.blockCard.filed": "工單已建立——我們會從這裡跟進。",
   "widget.tickets.new.email": "電子郵件",
   "widget.tickets.new.emailHint": "我們會透過電子郵件向你傳送此工單的回覆和更新。",
   "widget.tickets.new.emailPlaceholder": "you@example.com",

@@ -111,6 +111,7 @@
   "widget.tickets.new.details": "Подробности",
   "widget.tickets.new.detailsPlaceholder": "Добавьте всё, что поможет нам понять проблему.",
   "widget.tickets.new.submit": "Создать тикет",
+  "widget.tickets.blockCard.filed": "Тикет создан — мы будем отслеживать его отсюда.",
   "widget.tickets.new.email": "Электронная почта",
   "widget.tickets.new.emailHint": "Мы будем присылать ответы и обновления по этому тикету на электронную почту.",
   "widget.tickets.new.emailPlaceholder": "you@example.com",
