@@ -65,6 +65,7 @@ import {
   createEmailConversation,
   cleanupColdInboundLead,
 } from './conversation.email-cold-inbound'
+import { maybeAutoFileSpam } from './conversation.spam-filter'
 
 export type IngestInboundResult =
   | { status: 'ingested'; conversationId: ConversationId }
@@ -489,6 +490,15 @@ async function ingestColdInbound(parsed: ParsedInboundEmail): Promise<IngestInbo
     }
     throw error
   }
+
+  // Spam filter, after the thread exists so a filing has something to land
+  // on. Error-isolated inside (a classification failure leaves the thread in
+  // triage, never breaks ingestion); the workspace trust list bypasses it.
+  await maybeAutoFileSpam(conversationId, {
+    senderEmail,
+    subject: parsed.subject,
+    content,
+  })
   return { status: 'ingested', conversationId }
 }
 

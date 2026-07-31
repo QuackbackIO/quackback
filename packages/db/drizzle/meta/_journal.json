@@ -1527,6 +1527,13 @@
       "when": 1785600000000,
       "tag": "0232_changelog_featured_image",
       "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "7",
+      "when": 1785600600000,
+      "tag": "0239_spam_filter_config",
+      "breakpoints": true
     }
   ]
 }

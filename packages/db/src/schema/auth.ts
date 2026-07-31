@@ -398,6 +398,12 @@ export const settings = pgTable('settings', {
   /** Feature flags for experimental features (JSON) */
   featureFlags: text('feature_flags'),
   /**
+   * Inbound spam-filter configuration (JSON)
+   * Structure: { trustedSenders: string[] } — exact addresses or domains
+   * whose inbound messages bypass spam classification entirely.
+   */
+  spamFilterConfig: text('spam_filter_config'),
+  /**
    * Help center configuration (JSON)
    * Structure: { enabled, homepageTitle, homepageDescription, seo }
    */
