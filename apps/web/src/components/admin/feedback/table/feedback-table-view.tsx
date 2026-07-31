@@ -182,6 +182,7 @@ export function FeedbackTableView({
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
     { value: 'votes', label: 'Top Votes' },
+    { value: 'priority', label: 'Priority' },
   ]
 
   const headerContent = (

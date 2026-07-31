@@ -90,7 +90,7 @@ const listInboxPostsSchema = z.object({
   minComments: z.number().int().min(0).optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
+  sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().default('newest'),
   showDeleted: z.boolean().optional(),
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional().default(20),

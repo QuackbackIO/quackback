@@ -21,7 +21,7 @@ export interface PostViewFilters {
   minComments?: number
   hasDuplicates?: true
   showDeleted?: true
-  sort?: 'newest' | 'oldest' | 'votes'
+  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   dateFrom?: string
   dateTo?: string
   updatedBefore?: string

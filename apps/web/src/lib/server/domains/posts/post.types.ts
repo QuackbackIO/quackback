@@ -138,7 +138,7 @@ export interface InboxPostListParams {
   /** Filter by team response state */
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: Date
-  sort?: 'newest' | 'oldest' | 'votes'
+  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
   cursor?: string

@@ -25,7 +25,7 @@ export interface InboxFilters {
   updatedBefore?: string
   /** Only show posts with pending duplicate suggestions */
   hasDuplicates?: boolean
-  sort?: 'newest' | 'oldest' | 'votes'
+  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   showDeleted?: boolean
 }
 

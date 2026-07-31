@@ -19,7 +19,7 @@ import type { InboxFilters } from '@/lib/shared/types'
 
 /** The inbox sorts a view can pin; 'newest' is the inbox default and drops out
  *  of the stored JSON like every other default. */
-export const POST_VIEW_SORTS = ['newest', 'oldest', 'votes'] as const
+export const POST_VIEW_SORTS = ['newest', 'oldest', 'votes', 'priority'] as const
 export type PostViewSort = (typeof POST_VIEW_SORTS)[number]
 
 /**
