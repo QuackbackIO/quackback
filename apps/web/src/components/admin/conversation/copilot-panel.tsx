@@ -53,6 +53,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -76,6 +80,7 @@ import {
   type CopilotCitation,
   type CopilotFinalPayload,
   type CopilotProposedAction,
+  TRANSLATE_LANGUAGES,
   type TransformKind,
 } from '@/lib/shared/assistant/copilot-contract'
 import {
@@ -487,13 +492,14 @@ export function CopilotPanel({
   // keeps showing the newest draft), never overwriting a turn that changed
   // underneath the in-flight request. Rewrite is gated on the same
   // eligibility rule as insert, so a read-only answer stays read-only.
+  // `language` is the translate row's target; every other kind leaves it out.
   const handleRewrite = useCallback(
-    async (turn: CopilotTurn, transform: TransformKind) => {
+    async (turn: CopilotTurn, transform: TransformKind, language?: string) => {
       if (!insertableTurn(turn) || turn.rewriting) return
       const source = turn.answer
       setTurns((prev) => prev.map((t) => (t.id === turn.id ? { ...t, rewriting: true } : t)))
       try {
-        const result = await runTransform(transform, source)
+        const result = await runTransform(transform, source, language ? { language } : undefined)
         if (!result) return
         setTurns((prev) =>
           prev.map((t) =>
@@ -573,7 +579,7 @@ export function CopilotPanel({
                 key={turn.id}
                 turn={turn}
                 onAddToComposer={() => handleAddToComposer(turn)}
-                onRewrite={(transform) => void handleRewrite(turn, transform)}
+                onRewrite={(transform, language) => void handleRewrite(turn, transform, language)}
                 onUndoRewrite={() => handleUndoRewrite(turn)}
                 onRetry={() => retry(turn.id)}
                 onFeedback={(rating, reason) =>
@@ -673,8 +679,9 @@ function CopilotTurnView({
   turn: CopilotTurn
   onAddToComposer: () => void
   /** Run a Modify-menu rewrite over the streamed answer (insertable turns
-   *  only — the menu is withheld alongside the insert affordance). */
-  onRewrite: (transform: TransformKind) => void
+   *  only — the menu is withheld alongside the insert affordance). The
+   *  translate submenu passes its target language as the second argument. */
+  onRewrite: (transform: TransformKind, language?: string) => void
   /** Restore the streamed answer a rewrite replaced. */
   onUndoRewrite: () => void
   onRetry: () => void
@@ -741,6 +748,20 @@ function CopilotTurnView({
                             {row.label}
                           </DropdownMenuItem>
                         ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>Translate to</DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {TRANSLATE_LANGUAGES.map((lang) => (
+                              <DropdownMenuItem
+                                key={lang.value}
+                                onClick={() => onRewrite('translate', lang.value)}
+                              >
+                                {lang.label}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </>

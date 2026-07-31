@@ -15,10 +15,11 @@ import {
  * TanStack AI's AG-UI protocol: the transform kind and item ref ride
  * forwardedProps, the source text is the turn's user message, and the rewritten
  * text comes back on the terminal RUN_FINISHED.result ({ text }). Keeps its
- * external shape — `(kind, text) => Promise<string | null>` — so its call sites
- * are unchanged: abort resolves to null (no toast), a failure toasts and
- * resolves to null. A new call supersedes any run still in flight (and the last
- * run is aborted on unmount).
+ * external shape — `(kind, text, options?) => Promise<string | null>` — so its
+ * call sites are unchanged: abort resolves to null (no toast), a failure toasts
+ * and resolves to null. A new call supersedes any run still in flight (and the
+ * last run is aborted on unmount). `options.language` is the `translate`
+ * kind's target language; every other kind ignores it.
  */
 export function useCopilotTransform(item: InboxItemRef) {
   const activeRef = useRef<AguiRunHandle | null>(null)
@@ -26,7 +27,13 @@ export function useCopilotTransform(item: InboxItemRef) {
   useEffect(() => () => activeRef.current?.stop(), [])
 
   return useCallback(
-    (transform: TransformKind, text: string): Promise<string | null> => {
+    (
+      transform: TransformKind,
+      text: string,
+      /** The `translate` kind's target language (English name, see
+       *  TRANSLATE_LANGUAGES); ignored by every other kind. */
+      options?: { language?: string }
+    ): Promise<string | null> => {
       activeRef.current?.stop()
       return new Promise<string | null>((resolve) => {
         let finalText: string | null = null
@@ -34,7 +41,11 @@ export function useCopilotTransform(item: InboxItemRef) {
         const run = runAguiTurn({
           url: '/api/admin/assistant/transform',
           message: text,
-          forwardedProps: { ...itemRefBody(item), transform },
+          forwardedProps: {
+            ...itemRefBody(item),
+            transform,
+            ...(options?.language ? { language: options.language } : {}),
+          },
           onChunk: (chunk: StreamChunk) => {
             const c = chunk as { type: string; result?: unknown; message?: unknown }
             if (c.type === 'RUN_FINISHED' && c.result !== undefined) {
