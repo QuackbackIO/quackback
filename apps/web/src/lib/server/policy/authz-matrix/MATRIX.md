@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 617 surfaces
+### Server functions (`requireAuth`) — 622 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -176,6 +176,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::updatePortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::createPortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::findPortalUsersByEmailFn | people.manage |
+| `lib/server/functions/admin.ts`::listDuplicateUsersFn | people.view |
 | `lib/server/functions/admin.ts`::deletePortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::mergeLeadIntoUserFn | people.manage |
 | `lib/server/functions/admin.ts`::sendInvitationFn | member.manage |
@@ -361,7 +362,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation.ts`::removeMessageReactionFn | conversation.note |
 | `lib/server/functions/conversation.ts`::setMessageFlagFn | conversation.note |
 | `lib/server/functions/conversation.ts`::markConversationUnreadFromMessageFn | conversation.view |
-| `lib/server/functions/conversation.ts`::bulkUpdateConversationsFn | DYNAMIC (conversation.assign | conversation.set_tags | conversation.reply | conversation.set_status) |
+| `lib/server/functions/conversation.ts`::bulkUpdateConversationsFn | DYNAMIC (conversation.assign | conversation.set_tags | conversation.reply | conversation.set_status | conversation.manage) |
 | `lib/server/functions/conversation.ts`::addConversationParticipantFn | conversation.reply |
 | `lib/server/functions/conversation.ts`::removeConversationParticipantFn | conversation.reply |
 | `lib/server/functions/conversation.ts`::listConversationParticipantsFn | conversation.view |
@@ -471,6 +472,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/post-tags.ts`::createPostTagFn | tag.manage |
 | `lib/server/functions/post-tags.ts`::updatePostTagFn | tag.manage |
 | `lib/server/functions/post-tags.ts`::deletePostTagFn | tag.manage |
+| `lib/server/functions/post-tags.ts`::backfillAiTagsFn | tag.manage |
 | `lib/server/functions/post-views.ts`::listPostViewsFn | post.view_private |
 | `lib/server/functions/post-views.ts`::createPostViewFn | post.edit |
 | `lib/server/functions/post-views.ts`::deletePostViewFn | post.edit |
@@ -525,6 +527,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::deleteLogoFn | settings.branding |
 | `lib/server/functions/settings.ts`::saveHeaderLogoKeyFn | settings.branding |
 | `lib/server/functions/settings.ts`::deleteHeaderLogoFn | settings.branding |
+| `lib/server/functions/settings.ts`::savePortalOgImageKeyFn | settings.branding |
+| `lib/server/functions/settings.ts`::deletePortalOgImageFn | settings.branding |
 | `lib/server/functions/settings.ts`::saveFaviconKeyFn | settings.branding |
 | `lib/server/functions/settings.ts`::deleteFaviconFn | settings.branding |
 | `lib/server/functions/settings.ts`::updateHeaderDisplayModeFn | settings.branding |
@@ -696,6 +700,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/uploads.ts`::getLogoUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getFaviconUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getHeaderLogoUploadUrlFn | settings.manage |
+| `lib/server/functions/uploads.ts`::getPortalOgImageUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getWidgetHeroUploadUrlFn | settings.manage |
 | `lib/server/functions/uploads.ts`::getAvatarUploadUrlFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getAssistantAvatarUploadUrlFn | assistant.manage |
@@ -918,7 +923,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-184 of 909 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+185 of 915 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
@@ -998,6 +1003,7 @@ Each is expected to be intentionally public, a pre-auth flow, a signature-verifi
 | `lib/server/functions/settings-utils.ts`::fetchSettingsFaviconData | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsHeaderLogoData | server-fn |
 | `lib/server/functions/settings-utils.ts`::fetchSettingsLogoData | server-fn |
+| `lib/server/functions/settings-utils.ts`::fetchSettingsPortalOgImageData | server-fn |
 | `lib/server/functions/settings.ts`::fetchBrandingConfig | server-fn |
 | `lib/server/functions/settings.ts`::fetchCustomCssFn | server-fn |
 | `lib/server/functions/settings.ts`::fetchPublicAuthConfig | server-fn |
