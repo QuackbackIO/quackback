@@ -801,11 +801,11 @@ export const exportTicketTranscriptFn = createServerFn({ method: 'GET' })
   })
 
 // ---------------------------------------------------------------------------
-// Requester-facing — converged Messages surface support reads (the ticket
-// header card on the shared thread) + the watch bell below. No `ticket.*`
-// permission: everything requester-reachable gates on ownership in
-// requester.service. Customer ticket CREATION is agent-only — there is no
-// requester create/reply/list here; replies ride the conversation send path.
+// Requester-facing — the requester's own-ticket create (the widget New-Ticket
+// form) plus converged Messages surface support reads (the ticket header card
+// on the shared thread) and the watch bell below. No `ticket.*` permission:
+// everything requester-reachable gates on ownership in requester.service.
+// Replies ride the conversation send path.
 // ---------------------------------------------------------------------------
 
 /**
@@ -1012,7 +1012,7 @@ export const getConversationLinkedTicketFn = createServerFn({ method: 'GET' })
   })
 
 /**
- * The signed-in requester's own tickets with their current public stage (the
+ * The requester's own customer tickets with their current public stage (the
  * widget Tickets tab). Ownership-scoped in requester.service; flag-gated here
  * like the other requester reads.
  */
@@ -1022,6 +1022,65 @@ export const getMyTicketsFn = createServerFn({ method: 'GET' }).handler(async ()
   const { listMyTicketSummaries } = await import('@/lib/server/domains/tickets/requester.service')
   return { tickets: await listMyTicketSummaries(ctx.principal.id) }
 })
+
+const createMyTicketSchema = z.object({
+  title: z.string().min(1).max(300),
+  description: z.string().max(4000).optional(),
+  // Empty is valid for an image/embed-only opening message; the service re-validates.
+  descriptionJson: z.any().nullable().optional(),
+  attachments: z.array(ticketAttachmentSchema).optional(),
+  // The registry type filed under; absent = the intake default. Must be live +
+  // intake-visible (enforced server-side).
+  ticketTypeId: z.string().optional(),
+  // Custom intake-form answers; validated against the chosen type's form.
+  fieldValues: z.record(z.string(), z.unknown()).optional(),
+  // Email-capture tier: an anonymous visitor supplies the address the ticket's
+  // updates reach; captured overwrite-once onto their principal.
+  email: z.string().optional(),
+})
+
+/**
+ * The requester opens their own customer ticket (the widget New-Ticket form).
+ * Flag-gated like the other requester fns. Two identity tiers: a verified
+ * principal files directly; an anonymous principal must already carry a
+ * captured contact email or supply a plausible one here, captured
+ * overwrite-once — the service enforces the same contact-channel guard.
+ */
+export const createMyTicketFn = createServerFn({ method: 'POST' })
+  .validator(createMyTicketSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth()
+    await requireSupportTicketsEnabled()
+    const actor = await policyActorFromAuth(ctx)
+
+    // Capture the supplied email onto the (anonymous) principal first —
+    // overwrite-once, so it never replaces an address already on file. The
+    // service guard then finds a contact channel and lets the create through.
+    if (actor.principalType === 'anonymous' && data.email && actor.principalId) {
+      const { captureRequesterEmail, isPlausibleContactEmail } =
+        await import('@/lib/server/domains/tickets/requester.service')
+      if (isPlausibleContactEmail(data.email)) {
+        await captureRequesterEmail(actor.principalId, data.email)
+      }
+    }
+
+    // Resolve the type (explicit or the intake default) and validate the
+    // submitted answers server-side against its customer form (client inline
+    // validation and this share the one validator, so they can't drift). Keys
+    // not on the form or not visibleToCustomer are dropped.
+    const svc = await import('@/lib/server/domains/tickets/ticket-type-intake.service')
+    const intake = await svc.resolveIntakeCreate(data.ticketTypeId, data.fieldValues)
+
+    const { createMyTicket } = await import('@/lib/server/domains/tickets/requester.service')
+    return createMyTicket(actor, {
+      title: data.title,
+      description: data.description,
+      descriptionJson: data.descriptionJson ?? null,
+      attachments: data.attachments as ConversationAttachment[] | undefined,
+      ticketTypeId: intake.ticketTypeId,
+      customAttributes: intake.customAttributes,
+    })
+  })
 
 export const watchMyTicketFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string() }))

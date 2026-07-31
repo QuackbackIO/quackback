@@ -50,7 +50,9 @@ vi.mock('../ticket.webhooks', async (importOriginal) => ({
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   conversationMessages,
+  conversations,
   tickets,
+  ticketConversations,
   ticketStatuses,
   ticketSubscriptions,
   principal,
@@ -63,7 +65,10 @@ import {
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import {
   appendInboundTicketReply,
+  captureRequesterEmail,
+  createMyTicket,
   getMyTicketWatchStatus,
+  listMyTicketSummaries,
   watchMyTicket,
   unwatchMyTicket,
 } from '../requester.service'
@@ -402,5 +407,66 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
     expect((await getMyTicketWatchStatus(requesterActor(me), mine)).watching).toBe(true)
     await unwatchMyTicket(requesterActor(me), mine)
     expect((await getMyTicketWatchStatus(requesterActor(me), mine)).watching).toBe(false)
+  })
+
+  it('createMyTicket files a customer ticket with its backing conversation pair, listed for the requester', async () => {
+    await seedWorkspace()
+    await seedStagedStatuses()
+    const me = await seedPrincipal()
+
+    const created = await createMyTicket(requesterActor(me), {
+      title: '  Cannot export the report  ',
+      description: 'The export button spins forever.',
+    })
+
+    const row = await readTicketRow(created.id)
+    expect(row.type).toBe('customer')
+    expect(row.title).toBe('Cannot export the report')
+    expect(row.requesterPrincipalId).toBe(me)
+    // The requester projection strips the internal status/SLA fields.
+    expect(created.status).toBeNull()
+    expect(created.sla).toBeNull()
+
+    // The pair: one backing conversation, visitor = requester, linked 1:1.
+    const [pair] = await testDb
+      .select()
+      .from(ticketConversations)
+      .where(eq(ticketConversations.ticketId, created.id))
+    expect(pair.ticketType).toBe('customer')
+    const [conversation] = await testDb
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, pair.conversationId))
+    expect(conversation.visitorPrincipalId).toBe(me)
+
+    // The widget Tickets tab read lists it for the requester, newest first.
+    const mine = await listMyTicketSummaries(me)
+    expect(mine.map((t) => t.ticketId)).toContain(created.id)
+    // Another requester never sees it.
+    const other = await seedPrincipal()
+    expect(await listMyTicketSummaries(other)).toHaveLength(0)
+  })
+
+  it('createMyTicket rejects an anonymous requester with no contact channel until an email is captured', async () => {
+    await seedWorkspace()
+    await seedStagedStatuses()
+    const anonId = createId('principal') as PrincipalId
+    await testDb
+      .insert(principal)
+      .values({ id: anonId, role: 'member', type: 'anonymous', createdAt: new Date() })
+    const anonActor: Actor = { ...ANONYMOUS_ACTOR, principalId: anonId, principalType: 'anonymous' }
+
+    await expect(createMyTicket(anonActor, { title: 'Help' })).rejects.toThrow(
+      /email address is required/i
+    )
+
+    // Overwrite-once capture unlocks filing; a second capture can't replace it.
+    expect(await captureRequesterEmail(anonId, 'Visitor@Example.com')).toEqual({ captured: true })
+    const created = await createMyTicket(anonActor, { title: 'Help' })
+    const row = await readTicketRow(created.id)
+    expect(row.requesterPrincipalId).toBe(anonId)
+    const [p] = await testDb.select().from(principal).where(eq(principal.id, anonId))
+    expect(p.contactEmail).toBe('visitor@example.com')
+    expect(await captureRequesterEmail(anonId, 'other@example.com')).toEqual({ captured: false })
   })
 })
