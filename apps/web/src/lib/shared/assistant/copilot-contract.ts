@@ -135,9 +135,9 @@ export interface CopilotFinalPayload {
 
 /**
  * `my_tone` mines the teammate's own past replies for style excerpts.
- * `more_friendly`/`more_formal`/`more_concise` are shared by both entry
- * points; `expand`/`rephrase`/`fix_grammar` are Improve-menu only (there is no
- * "expand the answer" row on the answer card).
+ * `my_tone`/`more_friendly`/`more_formal`/`more_concise` are shared by both
+ * entry points; `expand`/`rephrase`/`fix_grammar` are Improve-menu only
+ * (there is no "expand the answer" row on the answer card).
  */
 export const TRANSFORM_KINDS = [
   'my_tone',
