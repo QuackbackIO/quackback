@@ -1011,6 +1011,18 @@ export const getConversationLinkedTicketFn = createServerFn({ method: 'GET' })
     )
   })
 
+/**
+ * The signed-in requester's own tickets with their current public stage (the
+ * widget Tickets tab). Ownership-scoped in requester.service; flag-gated here
+ * like the other requester reads.
+ */
+export const getMyTicketsFn = createServerFn({ method: 'GET' }).handler(async () => {
+  const ctx = await requireAuth()
+  await requireSupportTicketsEnabled()
+  const { listMyTicketSummaries } = await import('@/lib/server/domains/tickets/requester.service')
+  return { tickets: await listMyTicketSummaries(ctx.principal.id) }
+})
+
 export const watchMyTicketFn = createServerFn({ method: 'POST' })
   .validator(z.object({ ticketId: z.string() }))
   .handler(async ({ data }) => {
