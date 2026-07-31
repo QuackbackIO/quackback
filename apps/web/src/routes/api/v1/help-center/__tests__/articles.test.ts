@@ -109,6 +109,7 @@ const mockArticle: HelpCenterArticleWithCategory = {
   content: 'Follow these steps...',
   contentJson: null,
   principalId: 'principal_1' as PrincipalId,
+  segmentIds: [],
   publishedAt: new Date('2026-01-15'),
   viewCount: 42,
   helpfulCount: 10,

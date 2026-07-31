@@ -65,6 +65,8 @@ export interface HelpCenterArticle {
   content: string
   contentJson: TiptapContent | null
   principalId: PrincipalId
+  /** Segments the article is restricted to; [] = everyone. */
+  segmentIds: string[]
   publishedAt: Date | null
   viewCount: number
   helpfulCount: number
