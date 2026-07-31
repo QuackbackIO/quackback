@@ -102,6 +102,9 @@ const createPublicPostSchema = z.object({
   content: z.string().max(10000).optional().default(''),
   contentJson: tiptapContentSchema.optional(),
   metadata: z.record(z.string(), z.string()).optional(),
+  // Answers to the board's configured custom fields; validated against the
+  // board's declaration inside createPost (unknown keys are dropped there).
+  customFields: z.record(z.string(), z.unknown()).optional(),
 })
 
 const getPublicRoadmapPostsSchema = z.object({
@@ -429,7 +432,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
       throw new Error('Portal access required')
     }
     const ctx = await requireAuth()
-    const { boardId: boardIdRaw, title, content, contentJson, metadata } = data
+    const { boardId: boardIdRaw, title, content, contentJson, metadata, customFields } = data
     const boardId = boardIdRaw as BoardId
 
     // Resolve the actor first so getPublicBoardById can apply
@@ -488,6 +491,7 @@ export const createPublicPostFn = createServerFn({ method: 'POST' })
         contentJson: contentJson ? sanitizeTiptapContent(contentJson) : undefined,
         statusId: defaultStatus?.id,
         widgetMetadata: metadata,
+        customFields,
       },
       author,
       { headers: getRequestHeaders() }

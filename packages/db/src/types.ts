@@ -69,7 +69,37 @@ export type NewBoard = InferInsertModel<typeof boards>
 // Board settings (stored in boards.settings JSONB column)
 export interface BoardSettings {
   roadmapStatusIds?: PostStatusId[] // Status IDs to show on roadmap
+  customFields?: BoardCustomField[] // Extra intake fields the submission form renders
 }
+
+/** The input controls a board custom field can render as on the public
+ *  submission form. Mirrors the ticket intake-form field types. */
+export const BOARD_CUSTOM_FIELD_TYPES = [
+  'text',
+  'long_text',
+  'number',
+  'select',
+  'date',
+  'checkbox',
+] as const
+export type BoardCustomFieldType = (typeof BOARD_CUSTOM_FIELD_TYPES)[number]
+
+/**
+ * One configurable field on a board's public submission form. Validated
+ * values land in the post's `customFieldValues` JSONB column, keyed by
+ * `key`. `options` is only meaningful for `select`.
+ */
+export interface BoardCustomField {
+  key: string
+  label: string
+  type: BoardCustomFieldType
+  required: boolean
+  options?: string[]
+}
+
+/** Validated custom-field answers as stored on a post row. Every field type
+ *  coerces to a JSON scalar, so the map is always wire-serializable. */
+export type CustomFieldValues = Record<string, string | number | boolean>
 
 // ----------------------------------------------------------------------
 // Per-action access tiers (View+Vote / Comment / Submit) and per-board

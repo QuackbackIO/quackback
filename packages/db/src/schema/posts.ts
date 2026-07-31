@@ -19,7 +19,7 @@ import { postStatuses } from './statuses'
 import { postExternalLinks } from './external-links'
 import { principal } from './auth'
 import { MODERATION_STATES } from '../types'
-import type { TiptapContent } from '../types'
+import type { CustomFieldValues, TiptapContent } from '../types'
 
 // Custom tsvector type for full-text search
 const tsvector = customType<{ data: string }>({
@@ -90,6 +90,10 @@ export const posts = pgTable(
       .notNull(),
     // Key-value metadata attached by the widget SDK
     widgetMetadata: jsonb('widget_metadata').$type<Record<string, string>>(),
+    // Validated answers to the board's configured custom fields
+    // (boards.settings.customFields), keyed by field key. Null when the board
+    // configures no fields.
+    customFieldValues: jsonb('custom_field_values').$type<CustomFieldValues>(),
     // Merge/deduplication: points to the canonical post this was merged into
     canonicalPostId: typeIdColumnNullable('post')('canonical_post_id'),
     mergedAt: timestamp('merged_at', { withTimezone: true }),

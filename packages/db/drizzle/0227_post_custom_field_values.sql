@@ -1,0 +1,11 @@
+-- Per-post answers to a board's configured custom intake fields.
+--
+-- A board can declare extra fields in boards.settings.customFields (key,
+-- label, type, required, options); the values a submitter sends are validated
+-- against that declaration and stored here, keyed by field key, so triage can
+-- read them without re-deriving the board config.
+--
+-- Nullable and additive: posts on boards with no configured fields keep null,
+-- so no existing row changes meaning. No index — values are read with the
+-- post row, never filtered on.
+ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "custom_field_values" jsonb;
