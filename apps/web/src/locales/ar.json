@@ -117,6 +117,7 @@
   "widget.tickets.new.detailsTooLong": "التفاصيل طويلة جدًا (بحد أقصى {max} حرفًا).",
   "widget.tickets.new.selectPlaceholder": "اختر…",
   "widget.tickets.new.type": "النوع",
+  "widget.tickets.recent": "التذاكر الأخيرة",
   "widget.messages.emptyHint": "أسئلة أو ملاحظات؟ نحن هنا للمساعدة.",
   "widget.messages.resumeAria": "فتح المحادثة مع {name}",
   "widget.helpDetail.loading": "جارٍ التحميل...",

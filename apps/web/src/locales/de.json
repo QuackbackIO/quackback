@@ -117,6 +117,7 @@
   "widget.tickets.new.detailsTooLong": "Details sind zu lang (max. {max} Zeichen).",
   "widget.tickets.new.selectPlaceholder": "Auswählen…",
   "widget.tickets.new.type": "Typ",
+  "widget.tickets.recent": "Aktuelle Tickets",
   "widget.messages.emptyHint": "Fragen oder Feedback? Wir helfen gerne.",
   "widget.messages.resumeAria": "Unterhaltung mit {name} öffnen",
   "widget.helpDetail.loading": "Wird geladen...",
