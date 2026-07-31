@@ -33,6 +33,8 @@ export interface CreateChangelogInput {
   /** Publish state */
   publishState: PublishState
   displayDate?: Date | null
+  /** Hero image URL rendered at the top of the public entry detail page */
+  featuredImageUrl?: string | null
   /**
    * Whether publishing this entry should dispatch the subscriber
    * notification. Defaults to true; false stamps `notifiedAt` without
@@ -56,6 +58,8 @@ export interface UpdateChangelogInput {
   /** Publish state (if changing) */
   publishState?: PublishState
   displayDate?: Date | null
+  /** Hero image URL (null clears it) */
+  featuredImageUrl?: string | null
   /** See {@link CreateChangelogInput.notify}. */
   notify?: boolean
 }
@@ -87,6 +91,8 @@ export interface ChangelogEntryWithDetails {
   principalId: PrincipalId | null
   publishedAt: Date | null
   displayDate: Date | null
+  /** Hero image URL rendered at the top of the public entry detail page */
+  featuredImageUrl: string | null
   createdAt: Date
   updatedAt: Date
   /** Author information - only shown in admin views */
@@ -151,6 +157,8 @@ export interface PublicChangelogEntry {
   content: string
   contentJson: TiptapContent | null
   publishedAt: Date
+  /** Hero image URL rendered at the top of the public entry detail page */
+  featuredImageUrl: string | null
   linkedPosts: PublicChangelogLinkedPost[]
   categories: ChangelogCategorySummary[]
 }

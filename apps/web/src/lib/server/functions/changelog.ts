@@ -69,6 +69,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
         categoryIds: data.categoryIds as ChangelogCategoryId[] | undefined,
         publishState: data.publishState as PublishState,
         ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
+        ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
         notify: data.notify,
       },
       {
@@ -103,6 +104,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
       categoryIds: data.categoryIds as ChangelogCategoryId[] | undefined,
       publishState: data.publishState as PublishState | undefined,
       ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
+      ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
       notify: data.notify,
     })
 

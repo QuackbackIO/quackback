@@ -32,6 +32,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [notify, setNotify] = useState(true)
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false)
   const createChangelogMutation = useCreateChangelog()
 
@@ -78,6 +79,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     setNotify(true)
     setPublishState({ type: 'draft' })
     setDisplayDateOverride(undefined)
+    setFeaturedImageUrl(null)
     createChangelogMutation.reset()
   }
 
@@ -93,6 +95,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         notify,
         ...(publishState.type === 'published' &&
           displayDateOverride !== undefined && { displayDate: displayDateOverride }),
+        ...(featuredImageUrl !== null && { featuredImageUrl }),
       },
       {
         onSuccess: () => {
@@ -173,6 +176,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                 displayDateValue={displayDateOverride}
                 onDisplayDateChange={handleDisplayDateChange}
                 onDisplayDateClear={handleDisplayDateClear}
+                featuredImageUrl={featuredImageUrl}
+                onFeaturedImageChange={setFeaturedImageUrl}
               />
             </div>
 
@@ -207,6 +212,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                       displayDateValue={displayDateOverride}
                       onDisplayDateChange={handleDisplayDateChange}
                       onDisplayDateClear={handleDisplayDateClear}
+                      featuredImageUrl={featuredImageUrl}
+                      onFeaturedImageChange={setFeaturedImageUrl}
                     />
                   </div>
                 </SheetContent>

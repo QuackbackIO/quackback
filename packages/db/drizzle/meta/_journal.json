@@ -1492,6 +1492,13 @@
       "when": 1785506100000,
       "tag": "0231_posts_pinned_at",
       "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "7",
+      "when": 1785600000000,
+      "tag": "0232_changelog_featured_image",
+      "breakpoints": true
     }
   ]
 }

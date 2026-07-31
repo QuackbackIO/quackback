@@ -21,6 +21,7 @@ import { getWidgetAuthHeaders, generateOneTimeToken } from '@/lib/client/widget-
 import { sendToHost } from '@/lib/client/widget-bridge'
 import { useWidgetAuth } from './widget-auth-provider'
 import { useMessengerUnread } from './use-messenger-unread'
+import { useChangelogUnread } from './use-changelog-unread'
 
 import { type WidgetTab, type EnabledTabs, visibleTabs } from './widget-nav'
 export type { WidgetTab }
@@ -131,11 +132,15 @@ export function WidgetShell({
   // Total unread across all the visitor's conversations, for the Messages tab
   // badge (only fetched when that tab is actually shown).
   const messengerUnread = useMessengerUnread(enabledTabs.messages ?? false)
-  // Mirror it to the host so the floating launcher shows the same badge while
-  // the widget is closed (the iframe keeps polling even when hidden).
+  // Newly published changelog entries badge the launcher until the visitor
+  // opens the changelog surface (which advances their seen marker).
+  const { unread: changelogUnread } = useChangelogUnread(enabledTabs.changelog ?? false)
+  // Mirror the combined total to the host so the floating launcher shows the
+  // same badge while the widget is closed (the iframe keeps polling even when
+  // hidden).
   useEffect(() => {
-    sendToHost({ type: 'quackback:unread', count: messengerUnread })
-  }, [messengerUnread])
+    sendToHost({ type: 'quackback:unread', count: messengerUnread + changelogUnread })
+  }, [messengerUnread, changelogUnread])
   const reduceMotion = useReducedMotion()
   // When the bar was hidden for an EXPANDED view, its return waits for the
   // host panel's shrink transition (~520ms) before fading in; returning from

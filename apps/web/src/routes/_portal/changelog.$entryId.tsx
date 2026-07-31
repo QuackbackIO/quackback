@@ -66,6 +66,7 @@ function ChangelogEntryPage() {
           content={entry.content}
           contentJson={entry.contentJson}
           publishedAt={entry.publishedAt}
+          featuredImageUrl={entry.featuredImageUrl}
           linkedPosts={entry.linkedPosts}
           categories={entry.categories}
         />

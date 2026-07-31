@@ -162,6 +162,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       principalId: entry.principalId,
       publishedAt: entry.publishedAt,
       displayDate: entry.displayDate,
+      featuredImageUrl: entry.featuredImageUrl,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       viewCount: entry.viewCount,

@@ -117,6 +117,7 @@ export async function createChangelog(
       principalId: author.principalId,
       publishedAt,
       ...(displayDate != null && { displayDate }),
+      ...(input.featuredImageUrl != null && { featuredImageUrl: input.featuredImageUrl }),
     })
     .returning()
 
@@ -220,6 +221,11 @@ export async function updateChangelog(
   // Handle publish state change
   if (input.publishState !== undefined) {
     updateData.publishedAt = getPublishedAtFromState(input.publishState)
+  }
+
+  // featuredImageUrl: undefined leaves it, null clears it, a string replaces it.
+  if (input.featuredImageUrl !== undefined) {
+    updateData.featuredImageUrl = input.featuredImageUrl
   }
 
   // Update the entry
@@ -403,6 +409,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     principalId: entry.principalId,
     publishedAt: entry.publishedAt,
     displayDate: entry.displayDate,
+    featuredImageUrl: entry.featuredImageUrl,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     viewCount: entry.viewCount,

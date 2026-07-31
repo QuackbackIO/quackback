@@ -27,6 +27,8 @@ export const createChangelogSchema = z.object({
   categoryIds: z.array(z.string()).optional(),
   publishState: publishStateSchema,
   displayDate: z.coerce.date().nullable().optional(),
+  /** Hero image URL shown atop the public entry detail page; null clears it. */
+  featuredImageUrl: z.string().max(2048).nullable().optional(),
   /** Publish-time "Send email to subscribers" checkbox; default true. */
   notify: z.boolean().optional(),
 })
@@ -43,6 +45,8 @@ export const updateChangelogSchema = z.object({
   categoryIds: z.array(z.string()).optional(),
   publishState: publishStateSchema.optional(),
   displayDate: z.coerce.date().nullable().optional(),
+  /** Hero image URL shown atop the public entry detail page; null clears it. */
+  featuredImageUrl: z.string().max(2048).nullable().optional(),
   /** Publish-time "Send email to subscribers" checkbox; default true. */
   notify: z.boolean().optional(),
 })
