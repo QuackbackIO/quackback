@@ -115,6 +115,7 @@ const updatePostSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().max(10000).optional(),
   contentJson: tiptapContentSchema.optional(),
+  pinned: z.boolean().optional(),
 })
 
 const setPostOwnerSchema = z.object({
@@ -409,6 +410,7 @@ export const updatePostFn = createServerFn({ method: 'POST' })
         title: data.title,
         content: data.content,
         contentJson: data.contentJson ? sanitizeTiptapContent(data.contentJson) : undefined,
+        pinned: data.pinned,
       },
       {
         principalId: auth.principal.id,

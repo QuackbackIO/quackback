@@ -423,6 +423,9 @@ export async function updatePost(
     // the invariant holds no matter which caller supplies the timestamp.
     updateData.eta = input.eta ? startOfUtcMonth(input.eta) : null
   }
+  if (input.pinned !== undefined) {
+    updateData.pinnedAt = input.pinned ? new Date() : null
+  }
 
   // Update the post only if there's data to update
   let updatedPost: Post

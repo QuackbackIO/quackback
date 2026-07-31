@@ -135,6 +135,25 @@ describe('post.service updatePost', () => {
     ).rejects.toThrow('Actor principal ID is required')
   })
 
+  it('maps pinned=true to pinned_at and pinned=false to null', async () => {
+    const { updatePost } = await import('../post.service')
+
+    await updatePost(
+      'post_123' as PostId,
+      { pinned: true },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ pinnedAt: expect.any(Date) }))
+
+    updateSet.mockClear()
+    await updatePost(
+      'post_123' as PostId,
+      { pinned: false },
+      { principalId: 'principal_actor' as PrincipalId }
+    )
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ pinnedAt: null }))
+  })
+
   it('records status, owner, and tag activity for API-style updates', async () => {
     const { updatePost } = await import('../post.service')
 

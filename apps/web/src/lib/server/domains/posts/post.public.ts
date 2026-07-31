@@ -70,6 +70,15 @@ function getPostSortOrder(sort: SortOrder) {
   }
 }
 
+/**
+ * Pinned posts lead the board under every sort; among themselves the most
+ * recently pinned is first. NULLS LAST is load-bearing: Postgres DESC
+ * otherwise floats the unpinned NULL rows above the pinned ones.
+ */
+function pinnedFirstThen(sort: SortOrder) {
+  return [sql`${posts.pinnedAt} DESC NULLS LAST`, getPostSortOrder(sort)]
+}
+
 export interface PostWithVotesAndAvatars {
   id: PostId
   title: string
@@ -80,6 +89,8 @@ export interface PostWithVotesAndAvatars {
   authorName: string | null
   principalId: string
   createdAt: Date
+  /** Set when a team member pinned the post to lead its board listing. */
+  pinnedAt: Date | null
   tags: Array<{ id: PostTagId; name: string; color: string }>
   board: { id: string; name: string; slug: string }
   hasVoted: boolean
@@ -213,7 +224,7 @@ export async function listPublicPostsWithVotesAndAvatars(
   const { sort = 'top', page = 1, limit = 20, principalId, actor = ANONYMOUS_ACTOR } = params
   const offset = (page - 1) * limit
   const conditions = buildPostFilterConditions(params, actor)
-  const orderBy = getPostSortOrder(sort)
+  const orderBy = pinnedFirstThen(sort)
 
   // Only authenticated users can vote, so we only check principal_id
   // Anonymous users see vote counts but hasVoted is always false
@@ -236,6 +247,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       commentCount: posts.commentCount,
       principalId: posts.principalId,
       createdAt: posts.createdAt,
+      pinnedAt: posts.pinnedAt,
       boardId: boards.id,
       boardName: boards.name,
       boardSlug: boards.slug,
@@ -244,7 +256,7 @@ export async function listPublicPostsWithVotesAndAvatars(
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(and(...conditions))
-    .orderBy(orderBy)
+    .orderBy(...orderBy)
     .limit(limit + 1)
     .offset(offset)
 
@@ -310,6 +322,7 @@ export async function listPublicPostsWithVotesAndAvatars(
       authorName: author?.displayName ?? null,
       principalId: post.principalId,
       createdAt: post.createdAt,
+      pinnedAt: post.pinnedAt,
       tags: tagsByPost.get(post.id) ?? [],
       board: { id: post.boardId, name: post.boardName, slug: post.boardSlug },
       hasVoted: post.hasVoted ?? false,
@@ -326,7 +339,7 @@ export async function listPublicPosts(
   const { sort = 'top', page = 1, limit = 20, actor = ANONYMOUS_ACTOR } = params
   const offset = (page - 1) * limit
   const conditions = buildPostFilterConditions(params, actor)
-  const orderBy = getPostSortOrder(sort)
+  const orderBy = pinnedFirstThen(sort)
 
   const postsResult = await db
     .select({
@@ -356,7 +369,7 @@ export async function listPublicPosts(
     .from(posts)
     .innerJoin(boards, eq(posts.boardId, boards.id))
     .where(and(...conditions))
-    .orderBy(orderBy)
+    .orderBy(...orderBy)
     .limit(limit + 1)
     .offset(offset)
 

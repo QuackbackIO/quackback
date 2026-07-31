@@ -72,6 +72,9 @@ export const posts = pgTable(
     // Pinned comment as official response
     // References a team member's root-level comment that serves as the official response
     pinnedCommentId: typeIdColumnNullable('post_comment')('pinned_comment_id'),
+    // Board pinning: set posts lead their public board listing under every
+    // sort, most recently pinned first. Null means unpinned.
+    pinnedAt: timestamp('pinned_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     // Soft delete support
