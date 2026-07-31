@@ -9,9 +9,10 @@
  *   - an 'agent' message by Quinn    → 'assistant' (matched on the service
  *                                      principal id)
  *   - an 'agent' message by anyone   → 'human_agent'
- * System notices and text-less messages are not turns and are skipped; internal
- * notes and soft-deleted rows are filtered in SQL, so they never reach the
- * mapper (and no longer consume window slots).
+ * System notices are not turns and are skipped; text-less messages are skipped
+ * UNLESS they carry image attachments (a screenshot-only customer message is a
+ * turn — see vision.ts). Internal notes and soft-deleted rows are filtered in
+ * SQL, so they never reach the mapper (and no longer consume window slots).
  */
 import type { PrincipalId, ConversationId, TicketId } from '@quackback/ids'
 import {
@@ -47,10 +48,16 @@ export function mapRowsToThreadMessages(
     // System notices are status records, not turns.
     if (m.senderType === 'system') continue
     const content = m.content?.trim()
-    // Image/embed-only messages carry no text for the model to reason over.
-    if (!content) continue
+    // Image attachments make a text-less message a turn (Quinn vision); any
+    // other text-less message (embed-only) carries nothing for the model.
+    const images = (m.attachments ?? []).filter((a) => a.contentType.startsWith('image/'))
+    if (!content && images.length === 0) continue
     if (m.senderType === 'visitor') {
-      out.push({ sender: 'customer', content })
+      out.push({
+        sender: 'customer',
+        content,
+        ...(images.length > 0 ? { attachments: images } : {}),
+      })
     } else {
       out.push({
         sender: m.author?.principalId === assistantPrincipalId ? 'assistant' : 'human_agent',
