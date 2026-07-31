@@ -267,7 +267,7 @@ export interface AssistantToolContext {
    * attach a claim, approval, or denial to.
    * 'execute' (customer_support real turns) runs the write autonomously,
    * after its permission check — autonomous execution, no teammate approval
-   * teammate approval in the loop.
+   * in the loop.
    * 'propose' (P2-C.4, the copilot Q&A surface) resolves every write to a
    * pending-action proposal. From a Copilot chat the proposal card itself is
    * the confirmation UX, so nothing fires without a human decision. Quinn must

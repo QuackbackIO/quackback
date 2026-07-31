@@ -43,8 +43,7 @@ export const ASSUMED_RESOLUTION_INACTIVITY_MINUTES = 10
 
 /**
  * The Quinn-inbox buckets, mapped to involvement lifecycle statuses — the
- * outcome vocabulary the "Quinn AI" inbox view filters and counts by (mirrors
- * Fin's Resolved / Escalated / Pending folder views).
+ * outcome vocabulary the "Quinn AI" inbox view filters and counts by.
  */
 export const AI_INBOX_BUCKETS = {
   resolved: ['resolved_confirmed', 'resolved_assumed'],

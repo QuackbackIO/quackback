@@ -592,7 +592,7 @@ async function cascadeTrackerStatus(
  *  module doc): on a linked customer pair the stage event re-parents to the
  *  CONVERSATION via the conversation domain's own `emitSystemMessage`, so it
  *  renders as the in-thread status event on the shared thread and publishes
- *  state-change-in-thread) and publishes on the conversation channel.
+ *  on the conversation channel.
  *  Back-office/tracker tickets and standalone customer tickets stay
  *  ticket-parented (the resolve call is customer-link-scoped). */
 async function postTicketStatusEvent(ticketId: TicketId, stageLabel: string | null): Promise<void> {

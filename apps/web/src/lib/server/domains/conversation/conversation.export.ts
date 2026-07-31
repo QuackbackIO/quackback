@@ -1,6 +1,7 @@
 /**
  * Conversation export (Imports & exports hub §I3): full message content as
- * NDJSON — an OSS differentiator versus Intercom's paid full-content export.
+ * NDJSON — an OSS differentiator versus tools that gate full-content export
+ * behind a paid tier.
  * Capped like the posts/companies CSV exports so a very large workspace
  * can't exhaust memory building the response.
  */

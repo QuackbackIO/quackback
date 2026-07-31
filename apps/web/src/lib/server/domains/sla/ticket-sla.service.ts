@@ -34,7 +34,7 @@
  * NOT re-arm the clock (the stamp's resolvedAt is never cleared), so a
  * reopened ticket can't breach again or re-report — reopenedCount on the
  * ticket row stays the quality signal for reopen churn — time to resolution
- * "time to resolution is measured to first close" semantics.
+ * is measured to first close.
  */
 import { db, and, eq, isNull, sql, tickets, ticketStatuses, slaEvents } from '@/lib/server/db'
 import type { SlaPolicyId, TicketId } from '@quackback/ids'

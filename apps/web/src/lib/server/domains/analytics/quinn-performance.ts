@@ -1,5 +1,5 @@
 /**
- * Quinn performance summary — the "Analyze" headline for the AI assistant
+ * Quinn performance summary — the "Analyze" headline for the AI assistant:
  * involvement, resolution, and escalation
  * rates, the confirmed-vs-assumed resolution split, and actions taken via
  * tool calls, over a date range. Involvement volume is low (like CSAT — see

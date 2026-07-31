@@ -1,9 +1,9 @@
 /**
  * "Draft descriptions" authoring assist (AI-ATTRIBUTES-PARITY-SPEC.md Phase
  * 3): one chat call that turns an attribute label + option labels into
- * applies-if/does-not-apply-if descriptions — the exact template both
+ * applies-if/does-not-apply-if descriptions — the exact template competing
  * products' authoring docs tell admins to write themselves with an external
- * with an external LLM. Mocking idiom mirrors ai-classification.service.test.ts.
+ * LLM. Mocking idiom mirrors ai-classification.service.test.ts.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 

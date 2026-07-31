@@ -63,7 +63,7 @@ export function StageChip({
 
 /** The received -> in_progress -> awaiting_requester -> resolved progress bar,
  *  with every stage labeled under its segment (the full progression stays
- *  full progression, not just the current stop). Mobile keeps only the current
+ *  visible, not just the current stop). Mobile keeps only the current
  *  label — four labels don't fit a phone row. B22: a closed ticket with no
  *  stage slot shows a single quiet "Closed" bar instead of no tracker. */
 export function StageTracker({

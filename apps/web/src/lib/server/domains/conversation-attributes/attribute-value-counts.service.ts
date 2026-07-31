@@ -2,7 +2,7 @@
  * Per-value detection counts (AI-ATTRIBUTES-PARITY-SPEC.md Phase 3
  * monitoring): "how many conversations, created in the last N days, carry
  * each option value of this attribute" — the lightweight per-attribute
- * breakdown both competitor references show on their equivalent screens
+ * breakdown the competitor references show on their equivalent
  * training/reporting screens. Not wired to the
  * analytics materialized-view pipeline (that's a heavier, hourly-refreshed
  * mechanism for cross-entity dashboards); this is a cheap, live, single-

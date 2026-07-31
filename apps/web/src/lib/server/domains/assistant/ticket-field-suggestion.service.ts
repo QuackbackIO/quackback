@@ -8,8 +8,8 @@
  * pre-fill the dialog's form marked "✨ suggested", every field stays
  * editable, and the ticket persists only through the dialog's normal submit
  * (`createTicketFn`). Competing assistants auto-apply on conversion; ours
- * conversion; ours never does — suggestion-only stays even when auto-apply
- * gets tempting (second opinion, design doc ruling 5).
+ * never does — suggestion-only stays even when auto-apply gets tempting
+ * (second opinion, design doc ruling 5).
  *
  * TWO VALIDATION GATES stand between the model and a stored value, because
  * the grounding thread is attacker-reachable text (prompt injection via

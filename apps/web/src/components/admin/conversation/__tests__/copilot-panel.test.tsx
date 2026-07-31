@@ -683,14 +683,16 @@ describe('<CopilotPanel> empty state', () => {
   })
 
   it('keeps the teammate-facing Copilot identity separate from the customer assistant', async () => {
-    hoisted.widgetConfig = { messenger: { assistant: { name: 'Fin', avatarUrl: '' } } }
+    hoisted.widgetConfig = { messenger: { assistant: { name: 'Scout', avatarUrl: '' } } }
     vi.stubGlobal('fetch', vi.fn())
     renderPanel()
 
     expect(
       await screen.findByText('Ask Copilot anything about this conversation.')
     ).toBeInTheDocument()
-    expect(screen.queryByText('Ask Fin anything about this conversation.')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Ask Scout anything about this conversation.')
+    ).not.toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 })
