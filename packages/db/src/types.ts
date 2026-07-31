@@ -893,6 +893,11 @@ export interface ConversationMessageMetadata {
    *  A note carrying it is never carried again, so a copy that finds its way
    *  back onto a ticket thread stops there. */
   crossPostedFromTicketId?: TicketId
+  /** The tracker whose reply-all this message is a fanned copy of, set on each
+   *  copy a tracker reply lands on the customer tickets it tracks. A reply
+   *  carrying it never fans again, so a copy that finds its way back onto a
+   *  tracker thread stops there. */
+  repliedAllFromTicketId?: TicketId
 }
 
 /** See `ConversationMessageMetadata.translatedFrom`. */
