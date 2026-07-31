@@ -58,7 +58,7 @@ const { runAssistantTurn } = await import('../assistant.runtime')
 const { isVisionCapableModel } = await import('@/lib/server/domains/ai/models')
 
 describe.runIf(liveConfigured)('quinn vision (live endpoint)', () => {
-  it('describes the contents of a screenshot a customer sent', { timeout: 240_000 }, async () => {
+  it('describes the contents of a screenshot a customer sent', { timeout: 900_000 }, async () => {
     if (!(await endpointReachable(AI_BASE!))) {
       console.warn(`[vision.live] endpoint ${AI_BASE} unreachable — skipping`)
       return
