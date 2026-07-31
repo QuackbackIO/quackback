@@ -54,6 +54,19 @@ export interface ConditionContext {
      *  reads as unresolved (MISSING) for an anonymous visitor, same as one
      *  with no email captured at all. */
     email?: string | null
+    /** The user row's first-class columns (ISO-3166-1 alpha-2 country,
+     *  captured from geo-aware proxy headers; BCP-47 locale) — NOT part of
+     *  `attributes`, which only carries user.metadata. Null when never
+     *  captured; unresolved either way. */
+    country?: string | null
+    locale?: string | null
+    /** The visitor's plan/tier label — the `plan` key of user.metadata, the
+     *  same source the segment evaluator's own `plan` attribute reads
+     *  (segment.evaluation.ts), so workflows and segments share one plan
+     *  vocabulary. First-class (like person.email) rather than only
+     *  person.attr.plan so the three targeting staples (country, locale,
+     *  plan) sit together in the static catalogue. Null when unset. */
+    plan?: string | null
     /** The identified visitor's own attributes (user.metadata), bare values
      *  (no envelope — unlike conversation.attributes, this store was never
      *  enveloped). Absent/undefined for an anonymous visitor. */
@@ -170,6 +183,9 @@ export const CONDITION_FIELDS = [
   'message.sender',
   'person.segments',
   'person.email',
+  'person.country',
+  'person.locale',
+  'person.plan',
   'ticket.type',
   'office_hours',
   'csat.rating',
@@ -240,6 +256,15 @@ function resolveField(field: string, ctx: ConditionContext): unknown {
     // isUnresolved — either way `person.email` is a non-match except is_empty.
     case 'person.email':
       return ctx.person?.email
+    // The visitor's first-class user columns and metadata plan — see
+    // ConditionContext.person's docs. Null when the visitor is anonymous or
+    // the value was never captured; one unresolved subject either way.
+    case 'person.country':
+      return ctx.person?.country ?? null
+    case 'person.locale':
+      return ctx.person?.locale ?? null
+    case 'person.plan':
+      return ctx.person?.plan ?? null
     // The workspace-defined ticket type (ticket_types.id), not the coarse
     // category axis. No paired ticket, and a ticket predating the type
     // registry, both resolve null — one unresolved subject either way, so

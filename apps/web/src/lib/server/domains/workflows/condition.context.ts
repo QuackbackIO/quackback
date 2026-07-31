@@ -8,9 +8,11 @@
  * trigger event, not a query — so a "message contains X" condition sees the
  * message that fired the workflow, not merely the conversation's latest.
  *
- * `person`/`company` (person.attr.*, company.attr.*, person.email) are
+ * `person`/`company` (person.attr.*, company.attr.*, person.email, and the
+ * first-class person.country / person.locale / person.plan) are
  * resolved by one extra query alongside the rest (resolvePersonCompanyContext
- * below): the visitor principal's own attributes/email, plus their linked
+ * below): the visitor principal's own user row (email, country, locale
+ * columns; metadata for attributes and plan), plus their linked
  * company's attributes via principal.company_id. An anonymous visitor or one
  * with no company simply misses the corresponding join — the evaluator's
  * unresolved-subject contract (condition.evaluator.ts) already handles an
@@ -58,18 +60,26 @@ import type { ConditionContext } from './condition.evaluator'
  *  identically to an anonymous visitor's real miss, so skipping the join is
  *  observably indistinguishable from running it and finding nothing. */
 const UNRESOLVED_PERSON_COMPANY = {
-  person: { email: null, attributes: {} },
+  person: { email: null, country: null, locale: null, plan: null, attributes: {} },
   company: null,
 } as const
 
 async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
-  person: { email: string | null; attributes: Record<string, unknown> }
+  person: {
+    email: string | null
+    country: string | null
+    locale: string | null
+    plan: string | null
+    attributes: Record<string, unknown>
+  }
   company: { attributes: Record<string, unknown> } | null
 }> {
   const [row] = await db
     .select({
       userEmail: user.email,
       userMetadata: user.metadata,
+      userCountry: user.country,
+      userLocale: user.locale,
       companyAttributes: companies.customAttributes,
     })
     .from(principal)
@@ -78,12 +88,21 @@ async function resolvePersonCompanyContext(principalId: PrincipalId): Promise<{
     .where(eq(principal.id, principalId))
     .limit(1)
 
+  const attributes = parseUserAttributes(row?.userMetadata ?? null)
   return {
     // realEmail() strips the synthetic anonymous placeholder — an anonymous
     // visitor (no user row at all) already reads null via the left join.
     person: {
       email: realEmail(row?.userEmail ?? null),
-      attributes: parseUserAttributes(row?.userMetadata ?? null),
+      country: row?.userCountry ?? null,
+      locale: row?.userLocale ?? null,
+      // The plan label lives in user.metadata under the `plan` key — the
+      // same source the segment evaluator's `plan` attribute reads — not in
+      // a column, so it comes out of the parsed attributes. Only a string
+      // plan is meaningful; anything else (never the case on the write
+      // paths) reads unset.
+      plan: typeof attributes.plan === 'string' ? attributes.plan : null,
+      attributes,
     },
     company: row?.companyAttributes ? { attributes: row.companyAttributes } : null,
   }
@@ -213,6 +232,9 @@ export async function resolveConditionContext(
     person: {
       segmentIds: [...segmentIds],
       email: personCompany.person.email,
+      country: personCompany.person.country,
+      locale: personCompany.person.locale,
+      plan: personCompany.person.plan,
       attributes: personCompany.person.attributes,
     },
     company: personCompany.company,

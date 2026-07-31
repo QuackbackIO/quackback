@@ -45,6 +45,9 @@ export function makeConditionContext(overrides: Partial<ConditionContext> = {}):
         : {
             segmentIds: ['seg_paid'],
             email: 'ana@example.com',
+            country: 'DE',
+            locale: 'de-DE',
+            plan: 'enterprise',
             attributes: { plan: 'enterprise', seats: 25, active: true },
           },
     company:

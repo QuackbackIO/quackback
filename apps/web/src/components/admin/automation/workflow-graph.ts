@@ -342,6 +342,14 @@ export const CONDITION_FIELD_META: Record<ConditionField, ConditionFieldMeta> = 
     kind: 'text',
     placeholder: 'name@example.com',
   },
+  // The visitor's first-class user columns (country captured from geo-aware
+  // proxy headers; locale) — free text, not a fixed choice set: the workspace
+  // sees whichever ISO country / BCP-47 values its traffic carries.
+  'person.country': { label: 'Person country', kind: 'text', placeholder: 'DE' },
+  'person.locale': { label: 'Person locale', kind: 'text', placeholder: 'de-DE' },
+  // The plan label stored under user.metadata's `plan` key — the same source
+  // segments' plan attribute reads, so both target the same vocabulary.
+  'person.plan': { label: 'Person plan', kind: 'text', placeholder: 'enterprise' },
   // The workspace's ticket-type registry is live, so — like conversation.team
   // above — resolveConditionField fills `options` in from the `ticketTypes`
   // map it's passed rather than any fixed set here.
@@ -375,6 +383,9 @@ export const STATIC_CONDITION_FIELD_GROUP: Record<StaticConditionField, string> 
   'message.sender': 'Message',
   'person.segments': 'Person',
   'person.email': 'Person',
+  'person.country': 'Person',
+  'person.locale': 'Person',
+  'person.plan': 'Person',
   'ticket.type': 'Ticket',
   office_hours: 'Availability',
 }

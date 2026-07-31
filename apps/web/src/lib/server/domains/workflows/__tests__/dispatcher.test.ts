@@ -411,6 +411,22 @@ describe('dispatchWorkflowTrigger — person/company context gating', () => {
     )
   })
 
+  it.each(['person.country', 'person.locale', 'person.plan'] as const)(
+    'resolves the join when a workflow AUDIENCE references the first-class %s field',
+    async (field) => {
+      listLiveWorkflowsForTrigger.mockResolvedValue([
+        wf('bg1', 'background', {
+          audience: { field, op: 'is_set' },
+        }),
+      ])
+      await dispatchWorkflowTrigger(trigger())
+      expect(resolveConditionContext).toHaveBeenCalledWith(
+        conversationId,
+        expect.objectContaining({ resolvePersonCompany: true })
+      )
+    }
+  )
+
   it('does NOT gate on person.segments — its own pre-existing resolution is unconditional', async () => {
     listLiveWorkflowsForTrigger.mockResolvedValue([
       {
