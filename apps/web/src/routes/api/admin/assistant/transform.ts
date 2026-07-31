@@ -46,8 +46,11 @@ const MAX_TEXT_CHARS = 8000
 // The transform kind rides forwardedProps; the SOURCE TEXT is the AG-UI
 // request's trailing user message (the AG-UI-native shape — the thing being
 // rewritten reads as the turn's user turn, not a bespoke body field).
+// `language` is the `translate` kind's target (English name, see
+// TRANSLATE_LANGUAGES); optional on the wire, required for that kind below.
 const forwardedPropsSchema = withAssistantItemRef({
   transform: z.enum(TRANSFORM_KINDS),
+  language: z.string().trim().min(1).max(60).optional(),
 })
 
 export async function handleTransform({ request }: { request: Request }): Promise<Response> {
@@ -58,6 +61,12 @@ export async function handleTransform({ request }: { request: Request }): Promis
   )
   if (!gate.ok) return gate.response
   const { auth, parsed, agui } = gate
+
+  // A language-less translate can only produce a broken instruction, so it is
+  // rejected here rather than left for the transform module's throw.
+  if (parsed.transform === 'translate' && !parsed.language) {
+    return errorResponse('INVALID_REQUEST', 'A target language is required for translate', 400)
+  }
 
   // The source text is the trailing user turn, length-capped exactly as the
   // old `text` body field was (over-cap truncates, matching the AG-UI history
@@ -75,6 +84,7 @@ export async function handleTransform({ request }: { request: Request }): Promis
           transform: parsed.transform,
           text: source.content,
           principalId: auth.principal.id,
+          language: parsed.language,
           signal: request.signal,
           wireSink,
         }),

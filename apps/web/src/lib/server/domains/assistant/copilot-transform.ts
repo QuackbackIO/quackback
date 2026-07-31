@@ -28,7 +28,7 @@ import { wrapUntrustedText } from './injection-guard'
 
 /** How far back we look for the teammate's own outbound replies. */
 const STYLE_LOOKBACK_MESSAGES = 10
-const TRANSFORM_TASK: Record<TransformKind, string> = {
+const TRANSFORM_TASK: Record<Exclude<TransformKind, 'translate'>, string> = {
   my_tone:
     "Rewrite the text to sound like the teammate's own voice, following the derived style profile below.",
   more_friendly: 'Rewrite the text in a warmer, more friendly tone.',
@@ -39,6 +39,17 @@ const TRANSFORM_TASK: Record<TransformKind, string> = {
   rephrase: 'Rephrase the text in different words while keeping the same meaning.',
   fix_grammar:
     'Fix grammar, spelling, and punctuation only. Do not change the meaning, tone, or wording beyond what correctness requires.',
+}
+
+/** The one-line task instruction. `translate` is the one parameterized kind:
+ *  its target language (the English name, per TRANSLATE_LANGUAGES' doc) folds
+ *  into the instruction itself, so it has no static entry in TRANSFORM_TASK. */
+function transformTask(transform: TransformKind, language?: string): string {
+  if (transform === 'translate') {
+    if (!language) throw new Error('translate requires a target language')
+    return `Translate the text into ${language}. Keep the tone, formality, and level of detail unchanged; keep names, URLs, and placeholders untranslated.`
+  }
+  return TRANSFORM_TASK[transform]
 }
 
 const transformOutputSchema = z.object({ text: z.string() })
@@ -122,11 +133,13 @@ function buildStyleReferenceBlock(profile: TeammateStyleProfile | null): string 
 export function buildTransformSystemPrompts(
   transform: TransformKind,
   text: string,
-  styleProfile: TeammateStyleProfile | null = null
+  styleProfile: TeammateStyleProfile | null = null,
+  /** The target language for `translate` (required for that kind only). */
+  language?: string
 ): string[] {
   const instructions = [
     'You are helping a support teammate edit a piece of text for a customer conversation.',
-    `Task: ${TRANSFORM_TASK[transform]}`,
+    `Task: ${transformTask(transform, language)}`,
     'Rules:',
     '- Preserve the meaning and every fact already in the text. NEVER add facts, claims, numbers, or details that are not already present in it.',
     '- Keep any inline formatting already present (citation markers like [1], bullet or numbered lists, **bold**) unless the task above specifically requires removing it.',
@@ -150,6 +163,8 @@ export interface RunCopilotTransformParams {
   text: string
   /** The acting teammate: `my_tone` mines this principal's own past replies. */
   principalId: PrincipalId
+  /** The target language (English name) for `translate`; unused otherwise. */
+  language?: string
   signal?: AbortSignal
   onTextDelta?: (delta: string) => void
   /**
@@ -181,7 +196,12 @@ export async function runCopilotTransform(
 
   const styleProfile =
     params.transform === 'my_tone' ? await fetchTeammateStyleProfile(params.principalId) : null
-  const systemPrompts = buildTransformSystemPrompts(params.transform, params.text, styleProfile)
+  const systemPrompts = buildTransformSystemPrompts(
+    params.transform,
+    params.text,
+    styleProfile,
+    params.language
+  )
 
   const outcome = await runSynthesis<never>({
     model,
@@ -207,7 +227,10 @@ export async function runCopilotTransform(
       pipelineStep: 'copilot_transform',
       callType: 'chat_completion',
       model,
-      metadata: { transform: params.transform },
+      metadata: {
+        transform: params.transform,
+        ...(params.language ? { language: params.language } : {}),
+      },
     },
     deriveAnswerKind: (attempt) => (attempt.final !== null ? 'answered' : 'invalid_output'),
   })

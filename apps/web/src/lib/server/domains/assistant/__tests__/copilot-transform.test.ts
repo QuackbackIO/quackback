@@ -176,6 +176,18 @@ describe('buildTransformSystemPrompts', () => {
     expect(joined).toContain('No prior replies are on file for this teammate')
     expect(joined.toLowerCase()).toContain('professional, warm support voice')
   })
+
+  it('translate names the target language in its task and isolates other transforms', () => {
+    const joined = buildTransformSystemPrompts('translate', 'Some text', null, 'Spanish').join('\n')
+    expect(joined).toContain('Translate the text into Spanish.')
+    expect(joined.toLowerCase()).not.toContain('friendly tone')
+    expect(joined.toLowerCase()).not.toContain('grammar')
+    expect(joined).toContain('"""\nSome text\n"""')
+  })
+
+  it('throws when translate has no target language', () => {
+    expect(() => buildTransformSystemPrompts('translate', 'Some text')).toThrow(/language/i)
+  })
 })
 
 describe('fetchTeammateStyleProfile', () => {
@@ -258,6 +270,28 @@ describe('runCopilotTransform', () => {
     const call = mockChat.mock.calls[0][0] as { systemPrompts: string[] }
     expect(mockDbSelect).not.toHaveBeenCalled()
     expect(call.systemPrompts.join('\n').toLowerCase()).not.toContain('style profile')
+  })
+
+  it('passes the target language into the prompt and usage metadata for translate', async () => {
+    const object = { text: 'Texto traducido.' }
+    mockChat.mockReturnValueOnce(chunkStream(completeRun(object, JSON.stringify(object))))
+
+    const result = await runCopilotTransform({
+      transform: 'translate',
+      text: 'Reply text.',
+      principalId: PRINCIPAL_ID,
+      language: 'Spanish',
+    })
+
+    expect(result).toEqual(object)
+    const call = mockChat.mock.calls[0][0] as { systemPrompts: string[] }
+    expect(call.systemPrompts.join('\n')).toContain('Translate the text into Spanish.')
+    expect(mockDbSelect).not.toHaveBeenCalled()
+    const [params] = mockWithUsageLogging.mock.calls[0]
+    expect(params).toMatchObject({
+      pipelineStep: 'copilot_transform',
+      metadata: { transform: 'translate', language: 'Spanish' },
+    })
   })
 
   it('salvages a fenced-JSON reply when no structured object arrives', async () => {

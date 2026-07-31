@@ -1129,6 +1129,30 @@ describe('<CopilotPanel> answer rewrite menu', () => {
     expect(screen.queryByRole('menuitem', { name: 'Expand' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Rephrase' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /fix grammar/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Translate to' })).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('the Translate to submenu redrafts the answer in the chosen language before insert', async () => {
+    const onInsert = await askAnswer()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /^modify$/i }))
+    fireEvent.pointerMove(await screen.findByRole('menuitem', { name: 'Translate to' }), {
+      pointerType: 'mouse',
+    })
+    await user.click(await screen.findByRole('menuitem', { name: 'Español' }))
+
+    expect(hoisted.runTransform).toHaveBeenCalledWith('translate', DEFAULT_ANSWER, {
+      language: 'Spanish',
+    })
+    expect(await screen.findByText('A friendlier answer.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /add to composer/i }))
+    expect(onInsert).toHaveBeenCalledWith('A friendlier answer.')
+    expect(hoisted.recordCopilotEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'transform_inserted', destination: 'reply' })
+    )
     vi.unstubAllGlobals()
   })
 
@@ -1139,7 +1163,7 @@ describe('<CopilotPanel> answer rewrite menu', () => {
     await user.click(screen.getByRole('button', { name: /^modify$/i }))
     await user.click(await screen.findByRole('menuitem', { name: 'More friendly' }))
 
-    expect(hoisted.runTransform).toHaveBeenCalledWith('more_friendly', DEFAULT_ANSWER)
+    expect(hoisted.runTransform).toHaveBeenCalledWith('more_friendly', DEFAULT_ANSWER, undefined)
     expect(await screen.findByText('A friendlier answer.')).toBeInTheDocument()
     expect(screen.queryByText(DEFAULT_ANSWER)).not.toBeInTheDocument()
 

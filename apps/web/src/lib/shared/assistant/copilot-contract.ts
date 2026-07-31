@@ -135,9 +135,12 @@ export interface CopilotFinalPayload {
 
 /**
  * `my_tone` mines the teammate's own past replies for style excerpts.
- * `my_tone`/`more_friendly`/`more_formal`/`more_concise` are shared by both
- * entry points; `expand`/`rephrase`/`fix_grammar` are Improve-menu only
- * (there is no "expand the answer" row on the answer card).
+ * `my_tone`/`more_friendly`/`more_formal`/`more_concise`/`translate` are shared
+ * by both entry points; `expand`/`rephrase`/`fix_grammar` are Improve-menu only
+ * (there is no "expand the answer" row on the answer card). `translate` is the
+ * one parameterized kind: it requires a `language` on the request (the English
+ * name of the target language, one of TRANSLATE_LANGUAGES' `value`s), which the
+ * server folds into the rewrite instruction.
  */
 export const TRANSFORM_KINDS = [
   'my_tone',
@@ -147,9 +150,29 @@ export const TRANSFORM_KINDS = [
   'expand',
   'rephrase',
   'fix_grammar',
+  'translate',
 ] as const
 
 export type TransformKind = (typeof TRANSFORM_KINDS)[number]
+
+/**
+ * The languages the answer card's Modify menu offers for `translate` (the
+ * product's own supported languages). `value` is the English name sent to the
+ * server — it lands verbatim in the model instruction, so English keeps the
+ * prompt unambiguous; `label` is the native name the menu displays, so a
+ * teammate recognizes the target at a glance regardless of their UI locale.
+ */
+export const TRANSLATE_LANGUAGES = [
+  { value: 'English', label: 'English' },
+  { value: 'Arabic', label: 'العربية' },
+  { value: 'Chinese (Simplified)', label: '简体中文' },
+  { value: 'Chinese (Traditional)', label: '繁體中文' },
+  { value: 'French', label: 'Français' },
+  { value: 'German', label: 'Deutsch' },
+  { value: 'Portuguese (Brazilian)', label: 'Português (Brasil)' },
+  { value: 'Russian', label: 'Русский' },
+  { value: 'Spanish', label: 'Español' },
+] as const
 
 /** The completed rewrite (RUN_FINISHED.result). */
 export interface TransformFinalPayload {

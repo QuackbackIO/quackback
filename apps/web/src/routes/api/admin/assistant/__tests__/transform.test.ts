@@ -179,6 +179,43 @@ describe('POST /api/admin/assistant/transform', () => {
     expect(res.status).toBe(400)
   })
 
+  it('400s when translate carries no target language', async () => {
+    const res = await handleTransform({
+      request: makeRequest(
+        aguiBody({
+          forwardedProps: { conversationId: CONVERSATION_ID, transform: 'translate' },
+          text: SOURCE_TEXT,
+        })
+      ),
+    })
+    expect(res.status).toBe(400)
+    expect(mockRunCopilotTransform).not.toHaveBeenCalled()
+  })
+
+  it('passes the target language through to runCopilotTransform for translate', async () => {
+    const res = await handleTransform({
+      request: makeRequest(
+        aguiBody({
+          forwardedProps: {
+            conversationId: CONVERSATION_ID,
+            transform: 'translate',
+            language: 'Spanish',
+          },
+          text: SOURCE_TEXT,
+        })
+      ),
+    })
+    expect(res.status).toBe(200)
+    await res.text()
+    expect(mockRunCopilotTransform).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transform: 'translate',
+        language: 'Spanish',
+        text: SOURCE_TEXT,
+      })
+    )
+  })
+
   it('400s on a malformed conversationId', async () => {
     const res = await handleTransform({
       request: makeRequest(
