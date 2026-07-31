@@ -915,6 +915,8 @@ export interface SettingsBrandingData {
   logoUrl: string | null
   faviconUrl: string | null
   headerLogoUrl: string | null
+  /** Custom portal social share (OG) image; null falls back to the logo. */
+  ogImageUrl: string | null
   headerDisplayMode: string | null
   headerDisplayName: string | null
 }

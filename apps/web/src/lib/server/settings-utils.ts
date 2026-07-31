@@ -41,6 +41,19 @@ export async function getSettingsLogoData(): Promise<LogoData | null> {
   return { url }
 }
 
+/**
+ * Get portal OG image data for the settings.
+ */
+export async function getSettingsPortalOgImageData(): Promise<LogoData | null> {
+  const record = await getSettingsRecord()
+  if (!record) return null
+
+  const url = getPublicUrlOrNull(record.portalOgImageKey)
+  if (!url) return null
+
+  return { url }
+}
+
 export interface HeaderLogoData {
   url: string | null
   displayMode: string | null

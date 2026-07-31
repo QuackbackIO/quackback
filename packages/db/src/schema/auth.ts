@@ -297,6 +297,8 @@ export const settings = pgTable('settings', {
   faviconKey: text('favicon_key'),
   // Header logo - S3 storage key
   headerLogoKey: text('header_logo_key'),
+  // Portal social share (OG) image - S3 storage key
+  portalOgImageKey: text('portal_og_image_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
   /**
