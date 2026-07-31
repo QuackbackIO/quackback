@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { TicketIcon, PlusIcon } from '@heroicons/react/24/solid'
+import type { ConversationId } from '@quackback/ids'
 import { getMyTicketsFn } from '@/lib/server/functions/tickets'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { useWidgetAuth } from './widget-auth-provider'
@@ -17,15 +18,19 @@ export function widgetMyTicketsKey(sessionVersion: number) {
 
 /**
  * The Tickets tab — the signed-in requester's own tickets, newest-activity
- * first, each row carrying its current public stage chip and reference. Rows
- * are read-only here: the conversation the ticket is paired with lives on the
- * Messages tab, so this list is the status-at-a-glance surface, not a second
- * inbox. The "New ticket" affordance swaps the list for the intake form; a
- * submitted ticket lands at the top of the list. Identified visitors only —
- * an anonymous visitor has no tickets, so the tab itself is gated on sign-in
- * upstream.
+ * first, each row carrying its current public stage chip and reference. A row
+ * opens its ticket's conversation thread (the converged pair) via
+ * `onOpenTicket`; a legacy pair-less row stays inert. The "New ticket"
+ * affordance swaps the list for the intake form; a submitted ticket lands at
+ * the top of the list. Identified visitors only — an anonymous visitor has
+ * no tickets, so the tab itself is gated on sign-in upstream.
  */
-export function WidgetTickets() {
+export function WidgetTickets({
+  onOpenTicket,
+}: {
+  /** Opens the pair's conversation thread for a tapped row. */
+  onOpenTicket: (conversationId: ConversationId) => void
+}) {
   const { sessionVersion } = useWidgetAuth()
   const [composing, setComposing] = useState(false)
   const { data, isLoading } = useQuery({
@@ -61,7 +66,12 @@ export function WidgetTickets() {
           <ul className="px-3 pt-1 pb-24">
             {tickets.map((t) => (
               <li key={t.ticketId} className="border-b border-border/40 last:border-b-0">
-                <div className="flex w-full items-center gap-3 rounded-lg px-2 py-3">
+                <button
+                  type="button"
+                  disabled={!t.conversationId}
+                  onClick={() => t.conversationId && onOpenTicket(t.conversationId)}
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-start transition-colors hover:bg-muted/40 disabled:hover:bg-transparent"
+                >
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-medium text-foreground">
@@ -84,7 +94,7 @@ export function WidgetTickets() {
                       </span>
                     </span>
                   </span>
-                </div>
+                </button>
               </li>
             ))}
           </ul>

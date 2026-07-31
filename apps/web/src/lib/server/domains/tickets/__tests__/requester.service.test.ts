@@ -439,9 +439,12 @@ describe.skipIf(!fixture.available)('requester ticket service (real DB, rolled b
       .where(eq(conversations.id, pair.conversationId))
     expect(conversation.visitorPrincipalId).toBe(me)
 
-    // The widget Tickets tab read lists it for the requester, newest first.
+    // The widget Tickets tab read lists it for the requester, newest first,
+    // each row carrying the pair's conversation id (the row's click-through).
     const mine = await listMyTicketSummaries(me)
-    expect(mine.map((t) => t.ticketId)).toContain(created.id)
+    const summary = mine.find((t) => t.ticketId === created.id)
+    expect(summary).toBeDefined()
+    expect(summary!.conversationId).toBe(pair.conversationId)
     // Another requester never sees it.
     const other = await seedPrincipal()
     expect(await listMyTicketSummaries(other)).toHaveLength(0)

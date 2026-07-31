@@ -804,7 +804,7 @@ function WidgetPage() {
 
       {view === 'tickets' && (
         <ViewTransition id="tickets" kind="root">
-          <WidgetTickets />
+          <WidgetTickets onOpenTicket={openMessenger} />
         </ViewTransition>
       )}
 

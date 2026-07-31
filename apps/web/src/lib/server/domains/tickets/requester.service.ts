@@ -222,6 +222,9 @@ export interface MyTicketSummary {
   reference: string
   title: string
   stage: TicketStageRef
+  /** The pair's conversation — the row's click-through to its thread. Null on
+   *  a legacy standalone ticket (pre-pair rows were never backfilled). */
+  conversationId: ConversationId | null
   updatedAt: string
 }
 
@@ -229,7 +232,9 @@ export interface MyTicketSummary {
  * The requester's own customer tickets, newest-activity first. Ownership IS
  * the scope (the where clause is the requester id — no ticket.* permission
  * anywhere on this path), so a requester only ever sees their own tickets;
- * internal-only statuses project to a null stage instead of leaking.
+ * internal-only statuses project to a null stage instead of leaking. Each row
+ * carries its pair's conversation id so the widget row opens the shared
+ * thread straight from the list.
  */
 export async function listMyTicketSummaries(
   requesterPrincipalId: PrincipalId
@@ -240,9 +245,17 @@ export async function listMyTicketSummaries(
       number: tickets.number,
       title: tickets.title,
       statusId: tickets.statusId,
+      conversationId: ticketConversations.conversationId,
       updatedAt: tickets.updatedAt,
     })
     .from(tickets)
+    .leftJoin(
+      ticketConversations,
+      and(
+        eq(ticketConversations.ticketId, tickets.id),
+        eq(ticketConversations.ticketType, 'customer')
+      )
+    )
     .where(
       and(
         eq(tickets.type, 'customer'),
@@ -271,6 +284,7 @@ export async function listMyTicketSummaries(
         label: slot ? stageLabels[slot] : null,
         closed: status?.category === 'closed',
       },
+      conversationId: r.conversationId,
       updatedAt: r.updatedAt.toISOString(),
     }
   })
