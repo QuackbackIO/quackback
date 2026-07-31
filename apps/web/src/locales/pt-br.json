@@ -1049,6 +1049,8 @@
   "automation.knowledge.source.tickets.description": "Resolution summaries from closed tickets.",
   "automation.knowledge.source.changelog.label": "Changelog",
   "automation.knowledge.source.changelog.description": "Published changelog entries.",
+  "automation.knowledge.source.documents.label": "Documentos",
+  "automation.knowledge.source.documents.description": "Documentos de conhecimento enviados (PDFs).",
   "automation.knowledge.source.status.label": "System status",
   "automation.knowledge.source.status.description": "Live status components, incidents, and maintenance windows.",
   "automation.test.agent.label": "Agent",

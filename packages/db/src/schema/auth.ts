@@ -49,6 +49,7 @@ export interface StoredAssistantConfig {
         helpCenter: boolean
         posts: boolean
         changelog: boolean
+        documents: boolean
         status: boolean
       }
     }
@@ -61,6 +62,7 @@ export interface StoredAssistantConfig {
         internalNotes: boolean
         tickets: boolean
         changelog: boolean
+        documents: boolean
         status: boolean
       }
     }
@@ -352,7 +354,13 @@ export const settings = pgTable('settings', {
       agents: {
         agent: {
           voice: { tone: 'balanced', responseLength: 'balanced', additionalInstructions: '' },
-          knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+          knowledge: {
+            helpCenter: true,
+            posts: false,
+            changelog: false,
+            documents: true,
+            status: false,
+          },
         },
         copilot: {
           capabilities: { qa: true },
@@ -363,6 +371,7 @@ export const settings = pgTable('settings', {
             internalNotes: true,
             tickets: false,
             changelog: false,
+            documents: true,
             status: true,
           },
         },

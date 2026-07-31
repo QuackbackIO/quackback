@@ -66,6 +66,7 @@ export const ASSISTANT_AGENT_KNOWLEDGE_SOURCES = [
   'helpCenter',
   'posts',
   'changelog',
+  'documents',
   'status',
 ] as const
 export const ASSISTANT_COPILOT_KNOWLEDGE_SOURCES = [
@@ -75,21 +76,26 @@ export const ASSISTANT_COPILOT_KNOWLEDGE_SOURCES = [
   'internalNotes',
   'tickets',
   'changelog',
+  'documents',
   'status',
 ] as const
 
 export type AssistantAgentKnowledgeSource = (typeof ASSISTANT_AGENT_KNOWLEDGE_SOURCES)[number]
 export type AssistantCopilotKnowledgeSource = (typeof ASSISTANT_COPILOT_KNOWLEDGE_SOURCES)[number]
 
-// The `satisfies Record<...Source, z.ZodBoolean>` constraints tie each schema's
+// The `satisfies Record<...Source, z.ZodType<boolean>>` constraints tie each schema's
 // keys to its vocabulary array (C2): add a source to the array without a schema
 // field here (or a field without an array entry) and this stops typechecking.
+// `documents` carries a default so a config persisted before the documents
+// source existed (no key for it) parses with the source enabled — the same
+// default a fresh install gets — rather than failing the strict read.
 export const assistantAgentKnowledgeSchema = z.object({
   helpCenter: z.boolean(),
   posts: z.boolean(),
   changelog: z.boolean(),
+  documents: z.boolean().default(true),
   status: z.boolean(),
-} satisfies Record<AssistantAgentKnowledgeSource, z.ZodBoolean>)
+} satisfies Record<AssistantAgentKnowledgeSource, z.ZodType<boolean>>)
 export const assistantCopilotKnowledgeSchema = z.object({
   helpCenter: z.boolean(),
   posts: z.boolean(),
@@ -97,8 +103,9 @@ export const assistantCopilotKnowledgeSchema = z.object({
   internalNotes: z.boolean(),
   tickets: z.boolean(),
   changelog: z.boolean(),
+  documents: z.boolean().default(true),
   status: z.boolean(),
-} satisfies Record<AssistantCopilotKnowledgeSource, z.ZodBoolean>)
+} satisfies Record<AssistantCopilotKnowledgeSource, z.ZodType<boolean>>)
 
 /** Copilot capabilities gate the teammate-facing Q&A route. */
 export const assistantCopilotCapabilitiesSchema = z.object({
@@ -156,6 +163,7 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
         helpCenter: true,
         posts: false,
         changelog: false,
+        documents: true,
         status: false,
       },
     },
@@ -170,6 +178,7 @@ export const DEFAULT_ASSISTANT_CONFIG: AssistantConfig = {
         internalNotes: true,
         tickets: false,
         changelog: false,
+        documents: true,
         status: true,
       },
     },

@@ -54,6 +54,15 @@ vi.mock('../changelog-retrieval', () => ({
   },
 }))
 
+// Same idea for the knowledge-documents source.
+const mockDocumentsRetrieve = vi.fn()
+vi.mock('../documents-retrieval', () => ({
+  documentsKnowledgeSource: {
+    sourceType: 'document',
+    retrieve: (...args: unknown[]) => mockDocumentsRetrieve(...args),
+  },
+}))
+
 import {
   retrieveKnowledge,
   resolveKnowledgeSources,
@@ -75,6 +84,7 @@ beforeEach(() => {
   // a test that cares seeds its own rows.
   mockTicketsRetrieve.mockResolvedValue([])
   mockChangelogRetrieve.mockResolvedValue([])
+  mockDocumentsRetrieve.mockResolvedValue([])
 })
 
 describe('kbKnowledgeSource', () => {
@@ -140,7 +150,7 @@ describe('kbKnowledgeSource', () => {
 describe('resolveAssistantKnowledgeSnapshot', () => {
   it('compiles the Agent map (public ceiling): helpCenter only, no snippets, no team-only sources', () => {
     const snap = resolveAssistantKnowledgeSnapshot('agent', DEFAULT_ASSISTANT_CONFIG, 'public')
-    expect([...snap.sources].sort()).toEqual(['article'])
+    expect([...snap.sources].sort()).toEqual(['article', 'document'])
     expect(snap.status).toBe(false)
   })
 
@@ -150,6 +160,7 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
       helpCenter: true,
       posts: true,
       changelog: true,
+      documents: false,
       status: true,
     }
     const snap = resolveAssistantKnowledgeSnapshot('agent', config, 'public')
@@ -161,9 +172,9 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
 
   it('compiles the Copilot map (team ceiling): its enabled sources plus always-on snippets', () => {
     const snap = resolveAssistantKnowledgeSnapshot('copilot', DEFAULT_ASSISTANT_CONFIG, 'team')
-    // Default copilot: helpCenter, posts, pastConversations on; tickets,
-    // changelog off; plus snippets always at the team ceiling; status on.
-    expect([...snap.sources].sort()).toEqual(['article', 'post', 'snippet', 'summary'])
+    // Default copilot: helpCenter, posts, pastConversations, documents on;
+    // tickets, changelog off; plus snippets always at the team ceiling; status on.
+    expect([...snap.sources].sort()).toEqual(['article', 'document', 'post', 'snippet', 'summary'])
     expect(snap.status).toBe(true)
   })
 
@@ -176,6 +187,7 @@ describe('resolveAssistantKnowledgeSnapshot', () => {
       internalNotes: false,
       tickets: false,
       changelog: false,
+      documents: false,
       status: false,
     }
     const snap = resolveAssistantKnowledgeSnapshot('copilot', config, 'team')
@@ -217,6 +229,7 @@ describe('resolveKnowledgeSources', () => {
       'summary',
       'ticket',
       'changelog',
+      'document',
     ])
   })
 

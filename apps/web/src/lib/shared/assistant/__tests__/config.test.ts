@@ -70,7 +70,13 @@ describe('assistantConfigSchema', () => {
             responseLength: 'balanced',
             additionalInstructions: '',
           },
-          knowledge: { helpCenter: true, posts: false, changelog: false, status: false },
+          knowledge: {
+            helpCenter: true,
+            posts: false,
+            changelog: false,
+            documents: true,
+            status: false,
+          },
         },
         copilot: {
           capabilities: { qa: true },
@@ -81,6 +87,7 @@ describe('assistantConfigSchema', () => {
             internalNotes: true,
             tickets: false,
             changelog: false,
+            documents: true,
             status: true,
           },
         },
@@ -251,6 +258,22 @@ describe('assistant configuration normalization', () => {
     expect(normalized.agents.agent.voice.additionalInstructions).toBe('Keep this concise.')
   })
 
+  it('fills the documents toggle on a stored config that predates the documents source', () => {
+    const input = validConfig() as unknown as {
+      agents: {
+        agent: { knowledge: Record<string, unknown> }
+        copilot: { knowledge: Record<string, unknown> }
+      }
+    }
+    delete input.agents.agent.knowledge.documents
+    delete input.agents.copilot.knowledge.documents
+
+    const normalized = normalizeAssistantConfig(input)
+
+    expect(normalized.agents.agent.knowledge.documents).toBe(true)
+    expect(normalized.agents.copilot.knowledge.documents).toBe(true)
+  })
+
   it('rejects normalized values over every limit rather than truncating them', () => {
     const cases: Array<[string, (config: AssistantConfig) => void]> = [
       [
@@ -369,6 +392,7 @@ describe('v3 per-agent sub-config', () => {
       helpCenter: true,
       posts: false,
       changelog: false,
+      documents: true,
       status: false,
     })
     expect(DEFAULT_ASSISTANT_CONFIG.agents.copilot.knowledge).toEqual({
@@ -378,6 +402,7 @@ describe('v3 per-agent sub-config', () => {
       internalNotes: true,
       tickets: false,
       changelog: false,
+      documents: true,
       status: true,
     })
     expect(DEFAULT_ASSISTANT_CONFIG.agents.copilot.capabilities).toEqual({

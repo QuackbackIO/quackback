@@ -70,6 +70,13 @@ const SOURCE_META = {
     description: 'Published changelog entries.',
     readiness: 'ready',
   },
+  documents: {
+    labelId: 'automation.knowledge.source.documents.label',
+    label: 'Documents',
+    descriptionId: 'automation.knowledge.source.documents.description',
+    description: 'Uploaded knowledge documents (PDFs).',
+    readiness: 'ready',
+  },
   status: {
     labelId: 'automation.knowledge.source.status.label',
     label: 'System status',

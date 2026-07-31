@@ -387,6 +387,9 @@ export {
   // Schema tables - assistant snippets
   assistantSnippets,
   assistantSnippetsRelations,
+  // Schema tables - assistant knowledge documents
+  assistantDocuments,
+  assistantDocumentsRelations,
   // Schema tables - assistant pending actions
   assistantPendingActions,
   ASSISTANT_PENDING_ACTION_STATUSES,

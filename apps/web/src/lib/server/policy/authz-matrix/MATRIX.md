@@ -210,6 +210,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-custom-actions.ts`::updateCustomActionFn | assistant.manage |
 | `lib/server/functions/assistant-custom-actions.ts`::deleteCustomActionFn | assistant.manage |
 | `lib/server/functions/assistant-custom-actions.ts`::testCustomActionFn | assistant.manage |
+| `lib/server/functions/assistant-documents.ts`::uploadAssistantDocumentFn | assistant.manage |
+| `lib/server/functions/assistant-documents.ts`::listAssistantDocumentsFn | assistant.manage |
+| `lib/server/functions/assistant-documents.ts`::deleteAssistantDocumentFn | assistant.manage |
 | `lib/server/functions/assistant-guidance-stats.ts`::getGuidanceRuleStatsFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::listGuidanceRulesFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::createGuidanceRuleFn | assistant.manage |

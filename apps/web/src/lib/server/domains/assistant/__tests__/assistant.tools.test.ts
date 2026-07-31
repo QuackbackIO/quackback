@@ -50,6 +50,13 @@ vi.mock('../changelog-retrieval', () => ({
     retrieve: (...args: unknown[]) => mockChangelogRetrieve(...args),
   },
 }))
+const mockDocumentsRetrieve = vi.fn()
+vi.mock('../documents-retrieval', () => ({
+  documentsKnowledgeSource: {
+    sourceType: 'document',
+    retrieve: (...args: unknown[]) => mockDocumentsRetrieve(...args),
+  },
+}))
 
 const mockIsFeatureEnabled = vi.fn()
 vi.mock('@/lib/server/domains/settings/settings.service', () => ({
@@ -181,6 +188,7 @@ beforeEach(() => {
   mockConversationSummariesRetrieve.mockResolvedValue([])
   mockTicketsRetrieve.mockResolvedValue([])
   mockChangelogRetrieve.mockResolvedValue([])
+  mockDocumentsRetrieve.mockResolvedValue([])
 })
 
 describe('search', () => {
