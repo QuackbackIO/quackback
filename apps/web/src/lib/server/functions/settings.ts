@@ -832,6 +832,7 @@ const updateWidgetConfigSchema = z.object({
   defaultBoard: z.string().optional(),
   position: z.enum(['bottom-right', 'bottom-left']).optional(),
   launcherGreeting: z.string().max(120).optional(),
+  launcherLabel: z.string().max(60).optional(),
   tabs: z
     .object({
       feedback: z.boolean().optional(),

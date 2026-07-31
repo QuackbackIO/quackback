@@ -91,6 +91,13 @@ describe('Widget Config Types', () => {
       expect(config.launcherGreeting).toBe('Need a hand?')
       expect(update.launcherGreeting).toBe('Need a hand?')
     })
+
+    it('carries the launcher button label through config and updates', () => {
+      const config: WidgetConfig = { enabled: true, launcherLabel: 'Chat with us' }
+      const update: UpdateWidgetConfigInput = { launcherLabel: 'Chat with us' }
+      expect(config.launcherLabel).toBe('Chat with us')
+      expect(update.launcherLabel).toBe('Chat with us')
+    })
   })
 
   describe('UpdateWidgetConfigInput', () => {
@@ -182,6 +189,19 @@ describe('Widget Config Types', () => {
         'latest_updates',
       ])
     })
+  })
+})
+
+describe('getPublicWidgetConfig — launcher projection', () => {
+  it('projects position and the launcher button label to the public config', async () => {
+    settingsRow.current = fixtureRow({
+      enabled: true,
+      position: 'bottom-left',
+      launcherLabel: 'Chat with us',
+    })
+    const projected = await getPublicWidgetConfig()
+    expect(projected.position).toBe('bottom-left')
+    expect(projected.launcherLabel).toBe('Chat with us')
   })
 })
 

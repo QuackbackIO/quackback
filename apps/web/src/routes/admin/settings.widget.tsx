@@ -120,6 +120,8 @@ function WidgetSettingsPage() {
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>(
     (config.position as 'bottom-right' | 'bottom-left') ?? 'bottom-right'
   )
+  // Draft label — mirrors into the preview live; persisted on blur.
+  const [launcherLabel, setLauncherLabel] = useState(config.launcherLabel ?? '')
   const [homeDraft, setHomeDraft] = useState<WidgetHomeConfig>(config.home ?? {})
 
   // The preview theme follows the admin's own theme until the toggle overrides
@@ -162,6 +164,8 @@ function WidgetSettingsPage() {
             boards={boardsQuery.data}
             position={position}
             onPositionChange={setPosition}
+            launcherLabel={launcherLabel}
+            onLabelChange={setLauncherLabel}
             helpCenterFlagEnabled={helpCenterFlagEnabled}
             helpCenterEnabled={helpCenterEnabled}
             supportInboxFlagEnabled={supportInboxFlagEnabled}
@@ -204,6 +208,7 @@ function WidgetSettingsPage() {
             {mounted && (
               <WidgetPreview
                 position={position}
+                label={launcherLabel.trim() || undefined}
                 theme={previewTheme}
                 refreshKey={previewRefreshKey}
               />
@@ -273,6 +278,8 @@ function ModulesCard({
   boards,
   position,
   onPositionChange,
+  launcherLabel,
+  onLabelChange,
   helpCenterFlagEnabled,
   helpCenterEnabled,
   supportInboxFlagEnabled,
@@ -281,6 +288,7 @@ function ModulesCard({
   config: {
     defaultBoard?: string
     launcherGreeting?: string
+    launcherLabel?: string
     tabs?: {
       feedback?: boolean
       changelog?: boolean
@@ -292,6 +300,8 @@ function ModulesCard({
   boards: { id: string; name: string; slug: string }[]
   position: 'bottom-right' | 'bottom-left'
   onPositionChange: (val: 'bottom-right' | 'bottom-left') => void
+  launcherLabel: string
+  onLabelChange: (val: string) => void
   helpCenterFlagEnabled: boolean
   helpCenterEnabled: boolean
   supportInboxFlagEnabled: boolean
@@ -441,6 +451,28 @@ function ModulesCard({
             <SelectItem value="bottom-left">Bottom Left</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        <Label htmlFor="launcher-label" className="text-xs text-muted-foreground">
+          Button label
+        </Label>
+        <Input
+          id="launcher-label"
+          value={launcherLabel}
+          maxLength={60}
+          placeholder="e.g. Chat with us"
+          disabled={isBusy}
+          onChange={(e) => onLabelChange(e.target.value)}
+          onBlur={(e) => {
+            const value = e.target.value.trim()
+            if (value === (config.launcherLabel ?? '')) return
+            void save({ launcherLabel: value })
+          }}
+        />
+        <p className="text-[11px] text-muted-foreground/70">
+          Text next to the icon on the launcher button. Leave blank for the icon-only circle.
+        </p>
       </div>
 
       <div className="mt-4 space-y-2">

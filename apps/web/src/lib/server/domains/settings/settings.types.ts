@@ -629,6 +629,9 @@ export interface WidgetConfig {
    *  (e.g. "Need a hand?"). Empty/unset shows no bubble. Dismissible per browser
    *  session; clicking it opens the widget. */
   launcherGreeting?: string
+  /** Text label on the launcher button (e.g. "Chat with us"). Empty/unset
+   *  keeps the icon-only circular button. */
+  launcherLabel?: string
   /** Which tabs to show in the widget bottom bar */
   tabs?: {
     feedback?: boolean
@@ -656,7 +659,14 @@ export interface WidgetConfig {
  */
 export type PublicWidgetConfig = Pick<
   WidgetConfig,
-  'enabled' | 'defaultBoard' | 'position' | 'tabs' | 'home' | 'launcherGreeting' | 'translations'
+  | 'enabled'
+  | 'defaultBoard'
+  | 'position'
+  | 'tabs'
+  | 'home'
+  | 'launcherGreeting'
+  | 'launcherLabel'
+  | 'translations'
 > & {
   /** Always true: identify requires a backend-signed ssoToken (GH issue #300). */
   hmacRequired?: boolean
@@ -693,6 +703,7 @@ export interface UpdateWidgetConfigInput {
   defaultBoard?: string
   position?: 'bottom-right' | 'bottom-left'
   launcherGreeting?: string
+  launcherLabel?: string
   tabs?: {
     feedback?: boolean
     changelog?: boolean

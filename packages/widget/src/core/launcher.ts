@@ -16,6 +16,11 @@ export interface LauncherHandle {
    *  only while closed and not dismissed this browser session; clicking it opens
    *  the widget. Driven by the server config. */
   setGreeting(text: string | null | undefined): void
+  /** Text label beside the icon — turns the circular button into a pill.
+   *  Empty/unset restores the icon-only circle. Driven by the server config. */
+  setLabel(text: string | null | undefined): void
+  /** Move the button (and its greeting bubble) between bottom corners. */
+  setPlacement(side: 'left' | 'right'): void
   /** Fade the button in. Called after initial colors are set to avoid a color flash. */
   reveal(): void
   remove(): void
@@ -38,6 +43,8 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   // close (X) icon would be nonsensical, and an open widget is already read.
   let unreadCount = 0
   let isOpen = false
+  // Visible button label — when set, it doubles as the accessible name.
+  let labelText = ''
   // Proactive greeting bubble state. Dismissal persists per browser session so
   // the bubble invites once without nagging on every page.
   let greetingText: string | null = null
@@ -114,6 +121,18 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
   wrapper.appendChild(iconMessenger)
   wrapper.appendChild(iconClose)
   btn.appendChild(wrapper)
+
+  // Optional text label next to the icon. Hidden until setLabel arrives with
+  // the server config; the badge stays the last child either way.
+  const labelSpan = document.createElement('span')
+  Object.assign(labelSpan.style, {
+    display: 'none',
+    maxWidth: '180px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  })
+  btn.appendChild(labelSpan)
 
   // Unread-count badge, top-right of the button. Its own colors (not the theme
   // fg/bg) so it always reads as an alert against any launcher color.
@@ -223,7 +242,10 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
     setOpen(open) {
       isOpen = open
       btn.setAttribute('aria-expanded', open ? 'true' : 'false')
-      btn.setAttribute('aria-label', open ? 'Close feedback widget' : 'Open feedback widget')
+      btn.setAttribute(
+        'aria-label',
+        open ? 'Close feedback widget' : labelText || 'Open feedback widget'
+      )
       iconMessenger.style.opacity = open ? '0' : '1'
       iconMessenger.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)'
       iconClose.style.opacity = open ? '1' : '0'
@@ -249,6 +271,24 @@ export function createLauncher(opts: LauncherOptions): LauncherHandle {
       greetingText = text?.trim() || null
       bubbleText.textContent = greetingText ?? ''
       renderGreeting()
+    },
+    setLabel(text) {
+      labelText = text?.trim() ?? ''
+      const show = labelText.length > 0
+      labelSpan.textContent = labelText
+      labelSpan.style.display = show ? 'block' : 'none'
+      // Pill vs. icon-only circle.
+      btn.style.width = show ? 'auto' : '48px'
+      btn.style.borderRadius = show ? '24px' : '50%'
+      btn.style.padding = show ? '0 16px 0 10px' : '0'
+      btn.style.gap = show ? '8px' : '0'
+      if (!isOpen) btn.setAttribute('aria-label', labelText || 'Open feedback widget')
+    },
+    setPlacement(side) {
+      btn.style.left = side === 'left' ? '24px' : ''
+      btn.style.right = side === 'right' ? '24px' : ''
+      bubble.style.left = side === 'left' ? '24px' : ''
+      bubble.style.right = side === 'right' ? '24px' : ''
     },
     reveal() {
       btn.style.opacity = '1'

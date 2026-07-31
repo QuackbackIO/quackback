@@ -58,6 +58,9 @@ export function createSDK(): SDK {
   let pendingOpen: OpenOptions | null = null
   let panelOpen = false
   let currentUser: WidgetUser | null = null
+  // Effective launcher/panel corner: the init `placement` until the server
+  // config's `position` (the workspace's widget setting) overrides it.
+  let placement: 'left' | 'right' = 'right'
   let mobileMql: MediaQueryList | null = null
   let mobileCleanup: (() => void) | null = null
   let tracker: Tracker | null = null
@@ -187,7 +190,7 @@ export function createSDK(): SDK {
     if (panel) return panel
     panel = createPanel({
       widgetUrl: `${config!.instanceUrl}/widget`,
-      placement: config!.placement ?? 'right',
+      placement,
       defaultBoard: config!.defaultBoard,
       showCloseButton: config!.launcher === false,
       locale: config!.locale,
@@ -240,11 +243,18 @@ export function createSDK(): SDK {
     }
   }
 
-  /** Theme + greeting + analytics from a resolved server config. `initToken`
-   *  guards the tracker against a stale async apply after a re-init. */
+  /** Theme + greeting + launcher chrome + analytics from a resolved server
+   *  config. `initToken` guards the tracker against a stale async apply after
+   *  a re-init. */
   function applyServerConfig(serverConfig: ServerConfig, initToken: InitOptions): void {
     applyServerTheme(serverConfig)
     launcher?.setGreeting(serverConfig.launcherGreeting)
+    launcher?.setLabel(serverConfig.launcherLabel)
+    if (serverConfig.position) {
+      placement = serverConfig.position
+      launcher?.setPlacement(placement)
+      panel?.setPlacement(placement)
+    }
     // Host-page pageview tracking is instance-controlled: it starts only when
     // the server config enables visitor analytics, and only if this init is
     // still the live one. The durable device id is a separate opt-in on top.
@@ -265,7 +275,7 @@ export function createSDK(): SDK {
   function createLauncherIfNeeded(): void {
     if (launcher || !config || config.launcher === false) return
     launcher = createLauncher({
-      placement: config.placement ?? 'right',
+      placement,
       onClick: () => {
         if (panelOpen) dispatch('close')
         else dispatch('open')
@@ -283,6 +293,7 @@ export function createSDK(): SDK {
         // Validate before destroy so a bad re-init leaves the working instance intact.
         if (config) dispatch('destroy')
         config = next
+        placement = next.placement ?? 'right'
         createLauncherIfNeeded()
         // Preload the hidden panel iframe off the host page's critical path:
         // init typically runs while the host is still loading, and the iframe
@@ -403,6 +414,7 @@ export function createSDK(): SDK {
         pendingOpen = null
         panelOpen = false
         currentUser = null
+        placement = 'right'
         config = null
         return
     }

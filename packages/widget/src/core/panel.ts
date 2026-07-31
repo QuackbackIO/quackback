@@ -16,6 +16,8 @@ export interface PanelHandle {
   hide(): void
   /** Grow/shrink the panel for long-form content (transitioned via CSS). */
   setExpanded(expanded: boolean): void
+  /** Move the panel between bottom corners (rewrites the side-specific CSS). */
+  setPlacement(side: 'left' | 'right'): void
   destroy(): void
 }
 
@@ -81,6 +83,9 @@ export function createPanel(opts: PanelOptions): PanelHandle {
     },
     setExpanded(expanded) {
       panel.classList.toggle('quackback-expanded', expanded)
+    },
+    setPlacement(side) {
+      ensureStyles(side)
     },
     destroy() {
       panel.remove()

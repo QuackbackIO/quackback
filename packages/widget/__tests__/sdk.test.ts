@@ -397,3 +397,63 @@ describe('sdk', () => {
     expect(badge.textContent).toBe('5')
   })
 })
+
+describe('sdk server-driven launcher config', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    document.head.innerHTML = ''
+    vi.stubGlobal(
+      'requestIdleCallback',
+      vi.fn((cb: () => void) => {
+        cb()
+        return 1
+      })
+    )
+    vi.stubGlobal('cancelIdleCallback', vi.fn())
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    delete (window as { __QUACKBACK_CONFIG__?: unknown }).__QUACKBACK_CONFIG__
+  })
+
+  it('server config position and label reach the launcher, overriding init placement', () => {
+    stubIframe()
+    window.__QUACKBACK_CONFIG__ = { position: 'left', launcherLabel: 'Chat with us' }
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'right' })
+    const btn = document.querySelector('button[aria-label="Chat with us"]') as HTMLButtonElement
+    expect(btn).not.toBeNull()
+    expect(btn.style.left).toBe('24px')
+    expect(btn.style.right).toBe('')
+    expect(btn.textContent).toContain('Chat with us')
+  })
+
+  it('a fetched server config positions and labels the launcher', async () => {
+    stubIframe()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ position: 'left', launcherLabel: 'Feedback' }),
+      }))
+    )
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN })
+    await new Promise((r) => setTimeout(r, 0))
+    const btn = document.querySelector('button[aria-label="Feedback"]') as HTMLButtonElement
+    expect(btn).not.toBeNull()
+    expect(btn.style.left).toBe('24px')
+  })
+
+  it('no server position keeps the init placement', () => {
+    stubIframe()
+    window.__QUACKBACK_CONFIG__ = { theme: {} }
+    const sdk = createSDK()
+    sdk.dispatch('init', { instanceUrl: ORIGIN, placement: 'left' })
+    const btn = document.querySelector(
+      'button[aria-label="Open feedback widget"]'
+    ) as HTMLButtonElement
+    expect(btn.style.left).toBe('24px')
+  })
+})
