@@ -36,6 +36,7 @@ import {
   postActivity,
   conversations,
   conversationMessages,
+  conversationParticipants,
   conversationSummaries,
   postSubscriptions,
   inAppNotifications,
@@ -267,6 +268,13 @@ export const REPOINT_STEPS: RepointStep[] = [
     'principal_id',
     'Message authorship. ON DELETE RESTRICT, same as conversations.'
   ),
+  collisionRepoint(
+    'conversation_participants',
+    conversationParticipants,
+    'principal_id',
+    ['conversation_id'],
+    'Added customers on a group thread (§4.8). An anonymous lead an agent added by email keeps receiving replies after identifying; unique (conversation_id, principal_id), so a collision (the identified principal is already a participant) drops the anon row and the identified participation wins. ON DELETE CASCADE: a missed re-point would silently drop the row at teardown.'
+  ),
   simpleRepoint(
     'conversation_summaries',
     conversationSummaries,
@@ -429,6 +437,8 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
   'post_notes.principal_id': 'internal staff notes; authors are team members',
   'post_mentions.principal_id': 'mention targets are team members',
   'conversations.assigned_agent_principal_id': 'agents are never anonymous',
+  'conversation_participants.added_by_principal_id':
+    'the actor who adds a customer to a group thread is a team member; ON DELETE SET NULL, so teardown detaches attribution rather than blocking the merge',
   'team_members.principal_id': 'team members are teammates; the merge source is always anonymous',
   'teams.rr_cursor_principal_id':
     'round-robin cursor points at an online teammate, never anonymous',
@@ -447,6 +457,10 @@ export const REPOINT_EXEMPTIONS: Record<string, string> = {
     'workflow versions are saved by authenticated team members; anonymous principals cannot author them',
   'assistant_events.principal_id':
     'assistant event attribution is the acting teammate; customer subjects are carried by conversation or ticket instead',
+  'assistant_documents.created_by_id':
+    'knowledge documents are ingested by team members with assistant.manage; ON DELETE SET NULL, so teardown detaches the uploader (same reasoning as assistant_snippets.created_by_id)',
+  'assistant_web_sources.created_by_id':
+    'web sources are added by team members with assistant.manage; ON DELETE SET NULL, so teardown detaches the author (same reasoning as assistant_snippets.created_by_id)',
   'post_merge_suggestions.resolved_by_principal_id': 'suggestion resolution is a team action',
   'principal_role_assignments.principal_id':
     'role assignments are team-only; anonymous principals hold none',
