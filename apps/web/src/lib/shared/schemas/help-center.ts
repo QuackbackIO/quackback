@@ -155,10 +155,26 @@ export const restoreArticleSchema = z.object({
 // Help Center Config Schemas
 // ============================================================================
 
+/** A header link URL: an absolute http(s) URL or a root-relative path. */
+const helpCenterHeaderLinkUrl = z
+  .string()
+  .min(1)
+  .max(500)
+  .refine((v) => v.startsWith('/') || /^https?:\/\//i.test(v), {
+    message: 'URL must be an absolute http(s) URL or start with /',
+  })
+
+export const helpCenterHeaderLinkSchema = z.object({
+  label: z.string().trim().min(1, 'Label is required').max(60),
+  url: helpCenterHeaderLinkUrl,
+})
+
 export const updateHelpCenterConfigSchema = z.object({
   enabled: z.boolean().optional(),
   homepageTitle: z.string().min(1).max(200).optional(),
   homepageDescription: z.string().max(500).optional(),
+  /** Wholesale replacement — the header renders at most 3 links. */
+  headerLinks: z.array(helpCenterHeaderLinkSchema).max(3).optional(),
 })
 
 export const updateHelpCenterSeoSchema = z.object({

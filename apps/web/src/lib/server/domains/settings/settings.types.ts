@@ -817,10 +817,21 @@ export const DEFAULT_HELP_CENTER_AUTO_TRANSLATE_CONFIG: HelpCenterAutoTranslateC
   protectedTerms: [],
 }
 
+/** An admin-configured link rendered in the portal header on help center pages. */
+export interface HelpCenterHeaderLink {
+  label: string
+  url: string
+}
+
+/** Most header links the help center nav will render; the admin editor enforces the same cap. */
+export const HELP_CENTER_HEADER_LINKS_MAX = 3
+
 export interface HelpCenterConfig {
   enabled: boolean
   homepageTitle: string
   homepageDescription: string
+  /** Custom links shown beside the built-in nav on help center pages only. */
+  headerLinks: HelpCenterHeaderLink[]
   domain: HelpCenterDomainConfig
   locales: HelpCenterLocalesConfig
   autoTranslate: HelpCenterAutoTranslateConfig
@@ -831,6 +842,7 @@ export const DEFAULT_HELP_CENTER_CONFIG: HelpCenterConfig = {
   enabled: false,
   homepageTitle: 'How can we help?',
   homepageDescription: 'Search our knowledge base or browse by category',
+  headerLinks: [],
   domain: DEFAULT_HELP_CENTER_DOMAIN_CONFIG,
   locales: DEFAULT_HELP_CENTER_LOCALES_CONFIG,
   autoTranslate: DEFAULT_HELP_CENTER_AUTO_TRANSLATE_CONFIG,

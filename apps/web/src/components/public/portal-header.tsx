@@ -87,6 +87,12 @@ export function PortalHeader({
     (settings?.statusConfig?.portalTabEnabled ?? true) &&
     (statusAudience === 'public' || statusLoggedIn)
   const onHelpPages = pathname === '/hc' || pathname.startsWith('/hc/')
+  // Admin-configured help center links render beside the built-in nav on help
+  // pages only. External URLs open in a new tab; root-relative paths stay
+  // in-tab. Legacy configs predate the field, hence the `?? []`.
+  const helpHeaderLinks = onHelpPages
+    ? (settings?.helpCenterConfig?.headerLinks ?? []).slice(0, 3)
+    : []
   // Unsaved drafts from the admin branding preview (null outside preview mode).
   const previewDraft = usePreviewDraft()
   const navItems = resolvePortalNavItems(
@@ -246,6 +252,20 @@ export function PortalHeader({
               </span>
             )}
           </Link>
+        )
+      })}
+      {helpHeaderLinks.map((link) => {
+        const external = !link.url.startsWith('/')
+        return (
+          <a
+            key={link.url}
+            href={link.url}
+            target={external ? '_blank' : undefined}
+            rel={external ? 'noopener noreferrer' : undefined}
+            className={navItemClass(false)}
+          >
+            {link.label}
+          </a>
         )
       })}
     </nav>
