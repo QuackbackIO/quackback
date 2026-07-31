@@ -17,7 +17,7 @@ import {
   and,
   desc,
 } from '@/lib/server/db'
-import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
+import { createId, toUuid, type PostId, type PostVoteId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -385,13 +385,41 @@ export async function removeVote(
   return { removed: row.deleted, voteCount: row.vote_count ?? 0 }
 }
 
+export interface ListPostVotersResult {
+  items: VoterInfo[]
+  nextCursor: PostVoteId | null
+  hasMore: boolean
+}
+
 /**
- * Get all voters for a post with their identity and source attribution.
- * Returns newest votes first.
+ * List the voters on a post, newest votes first, with optional keyset
+ * pagination. The cursor is a vote ID; the page continues strictly after that
+ * vote in (createdAt, id) order. A cursor that no longer resolves is ignored
+ * rather than erroring, matching the inbox listing. When no limit is given
+ * the full list is returned and hasMore is always false.
  */
-export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
-  const rows = await db
+export async function listPostVoters(
+  postId: PostId,
+  options: { limit?: number; cursor?: PostVoteId } = {}
+): Promise<ListPostVotersResult> {
+  const { limit, cursor } = options
+
+  const conditions = [eq(postVotes.postId, postId)]
+  if (cursor) {
+    const cursorVote = await db.query.postVotes.findFirst({
+      where: eq(postVotes.id, cursor),
+      columns: { id: true, createdAt: true },
+    })
+    if (cursorVote) {
+      conditions.push(
+        sql`(${postVotes.createdAt}, ${postVotes.id}) < (${cursorVote.createdAt.toISOString()}, ${toUuid(cursorVote.id)}::uuid)`
+      )
+    }
+  }
+
+  const query = db
     .select({
+      voteId: postVotes.id,
       principalId: principal.id,
       displayName: principal.displayName,
       email: user.email,
@@ -417,25 +445,61 @@ export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
         eq(postSubscriptions.principalId, postVotes.principalId)
       )
     )
-    .where(eq(postVotes.postId, postId))
-    .orderBy(desc(postVotes.createdAt))
+    .where(and(...conditions))
+    // Secondary id key keeps the order total so pages never overlap on ties.
+    .orderBy(desc(postVotes.createdAt), desc(postVotes.id))
+    .$dynamic()
 
-  return rows.map((row) => {
-    const isAnonymous = row.principalType === 'anonymous'
-    return {
-      principalId: row.principalId,
-      displayName: isAnonymous ? null : row.displayName,
-      // Anonymous voters carry the synthetic placeholder email — never expose it.
-      email: realEmail(row.email),
-      avatarUrl: isAnonymous ? null : row.avatarUrl,
-      isAnonymous,
-      sourceType: row.sourceType,
-      sourceExternalUrl: row.sourceExternalUrl,
-      addedByName: row.addedByName,
-      createdAt: row.createdAt,
-      subscriptionLevel: isAnonymous
-        ? ('none' as const)
-        : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
-    }
-  })
+  const rows = limit !== undefined ? await query.limit(limit + 1) : await query
+
+  const hasMore = limit !== undefined && rows.length > limit
+  const pageRows = hasMore ? rows.slice(0, limit) : rows
+
+  return {
+    items: pageRows.map(mapVoterRow),
+    nextCursor: hasMore ? pageRows[pageRows.length - 1].voteId : null,
+    hasMore,
+  }
+}
+
+type VoterRow = {
+  principalId: PrincipalId
+  displayName: string | null
+  email: string | null
+  avatarUrl: string | null
+  principalType: string
+  sourceType: string | null
+  sourceExternalUrl: string | null
+  addedByName: string | null
+  createdAt: Date
+  notifyComments: boolean | null
+  notifyStatusChanges: boolean | null
+}
+
+function mapVoterRow(row: VoterRow): VoterInfo {
+  const isAnonymous = row.principalType === 'anonymous'
+  return {
+    principalId: row.principalId,
+    displayName: isAnonymous ? null : row.displayName,
+    // Anonymous voters carry the synthetic placeholder email — never expose it.
+    email: realEmail(row.email),
+    avatarUrl: isAnonymous ? null : row.avatarUrl,
+    isAnonymous,
+    sourceType: row.sourceType,
+    sourceExternalUrl: row.sourceExternalUrl,
+    addedByName: row.addedByName,
+    createdAt: row.createdAt,
+    subscriptionLevel: isAnonymous
+      ? ('none' as const)
+      : levelFromFlags(row.notifyComments ?? false, row.notifyStatusChanges ?? false),
+  }
+}
+
+/**
+ * Get all voters for a post with their identity and source attribution.
+ * Returns newest votes first.
+ */
+export async function getPostVoters(postId: PostId): Promise<VoterInfo[]> {
+  const { items } = await listPostVoters(postId)
+  return items
 }

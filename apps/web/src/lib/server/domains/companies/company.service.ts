@@ -1,3 +1,5 @@
+/* eslint-disable max-lines -- companyFilterConditions composes the external-id,
+   segment, and tag restriction joins alongside the existing CRUD */
 /**
  * Companies service (support platform §4.4): CRUD plus the person-to-company
  * links that give agents plan / MRR context in the inbox.
@@ -12,15 +14,19 @@ import {
   eq,
   and,
   asc,
+  inArray,
   isNull,
   sql,
   companies,
+  postTagAssignments,
+  posts,
   principal,
   user,
+  userSegments,
   conversations,
   tickets,
 } from '@/lib/server/db'
-import { toUuid, type PrincipalId } from '@quackback/ids'
+import { toUuid, type PostTagId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import { emitBestEffort } from '@/lib/server/events/emit'
 import { companyCreated, companyDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
@@ -161,6 +167,27 @@ export async function getCompany(id: CompanyId): Promise<Company> {
   return row
 }
 
+/**
+ * One company with its linked-people count — the single-record counterpart of
+ * the directory list's memberCount projection.
+ */
+export async function getCompanyWithMemberCount(id: CompanyId): Promise<CompanyWithMemberCount> {
+  const rows = await db
+    .select({
+      company: companies,
+      memberCount: sql<number>`count(${principal.id})::int`.as('member_count'),
+    })
+    .from(companies)
+    .leftJoin(principal, eq(principal.companyId, companies.id))
+    .where(eq(companies.id, id))
+    .groupBy(companies.id)
+  const row = rows[0]
+  if (!row) {
+    throw new NotFoundError('COMPANY_NOT_FOUND', `Company with ID ${id} not found`)
+  }
+  return { ...row.company, memberCount: row.memberCount }
+}
+
 /** One jsonb predicate over companies.custom_attributes — same operator set as
  *  the People directory's metadata filters so the two tabs behave alike. */
 function attrConditionSql(attr: CompanyAttrFilter): ReturnType<typeof sql> | null {
@@ -254,6 +281,39 @@ function companyFilterConditions(filter: CompanyListFilter): ReturnType<typeof s
   for (const attr of filter.attrs ?? []) {
     const cond = attrConditionSql(attr)
     if (cond) conditions.push(cond)
+  }
+
+  if (filter.externalId?.trim()) {
+    // Exact match; unknown external references match nothing rather than erroring.
+    conditions.push(sql`${companies.externalId} = ${filter.externalId.trim()}`)
+  }
+  if (filter.segmentId) {
+    // Members' segments: user_segments is the engine's membership set for both
+    // manual and dynamic segments (dynamic rows are the evaluation cache).
+    conditions.push(
+      inArray(
+        companies.id,
+        db
+          .select({ companyId: principal.companyId })
+          .from(principal)
+          .innerJoin(userSegments, eq(userSegments.principalId, principal.id))
+          .where(eq(userSegments.segmentId, filter.segmentId as SegmentId))
+      )
+    )
+  }
+  if (filter.tagId) {
+    // Members' authorship links companies to the product's tagging primitive.
+    conditions.push(
+      inArray(
+        companies.id,
+        db
+          .select({ companyId: principal.companyId })
+          .from(principal)
+          .innerJoin(posts, eq(posts.principalId, principal.id))
+          .innerJoin(postTagAssignments, eq(postTagAssignments.postId, posts.id))
+          .where(eq(postTagAssignments.tagId, filter.tagId as PostTagId))
+      )
+    )
   }
 
   return conditions

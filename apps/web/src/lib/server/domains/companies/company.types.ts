@@ -72,6 +72,16 @@ export interface CompanyListFilter {
   limit?: number
   /** Keyset cursor: the previous page's last company id. */
   cursor?: string
+  /** Exact match on the integration-facing external reference (external_id). */
+  externalId?: string
+  /** Restrict to companies with at least one member principal in this segment. */
+  segmentId?: string
+  /**
+   * Restrict to companies with at least one member principal who authored a
+   * post carrying this post tag — the product's tagging primitive, linked to
+   * companies through authorship.
+   */
+  tagId?: string
 }
 
 /** One keyset page of companies plus the cursor for the next page. */

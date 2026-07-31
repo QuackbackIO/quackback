@@ -9,7 +9,20 @@ import { createId, type PrincipalId, type TypeId, type UserId } from '@quackback
 
 type CompanyId = TypeId<'company'>
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { companies, principal, user, conversations, tickets, ticketStatuses } from '@/lib/server/db'
+import {
+  boards,
+  companies,
+  conversations,
+  postTagAssignments,
+  postTags,
+  posts,
+  principal,
+  segments,
+  tickets,
+  ticketStatuses,
+  user,
+  userSegments,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -31,6 +44,9 @@ const fixture = await createDbTestFixture({
     await db.select({ id: companies.id }).from(companies).limit(0)
     await db.select({ id: conversations.id }).from(conversations).limit(0)
     await db.select({ id: tickets.id }).from(tickets).limit(0)
+    await db.select({ id: segments.id }).from(segments).limit(0)
+    await db.select({ id: posts.id }).from(posts).limit(0)
+    await db.select({ id: postTags.id }).from(postTags).limit(0)
   },
 })
 
@@ -147,6 +163,77 @@ describe.skipIf(!fixture.available)('company directory queries (real DB, rolled 
 
       const hits = await listCompanies({ search: `Counted ${tag}` })
       expect(hits.find((c) => c.id === company.id)?.memberCount).toBe(1)
+    })
+  })
+
+  describe('integration lookup filters (externalId / segmentId / tagId)', () => {
+    it('matches externalId exactly', async () => {
+      const tag = suffix()
+      const match = await createCompany({ name: `Ext ${tag}`, externalId: `crm-${tag}` })
+      await createCompany({ name: `Other ${tag}`, externalId: `crm-other-${tag}` })
+      await createCompany({ name: `None ${tag}` })
+
+      const hits = await listCompanies({ externalId: `crm-${tag}` })
+      expect(hits.map((c) => c.id)).toEqual([match.id])
+
+      // An unknown external reference degrades to an empty list, not an error.
+      expect(await listCompanies({ externalId: `crm-missing-${tag}` })).toEqual([])
+    })
+
+    it('restricts to companies with a member principal in the segment', async () => {
+      const tag = suffix()
+      const inSegment = await createCompany({ name: `Segmented ${tag}` })
+      const notInSegment = await createCompany({ name: `Outside ${tag}` })
+
+      const segmentId = createId('segment')
+      await testDb
+        .insert(segments)
+        .values({ id: segmentId, name: `Seg ${tag}`, slug: `seg-${tag}` })
+
+      const member = await seedPrincipal()
+      await attachPrincipal(inSegment.id as CompanyId, member)
+      await attachPrincipal(notInSegment.id as CompanyId, await seedPrincipal())
+      await testDb.insert(userSegments).values({ principalId: member, segmentId })
+
+      const hits = await listCompanies({ segmentId })
+      const ids = hits.map((c) => c.id)
+      expect(ids).toContain(inSegment.id)
+      expect(ids).not.toContain(notInSegment.id)
+
+      // A segment with no members matches nothing.
+      const emptySegmentId = createId('segment')
+      await testDb
+        .insert(segments)
+        .values({ id: emptySegmentId, name: `Empty ${tag}`, slug: `empty-${tag}` })
+      expect(await listCompanies({ segmentId: emptySegmentId })).toEqual([])
+    })
+
+    it('restricts to companies whose members authored posts carrying the tag', async () => {
+      const tag = suffix()
+      const tagged = await createCompany({ name: `Tagged ${tag}` })
+      const untagged = await createCompany({ name: `Untagged ${tag}` })
+
+      const author = await seedPrincipal()
+      await attachPrincipal(tagged.id as CompanyId, author)
+      await attachPrincipal(untagged.id as CompanyId, await seedPrincipal())
+
+      const boardId = createId('board')
+      await testDb.insert(boards).values({ id: boardId, slug: `b-${tag}`, name: `Board ${tag}` })
+      const tagId = createId('post_tag')
+      await testDb.insert(postTags).values({ id: tagId, name: `tag-${tag}` })
+      const postId = createId('post')
+      await testDb
+        .insert(posts)
+        .values({ id: postId, boardId, principalId: author, title: `Post ${tag}`, content: '' })
+      await testDb.insert(postTagAssignments).values({ postId, tagId })
+
+      const hits = await listCompanies({ tagId })
+      const ids = hits.map((c) => c.id)
+      expect(ids).toContain(tagged.id)
+      expect(ids).not.toContain(untagged.id)
+
+      // An unknown tag matches nothing.
+      expect(await listCompanies({ tagId: createId('post_tag') })).toEqual([])
     })
   })
 
