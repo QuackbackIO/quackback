@@ -48,6 +48,7 @@ import {
   usePersonBlockStatus,
 } from '@/components/admin/users/block-person-control'
 import { ChangelogSubscriptionControl } from '@/components/admin/users/changelog-subscription-control'
+import { DuplicateUsersWarning } from '@/components/admin/users/duplicate-users-warning'
 import { MergeLeadControl } from '@/components/admin/users/merge-lead-control'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
@@ -612,6 +613,15 @@ export function UserDetail({
               email: displayEmail,
               image: user.image,
             }}
+          />
+        )}
+
+        {/* Possible duplicates — renders nothing when the lookup is clean. */}
+        {!isEditing && (
+          <DuplicateUsersWarning
+            principalId={user.principalId as PrincipalId}
+            currentName={user.name}
+            canManage={canManageUsers}
           />
         )}
 
