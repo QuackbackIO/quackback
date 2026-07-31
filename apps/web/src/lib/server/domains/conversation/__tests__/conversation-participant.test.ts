@@ -27,6 +27,11 @@ const hoisted = vi.hoisted(() => ({
   // select...limit() resolves to. Inserts record their values here.
   selectQueue: [] as unknown[][],
   insertedRows: [] as unknown[],
+  // FIFO results for insert...returning() and delete...returning(): a row array
+  // (inserted/deleted) or [] (conflict / nothing matched).
+  writeQueue: [] as unknown[][],
+  deletedFrom: [] as unknown[],
+  emitSystemMessage: vi.fn(),
 }))
 
 vi.mock('@/lib/server/db', async (importOriginal) => {
@@ -47,13 +52,21 @@ vi.mock('@/lib/server/db', async (importOriginal) => {
       hoisted.insertedRows.push(v)
       return c
     }
-    c.onConflictDoNothing = async () => {}
+    c.onConflictDoNothing = () => c
+    c.returning = async () => hoisted.writeQueue.shift() ?? []
     c.then = (resolve: (v: unknown) => unknown) => resolve(undefined)
+    return c
+  }
+  function deleteChain(table: unknown): Record<string, unknown> {
+    hoisted.deletedFrom.push(table)
+    const c: Record<string, unknown> = {}
+    c.where = () => c
+    c.returning = async () => hoisted.writeQueue.shift() ?? []
     return c
   }
   return {
     ...(await importOriginal<typeof import('@/lib/server/db')>()),
-    db: { select: () => chain(), insert: () => insertChain() },
+    db: { select: () => chain(), insert: () => insertChain(), delete: deleteChain },
   }
 })
 
@@ -68,10 +81,18 @@ vi.mock('@/lib/server/domains/principals/principal.factory', () => ({
   createPrincipal: hoisted.createPrincipal,
 }))
 
+// The thread-notice seam (emitSystemMessage lives on the conversation write
+// service); the participant service must record each change through it.
+vi.mock('../conversation.service', () => ({
+  emitSystemMessage: hoisted.emitSystemMessage,
+}))
+
 import {
   addConversationParticipantByEmail,
+  removeConversationParticipant,
   listParticipantReplyRecipients,
 } from '../conversation-participant.service'
+import { conversationParticipants } from '@/lib/server/db'
 
 const ACTOR = { principalId: 'principal_agent1' } as unknown as Actor
 const CONVERSATION = 'conversation_c1'
@@ -81,6 +102,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   hoisted.selectQueue.length = 0
   hoisted.insertedRows.length = 0
+  hoisted.writeQueue.length = 0
+  hoisted.deletedFrom.length = 0
+  hoisted.emitSystemMessage.mockResolvedValue(undefined)
   // Default conversation lookup: exists, owned by VISITOR.
   hoisted.selectQueue.push([{ visitorPrincipalId: VISITOR }])
 })
@@ -172,6 +196,97 @@ describe('addConversationParticipantByEmail', () => {
     await expect(
       addConversationParticipantByEmail(CONVERSATION, 'x@example.com', ACTOR)
     ).rejects.toThrow(/not found/i)
+  })
+
+  it('posts an internal thread notice when a new participant is added', async () => {
+    hoisted.selectQueue.push([]) // no user account
+    hoisted.selectQueue.push([{ id: 'principal_lead1' }])
+    hoisted.writeQueue.push([{ principalId: 'principal_lead1' }]) // insert landed
+
+    await addConversationParticipantByEmail(CONVERSATION, 'Lead@Example.com', ACTOR, {
+      actorDisplayName: 'Agent Smith',
+    })
+
+    expect(hoisted.emitSystemMessage).toHaveBeenCalledTimes(1)
+    const [conversationId, content, event, opts] = hoisted.emitSystemMessage.mock.calls[0]
+    expect(conversationId).toBe(CONVERSATION)
+    expect(content).toContain('lead@example.com')
+    expect(content).toContain('Agent Smith')
+    // Team-only: the customer has no business seeing membership churn.
+    expect(event).toBeUndefined()
+    expect(opts).toEqual({ internal: true })
+  })
+
+  it('posts no notice for an idempotent repeat add (no new row)', async () => {
+    hoisted.selectQueue.push([]) // no user account
+    hoisted.selectQueue.push([{ id: 'principal_lead1' }])
+    hoisted.writeQueue.push([]) // onConflictDoNothing: nothing inserted
+
+    await addConversationParticipantByEmail(CONVERSATION, 'lead@example.com', ACTOR)
+
+    expect(hoisted.emitSystemMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('removeConversationParticipant', () => {
+  it('deletes the join row and posts an internal thread notice', async () => {
+    hoisted.selectQueue.length = 0 // remove does not re-check the conversation
+    // Participant lookup (for the notice label), then the delete returning a row.
+    hoisted.selectQueue.push([
+      {
+        displayName: 'Pat Doe',
+        userEmail: 'pat@example.com',
+        contactEmail: null,
+      },
+    ])
+    hoisted.writeQueue.push([{ principalId: 'principal_p1' }])
+
+    const result = await removeConversationParticipant(
+      CONVERSATION as never,
+      'principal_p1' as never,
+      ACTOR,
+      { actorDisplayName: 'Agent Smith' }
+    )
+
+    expect(result).toEqual({ removed: true })
+    expect(hoisted.deletedFrom).toEqual([conversationParticipants])
+    expect(hoisted.emitSystemMessage).toHaveBeenCalledTimes(1)
+    const [conversationId, content, , opts] = hoisted.emitSystemMessage.mock.calls[0]
+    expect(conversationId).toBe(CONVERSATION)
+    expect(content).toContain('pat@example.com')
+    expect(content).toContain('Agent Smith')
+    expect(opts).toEqual({ internal: true })
+  })
+
+  it('removing a never-added participant is a clean no-op — no error, no notice', async () => {
+    hoisted.selectQueue.length = 0
+    hoisted.selectQueue.push([]) // no such participant
+    hoisted.writeQueue.push([]) // delete matched nothing
+
+    const result = await removeConversationParticipant(
+      CONVERSATION as never,
+      'principal_ghost' as never,
+      ACTOR
+    )
+
+    expect(result).toEqual({ removed: false })
+    expect(hoisted.emitSystemMessage).not.toHaveBeenCalled()
+  })
+
+  it('a removed participant receives no further replies (fan-out reads the live join table)', async () => {
+    // After the delete, the recipients read finds no rows — nothing to email.
+    hoisted.selectQueue.length = 0
+    hoisted.selectQueue.push([]) // label lookup: row already gone mid-flow is fine
+    hoisted.writeQueue.push([{ principalId: 'principal_p1' }])
+    await removeConversationParticipant(CONVERSATION as never, 'principal_p1' as never, ACTOR)
+
+    hoisted.selectQueue.push([]) // join table now empty for this conversation
+    const recipients = await listParticipantReplyRecipients(
+      CONVERSATION as never,
+      VISITOR as never,
+      'visitor@example.com'
+    )
+    expect(recipients).toEqual([])
   })
 })
 

@@ -1523,6 +1523,11 @@ const addParticipantSchema = z.object({
   email: z.string().email().max(320),
 })
 
+const removeParticipantSchema = z.object({
+  conversationId: z.string(),
+  principalId: z.string(),
+})
+
 /**
  * Add a second customer to an existing conversation by email address. The
  * address resolves to a principal (existing account, prior lead, or a freshly
@@ -1541,7 +1546,28 @@ export const addConversationParticipantFn = createServerFn({ method: 'POST' })
     return addConversationParticipantByEmail(
       data.conversationId as ConversationId,
       data.email,
-      actor
+      actor,
+      { actorDisplayName: ctx.user.name }
+    )
+  })
+
+/**
+ * Remove an added customer from a conversation — they stop receiving replies
+ * with the next send (the fan-out reads the join table live). A clean no-op
+ * when the principal was never a participant. Same gate as the add fn.
+ */
+export const removeConversationParticipantFn = createServerFn({ method: 'POST' })
+  .validator(removeParticipantSchema)
+  .handler(async ({ data }) => {
+    const ctx = await requireAuth({ permission: PERMISSIONS.CONVERSATION_REPLY })
+    const actor = await policyActorFromAuth(ctx)
+    const { removeConversationParticipant } =
+      await import('@/lib/server/domains/conversation/conversation-participant.service')
+    return removeConversationParticipant(
+      data.conversationId as ConversationId,
+      data.principalId as PrincipalId,
+      actor,
+      { actorDisplayName: ctx.user.name }
     )
   })
 

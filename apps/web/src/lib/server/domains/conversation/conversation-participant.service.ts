@@ -5,9 +5,11 @@
  * minted from an earlier email, then a fresh standalone lead (the same
  * identity precedence as cold-inbound, minus its DMARC trust gate: the agent's
  * explicit add IS the trust decision) — and records the (conversation,
- * principal) row idempotently. The reply fan-out (conversation.notify) reads
- * `listParticipantReplyRecipients` to email every participant each subsequent
- * agent reply.
+ * principal) row idempotently. Removal deletes that row; both changes post an
+ * internal (team-only) thread notice so membership churn is auditable in one
+ * place. The reply fan-out (conversation.notify) reads
+ * `listParticipantReplyRecipients` live on every reply, so a removed
+ * participant stops receiving mail with the next reply.
  */
 import {
   db,
@@ -68,12 +70,16 @@ async function resolveCustomerPrincipalByEmail(rawEmail: string): Promise<Princi
  * Add a customer to a conversation by email address. Idempotent: the join
  * row's (conversation, principal) uniqueness makes a repeat add a no-op, and
  * adding the conversation's own visitor records nothing (they already receive
- * every reply as the primary recipient). Returns the resolved principal id.
+ * every reply as the primary recipient). A genuinely new participant gets an
+ * internal (team-only) thread notice — the same record `removeConversationParticipant`
+ * posts on removal, so membership churn is always auditable in the thread.
+ * Returns the resolved principal id.
  */
 export async function addConversationParticipantByEmail(
   conversationId: ConversationId,
   email: string,
-  actor: Actor
+  actor: Actor,
+  opts?: { actorDisplayName?: string | null }
 ): Promise<{ principalId: PrincipalId }> {
   const [conversation] = await db
     .select({ visitorPrincipalId: conversations.visitorPrincipalId })
@@ -82,14 +88,85 @@ export async function addConversationParticipantByEmail(
     .limit(1)
   if (!conversation) throw new NotFoundError('NOT_FOUND', 'Conversation not found')
 
+  const normalizedEmail = email.trim().toLowerCase()
   const principalId = await resolveCustomerPrincipalByEmail(email)
   if (principalId === conversation.visitorPrincipalId) return { principalId }
 
-  await db
+  const inserted = await db
     .insert(conversationParticipants)
     .values({ conversationId, principalId, addedByPrincipalId: actor.principalId })
     .onConflictDoNothing()
+    .returning({ principalId: conversationParticipants.principalId })
+  if (inserted.length > 0) {
+    const { emitSystemMessage } = await import('./conversation.service')
+    const byName = opts?.actorDisplayName ? ` by ${opts.actorDisplayName}` : ''
+    await emitSystemMessage(
+      conversationId,
+      `${normalizedEmail} was added to the conversation${byName} — they will receive future replies by email`,
+      undefined,
+      { internal: true }
+    )
+  }
   return { principalId }
+}
+
+/**
+ * Remove an added customer from a conversation. Clean no-op when the principal
+ * was never a participant (`removed: false`, no notice) — a double-click or a
+ * stale dialog must not error. The reply fan-out reads the join table live on
+ * every reply, so the deletion alone stops delivery; the internal thread
+ * notice mirrors the one the add path posts, keeping membership churn
+ * auditable in one place.
+ */
+export async function removeConversationParticipant(
+  conversationId: ConversationId,
+  participantPrincipalId: PrincipalId,
+  actor: Actor,
+  opts?: { actorDisplayName?: string | null }
+): Promise<{ removed: boolean }> {
+  // Read the participant's label first so the notice can name who was removed.
+  const [participant] = await db
+    .select({
+      displayName: principal.displayName,
+      userEmail: user.email,
+      contactEmail: principal.contactEmail,
+    })
+    .from(conversationParticipants)
+    .innerJoin(principal, eq(principal.id, conversationParticipants.principalId))
+    .leftJoin(user, eq(user.id, principal.userId))
+    .where(
+      and(
+        eq(conversationParticipants.conversationId, conversationId),
+        eq(conversationParticipants.principalId, participantPrincipalId)
+      )
+    )
+    .limit(1)
+
+  const deleted = await db
+    .delete(conversationParticipants)
+    .where(
+      and(
+        eq(conversationParticipants.conversationId, conversationId),
+        eq(conversationParticipants.principalId, participantPrincipalId)
+      )
+    )
+    .returning({ principalId: conversationParticipants.principalId })
+  if (deleted.length === 0) return { removed: false }
+
+  const label =
+    realEmail(participant?.userEmail) ??
+    realEmail(participant?.contactEmail) ??
+    participant?.displayName ??
+    'A customer'
+  const { emitSystemMessage } = await import('./conversation.service')
+  const byName = opts?.actorDisplayName ? ` by ${opts.actorDisplayName}` : ''
+  await emitSystemMessage(
+    conversationId,
+    `${label} was removed from the conversation${byName} — they no longer receive replies`,
+    undefined,
+    { internal: true }
+  )
+  return { removed: true }
 }
 
 /**
