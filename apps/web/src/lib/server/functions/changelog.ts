@@ -5,7 +5,7 @@
  */
 
 import { createServerFn } from '@tanstack/react-start'
-import type { BoardId, ChangelogCategoryId, ChangelogId, PostId } from '@quackback/ids'
+import type { BoardId, ChangelogCategoryId, ChangelogId, PostId, SegmentId } from '@quackback/ids'
 // Note: BoardId is only used for searchShippedPosts filtering
 import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
 import { NotFoundError } from '@/lib/shared/errors'
@@ -70,6 +70,7 @@ export const createChangelogFn = createServerFn({ method: 'POST' })
         publishState: data.publishState as PublishState,
         ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
         ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
+        ...(data.segmentIds !== undefined && { segmentIds: data.segmentIds as SegmentId[] }),
         notify: data.notify,
       },
       {
@@ -105,6 +106,7 @@ export const updateChangelogFn = createServerFn({ method: 'POST' })
       publishState: data.publishState as PublishState | undefined,
       ...(data.displayDate !== undefined && { displayDate: data.displayDate }),
       ...(data.featuredImageUrl !== undefined && { featuredImageUrl: data.featuredImageUrl }),
+      ...(data.segmentIds !== undefined && { segmentIds: data.segmentIds as SegmentId[] }),
       notify: data.notify,
     })
 
