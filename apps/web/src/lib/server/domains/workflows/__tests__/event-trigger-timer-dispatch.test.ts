@@ -28,6 +28,7 @@ vi.mock('../condition.context', () => ({ resolveConditionContext }))
 const {
   channelAllows,
   ticketStatusCategoryAllows,
+  pagePathAllows,
   audienceAllows,
   sendWindowAllows,
   frequencyCapAllows,
@@ -38,6 +39,8 @@ const {
   // triggers) — always-allow, same stance as every other guard's default
   // here (see beforeEach below).
   ticketStatusCategoryAllows: vi.fn(),
+  // Same always-allow stance: page.visited is never a timer trigger.
+  pagePathAllows: vi.fn(),
   audienceAllows: vi.fn(),
   sendWindowAllows: vi.fn(),
   frequencyCapAllows: vi.fn(),
@@ -46,6 +49,7 @@ const {
 vi.mock('../dispatcher.guards', () => ({
   channelAllows,
   ticketStatusCategoryAllows,
+  pagePathAllows,
   audienceAllows,
   sendWindowAllows,
   frequencyCapAllows,
@@ -104,6 +108,7 @@ beforeEach(() => {
   resolveConditionContext.mockResolvedValue(baseCtx)
   channelAllows.mockReturnValue(true)
   ticketStatusCategoryAllows.mockReturnValue(true)
+  pagePathAllows.mockReturnValue(true)
   audienceAllows.mockReturnValue(true)
   sendWindowAllows.mockReturnValue(true)
   frequencyCapAllows.mockResolvedValue(true)

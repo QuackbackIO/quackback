@@ -160,6 +160,25 @@ export function ticketStatusCategoryAllows(workflow: Workflow, trigger: Workflow
   return trigger.ticketStatusCategory === configured
 }
 
+/**
+ * Whether `workflow`'s `triggerSettings.pagePath` (page.visited trigger —
+ * workflow.schemas.ts's triggerSettingsSchema) permits this dispatch. Only
+ * ever restricts `page.visited`; every other trigger type always allows,
+ * same "not applicable -> allow" stance as the guards above. Matching is
+ * exact on the URL pathname, or a prefix match when the configured pattern
+ * ends in `*` (`/docs/*` matches `/docs/getting-started`). An unset/empty
+ * pagePath means "any page". Pure — no DB access, same as channelAllows.
+ */
+export function pagePathAllows(workflow: Workflow, trigger: WorkflowTrigger): boolean {
+  if (trigger.triggerType !== 'page.visited') return true
+  const configured = workflow.triggerSettings.pagePath
+  if (typeof configured !== 'string' || configured.length === 0) return true // "Any page" (unset)
+  const path = trigger.pagePath
+  if (!path) return false
+  if (configured.endsWith('*')) return path.startsWith(configured.slice(0, -1))
+  return path === configured
+}
+
 /** Workflow ids already logged for an unenforceable stored `audience` this
  *  process's lifetime — keeps a corrupted/malformed audience from spamming
  *  the log on every dispatch to the same workflow, while still surfacing it

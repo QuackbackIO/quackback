@@ -492,3 +492,54 @@ describe('dispatchWorkflowTrigger — ticket context gating', () => {
     )
   })
 })
+
+describe('dispatchWorkflowTrigger page.visited URL matching', () => {
+  const pageTrigger = (pagePath: string) =>
+    trigger({ triggerType: 'page.visited', pagePath } as Partial<WorkflowTrigger>)
+
+  it('runs a page.visited workflow when the visited path matches its pagePath exactly', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('pv1', 'background', { pagePath: '/pricing' }),
+    ])
+    await dispatchWorkflowTrigger(pageTrigger('/pricing'))
+    expect(ranIds()).toEqual(['pv1'])
+  })
+
+  it('matches a trailing-* pagePath as a prefix pattern', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('pv1', 'background', { pagePath: '/docs/*' }),
+    ])
+    await dispatchWorkflowTrigger(pageTrigger('/docs/getting-started'))
+    expect(ranIds()).toEqual(['pv1'])
+  })
+
+  it('skips a page.visited workflow whose pagePath does not match the visited path', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('pv1', 'background', { pagePath: '/pricing' }),
+    ])
+    await dispatchWorkflowTrigger(pageTrigger('/roadmap'))
+    expect(runWorkflow).not.toHaveBeenCalled()
+  })
+
+  it('a prefix pattern does not match a path outside the prefix', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('pv1', 'background', { pagePath: '/docs/*' }),
+    ])
+    await dispatchWorkflowTrigger(pageTrigger('/blog/post'))
+    expect(runWorkflow).not.toHaveBeenCalled()
+  })
+
+  it('an unset pagePath matches any visited path', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([wf('pv1', 'background')])
+    await dispatchWorkflowTrigger(pageTrigger('/anything'))
+    expect(ranIds()).toEqual(['pv1'])
+  })
+
+  it('the pagePath guard never filters other trigger types', async () => {
+    listLiveWorkflowsForTrigger.mockResolvedValue([
+      wf('bg1', 'background', { pagePath: '/pricing' }),
+    ])
+    await dispatchWorkflowTrigger(trigger())
+    expect(ranIds()).toEqual(['bg1'])
+  })
+})
