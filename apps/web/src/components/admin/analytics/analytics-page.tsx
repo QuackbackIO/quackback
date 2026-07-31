@@ -57,6 +57,11 @@ const AnalyticsFirstResponseChart = lazy(() =>
     default: m.AnalyticsFirstResponseChart,
   }))
 )
+const AnalyticsTimeToCloseChart = lazy(() =>
+  import('./analytics-time-to-close-chart').then((m) => ({
+    default: m.AnalyticsTimeToCloseChart,
+  }))
+)
 
 /** A section card matching the Overview: a divided headline stat row, then the
  *  section's visual beneath a hairline divider. */
@@ -409,6 +414,23 @@ export function AnalyticsPage() {
                     >
                       <Suspense fallback={<ChartSkeleton />}>
                         <AnalyticsFirstResponseChart days={data.firstResponse.days} />
+                      </Suspense>
+                    </StatSection>
+                    <StatSection
+                      stats={[
+                        {
+                          label: 'Median time to close',
+                          value: formatResponseTime(data.timeToClose.medianMinutes),
+                        },
+                        {
+                          label: 'Closed',
+                          value: data.timeToClose.closed.toLocaleString(),
+                          caption: 'conversations',
+                        },
+                      ]}
+                    >
+                      <Suspense fallback={<ChartSkeleton />}>
+                        <AnalyticsTimeToCloseChart days={data.timeToClose.days} />
                       </Suspense>
                     </StatSection>
                     {data.csat.responseCount === 0 ? (
