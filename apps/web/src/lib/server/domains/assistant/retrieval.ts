@@ -150,7 +150,7 @@ interface RetrievalRow {
  *  segment-gated category is NOT public-to-everyone, so the copilot leak gate
  *  must treat it as internal on team-ceiling retrievals. */
 const isPublicRow = () =>
-  sql<boolean>`(${helpCenterCategories.isPublic} AND jsonb_array_length(${helpCenterCategories.segmentIds}) = 0 AND ${helpCenterArticles.publishedAt} IS NOT NULL AND ${helpCenterArticles.publishedAt} <= now())`
+  sql<boolean>`(${helpCenterCategories.isPublic} AND jsonb_array_length(${helpCenterCategories.segmentIds}) = 0 AND jsonb_array_length(${helpCenterArticles.segmentIds}) = 0 AND ${helpCenterArticles.publishedAt} IS NOT NULL AND ${helpCenterArticles.publishedAt} <= now())`
 
 /**
  * Hybrid retrieval: an article matches on a keyword hit OR a semantic hit above

@@ -184,6 +184,7 @@ export async function createArticle(
       principalId: effectivePrincipalId,
       position: input.position ?? null,
       description: input.description?.trim() || null,
+      segmentIds: input.segmentIds ?? [],
     })
     .returning()
 
@@ -222,6 +223,7 @@ export async function updateArticle(
     )
   if (input.position !== undefined) updateData.position = input.position
   if (input.description !== undefined) updateData.description = input.description?.trim() || null
+  if (input.segmentIds !== undefined) updateData.segmentIds = input.segmentIds
   const updated = await db.transaction(async (tx) => {
     if (authorPrincipalId !== undefined) {
       const author = await tx.query.principal.findFirst({
