@@ -631,6 +631,9 @@ const sendTicketMessageSchema = z.object({
   content: z.string().default(''),
   contentJson: z.any().nullable().optional(),
   attachments: z.array(ticketAttachmentSchema).optional(),
+  /** Tracker-only: also post the reply onto every customer ticket the tracker
+   *  tracks. Ignored on non-tracker tickets. */
+  replyAll: z.boolean().optional(),
 })
 
 export const sendTicketMessageFn = createServerFn({ method: 'POST' })
@@ -645,6 +648,7 @@ export const sendTicketMessageFn = createServerFn({ method: 'POST' })
       content: data.content,
       contentJson: data.contentJson ?? null,
       attachments: data.attachments as ConversationAttachment[] | undefined,
+      replyAll: data.replyAll,
     })
   })
 

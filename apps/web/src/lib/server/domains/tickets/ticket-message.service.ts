@@ -111,6 +111,9 @@ import type { Actor } from '@/lib/server/policy/types'
 import { PERMISSIONS } from '@/lib/shared/permissions'
 import type { PermissionKey } from '@/lib/shared/permissions'
 import { ForbiddenError } from '@/lib/shared/errors'
+import { logger } from '@/lib/server/logger'
+
+const log = logger.child({ component: 'ticket-message' })
 
 /**
  * Insert a team-only, author-less 'system' status event on a ticket thread —
@@ -170,6 +173,12 @@ export interface SendTicketMessageInput {
    *  message is caught by the (metadata->>'emailMessageId') partial unique index
    *  the conversation path already relies on; the portal reply path omits it. */
   metadata?: Record<string, unknown>
+  /** Tracker-only: also post this reply onto every customer ticket the tracker
+   *  tracks (each linked ticket's own write path runs, so a paired ticket's
+   *  copy lands in its conversation). Off unless asked; ignored on
+   *  non-tracker tickets and on a reply that already carries the
+   *  `repliedAllFromTicketId` stamp. */
+  replyAll?: boolean
 }
 
 /**
@@ -408,12 +417,64 @@ export async function sendTicketMessage(
   // Replying opts the agent in as a watcher (reason 'replier'). Must never
   // fail the send itself; note authors and visitor replies subscribe nobody.
   await safeSubscribeToTicket(principalId, input.ticketId, 'replier')
+  // A tracker's reply-all fans the reply onto every customer ticket it tracks
+  // (§4.9's message-axis counterpart of the status cascade). The stamp guard
+  // keeps a relayed copy from fanning again; a non-tracker ticket ignores the
+  // ask (its own reply already went to its one thread).
+  if (input.replyAll && ticket.type === 'tracker' && !input.metadata?.repliedAllFromTicketId) {
+    await cascadeTrackerReplyAll(ticket, input, principalId, actor)
+  }
   // Agent/integration-facing signal, fire-and-forget after the write commits.
   // On a linked pair this rides ALONGSIDE the delegate's `message.created`
   // (notification matrix: the watcher fan-out — the requester included through
   // their subscription row, B18 — is ticket-side, unchanged by the redirect).
   void emitTicketReplied(actor, ticket, message)
   return { message }
+}
+
+/**
+ * Fan a tracker's reply-all onto every customer ticket it tracks (§4.9's
+ * message-axis counterpart of cascadeTrackerStatus in ticket.service). Each
+ * linked ticket takes the reply through insertTicketMessage itself, so the
+ * Phase 1a redirect lands a paired ticket's copy in its CONVERSATION (the
+ * full conversation write pipeline owns the side effects from there) and a
+ * standalone ticket keeps the copy on its own thread. Every copy is stamped
+ * `repliedAllFromTicketId`, and the send path refuses to fan a reply that
+ * already carries the stamp — the stamp outranks the ask, so a copy relayed
+ * back onto a tracker cannot bounce the reply between trackers. Per-link
+ * best-effort: the tracker's own reply already committed, so one failing link
+ * is logged, not fatal. The dynamic import breaks the
+ * ticket-message.service <-> ticket-links static cycle (ticket-links imports
+ * emitTicketSystemMessage from this module).
+ */
+async function cascadeTrackerReplyAll(
+  tracker: Ticket,
+  input: SendTicketMessageInput,
+  principalId: PrincipalId,
+  actor: Actor
+): Promise<void> {
+  const { listLinkedTicketIds } = await import('./ticket-links.service')
+  const linkedIds = await listLinkedTicketIds(tracker.id)
+  for (const linkedId of linkedIds) {
+    try {
+      await insertTicketMessage(
+        {
+          ticketId: linkedId,
+          content: input.content,
+          contentJson: input.contentJson,
+          attachments: input.attachments,
+          metadata: { ...input.metadata, repliedAllFromTicketId: tracker.id },
+        },
+        principalId,
+        { senderType: 'agent', isInternal: false, stampFirstResponse: true, actor }
+      )
+    } catch (err) {
+      log.warn(
+        { err, tracker_id: tracker.id, linked_id: linkedId },
+        'tracker reply-all: link failed'
+      )
+    }
+  }
 }
 
 /** Agent-only internal note on a ticket thread (never customer-visible). */
