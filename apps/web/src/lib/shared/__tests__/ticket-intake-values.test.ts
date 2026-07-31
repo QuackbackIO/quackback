@@ -49,10 +49,42 @@ describe('validateTicketIntakeValues', () => {
     expect(validateTicketIntakeValues(form, { count: 'abc' }).ok).toBe(false)
   })
 
+  it('rejects non-string/non-number raws for number fields (no boolean coercion)', () => {
+    const form = [field({ key: 'count', type: 'number' })]
+    // A boolean raw must not coerce through Number() (true would store as 1).
+    expect(validateTicketIntakeValues(form, { count: true }).ok).toBe(false)
+    expect(validateTicketIntakeValues(form, { count: false }).ok).toBe(false)
+    const ok = validateTicketIntakeValues(form, { count: 3.5 })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) expect(ok.values.count).toBe(3.5)
+  })
+
   it('validates ISO dates', () => {
     const form = [field({ key: 'when', type: 'date' })]
     expect(validateTicketIntakeValues(form, { when: '2026-07-18' }).ok).toBe(true)
     expect(validateTicketIntakeValues(form, { when: 'yesterday' }).ok).toBe(false)
+  })
+
+  it('accepts a full ISO datetime for date fields', () => {
+    const form = [field({ key: 'when', type: 'date' })]
+    const ok = validateTicketIntakeValues(form, { when: '2026-07-18T10:30:00Z' })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) expect(ok.values.when).toBe('2026-07-18T10:30:00Z')
+  })
+
+  it('rejects impossible calendar dates (Date.parse rolls them over)', () => {
+    const form = [field({ key: 'when', type: 'date' })]
+    expect(validateTicketIntakeValues(form, { when: '2026-02-31' }).ok).toBe(false)
+    expect(validateTicketIntakeValues(form, { when: '2026-04-31' }).ok).toBe(false)
+    expect(validateTicketIntakeValues(form, { when: '2026-02-29' }).ok).toBe(false)
+    // A leap-year Feb 29 is a real date.
+    expect(validateTicketIntakeValues(form, { when: '2028-02-29' }).ok).toBe(true)
+  })
+
+  it('rejects trailing junk after an ISO date prefix', () => {
+    const form = [field({ key: 'when', type: 'date' })]
+    expect(validateTicketIntakeValues(form, { when: '2026-07-18junk' }).ok).toBe(false)
+    expect(validateTicketIntakeValues(form, { when: '2026-07-18 10:30' }).ok).toBe(false)
   })
 
   it('coerces checkbox to boolean and enforces required (must be checked)', () => {
