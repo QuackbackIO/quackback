@@ -22,6 +22,8 @@ export type BulkConversationAction =
   | { type: 'macro'; macroId: string }
   | { type: 'close' }
   | { type: 'reopen' }
+  | { type: 'restore_spam' }
+  | { type: 'delete_forever' }
 
 export interface BulkConversationInput {
   conversationIds: string[]

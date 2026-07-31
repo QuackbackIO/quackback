@@ -10,6 +10,7 @@
  * can pop the right one open without a second source of truth.
  */
 import { XMarkIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
@@ -26,6 +27,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/shared/utils'
 
 /** The value menus the bar can pop open on demand. */
@@ -61,6 +72,13 @@ export interface BulkActionBarProps {
   /** True when the target includes at least one ticket — a macro reply posts
    *  a conversation message, so the trigger is disabled for ticket targets. */
   disableMacro?: boolean
+  /** Spam-view mode: the bar offers ONLY the spam-lifecycle actions (restore,
+   *  delete forever) — triage actions are meaningless on a spam-ended thread. */
+  spam?: boolean
+  /** Restore every spam-ended target to the open queue. */
+  onRestore?: () => void
+  /** Permanently delete every spam-ended target (confirmed in the bar). */
+  onDeleteForever?: () => void
 }
 
 const triggerClass =
@@ -83,6 +101,9 @@ export function BulkActionBar({
   disableSnooze,
   disableTag,
   disableMacro,
+  spam,
+  onRestore,
+  onDeleteForever,
 }: BulkActionBarProps) {
   const { data: members } = useTeamMembers()
   const { data: teams } = useInboxTeams()
@@ -90,12 +111,77 @@ export function BulkActionBar({
   const { data: tags } = useConversationTags({ enabled: openMenu === 'tag' })
   // Same lazy fetch for the macro list — the support-surface macros only.
   const { data: macros } = useQuery({ ...macrosQuery('support'), enabled: openMenu === 'macro' })
+  // Two-step gate for the one irreversible action the bar offers.
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Controlled open/close for one menu, so the command bar can pop it open.
   const menuOpen = (id: BulkMenuId) => ({
     open: openMenu === id,
     onOpenChange: (o: boolean) => onOpenMenuChange(o ? id : null),
   })
+
+  // Spam-view mode: only the spam-lifecycle actions. Triage menus (assign,
+  // priority, snooze, tag, macro, close) operate on live threads and would be
+  // no-ops or lies against a spam-ended one.
+  if (spam) {
+    return (
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+        <div
+          role="toolbar"
+          aria-label="Bulk actions"
+          className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-background/95 px-2 py-1.5 shadow-lg backdrop-blur"
+        >
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label={solo ? 'Dismiss' : 'Clear selection'}
+            className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <XMarkIcon className="size-4" />
+          </button>
+          <span className="px-1.5 text-xs font-semibold whitespace-nowrap">
+            {solo ? 'This conversation' : `${count} selected`}
+          </span>
+          <span className="mx-1 h-5 w-px bg-border" />
+          <button type="button" onClick={onRestore} disabled={pending} className={triggerClass}>
+            Restore
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            disabled={pending}
+            className={cn(triggerClass, 'text-destructive hover:bg-destructive/10')}
+          >
+            Delete forever
+          </button>
+        </div>
+        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Delete {solo ? 'this conversation' : `${count} conversations`} forever?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes the conversation and its entire history. This action cannot
+                be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirmDelete(false)
+                  onDeleteForever?.()
+                }}
+              >
+                Delete permanently
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    )
+  }
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">

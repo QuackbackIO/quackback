@@ -1171,6 +1171,28 @@ export async function autoFileConversationAsSpam(conversationId: ConversationId)
 }
 
 /**
+ * Agent action: permanently delete a spam-ended conversation. Hard delete —
+ * every child row (messages, participants, summaries, assignments, …) goes
+ * with it through the FK cascades, so this is irreversible by design: it
+ * exists for the Spam view's "delete forever", and only a conversation still
+ * marked spam may be deleted through it. A live or merely-closed thread is
+ * rejected loud — inbox hygiene never destroys a real customer thread.
+ */
+export async function deleteConversationPermanently(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<void> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  const existing = await loadConversationOr404(conversationId)
+  if (existing.endReason !== 'spam') {
+    throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
+  }
+  await db.delete(conversations).where(eq(conversations.id, conversationId))
+  log.info({ conversation_id: conversationId }, 'conversation permanently deleted')
+}
+
+/**
  * Attribution for a system notice posted by automation: the name of the
  * workflow whose run fired the action. Threaded from the workflow engine
  * through the conversation-write seams into the stored systemEvent, so the

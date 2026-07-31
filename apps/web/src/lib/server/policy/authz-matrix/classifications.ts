@@ -272,8 +272,9 @@ export const BARE_GATE_CLASSIFICATIONS: Record<string, Classification> = {
       PERMISSIONS.CONVERSATION_SET_TAGS,
       PERMISSIONS.CONVERSATION_REPLY,
       PERMISSIONS.CONVERSATION_SET_STATUS,
+      PERMISSIONS.CONVERSATION_MANAGE,
     ],
-    'bulk action — assign/assign_team require conversation.assign, tag requires conversation.set_tags, macro requires conversation.reply, the rest conversation.set_status'
+    'bulk action — assign/assign_team require conversation.assign, tag requires conversation.set_tags, macro requires conversation.reply, delete_forever requires conversation.manage, the rest conversation.set_status'
   ),
 
   // Ticket-axis counterpart of the bulk inbox action above: same dynamic
