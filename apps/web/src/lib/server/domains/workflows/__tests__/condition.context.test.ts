@@ -70,6 +70,8 @@ async function seedPrincipal(
     email?: string | null
     metadata?: Record<string, unknown>
     companyId?: CompanyId | null
+    country?: string | null
+    locale?: string | null
   } = {}
 ): Promise<PrincipalId> {
   const userId = createId('user') as UserId
@@ -79,6 +81,8 @@ async function seedPrincipal(
     name: `Visitor-${suffix()}`,
     email: opts.email,
     metadata: opts.metadata ? JSON.stringify(opts.metadata) : null,
+    country: opts.country ?? null,
+    locale: opts.locale ?? null,
   })
   await testDb.insert(principal).values({
     id: principalId,
@@ -275,6 +279,32 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     ).toBe(true)
   })
 
+  it("resolves the visitor's first-class country / locale / plan columns for person.country / person.locale / person.plan", async () => {
+    const principalId = await seedPrincipal({
+      metadata: { plan: 'enterprise', seats: 25 },
+      country: 'DE',
+      locale: 'de-DE',
+    })
+    const [conv] = await testDb
+      .insert(conversations)
+      .values({ visitorPrincipalId: principalId, channel: 'messenger' })
+      .returning()
+
+    const ctx = await resolveConditionContext(conv.id)
+    expect(ctx!.person!.country).toBe('DE')
+    expect(ctx!.person!.locale).toBe('de-DE')
+    // person.plan reads the same user.metadata `plan` key the segment
+    // evaluator's own `plan` attribute does — one plan vocabulary workspace-wide.
+    expect(ctx!.person!.plan).toBe('enterprise')
+
+    expect(evaluateCondition({ field: 'person.country', op: 'eq', value: 'DE' }, ctx!)).toBe(true)
+    expect(evaluateCondition({ field: 'person.locale', op: 'eq', value: 'de-DE' }, ctx!)).toBe(true)
+    expect(evaluateCondition({ field: 'person.plan', op: 'eq', value: 'enterprise' }, ctx!)).toBe(
+      true
+    )
+    expect(evaluateCondition({ field: 'person.plan', op: 'neq', value: 'free' }, ctx!)).toBe(true)
+  })
+
   it("resolves the visitor's linked company's attributes for company.attr.<key>", async () => {
     const [company] = await testDb
       .insert(companies)
@@ -310,6 +340,9 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     const ctx = await resolveConditionContext(conv.id)
     expect(ctx!.person!.attributes).toEqual({})
     expect(ctx!.person!.email).toBeNull()
+    expect(ctx!.person!.country).toBeNull()
+    expect(ctx!.person!.locale).toBeNull()
+    expect(ctx!.person!.plan).toBeNull()
     expect(ctx!.company).toBeNull()
 
     // The unresolved-subject contract: only is_empty matches.
@@ -318,6 +351,11 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
     expect(evaluateCondition({ field: 'company.attr.tier', op: 'is_empty' }, ctx!)).toBe(true)
     expect(evaluateCondition({ field: 'person.email', op: 'is_empty' }, ctx!)).toBe(true)
     expect(evaluateCondition({ field: 'person.email', op: 'is_set' }, ctx!)).toBe(false)
+    expect(evaluateCondition({ field: 'person.country', op: 'is_empty' }, ctx!)).toBe(true)
+    expect(evaluateCondition({ field: 'person.country', op: 'eq', value: 'DE' }, ctx!)).toBe(false)
+    expect(evaluateCondition({ field: 'person.locale', op: 'is_empty' }, ctx!)).toBe(true)
+    expect(evaluateCondition({ field: 'person.plan', op: 'is_empty' }, ctx!)).toBe(true)
+    expect(evaluateCondition({ field: 'person.plan', op: 'neq', value: 'free' }, ctx!)).toBe(false)
   })
 
   it('resolvePersonCompany: false skips the person/company join entirely — the snapshot reads unresolved even though the DB has real values', async () => {
@@ -332,6 +370,9 @@ describe.skipIf(!fixture.available)('resolveConditionContext (real DB, rolled ba
 
     const ctx = await resolveConditionContext(conv.id, { resolvePersonCompany: false })
     expect(ctx!.person!.email).toBeNull()
+    expect(ctx!.person!.country).toBeNull()
+    expect(ctx!.person!.locale).toBeNull()
+    expect(ctx!.person!.plan).toBeNull()
     expect(ctx!.person!.attributes).toEqual({})
     expect(ctx!.company).toBeNull()
     // person.segments is a separate, unconditional resolution — unaffected.

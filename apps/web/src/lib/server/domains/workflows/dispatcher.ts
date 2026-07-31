@@ -62,6 +62,9 @@ const log = logger.child({ component: 'workflow-dispatcher' })
 function needsPersonOrCompanyJoin(field: string): boolean {
   return (
     field === 'person.email' ||
+    field === 'person.country' ||
+    field === 'person.locale' ||
+    field === 'person.plan' ||
     field.startsWith(PERSON_ATTRIBUTE_FIELD_PREFIX) ||
     field.startsWith(COMPANY_ATTRIBUTE_FIELD_PREFIX)
   )

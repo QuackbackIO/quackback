@@ -116,6 +116,47 @@ describe('evaluateCondition — leaves', () => {
     no({ field: 'ticket.type', op: 'includes_any', value: ['ticket_type_ask'] })
   })
 
+  it('person.country / person.locale / person.plan: eq / neq / includes_any on the identified visitor', () => {
+    ok({ field: 'person.country', op: 'eq', value: 'DE' })
+    no({ field: 'person.country', op: 'eq', value: 'US' })
+    ok({ field: 'person.locale', op: 'eq', value: 'de-DE' })
+    no({ field: 'person.locale', op: 'eq', value: 'en-US' })
+    ok({ field: 'person.plan', op: 'eq', value: 'enterprise' })
+    ok({ field: 'person.plan', op: 'neq', value: 'free' })
+    no({ field: 'person.plan', op: 'eq', value: 'free' })
+    ok({ field: 'person.country', op: 'includes_any', value: ['DE', 'FR'] })
+    no({ field: 'person.country', op: 'includes_any', value: ['US', 'FR'] })
+    ok({ field: 'person.plan', op: 'is_set' })
+    no({ field: 'person.plan', op: 'is_empty' })
+  })
+
+  it('person.country / person.locale / person.plan are unresolved for an anonymous visitor or an uncaptured value', () => {
+    // No person at all (anonymous): per the null contract every operator is a
+    // non-match — including neq, so a plan rule never silently fires for an
+    // anonymous visitor — and is_empty is the deliberate "unknown" test.
+    const anon = baseCtx({ person: null })
+    no({ field: 'person.country', op: 'eq', value: 'DE' }, anon)
+    no({ field: 'person.country', op: 'neq', value: 'US' }, anon)
+    no({ field: 'person.plan', op: 'eq', value: 'enterprise' }, anon)
+    ok({ field: 'person.locale', op: 'is_empty' }, anon)
+
+    // An identified visitor with none of the three captured reads the same.
+    const uncaptured = baseCtx({
+      person: {
+        segmentIds: [],
+        email: null,
+        country: null,
+        locale: null,
+        plan: null,
+        attributes: {},
+      },
+    })
+    no({ field: 'person.country', op: 'eq', value: 'DE' }, uncaptured)
+    no({ field: 'person.plan', op: 'neq', value: 'free' }, uncaptured)
+    ok({ field: 'person.country', op: 'is_empty' }, uncaptured)
+    ok({ field: 'person.plan', op: 'is_empty' }, uncaptured)
+  })
+
   it('ticket.type is unresolved with no ticket, and for a ticket carrying no type', () => {
     // A conversation-triggered workflow on a conversation with no customer
     // ticket: per the null contract every operator is a non-match — including
