@@ -1,8 +1,8 @@
 /**
  * The floating bulk-action bar (support platform §4.6): appears while a
  * multi-selection is active (or while a value menu is being surfaced for the
- * single open conversation) and applies one action — assign, team, priority,
- * snooze, label, or close — to the whole target set. It owns no server logic: the
+ * single open conversation) and applies one action — macro reply, assign, team,
+ * priority, snooze, label, or close — to the whole target set. It owns no server logic: the
  * inbox route wires each control to the bulk mutation (many rows) or the single
  * conversation fns (the active thread), and toasts the summary.
  *
@@ -10,12 +10,14 @@
  * can pop the right one open without a second source of truth.
  */
 import { XMarkIcon, ChevronUpIcon } from '@heroicons/react/24/solid'
+import { useQuery } from '@tanstack/react-query'
 import type { ConversationPriority } from '@/lib/shared/conversation/types'
 import { useTeamMembers } from '@/lib/client/hooks/use-team-members'
 import { useConversationTags } from '@/lib/client/hooks/use-conversation-tags'
 import { useInboxTeams } from '@/components/admin/conversation/inbox-nav-sidebar'
 import { PriorityMenuItems } from '@/components/admin/conversation/priority-control'
 import { AssigneeMenuItems } from '@/components/admin/conversation/assignee-control'
+import { macrosQuery } from '@/lib/client/queries/macros'
 import { tomorrowAt, inHours, nextMondayAt } from '@/lib/shared/utils'
 import {
   DropdownMenu,
@@ -27,7 +29,7 @@ import {
 import { cn } from '@/lib/shared/utils'
 
 /** The value menus the bar can pop open on demand. */
-export type BulkMenuId = 'assign' | 'assign_team' | 'priority' | 'snooze' | 'tag'
+export type BulkMenuId = 'assign' | 'assign_team' | 'priority' | 'snooze' | 'tag' | 'macro'
 
 export interface BulkActionBarProps {
   /** Number of conversations the action targets. */
@@ -46,6 +48,8 @@ export interface BulkActionBarProps {
   onSnooze: (until: string | null) => void
   /** Apply an existing label to the whole target set. */
   onTag: (tagId: string) => void
+  /** Reply to every target with a macro: the rendered body posts immediately. */
+  onMacro: (macroId: string) => void
   onClose: () => void
   /** True when the target includes at least one ticket — snooze has no
    *  ticket-row equivalent (UNIFIED-INBOX-SPEC.md §2.5), so its trigger is
@@ -54,6 +58,9 @@ export interface BulkActionBarProps {
   /** True when the target includes at least one ticket — tickets carry no
    *  labels, so the trigger is disabled for the same reason as snooze. */
   disableTag?: boolean
+  /** True when the target includes at least one ticket — a macro reply posts
+   *  a conversation message, so the trigger is disabled for ticket targets. */
+  disableMacro?: boolean
 }
 
 const triggerClass =
@@ -71,14 +78,18 @@ export function BulkActionBar({
   onPriority,
   onSnooze,
   onTag,
+  onMacro,
   onClose,
   disableSnooze,
   disableTag,
+  disableMacro,
 }: BulkActionBarProps) {
   const { data: members } = useTeamMembers()
   const { data: teams } = useInboxTeams()
   // Only fetch the label taxonomy once its menu is actually open.
   const { data: tags } = useConversationTags({ enabled: openMenu === 'tag' })
+  // Same lazy fetch for the macro list — the support-surface macros only.
+  const { data: macros } = useQuery({ ...macrosQuery('support'), enabled: openMenu === 'macro' })
 
   // Controlled open/close for one menu, so the command bar can pop it open.
   const menuOpen = (id: BulkMenuId) => ({
@@ -105,6 +116,39 @@ export function BulkActionBar({
           {solo ? 'This conversation' : `${count} selected`}
         </span>
         <span className="mx-1 h-5 w-px bg-border" />
+
+        {/* Macro. Replies to every target at once: the body renders against
+            each conversation's own visitor context and posts immediately, then
+            the macro's bundled actions run. A macro reply is a conversation
+            message, so the trigger is disabled for ticket targets. */}
+        <DropdownMenu {...menuOpen('macro')}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={pending || disableMacro}
+              title={disableMacro ? 'Not available for tickets' : undefined}
+              className={triggerClass}
+            >
+              Macro
+              <ChevronUpIcon className="size-3" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" side="top" className="max-h-72 overflow-y-auto">
+            {macros?.macros && macros.macros.length > 0 ? (
+              macros.macros.map((m) => (
+                <DropdownMenuItem
+                  key={m.id}
+                  onClick={() => onMacro(m.id)}
+                  className="flex items-center gap-2"
+                >
+                  <span className="truncate">{m.name}</span>
+                </DropdownMenuItem>
+              ))
+            ) : (
+              <DropdownMenuItem disabled>No macros</DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* Assign to a teammate */}
         <DropdownMenu {...menuOpen('assign')}>

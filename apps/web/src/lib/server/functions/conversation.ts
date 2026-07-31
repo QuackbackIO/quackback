@@ -20,6 +20,7 @@ import type {
   SegmentId,
   CompanyId,
   TeamId,
+  MacroId,
 } from '@quackback/ids'
 import {
   MAX_CONVERSATION_MESSAGE_LENGTH,
@@ -1373,6 +1374,10 @@ const bulkConversationActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('tag'), tagId: z.string() }),
   z.object({ type: z.literal('close') }),
   z.object({ type: z.literal('reopen') }),
+  // Reply with a macro: the body is rendered against each conversation's own
+  // visitor context and posted as an agent reply, then the macro's bundled
+  // actions run (mirrors applyMacroFn's render + apply, sent immediately).
+  z.object({ type: z.literal('macro'), macroId: z.string() }),
 ])
 
 type BulkConversationAction = z.infer<typeof bulkConversationActionSchema>
@@ -1386,10 +1391,12 @@ const bulkUpdateConversationsSchema = z.object({
 /** Gate a bulk action on the SAME permission its single-conversation fn uses:
  *  (re)assignment mirrors assignConversationFn/assignConversationTeamFn
  *  (conversation.assign); labelling mirrors addConversationTagFn
- *  (conversation.set_tags); status/priority/snooze mirror the set-status fns. */
+ *  (conversation.set_tags); a macro reply mirrors applyMacroFn
+ *  (conversation.reply); status/priority/snooze mirror the set-status fns. */
 function permissionForBulkAction(type: BulkConversationAction['type']) {
   if (type === 'assign' || type === 'assign_team') return PERMISSIONS.CONVERSATION_ASSIGN
   if (type === 'tag') return PERMISSIONS.CONVERSATION_SET_TAGS
+  if (type === 'macro') return PERMISSIONS.CONVERSATION_REPLY
   return PERMISSIONS.CONVERSATION_SET_STATUS
 }
 
@@ -1416,6 +1423,7 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
       setConversationPriority,
       setConversationStatus,
       snoozeConversation,
+      sendAgentMessage,
     } = await import('@/lib/server/domains/conversation/conversation.service')
     const { assertRequiredAttributesForClose } =
       await import('@/lib/server/domains/conversation-attributes/close-guard')
@@ -1425,6 +1433,15 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
     // acting agent, snooze wake-time, and assignee are computed a single time,
     // not per conversation.
     const action = data.action
+    // A macro is fetched once for the whole batch and shared through one
+    // promise: every item awaits the same fetch, and a missing/deleted macro
+    // rejects each item with the same reason through the per-item catch below.
+    const macroPromise =
+      action.type === 'macro'
+        ? import('@/lib/server/domains/macros').then(({ getMacro }) =>
+            getMacro(action.macroId as MacroId)
+          )
+        : null
     const apply: (id: ConversationId) => Promise<unknown> = (() => {
       switch (action.type) {
         case 'assign': {
@@ -1448,6 +1465,29 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
           const tagId = action.tagId as ConversationTagId
           return (id) => attachTag(id, tagId)
         }
+        case 'macro':
+          // Render the body against each conversation's OWN visitor context,
+          // post it as an agent reply, then run the bundled actions — the same
+          // render + apply as the single-conversation applyMacroFn, sent
+          // immediately instead of staged into a composer.
+          return async (id) => {
+            const macro = await macroPromise
+            if (!macro) throw new Error('Macro not found')
+            const { buildMacroContext, renderMacro, applyMacroActions } =
+              await import('@/lib/server/domains/macros')
+            const body = renderMacro(macro.body, await buildMacroContext(id))
+            await sendAgentMessage(
+              id,
+              body,
+              {
+                principalId: ctx.principal.id,
+                displayName: ctx.user.name,
+                avatarUrl: ctx.user.image,
+              },
+              actor
+            )
+            await applyMacroActions(id, macro.actions, actor)
+          }
         case 'close':
           // Teammate bulk close honors required-to-close per conversation;
           // a blocked thread lands in `failed` without aborting the batch.

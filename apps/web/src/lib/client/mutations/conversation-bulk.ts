@@ -1,6 +1,6 @@
 /**
- * Bulk inbox mutation: apply one action (assign, priority, snooze, tag, close,
- * reopen) to many conversations in a single call. The command bar / inbox list call
+ * Bulk inbox mutation: apply one action (assign, priority, snooze, tag, macro
+ * reply, close, reopen) to many conversations in a single call. The command bar / inbox list call
  * `mutateAsync` and toast the returned partial-failure summary. On success every
  * admin conversation list is invalidated (the batch changed status/assignee/
  * priority/labels) along with each affected open thread.
@@ -19,6 +19,7 @@ export type BulkConversationAction =
   | { type: 'priority'; priority: ConversationPriority }
   | { type: 'snooze'; until: string | null }
   | { type: 'tag'; tagId: string }
+  | { type: 'macro'; macroId: string }
   | { type: 'close' }
   | { type: 'reopen' }
 

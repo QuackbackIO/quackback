@@ -17,6 +17,7 @@ export type InboxActionId =
   | 'reply'
   | 'note'
   | 'copilot'
+  | 'macro'
   | 'assign'
   | 'assign_team'
   | 'snooze'
@@ -62,8 +63,10 @@ export const INBOX_ACTION_GROUP_ORDER: readonly InboxActionGroup[] = [
  * Ordered registry. Order here is the order the palette shows within a group.
  * Every key char lives here and nowhere else.
  *
- * Macro (m) arrives with its own picker seam; until then it's omitted so the
- * palette, keyboard, and help panel never advertise a half-wired action.
+ * Macro (m) pops the floating bar's macro menu against the current target
+ * (selection or the single open conversation); applying one sends its rendered
+ * reply immediately. It shares snooze's ticket gate — a reply is a conversation
+ * message, so a ticket target disables it.
  */
 export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
   { id: 'reply', label: 'Reply', group: 'Reply', scope: 'active', shortcut: 'r' },
@@ -74,6 +77,7 @@ export const INBOX_ACTIONS: readonly InboxActionDescriptor[] = [
   // q for Quinn. Additionally gated on `copilotAvailable` (flag + copilot.use
   // + the ≥xl viewport that shows the detail panel) — see isInboxActionEnabled.
   { id: 'copilot', label: 'Ask Copilot', group: 'Reply', scope: 'active', shortcut: 'q' },
+  { id: 'macro', label: 'Reply with macro', group: 'Reply', scope: 'both', shortcut: 'm' },
   { id: 'assign', label: 'Assign to teammate', group: 'Assign', scope: 'both', shortcut: 'a' },
   { id: 'assign_team', label: 'Assign to team', group: 'Assign', scope: 'both', shortcut: 't' },
   { id: 'snooze', label: 'Snooze', group: 'Status', scope: 'both', shortcut: 's' },
@@ -155,6 +159,9 @@ export function isInboxActionEnabled(
   ctx: InboxActionContext
 ): boolean {
   if (descriptor.id === 'snooze' && ctx.hasTicketTarget) return false
+  // A macro reply posts a conversation message — no ticket-row equivalent, so
+  // it shares snooze's ticket gate.
+  if (descriptor.id === 'macro' && ctx.hasTicketTarget) return false
   if (descriptor.id === 'create_ticket') return !ctx.hasTicketTarget && !ctx.hasLinkedTicket
   if (descriptor.id === 'open_ticket') return ctx.hasLinkedTicket === true
   if (descriptor.id === 'copilot' && !ctx.copilotAvailable) return false

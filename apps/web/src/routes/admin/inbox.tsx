@@ -1173,6 +1173,35 @@ function InboxPage() {
     [hasSelection, selectedRef, runConversationOnlyBulk, runSolo, refreshInbox, queryClient]
   )
 
+  // A macro reply posts a conversation message, so like snooze/tag it has no
+  // ticket-row equivalent — the bar disables its trigger for ticket targets
+  // (`hasTicketTarget`) and this only ever runs against conversation ids. The
+  // solo case goes through the same bulk fn with the single id: applying from
+  // the bar sends immediately (unlike the composer's picker, which stages the
+  // rendered body for editing first).
+  const applyMacroReply = useCallback(
+    async (macroId: string) => {
+      if (hasSelection) {
+        await runConversationOnlyBulk({ type: 'macro', macroId }, 'Replied')
+        refreshInbox()
+        return
+      }
+      if (!selectedRef || selectedRef.kind === 'ticket') return
+      const conversationId = selectedRef.id
+      return runSolo(
+        async () => {
+          const res = await bulk.mutateAsync({
+            conversationIds: [conversationId],
+            action: { type: 'macro', macroId },
+          })
+          if (res.failed.length > 0) throw new Error(res.failed[0].reason)
+        },
+        { success: 'Reply sent', error: 'Failed to send macro reply' }
+      )
+    },
+    [hasSelection, selectedRef, runConversationOnlyBulk, runSolo, refreshInbox, bulk]
+  )
+
   const applyClose = useCallback(async () => {
     const closedStatusId = resolveDefaultClosedStatusId(ticketStatusList)
     if (hasSelection) {
@@ -1327,6 +1356,9 @@ function InboxPage() {
           break
         case 'snooze':
           if (needsTarget && !hasTicketTarget) setBulkMenu('snooze')
+          break
+        case 'macro':
+          if (needsTarget && !hasTicketTarget) setBulkMenu('macro')
           break
         case 'close':
           if (needsTarget) void applyClose()
@@ -1521,9 +1553,11 @@ function InboxPage() {
           onPriority={applyPriority}
           onSnooze={applySnooze}
           onTag={applyTag}
+          onMacro={applyMacroReply}
           onClose={applyClose}
           disableSnooze={hasTicketTarget}
           disableTag={hasTicketTarget}
+          disableMacro={hasTicketTarget}
         />
       )}
 

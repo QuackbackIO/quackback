@@ -19,6 +19,7 @@ describe('INBOX_ACTIONS registry', () => {
       'reply',
       'note',
       'copilot',
+      'macro',
       'assign',
       'assign_team',
       'snooze',
@@ -34,9 +35,11 @@ describe('INBOX_ACTIONS registry', () => {
     }
   })
 
-  it('omits the still-deferred actions (macro)', () => {
-    const ids = INBOX_ACTIONS.map((a) => a.id)
-    expect(ids).not.toContain('macro')
+  it('keys the macro action on m in the Reply group, scoped to any target', () => {
+    const macro = byId('macro')
+    expect(macro.shortcut).toBe('m')
+    expect(macro.group).toBe('Reply')
+    expect(macro.scope).toBe('both')
   })
 
   it('keys the internal note on n, next to reply in the Reply group', () => {
@@ -60,6 +63,7 @@ describe('INBOX_ACTIONS registry', () => {
       'close',
       'reopen',
       'create_ticket',
+      'macro',
     ]) {
       expect(byId(id).scope).toBe('both')
     }
@@ -149,6 +153,23 @@ describe('isInboxActionEnabled', () => {
     ).toBe(false)
     expect(
       isInboxActionEnabled(snooze, {
+        hasActiveConversation: false,
+        hasSelection: true,
+        hasTicketTarget: true,
+      })
+    ).toBe(false)
+  })
+
+  it('macro shares the ticket gate — a reply is a conversation message', () => {
+    const macro = byId('macro')
+    expect(isInboxActionEnabled(macro, { hasActiveConversation: true, hasSelection: false })).toBe(
+      true
+    )
+    expect(isInboxActionEnabled(macro, { hasActiveConversation: false, hasSelection: true })).toBe(
+      true
+    )
+    expect(
+      isInboxActionEnabled(macro, {
         hasActiveConversation: false,
         hasSelection: true,
         hasTicketTarget: true,
