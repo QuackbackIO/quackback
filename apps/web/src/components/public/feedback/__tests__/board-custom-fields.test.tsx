@@ -9,6 +9,13 @@ const FIELDS: BoardCustomField[] = [
   { key: 'details', label: 'Details', type: 'long_text', required: false },
   { key: 'seats', label: 'Seats', type: 'number', required: false },
   { key: 'impact', label: 'Impact', type: 'select', required: true, options: ['low', 'high'] },
+  {
+    key: 'priority',
+    label: 'Priority',
+    type: 'select',
+    required: false,
+    options: ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
+  },
   { key: 'needed_by', label: 'Needed by', type: 'date', required: false },
   { key: 'read_docs', label: 'I read the docs', type: 'checkbox', required: true },
 ]
@@ -25,7 +32,9 @@ describe('<BoardCustomFields>', () => {
     expect(screen.getByLabelText(/Details/).tagName).toBe('TEXTAREA')
     expect(screen.getByLabelText(/Seats/)).toHaveProperty('type', 'number')
     expect(screen.getByLabelText(/Needed by/)).toHaveProperty('type', 'date')
-    expect(screen.getByRole('combobox', { name: /Impact/ })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'low' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'high' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: /Priority/ })).toBeTruthy()
     expect(screen.getByRole('checkbox', { name: /I read the docs/ })).toBeTruthy()
   })
 
@@ -52,9 +61,28 @@ describe('<BoardCustomFields>', () => {
     expect(onChange).toHaveBeenCalledWith('read_docs', true)
   })
 
-  it('renders select options from the field declaration', () => {
+  it('renders a short select as visible one-tap choices, not a dropdown', () => {
+    renderFields()
+    expect(screen.queryByRole('combobox', { name: /Impact/ })).toBeNull()
+    const group = screen.getByRole('radiogroup', { name: /Impact/ })
+    expect(group).toBeTruthy()
+  })
+
+  it('reports a tapped choice by field key and marks it selected', () => {
+    const onChange = renderFields()
+    fireEvent.click(screen.getByRole('radio', { name: 'high' }))
+    expect(onChange).toHaveBeenCalledWith('impact', 'high')
+  })
+
+  it('marks the current value as the checked choice', () => {
     renderFields({ impact: 'high' })
-    const trigger = screen.getByRole('combobox', { name: /Impact/ })
-    expect(trigger.textContent).toContain('high')
+    expect(screen.getByRole('radio', { name: 'high' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: 'low' }).getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('keeps selects with more than six options as a dropdown', () => {
+    renderFields({ priority: 'p3' })
+    const trigger = screen.getByRole('combobox', { name: /Priority/ })
+    expect(trigger.textContent).toContain('p3')
   })
 })

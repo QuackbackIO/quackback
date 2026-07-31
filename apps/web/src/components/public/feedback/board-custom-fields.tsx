@@ -17,6 +17,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { BoardCustomField } from '@/lib/shared/db-types'
+import { cn } from '@/lib/shared/utils'
+
+/**
+ * Select fields with at most this many options render as visible one-tap
+ * choices; longer lists stay a closed dropdown to keep the form compact.
+ */
+export const PILL_SELECT_MAX_OPTIONS = 6
 
 export interface BoardCustomFieldsProps {
   fields: BoardCustomField[]
@@ -92,21 +99,7 @@ function FieldControl({ field, values, onChange }: FieldControlProps) {
           onChange={(e) => onChange(field.key, e.target.value)}
         />
       ) : field.type === 'select' ? (
-        <Select
-          value={typeof value === 'string' ? value : undefined}
-          onValueChange={(v) => onChange(field.key, v)}
-        >
-          <SelectTrigger id={id} size="sm" className="w-full" aria-label={field.label}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(field.options ?? []).map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SelectControl field={field} id={id} value={value} onChange={onChange} />
       ) : (
         <Input
           id={id}
@@ -115,6 +108,60 @@ function FieldControl({ field, values, onChange }: FieldControlProps) {
           onChange={(e) => onChange(field.key, e.target.value)}
         />
       )}
+    </div>
+  )
+}
+
+interface SelectControlProps {
+  field: BoardCustomField
+  id: string
+  value: unknown
+  onChange: (key: string, value: unknown) => void
+}
+
+function SelectControl({ field, id, value, onChange }: SelectControlProps) {
+  const options = field.options ?? []
+  const selected = typeof value === 'string' ? value : undefined
+
+  if (options.length > PILL_SELECT_MAX_OPTIONS) {
+    return (
+      <Select value={selected} onValueChange={(v) => onChange(field.key, v)}>
+        <SelectTrigger id={id} size="sm" className="w-full" aria-label={field.label}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )
+  }
+
+  return (
+    <div role="radiogroup" aria-label={field.label} className="flex flex-wrap gap-1.5">
+      {options.map((option) => {
+        const isSelected = option === selected
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={isSelected}
+            onClick={() => onChange(field.key, option)}
+            className={cn(
+              'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
+              isSelected
+                ? 'border-primary bg-primary/10 font-medium text-primary'
+                : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
+            )}
+          >
+            {option}
+          </button>
+        )
+      })}
     </div>
   )
 }
