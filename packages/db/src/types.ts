@@ -657,6 +657,9 @@ export type ConversationSystemEventKind =
   | 'external_linked'
   | 'external_unlinked'
   | 'external_status_changed'
+  | 'priority_changed'
+  | 'snoozed'
+  | 'csat_submitted'
 
 export interface ConversationSystemEvent {
   kind: ConversationSystemEventKind
@@ -685,6 +688,10 @@ export interface ConversationSystemEvent {
   externalReference?: string
   /** External issue URL for 'external_linked' / 'external_unlinked' — team-only. */
   externalUrl?: string
+  /** New priority for 'priority_changed' — team-only (the row is internal). */
+  priority?: ConversationPriority
+  /** CSAT rating (1-5) for 'csat_submitted' — team-only (the row is internal). */
+  rating?: number
 }
 
 // An agent-only suggestion (carried on an internal note) to track a resolved
