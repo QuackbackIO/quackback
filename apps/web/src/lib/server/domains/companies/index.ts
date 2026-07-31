@@ -3,6 +3,7 @@ export {
   updateCompany,
   deleteCompany,
   getCompany,
+  getCompanyWithMemberCount,
   listCompanies,
   listCompaniesPage,
   countCompanies,

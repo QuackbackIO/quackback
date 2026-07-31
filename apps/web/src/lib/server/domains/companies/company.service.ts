@@ -161,6 +161,27 @@ export async function getCompany(id: CompanyId): Promise<Company> {
   return row
 }
 
+/**
+ * One company with its linked-people count — the single-record counterpart of
+ * the directory list's memberCount projection.
+ */
+export async function getCompanyWithMemberCount(id: CompanyId): Promise<CompanyWithMemberCount> {
+  const rows = await db
+    .select({
+      company: companies,
+      memberCount: sql<number>`count(${principal.id})::int`.as('member_count'),
+    })
+    .from(companies)
+    .leftJoin(principal, eq(principal.companyId, companies.id))
+    .where(eq(companies.id, id))
+    .groupBy(companies.id)
+  const row = rows[0]
+  if (!row) {
+    throw new NotFoundError('COMPANY_NOT_FOUND', `Company with ID ${id} not found`)
+  }
+  return { ...row.company, memberCount: row.memberCount }
+}
+
 /** One jsonb predicate over companies.custom_attributes — same operator set as
  *  the People directory's metadata filters so the two tabs behave alike. */
 function attrConditionSql(attr: CompanyAttrFilter): ReturnType<typeof sql> | null {
