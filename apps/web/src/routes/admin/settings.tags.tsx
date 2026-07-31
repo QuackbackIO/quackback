@@ -5,6 +5,7 @@ import { TagIcon } from '@heroicons/react/24/solid'
 import { BackLink } from '@/components/ui/back-link'
 import { PageHeader } from '@/components/shared/page-header'
 import { TagList } from '@/components/admin/settings/tags/tag-list'
+import { AiBackfillCard } from '@/components/admin/settings/tags/ai-backfill-card'
 import { isProductEnabled } from '@/lib/shared/types/settings'
 
 export const Route = createFileRoute('/admin/settings/tags')({
@@ -15,7 +16,10 @@ export const Route = createFileRoute('/admin/settings/tags')({
   },
   loader: async ({ context }) => {
     const { queryClient } = context
-    await queryClient.ensureQueryData(adminQueries.tags())
+    await Promise.all([
+      queryClient.ensureQueryData(adminQueries.tags()),
+      queryClient.ensureQueryData(adminQueries.boards()),
+    ])
     return {}
   },
   component: TagsPage,
@@ -23,6 +27,7 @@ export const Route = createFileRoute('/admin/settings/tags')({
 
 function TagsPage() {
   const tagsQuery = useSuspenseQuery(adminQueries.tags())
+  const boardsQuery = useSuspenseQuery(adminQueries.boards())
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -36,6 +41,7 @@ function TagsPage() {
       />
 
       <TagList initialTags={tagsQuery.data} />
+      <AiBackfillCard tags={tagsQuery.data} boards={boardsQuery.data} />
     </div>
   )
 }
