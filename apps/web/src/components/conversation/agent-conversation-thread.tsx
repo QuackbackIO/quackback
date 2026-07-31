@@ -194,6 +194,7 @@ import { Spinner } from '@/components/shared/spinner'
 import { EmptyState } from '@/components/shared/empty-state'
 import { Button } from '@/components/ui/button'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
+import { SnoozeNaturalInput } from '@/components/conversation/snooze-natural-input'
 import {
   Dialog,
   DialogContent,
@@ -2221,6 +2222,10 @@ export function AgentConversationThread({
                   The conversation leaves your open queue and returns at the time you pick.
                 </DialogDescription>
               </DialogHeader>
+              <SnoozeNaturalInput
+                onResolve={setSnoozeCustomDate}
+                disabled={snoozeMutation.isPending}
+              />
               <DateTimePicker
                 value={snoozeCustomDate}
                 onChange={setSnoozeCustomDate}
