@@ -97,6 +97,9 @@ describe.skipIf(!fixture.available)('findDuplicatesForPrincipal', () => {
     expect(matches[0]).toMatchObject({
       principalId: lead.principalId,
       isLead: true,
+      // The lead's reachable address is the captured contact email, not the
+      // synthetic placeholder on its user row.
+      email,
       reasons: ['email'],
     })
   })

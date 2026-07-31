@@ -174,7 +174,13 @@ export async function findDuplicatesForPrincipal(
       userId: row.userId as UserId | null,
       isLead: row.type === 'anonymous',
       name: row.displayName || row.userName || 'Anonymous visitor',
-      email: row.userEmail ?? row.contactEmail,
+      // A lead's user.email is the synthetic placeholder; its reachable
+      // address is the captured contactEmail. Identified users are the
+      // reverse.
+      email:
+        row.type === 'anonymous'
+          ? (row.contactEmail ?? row.userEmail)
+          : (row.userEmail ?? row.contactEmail),
       avatarUrl: row.avatarUrl,
       reasons: [reason],
     })
