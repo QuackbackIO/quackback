@@ -33,6 +33,7 @@ import { AnalyticsTopPosts } from './analytics-top-posts'
 import { AnalyticsTopContributors } from './analytics-top-contributors'
 import { AnalyticsSignupSources } from './analytics-signup-sources'
 import { AnalyticsCsatDistribution } from './analytics-csat-card'
+import { AnalyticsResponseDistribution } from './analytics-response-distribution'
 import { ChartSkeleton, StatusChartSkeleton, SectionSkeleton } from './analytics-skeletons'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
@@ -416,6 +417,14 @@ export function AnalyticsPage() {
                         <AnalyticsFirstResponseChart days={data.firstResponse.days} />
                       </Suspense>
                     </StatSection>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>First response distribution</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <AnalyticsResponseDistribution distribution={data.responseDistribution} />
+                      </CardContent>
+                    </Card>
                     <StatSection
                       stats={[
                         {

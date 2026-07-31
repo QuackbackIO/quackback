@@ -32,6 +32,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
 import { buildConversationVolume } from '@/lib/server/domains/analytics/conversation-volume'
 import { buildFirstResponseTimes } from '@/lib/server/domains/analytics/first-response'
+import { buildResponseDistribution } from '@/lib/server/domains/analytics/response-distribution'
 import { buildTimeToClose } from '@/lib/server/domains/analytics/time-to-close'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
@@ -530,6 +531,14 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       nowStr
     )
 
+    // -- Wait-time distribution: the same first-response rows grouped into
+    // fixed ranges (<5m … >3d) for the histogram beneath the trend. --
+    const responseDistribution = buildResponseDistribution(
+      Array.from(firstResponseRows as Iterable<{ createdAt: Date; firstResponseAt: Date }>),
+      startStr,
+      nowStr
+    )
+
     // -- Time-to-close: per-day median series over the current window, bucketed
     // on the close day. Same no-delta polarity reasoning as first response. --
     const timeToClose = buildTimeToClose(
@@ -581,6 +590,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         delta: delta(conversationVolume.total, prevConversationCount),
       },
       firstResponse,
+      responseDistribution,
       timeToClose,
       changelog: {
         totalViews,
