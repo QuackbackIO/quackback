@@ -48,6 +48,7 @@ import {
   deleteArticleSchema,
   listArticlesSchema,
   listArticlePerformanceSchema,
+  listSearchTermsSchema,
   listPublicArticlesSchema,
   publishArticleSchema,
   unpublishArticleSchema,
@@ -200,6 +201,16 @@ export const listArticlePerformanceFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
     return listArticlePerformance(data.limit)
+  })
+
+export const listSearchTermsFn = createServerFn({ method: 'GET' })
+  .validator(listSearchTermsSchema)
+  .handler(async ({ data }) => {
+    await requireAuth({ permission: PERMISSIONS.HELP_CENTER_MANAGE })
+    const { listTopSearchTerms } =
+      await import('@/lib/server/domains/help-center/help-center.search-analytics')
+    const rows = await listTopSearchTerms({ days: data.days, limit: data.limit })
+    return rows.map((row) => ({ ...row, lastSearchedAt: row.lastSearchedAt.toISOString() }))
   })
 
 export const restoreCategoryFn = createServerFn({ method: 'POST' })

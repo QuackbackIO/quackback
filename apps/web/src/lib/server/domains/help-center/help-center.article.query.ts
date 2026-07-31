@@ -57,6 +57,7 @@ const LIST_COLUMNS = {
   position: true,
   content: true,
   principalId: true,
+  segmentIds: true,
   publishedAt: true,
   viewCount: true,
   helpfulCount: true,

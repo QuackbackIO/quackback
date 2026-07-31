@@ -11,6 +11,7 @@ import {
   listPublicCategoriesFn,
   listArticlesFn,
   listArticlePerformanceFn,
+  listSearchTermsFn,
   listPublicArticlesFn,
   listPublicArticlesForCategoryFn,
   getArticleFn,
@@ -36,6 +37,7 @@ export const helpCenterKeys = {
     showDeleted?: boolean
   }) => [...helpCenterKeys.articleLists(), filters] as const,
   articlePerformance: () => [...helpCenterKeys.articles(), 'performance'] as const,
+  searchTerms: () => [...helpCenterKeys.all, 'search-terms'] as const,
   articleDetails: () => [...helpCenterKeys.articles(), 'detail'] as const,
   articleDetail: (id: KbArticleId) => [...helpCenterKeys.articleDetails(), id] as const,
   articleFeedbackReasons: (id: KbArticleId) =>
@@ -91,6 +93,13 @@ export const helpCenterQueries = {
     queryOptions({
       queryKey: helpCenterKeys.articlePerformance(),
       queryFn: () => listArticlePerformanceFn({ data: {} }),
+      staleTime: STALE_TIME_MEDIUM,
+    }),
+
+  searchTerms: () =>
+    queryOptions({
+      queryKey: helpCenterKeys.searchTerms(),
+      queryFn: () => listSearchTermsFn({ data: {} }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 

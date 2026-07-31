@@ -357,6 +357,7 @@ export {
   helpCenterArticleTranslationsRelations,
   helpCenterCategoryTranslations,
   helpCenterCategoryTranslationsRelations,
+  helpCenterSearchQueries,
   LOCALE_TO_REGCONFIG,
   regconfigForLocale,
   // Schema tables - status page

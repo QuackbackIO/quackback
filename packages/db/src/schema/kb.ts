@@ -7,6 +7,7 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  uuid,
   customType,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
@@ -212,6 +213,34 @@ export const helpCenterRedirectRules = pgTable(
   (table) => [
     uniqueIndex('hc_redirect_rules_path_idx').on(table.path),
     index('hc_redirect_rules_target_idx').on(table.targetType, table.targetId),
+  ]
+)
+
+// ============================================
+// Visitor Search Queries
+// ============================================
+
+/**
+ * Append-only log of visitor help-center searches (portal /hc box and
+ * widget). `normalizedQuery` (trimmed, whitespace-collapsed, lowercased) is
+ * the grouping key for the admin search-term analytics; `query` keeps a raw
+ * exemplar for display. No principal reference: visitors are usually
+ * anonymous, so rows carry no identity at all. Plain uuid PK — a typeId
+ * prefix buys nothing on a high-volume log table.
+ */
+export const helpCenterSearchQueries = pgTable(
+  'kb_search_queries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    query: text('query').notNull(),
+    normalizedQuery: text('normalized_query').notNull(),
+    locale: text('locale').notNull(),
+    resultsCount: integer('results_count').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    // Backs the admin aggregation's time-window filter.
+    index('kb_search_queries_created_at_idx').on(table.createdAt),
   ]
 )
 

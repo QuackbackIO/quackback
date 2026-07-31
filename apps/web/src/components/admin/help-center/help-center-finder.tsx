@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { HelpCenterListItem } from './help-center-list-item'
 import { ArticlePerformanceTable } from './article-performance-table'
+import { SearchTermsTable } from './search-terms-table'
 import { CreateArticleDialog } from './create-article-dialog'
 import type { CategoryActions } from './help-center-category-tree'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
@@ -74,7 +75,14 @@ export function HelpCenterFinder(props: HelpCenterFinderProps) {
   }
 
   if (search.performance) {
-    return <ArticlePerformanceTable />
+    return (
+      <div className="max-w-5xl w-full mx-auto">
+        <ArticlePerformanceTable />
+        <div className="px-3 pb-4 -mt-2">
+          <SearchTermsTable />
+        </div>
+      </div>
+    )
   }
 
   return <LiveHelpCenterFinder {...props} />

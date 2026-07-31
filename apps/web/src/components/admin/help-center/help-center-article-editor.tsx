@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { FormError } from '@/components/shared/form-error'
+import { ArticleAudienceControl } from '@/components/admin/help-center/article-audience-control'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { updateArticleSchema } from '@/lib/shared/schemas/help-center'
@@ -43,6 +44,7 @@ import {
   useUnpublishArticle,
 } from '@/lib/client/mutations/help-center'
 import { helpCenterQueries } from '@/lib/client/queries/help-center'
+import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { getInitialContentJson } from '@/components/admin/feedback/detail/post-utils'
 import { cn } from '@/lib/shared/utils'
 import type { KbArticleId } from '@quackback/ids'
@@ -76,6 +78,12 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
     ...helpCenterQueries.articleDetail(articleId),
   })
   const { data: categories = [] } = useQuery(helpCenterQueries.categories())
+  const segmentsQuery = useQuery({
+    queryKey: ['admin', 'segments'] as const,
+    queryFn: () => listSegmentsFn(),
+    staleTime: 60_000,
+  })
+  const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   const form = useForm({
     resolver: standardSchemaResolver(updateArticleSchema),
@@ -85,11 +93,13 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
       description: '',
       content: '',
       categoryId: '',
+      segmentIds: [] as string[],
     },
   })
 
   const { isDirty } = form.formState
   const categoryId = form.watch('categoryId')
+  const segmentIds = form.watch('segmentIds') ?? []
 
   useEffect(() => {
     if (article && !hasInitialized.current) {
@@ -100,6 +110,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
         description: article.description ?? '',
         content: article.content,
         categoryId: article.categoryId,
+        segmentIds: article.segmentIds ?? [],
       })
       setContentJson(getInitialContentJson(article))
     }
@@ -116,6 +127,13 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
   const handleCategoryChange = useCallback(
     (id: string) => {
       form.setValue('categoryId', id, { shouldDirty: true })
+    },
+    [form]
+  )
+
+  const handleSegmentsChange = useCallback(
+    (ids: string[]) => {
+      form.setValue('segmentIds', ids, { shouldDirty: true })
     },
     [form]
   )
@@ -137,6 +155,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
         content: data.content,
         contentJson: contentJson as TiptapContent | null,
         categoryId: data.categoryId,
+        segmentIds: data.segmentIds ?? [],
       },
       {
         onSuccess: () => {
@@ -146,6 +165,7 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
             description: data.description?.trim() ?? '',
             content: data.content,
             categoryId: data.categoryId,
+            segmentIds: data.segmentIds ?? [],
           })
         },
       }
@@ -243,6 +263,12 @@ export function HelpCenterArticleEditor({ articleId }: HelpCenterArticleEditorPr
                   ))}
                 </SelectContent>
               </Select>
+
+              <ArticleAudienceControl
+                segments={segments}
+                value={segmentIds}
+                onChange={handleSegmentsChange}
+              />
 
               {article.notHelpfulCount > 0 && (
                 <Button
