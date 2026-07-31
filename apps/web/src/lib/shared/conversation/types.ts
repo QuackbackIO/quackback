@@ -19,6 +19,7 @@ import type {
   ConversationSystemEvent,
   TiptapContent,
   ConversationEndReason,
+  ConversationSpamFiledBy,
   TranslatedFromMetadata,
   WorkflowBlockPayload,
   BlockReplyMetadata,
@@ -32,7 +33,12 @@ import type { JsonValue } from '@/lib/shared/json'
 // lib/shared/types/posts.ts imports from '@/lib/server/domains/posts` the same
 // way) so this adds no new dependency-graph edge to adjudicate.
 import type { TicketDTO } from '@/lib/server/domains/tickets'
-export type { ConversationStatus, ConversationSystemEvent, ConversationEndReason }
+export type {
+  ConversationStatus,
+  ConversationSystemEvent,
+  ConversationEndReason,
+  ConversationSpamFiledBy,
+}
 export { CONVERSATION_END_REASONS }
 export type ConversationPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent'
 // 'system' = a status event (e.g. assignment) shown to both sides, rendered as
@@ -311,6 +317,10 @@ export interface ConversationDTO {
   /** Agent-only free-text note left when ending the conversation; null otherwise.
    *  Stripped on visitor-facing payloads. */
   endNote: string | null
+  /** Which rule or classifier filed a spam-ended conversation
+   *  (CONVERSATION_SPAM_FILED_BY), or null for non-spam threads. Agent-only —
+   *  stripped on visitor-facing payloads. */
+  spamReason: ConversationSpamFiledBy | null
   /** Conversation labels (agent-managed); empty when untagged. Agent-only. */
   tags: ConversationTagDTO[]
   /** The active SLA's clocks (agent-only); null when no policy is applied.
@@ -353,6 +363,16 @@ export const CONVERSATION_END_REASON_LABELS: Record<ConversationEndReason, strin
   no_response: 'No response from customer',
   spam: 'Spam / not actionable',
   other: 'Other',
+}
+
+/** Human labels for each spam filing reason, for the Spam view's row badge.
+ *  Kept beside the taxonomy so the two never drift. */
+export const CONVERSATION_SPAM_FILED_BY_LABELS: Record<ConversationSpamFiledBy, string> = {
+  auto_responder: 'Auto-responder',
+  sender_auth_failure: 'Sender-auth failure',
+  burst_rate: 'Burst rate',
+  ai_classifier: 'AI classifier',
+  manual: 'Manually filed',
 }
 
 /**

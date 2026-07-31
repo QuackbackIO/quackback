@@ -52,9 +52,11 @@ import type { Actor } from '@/lib/server/policy/types'
 import {
   MAX_CONVERSATION_ATTACHMENTS,
   HANDOFF_REASON_LABELS,
+  CONVERSATION_SPAM_FILED_BY_LABELS,
   type ConversationStatus,
   type ConversationPriority,
   type ConversationEndReason,
+  type ConversationSpamFiledBy,
   type ConversationDTO,
   type ConversationSide,
   type AgentConversationMessageDTO,
@@ -1082,6 +1084,9 @@ export async function endConversation(
       resolvedAt: now,
       endReason: reason,
       endNote,
+      // An agent's own spam filing is 'manual'; any other end clears a stale
+      // marker (a re-ended thread is a new human decision).
+      spamReason: reason === 'spam' ? 'manual' : null,
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))
@@ -1122,7 +1127,14 @@ export async function restoreConversationFromSpam(
   const now = new Date()
   const [updated] = await db
     .update(conversations)
-    .set({ status: 'open', resolvedAt: null, endReason: null, endNote: null, updatedAt: now })
+    .set({
+      status: 'open',
+      resolvedAt: null,
+      endReason: null,
+      endNote: null,
+      spamReason: null,
+      updatedAt: now,
+    })
     .where(eq(conversations.id, conversationId))
     .returning()
   // Team-only marker: the customer already saw the thread end; the restore is
@@ -1145,7 +1157,10 @@ export async function restoreConversationFromSpam(
  * human decision the filter must not overwrite. Returns whether the filing
  * happened, so the caller can tell a real filing from a skipped one.
  */
-export async function autoFileConversationAsSpam(conversationId: ConversationId): Promise<boolean> {
+export async function autoFileConversationAsSpam(
+  conversationId: ConversationId,
+  filedBy: ConversationSpamFiledBy = 'ai_classifier'
+): Promise<boolean> {
   const existing = await loadConversationOr404(conversationId)
   if (existing.status === 'closed' || existing.endReason !== null) return false
   const now = new Date()
@@ -1155,7 +1170,8 @@ export async function autoFileConversationAsSpam(conversationId: ConversationId)
       status: 'closed',
       resolvedAt: now,
       endReason: 'spam',
-      endNote: 'Auto-filed by the spam filter',
+      endNote: `Auto-filed by the spam filter (${CONVERSATION_SPAM_FILED_BY_LABELS[filedBy]})`,
+      spamReason: filedBy,
       updatedAt: now,
     })
     .where(eq(conversations.id, conversationId))

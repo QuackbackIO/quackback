@@ -32,6 +32,7 @@ import { createUsageLoggingMiddleware } from '@/lib/server/domains/ai/usage-midd
 import { enforceAiTokenBudget } from '@/lib/server/domains/settings/tier-enforce'
 import { TierLimitError } from '@/lib/server/errors/tier-limit-error'
 import { logger } from '@/lib/server/logger'
+import type { SpamSignalHints } from './conversation.spam-signals'
 
 const log = logger.child({ component: 'spam-filter' })
 
@@ -64,6 +65,28 @@ export interface ClassifyInboundSpamInput {
 }
 
 /**
+ * Whether the workspace trust list exempts this sender from every spam filing
+ * path. Shared by the signal layer and the AI classifier — trust outranks
+ * both. An unreadable trust list fails open to "not trusted" so it never
+ * blocks classification or ingest.
+ */
+async function isTrustedInboundSender(senderEmail: string | null): Promise<boolean> {
+  try {
+    const { getSpamFilterConfig, isTrustedSender } =
+      await import('@/lib/server/domains/settings/settings.spam')
+    const { trustedSenders } = await getSpamFilterConfig()
+    if (isTrustedSender(senderEmail, trustedSenders)) {
+      log.info({ sender: senderEmail }, 'spam filing bypassed: trusted sender')
+      return true
+    }
+  } catch (err) {
+    // An unreadable trust list must not block classification (or the ingest).
+    log.warn({ err }, 'spam filter: trusted-sender list unreadable, classifying anyway')
+  }
+  return false
+}
+
+/**
  * Classify a new conversation's first inbound message. Returns true only on
  * an affirmative, parseable spam verdict; every fallback resolves false.
  * Never throws.
@@ -71,18 +94,7 @@ export interface ClassifyInboundSpamInput {
 export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Promise<boolean> {
   // Trusted senders bypass classification entirely — checked first so a
   // trusted sender never even spends a completion.
-  try {
-    const { getSpamFilterConfig, isTrustedSender } =
-      await import('@/lib/server/domains/settings/settings.spam')
-    const { trustedSenders } = await getSpamFilterConfig()
-    if (isTrustedSender(input.senderEmail, trustedSenders)) {
-      log.info({ sender: input.senderEmail }, 'spam classification bypassed: trusted sender')
-      return false
-    }
-  } catch (err) {
-    // An unreadable trust list must not block classification (or the ingest).
-    log.warn({ err }, 'spam filter: trusted-sender list unreadable, classifying anyway')
-  }
+  if (await isTrustedInboundSender(input.senderEmail)) return false
 
   const model = getChatModel('classification')
   if (!isAiClientConfigured(config.openaiApiKey, config.openaiBaseUrl) || !model) return false
@@ -139,12 +151,24 @@ export async function classifyInboundAsSpam(input: ClassifyInboundSpamInput): Pr
  * The one call both ingest paths make; error-isolated so a filing failure
  * never breaks ingestion — the conversation simply stays in triage. Returns
  * whether the conversation was filed.
+ *
+ * Order: the workspace trust list first (it outranks every filing path), then
+ * the deterministic signals (a match files without spending a completion),
+ * then the AI classifier as the fallback for everything else.
  */
 export async function maybeAutoFileSpam(
   conversationId: ConversationId,
-  input: ClassifyInboundSpamInput
+  input: ClassifyInboundSpamInput & { signals?: SpamSignalHints }
 ): Promise<boolean> {
   try {
+    if (await isTrustedInboundSender(input.senderEmail)) return false
+    const { detectSpamSignal } = await import('./conversation.spam-signals')
+    const signal = await detectSpamSignal({ senderEmail: input.senderEmail, ...input.signals })
+    if (signal) {
+      log.info({ conversation_id: conversationId, signal }, 'spam signal matched; filing')
+      const { autoFileConversationAsSpam } = await import('./conversation.service')
+      return await autoFileConversationAsSpam(conversationId, signal)
+    }
     if (!(await classifyInboundAsSpam(input))) return false
     const { autoFileConversationAsSpam } = await import('./conversation.service')
     return await autoFileConversationAsSpam(conversationId)

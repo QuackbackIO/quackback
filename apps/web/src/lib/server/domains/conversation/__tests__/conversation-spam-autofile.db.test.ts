@@ -168,6 +168,12 @@ async function spamViewIds(): Promise<string[]> {
   return page.conversations.map((c) => c.id)
 }
 
+/** The Spam-view DTO's filing-reason badge field for one conversation. */
+async function spamViewReason(id: string): Promise<string | null> {
+  const page = await listConversationsForAgent({ spamOnly: true }, agentActor())
+  return page.conversations.find((c) => c.id === id)?.spamReason ?? null
+}
+
 describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled back)', () => {
   beforeEach(fixture.begin)
   beforeEach(() => vi.clearAllMocks())
@@ -193,8 +199,10 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('closed')
     expect(stored?.endReason).toBe('spam')
-    // And the Spam view is the list that surfaces it.
+    expect(stored?.spamReason).toBe('ai_classifier')
+    // And the Spam view is the list that surfaces it — with the filing reason.
     await expect(spamViewIds()).resolves.toContain(res.conversationId)
+    await expect(spamViewReason(res.conversationId)).resolves.toBe('ai_classifier')
   })
 
   it('leaves a legitimate message in triage untouched', async () => {
@@ -227,5 +235,108 @@ describe.skipIf(!fixture.available)('inbound auto-spam filter (real DB, rolled b
     })
     expect(stored?.status).toBe('open')
     expect(stored?.endReason).toBeNull()
+  })
+
+  it('files a cold auto-responder to Spam without invoking the AI classifier', async () => {
+    await seedWorkspace()
+    mockChat.mockResolvedValue({ spam: false })
+
+    const res = await ingestParsedEmail(
+      coldEmail({
+        from: 'noreply@bulk-mailer.example',
+        precedence: 'bulk',
+        subject: 'Limited-time offer inside',
+        text: 'Buy now, act fast.',
+      })
+    )
+    // No threading headers and no plus-address: ingested, not suppressed.
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const stored = await testDb.query.conversations.findFirst({
+      where: eq(conversations.id, res.conversationId),
+    })
+    expect(stored?.status).toBe('closed')
+    expect(stored?.endReason).toBe('spam')
+    expect(stored?.spamReason).toBe('auto_responder')
+    await expect(spamViewIds()).resolves.toContain(res.conversationId)
+    await expect(spamViewReason(res.conversationId)).resolves.toBe('auto_responder')
+    // The deterministic signal filed it; the AI path never ran.
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('still hard-drops an auto-responder that replies to an existing thread', async () => {
+    await seedWorkspace()
+    const res = await ingestParsedEmail(
+      coldEmail({
+        precedence: 'bulk',
+        inReplyTo: '<some-thread@acme.com>',
+        references: ['<some-thread@acme.com>'],
+      })
+    )
+    expect(res.status).toBe('suppressed')
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('files a sender-auth failure to Spam without invoking the AI classifier', async () => {
+    await seedWorkspace()
+    mockChat.mockResolvedValue({ spam: false })
+
+    const res = await ingestParsedEmail(
+      coldEmail({
+        from: 'spoofer@lookalike.example',
+        authenticationResults:
+          'mx.quackback.io; spf=fail; dmarc=fail (p=none) header.from=lookalike.example',
+      })
+    )
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const stored = await testDb.query.conversations.findFirst({
+      where: eq(conversations.id, res.conversationId),
+    })
+    expect(stored?.status).toBe('closed')
+    expect(stored?.endReason).toBe('spam')
+    expect(stored?.spamReason).toBe('sender_auth_failure')
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('files a bursting sender to Spam without invoking the AI classifier', async () => {
+    await seedWorkspace()
+    mockChat.mockResolvedValue({ spam: false })
+    const { incrementBucket } = await import('@/lib/server/utils/redis-rate-bucket')
+    vi.mocked(incrementBucket).mockImplementation(async (spec: { key: string }) => ({
+      count: spec.key.includes(':burst:') ? 5 : 1,
+    }))
+
+    const res = await ingestParsedEmail(coldEmail({ from: 'flooder@acme.com' }))
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const stored = await testDb.query.conversations.findFirst({
+      where: eq(conversations.id, res.conversationId),
+    })
+    expect(stored?.status).toBe('closed')
+    expect(stored?.endReason).toBe('spam')
+    expect(stored?.spamReason).toBe('burst_rate')
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('keeps a trusted sender in triage even when a signal matches', async () => {
+    await seedWorkspace(['bulk-mailer.example'])
+    mockChat.mockResolvedValue({ spam: false })
+
+    const res = await ingestParsedEmail(
+      coldEmail({ from: 'noreply@bulk-mailer.example', precedence: 'bulk' })
+    )
+    expect(res.status).toBe('ingested')
+    if (res.status !== 'ingested') return
+
+    const stored = await testDb.query.conversations.findFirst({
+      where: eq(conversations.id, res.conversationId),
+    })
+    expect(stored?.status).toBe('open')
+    expect(stored?.endReason).toBeNull()
+    expect(mockChat).not.toHaveBeenCalled()
   })
 })

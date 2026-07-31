@@ -144,6 +144,8 @@ describe.skipIf(!available)('spam lifecycle', () => {
     expect(spam.conversations.every((c) => c.status === 'closed' && c.endReason === 'spam')).toBe(
       true
     )
+    // An agent-filed spam records 'manual' as its filing reason.
+    expect(spam.conversations.find((c) => c.id === id)?.spamReason).toBe('manual')
   })
 
   it('restore reopens the thread, clears the spam marker, and returns it to triage', async () => {
@@ -156,6 +158,7 @@ describe.skipIf(!available)('spam lifecycle', () => {
     expect(stored?.status).toBe('open')
     expect(stored?.endReason).toBeNull()
     expect(stored?.endNote).toBeNull()
+    expect(stored?.spamReason).toBeNull()
     expect(stored?.resolvedAt).toBeNull()
 
     const ids = (page: { conversations: Array<{ id: string }> }) =>
