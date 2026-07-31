@@ -6,6 +6,7 @@ import {
   MagnifyingGlassIcon,
   ChevronUpIcon,
   UserIcon,
+  UsersIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
@@ -26,10 +27,12 @@ import {
   type StatusOption,
 } from '@/components/shared/sidebar-primitives'
 import { ChangelogCategorySelect } from './changelog-category-select'
+import { SegmentMultiSelect } from '@/components/admin/segments/segment-multi-select'
+import { listSegmentsFn } from '@/lib/server/functions/admin'
 import { changelogSettingsQueries } from '@/lib/client/queries/changelog'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
 import { cn, tomorrowAt } from '@/lib/shared/utils'
-import type { PostId, ChangelogCategoryId } from '@quackback/ids'
+import type { PostId, ChangelogCategoryId, SegmentId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import { TagIcon, EnvelopeIcon, PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
@@ -42,6 +45,9 @@ interface ChangelogMetadataSidebarContentProps {
   onCategoriesChange: (categoryIds: ChangelogCategoryId[]) => void
   notify: boolean
   onNotifyChange: (notify: boolean) => void
+  /** Publish-notification targeting; empty = notify every subscriber. */
+  segmentIds?: SegmentId[]
+  onSegmentIdsChange?: (segmentIds: SegmentId[]) => void
   authorName?: string | null
   publishedAt?: string | null
   displayDateValue?: Date
@@ -66,6 +72,8 @@ export function ChangelogMetadataSidebarContent({
   onCategoriesChange,
   notify,
   onNotifyChange,
+  segmentIds = [],
+  onSegmentIdsChange = () => {},
   authorName,
   publishedAt,
   displayDateValue,
@@ -95,6 +103,14 @@ export function ChangelogMetadataSidebarContent({
   const { data: changelogSettings } = useQuery(changelogSettingsQueries.get())
   const emailsDisabled = changelogSettings?.emailsDisabled ?? false
   const willSendEmail = publishState.type === 'published' || publishState.type === 'scheduled'
+
+  // Segments for the publish-notification targeting picker.
+  const segmentsQuery = useQuery({
+    queryKey: ['admin', 'segments'] as const,
+    queryFn: () => listSegmentsFn(),
+    staleTime: 60_000,
+  })
+  const segments = (segmentsQuery.data ?? []).map((s) => ({ id: s.id, name: s.name }))
 
   // Default scheduled time to tomorrow at 9am
   const [scheduledDateTime, setScheduledDateTime] = useState<Date>(() => {
@@ -236,6 +252,25 @@ export function ChangelogMetadataSidebarContent({
           <Checkbox
             checked={notify}
             onCheckedChange={(checked) => onNotifyChange(checked === true)}
+          />
+        </div>
+      )}
+
+      {/* Notify segments — restricts the publish fan-out (email + in-app) to
+          members of the selected segments. Empty = every subscriber. */}
+      {willSendEmail && segments.length > 0 && (
+        <div className="space-y-2">
+          <SidebarRow icon={<UsersIcon className="h-4 w-4" />} label="Notify segments">
+            {null}
+          </SidebarRow>
+          <p className="text-xs text-muted-foreground pl-6">
+            Leave empty to notify every subscriber.
+          </p>
+          <SegmentMultiSelect
+            segments={segments}
+            value={segmentIds}
+            onChange={(next) => onSegmentIdsChange(next as SegmentId[])}
+            ariaLabel="Changelog notify segments"
           />
         </div>
       )}
