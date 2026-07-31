@@ -605,27 +605,36 @@ function RowShell({
   )
 }
 
-/** The inline assignee glance for a conversation row: avatar + name, or
- *  nothing when unassigned (absence reads as "up for grabs"). Kept tiny and
- *  muted so it scans as metadata, never as a second row identity. */
-function assigneeChip(c: ConversationDTO) {
-  if (!c.assignedAgent) return null
+/** The row's assignee column: a FIXED-width (w-24), left-aligned slot at a
+ *  constant offset from the row's right edge, so assignees align down one
+ *  unbroken vertical scan line whatever the snippet length. An unassigned
+ *  thread renders an explicit "Unassigned" label in the same slot — the
+ *  column is always present, never collapsing with row content. Kept tiny
+ *  and muted so it scans as metadata, never as a second row identity. */
+function assigneeColumn(c: ConversationDTO) {
+  if (!c.assignedAgent) {
+    return (
+      <span className="flex w-24 shrink-0 items-center text-xs text-muted-foreground/70">
+        Unassigned
+      </span>
+    )
+  }
   const fullName = c.assignedAgent.displayName ?? 'teammate'
-  // First name only: the chip shares a line with the preview + time, so a
-  // full name would ellipsis-truncate into noise; the full name stays one
-  // hover away on the title.
+  // First name only: the column is a fixed 96px, so a full name would
+  // ellipsis-truncate into noise; the full name stays one hover away on the
+  // title.
   const firstName = fullName.split(' ')[0]
   return (
     <span
       title={`Assigned to ${fullName}`}
-      className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+      className="flex w-24 shrink-0 items-center gap-1 text-xs text-muted-foreground"
     >
       <Avatar
         src={c.assignedAgent.avatarUrl}
         name={fullName}
         className="size-5 shrink-0 text-[11px]"
       />
-      <span className="max-w-24 truncate">{firstName}</span>
+      <span className="truncate">{firstName}</span>
     </span>
   )
 }
@@ -662,12 +671,13 @@ export const ConversationRow = memo(function ConversationRow({
       {/* Rows keep a fixed anatomy (name / linked-ticket line / preview + time)
           so the list scans uniformly — the sometimes-present decorations
           (priority dot, SLA, channel, tags) live on the thread, not here. The
-          ONE identity decoration is the assignee chip pinned to the preview
-          line's right edge (a glance must answer "who has this?" without
-          opening the thread); unassigned threads render nothing there, so
-          absence reads as "up for grabs". A result row swaps the preview for
-          the matched excerpt and moves the time up beside the name, so the
-          excerpt gets the full row width. */}
+          ONE identity decoration is the assignee column pinned to the row's
+          right edge at a fixed width (a glance must answer "who has this?"
+          without opening the thread, and the fixed slot lets the eye scan
+          assignees down one vertical line); unassigned threads render an
+          explicit "Unassigned" label there, so the scan line never breaks. A
+          result row swaps the preview for the matched excerpt and moves the
+          time up beside the name, so the excerpt gets the full row width. */}
       <button
         type="button"
         onClick={() => onSelect(id)}
@@ -684,16 +694,20 @@ export const ConversationRow = memo(function ConversationRow({
               {c.visitor.displayName ?? 'Visitor'}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
-              {item.searchSnippet && assigneeChip(c)}
               {c.unreadCount > 0 && (
                 <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
                   {c.unreadCount}
                 </span>
               )}
               {item.searchSnippet && (
-                <span className="text-xs text-muted-foreground">
-                  {relativeTime(c.lastMessageAt)}
-                </span>
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    {relativeTime(c.lastMessageAt)}
+                  </span>
+                  {/* Rightmost on the row, so the column's left edge is the
+                      same constant offset from the right edge on every row. */}
+                  {assigneeColumn(c)}
+                </>
               )}
             </span>
           </div>
@@ -714,10 +728,12 @@ export const ConversationRow = memo(function ConversationRow({
                 {c.lastMessagePreview ?? c.subject ?? 'No messages yet'}
               </p>
               <span className="flex shrink-0 items-center gap-1.5">
-                {assigneeChip(c)}
                 <span className="text-xs text-muted-foreground">
                   {relativeTime(c.lastMessageAt)}
                 </span>
+                {/* Rightmost on the row, so the column's left edge is the
+                    same constant offset from the right edge on every row. */}
+                {assigneeColumn(c)}
               </span>
             </div>
           )}

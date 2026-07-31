@@ -1,9 +1,10 @@
 /**
- * The conversation list row carries its assignee inline (the at-a-glance
- * anatomy: name / optional ticket line / preview + time + assignee), so an
- * agent can see WHO is handling a thread without opening it. Unassigned
- * threads render no assignee element at all — absence IS the "unassigned"
- * signal, matching the queues.
+ * The conversation list row carries its assignee in a FIXED-width column at a
+ * constant horizontal position on every row (the at-a-glance anatomy: name /
+ * optional ticket line / preview + assignee column + time), so the eye scans
+ * assignees down one unbroken vertical line regardless of snippet length.
+ * Unassigned threads render an explicit "Unassigned" label in the same
+ * column — the scan line never breaks.
  */
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -60,8 +61,8 @@ function renderRow(c: ConversationDTO) {
   )
 }
 
-describe('ConversationRow assignee', () => {
-  it('shows the assignee inline when the conversation is assigned', () => {
+describe('ConversationRow assignee column', () => {
+  it('shows the assignee in a fixed-width column when the conversation is assigned', () => {
     renderRow(
       conversation({
         assignedAgent: {
@@ -71,13 +72,19 @@ describe('ConversationRow assignee', () => {
         },
       })
     )
-    expect(screen.getByTitle('Assigned to Maya Chen')).toBeInTheDocument()
+    const column = screen.getByTitle('Assigned to Maya Chen')
+    expect(column).toBeInTheDocument()
     // The chip renders the first name; the full name is the hover title.
     expect(screen.getByText('Maya')).toBeInTheDocument()
+    // The column's width is pinned, so its left edge never moves with the
+    // snippet length — assignees align down a single vertical line.
+    expect(column.className).toContain('w-24')
   })
 
-  it('renders no assignee element when the conversation is unassigned', () => {
+  it('renders an explicit unassigned state in the same fixed column', () => {
     renderRow(conversation({ assignedAgent: null }))
-    expect(screen.queryByTitle(/^Assigned to /)).not.toBeInTheDocument()
+    const unassigned = screen.getByText('Unassigned')
+    expect(unassigned).toBeInTheDocument()
+    expect(unassigned.className).toContain('w-24')
   })
 })
