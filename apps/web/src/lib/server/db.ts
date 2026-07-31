@@ -258,6 +258,8 @@ export {
   // Schema tables - custom saved inbox views + per-user pins
   conversationViews,
   conversationViewPins,
+  // Schema tables - saved feedback-inbox views
+  postViews,
   // Schema tables - conversation attribute definitions
   conversationAttributeDefinitions,
   type ConversationAttributeFieldType,

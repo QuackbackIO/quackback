@@ -265,6 +265,9 @@ export type MacroId = TypeId<'macro'>
 /** Saved inbox view ID - e.g., conversation_view_01h455vb4pex5vsknk084sn02q */
 export type ConversationViewId = TypeId<'conversation_view'>
 
+/** Saved feedback-inbox view ID - e.g., post_view_01h455vb4pex5vsknk084sn02q */
+export type PostViewId = TypeId<'post_view'>
+
 // ============================================
 // Feedback Aggregation Entity IDs
 // ============================================
@@ -431,6 +434,7 @@ export interface EntityIdMap {
   team_member: TeamMemberId
   macro: MacroId
   conversation_view: ConversationViewId
+  post_view: PostViewId
   conversation_attribute: ConversationAttributeId
   feedback_source: FeedbackSourceId
   raw_feedback: RawFeedbackItemId
