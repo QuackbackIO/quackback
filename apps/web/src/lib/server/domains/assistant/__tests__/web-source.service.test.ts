@@ -26,6 +26,8 @@ vi.mock('@/lib/server/content/ssrf-guard', async (importOriginal) => ({
 
 import {
   addWebSourceFromUrl,
+  extractLinks,
+  matchesPathFilters,
   listWebSources,
   setWebSourceEnabled,
   deleteWebSource,
@@ -143,5 +145,147 @@ describe.skipIf(!fixture.available)('web-source service + retrieval (real DB, ro
 
     await expect(addWebSourceFromUrl({ url: 'https://example.com/missing' })).rejects.toThrow(/404/)
     expect(await listWebSources()).toEqual([])
+  })
+
+  describe('crawl mode', () => {
+    /** A fake site: url -> html body; links drive the crawl. */
+    function fakeSite(pages: Record<string, string | Response>) {
+      mockSafeFetch.mockImplementation(async (url: string) => {
+        const page = pages[url]
+        if (page === undefined) {
+          return htmlResponse('not found', { status: 404 })
+        }
+        return page instanceof Response ? page : htmlResponse(page)
+      })
+    }
+
+    const page = (title: string, body: string, links: string[] = []) =>
+      `<!doctype html><html><head><title>${title}</title></head><body><p>${body}</p>${links
+        .map((href) => `<a href="${href}">link</a>`)
+        .join('')}</body></html>`
+
+    it('ingests same-origin pages linked from the seed URL', async () => {
+      fakeSite({
+        'https://docs.example.com/': page('Docs home', 'Welcome to the docs.', [
+          '/billing',
+          '/quickstart',
+          'https://other.example.com/external',
+        ]),
+        'https://docs.example.com/billing': page('Billing', 'Invoices are issued monthly.', [
+          'https://docs.example.com/refunds#section',
+        ]),
+        'https://docs.example.com/quickstart': page('Quickstart', 'Install the snippet.'),
+        'https://docs.example.com/refunds': page('Refunds', 'Refunds take five days.'),
+      })
+
+      const root = await addWebSourceFromUrl({ url: 'https://docs.example.com/', crawl: true })
+
+      expect(root.url).toBe('https://docs.example.com/')
+      const urls = (await listWebSources()).map((r) => r.url)
+      expect(urls).toHaveLength(4)
+      expect(urls).toContain('https://docs.example.com/billing')
+      expect(urls).toContain('https://docs.example.com/quickstart')
+      // Hash-only suffix does not produce a second page for the same target.
+      expect(urls.filter((u) => u.startsWith('https://docs.example.com/refunds'))).toHaveLength(1)
+      // Cross-origin link was never fetched.
+      expect(mockSafeFetch).not.toHaveBeenCalledWith(
+        expect.stringContaining('other.example.com'),
+        expect.anything()
+      )
+    })
+
+    it('caps the number of ingested pages per source', async () => {
+      const pages: Record<string, string> = {
+        'https://docs.example.com/': page('Home', 'root', ['/p1', '/p2', '/p3']),
+      }
+      for (const n of [1, 2, 3]) {
+        pages[`https://docs.example.com/p${n}`] = page(`P${n}`, `page ${n}`)
+      }
+      fakeSite(pages)
+
+      await addWebSourceFromUrl({ url: 'https://docs.example.com/', crawl: true, maxPages: 2 })
+
+      expect(await listWebSources()).toHaveLength(2)
+      expect(mockSafeFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('honors admin include/exclude path filters on discovered links', async () => {
+      fakeSite({
+        'https://docs.example.com/': page('Home', 'root', [
+          '/docs/a',
+          '/docs/internal/draft',
+          '/blog/post',
+        ]),
+        'https://docs.example.com/docs/a': page('A', 'public doc a'),
+        'https://docs.example.com/docs/internal/draft': page('Draft', 'unpublished draft'),
+        'https://docs.example.com/blog/post': page('Post', 'a blog post'),
+      })
+
+      await addWebSourceFromUrl({
+        url: 'https://docs.example.com/',
+        crawl: true,
+        includePaths: ['/docs/*'],
+        excludePaths: ['/docs/internal/*'],
+      })
+
+      const urls = (await listWebSources()).map((r) => r.url)
+      expect(urls).toContain('https://docs.example.com/docs/a')
+      expect(urls).not.toContain('https://docs.example.com/docs/internal/draft')
+      expect(urls).not.toContain('https://docs.example.com/blog/post')
+      expect(mockSafeFetch).not.toHaveBeenCalledWith(
+        expect.stringContaining('/docs/internal'),
+        expect.anything()
+      )
+    })
+
+    it('edge case: a broken page mid-crawl is skipped and the crawl continues', async () => {
+      fakeSite({
+        'https://docs.example.com/': page('Home', 'root', ['/gone', '/fine']),
+        'https://docs.example.com/fine': page('Fine', 'this page works'),
+      })
+
+      const root = await addWebSourceFromUrl({ url: 'https://docs.example.com/', crawl: true })
+
+      expect(root.url).toBe('https://docs.example.com/')
+      const urls = (await listWebSources()).map((r) => r.url)
+      expect(urls).toEqual(
+        expect.arrayContaining(['https://docs.example.com/', 'https://docs.example.com/fine'])
+      )
+      expect(urls).toHaveLength(2)
+    })
+
+    it('edge case: an already-stored page is not duplicated on re-crawl', async () => {
+      fakeSite({
+        'https://docs.example.com/': page('Home', 'root', ['/a']),
+        'https://docs.example.com/a': page('A', 'page a', ['/']),
+      })
+
+      await addWebSourceFromUrl({ url: 'https://docs.example.com/', crawl: true })
+      await addWebSourceFromUrl({ url: 'https://docs.example.com/', crawl: true })
+
+      expect(await listWebSources()).toHaveLength(2)
+    })
+  })
+
+  describe('pure helpers', () => {
+    it('extractLinks resolves relative hrefs and drops non-http schemes', () => {
+      const links = extractLinks(
+        `<a href="/a">a</a><a href="b">b</a><a href="mailto:x@y.z">m</a><a href="#frag">f</a>`,
+        'https://docs.example.com/dir/'
+      )
+      expect(links).toContain('https://docs.example.com/a')
+      expect(links).toContain('https://docs.example.com/dir/b')
+      expect(links).not.toContain('mailto:x@y.z')
+      // Same-page fragment resolves to the page itself, hash stripped.
+      expect(links).toContain('https://docs.example.com/dir/')
+    })
+
+    it('matchesPathFilters applies include-then-exclude glob semantics', () => {
+      expect(matchesPathFilters('/docs/a', ['/docs/*'], [])).toBe(true)
+      expect(matchesPathFilters('/blog/a', ['/docs/*'], [])).toBe(false)
+      expect(matchesPathFilters('/docs/internal/x', ['/docs/*'], ['/docs/internal/*'])).toBe(false)
+      expect(matchesPathFilters('/anything', [], [])).toBe(true)
+      expect(matchesPathFilters('/exact', ['/exact'], [])).toBe(true)
+    })
   })
 })
