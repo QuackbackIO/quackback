@@ -770,6 +770,9 @@ export interface AssistantPendingActionSurface {
 // already substituted server-side; a raw {token} never reaches storage).
 export type WorkflowBlockKind =
   | 'message'
+  // The in-thread ticket intake form (send_ticket_form node) — a SEND kind,
+  // never in INTERACTIVE_BLOCK_KINDS: it posts and continues immediately.
+  | 'ticketForm'
   | 'buttons'
   | 'collect'
   | 'collectReply'
@@ -823,6 +826,11 @@ export interface WorkflowBlockAttributeOption {
 
 export type WorkflowBlockPayload =
   | (WorkflowBlockPayloadBase & { kind: 'message' })
+  // The ticket intake form sent into the thread by a workflow's
+  // send_ticket_form node: a SEND kind (waiting always false) — the widget
+  // renders the form card for this kind and the visitor files the ticket
+  // in-thread; there is no structured block reply to correlate.
+  | (WorkflowBlockPayloadBase & { kind: 'ticketForm' })
   | (WorkflowBlockPayloadBase & {
       kind: 'buttons'
       options: WorkflowBlockButtonOption[]

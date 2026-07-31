@@ -223,6 +223,10 @@ const nodeSchema = z.discriminatedUnion('type', [
   }),
   // ── Conversational block kinds (Phase C, slice C-1) ──────────────────────
   z.object({ id: z.string().min(1), type: z.literal('message'), body: blockBodySchema }),
+  // The ticket intake form as an in-thread block — a SEND kind like `message`
+  // (posts and continues; the visitor files the ticket in-thread from the
+  // rendered form, no structured block reply, no park).
+  z.object({ id: z.string().min(1), type: z.literal('send_ticket_form'), body: blockBodySchema }),
   z.object({ id: z.string().min(1), type: z.literal('show_reply_time') }),
   z.object({
     id: z.string().min(1),
@@ -279,6 +283,7 @@ const nodeSchema = z.discriminatedUnion('type', [
  *  node kind added here to the client ever learning about it. */
 export const BLOCK_NODE_TYPES = [
   'message',
+  'send_ticket_form',
   'show_reply_time',
   'let_assistant_answer',
   'disable_composer',

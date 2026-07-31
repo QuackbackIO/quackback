@@ -189,6 +189,10 @@ export interface WorkflowContext {
  *  authored (a raw `{token}` is resolved at apply time, never stored). */
 export type BlockSendSpec =
   | { kind: 'message'; body: TiptapContent }
+  // The ticket intake form as an in-thread block (send_ticket_form node): a
+  // SEND kind like `message` — the widget renders the form for this block
+  // kind and the visitor files the ticket in-thread; the run never parks.
+  | { kind: 'ticketForm'; body: TiptapContent }
   | { kind: 'replyTime' }
   | {
       kind: 'buttons'
@@ -340,6 +344,8 @@ function buildBlockPayload(
   switch (block.kind) {
     case 'message':
       return { ...common, kind: 'message' }
+    case 'ticketForm':
+      return { ...common, kind: 'ticketForm' }
     case 'buttons':
       return { ...common, kind: 'buttons', options: block.options, allowTyping: block.allowTyping }
     case 'collect':

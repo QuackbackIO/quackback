@@ -282,6 +282,27 @@ describe('walkWorkflow — conversational block kinds (Phase C, slice C-1)', () 
     })
   })
 
+  it('send_ticket_form is a SEND kind: posts the form block and continues immediately (no park)', () => {
+    const graph: WorkflowGraph = {
+      nodes: [
+        { id: 't', type: 'trigger' },
+        { id: 'f', type: 'send_ticket_form', body: doc },
+        { id: 'a', type: 'action', action: { type: 'close' } },
+      ],
+      edges: [
+        { from: 't', to: 'f' },
+        { from: 'f', to: 'a' },
+      ],
+    }
+    expect(walkWorkflow(graph, ctx())).toMatchObject({
+      status: 'completed',
+      actions: [
+        { type: 'send_block', nodeId: 'f', block: { kind: 'ticketForm', body: doc } },
+        { type: 'close' },
+      ],
+    })
+  })
+
   describe("let_assistant_answer (Phase C, slice C-6: parks pending Quinn's outcome)", () => {
     const graph: WorkflowGraph = {
       nodes: [

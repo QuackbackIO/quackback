@@ -184,6 +184,9 @@ export function InspectorPanel({
         {step.kind === 'message' && (
           <MessageEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
         )}
+        {step.kind === 'send_ticket_form' && (
+          <MessageEditor step={step} onChange={(next) => onUpdateStep(() => next)} />
+        )}
         {step.kind === 'show_reply_time' && <ReplyTimeEditor />}
         {step.kind === 'disable_composer' && (
           <p className="text-xs text-muted-foreground">

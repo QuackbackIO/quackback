@@ -90,6 +90,7 @@ export type CollectFieldType = Extract<GraphNode, { type: 'collect_data' }>['fie
 
 export type BlockStepKind =
   | 'message'
+  | 'send_ticket_form'
   | 'show_reply_time'
   | 'let_assistant_answer'
   | 'disable_composer'
@@ -100,6 +101,7 @@ export type BlockStepKind =
 
 export const BLOCK_STEP_LABELS: Record<BlockStepKind, string> = {
   message: 'Message',
+  send_ticket_form: 'Send ticket form',
   show_reply_time: 'Show expected reply time',
   let_assistant_answer: 'Let Quinn answer',
   disable_composer: 'Disable replies',
@@ -113,6 +115,7 @@ export const BLOCK_STEP_LABELS: Record<BlockStepKind, string> = {
  *  control-flow kinds) and continues immediately. */
 export const SEND_BLOCK_KINDS: readonly BlockStepKind[] = [
   'message',
+  'send_ticket_form',
   'show_reply_time',
   'let_assistant_answer',
   'disable_composer',
@@ -1093,6 +1096,7 @@ export type TreeStep =
   | { id: string; kind: 'branch'; paths: BranchPath[] }
   // ── Conversational block kinds (Phase C, slice C-5) ───────────────────────
   | { id: string; kind: 'message'; body: BlockBody }
+  | { id: string; kind: 'send_ticket_form'; body: BlockBody }
   | { id: string; kind: 'show_reply_time' }
   | { id: string; kind: 'disable_composer' }
   | {
@@ -1222,6 +1226,8 @@ export function createStep(
       return { id, kind, seconds: 3600 }
     // ── Conversational block kinds (Phase C, slice C-5) ───────────────────
     case 'message':
+      return { id, kind, body: EMPTY_BLOCK_BODY }
+    case 'send_ticket_form':
       return { id, kind, body: EMPTY_BLOCK_BODY }
     case 'show_reply_time':
       return { id, kind }
@@ -1484,6 +1490,11 @@ export function validateGraph(input: unknown): Result<WorkflowGraphJson> {
       }
       // ── Conversational block kinds (Phase C, slice C-5) ──────────────────
       case 'message': {
+        const err = validateBlockBody(node.body, where)
+        if (err) return fail(err)
+        break
+      }
+      case 'send_ticket_form': {
         const err = validateBlockBody(node.body, where)
         if (err) return fail(err)
         break
@@ -1858,6 +1869,9 @@ export function graphToTree(graph: WorkflowGraphJson): Result<WorkflowTree> {
         case 'message':
           steps.push({ id: node.id, kind: 'message', body: node.body })
           break
+        case 'send_ticket_form':
+          steps.push({ id: node.id, kind: 'send_ticket_form', body: node.body })
+          break
         case 'show_reply_time':
           steps.push({ id: node.id, kind: 'show_reply_time' })
           break
@@ -1936,6 +1950,9 @@ export function treeToGraph(tree: WorkflowTree): WorkflowGraphJson {
         // ── Conversational block kinds (Phase C, slice C-5) ───────────────
         case 'message':
           nodes.push({ id: step.id, type: 'message', body: step.body })
+          break
+        case 'send_ticket_form':
+          nodes.push({ id: step.id, type: 'send_ticket_form', body: step.body })
           break
         case 'show_reply_time':
           nodes.push({ id: step.id, type: 'show_reply_time' })
@@ -2801,6 +2818,9 @@ function blockStepIssue(step: TreeStep): string | null {
   switch (step.kind) {
     case 'message':
       return isBlockBodyEmpty(step.body) ? 'Write the message' : null
+    case 'send_ticket_form':
+      // The form card itself is the content; the intro body is optional.
+      return null
     case 'reply_buttons':
       if (step.paths.length === 0) return 'Add at least one button'
       if (step.paths.some((p) => !p.label.trim())) return 'Every button needs a label'
@@ -2974,6 +2994,10 @@ function stepLabel(step: TreeStep, labels: EntityLabels): string {
       return `Branch · ${step.paths.length} path${step.paths.length === 1 ? '' : 's'}`
     case 'message':
       return blockBodyPreview(step.body)
+    case 'send_ticket_form':
+      return isBlockBodyEmpty(step.body)
+        ? BLOCK_STEP_LABELS.send_ticket_form
+        : `${BLOCK_STEP_LABELS.send_ticket_form} · ${blockBodyPreview(step.body)}`
     case 'show_reply_time':
       return BLOCK_STEP_LABELS.show_reply_time
     case 'disable_composer':
