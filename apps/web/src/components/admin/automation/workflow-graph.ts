@@ -417,6 +417,8 @@ export const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   neq: 'is not',
   contains: 'contains',
   not_contains: "doesn't contain",
+  contains_any: 'contains any of',
+  contains_all: 'contains all of',
   gt: 'is more than',
   gte: 'is at least',
   lt: 'is less than',
@@ -430,9 +432,26 @@ export const OPERATOR_LABELS: Record<ConditionOperator, string> = {
 /** Operators that take no value (the value input is hidden and omitted). */
 export const VALUELESS_OPERATORS: ReadonlySet<ConditionOperator> = new Set(['is_set', 'is_empty'])
 
+/** Keyword-list operators on a text subject (condition.evaluator's
+ *  contains_any / contains_all): the draft value is a comma-separated string
+ *  that encodes to a string array, mirroring the `list` kind's encoding. */
+export const KEYWORD_OPERATORS: ReadonlySet<ConditionOperator> = new Set([
+  'contains_any',
+  'contains_all',
+])
+
 /** The operators that make sense per value kind, in menu order. */
 export const OPERATORS_BY_KIND: Record<ConditionValueKind, readonly ConditionOperator[]> = {
-  text: ['contains', 'not_contains', 'eq', 'neq', 'is_set', 'is_empty'],
+  text: [
+    'contains',
+    'not_contains',
+    'contains_any',
+    'contains_all',
+    'eq',
+    'neq',
+    'is_set',
+    'is_empty',
+  ],
   number: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_set', 'is_empty'],
   list: ['includes_any', 'excludes_all', 'is_set', 'is_empty'],
   boolean: ['eq', 'neq'],
@@ -2025,6 +2044,14 @@ function leafToRule(leaf: ConditionLeaf): ConditionRuleDraft | null {
   }
   switch (CONDITION_FIELD_META[field].kind) {
     case 'text':
+      // Keyword operators store a string array (see KEYWORD_OPERATORS); the
+      // draft edits it as a comma-separated string, same as the list kind.
+      if (KEYWORD_OPERATORS.has(op)) {
+        return Array.isArray(v) && v.every((x) => typeof x === 'string')
+          ? { field, op, value: v.join(', ') }
+          : null
+      }
+      return typeof v === 'string' ? { field, op, value: v } : null
     case 'choice':
       return typeof v === 'string' ? { field, op, value: v } : null
     case 'number':
@@ -2169,7 +2196,14 @@ function ruleToLeaf(
         .filter(Boolean)
       break
     default:
-      value = rule.value
+      // Keyword operators encode to a string array (see KEYWORD_OPERATORS),
+      // the same comma-split the list kind uses.
+      value = KEYWORD_OPERATORS.has(rule.op)
+        ? rule.value
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : rule.value
   }
   return { field: rule.field, op: rule.op, value }
 }

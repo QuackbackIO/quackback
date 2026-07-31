@@ -453,6 +453,21 @@ describe('condition drafts', () => {
     expect(draftToCondition(draft)).toEqual(group)
   })
 
+  it('round-trips a keyword-list rule (contains_any) on message body', () => {
+    const leaf = {
+      field: 'message.body',
+      op: 'contains_any',
+      value: ['refund', 'exchange'],
+    } as const
+    const draft = conditionToDraft(leaf)
+    expect(draft).toEqual({
+      kind: 'simple',
+      mode: 'all',
+      rules: [{ field: 'message.body', op: 'contains_any', value: 'refund, exchange' }],
+    })
+    if (draft.kind === 'simple') expect(draftToCondition(draft)).toEqual(leaf)
+  })
+
   it('treats an empty group as "matches everything"', () => {
     const draft = conditionToDraft({})
     expect(draft).toEqual({ kind: 'simple', mode: 'all', rules: [] })
@@ -1151,6 +1166,8 @@ describe('person/company attribute condition fields', () => {
       expect(resolved.operators).toEqual([
         'contains',
         'not_contains',
+        'contains_any',
+        'contains_all',
         'eq',
         'neq',
         'is_set',

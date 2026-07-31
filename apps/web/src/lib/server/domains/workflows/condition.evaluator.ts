@@ -124,6 +124,8 @@ export type ConditionOperator =
   | 'neq'
   | 'contains'
   | 'not_contains'
+  | 'contains_any'
+  | 'contains_all'
   | 'gt'
   | 'gte'
   | 'lt'
@@ -345,6 +347,25 @@ function applyOp(actual: unknown, op: ConditionOperator, value: unknown): boolea
         typeof value === 'string' &&
         actual.toLowerCase().includes(value.toLowerCase())
       return op === 'contains' ? hit : !unresolved && !hit
+    }
+    case 'contains_any':
+    case 'contains_all': {
+      // Keyword-list matching on a text subject (the message.body staple):
+      // every listed keyword is a case-insensitive substring test, any vs all
+      // deciding whether one hit or every hit is required. The value is
+      // normally a string array; a bare string (JSON-mode authoring) reads as
+      // a single keyword via asArray. Non-string and blank entries are
+      // dropped, and an empty effective keyword list never matches — a
+      // misconfigured rule must not let every message through. Unresolved
+      // subject: non-match, per the contract above.
+      if (unresolved || typeof actual !== 'string') return false
+      const keywords = asArray(value).filter(
+        (v): v is string => typeof v === 'string' && v.trim() !== ''
+      )
+      if (keywords.length === 0) return false
+      const haystack = actual.toLowerCase()
+      const hits = keywords.filter((k) => haystack.includes(k.toLowerCase()))
+      return op === 'contains_any' ? hits.length > 0 : hits.length === keywords.length
     }
     case 'gt':
     case 'gte':

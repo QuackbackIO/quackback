@@ -45,6 +45,8 @@ const conditionOperator = z.enum([
   'neq',
   'contains',
   'not_contains',
+  'contains_any',
+  'contains_all',
   'gt',
   'gte',
   'lt',
