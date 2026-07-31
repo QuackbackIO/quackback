@@ -4,8 +4,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockValues = vi.fn().mockResolvedValue(undefined)
 const mockInsert = vi.fn(() => ({ values: mockValues }))
 vi.mock('@/lib/server/db', () => ({
-  db: { insert: mockInsert },
+  db: { insert: mockInsert, select: vi.fn() },
   pageViews: {},
+  visitorDevices: { deviceId: 'deviceId', principalId: 'principalId' },
+  conversations: {
+    id: 'id',
+    visitorPrincipalId: 'visitorPrincipalId',
+    lastMessageAt: 'lastMessageAt',
+  },
+  eq: (a: unknown, b: unknown) => ['eq', a, b],
+  desc: (a: unknown) => ['desc', a],
+}))
+
+// The page.visited workflow bridge is covered by page-visit-trigger.test.ts;
+// here the dispatcher is mocked away and beacons carry no deviceId, so the
+// hook never fires.
+vi.mock('@/lib/server/domains/workflows/dispatcher', () => ({
+  dispatchWorkflowTrigger: vi.fn(),
 }))
 
 const mockIncrementBucket = vi.fn()

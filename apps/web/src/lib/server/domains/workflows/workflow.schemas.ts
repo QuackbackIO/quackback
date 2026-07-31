@@ -25,7 +25,7 @@ import {
   CONDITION_FIELDS,
   type WorkflowCondition,
 } from './condition.evaluator'
-import { DISPATCHABLE_TRIGGER_TYPES } from '@/lib/shared/workflow-trigger-types'
+import { AUTHORABLE_TRIGGER_TYPES } from '@/lib/shared/workflow-trigger-types'
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { MAX_CONVERSATION_MESSAGE_LENGTH } from '@/lib/shared/conversation/types'
 import { TICKET_STATUS_CATEGORIES } from '@/lib/shared/db-types'
@@ -522,6 +522,14 @@ export const triggerSettingsSchema = z
     inactivityMinutes: z.number().int().min(1).max(MAX_INACTIVITY_MINUTES).optional(),
     breachLeadMinutes: z.number().int().min(1).max(MAX_BREACH_LEAD_MINUTES).optional(),
     ticketStatusCategory: ticketStatusCategorySchema.optional(),
+    /** `triggerSettings.pagePath` (page.visited trigger): restricts the
+     *  trigger to firing when the visited URL's pathname matches — exact, or
+     *  a trailing `*` for a prefix pattern (`/docs/*`). Absent = "any page"
+     *  (never restricts). Enforced at dispatch by dispatcher.guards.ts's
+     *  pagePathAllows, beside ticketStatusCategoryAllows — a page visit has
+     *  no conversation-condition-evaluable field, so it rides the same
+     *  triggerSettings bag. */
+    pagePath: z.string().min(1).max(500).optional(),
   })
   .catchall(z.unknown())
 
@@ -556,12 +564,13 @@ export function parseBreachLeadMinutes(raw: unknown): number | undefined {
   return parseBoundedTriggerSetting(triggerSettingsSchema.shape.breachLeadMinutes, raw)
 }
 
-/** Which trigger types a workflow can actually be dispatched on — see
- *  lib/shared/workflow-trigger-types.ts for the canonical list and how it's
- *  kept in sync with the event bus. Without this, functions/workflows.ts used
- *  to accept any string up to 80 characters, so a typo'd triggerType saved
- *  cleanly and then simply never fired. */
-export const triggerTypeSchema = z.enum(DISPATCHABLE_TRIGGER_TYPES)
+/** Which trigger types a workflow can actually be dispatched on — the
+ *  event-bus dispatchables plus the non-event page.visited trigger (see
+ *  lib/shared/workflow-trigger-types.ts for the canonical lists and how the
+ *  dispatchable one is kept in sync with the event bus). Without this,
+ *  functions/workflows.ts used to accept any string up to 80 characters, so
+ *  a typo'd triggerType saved cleanly and then simply never fired. */
+export const triggerTypeSchema = z.enum(AUTHORABLE_TRIGGER_TYPES)
 
 /**
  * The validated graph, with plain-string ids. The domain WorkflowGraph uses

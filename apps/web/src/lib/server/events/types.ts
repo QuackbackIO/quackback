@@ -39,6 +39,7 @@ export const EVENT_TYPES = [
   'post.unmerged',
   'post.mentioned',
   'post.owner_assigned',
+  'post.voted',
   'comment.created',
   'comment.updated',
   'comment.deleted',
@@ -187,6 +188,20 @@ export interface PostDeletedPayload {
 
 export interface PostRestoredPayload {
   post: EventPostRef
+}
+
+/**
+ * A vote cast on a post. Fires only when a vote is ADDED — the toggle-off
+ * half of voteOnPost and removeVote never emit it. Voter identity is
+ * best-effort: anonymous voters carry null email/name (their synthetic
+ * placeholder email is stripped at the emit site), and the count is the
+ * post's vote_count immediately after this vote landed.
+ */
+export interface PostVotedPayload {
+  post: EventPostRef
+  voterEmail?: string | null
+  voterName?: string | null
+  voteCount: number
 }
 
 export interface PostMergedPayload {
@@ -599,6 +614,10 @@ export interface PostRestoredEvent extends EventBase<'post.restored'> {
   data: PostRestoredPayload
 }
 
+export interface PostVotedEvent extends EventBase<'post.voted'> {
+  data: PostVotedPayload
+}
+
 export interface PostMergedEvent extends EventBase<'post.merged'> {
   data: PostMergedPayload
 }
@@ -733,6 +752,7 @@ export type EventData =
   | PostUpdatedEvent
   | PostDeletedEvent
   | PostRestoredEvent
+  | PostVotedEvent
   | PostMergedEvent
   | PostUnmergedEvent
   | PostMentionedEvent

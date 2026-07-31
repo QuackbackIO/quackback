@@ -21,7 +21,11 @@ import { createId, toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import { getExecuteRows } from '@/lib/server/utils'
 import { NotFoundError } from '@/lib/shared/errors'
 import { realEmail } from '@/lib/shared/anonymous-email'
+import { logger } from '@/lib/server/logger'
+import { dispatchPostVoted } from '@/lib/server/events/dispatch'
 import type { VoteResult } from './post.types'
+
+const log = logger.child({ component: 'post-voting' })
 import {
   levelFromFlags,
   type SubscriptionLevel,
@@ -38,6 +42,61 @@ export interface VoterInfo {
   addedByName: string | null
   createdAt: Date | string
   subscriptionLevel: SubscriptionLevel
+}
+
+/**
+ * Emit the post.voted event for a freshly cast vote: one indexed lookup for
+ * the post ref (title/board slug) joined to the voter's identity, then the
+ * usual best-effort dispatch. Anonymous voters contribute no identity — the
+ * synthetic placeholder email is stripped here, never on the payload. Best
+ * effort end to end: a lookup or dispatch failure is logged and dropped,
+ * never fails the vote itself (dispatchEvent already swallows its own
+ * failures; this catch covers the lookup).
+ */
+async function emitPostVotedEvent(
+  postId: PostId,
+  principalId: PrincipalId,
+  voteCount: number
+): Promise<void> {
+  try {
+    const [row] = await db
+      .select({
+        title: posts.title,
+        boardId: posts.boardId,
+        boardSlug: boards.slug,
+        voterName: principal.displayName,
+        voterEmail: user.email,
+        voterType: principal.type,
+      })
+      .from(posts)
+      .innerJoin(boards, eq(boards.id, posts.boardId))
+      .leftJoin(principal, eq(principal.id, principalId))
+      .leftJoin(user, eq(user.id, principal.userId))
+      .where(eq(posts.id, postId))
+      .limit(1)
+    if (!row) return
+
+    const isAnonymous = row.voterType === 'anonymous'
+    await dispatchPostVoted(
+      {
+        type: 'user',
+        principalId,
+        email: isAnonymous ? undefined : (realEmail(row.voterEmail) ?? undefined),
+        displayName: isAnonymous ? undefined : (row.voterName ?? undefined),
+      },
+      {
+        id: postId,
+        title: row.title,
+        boardId: row.boardId,
+        boardSlug: row.boardSlug,
+        voterEmail: isAnonymous ? null : realEmail(row.voterEmail),
+        voterName: isAnonymous ? null : row.voterName,
+        voteCount,
+      }
+    )
+  } catch (error) {
+    log.error({ err: error, postId }, 'post.voted event emission failed, dropping')
+  }
 }
 
 /**
@@ -148,6 +207,12 @@ export async function voteOnPost(postId: PostId, principalId: PrincipalId): Prom
   // newly_voted = false means we deleted a vote (user no longer has vote)
   const voted = row.newly_voted
   const voteCount = row.vote_count ?? 0
+
+  // post.voted fires only on the insert half of the toggle — an unvote is
+  // not a "vote cast" and must not notify subscribed endpoints.
+  if (voted) {
+    await emitPostVotedEvent(postId, principalId, voteCount)
+  }
 
   return { voted, voteCount }
 }

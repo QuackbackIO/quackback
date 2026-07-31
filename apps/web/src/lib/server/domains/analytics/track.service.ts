@@ -10,12 +10,14 @@
 import { z } from 'zod'
 import Bowser from 'bowser'
 import { isbot } from 'isbot'
-import { db, pageViews } from '@/lib/server/db'
+import { db, eq, desc, pageViews, visitorDevices, conversations } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import { incrementBucket } from '@/lib/server/utils/redis-rate-bucket'
 import { captureCountryFromHeaders } from '@/lib/server/auth/country-capture'
 import { isFeatureEnabled } from '@/lib/server/domains/settings/settings.service'
+import { dispatchWorkflowTrigger } from '@/lib/server/domains/workflows/dispatcher'
+import type { ConversationId } from '@quackback/ids'
 import { getDailySalt, computeVisitorHash } from './visitor-hash'
 
 const log = logger.child({ component: 'visitor-track' })
@@ -84,6 +86,52 @@ function deriveSource(url: URL, referrer: string): string | null {
   }
 }
 
+/**
+ * The page.visited workflow trigger bridge: a beacon from an IDENTIFIED
+ * visitor (their durable device carries a principal link — see
+ * device-link.service.ts) fires page.visited workflows against the visitor's
+ * most recently active conversation, with the visitor as the frequency-cap
+ * subject. Anonymous beacons (no device, or a device with no principal link
+ * yet) and visitors with no conversation yet dispatch nothing — there is no
+ * conversation for a run to act on, and the dispatcher/run pipeline is
+ * conversation-keyed throughout.
+ *
+ * Never throws: the beacon route's contract is fire-and-forget 204, so a
+ * workflow dispatch failure is logged and dropped, never surfaced. The
+ * caller kicks this off without awaiting it, so dispatch latency never
+ * reaches the beacon response either.
+ */
+export async function dispatchPageVisitWorkflows(deviceId: string, path: string): Promise<void> {
+  try {
+    const [device] = await db
+      .select({ principalId: visitorDevices.principalId })
+      .from(visitorDevices)
+      .where(eq(visitorDevices.deviceId, deviceId))
+      .limit(1)
+    if (!device?.principalId) return
+
+    const [conversation] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.visitorPrincipalId, device.principalId))
+      .orderBy(desc(conversations.lastMessageAt))
+      .limit(1)
+    if (!conversation) return
+
+    await dispatchWorkflowTrigger({
+      triggerType: 'page.visited',
+      conversationId: conversation.id as ConversationId,
+      // A human's own browsing is the actor — never 'service', so the
+      // dispatcher's automated-actor gate stays untouched.
+      actorType: 'user',
+      subjectPrincipalId: device.principalId,
+      pagePath: path,
+    })
+  } catch (error) {
+    log.error({ err: error, deviceId }, 'page.visited workflow dispatch failed, dropping')
+  }
+}
+
 /** Ingest one beacon. Never throws; the caller always answers 204. */
 export async function recordPageView(request: Request): Promise<void> {
   // Opt-out signals win before anything else is read.
@@ -137,6 +185,10 @@ export async function recordPageView(request: Request): Promise<void> {
     if (beacon.deviceId) {
       const { touchVisitorDevice } = await import('./device-link.service')
       await touchVisitorDevice(beacon.deviceId, country)
+      // page.visited workflow trigger: fire-and-forget off the beacon path
+      // (see dispatchPageVisitWorkflows' doc for the anonymous/no-conversation
+      // no-op cases and the never-throws contract).
+      void dispatchPageVisitWorkflows(beacon.deviceId, url.pathname)
     }
   } catch (error) {
     // Most likely a missing day partition (maintenance job not running).

@@ -44,3 +44,29 @@ export const DISPATCHABLE_TRIGGER_TYPES = [
 ] as const
 
 export type DispatchableTriggerType = (typeof DISPATCHABLE_TRIGGER_TYPES)[number]
+
+/**
+ * Trigger types that never travel the event bus: `page.visited` is dispatched
+ * straight from the beacon pipeline (track.service.ts's
+ * dispatchPageVisitWorkflows) against the identified visitor's latest
+ * conversation, so there is no EventData payload and no eventToWorkflowTrigger
+ * case for it — the two lookups (device -> principal, principal -> latest
+ * conversation) are request-path work, not event mapping. Kept OUT of
+ * DISPATCHABLE_TRIGGER_TYPES so that array keeps its 1:1 coverage contract
+ * with eventToWorkflowTrigger's switch (see the sync test in
+ * event-trigger.test.ts).
+ */
+export const NON_EVENT_TRIGGER_TYPES = ['page.visited'] as const
+
+/**
+ * Every trigger type a workflow may be authored against: the event-bus
+ * dispatchables plus the non-event ones above. Authoring validation
+ * (workflow.schemas.ts's triggerTypeSchema) uses this union; the dispatcher
+ * fans out on whichever list the firing source used.
+ */
+export const AUTHORABLE_TRIGGER_TYPES = [
+  ...DISPATCHABLE_TRIGGER_TYPES,
+  ...NON_EVENT_TRIGGER_TYPES,
+] as const
+
+export type AuthorableTriggerType = (typeof AUTHORABLE_TRIGGER_TYPES)[number]

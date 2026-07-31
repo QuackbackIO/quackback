@@ -58,6 +58,11 @@ export const WEBHOOK_EVENT_CONFIG = [
     description: 'When a merged post is separated back out',
   },
   {
+    id: 'post.voted',
+    label: 'Post Voted',
+    description: 'When a user votes on a post',
+  },
+  {
     id: 'comment.created',
     label: 'New Comment',
     description: 'When a comment is posted',

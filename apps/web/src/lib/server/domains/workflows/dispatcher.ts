@@ -42,6 +42,7 @@ import {
   frequencyCapAllows,
   hasActiveCustomerFacingRun,
   ticketStatusCategoryAllows,
+  pagePathAllows,
 } from './dispatcher.guards'
 import {
   someConditionField,
@@ -189,6 +190,14 @@ export interface WorkflowTrigger {
    * this, never against a raw event payload.
    */
   ticketStatusCategory?: TicketStatusCategory | null
+  /**
+   * `page.visited` only (page-visit trigger): the visited URL's pathname,
+   * carried from the beacon by track.service.ts's dispatchPageVisitWorkflows.
+   * `pagePathAllows` below compares a live workflow's own
+   * `triggerSettings.pagePath` against this, never against the raw beacon
+   * URL. Undefined for every other trigger type.
+   */
+  pagePath?: string
 }
 
 export interface DispatchWorkflowTriggerOpts {
@@ -289,6 +298,7 @@ export async function dispatchWorkflowTrigger(
     for (const wf of customerFacing) {
       if (!channelAllows(wf, ctx.conversation.channel)) continue
       if (!ticketStatusCategoryAllows(wf, trigger)) continue
+      if (!pagePathAllows(wf, trigger)) continue
       if (!audienceAllows(wf, ctx)) continue
       if (!sendWindowAllows(wf, ctx)) continue
       if (!(await frequencyCapAllows(wf, subject))) continue
@@ -317,6 +327,7 @@ export async function dispatchWorkflowTrigger(
       try {
         if (!channelAllows(wf, ctx.conversation.channel)) return
         if (!ticketStatusCategoryAllows(wf, trigger)) return
+        if (!pagePathAllows(wf, trigger)) return
         if (!audienceAllows(wf, ctx)) return
         if (!sendWindowAllows(wf, ctx)) return
         if (await frequencyCapAllows(wf, subject)) await start(wf)

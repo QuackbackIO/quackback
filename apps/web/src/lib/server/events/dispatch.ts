@@ -153,6 +153,27 @@ export async function dispatchPostStatusChanged(
   })
 }
 
+export interface PostVotedInput {
+  id: PostId
+  title: string
+  boardId: BoardId
+  boardSlug: string
+  /** Null for an anonymous voter — never the synthetic placeholder email. */
+  voterEmail: string | null
+  voterName: string | null
+  /** The post's vote_count immediately after this vote landed. */
+  voteCount: number
+}
+
+export async function dispatchPostVoted(actor: EventActor, input: PostVotedInput): Promise<void> {
+  const { voterEmail, voterName, voteCount, ...post } = input
+  await dispatchEvent({
+    ...eventEnvelope(actor),
+    type: 'post.voted',
+    data: { post, voterEmail, voterName, voteCount },
+  })
+}
+
 export async function dispatchCommentCreated(
   actor: EventActor,
   comment: CommentCreatedInput,
