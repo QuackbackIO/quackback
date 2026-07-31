@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 622 surfaces
+### Server functions (`requireAuth`) — 630 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -177,6 +177,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::createPortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::findPortalUsersByEmailFn | people.manage |
 | `lib/server/functions/admin.ts`::listDuplicateUsersFn | people.view |
+| `lib/server/functions/admin.ts`::listUserTagsFn | people.view |
+| `lib/server/functions/admin.ts`::listUserTagsForPrincipalFn | people.view |
+| `lib/server/functions/admin.ts`::assignUserTagFn | people.manage |
+| `lib/server/functions/admin.ts`::removeUserTagFn | people.manage |
 | `lib/server/functions/admin.ts`::deletePortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::mergeLeadIntoUserFn | people.manage |
 | `lib/server/functions/admin.ts`::sendInvitationFn | member.manage |
@@ -222,6 +226,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-guidance.ts`::reorderGuidanceRulesFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::deleteGuidanceRuleFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::listAssistantToolsFn | assistant.manage |
+| `lib/server/functions/assistant-improve-answer.ts`::improveAssistantAnswerFn | conversation.reply |
 | `lib/server/functions/assistant-pending-actions.ts`::getAssistantPendingActionFn | DYNAMIC (conversation.view | ticket.view) |
 | `lib/server/functions/assistant-settings.ts`::getAssistantSettingsFn | assistant.manage |
 | `lib/server/functions/assistant-settings.ts`::updateAssistantIdentityFn | assistant.manage |
@@ -407,6 +412,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/help-center.ts`::deleteCategoryFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::listArticlesFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::listArticlePerformanceFn | help_center.manage |
+| `lib/server/functions/help-center.ts`::listSearchTermsFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::restoreCategoryFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::restoreArticleFn | help_center.manage |
 | `lib/server/functions/help-center.ts`::getArticleFn | help_center.manage |
@@ -548,6 +554,8 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/settings.ts`::updateChangelogSettingsFn | changelog.manage |
 | `lib/server/functions/settings.ts`::fetchWorkflowAbandonedAutoCloseFn | routing.manage |
 | `lib/server/functions/settings.ts`::updateWorkflowAbandonedAutoCloseFn | workflow.manage |
+| `lib/server/functions/settings.ts`::getSpamFilterConfigFn | settings.manage |
+| `lib/server/functions/settings.ts`::updateSpamFilterConfigFn | settings.manage |
 | `lib/server/functions/settings.ts`::getEmailChannelStatusFn | settings.manage |
 | `lib/server/functions/settings.ts`::updateModerationDefaultFn | settings.moderation |
 | `lib/server/functions/sla.ts`::listSlaPoliciesFn | sla.manage |
@@ -926,7 +934,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-185 of 918 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+185 of 926 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
