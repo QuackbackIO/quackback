@@ -63,6 +63,8 @@ import { useSettingsLogo } from '@/lib/client/hooks/use-settings-queries'
 import {
   useUploadWorkspaceLogo,
   useDeleteWorkspaceLogo,
+  useUploadPortalOgImage,
+  useDeletePortalOgImage,
   useUpdatePortalConfig,
 } from '@/lib/client/mutations/settings'
 import { useImageUpload } from '@/lib/client/hooks/use-image-upload'
@@ -108,6 +110,7 @@ export const Route = createFileRoute('/admin/settings/branding')({
     await Promise.all([
       context.queryClient.ensureQueryData(settingsQueries.branding()),
       context.queryClient.ensureQueryData(settingsQueries.logo()),
+      context.queryClient.ensureQueryData(settingsQueries.portalOgImage()),
       context.queryClient.ensureQueryData(settingsQueries.customCss()),
       context.queryClient.ensureQueryData(settingsQueries.portalConfig()),
     ])
@@ -314,6 +317,13 @@ function BrandingPage() {
             <div className="flex flex-wrap items-start gap-6">
               <LogoUploader workspaceName={workspaceName} onLogoChange={state.setLogoUrl} />
             </div>
+          </SettingsCard>
+
+          <SettingsCard
+            title="Social share image"
+            description="Shown when your portal link is shared on social media or in chat apps. Falls back to your logo. Recommended 1200×630"
+          >
+            <OgImageUploader />
           </SettingsCard>
 
           <SettingsCard title="Appearance" description="Theme mode, color palette, and typography">
@@ -763,6 +773,117 @@ function LogoUploader({ workspaceName, onLogoChange }: LogoUploaderProps) {
           aspectRatio={1}
           maxOutputSize={512}
           title="Crop your logo"
+        />
+      )}
+    </div>
+  )
+}
+
+// Wide (1200×630) social share image for the portal's og:image meta tag.
+function OgImageUploader() {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null)
+
+  const { data: ogImageData } = useSuspenseQuery(settingsQueries.portalOgImage())
+  const uploadMutation = useUploadPortalOgImage()
+  const deleteMutation = useDeletePortalOgImage()
+
+  const ogImageUrl = ogImageData?.url ?? null
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!RASTER_IMAGE_TYPES.includes(file.type)) {
+      toast.error('Invalid file type. Allowed: JPEG, PNG, GIF, WebP')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File too large. Maximum size is 5MB')
+      return
+    }
+
+    setCropImageSrc(URL.createObjectURL(file))
+    setShowCropper(true)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc)
+      setCropImageSrc(null)
+    }
+    uploadMutation.mutate(croppedBlob, {
+      onSuccess: () => toast.success('Social share image updated'),
+      onError: (error) =>
+        toast.error(error instanceof Error ? error.message : 'Failed to upload social share image'),
+    })
+  }
+
+  const handleCropperClose = (open: boolean) => {
+    if (!open && cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc)
+      setCropImageSrc(null)
+    }
+    setShowCropper(open)
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploadMutation.isPending}
+        className="relative group cursor-pointer w-full max-w-[320px]"
+        aria-label="Change social share image"
+      >
+        {ogImageUrl ? (
+          <img
+            src={ogImageUrl}
+            alt="Social share image preview"
+            className="w-full aspect-[1200/630] rounded-xl object-cover border border-border transition-opacity group-hover:opacity-80"
+          />
+        ) : (
+          <div className="w-full aspect-[1200/630] rounded-xl border border-dashed border-border bg-muted/30 flex items-center justify-center text-xs text-muted-foreground transition-colors group-hover:border-primary/50">
+            1200 × 630
+          </div>
+        )}
+        <UploaderOverlay busy={uploadMutation.isPending} />
+      </button>
+      {ogImageUrl && (
+        <RemoveAssetButton
+          pending={deleteMutation.isPending}
+          onClick={() =>
+            deleteMutation.mutate(undefined, {
+              onSuccess: () => toast.success('Social share image removed'),
+              onError: (error) =>
+                toast.error(
+                  error instanceof Error ? error.message : 'Failed to remove social share image'
+                ),
+            })
+          }
+        />
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {cropImageSrc && (
+        <ImageCropper
+          imageSrc={cropImageSrc}
+          open={showCropper}
+          onOpenChange={handleCropperClose}
+          onCropComplete={handleCropComplete}
+          aspectRatio={1200 / 630}
+          maxOutputSize={1200}
+          cropShape="rect"
+          title="Crop your social share image"
         />
       )}
     </div>

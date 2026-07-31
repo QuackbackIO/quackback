@@ -31,6 +31,7 @@ import { listRolesFn } from '@/lib/server/functions/roles'
 import {
   fetchSettingsLogoData,
   fetchSettingsHeaderLogoData,
+  fetchSettingsPortalOgImageData,
 } from '@/lib/server/functions/settings-utils'
 
 const STALE_TIME_SHORT = 30 * 1000
@@ -84,6 +85,13 @@ export const settingsQueries = {
     queryOptions({
       queryKey: ['settings', 'headerLogo'],
       queryFn: fetchSettingsHeaderLogoData,
+      staleTime: STALE_TIME_LONG,
+    }),
+
+  portalOgImage: () =>
+    queryOptions({
+      queryKey: ['settings', 'portalOgImage'],
+      queryFn: fetchSettingsPortalOgImageData,
       staleTime: STALE_TIME_LONG,
     }),
 

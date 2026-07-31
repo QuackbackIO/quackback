@@ -23,6 +23,8 @@ import {
   deleteLogoKey,
   saveHeaderLogoKey,
   deleteHeaderLogoKey,
+  savePortalOgImageKey,
+  deletePortalOgImageKey,
   updateHeaderDisplayMode,
   updateHeaderDisplayName,
   updateWorkspaceName,
@@ -613,6 +615,20 @@ export const deleteHeaderLogoFn = createServerFn({ method: 'POST' }).handler(asy
   log.info('delete header logo')
   await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
   return await deleteHeaderLogoKey()
+})
+
+export const savePortalOgImageKeyFn = createServerFn({ method: 'POST' })
+  .validator(saveLogoKeySchema)
+  .handler(async ({ data }) => {
+    log.info({ key: data.key }, 'save portal og image key')
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+    return await savePortalOgImageKey(data.key)
+  })
+
+export const deletePortalOgImageFn = createServerFn({ method: 'POST' }).handler(async () => {
+  log.info('delete portal og image')
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_BRANDING })
+  return await deletePortalOgImageKey()
 })
 
 export const updateHeaderDisplayModeFn = createServerFn({ method: 'POST' })

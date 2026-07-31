@@ -260,6 +260,64 @@ export async function deleteHeaderLogoKey(): Promise<{ success: true }> {
   }
 }
 
+/**
+ * Save portal OG image S3 key and delete old image if exists.
+ */
+export async function savePortalOgImageKey(key: string): Promise<{ success: true; key: string }> {
+  log.info('save portal og image key')
+  try {
+    const org = await requireSettings()
+
+    if (org.portalOgImageKey) {
+      try {
+        await deleteObject(org.portalOgImageKey)
+      } catch (err) {
+        log.warn(
+          { err, portal_og_image_key: org.portalOgImageKey },
+          'failed to delete old portal og image s3 object'
+        )
+      }
+    }
+
+    await db.update(settings).set({ portalOgImageKey: key }).where(eq(settings.id, org.id))
+    await invalidateSettingsCache()
+
+    return { success: true, key }
+  } catch (error) {
+    log.error({ err: error }, 'save portal og image key failed')
+    wrapDbError('save portal og image key', error)
+  }
+}
+
+/**
+ * Delete portal OG image from S3 and clear the key.
+ */
+export async function deletePortalOgImageKey(): Promise<{ success: true }> {
+  log.info('delete portal og image key')
+  try {
+    const org = await requireSettings()
+
+    if (org.portalOgImageKey) {
+      try {
+        await deleteObject(org.portalOgImageKey)
+      } catch (err) {
+        log.warn(
+          { err, portal_og_image_key: org.portalOgImageKey },
+          'failed to delete portal og image s3 object'
+        )
+      }
+    }
+
+    await db.update(settings).set({ portalOgImageKey: null }).where(eq(settings.id, org.id))
+    await invalidateSettingsCache()
+
+    return { success: true }
+  } catch (error) {
+    log.error({ err: error }, 'delete portal og image key failed')
+    wrapDbError('delete portal og image key', error)
+  }
+}
+
 // ============================================================================
 // Header Display
 // ============================================================================

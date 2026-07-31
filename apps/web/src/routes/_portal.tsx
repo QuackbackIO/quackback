@@ -34,6 +34,7 @@ import { useAutoOpenAuthDialog } from '@/components/auth/use-auto-open-auth'
 import { resolveInstantSsoRedirectFn } from '@/lib/server/functions/instant-sso'
 import { useBrandingFont } from '@/lib/client/hooks/use-branding-font'
 import { usePreviewDraft } from '@/components/public/preview-draft-context'
+import { resolvePortalOgImageUrl } from '@/lib/shared/portal-og-image'
 
 /**
  * Portal documents may be framed same-origin only — the admin Branding page
@@ -288,7 +289,8 @@ export const Route = createFileRoute('/_portal')({
 
     const workspaceName = loaderData?.workspaceName ?? 'Quackback'
     const description = `Share feedback, vote on feature requests, and track the ${workspaceName} roadmap.`
-    const logoUrl = loaderData?.brandingData?.logoUrl || '/logo.png'
+    // Social share image: custom OG upload > workspace logo > bundled default.
+    const ogImageUrl = resolvePortalOgImageUrl(loaderData?.brandingData)
 
     const meta: Array<Record<string, string>> = [
       { title: workspaceName },
@@ -296,7 +298,7 @@ export const Route = createFileRoute('/_portal')({
       { property: 'og:site_name', content: workspaceName },
       { property: 'og:title', content: workspaceName },
       { property: 'og:description', content: description },
-      { property: 'og:image', content: logoUrl },
+      { property: 'og:image', content: ogImageUrl },
       { name: 'twitter:title', content: workspaceName },
       { name: 'twitter:description', content: description },
     ]

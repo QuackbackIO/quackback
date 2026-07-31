@@ -880,6 +880,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       logoUrl: getPublicUrlOrNull(org.logoKey),
       faviconUrl: getPublicUrlOrNull(org.faviconKey),
       headerLogoUrl: getPublicUrlOrNull(org.headerLogoKey),
+      ogImageUrl: getPublicUrlOrNull(org.portalOgImageKey),
       headerDisplayMode: org.headerDisplayMode,
       headerDisplayName: org.headerDisplayName,
     }
