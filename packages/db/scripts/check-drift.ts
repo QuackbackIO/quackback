@@ -202,13 +202,13 @@ const EXEMPTIONS: { reason: string; pattern: RegExp }[] = [
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; drop half of the spurious pair',
     pattern:
-      /^DROP INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx"/,
+      /^DROP INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx"/,
   },
   {
     reason:
       'hnsw vector_cosine_ops partial index is not faithfully round-tripped by drizzle-kit; create half of the spurious pair',
     pattern:
-      /^CREATE INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx" ON "\w+" USING hnsw /,
+      /^CREATE INDEX "(posts|kb_articles|feedback_signals|feedback_suggestions|assistant_snippets|assistant_documents|conversation_summaries|ticket_summaries|changelog)_embedding_hnsw_idx" ON "\w+" USING hnsw /,
   },
   {
     // Same empty text[] default false positive as invitation.magic_link_tokens
