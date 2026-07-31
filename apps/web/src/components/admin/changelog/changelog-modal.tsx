@@ -21,7 +21,12 @@ import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
 import { toPublishState, type PublishState } from '@/lib/shared/schemas/changelog'
 import { Route } from '@/routes/admin/changelog'
-import { type ChangelogId, type PostId, type ChangelogCategoryId } from '@quackback/ids'
+import {
+  type ChangelogId,
+  type PostId,
+  type ChangelogCategoryId,
+  type SegmentId,
+} from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 
 interface ChangelogModalProps {
@@ -38,6 +43,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
   const [notify, setNotify] = useState(true)
+  const [segmentIds, setSegmentIds] = useState<SegmentId[]>([])
+  const [segmentIdsTouched, setSegmentIdsTouched] = useState(false)
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [displayDateTouched, setDisplayDateTouched] = useState(false)
@@ -77,6 +84,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
       setDisplayDateTouched(false)
       setFeaturedImageUrl(entry.featuredImageUrl)
       setFeaturedImageTouched(false)
+      setSegmentIds((entry.segmentIds ?? []) as SegmentId[])
+      setSegmentIdsTouched(false)
       setHasInitialized(true)
     }
   }, [entry, form, hasInitialized])
@@ -106,6 +115,11 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
     setFeaturedImageTouched(true)
   }
 
+  function handleSegmentIdsChange(ids: SegmentId[]) {
+    setSegmentIds(ids)
+    setSegmentIdsTouched(true)
+  }
+
   const handleSubmit = form.handleSubmit((data) => {
     const displayDatePayload = displayDateTouched
       ? displayDateOverride === undefined
@@ -127,6 +141,10 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
         // Only send when the admin changed it, so an untouched value isn't
         // round-tripped and a cleared one is (null clears).
         ...(featuredImageTouched && { featuredImageUrl }),
+        // Same touched-gate as featuredImageUrl: an untouched targeting list
+        // isn't round-tripped; an edited one (including cleared to [])
+        // replaces the stored list wholesale.
+        ...(segmentIdsTouched && { segmentIds }),
       },
       {
         onSuccess: () => {
@@ -195,6 +213,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
             onCategoriesChange={setCategoryIds}
             notify={notify}
             onNotifyChange={setNotify}
+            segmentIds={segmentIds}
+            onSegmentIdsChange={handleSegmentIdsChange}
             authorName={entry?.author?.name}
             publishedAt={entry?.publishedAt}
             displayDateValue={displayDateOverride}
@@ -233,6 +253,8 @@ function ChangelogModalContent({ entryId, onClose }: ChangelogModalContentProps)
                   onCategoriesChange={setCategoryIds}
                   notify={notify}
                   onNotifyChange={setNotify}
+                  segmentIds={segmentIds}
+                  onSegmentIdsChange={handleSegmentIdsChange}
                   authorName={entry?.author?.name}
                   publishedAt={entry?.publishedAt}
                   displayDateValue={displayDateOverride}

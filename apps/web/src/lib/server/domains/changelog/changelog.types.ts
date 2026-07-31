@@ -3,7 +3,13 @@
  */
 
 import type { TiptapContent } from '@/lib/server/db'
-import type { ChangelogId, ChangelogCategoryId, PrincipalId, PostId } from '@quackback/ids'
+import type {
+  ChangelogId,
+  ChangelogCategoryId,
+  PrincipalId,
+  PostId,
+  SegmentId,
+} from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 
 export type { PublishState } from '@/lib/shared/schemas/changelog'
@@ -36,6 +42,12 @@ export interface CreateChangelogInput {
   /** Hero image URL rendered at the top of the public entry detail page */
   featuredImageUrl?: string | null
   /**
+   * Publish-notification targeting: a non-empty list restricts the
+   * subscriber fan-out to members of those segments; omitted/[] broadcasts
+   * to every subscriber.
+   */
+  segmentIds?: SegmentId[]
+  /**
    * Whether publishing this entry should dispatch the subscriber
    * notification. Defaults to true; false stamps `notifiedAt` without
    * sending (the atomic-claim idempotence still applies — see
@@ -60,6 +72,8 @@ export interface UpdateChangelogInput {
   displayDate?: Date | null
   /** Hero image URL (null clears it) */
   featuredImageUrl?: string | null
+  /** See {@link CreateChangelogInput.segmentIds}. Replaces the existing list. */
+  segmentIds?: SegmentId[]
   /** See {@link CreateChangelogInput.notify}. */
   notify?: boolean
 }
@@ -93,6 +107,8 @@ export interface ChangelogEntryWithDetails {
   displayDate: Date | null
   /** Hero image URL rendered at the top of the public entry detail page */
   featuredImageUrl: string | null
+  /** Publish-notification segment targeting ([] = broadcast to everyone). */
+  segmentIds: SegmentId[]
   createdAt: Date
   updatedAt: Date
   /** Author information - only shown in admin views */

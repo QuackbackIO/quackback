@@ -50,6 +50,11 @@ export const changelogEntries = pgTable(
     viewCount: integer('view_count').default(0).notNull(),
     // Optional hero image rendered at the top of the public entry detail page.
     featuredImageUrl: text('featured_image_url'),
+    // Publish-notification targeting: a non-empty list restricts the
+    // subscriber fan-out (email + in-app) to principals holding at least one
+    // of these segments. [] = broadcast to every subscriber. Same "segment
+    // list, [] = everyone" convention as the segment-gate primitive.
+    segmentIds: jsonb('segment_ids').$type<string[]>().notNull().default([]),
     // Semantic embedding for Quinn grounding (Quinn Phase 4). Embedded on
     // publish/edit; drafts stay null. Track the model version so a re-embed
     // can find rows without losing data (mirrors posts.embedding_model).

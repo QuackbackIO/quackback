@@ -15,7 +15,7 @@ import { ChangelogFormFields } from './changelog-form-fields'
 import { ChangelogMetadataSidebar } from './changelog-metadata-sidebar'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 import type { JSONContent } from '@tiptap/react'
-import type { PostId, ChangelogCategoryId } from '@quackback/ids'
+import type { PostId, ChangelogCategoryId, SegmentId } from '@quackback/ids'
 
 // Mobile-only version of the sidebar content for the sheet
 import { ChangelogMetadataSidebarContent } from './changelog-metadata-sidebar-content'
@@ -30,6 +30,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
   const [linkedPostIds, setLinkedPostIds] = useState<PostId[]>([])
   const [categoryIds, setCategoryIds] = useState<ChangelogCategoryId[]>([])
   const [notify, setNotify] = useState(true)
+  const [segmentIds, setSegmentIds] = useState<SegmentId[]>([])
   const [publishState, setPublishState] = useState<PublishState>({ type: 'draft' })
   const [displayDateOverride, setDisplayDateOverride] = useState<Date | undefined>(undefined)
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null)
@@ -77,6 +78,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
     setLinkedPostIds([])
     setCategoryIds([])
     setNotify(true)
+    setSegmentIds([])
     setPublishState({ type: 'draft' })
     setDisplayDateOverride(undefined)
     setFeaturedImageUrl(null)
@@ -93,6 +95,7 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
         categoryIds,
         publishState,
         notify,
+        segmentIds,
         ...(publishState.type === 'published' &&
           displayDateOverride !== undefined && { displayDate: displayDateOverride }),
         ...(featuredImageUrl !== null && { featuredImageUrl }),
@@ -173,6 +176,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                 onCategoriesChange={setCategoryIds}
                 notify={notify}
                 onNotifyChange={setNotify}
+                segmentIds={segmentIds}
+                onSegmentIdsChange={setSegmentIds}
                 displayDateValue={displayDateOverride}
                 onDisplayDateChange={handleDisplayDateChange}
                 onDisplayDateClear={handleDisplayDateClear}
@@ -209,6 +214,8 @@ export function CreateChangelogDialog({ onChangelogCreated }: CreateChangelogDia
                       onCategoriesChange={setCategoryIds}
                       notify={notify}
                       onNotifyChange={setNotify}
+                      segmentIds={segmentIds}
+                      onSegmentIdsChange={setSegmentIds}
                       displayDateValue={displayDateOverride}
                       onDisplayDateChange={handleDisplayDateChange}
                       onDisplayDateClear={handleDisplayDateClear}

@@ -118,6 +118,7 @@ export async function createChangelog(
       publishedAt,
       ...(displayDate != null && { displayDate }),
       ...(input.featuredImageUrl != null && { featuredImageUrl: input.featuredImageUrl }),
+      ...(input.segmentIds != null && { segmentIds: input.segmentIds }),
     })
     .returning()
 
@@ -226,6 +227,12 @@ export async function updateChangelog(
   // featuredImageUrl: undefined leaves it, null clears it, a string replaces it.
   if (input.featuredImageUrl !== undefined) {
     updateData.featuredImageUrl = input.featuredImageUrl
+  }
+
+  // segmentIds: undefined leaves the targeting untouched; a provided list
+  // (including []) replaces it wholesale.
+  if (input.segmentIds !== undefined) {
+    updateData.segmentIds = input.segmentIds
   }
 
   // Update the entry
@@ -410,6 +417,7 @@ export async function getChangelogById(id: ChangelogId): Promise<ChangelogEntryW
     publishedAt: entry.publishedAt,
     displayDate: entry.displayDate,
     featuredImageUrl: entry.featuredImageUrl,
+    segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     viewCount: entry.viewCount,

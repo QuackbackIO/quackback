@@ -1694,6 +1694,7 @@ export async function getChangelogSubscriberTargets(
   if (!changelogId) return []
 
   const {
+    changelogEntries,
     changelogEntryPosts,
     changelogSubscriptions,
     isNull,
@@ -1770,9 +1771,36 @@ export async function getChangelogSubscriberTargets(
     }
   }
 
+  // Segment targeting: a non-empty segmentIds list on the entry restricts the
+  // whole fan-out (email + in-app, both subscriber sources) to principals
+  // holding at least one targeted segment. An empty list broadcasts to every
+  // subscriber — same "segment list, [] = everyone" convention as the
+  // segment-gate primitive.
+  const entryRows = await db
+    .select({ segmentIds: changelogEntries.segmentIds })
+    .from(changelogEntries)
+    .where(eqOp(changelogEntries.id, changelogId as import('@quackback/ids').ChangelogId))
+    .limit(1)
+  const targetedSegmentIds = entryRows[0]?.segmentIds ?? []
+  if (targetedSegmentIds.length > 0) {
+    const memberRows = await db
+      .select({ principalId: userSegments.principalId })
+      .from(userSegments)
+      .where(inArray(userSegments.segmentId, targetedSegmentIds as SegmentId[]))
+    const memberIds = new Set<string>(memberRows.map((r) => r.principalId))
+    for (const id of allSubscribers.keys()) {
+      if (!memberIds.has(id)) allSubscribers.delete(id)
+    }
+  }
+
   const subscribers = [...allSubscribers.values()]
   log.debug(
-    { count: subscribers.length, post_count: postIds.length, changelog_id: changelogId },
+    {
+      count: subscribers.length,
+      post_count: postIds.length,
+      targeted_segment_count: targetedSegmentIds.length,
+      changelog_id: changelogId,
+    },
     'found unique changelog subscribers (dedicated + linked-post union)'
   )
   if (subscribers.length === 0) return []

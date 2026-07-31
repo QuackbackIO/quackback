@@ -29,6 +29,12 @@ export const createChangelogSchema = z.object({
   displayDate: z.coerce.date().nullable().optional(),
   /** Hero image URL shown atop the public entry detail page; null clears it. */
   featuredImageUrl: z.string().max(2048).nullable().optional(),
+  /**
+   * Publish-notification targeting: a non-empty list restricts the
+   * subscriber fan-out to members of those segments; omitted/[] broadcasts
+   * to every subscriber.
+   */
+  segmentIds: z.array(z.string()).max(50).optional(),
   /** Publish-time "Send email to subscribers" checkbox; default true. */
   notify: z.boolean().optional(),
 })
@@ -47,6 +53,12 @@ export const updateChangelogSchema = z.object({
   displayDate: z.coerce.date().nullable().optional(),
   /** Hero image URL shown atop the public entry detail page; null clears it. */
   featuredImageUrl: z.string().max(2048).nullable().optional(),
+  /**
+   * Publish-notification targeting: a non-empty list restricts the
+   * subscriber fan-out to members of those segments; omitted/[] broadcasts
+   * to every subscriber.
+   */
+  segmentIds: z.array(z.string()).max(50).optional(),
   /** Publish-time "Send email to subscribers" checkbox; default true. */
   notify: z.boolean().optional(),
 })

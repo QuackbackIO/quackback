@@ -163,6 +163,7 @@ export async function listChangelogs(params: ListChangelogParams): Promise<Chang
       publishedAt: entry.publishedAt,
       displayDate: entry.displayDate,
       featuredImageUrl: entry.featuredImageUrl,
+      segmentIds: (entry.segmentIds ?? []) as ChangelogEntryWithDetails['segmentIds'],
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       viewCount: entry.viewCount,
