@@ -182,8 +182,9 @@ async function initializeQueue() {
           concurrency: CONCURRENCY,
           settings: {
             // Applies to every retry of every hook job: seconds-fast at
-            // first, one hour before the final attempt, so an endpoint in a
-            // real outage still receives the delivery once it recovers (see
+            // first, then jittered hourly backoffs (1h/2h/4h) keeping the
+            // tail alive for roughly seven hours, so an endpoint in a real
+            // outage still receives the delivery once it recovers (see
             // retry-schedule.ts).
             backoffStrategy: (attemptsMade: number) => hookRetryDelayMs(attemptsMade),
           },

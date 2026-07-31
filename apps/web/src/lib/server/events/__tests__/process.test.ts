@@ -153,17 +153,19 @@ describe('Event Processing (BullMQ)', () => {
       }
     }
 
-    it('retries a failed delivery again at least one hour after the first failure', async () => {
+    it('keeps retrying a failed delivery roughly six hours after the first failure', async () => {
       await ensureInitialized()
-      // Four total attempts: first try + two fast retries + the slow one.
-      expect(capturedQueueOpts?.defaultJobOptions?.attempts).toBe(4)
+      // Six total attempts: first try + two fast retries + three slow ones.
+      expect(capturedQueueOpts?.defaultJobOptions?.attempts).toBe(6)
       const backoff = capturedWorkerOpts?.settings?.backoffStrategy
       expect(backoff).toBeDefined()
       // Fast retries clear transient blips in seconds…
       expect(backoff!(1)).toBeLessThan(60_000)
       expect(backoff!(2)).toBeLessThan(60_000)
-      // …and the final retry waits at least an hour.
-      expect(backoff!(3)).toBeGreaterThanOrEqual(3_600_000)
+      // …and the jittered slow tail (1h/2h/4h base) keeps a retry pending
+      // past the six-hour mark even at the jitter floor.
+      const span = [1, 2, 3, 4, 5].reduce((sum, n) => sum + backoff!(n), 0)
+      expect(span).toBeGreaterThanOrEqual(6 * 3_600_000)
     })
 
     it('succeeds silently when hook returns success', async () => {
