@@ -249,7 +249,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   const items = sliced.map((post) => ({
     ...post,
     board: post.board,
-    tags: post.tags.map((pt) => pt.tag),
+    tags: post.tags.map((pt) => ({ ...pt.tag, autoTagged: pt.autoTagged })),
     commentCount: post.commentCount,
     authorName: post.author?.displayName ?? null,
   })) as unknown as PostListItem[]

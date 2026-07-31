@@ -159,7 +159,7 @@ export interface InboxPostListResult {
  */
 export interface PostListItem extends Post {
   board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Array<Pick<PostTag, 'id' | 'name' | 'color'>>
+  tags: Array<Pick<PostTag, 'id' | 'name' | 'color'> & { autoTagged: boolean }>
   commentCount: number
   /** Author name resolved from member->user relation */
   authorName: string | null

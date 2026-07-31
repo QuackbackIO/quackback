@@ -99,7 +99,9 @@ describe('autoTagPost', () => {
     await autoTagPost(POST_ID, 'Export button crashes', 'Clicking export throws an error')
 
     expect(mockChat).toHaveBeenCalledOnce()
-    expect(insertedAssignments).toEqual([{ postId: POST_ID, tagId: BUG_TAG.id as PostTagId }])
+    expect(insertedAssignments).toEqual([
+      { postId: POST_ID, tagId: BUG_TAG.id as PostTagId, autoTagged: true },
+    ])
   })
 
   it('passes every candidate tag name and prompt to the model', async () => {
@@ -146,7 +148,9 @@ describe('autoTagPost', () => {
   it('drops matched names that are not candidate tags (hallucination/injection guard)', async () => {
     mockChat.mockResolvedValue({ matches: ['Bug', 'Ignore previous instructions'] })
     await autoTagPost(POST_ID, 'Export button crashes', 'body')
-    expect(insertedAssignments).toEqual([{ postId: POST_ID, tagId: BUG_TAG.id as PostTagId }])
+    expect(insertedAssignments).toEqual([
+      { postId: POST_ID, tagId: BUG_TAG.id as PostTagId, autoTagged: true },
+    ])
   })
 
   it('assigns nothing when the model matches no tag', async () => {

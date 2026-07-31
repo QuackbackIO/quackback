@@ -128,6 +128,7 @@ export const updatePostTagFn = createServerFn({ method: 'POST' })
     log.debug({ tag_id: data.id }, 'update tag')
     await requireAuth({ permission: PERMISSIONS.TAG_MANAGE })
 
+    const before = await getTagById(data.id as PostTagId)
     const tag = await updatePostTag(data.id as PostTagId, {
       name: data.name,
       color: data.color,
@@ -135,6 +136,19 @@ export const updatePostTagFn = createServerFn({ method: 'POST' })
       aiPrompt: data.aiPrompt,
     })
     log.info({ tag_id: tag.id }, 'tag updated')
+
+    // A changed, non-empty AI prompt re-evaluates the tag against recent
+    // posts so the new rule takes effect on existing feedback. Best-effort:
+    // a re-evaluation failure never fails the tag save.
+    if (data.aiPrompt !== undefined && tag.aiPrompt && tag.aiPrompt !== before.aiPrompt) {
+      try {
+        const { reevaluateAiTag } = await import('@/lib/server/domains/posts/post.autotag')
+        const result = await reevaluateAiTag(tag.id)
+        log.info({ tag_id: tag.id, ...result }, 'ai tag re-evaluated after prompt change')
+      } catch (err) {
+        log.warn({ err, tag_id: tag.id }, 'ai tag re-evaluation failed')
+      }
+    }
     return tag
   })
 

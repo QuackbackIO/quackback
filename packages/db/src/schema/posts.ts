@@ -190,6 +190,9 @@ export const postTagAssignments = pgTable(
   {
     postId: typeIdColumn('post')('post_id').notNull(),
     tagId: typeIdColumn('post_tag')('tag_id').notNull(),
+    // AI-applied marker: true when the auto-tagging engine (not a human)
+    // attached the tag, so admins can review AI-applied tags.
+    autoTagged: boolean('auto_tagged').default(false).notNull(),
   },
   (table) => [
     // FK names predate the post_tags -> post_tag_assignments table rename.
