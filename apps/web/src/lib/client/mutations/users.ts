@@ -11,6 +11,7 @@ import type { PortalUserListResultView, PortalUserListItemView } from '@/lib/sha
 import {
   createPortalUserFn,
   deletePortalUserFn,
+  mergeLeadIntoUserFn,
   updatePortalUserFn,
 } from '@/lib/server/functions/admin'
 import { usersKeys } from '@/lib/client/hooks/use-users-queries'
@@ -97,6 +98,22 @@ export function useRemovePortalUser() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: usersKeys.lists() })
+    },
+  })
+}
+
+/**
+ * Hook to merge a lead into an identified portal user. The lead row disappears
+ * and the target's detail gains the activity, so the whole users tree is stale.
+ */
+export function useMergeLeadIntoUser() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: { principalId: PrincipalId; targetPrincipalId: PrincipalId }) =>
+      mergeLeadIntoUserFn({ data }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: usersKeys.all })
     },
   })
 }

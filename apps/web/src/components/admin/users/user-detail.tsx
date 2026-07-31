@@ -48,6 +48,7 @@ import {
   usePersonBlockStatus,
 } from '@/components/admin/users/block-person-control'
 import { ChangelogSubscriptionControl } from '@/components/admin/users/changelog-subscription-control'
+import { MergeLeadControl } from '@/components/admin/users/merge-lead-control'
 import { useUpdatePortalUser } from '@/lib/client/mutations'
 import { listConversationsForUserFn, getConversationFn } from '@/lib/server/functions/conversation'
 import type { PrincipalId } from '@quackback/ids'
@@ -742,6 +743,17 @@ export function UserDetail({
               personName={user.name}
               className="w-full"
             />
+
+            {/* Merge — leads only: fold the lead's activity into an identified
+                user and retire the anonymous identity. */}
+            {user.isLead && (
+              <MergeLeadControl
+                principalId={user.principalId as PrincipalId}
+                leadName={user.name}
+                onMerged={onClose}
+                className="w-full"
+              />
+            )}
 
             {/* Remove User */}
             <Button
