@@ -24,6 +24,7 @@ import { DEFAULT_LOCALE } from '@/lib/shared/i18n'
 import { ANONYMOUS_ACTOR, type Actor } from '@/lib/server/policy/types'
 import { segmentGateFilter } from '@/lib/server/policy/segment-gate'
 import { generateKbQueryEmbedding } from './help-center-embedding.service'
+import { logSearchQuery } from './help-center.search-analytics'
 
 export const KEYWORD_WEIGHT = 0.4
 export const SEMANTIC_WEIGHT = 0.6
@@ -499,6 +500,9 @@ async function keywordOnlyQueryForLocale(
  * Locale-dispatching entry point for the public /hc search box. The default
  * locale keeps the full hybrid (keyword + semantic) search unchanged;
  * additional locales get keyword-only search against their translations.
+ *
+ * Every call is a visitor search, so the query + result count are logged
+ * (fire-and-forget) for the admin search-term analytics.
  */
 export async function hybridSearchForLocale(
   query: string,
@@ -506,8 +510,12 @@ export async function hybridSearchForLocale(
   limit = 10,
   viewer: Actor = ANONYMOUS_ACTOR
 ): Promise<HybridSearchResult[]> {
-  if (locale === DEFAULT_LOCALE) return hybridSearch(query, limit, viewer)
-  return keywordOnlyQueryForLocale(query, locale, limit, viewer)
+  const results =
+    locale === DEFAULT_LOCALE
+      ? await hybridSearch(query, limit, viewer)
+      : await keywordOnlyQueryForLocale(query, locale, limit, viewer)
+  logSearchQuery({ query, locale, resultsCount: results.length })
+  return results
 }
 
 /**
