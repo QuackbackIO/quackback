@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 603 surfaces
+### Server functions (`requireAuth`) — 615 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -177,6 +177,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::createPortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::findPortalUsersByEmailFn | people.manage |
 | `lib/server/functions/admin.ts`::deletePortalUserFn | people.manage |
+| `lib/server/functions/admin.ts`::mergeLeadIntoUserFn | people.manage |
 | `lib/server/functions/admin.ts`::sendInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::cancelInvitationFn | member.manage |
 | `lib/server/functions/admin.ts`::resendInvitationFn | member.manage |
@@ -210,6 +211,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/assistant-custom-actions.ts`::updateCustomActionFn | assistant.manage |
 | `lib/server/functions/assistant-custom-actions.ts`::deleteCustomActionFn | assistant.manage |
 | `lib/server/functions/assistant-custom-actions.ts`::testCustomActionFn | assistant.manage |
+| `lib/server/functions/assistant-documents.ts`::uploadAssistantDocumentFn | assistant.manage |
+| `lib/server/functions/assistant-documents.ts`::listAssistantDocumentsFn | assistant.manage |
+| `lib/server/functions/assistant-documents.ts`::deleteAssistantDocumentFn | assistant.manage |
 | `lib/server/functions/assistant-guidance-stats.ts`::getGuidanceRuleStatsFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::listGuidanceRulesFn | assistant.manage |
 | `lib/server/functions/assistant-guidance.ts`::createGuidanceRuleFn | assistant.manage |
@@ -350,13 +354,17 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/conversation.ts`::setConversationStatusFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::snoozeConversationFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::endConversationFn | conversation.set_status |
+| `lib/server/functions/conversation.ts`::restoreConversationFromSpamFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::assignConversationFn | conversation.assign |
 | `lib/server/functions/conversation.ts`::setConversationPriorityFn | conversation.set_status |
 | `lib/server/functions/conversation.ts`::addMessageReactionFn | conversation.note |
 | `lib/server/functions/conversation.ts`::removeMessageReactionFn | conversation.note |
 | `lib/server/functions/conversation.ts`::setMessageFlagFn | conversation.note |
 | `lib/server/functions/conversation.ts`::markConversationUnreadFromMessageFn | conversation.view |
-| `lib/server/functions/conversation.ts`::bulkUpdateConversationsFn | DYNAMIC (conversation.assign | conversation.set_tags | conversation.set_status) |
+| `lib/server/functions/conversation.ts`::bulkUpdateConversationsFn | DYNAMIC (conversation.assign | conversation.set_tags | conversation.reply | conversation.set_status) |
+| `lib/server/functions/conversation.ts`::addConversationParticipantFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::removeConversationParticipantFn | conversation.reply |
+| `lib/server/functions/conversation.ts`::listConversationParticipantsFn | conversation.view |
 | `lib/server/functions/conversation.ts`::listFlaggedMessagesFn | conversation.view |
 | `lib/server/functions/conversation.ts`::getLinkedPostsForConversationFn | conversation.view |
 | `lib/server/functions/conversation.ts`::getLinkedConversationsForPostFn | conversation.view |
@@ -463,6 +471,9 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/post-tags.ts`::createPostTagFn | tag.manage |
 | `lib/server/functions/post-tags.ts`::updatePostTagFn | tag.manage |
 | `lib/server/functions/post-tags.ts`::deletePostTagFn | tag.manage |
+| `lib/server/functions/post-views.ts`::listPostViewsFn | post.view_private |
+| `lib/server/functions/post-views.ts`::createPostViewFn | post.edit |
+| `lib/server/functions/post-views.ts`::deletePostViewFn | post.edit |
 | `lib/server/functions/post-voters-context.ts`::listPostVotersForVoteManagerFn | post.vote_on_behalf |
 | `lib/server/functions/posts.ts`::fetchInboxPostsForAdmin | post.view_private |
 | `lib/server/functions/posts.ts`::fetchPostWithDetails | post.view_private |
@@ -674,6 +685,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/tickets.ts`::getMyTicketWatchStatusFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::getConversationLinkedTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::getMyTicketsFn | END_USER (any authenticated) |
+| `lib/server/functions/tickets.ts`::createMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::watchMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/tickets.ts`::unwatchMyTicketFn | END_USER (any authenticated) |
 | `lib/server/functions/uploads.ts`::getPresignedUploadUrlFn | post.create |
@@ -904,7 +916,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-183 of 894 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+183 of 906 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 
