@@ -59,6 +59,7 @@ export const createArticleSchema = z.object({
   slug: z.string().max(200).optional(),
   position: z.number().int().optional(),
   description: z.string().max(300).optional(),
+  segmentIds: z.array(z.string()).max(100).optional(),
 })
 
 export const updateArticleSchema = z.object({
@@ -70,6 +71,7 @@ export const updateArticleSchema = z.object({
   slug: z.string().max(200).optional(),
   position: z.number().int().optional(),
   description: z.string().max(300).optional(),
+  segmentIds: z.array(z.string()).max(100).optional(),
 })
 
 export const getArticleSchema = z.object({

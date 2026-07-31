@@ -1083,6 +1083,11 @@ export interface ConversationListFilter {
    *  principal. Always the requesting agent — resolved server-side from auth,
    *  never client-supplied (it would leak who-mentioned-whom). */
   mentionedPrincipalId?: PrincipalId
+  /** "Created by me" view: only conversations whose FIRST non-deleted message
+   *  was agent-authored by this principal (the compose path). Replying later
+   *  does not count — the opener owns the thread's origin. Always the
+   *  requesting agent, resolved server-side like mentionedPrincipalId. */
+  startedByPrincipalId?: PrincipalId
   /** "Quinn AI" view: only conversations with an `assistant_involvements` row in
    *  ANY of these lifecycle statuses (Resolved / Escalated / Pending buckets). */
   assistantStatuses?: AssistantInvolvementStatus[]
@@ -1686,6 +1691,23 @@ export async function listConversationsForAgent(
                 .from(assistantInvolvements)
                 .where(inArray(assistantInvolvements.status, filter.assistantStatuses))
             )
+          : undefined,
+        // Created-by-me view: the conversation's earliest non-deleted message is
+        // an agent message by this principal. EXISTS over conversation_messages
+        // keeps the select shape; the MIN(created_at) inner query pins "first".
+        filter.startedByPrincipalId
+          ? sql`EXISTS (
+              SELECT 1 FROM conversation_messages cm
+              WHERE cm.conversation_id = ${conversations.id}
+                AND cm.deleted_at IS NULL
+                AND cm.principal_id = ${toUuid(filter.startedByPrincipalId)}::uuid
+                AND cm.sender_type = 'agent'
+                AND cm.created_at = (
+                  SELECT MIN(cm2.created_at) FROM conversation_messages cm2
+                  WHERE cm2.conversation_id = ${conversations.id}
+                    AND cm2.deleted_at IS NULL
+                )
+            )`
           : undefined,
         // Custom-attribute view rules (§C2.7): each ANDs its own jsonb
         // predicate — spread so an arbitrary number of rules compose without

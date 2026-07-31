@@ -43,6 +43,7 @@ export type InboxView =
   | 'saved'
   | 'quinn'
   | 'spam'
+  | 'created_by_me'
   // UNIFIED-INBOX-SPEC.md §2.3: the Tickets nav section. A separate group in
   // the sidebar (see inbox-nav-sidebar.tsx), but the same InboxView/InboxNavItem
   // machinery carries them through the URL + query layer.
@@ -223,6 +224,10 @@ export function buildListParams(
   // spam-only scope, so status/priority chips don't apply within it.
   if (nav.view === 'spam')
     return { view: 'spam' as const, search: q, companyId: company, sort: sortParam }
+  // Created-by-me is a personal feed (like Mentions): self-contained, no
+  // status/priority chips.
+  if (nav.view === 'created_by_me')
+    return { view: 'created_by_me' as const, search: q, companyId: company, sort: sortParam }
   if (nav.view === 'quinn')
     return {
       view: 'quinn' as const,

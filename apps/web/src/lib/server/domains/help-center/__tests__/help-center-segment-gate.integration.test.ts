@@ -126,6 +126,7 @@ let catPrivate: SeededCategory
 let artOpenSlug: string
 let artGatedSlug: string
 let artPrivateSlug: string
+let artSelfGatedSlug: string
 const articleIds: KbArticleId[] = []
 
 async function seedCategory(name: string, isPublic: boolean, segmentIds: string[]) {
@@ -141,7 +142,7 @@ async function seedCategory(name: string, isPublic: boolean, segmentIds: string[
   return { id, slug }
 }
 
-async function seedArticle(name: string, categoryId: KbCategoryId) {
+async function seedArticle(name: string, categoryId: KbCategoryId, segmentIds: string[] = []) {
   const id = createId('kb_article') as KbArticleId
   const slug = `sg-${runSuffix}-${name}`
   await activeDb!.insert(helpCenterArticles).values({
@@ -152,6 +153,7 @@ async function seedArticle(name: string, categoryId: KbCategoryId) {
     content: `How to use the ${TOKEN} feature (${name}).`,
     principalId: P_AUTHOR,
     publishedAt: new Date(Date.now() - 60_000),
+    segmentIds,
   })
   articleIds.push(id)
   return slug
@@ -185,6 +187,9 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     artOpenSlug = await seedArticle('open-article', catOpen.id)
     artGatedSlug = await seedArticle('gated-article', catGated.id)
     artPrivateSlug = await seedArticle('private-article', catPrivate.id)
+    // Article-level gate: lives in the OPEN category, restricted by its own
+    // segment list — the case the category gate alone cannot express.
+    artSelfGatedSlug = await seedArticle('self-gated-article', catOpen.id, [SEG_ALPHA])
   })
 
   afterAll(async () => {
@@ -206,10 +211,10 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     expect(ownSlugs(await hybridSearch(TOKEN, 10))).toEqual([artOpenSlug])
     expect(ownSlugs(await hybridSearch(TOKEN, 10, outsider))).toEqual([artOpenSlug])
     expect(ownSlugs(await hybridSearch(TOKEN, 10, member)).sort()).toEqual(
-      [artOpenSlug, artGatedSlug].sort()
+      [artOpenSlug, artGatedSlug, artSelfGatedSlug].sort()
     )
     expect(ownSlugs(await hybridSearch(TOKEN, 10, team)).sort()).toEqual(
-      [artOpenSlug, artGatedSlug].sort()
+      [artOpenSlug, artGatedSlug, artSelfGatedSlug].sort()
     )
   })
 
@@ -220,9 +225,9 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
 
     const own = (ids: string[]) => ids.filter((id) => articleIds.includes(id as KbArticleId))
     expect(own(publicAnon)).toHaveLength(1)
-    expect(own(publicMember)).toHaveLength(2)
-    // Team bypass: open + gated + private-category article all rank.
-    expect(own(teamPool)).toHaveLength(3)
+    expect(own(publicMember)).toHaveLength(3)
+    // Team bypass: open + gated + private-category + self-gated articles all rank.
+    expect(own(teamPool)).toHaveLength(4)
   })
 
   // ---- Path 2: listing ---------------------------------------------------
@@ -232,7 +237,9 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     expect(ownSlugs(anon.items)).toEqual([artOpenSlug])
 
     const forMember = await listPublicArticles({ limit: 100 }, member)
-    expect(ownSlugs(forMember.items).sort()).toEqual([artOpenSlug, artGatedSlug].sort())
+    expect(ownSlugs(forMember.items).sort()).toEqual(
+      [artOpenSlug, artGatedSlug, artSelfGatedSlug].sort()
+    )
 
     const forTeamViewer = await listPublicArticles({ limit: 100 }, team)
     expect(ownSlugs(forTeamViewer.items)).toContain(artGatedSlug)
@@ -251,6 +258,19 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     expect(ownSlugs(await listPublicArticlesForCategory(catGated.id, team))).toEqual([artGatedSlug])
   })
 
+  it('listPublicArticlesForCategory: an article-gated row in an open category shows only to members', async () => {
+    expect(ownSlugs(await listPublicArticlesForCategory(catOpen.id))).toEqual([artOpenSlug])
+    expect(ownSlugs(await listPublicArticlesForCategory(catOpen.id, outsider))).toEqual([
+      artOpenSlug,
+    ])
+    expect(ownSlugs(await listPublicArticlesForCategory(catOpen.id, member)).sort()).toEqual(
+      [artOpenSlug, artSelfGatedSlug].sort()
+    )
+    expect(ownSlugs(await listPublicArticlesForCategory(catOpen.id, team)).sort()).toEqual(
+      [artOpenSlug, artSelfGatedSlug].sort()
+    )
+  })
+
   it('listPublicCategories: gated category hidden from anonymous and non-members', async () => {
     const own = (rows: Array<{ slug: string }>) => ownSlugs(rows)
     expect(own(await listPublicCategories())).toEqual([catOpen.slug])
@@ -266,7 +286,7 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
   it('listPopularPublicArticles: gated articles excluded for anonymous, included for member', async () => {
     expect(ownSlugs(await listPopularPublicArticles(500))).toEqual([artOpenSlug])
     expect(ownSlugs(await listPopularPublicArticles(500, member)).sort()).toEqual(
-      [artOpenSlug, artGatedSlug].sort()
+      [artOpenSlug, artGatedSlug, artSelfGatedSlug].sort()
     )
   })
 
@@ -283,6 +303,17 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     })
     // Private categories are unchanged: team-only regardless of segments.
     await expect(getPublicArticleBySlug(artPrivateSlug, member)).rejects.toThrow(NotFoundError)
+  })
+
+  it('getPublicArticleBySlug: an article-level gate hides the article even in an open category', async () => {
+    await expect(getPublicArticleBySlug(artSelfGatedSlug)).rejects.toThrow(NotFoundError)
+    await expect(getPublicArticleBySlug(artSelfGatedSlug, outsider)).rejects.toThrow(NotFoundError)
+    await expect(getPublicArticleBySlug(artSelfGatedSlug, member)).resolves.toMatchObject({
+      slug: artSelfGatedSlug,
+    })
+    await expect(getPublicArticleBySlug(artSelfGatedSlug, team)).resolves.toMatchObject({
+      slug: artSelfGatedSlug,
+    })
   })
 
   it('getPublicCategoryBySlug: gated category 404s for non-members, resolves for member and team', async () => {
@@ -329,7 +360,7 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     ).toEqual([artOpenSlug])
     expect(
       own(await retrieveKbArticles(TOKEN, { audience: 'public', viewer: member, topK: 10 })).sort()
-    ).toEqual([artOpenSlug, artGatedSlug].sort())
+    ).toEqual([artOpenSlug, artGatedSlug, artSelfGatedSlug].sort())
   })
 
   it('retrieval: team audience sees gated articles but flags them internal (isPublic=false)', async () => {
@@ -340,6 +371,7 @@ describe.skipIf(!dbAvailable)('help-center segment gate (execution-level)', () =
     expect(bySlug.get(artOpenSlug)?.isPublic).toBe(true)
     // Segment-gated => not public-to-everyone => internal for the leak gate.
     expect(bySlug.get(artGatedSlug)?.isPublic).toBe(false)
+    expect(bySlug.get(artSelfGatedSlug)?.isPublic).toBe(false)
     expect(bySlug.get(artPrivateSlug)?.isPublic).toBe(false)
   })
 

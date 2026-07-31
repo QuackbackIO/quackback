@@ -1538,9 +1538,16 @@
     {
       "version": "7",
       "when": 1785700000000,
-      "tag": "0243_portal_og_image",
+      "tag": "0240_kb_article_segments",
       "breakpoints": true,
       "idx": 219
+    },
+    {
+      "version": "7",
+      "when": 1785700000000,
+      "tag": "0243_portal_og_image",
+      "breakpoints": true,
+      "idx": 220
     }
   ]
 }

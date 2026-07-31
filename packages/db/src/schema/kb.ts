@@ -128,6 +128,9 @@ export const helpCenterArticles = pgTable(
       .notNull()
       .references(() => principal.id, { onDelete: 'restrict' }),
     publishedAt: timestamp('published_at', { withTimezone: true }),
+    // Segments a PUBLISHED article is restricted to; [] = everyone. Layers on
+    // top of the parent category's gate: a public reader must pass both.
+    segmentIds: jsonb('segment_ids').$type<string[]>().notNull().default([]),
     viewCount: integer('view_count').default(0).notNull(),
     helpfulCount: integer('helpful_count').default(0).notNull(),
     notHelpfulCount: integer('not_helpful_count').default(0).notNull(),

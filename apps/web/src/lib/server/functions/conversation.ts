@@ -170,7 +170,9 @@ const listConversationsSchema = z.object({
   // 'quinn' = only conversations Quinn engaged (see the `ai` bucket).
   // 'spam' = the Spam view: only spam-ended conversations (every other scope
   // excludes them).
-  view: z.enum(['all', 'mentions', 'quinn', 'spam']).optional(),
+  // 'created_by_me' = only conversations the requesting agent started (their
+  // first message is agent-authored by them).
+  view: z.enum(['all', 'mentions', 'quinn', 'spam', 'created_by_me']).optional(),
   // Quinn-inbox sub-filter by involvement outcome; omitted = any Quinn-engaged.
   ai: z.enum(['resolved', 'escalated', 'pending']).optional(),
   before: z.string().optional(),
@@ -902,6 +904,8 @@ export const listConversationsFn = createServerFn({ method: 'GET' })
         companyId: data.companyId as CompanyId | undefined,
         // Always the requesting agent — never trust a client-supplied id here.
         mentionedPrincipalId: data.view === 'mentions' ? ctx.principal.id : undefined,
+        // Created-by-me view: same server-side resolution as mentions.
+        startedByPrincipalId: data.view === 'created_by_me' ? ctx.principal.id : undefined,
         // Spam view: the only scope that lists spam-ended conversations.
         spamOnly: data.view === 'spam',
         // Quinn view: a chosen bucket narrows to its statuses; none = any Quinn

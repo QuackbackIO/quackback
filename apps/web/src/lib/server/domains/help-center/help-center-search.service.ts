@@ -117,6 +117,8 @@ export function helpCenterVisibilityConditions(audience: HelpCenterAudience, vie
     lte(helpCenterArticles.publishedAt, new Date()),
     eq(helpCenterCategories.isPublic, true),
     segmentGateFilter(viewer, helpCenterCategories.segmentIds),
+    // Per-article gate layers on the category gate: the reader must pass both.
+    segmentGateFilter(viewer, helpCenterArticles.segmentIds),
   ]
 }
 
@@ -135,13 +137,17 @@ export function helpCenterVisibilityConditions(audience: HelpCenterAudience, vie
  */
 export function publicCategoryExistsCondition(viewer: Actor) {
   const gate = segmentGateFilter(viewer, sql.raw('"kb_categories"."segment_ids"'))
+  // The article-level gate refs kb_articles itself, so it stays a column
+  // object: the relational builder rewrites it onto the root alias, which is
+  // the correct table here (same treatment as the categoryId ref below).
+  const articleGate = segmentGateFilter(viewer, helpCenterArticles.segmentIds)
   return sql`EXISTS (
     SELECT 1 FROM "kb_categories"
     WHERE "kb_categories"."id" = ${helpCenterArticles.categoryId}
       AND "kb_categories"."deleted_at" IS NULL
       AND "kb_categories"."is_public" = true
       AND ${gate}
-  )`
+  ) AND ${articleGate}`
 }
 
 export interface HybridSearchResult {
