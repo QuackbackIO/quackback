@@ -96,4 +96,49 @@ describe('GET /api/v1/companies', () => {
     expect(res.status).toBe(401)
     expect(mockListCompaniesPage).not.toHaveBeenCalled()
   })
+
+  it('maps company_id to an exact external-reference lookup', async () => {
+    await GET({ request: makeRequest('?company_id=crm-42') })
+    expect(mockListCompaniesPage).toHaveBeenCalledWith({
+      search: undefined,
+      limit: 20,
+      cursor: undefined,
+      externalId: 'crm-42',
+      tagId: undefined,
+      segmentId: undefined,
+    })
+  })
+
+  it('passes valid tag_id and segment_id filters to the domain query', async () => {
+    await GET({
+      request: makeRequest(
+        '?tag_id=post_tag_01kqhxq697fvgat0h2def67890&segment_id=segment_01kqhxq697fvgat0h3xyz67890'
+      ),
+    })
+    expect(mockListCompaniesPage).toHaveBeenCalledWith({
+      search: undefined,
+      limit: 20,
+      cursor: undefined,
+      externalId: undefined,
+      tagId: 'post_tag_01kqhxq697fvgat0h2def67890',
+      segmentId: 'segment_01kqhxq697fvgat0h3xyz67890',
+    })
+  })
+
+  it('degrades a malformed tag_id to an empty list, not an error', async () => {
+    const res = await GET({ request: makeRequest('?tag_id=not-a-typeid') })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.data).toEqual([])
+    expect(json.meta.pagination).toEqual({ cursor: null, hasMore: false })
+    expect(mockListCompaniesPage).not.toHaveBeenCalled()
+  })
+
+  it('degrades a malformed segment_id to an empty list, not an error', async () => {
+    const res = await GET({ request: makeRequest('?segment_id=not-a-typeid') })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.data).toEqual([])
+    expect(mockListCompaniesPage).not.toHaveBeenCalled()
+  })
 })

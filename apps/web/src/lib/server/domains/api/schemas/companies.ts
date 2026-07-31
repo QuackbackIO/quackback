@@ -53,6 +53,27 @@ registerPath('/companies', {
         description: 'Search in name and domain',
       },
       {
+        name: 'company_id',
+        in: 'query',
+        schema: { type: 'string' },
+        description:
+          'Exact match on the external reference (external ID). Unknown references return an empty list.',
+      },
+      {
+        name: 'tag_id',
+        in: 'query',
+        schema: { type: 'string' },
+        description:
+          'Restrict to companies whose members authored posts carrying this post tag. Unknown or malformed IDs return an empty list.',
+      },
+      {
+        name: 'segment_id',
+        in: 'query',
+        schema: { type: 'string' },
+        description:
+          'Restrict to companies with at least one member in this segment. Unknown or malformed IDs return an empty list.',
+      },
+      {
         name: 'cursor',
         in: 'query',
         schema: { type: 'string' },

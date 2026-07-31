@@ -12,15 +12,19 @@ import {
   eq,
   and,
   asc,
+  inArray,
   isNull,
   sql,
   companies,
+  postTagAssignments,
+  posts,
   principal,
   user,
+  userSegments,
   conversations,
   tickets,
 } from '@/lib/server/db'
-import { toUuid, type PrincipalId } from '@quackback/ids'
+import { toUuid, type PostTagId, type PrincipalId, type SegmentId } from '@quackback/ids'
 import { emitBestEffort } from '@/lib/server/events/emit'
 import { companyCreated, companyDeleted } from '@/lib/server/events/catalogue'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
@@ -275,6 +279,39 @@ function companyFilterConditions(filter: CompanyListFilter): ReturnType<typeof s
   for (const attr of filter.attrs ?? []) {
     const cond = attrConditionSql(attr)
     if (cond) conditions.push(cond)
+  }
+
+  if (filter.externalId?.trim()) {
+    // Exact match; unknown external references match nothing rather than erroring.
+    conditions.push(sql`${companies.externalId} = ${filter.externalId.trim()}`)
+  }
+  if (filter.segmentId) {
+    // Members' segments: user_segments is the engine's membership set for both
+    // manual and dynamic segments (dynamic rows are the evaluation cache).
+    conditions.push(
+      inArray(
+        companies.id,
+        db
+          .select({ companyId: principal.companyId })
+          .from(principal)
+          .innerJoin(userSegments, eq(userSegments.principalId, principal.id))
+          .where(eq(userSegments.segmentId, filter.segmentId as SegmentId))
+      )
+    )
+  }
+  if (filter.tagId) {
+    // Members' authorship links companies to the product's tagging primitive.
+    conditions.push(
+      inArray(
+        companies.id,
+        db
+          .select({ companyId: principal.companyId })
+          .from(principal)
+          .innerJoin(posts, eq(posts.principalId, principal.id))
+          .innerJoin(postTagAssignments, eq(postTagAssignments.postId, posts.id))
+          .where(eq(postTagAssignments.tagId, filter.tagId as PostTagId))
+      )
+    )
   }
 
   return conditions

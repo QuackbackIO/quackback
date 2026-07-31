@@ -24,13 +24,36 @@ export const Route = createFileRoute('/api/v1/companies/')({
             Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20)
           )
 
+          // Integration lookup filters: company_id is an exact match on the
+          // external reference; tag_id/segment_id restrict the list.
+          const externalId = url.searchParams.get('company_id') ?? undefined
+          const tagIdParam = url.searchParams.get('tag_id') ?? undefined
+          const segmentIdParam = url.searchParams.get('segment_id') ?? undefined
+
           const { isValidTypeId } = await import('@quackback/ids')
           const cursorId =
             cursor && isValidTypeId(cursor, 'company') ? (cursor as CompanyId) : undefined
+          const tagId = tagIdParam && isValidTypeId(tagIdParam, 'post_tag') ? tagIdParam : undefined
+          const segmentId =
+            segmentIdParam && isValidTypeId(segmentIdParam, 'segment') ? segmentIdParam : undefined
+
+          // A restriction filter that cannot resolve must never widen the
+          // result set: a present-but-malformed tag/segment id degrades to an
+          // empty page, not an error and not an unfiltered list.
+          if ((tagIdParam && !tagId) || (segmentIdParam && !segmentId)) {
+            return successResponse([], { pagination: { cursor: null, hasMore: false } })
+          }
 
           const { listCompaniesPage } =
             await import('@/lib/server/domains/companies/company.service')
-          const page = await listCompaniesPage({ search, limit, cursor: cursorId })
+          const page = await listCompaniesPage({
+            search,
+            limit,
+            cursor: cursorId,
+            externalId,
+            tagId,
+            segmentId,
+          })
 
           return successResponse(page.items.map(serializeCompany), {
             pagination: {
