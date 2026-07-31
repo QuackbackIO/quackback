@@ -12,6 +12,7 @@ import { voiceScenarios } from './voice'
 import { roleScenarios } from './roles'
 import { languageScenarios } from './language'
 import { knowledgeScenarios } from './knowledge'
+import { actionScenarios } from './actions'
 
 export const scenarios: Scenario[] = [
   ...groundingScenarios,
@@ -21,4 +22,5 @@ export const scenarios: Scenario[] = [
   ...roleScenarios,
   ...languageScenarios,
   ...knowledgeScenarios,
+  ...actionScenarios,
 ]
