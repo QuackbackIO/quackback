@@ -333,6 +333,23 @@ export const getPublicArticleBySlugFn = createServerFn({ method: 'GET' })
     return publicArticle
   })
 
+export const getRelatedPublicArticlesFn = createServerFn({ method: 'GET' })
+  .validator(
+    z.object({
+      articleId: z.string().min(1),
+      limit: z.number().int().min(1).max(10).optional(),
+    })
+  )
+  .handler(async ({ data }) => {
+    const { getRelatedArticles, RELATED_ARTICLES_LIMIT } =
+      await import('@/lib/server/domains/help-center/help-center-related.service')
+    return getRelatedArticles(
+      data.articleId,
+      data.limit ?? RELATED_ARTICLES_LIMIT,
+      await publicViewer()
+    )
+  })
+
 export const createArticleFn = createServerFn({ method: 'POST' })
   .validator(createArticleSchema)
   .handler(async ({ data }) => {

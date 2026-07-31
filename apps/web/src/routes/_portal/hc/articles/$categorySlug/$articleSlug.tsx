@@ -1,11 +1,15 @@
 import { createFileRoute, getRouteApi, notFound } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
-import { getPublicArticleBySlugFn } from '@/lib/server/functions/help-center'
+import {
+  getPublicArticleBySlugFn,
+  getRelatedPublicArticlesFn,
+} from '@/lib/server/functions/help-center'
 import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-editor'
 import { EmbedHydration } from '@/components/shared/embed-hydration'
 import { HelpCenterBreadcrumbs } from '@/components/help-center/help-center-breadcrumbs'
 import { HelpCenterPrevNext } from '@/components/help-center/help-center-prev-next'
 import { HelpCenterArticleFeedback } from '@/components/help-center/help-center-article-feedback'
+import { HelpCenterRelatedArticles } from '@/components/help-center/help-center-related-articles'
 import { HelpCenterToc } from '@/components/help-center/help-center-toc'
 import { buildCategoryBreadcrumbs } from '@/components/help-center/help-center-utils'
 import {
@@ -24,7 +28,8 @@ export const Route = createFileRoute('/_portal/hc/articles/$categorySlug/$articl
   loader: async ({ params }) => {
     try {
       const article = await getPublicArticleBySlugFn({ data: { slug: params.articleSlug } })
-      return { article }
+      const related = await getRelatedPublicArticlesFn({ data: { articleId: article.id } })
+      return { article, related }
     } catch {
       throw notFound()
     }
@@ -69,7 +74,7 @@ export const Route = createFileRoute('/_portal/hc/articles/$categorySlug/$articl
 })
 
 function ArticleDetailPage() {
-  const { article } = Route.useLoaderData()
+  const { article, related } = Route.useLoaderData()
   const { categorySlug } = Route.useParams()
   const { category, articles, allCategories } = categoryApi.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
@@ -187,6 +192,8 @@ function ArticleDetailPage() {
             />
 
             <HelpCenterPrevNext categorySlug={categorySlug} prev={prev} next={next} />
+
+            <HelpCenterRelatedArticles articles={related} />
           </article>
 
           {/* Right: table of contents (scrollspy) */}
