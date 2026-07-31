@@ -3,1530 +3,1530 @@
   "dialect": "postgresql",
   "entries": [
     {
-      "idx": 0,
       "version": "7",
       "when": 1770636770602,
       "tag": "0000_initial",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 0
     },
     {
-      "idx": 1,
       "version": "7",
       "when": 1770642015175,
       "tag": "0001_loud_justice",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 1
     },
     {
-      "idx": 2,
       "version": "7",
       "when": 1770656333437,
       "tag": "0002_groovy_pretty_boy",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 2
     },
     {
-      "idx": 3,
       "version": "7",
       "when": 1770712174017,
       "tag": "0003_colorful_jocasta",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 3
     },
     {
-      "idx": 4,
       "version": "7",
       "when": 1770712174018,
       "tag": "0004_deep_sauron",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 4
     },
     {
-      "idx": 5,
       "version": "7",
       "when": 1770987666339,
       "tag": "0005_greedy_stellaris",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 5
     },
     {
-      "idx": 6,
       "version": "7",
       "when": 1771260577775,
       "tag": "0006_thick_arclight",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 6
     },
     {
-      "idx": 7,
       "version": "7",
       "when": 1771862934682,
       "tag": "0007_awesome_next_avengers",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 7
     },
     {
-      "idx": 8,
       "version": "7",
       "when": 1771862934700,
       "tag": "0008_user_segments",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 8
     },
     {
-      "idx": 9,
       "version": "7",
       "when": 1772006400000,
       "tag": "0009_segment_scheduling",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 9
     },
     {
-      "idx": 10,
       "version": "7",
       "when": 1772092800000,
       "tag": "0010_user_attribute_definitions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 10
     },
     {
-      "idx": 11,
       "version": "7",
       "when": 1772179200000,
       "tag": "0011_user_attr_external_key",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 11
     },
     {
-      "idx": 12,
       "version": "7",
       "when": 1772179200001,
       "tag": "0012_green_northstar",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 12
     },
     {
-      "idx": 13,
       "version": "7",
       "when": 1772265600000,
       "tag": "0013_keen_iron_monger",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 13
     },
     {
-      "idx": 14,
       "version": "7",
       "when": 1772272585653,
       "tag": "0014_rare_rick_jones",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 14
     },
     {
-      "idx": 15,
       "version": "7",
       "when": 1772280000000,
       "tag": "0015_curious_warstar",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 15
     },
     {
-      "idx": 16,
       "version": "7",
       "when": 1772290000000,
       "tag": "0016_ideas_redesign",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 16
     },
     {
-      "idx": 17,
       "version": "7",
       "when": 1772300000000,
       "tag": "0017_aromatic_zodiak",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 17
     },
     {
-      "idx": 18,
       "version": "7",
       "when": 1772310000000,
       "tag": "0018_safe_mad_thinker",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 18
     },
     {
-      "idx": 19,
       "version": "7",
       "when": 1772320000000,
       "tag": "0019_large_earthquake",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 19
     },
     {
-      "idx": 20,
       "version": "7",
       "when": 1772330000000,
       "tag": "0020_lovely_callisto",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 20
     },
     {
-      "idx": 21,
       "version": "7",
       "when": 1772340000000,
       "tag": "0021_notification_channels",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 21
     },
     {
-      "idx": 22,
       "version": "7",
       "when": 1772350000000,
       "tag": "0022_odd_kabuki",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 22
     },
     {
-      "idx": 23,
       "version": "7",
       "when": 1772360000000,
       "tag": "0023_merge_suggestions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 23
     },
     {
-      "idx": 24,
       "version": "7",
       "when": 1772370000000,
       "tag": "0024_remove_merge_post_suggestions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 24
     },
     {
-      "idx": 25,
       "version": "7",
       "when": 1772390000000,
       "tag": "0026_post_activity",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 25
     },
     {
-      "idx": 26,
       "version": "7",
       "when": 1772813136056,
       "tag": "0027_slack_channel_monitors",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 26
     },
     {
-      "idx": 27,
       "version": "7",
       "when": 1772900000000,
       "tag": "0028_vote_on_post_suggestions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 27
     },
     {
-      "idx": 28,
       "version": "7",
       "when": 1772910000000,
       "tag": "0029_feedback_indexes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 28
     },
     {
-      "idx": 29,
       "version": "7",
       "when": 1772920000000,
       "tag": "0030_ai_usage_and_pipeline_log",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 29
     },
     {
-      "idx": 30,
       "version": "7",
       "when": 1772930000000,
       "tag": "0031_nullable_user_email",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 30
     },
     {
-      "idx": 31,
       "version": "7",
       "when": 1772940000000,
       "tag": "0032_drop_dismiss_reason",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 31
     },
     {
-      "idx": 32,
       "version": "7",
       "when": 1772950000000,
       "tag": "0033_vote_added_by_principal",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 32
     },
     {
-      "idx": 33,
       "version": "7",
       "when": 1773304587850,
       "tag": "0033_jittery_archangel",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 33
     },
     {
-      "idx": 34,
       "version": "7",
       "when": 1773407236622,
       "tag": "0034_petite_squirrel_girl",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 34
     },
     {
-      "idx": 35,
       "version": "7",
       "when": 1773488401446,
       "tag": "0035_cute_bucky",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 35
     },
     {
-      "idx": 36,
       "version": "7",
       "when": 1773526215917,
       "tag": "0036_glossy_revanche",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 36
     },
     {
-      "idx": 37,
       "version": "7",
       "when": 1773526215918,
       "tag": "0024_bored_human_cannonball",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 37
     },
     {
-      "idx": 38,
       "version": "7",
       "when": 1774132557224,
       "tag": "0038_furry_thunderbolts",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 38
     },
     {
-      "idx": 39,
       "version": "7",
       "when": 1774562002342,
       "tag": "0039_swift_hiroim",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 39
     },
     {
-      "idx": 40,
       "version": "7",
       "when": 1774606361148,
       "tag": "0040_tearful_wiccan",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 40
     },
     {
-      "idx": 41,
       "version": "7",
       "when": 1774609643895,
       "tag": "0041_young_songbird",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 41
     },
     {
-      "idx": 42,
       "version": "7",
       "when": 1775294037212,
       "tag": "0042_closed_lady_bullseye",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 42
     },
     {
-      "idx": 43,
       "version": "7",
       "when": 1775609621582,
       "tag": "0043_mighty_marrow",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 43
     },
     {
-      "idx": 44,
       "version": "7",
       "when": 1775811945790,
       "tag": "0044_wakeful_silk_fever",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 44
     },
     {
-      "idx": 45,
       "version": "7",
       "when": 1775830438920,
       "tag": "0045_needy_centennial",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 45
     },
     {
-      "idx": 46,
       "version": "7",
       "when": 1776295529864,
       "tag": "0046_military_nebula",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 46
     },
     {
-      "idx": 47,
       "version": "7",
       "when": 1776847294910,
       "tag": "0047_true_jimmy_woo",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 47
     },
     {
-      "idx": 48,
       "version": "7",
       "when": 1777620521131,
       "tag": "0048_consolidate_chat_target_keys",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 48
     },
     {
-      "idx": 49,
-      "version": "7",
-      "when": 1777668617288,
-      "tag": "0049_settings_tier_limits",
-      "breakpoints": true
-    },
-    {
-      "idx": 50,
-      "version": "7",
-      "when": 1777669821603,
-      "tag": "0050_api_keys_scopes",
-      "breakpoints": true
-    },
-    {
-      "idx": 51,
-      "version": "7",
-      "when": 1777669821604,
-      "tag": "0051_ai_usage_log_month_index",
-      "breakpoints": true
-    },
-    {
-      "idx": 52,
       "version": "7",
       "when": 1777655280134,
       "tag": "0052_otp_to_magic_link",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 49
     },
     {
-      "idx": 53,
+      "version": "7",
+      "when": 1777668617288,
+      "tag": "0049_settings_tier_limits",
+      "breakpoints": true,
+      "idx": 50
+    },
+    {
+      "version": "7",
+      "when": 1777669821603,
+      "tag": "0050_api_keys_scopes",
+      "breakpoints": true,
+      "idx": 51
+    },
+    {
+      "version": "7",
+      "when": 1777669821604,
+      "tag": "0051_ai_usage_log_month_index",
+      "breakpoints": true,
+      "idx": 52
+    },
+    {
       "version": "7",
       "when": 1778457600000,
       "tag": "0053_settings_managed_field_paths",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 53
     },
     {
-      "idx": 54,
       "version": "7",
       "when": 1778457600001,
       "tag": "0054_settings_state",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 54
     },
     {
-      "idx": 55,
       "version": "7",
       "when": 1778457600002,
       "tag": "0055_hook_deliveries",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 55
     },
     {
-      "idx": 56,
       "version": "7",
       "when": 1778457600003,
       "tag": "0056_admin_auth_settings",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 56
     },
     {
-      "idx": 57,
       "version": "7",
       "when": 1778457600004,
       "tag": "0057_audit_log",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 57
     },
     {
-      "idx": 58,
       "version": "7",
       "when": 1778457600005,
       "tag": "0058_sso_recovery_codes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 58
     },
     {
-      "idx": 59,
       "version": "7",
       "when": 1778457600006,
       "tag": "0059_sso_required_default",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 59
     },
     {
-      "idx": 60,
       "version": "7",
       "when": 1778457600007,
       "tag": "0060_session_user_created_at_index",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 60
     },
     {
-      "idx": 61,
       "version": "7",
       "when": 1778457600008,
       "tag": "0061_normalize_2fa_password_dependency",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 61
     },
     {
-      "idx": 62,
       "version": "7",
       "when": 1778457600009,
       "tag": "0062_drop_sso_required_flag",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 62
     },
     {
-      "idx": 63,
       "version": "7",
       "when": 1778457600010,
       "tag": "0063_comment_content_json",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 63
     },
     {
-      "idx": 64,
       "version": "7",
       "when": 1778457600011,
       "tag": "0064_post_mentions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 64
     },
     {
-      "idx": 65,
       "version": "7",
       "when": 1778457600012,
       "tag": "0065_principal_displayname_lower_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 65
     },
     {
-      "idx": 66,
       "version": "7",
       "when": 1778457600013,
       "tag": "0066_granular_access_controls",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 66
     },
     {
-      "idx": 67,
       "version": "7",
       "when": 1778457600014,
       "tag": "0067_drop_boards_moderation",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 67
     },
     {
-      "idx": 68,
       "version": "7",
       "when": 1778457600015,
       "tag": "0068_invitation_kind",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 68
     },
     {
-      "idx": 69,
       "version": "7",
       "when": 1778457600016,
       "tag": "0069_widget_origin_session",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 69
     },
     {
-      "idx": 70,
       "version": "7",
       "when": 1778457600017,
       "tag": "0070_audit_log_observability",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 70
     },
     {
-      "idx": 71,
       "version": "7",
       "when": 1778457600018,
       "tag": "0071_widget_identified_session",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 71
     },
     {
-      "idx": 72,
       "version": "7",
       "when": 1778457600019,
       "tag": "0072_user_locale",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 72
     },
     {
-      "idx": 73,
       "version": "7",
       "when": 1778457600020,
       "tag": "0073_user_country",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 73
     },
     {
-      "idx": 74,
       "version": "7",
       "when": 1779062400000,
       "tag": "0074_user_country_locale_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 74
     },
     {
-      "idx": 75,
       "version": "7",
       "when": 1779148800000,
       "tag": "0075_invitation_account_indexes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 75
     },
     {
-      "idx": 76,
       "version": "7",
       "when": 1779235200000,
       "tag": "0076_user_email_lower_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 76
     },
     {
-      "idx": 77,
       "version": "7",
       "when": 1779321600000,
       "tag": "0077_sweep_lock",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 77
     },
     {
-      "idx": 78,
       "version": "7",
       "when": 1779408000000,
       "tag": "0078_comment_moderation_state",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 78
     },
     {
-      "idx": 79,
       "version": "7",
       "when": 1779494400000,
       "tag": "0079_board_access",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 79
     },
     {
-      "idx": 80,
       "version": "7",
       "when": 1779580800000,
       "tag": "0080_drop_board_audience",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 80
     },
     {
-      "idx": 81,
       "version": "7",
       "when": 1779667200000,
       "tag": "0081_per_action_segments",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 81
     },
     {
-      "idx": 82,
       "version": "7",
       "when": 1779753600000,
       "tag": "0082_board_access_vote_action",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 82
     },
     {
-      "idx": 83,
       "version": "7",
       "when": 1779840000000,
       "tag": "0083_board_moderation_tri_state",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 83
     },
     {
-      "idx": 84,
       "version": "7",
       "when": 1779926400000,
       "tag": "0084_workspace_allow_anonymous_master",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 84
     },
     {
-      "idx": 85,
       "version": "7",
       "when": 1780012800000,
       "tag": "0085_live_chat",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 85
     },
     {
-      "idx": 86,
       "version": "7",
       "when": 1780099200000,
       "tag": "0086_chat_attachments",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 86
     },
     {
-      "idx": 87,
       "version": "7",
       "when": 1780185600000,
       "tag": "0087_chat_csat",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 87
     },
     {
-      "idx": 88,
       "version": "7",
       "when": 1780272000000,
       "tag": "0088_chat_internal_notes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 88
     },
     {
-      "idx": 89,
       "version": "7",
       "when": 1780358400000,
       "tag": "0089_conversation_tags",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 89
     },
     {
-      "idx": 90,
       "version": "7",
       "when": 1780444800000,
       "tag": "0090_chat_visitor_email",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 90
     },
     {
-      "idx": 91,
       "version": "7",
       "when": 1780531200000,
       "tag": "0091_drop_conversation_tags",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 91
     },
     {
-      "idx": 92,
       "version": "7",
       "when": 1780617600000,
       "tag": "0092_chat_channel",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 92
     },
     {
-      "idx": 93,
       "version": "7",
       "when": 1780704000000,
       "tag": "0093_chat_pending_resolved_at",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 93
     },
     {
-      "idx": 94,
       "version": "7",
       "when": 1780790400000,
       "tag": "0094_conversation_priority_and_tags",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 94
     },
     {
-      "idx": 95,
       "version": "7",
       "when": 1780876800000,
       "tag": "0095_principal_contact_email",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 95
     },
     {
-      "idx": 96,
       "version": "7",
       "when": 1780963200000,
       "tag": "0096_chat_message_metadata",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 96
     },
     {
-      "idx": 97,
       "version": "7",
       "when": 1781049600000,
       "tag": "0097_user_external_id",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 97
     },
     {
-      "idx": 98,
       "version": "7",
       "when": 1781136000000,
       "tag": "0098_normalize_snoozed_conversations",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 98
     },
     {
-      "idx": 99,
       "version": "7",
       "when": 1781222400000,
       "tag": "0099_agent_availability",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 99
     },
     {
-      "idx": 100,
       "version": "7",
       "when": 1781308800000,
       "tag": "0100_chat_tags_and_message_mentions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 100
     },
     {
-      "idx": 101,
       "version": "7",
       "when": 1781395200000,
       "tag": "0101_chat_message_content_json",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 101
     },
     {
-      "idx": 102,
       "version": "7",
       "when": 1781481600000,
       "tag": "0102_chat_message_reactions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 102
     },
     {
-      "idx": 103,
       "version": "7",
       "when": 1781568000000,
       "tag": "0103_chat_message_flags",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 103
     },
     {
-      "idx": 104,
       "version": "7",
       "when": 1781654400000,
       "tag": "0104_chat_message_flags_per_agent",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 104
     },
     {
-      "idx": 105,
       "version": "7",
       "when": 1781740800000,
       "tag": "0105_push_devices",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 105
     },
     {
-      "idx": 106,
       "version": "7",
       "when": 1781827200000,
       "tag": "0106_analytics_indexes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 106
     },
     {
-      "idx": 107,
       "version": "7",
       "when": 1781913600000,
       "tag": "0107_posts_tracked_by",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 107
     },
     {
-      "idx": 108,
       "version": "7",
       "when": 1782000000000,
       "tag": "0108_conversation_end_reason",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 108
     },
     {
-      "idx": 109,
       "version": "7",
       "when": 1782086400000,
       "tag": "0109_oauth_refresh_token_unique",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 109
     },
     {
-      "idx": 110,
       "version": "7",
       "when": 1782172800000,
       "tag": "0110_oauth_refresh_token_family_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 110
     },
     {
-      "idx": 111,
       "version": "7",
       "when": 1782259200000,
       "tag": "0111_invitation_magic_link_token",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 111
     },
     {
-      "idx": 112,
       "version": "7",
       "when": 1782345600000,
       "tag": "0112_invitation_magic_link_tokens",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 112
     },
     {
-      "idx": 113,
       "version": "7",
       "when": 1782432000000,
       "tag": "0113_integration_channelid_backfill",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 113
     },
     {
-      "idx": 114,
       "version": "7",
       "when": 1782691200000,
       "tag": "0114_identity_provider",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 114
     },
     {
-      "idx": 115,
       "version": "7",
       "when": 1782777600000,
       "tag": "0115_identity_provider_backfill_sso",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 115
     },
     {
-      "idx": 116,
       "version": "7",
       "when": 1782864000000,
       "tag": "0116_identity_provider_kind",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 116
     },
     {
-      "idx": 117,
       "version": "7",
       "when": 1782950400000,
       "tag": "0117_identity_provider_jwks_issuer",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 117
     },
     {
-      "idx": 118,
       "version": "7",
       "when": 1783036800000,
       "tag": "0118_identity_provider_consolidate_default_role",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 118
     },
     {
-      "idx": 119,
       "version": "7",
       "when": 1783123200000,
       "tag": "0119_changelog_display_date",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 119
     },
     {
-      "idx": 120,
       "version": "7",
       "when": 1783209600000,
       "tag": "0120_changelog_notified_at",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 120
     },
     {
-      "idx": 121,
       "version": "7",
       "when": 1783296000000,
       "tag": "0121_board_slug_backfill",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 121
     },
     {
-      "idx": 122,
       "version": "7",
       "when": 1783382400000,
       "tag": "0122_help_center_slug_backfill",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 122
     },
     {
-      "idx": 123,
       "version": "7",
       "when": 1783468800000,
       "tag": "0123_csat_comment_subscription_backfill",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 123
     },
     {
-      "idx": 124,
       "version": "7",
       "when": 1783555200000,
       "tag": "0124_conversation_channel_messenger",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 124
     },
     {
-      "idx": 125,
       "version": "7",
       "when": 1783641600000,
       "tag": "0125_conversation_channel_drop_default",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 125
     },
     {
-      "idx": 126,
       "version": "7",
       "when": 1783728000000,
       "tag": "0126_rbac_roles_permissions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 126
     },
     {
-      "idx": 127,
       "version": "7",
       "when": 1783814400000,
       "tag": "0127_conversation_tags_rename",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 127
     },
     {
-      "idx": 128,
       "version": "7",
       "when": 1784678400000,
       "tag": "0137_visitor_analytics",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 128
     },
     {
-      "idx": 129,
       "version": "7",
       "when": 1784764860000,
       "tag": "0139_conversation_lifecycle",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 129
     },
     {
-      "idx": 130,
       "version": "7",
       "when": 1784764920000,
       "tag": "0140_companies",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 130
     },
     {
-      "idx": 131,
       "version": "7",
       "when": 1784764980000,
       "tag": "0141_post_eta",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 131
     },
     {
-      "idx": 132,
       "version": "7",
       "when": 1784765040000,
       "tag": "0142_assistant_involvements",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 132
     },
     {
-      "idx": 133,
       "version": "7",
       "when": 1784765100000,
       "tag": "0143_channel_identities",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 133
     },
     {
-      "idx": 134,
       "version": "7",
       "when": 1784765220000,
       "tag": "0145_teams",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 134
     },
     {
-      "idx": 135,
       "version": "7",
       "when": 1784765280000,
       "tag": "0146_macros",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 135
     },
     {
-      "idx": 136,
       "version": "7",
       "when": 1784765340000,
       "tag": "0147_principal_blocking",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 136
     },
     {
-      "idx": 137,
       "version": "7",
       "when": 1784765400000,
       "tag": "0148_conversation_views",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 137
     },
     {
-      "idx": 138,
       "version": "7",
       "when": 1784765460000,
       "tag": "0149_message_citations",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 138
     },
     {
-      "idx": 139,
       "version": "7",
       "when": 1784765520000,
       "tag": "0150_tickets",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 139
     },
     {
-      "idx": 140,
       "version": "7",
       "when": 1784765580000,
       "tag": "0151_message_polymorphism",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 140
     },
     {
-      "idx": 141,
       "version": "7",
       "when": 1784765640000,
       "tag": "0152_email_channel",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 141
     },
     {
-      "idx": 142,
       "version": "7",
       "when": 1784765700000,
       "tag": "0153_office_hours",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 142
     },
     {
-      "idx": 143,
       "version": "7",
       "when": 1784765760000,
       "tag": "0154_sla_policies",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 143
     },
     {
-      "idx": 144,
       "version": "7",
       "when": 1784765820000,
       "tag": "0155_workflows",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 144
     },
     {
-      "idx": 145,
       "version": "7",
       "when": 1784765880000,
       "tag": "0156_conversation_attributes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 145
     },
     {
-      "idx": 146,
       "version": "7",
       "when": 1784766000000,
       "tag": "0158_changelog_settings",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 146
     },
     {
-      "idx": 147,
       "version": "7",
       "when": 1784766060000,
       "tag": "0159_hc_redirect_rules",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 147
     },
     {
-      "idx": 148,
       "version": "7",
       "when": 1784766120000,
       "tag": "0160_import_runs",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 148
     },
     {
-      "idx": 149,
       "version": "7",
       "when": 1784766180000,
       "tag": "0161_kb_translations",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 149
     },
     {
-      "idx": 150,
       "version": "7",
       "when": 1784766300000,
       "tag": "0163_assistant_guidance_rules",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 150
     },
     {
-      "idx": 151,
       "version": "7",
       "when": 1784766360000,
       "tag": "0164_assistant_pending_actions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 151
     },
     {
-      "idx": 152,
       "version": "7",
       "when": 1784766420000,
       "tag": "0165_assistant_tool_calls",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 152
     },
     {
-      "idx": 153,
       "version": "7",
       "when": 1784766480000,
       "tag": "0166_data_connectors",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 153
     },
     {
-      "idx": 154,
       "version": "7",
       "when": 1784766600000,
       "tag": "0168_assistant_analytics_indexes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 154
     },
     {
-      "idx": 155,
       "version": "7",
       "when": 1784766660000,
       "tag": "0169_teammate_language_pref",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 155
     },
     {
-      "idx": 156,
       "version": "7",
       "when": 1784766720000,
       "tag": "0170_assistant_snippets",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 156
     },
     {
-      "idx": 157,
       "version": "7",
       "when": 1784766780000,
       "tag": "0171_conversation_summaries",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 157
     },
     {
-      "idx": 158,
       "version": "7",
       "when": 1784766900000,
       "tag": "0173_conversation_messages_style_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 158
     },
     {
-      "idx": 159,
       "version": "7",
       "when": 1784767020000,
       "tag": "0175_conversation_translation",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 159
     },
     {
-      "idx": 160,
       "version": "7",
       "when": 1784767140000,
       "tag": "0177_unified_inbox",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 160
     },
     {
-      "idx": 161,
       "version": "7",
       "when": 1784767200000,
       "tag": "0178_ai_attribute_detection",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 161
     },
     {
-      "idx": 162,
       "version": "7",
       "when": 1784767260000,
       "tag": "0179_status_product",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 162
     },
     {
-      "idx": 163,
       "version": "7",
       "when": 1784767500000,
       "tag": "0180_workflow_runs_started_at_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 163
     },
     {
-      "idx": 164,
       "version": "7",
       "when": 1784767620000,
       "tag": "0181_ticket_activity",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 164
     },
     {
-      "idx": 165,
       "version": "7",
       "when": 1784767800000,
       "tag": "0182_ticket_external_links",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 165
     },
     {
-      "idx": 166,
       "version": "7",
       "when": 1784767980000,
       "tag": "0183_kb_category_segments",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 166
     },
     {
-      "idx": 167,
       "version": "7",
       "when": 1784768100000,
       "tag": "0184_workflow_run_graph_snapshot",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 167
     },
     {
-      "idx": 168,
       "version": "7",
       "when": 1784768220000,
       "tag": "0185_workflow_run_graph_backfill",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 168
     },
     {
-      "idx": 169,
       "version": "7",
       "when": 1784768340000,
       "tag": "0186_conversations_sla_applied_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 169
     },
     {
-      "idx": 170,
       "version": "7",
       "when": 1784768460000,
       "tag": "0187_conversations_sla_unsettled_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 170
     },
     {
-      "idx": 171,
       "version": "7",
       "when": 1784772060000,
       "tag": "0188_workflow_versions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 171
     },
     {
-      "idx": 172,
       "version": "7",
       "when": 1784772120000,
       "tag": "0189_assistant_events",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 172
     },
     {
-      "idx": 173,
       "version": "7",
       "when": 1784772180000,
       "tag": "0190_audit_invariants",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 173
     },
     {
-      "idx": 174,
       "version": "7",
       "when": 1784772240000,
       "tag": "0191_notification_pref_matrix",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 174
     },
     {
-      "idx": 175,
       "version": "7",
       "when": 1784772300000,
       "tag": "0192_events_outbox",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 175
     },
     {
-      "idx": 176,
       "version": "7",
       "when": 1784772360000,
       "tag": "0193_apps",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 176
     },
     {
-      "idx": 177,
       "version": "7",
       "when": 1784772420000,
       "tag": "0194_apps_oauth_fk",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 177
     },
     {
-      "idx": 178,
       "version": "7",
       "when": 1784772480000,
       "tag": "0195_widget_install_observation",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 178
     },
     {
-      "idx": 179,
       "version": "7",
       "when": 1784772540000,
       "tag": "0196_assistant_config_v2",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 179
     },
     {
-      "idx": 180,
       "version": "7",
       "when": 1784772600000,
       "tag": "0197_remove_data_connectors",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 180
     },
     {
-      "idx": 181,
       "version": "7",
       "when": 1784772660000,
       "tag": "0198_roadmap_views",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 181
     },
     {
-      "idx": 182,
       "version": "7",
       "when": 1784772720000,
       "tag": "0199_drop_roadmap_curation",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 182
     },
     {
-      "idx": 183,
       "version": "7",
       "when": 1784772780000,
       "tag": "0200_assistant_drop_channels_ai_label",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 183
     },
     {
-      "idx": 184,
       "version": "7",
       "when": 1784772840000,
       "tag": "0201_status_template_usage",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 184
     },
     {
-      "idx": 185,
       "version": "7",
       "when": 1784772900000,
       "tag": "0202_assistant_drop_tool_controls",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 185
     },
     {
-      "idx": 186,
       "version": "7",
       "when": 1784772960000,
       "tag": "0203_assistant_ticket_changelog_knowledge",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 186
     },
     {
-      "idx": 187,
       "version": "7",
       "when": 1784773020000,
       "tag": "0204_assistant_config_v3",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 187
     },
     {
-      "idx": 188,
       "version": "7",
       "when": 1784773080000,
       "tag": "0205_assistant_custom_actions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 188
     },
     {
-      "idx": 189,
       "version": "7",
       "when": 1784773140000,
       "tag": "0206_export_runs",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 189
     },
     {
-      "idx": 190,
       "version": "7",
       "when": 1784773200000,
       "tag": "0207_index_tuning",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 190
     },
     {
-      "idx": 191,
       "version": "7",
       "when": 1784773260000,
       "tag": "0208_ticket_subscriptions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 191
     },
     {
-      "idx": 192,
       "version": "7",
       "when": 1784773320000,
       "tag": "0209_drift_repair",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 192
     },
     {
-      "idx": 193,
       "version": "7",
       "when": 1784773380000,
       "tag": "0210_inbound_delivery_dedup",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 193
     },
     {
-      "idx": 194,
       "version": "7",
       "when": 1784773381000,
       "tag": "0211_invitation_role_id",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 194
     },
     {
-      "idx": 195,
       "version": "7",
       "when": 1784773441000,
       "tag": "0212_ticket_sla_holidays",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 195
     },
     {
-      "idx": 196,
       "version": "7",
       "when": 1784773501000,
       "tag": "0213_conversations_sla_nrt_unsettled_idx",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 196
     },
     {
-      "idx": 197,
       "version": "7",
       "when": 1784773561000,
       "tag": "0214_ticket_conversations_customer_ticket_uq",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 197
     },
     {
-      "idx": 198,
       "version": "7",
       "when": 1784773621000,
       "tag": "0215_ticket_types",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 198
     },
     {
-      "idx": 199,
       "version": "7",
       "when": 1784773700000,
       "tag": "0216_external_link_cache_and_health",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 199
     },
     {
-      "idx": 200,
       "version": "7",
       "when": 1784773800000,
       "tag": "0217_drop_feedback_pipeline",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 200
     },
     {
-      "idx": 201,
       "version": "7",
       "when": 1784773860000,
       "tag": "0218_customer_messages_reparent_backfill",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 201
     },
     {
-      "idx": 202,
       "version": "7",
       "when": 1784773920000,
       "tag": "0219_search_and_unread_indexes",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 202
     },
     {
-      "idx": 203,
       "version": "7",
       "when": 1784900314886,
       "tag": "0220_drop_assistant_custom_actions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 203
     },
     {
-      "idx": 204,
       "version": "7",
       "when": 1784902535956,
       "tag": "0221_remove_web_form_channel",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 204
     },
     {
-      "idx": 205,
       "version": "7",
       "when": 1784902535957,
       "tag": "0222_account_identity_index",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 205
     },
     {
-      "idx": 206,
       "version": "7",
       "when": 1784902535958,
       "tag": "0223_identity_provider_request_options",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 206
     },
     {
-      "idx": 207,
       "version": "7",
       "when": 1784902535959,
       "tag": "0224_identity_provider_claim_mapping",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 207
     },
     {
-      "idx": 208,
       "version": "7",
       "when": 1784902535961,
       "tag": "0226_kb_article_feedback_reason",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 208
     },
     {
-      "idx": 209,
       "version": "7",
       "when": 1784902535962,
       "tag": "0227_post_custom_field_values",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 209
     },
     {
-      "idx": 210,
       "version": "7",
       "when": 1785463478792,
       "tag": "0228_assistant_custom_actions",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 210
     },
     {
-      "idx": 211,
       "version": "7",
       "when": 1785463478793,
       "tag": "0234_conversation_participants",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 211
     },
     {
-      "idx": 212,
       "version": "7",
       "when": 1785467200000,
       "tag": "0236_assistant_web_sources",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 212
     },
     {
-      "idx": 213,
       "version": "7",
       "when": 1785471696513,
       "tag": "0237_post_views",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 213
     },
     {
-      "idx": 214,
       "version": "7",
       "when": 1785471764353,
       "tag": "0235_assistant_documents",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 214
     },
     {
-      "idx": 215,
       "version": "7",
       "when": 1785505560000,
       "tag": "0230_post_tags_ai_prompt",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 215
     },
     {
-      "idx": 216,
       "version": "7",
       "when": 1785506100000,
       "tag": "0231_posts_pinned_at",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 216
     },
     {
-      "idx": 217,
       "version": "7",
       "when": 1785600000000,
       "tag": "0232_changelog_featured_image",
-      "breakpoints": true
+      "breakpoints": true,
+      "idx": 217
     },
     {
       "version": "7",
@@ -1555,6 +1555,13 @@
       "tag": "0245_post_tag_assignments_auto_tagged",
       "breakpoints": true,
       "idx": 221
+    },
+    {
+      "version": "7",
+      "when": 1785700000002,
+      "tag": "0247_user_tags",
+      "breakpoints": true,
+      "idx": 222
     }
   ]
 }

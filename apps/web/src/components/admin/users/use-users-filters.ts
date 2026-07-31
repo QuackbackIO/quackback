@@ -21,6 +21,8 @@ export function useUsersFilters() {
       ? (search as { segments?: string }).segments!.split(',').filter(Boolean)
       : undefined
 
+    const tagIds = search.tags ? search.tags.split(',').filter(Boolean) : undefined
+
     return {
       search: search.search,
       verified,
@@ -35,6 +37,7 @@ export function useUsersFilters() {
       lifecycle: search.lifecycle,
       sort: search.sort,
       segmentIds,
+      tagIds,
     }
   }, [search])
 
@@ -61,6 +64,14 @@ export function useUsersFilters() {
             : undefined
           : undefined
 
+      // Convert tagIds array to comma-separated string for URL
+      const tagsParam =
+        'tagIds' in updates
+          ? updates.tagIds && updates.tagIds.length > 0
+            ? updates.tagIds.join(',')
+            : undefined
+          : undefined
+
       void navigate({
         to: '/admin/users',
         search: {
@@ -84,6 +95,7 @@ export function useUsersFilters() {
           }),
           ...('sort' in updates && { sort: updates.sort }),
           ...('segmentIds' in updates && { segments: segmentsParam }),
+          ...('tagIds' in updates && { tags: tagsParam }),
         },
         replace: true,
       })
@@ -126,8 +138,9 @@ export function useUsersFilters() {
         sort: search.sort,
         selected: search.selected,
         company: search.company,
-        // Preserve segment selection and the lifecycle view when clearing filters
+        // Preserve segment/tag selection and the lifecycle view when clearing filters
         segments: (search as { segments?: string }).segments,
+        tags: search.tags,
         lifecycle: search.lifecycle,
       },
       replace: true,

@@ -115,6 +115,8 @@ export interface PortalUserListParams {
   limit?: number
   /** Filter by segment IDs (OR logic — users in ANY of the given segments) */
   segmentIds?: import('@quackback/ids').SegmentId[]
+  /** Filter by user tag IDs (OR logic — users carrying ANY of the given tags) */
+  tagIds?: import('@quackback/ids').UserTagId[]
   /**
    * Lifecycle view over the three-tier people model:
    * - visitor: anonymous with no engagement yet (idle minted session, or an

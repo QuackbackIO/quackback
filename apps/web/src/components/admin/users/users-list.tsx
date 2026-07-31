@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useIntl } from 'react-intl'
 import { toast } from 'sonner'
-import { PlusIcon, UsersIcon, ViewColumnsIcon } from '@heroicons/react/24/solid'
+import { PlusIcon, TagIcon, UsersIcon, ViewColumnsIcon } from '@heroicons/react/24/solid'
 import { useInfiniteScroll } from '@/lib/client/hooks/use-infinite-scroll'
 import { useDebouncedSearch } from '@/lib/client/hooks/use-debounced-search'
 import { useAssignUsersToSegment, useRemoveUsersFromSegment } from '@/lib/client/mutations'
@@ -27,6 +27,7 @@ import {
   COUNTRY_COLUMN_WIDTH,
 } from '@/components/admin/users/user-card'
 import { UsersActiveFiltersBar } from '@/components/admin/users/users-active-filters-bar'
+import { useUserTags } from '@/lib/client/hooks/use-user-tags'
 import { UsersBulkSegmentBar } from '@/components/admin/users/users-bulk-segment-bar'
 import { MobileSegmentSelector } from '@/components/admin/users/users-segment-nav'
 import type { PortalUserListItemView } from '@/lib/shared/types'
@@ -148,6 +149,59 @@ function UsersEmptyState({
         />
       </div>
     </div>
+  )
+}
+
+/**
+ * People-list tag filter: checkbox menu over every live user tag, OR logic —
+ * a person carrying ANY selected tag matches. Renders nothing when no tags
+ * exist yet (tags are minted from the profile tag control).
+ */
+function UserTagFilterDropdown({
+  selectedTagIds,
+  onChange,
+}: {
+  selectedTagIds: string[]
+  onChange: (tagIds: string[]) => void
+}) {
+  const { data: tags } = useUserTags()
+  if (!tags || tags.length === 0) return null
+
+  const toggle = (tagId: string, checked: boolean) => {
+    onChange(checked ? [...selectedTagIds, tagId] : selectedTagIds.filter((id) => id !== tagId))
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            'h-8 text-xs gap-1.5',
+            selectedTagIds.length > 0 && 'border-primary/40 text-primary'
+          )}
+        >
+          <TagIcon className={MENU_ICON} />
+          Tags{selectedTagIds.length > 0 ? ` (${selectedTagIds.length})` : ''}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {tags.map((tag) => (
+          <DropdownMenuCheckboxItem
+            key={tag.id}
+            checked={selectedTagIds.includes(tag.id)}
+            onCheckedChange={(checked) => toggle(tag.id, checked === true)}
+          >
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: tag.color }}
+            />
+            {tag.name}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -364,6 +418,10 @@ export function UsersList({
           ))}
         </div>
         <div className="flex-1" />
+        <UserTagFilterDropdown
+          selectedTagIds={filters.tagIds ?? []}
+          onChange={(tagIds) => onFiltersChange({ tagIds: tagIds.length > 0 ? tagIds : undefined })}
+        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">

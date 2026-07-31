@@ -42,6 +42,7 @@ import type { PortalUserDetail, EngagedPost } from '@/lib/shared/types'
 import type { ConversationDTO, ConversationStatus } from '@/lib/shared/conversation/types'
 import type { FeatureFlags } from '@/lib/shared/types/settings'
 import { UserSegmentBadges } from '@/components/admin/users/user-segments'
+import { UserTagControl } from '@/components/admin/users/user-tag-control'
 import { UserCompanyControl } from '@/components/admin/users/user-company-control'
 import {
   BlockPersonControl,
@@ -442,7 +443,9 @@ export function UserDetail({
   const startEditing = () => {
     if (!user) return
     setEditName(user.name || '')
-    setEditEmail(user.email || '')
+    // A lead's editable address is the captured contact email; the account
+    // email behind it is a synthetic placeholder.
+    setEditEmail(user.email ?? user.contactEmail ?? '')
     setIsEditing(true)
   }
 
@@ -461,8 +464,9 @@ export function UserDetail({
     if (trimmedName && trimmedName !== (user.name || '')) {
       updates.name = trimmedName
     }
+    const currentEmail = user.email ?? user.contactEmail ?? null
     const newEmail = trimmedEmail || null
-    if (newEmail !== (user.email || null)) {
+    if (newEmail !== currentEmail) {
       updates.email = newEmail
     }
 
@@ -554,10 +558,9 @@ export function UserDetail({
                   {user.emailVerified && (
                     <CheckCircleIcon className="h-4 w-4 text-primary shrink-0" />
                   )}
-                  {/* Leads have no editable account fields: the visible email
-                      is the captured contact email, not user.email, which the
-                      form edits. Editing arrives with the lead merge work. */}
-                  {canManageUsers && !user.isLead && (
+                  {/* For a lead the form edits the captured contact email,
+                      never the placeholder account address. */}
+                  {canManageUsers && (
                     <button
                       type="button"
                       onClick={startEditing}
@@ -692,6 +695,15 @@ export function UserDetail({
             />
           </div>
         )}
+
+        {/* Tags */}
+        <div className="border-t border-border/50 pt-4">
+          <h3 className="text-sm font-medium mb-3">Tags</h3>
+          <UserTagControl
+            principalId={user.principalId as PrincipalId}
+            canManage={canManageUsers}
+          />
+        </div>
 
         {/* Company */}
         <div className="border-t border-border/50 pt-4">

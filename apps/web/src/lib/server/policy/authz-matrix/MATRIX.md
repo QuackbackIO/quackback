@@ -100,7 +100,7 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 
 ## 2. Surfaces and their enforced authorization
 
-### Server functions (`requireAuth`) — 622 surfaces
+### Server functions (`requireAuth`) — 626 surfaces
 
 | Surface | Enforces |
 | --- | --- |
@@ -177,6 +177,10 @@ Profiles: **Owner** = admin class + an admin-owned full API key (scoped keys hol
 | `lib/server/functions/admin.ts`::createPortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::findPortalUsersByEmailFn | people.manage |
 | `lib/server/functions/admin.ts`::listDuplicateUsersFn | people.view |
+| `lib/server/functions/admin.ts`::listUserTagsFn | people.view |
+| `lib/server/functions/admin.ts`::listUserTagsForPrincipalFn | people.view |
+| `lib/server/functions/admin.ts`::assignUserTagFn | people.manage |
+| `lib/server/functions/admin.ts`::removeUserTagFn | people.manage |
 | `lib/server/functions/admin.ts`::deletePortalUserFn | people.manage |
 | `lib/server/functions/admin.ts`::mergeLeadIntoUserFn | people.manage |
 | `lib/server/functions/admin.ts`::sendInvitationFn | member.manage |
@@ -923,7 +927,7 @@ Key scopes are enforced: an API key holds exactly its stored scopes (owner permi
 
 ## 4. Entry points without a requireAuth/key gate
 
-185 of 915 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
+185 of 919 entry points hold no `requireAuth` / `withApiKeyAuth` / `requireTeamAuth` gate.
 Each is expected to be intentionally public, a pre-auth flow, a signature-verified webhook, or a handler that delegates auth (e.g. the MCP route).
 **Adding a row here is an access-control change** — confirm the new entry point is meant to be reachable without a gate.
 

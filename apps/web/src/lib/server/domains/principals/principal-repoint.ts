@@ -43,6 +43,7 @@ import {
   pageViews,
   visitorDevices,
   userSegments,
+  userTagAssignments,
   helpCenterArticleFeedback,
   channelIdentities,
   tickets,
@@ -333,6 +334,13 @@ export const REPOINT_STEPS: RepointStep[] = [
       await tx.delete(userSegments).where(eq(userSegments.principalId, from))
     },
   },
+  collisionRepoint(
+    'user_tag_assignments',
+    userTagAssignments,
+    'principal_id',
+    ['tag_id'],
+    'User tag assignments; unique (principal_id, tag_id). A tag on the anonymous visitor follows the person on merge; when the identified user already has the tag, the colliding anon row is dropped.'
+  ),
   collisionRepoint(
     'kb_article_feedback',
     helpCenterArticleFeedback,

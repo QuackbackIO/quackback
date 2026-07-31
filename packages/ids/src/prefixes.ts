@@ -136,6 +136,7 @@ export const ID_PREFIXES = {
   segment: 'segment',
   user_attr: 'user_attr',
   company_attr: 'company_attr',
+  user_tag: 'user_tag',
 
   // AI
   sentiment: 'sentiment',

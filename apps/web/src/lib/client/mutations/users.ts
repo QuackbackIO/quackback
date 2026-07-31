@@ -36,7 +36,9 @@ export function useCreatePortalUser() {
 }
 
 /**
- * Hook to update a portal user's details (name, email).
+ * Hook to update a portal user's details (name, email). An email edit can
+ * create or dissolve an address collision, so the duplicate-match queries
+ * refresh too.
  */
 export function useUpdatePortalUser() {
   const queryClient = useQueryClient()
@@ -47,6 +49,7 @@ export function useUpdatePortalUser() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: usersKeys.lists() })
       queryClient.invalidateQueries({ queryKey: usersKeys.details() })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'user-duplicates'] })
     },
   })
 }

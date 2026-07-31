@@ -128,6 +128,11 @@ export function mockDbModule(): Record<string, unknown> {
       addedBy: 'userSegments.addedBy',
       __name: 'user_segments',
     },
+    userTagAssignments: {
+      principalId: 'userTagAssignments.principalId',
+      tagId: 'userTagAssignments.tagId',
+      __name: 'user_tag_assignments',
+    },
     helpCenterArticleFeedback: {
       principalId: 'helpCenterArticleFeedback.principalId',
       articleId: 'helpCenterArticleFeedback.articleId',

@@ -153,6 +153,9 @@ export type SegmentId = TypeId<'segment'>
 /** User attribute definition ID - e.g., user_attr_01h455vb4pex5vsknk084sn02q */
 export type UserAttributeId = TypeId<'user_attr'>
 
+/** User tag ID - e.g., user_tag_01h455vb4pex5vsknk084sn02q */
+export type UserTagId = TypeId<'user_tag'>
+
 /** Company attribute definition ID - e.g., company_attr_01h455vb4pex5vsknk084sn02q */
 export type CompanyAttributeId = TypeId<'company_attr'>
 
@@ -403,6 +406,7 @@ export interface EntityIdMap {
   post_note: PostNoteId
   segment: SegmentId
   user_attr: UserAttributeId
+  user_tag: UserTagId
   company_attr: CompanyAttributeId
   role: RoleId
   permission: PermissionId
