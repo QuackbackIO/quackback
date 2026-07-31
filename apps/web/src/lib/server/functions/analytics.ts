@@ -33,6 +33,7 @@ import { summarizeCsat } from '@/lib/server/domains/analytics/csat-summary'
 import { buildConversationVolume } from '@/lib/server/domains/analytics/conversation-volume'
 import { buildFirstResponseTimes } from '@/lib/server/domains/analytics/first-response'
 import { buildResponseDistribution } from '@/lib/server/domains/analytics/response-distribution'
+import { buildTeammatePerformance } from '@/lib/server/domains/analytics/teammate-performance'
 import { buildTimeToClose } from '@/lib/server/domains/analytics/time-to-close'
 import { computeResolutionRate } from '@/lib/server/domains/analytics/resolution'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
@@ -95,6 +96,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       conversationCreatedRows,
       firstResponseRows,
       timeToCloseRows,
+      teammateRows,
     ] = await Promise.all([
       // Daily stats for current + previous periods (one scan, split in memory).
       db
@@ -360,6 +362,40 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
         .select({ createdAt: conversations.createdAt, closedAt: conversations.resolvedAt })
         .from(conversations)
         .where(and(isNotNull(conversations.resolvedAt), gte(conversations.resolvedAt, start))),
+
+      // Per-teammate workload (live query; chat volume is low, like CSAT, so
+      // no rollup table). One row per agent-assigned conversation that arrived
+      // in the window, carrying its first agent reply (lateral MIN, null while
+      // unanswered) and its close timestamp (null while open); the grouping and
+      // medians happen in memory in buildTeammatePerformance.
+      db.execute<{
+        agentId: string
+        displayName: string | null
+        avatarUrl: string | null
+        createdAt: Date
+        firstResponseAt: Date | null
+        closedAt: Date | null
+      }>(sql`
+        SELECT
+          c.assigned_agent_principal_id AS "agentId",
+          p.display_name AS "displayName",
+          p.avatar_url AS "avatarUrl",
+          c.created_at AS "createdAt",
+          fr.first_response_at AS "firstResponseAt",
+          c.resolved_at AS "closedAt"
+        FROM conversations c
+        JOIN principal p ON p.id = c.assigned_agent_principal_id
+        LEFT JOIN LATERAL (
+          SELECT MIN(m.created_at) AS first_response_at
+          FROM conversation_messages m
+          WHERE m.conversation_id = c.id
+            AND m.sender_type = 'agent'
+            AND m.is_internal = false
+            AND m.deleted_at IS NULL
+        ) fr ON true
+        WHERE c.created_at >= ${sinceIso}::timestamptz
+          AND c.assigned_agent_principal_id IS NOT NULL
+      `),
     ])
 
     // -- Period split for the daily-stats rollup --
@@ -547,6 +583,21 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       nowStr
     )
 
+    // -- Per-teammate performance: handled count + median first response and
+    // median time to close, sorted by workload for the support table. --
+    const teammatePerformance = buildTeammatePerformance(
+      Array.from(
+        teammateRows as Iterable<{
+          agentId: string
+          displayName: string | null
+          avatarUrl: string | null
+          createdAt: Date
+          firstResponseAt: Date | null
+          closedAt: Date | null
+        }>
+      )
+    )
+
     // -- Quinn AI metrics (queries started above) folded into the shared
     // Resolved/Escalated/Pending buckets via AI_INBOX_BUCKETS, so the bucket
     // vocabulary lives in one place (also used by the inbox filter + counts). --
@@ -592,6 +643,7 @@ export const getAnalyticsData = createServerFn({ method: 'GET' })
       firstResponse,
       responseDistribution,
       timeToClose,
+      teammatePerformance,
       changelog: {
         totalViews,
         publishedCount: changelogPublishedCount,

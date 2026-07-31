@@ -34,6 +34,7 @@ import { AnalyticsTopContributors } from './analytics-top-contributors'
 import { AnalyticsSignupSources } from './analytics-signup-sources'
 import { AnalyticsCsatDistribution } from './analytics-csat-card'
 import { AnalyticsResponseDistribution } from './analytics-response-distribution'
+import { AnalyticsTeammatePerformance } from './analytics-teammate-performance'
 import { ChartSkeleton, StatusChartSkeleton, SectionSkeleton } from './analytics-skeletons'
 
 // Defer recharts (~580KB minified, including victory-vendor) and the chart
@@ -442,6 +443,14 @@ export function AnalyticsPage() {
                         <AnalyticsTimeToCloseChart days={data.timeToClose.days} />
                       </Suspense>
                     </StatSection>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Teammate performance</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <AnalyticsTeammatePerformance teammates={data.teammatePerformance} />
+                      </CardContent>
+                    </Card>
                     {data.csat.responseCount === 0 ? (
                       <Card className="overflow-hidden">
                         <AnalyticsEmpty message="No CSAT responses for this period" />
