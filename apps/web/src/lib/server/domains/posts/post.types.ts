@@ -138,7 +138,7 @@ export interface InboxPostListParams {
   /** Filter by team response state */
   responded?: 'all' | 'responded' | 'unresponded'
   updatedBefore?: Date
-  sort?: 'newest' | 'oldest' | 'votes'
+  sort?: 'newest' | 'oldest' | 'votes' | 'priority'
   /** Show only soft-deleted posts (within 30-day restorable window) */
   showDeleted?: boolean
   cursor?: string
@@ -159,7 +159,7 @@ export interface InboxPostListResult {
  */
 export interface PostListItem extends Post {
   board: Pick<Board, 'id' | 'name' | 'slug'>
-  tags: Array<Pick<PostTag, 'id' | 'name' | 'color'>>
+  tags: Array<Pick<PostTag, 'id' | 'name' | 'color'> & { autoTagged: boolean }>
   commentCount: number
   /** Author name resolved from member->user relation */
   authorName: string | null

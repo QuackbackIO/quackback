@@ -15,7 +15,7 @@ const searchSchema = z.object({
   minComments: z.string().optional(),
   responded: z.enum(['all', 'responded', 'unresponded']).optional(),
   updatedBefore: z.string().optional(),
-  sort: z.enum(['newest', 'oldest', 'votes']).optional().default('newest'),
+  sort: z.enum(['newest', 'oldest', 'votes', 'priority']).optional().default('newest'),
   hasDuplicates: z.boolean().optional(),
   deleted: z.boolean().optional(),
   post: z.string().optional(),

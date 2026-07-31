@@ -27,6 +27,7 @@ import {
   db,
   and,
   asc,
+  desc,
   eq,
   isNull,
   isNotNull,
@@ -75,24 +76,24 @@ function renderCandidateTags(tags: Array<{ name: string; aiPrompt: string }>): s
   return tags.map((t) => `- "${t.name}": ${t.aiPrompt}`).join('\n')
 }
 
+interface CandidateTag {
+  id: PostTagId
+  name: string
+  aiPrompt: string
+}
+
 /**
- * Evaluate a new post against every tag that carries an AI prompt and assign
- * the matching ones. Returns the assigned tag ids — empty in every fallback
- * case, resolving without throwing; see the module doc for the contract.
+ * Evaluate one post against a fixed candidate tag set and assign the matching
+ * tags, marked as AI-applied (`auto_tagged`) so admins can review them.
+ * Returns the assigned tag ids — empty in every fallback case, resolving
+ * without throwing; see the module doc for the contract.
  */
-export async function autoTagPost(
+async function evaluatePostAgainstTags(
   postId: PostId,
   title: string,
-  content: string
+  content: string,
+  prompted: CandidateTag[]
 ): Promise<PostTagId[]> {
-  const candidates = await db
-    .select({ id: postTags.id, name: postTags.name, aiPrompt: postTags.aiPrompt })
-    .from(postTags)
-    .where(and(isNull(postTags.deletedAt), isNotNull(postTags.aiPrompt)))
-
-  const prompted = candidates.filter((t): t is typeof t & { aiPrompt: string } =>
-    Boolean(t.aiPrompt?.trim())
-  )
   if (prompted.length === 0) return []
 
   const model = getChatModel('classification')
@@ -158,11 +159,30 @@ export async function autoTagPost(
 
   await db
     .insert(postTagAssignments)
-    .values(matchedIds.map((tagId) => ({ postId, tagId })))
+    .values(matchedIds.map((tagId) => ({ postId, tagId, autoTagged: true })))
     .onConflictDoNothing()
 
   log.info({ post_id: postId, tag_ids: matchedIds }, 'auto-tagged post')
   return matchedIds
+}
+
+/**
+ * Evaluate a new post against every tag that carries an AI prompt and assign
+ * the matching ones. Returns the assigned tag ids — empty in every fallback
+ * case, resolving without throwing; see the module doc for the contract.
+ */
+export async function autoTagPost(
+  postId: PostId,
+  title: string,
+  content: string
+): Promise<PostTagId[]> {
+  const candidates = await db
+    .select({ id: postTags.id, name: postTags.name, aiPrompt: postTags.aiPrompt })
+    .from(postTags)
+    .where(and(isNull(postTags.deletedAt), isNotNull(postTags.aiPrompt)))
+
+  const prompted = candidates.filter((t): t is CandidateTag => Boolean(t.aiPrompt?.trim()))
+  return evaluatePostAgainstTags(postId, title, content, prompted)
 }
 
 /** One backfill action evaluates at most this many posts, bounding AI spend
@@ -215,4 +235,68 @@ export async function backfillAiTagsForBoard(
 
   log.info({ board_id: boardId, scanned: batch.length, tagged }, 'ai auto-tag backfill batch')
   return { scanned: batch.length, tagged, hasMore: untagged.length > batch.length }
+}
+
+/** One re-evaluation pass scans at most this many recent posts, bounding AI
+ *  spend per prompt save. */
+export const AUTOTAG_REEVALUATE_BATCH_SIZE = 25
+
+export interface ReevaluateAiTagResult {
+  /** Recent posts evaluated in this pass. */
+  scanned: number
+  /** Posts that newly received the tag. */
+  tagged: number
+}
+
+/**
+ * Re-evaluate a single tag against the most recent posts after its AI prompt
+ * changed. Tags are workspace-wide, so the scan covers the workspace's newest
+ * posts (newest first, bounded by AUTOTAG_REEVALUATE_BATCH_SIZE); posts
+ * already carrying the tag are left alone and existing assignments are never
+ * removed — re-evaluation is additive only. Every post goes through the same
+ * evaluation gate as a new post, so AI failures degrade to "no tags added"
+ * without failing the pass, and every assignment is marked AI-applied.
+ */
+export async function reevaluateAiTag(
+  tagId: PostTagId,
+  limit: number = AUTOTAG_REEVALUATE_BATCH_SIZE
+): Promise<ReevaluateAiTagResult> {
+  const [tag] = await db
+    .select({ id: postTags.id, name: postTags.name, aiPrompt: postTags.aiPrompt })
+    .from(postTags)
+    .where(and(eq(postTags.id, tagId), isNull(postTags.deletedAt)))
+
+  if (!tag?.aiPrompt?.trim()) {
+    log.info({ tag_id: tagId }, 'ai tag re-evaluation skipped: no prompt')
+    return { scanned: 0, tagged: 0 }
+  }
+
+  const recent = await db
+    .select({ id: posts.id, title: posts.title, content: posts.content })
+    .from(posts)
+    .where(
+      and(
+        isNull(posts.deletedAt),
+        notExists(
+          db
+            .select({ postId: postTagAssignments.postId })
+            .from(postTagAssignments)
+            .where(
+              and(eq(postTagAssignments.postId, posts.id), eq(postTagAssignments.tagId, tagId))
+            )
+        )
+      )
+    )
+    .orderBy(desc(posts.createdAt))
+    .limit(limit)
+
+  const candidate: CandidateTag = { id: tag.id, name: tag.name, aiPrompt: tag.aiPrompt }
+  let tagged = 0
+  for (const post of recent) {
+    const assigned = await evaluatePostAgainstTags(post.id, post.title, post.content, [candidate])
+    if (assigned.length > 0) tagged++
+  }
+
+  log.info({ tag_id: tagId, scanned: recent.length, tagged }, 'ai tag re-evaluation pass')
+  return { scanned: recent.length, tagged }
 }

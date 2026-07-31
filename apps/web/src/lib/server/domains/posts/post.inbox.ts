@@ -24,6 +24,20 @@ import { toUuid, type PostId, type PrincipalId } from '@quackback/ids'
 import type { PostListItem, InboxPostListParams, InboxPostListResult } from './post.types'
 
 /**
+ * Priority score: `votes · 3 + comments · 2 + recency bonus`, where the
+ * recency bonus starts at 30 for a brand-new post and decays linearly to 0
+ * at 30 days old. Votes outweigh comments (a vote is the broader demand
+ * signal); the bounded bonus keeps fresh posts visible without letting age
+ * alone permanently outrank a strongly-voted post. Computed in SQL so
+ * sorting and keyset pagination share one formula.
+ */
+const priorityScoreSql = sql<number>`
+  ${posts.voteCount} * 3
+  + ${posts.commentCount} * 2
+  + GREATEST(0, 30 - EXTRACT(EPOCH FROM (now() - ${posts.createdAt})) / 86400)
+`
+
+/**
  * List posts for admin inbox with advanced filtering
  *
  * @param params - Query parameters including filters, sort, and pagination
@@ -169,7 +183,19 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     if (cursorPost) {
       const cursorDate = cursorPost.createdAt.toISOString()
       const cursorUuid = toUuid(cursorPost.id)
-      if (sort === 'votes') {
+      if (sort === 'priority') {
+        // Keyset on the computed score: look up the cursor post's score with
+        // the same expression the ORDER BY uses.
+        const [scoreRow] = await db
+          .select({ score: priorityScoreSql })
+          .from(posts)
+          .where(eq(posts.id, cursor as PostId))
+        if (scoreRow) {
+          conditions.push(
+            sql`(${priorityScoreSql}, ${posts.createdAt}, ${posts.id}) < (${scoreRow.score}, ${cursorDate}, ${cursorUuid}::uuid)`
+          )
+        }
+      } else if (sort === 'votes') {
         conditions.push(
           sql`(${posts.voteCount}, ${posts.createdAt}, ${posts.id}) < (${cursorPost.voteCount}, ${cursorDate}, ${cursorUuid}::uuid)`
         )
@@ -193,6 +219,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
     newest: [desc(posts.createdAt), desc(posts.id)],
     oldest: [asc(posts.createdAt), asc(posts.id)],
     votes: [desc(posts.voteCount), desc(posts.createdAt), desc(posts.id)],
+    priority: [desc(priorityScoreSql), desc(posts.createdAt), desc(posts.id)],
   }
 
   // Fetch limit+1 to determine hasMore without a COUNT query
@@ -249,7 +276,7 @@ export async function listInboxPosts(params: InboxPostListParams): Promise<Inbox
   const items = sliced.map((post) => ({
     ...post,
     board: post.board,
-    tags: post.tags.map((pt) => pt.tag),
+    tags: post.tags.map((pt) => ({ ...pt.tag, autoTagged: pt.autoTagged })),
     commentCount: post.commentCount,
     authorName: post.author?.displayName ?? null,
   })) as unknown as PostListItem[]

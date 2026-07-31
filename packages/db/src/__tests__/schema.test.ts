@@ -139,7 +139,8 @@ describe('Schema definitions', () => {
       const columns = Object.keys(getTableColumns(postTagAssignments))
       expect(columns).toContain('postId')
       expect(columns).toContain('tagId')
-      expect(columns.length).toBe(2)
+      expect(columns).toContain('autoTagged')
+      expect(columns.length).toBe(3)
     })
   })
 

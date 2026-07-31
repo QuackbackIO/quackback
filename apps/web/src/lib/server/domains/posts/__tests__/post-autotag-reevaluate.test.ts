@@ -1,14 +1,13 @@
 /**
- * AI auto-tag backfill: an admin applies the AI-prompted tags to a board's
- * existing untagged posts in one action. Each post is evaluated through the
- * same `autoTagPost` gate as new posts, so every fallback (AI unconfigured,
- * budget exhausted, completion failure, hallucinated match) degrades to
- * "no tags added" for that post without failing the batch.
+ * AI tag re-evaluation: saving a changed AI prompt on a tag re-runs that tag
+ * against the workspace's recent posts. Posts matched this way are assigned
+ * with the AI-applied marker (`auto_tagged`) so admins can review them.
  *
- * Pure unit test, no real DB — mirrors post-autotag.test.ts's mocking idiom.
+ * Pure unit test, no real DB — mirrors post-autotag-backfill.test.ts's
+ * mocking idiom.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { BoardId, PostId } from '@quackback/ids'
+import type { PostId, PostTagId } from '@quackback/ids'
 
 const mockConfig = vi.hoisted(() => ({
   openaiApiKey: 'test-key' as string | undefined,
@@ -41,26 +40,25 @@ vi.mock('@/lib/server/domains/settings/tier-enforce', () => ({
   enforceAiTokenBudget: vi.fn(async () => undefined),
 }))
 
-// DB stub. Two read shapes flow through db.select: the untagged-post scan
-// (where().orderBy().limit()) and autoTagPost's candidate-tag read plus the
-// not-exists subquery (where() awaited directly). from() branches on the
-// table marker.
-const candidateTags: { value: Array<{ id: string; name: string; aiPrompt: string | null }> } = {
+// DB stub. Three read shapes flow through db.select: the tag lookup and
+// autoTagPost's candidate-tag read (where() awaited directly) and the recent
+// posts scan (where().orderBy().limit()). from() branches on the table marker.
+const tagRows: { value: Array<{ id: string; name: string; aiPrompt: string | null }> } = {
   value: [],
 }
-const untaggedPosts: { value: Array<{ id: string; title: string; content: string }> } = {
-  value: [],
-}
-const insertedAssignments: Array<{ postId: string; tagId: string }> = []
+const recentPosts: { value: Array<{ id: string; title: string; content: string }> } = { value: [] }
+const insertedAssignments: Array<{ postId: string; tagId: string; autoTagged?: boolean }> = []
 
 const postsTable = vi.hoisted(() => ({
   id: 'id',
   title: 'title',
   content: 'content',
   boardId: 'board_id',
+  createdAt: 'created_at',
+  deletedAt: 'deleted_at',
 }))
 vi.mock('@/lib/server/db', async () => {
-  const { and, eq, isNull, isNotNull, asc, notExists } =
+  const { and, eq, isNull, isNotNull, asc, desc, notExists } =
     await vi.importActual<typeof import('drizzle-orm')>('drizzle-orm')
   const selectChain = () => ({
     from: vi.fn((table: unknown) => {
@@ -68,12 +66,12 @@ vi.mock('@/lib/server/db', async () => {
         return {
           where: vi.fn(() => ({
             orderBy: vi.fn(() => ({
-              limit: vi.fn(async () => untaggedPosts.value),
+              limit: vi.fn(async () => recentPosts.value),
             })),
           })),
         }
       }
-      return { where: vi.fn(async () => candidateTags.value) }
+      return { where: vi.fn(async () => tagRows.value) }
     }),
   })
   return {
@@ -82,11 +80,12 @@ vi.mock('@/lib/server/db', async () => {
     isNull,
     isNotNull,
     asc,
+    desc,
     notExists,
     db: {
       select: vi.fn(selectChain),
       insert: vi.fn(() => ({
-        values: vi.fn((rows: Array<{ postId: string; tagId: string }>) => {
+        values: vi.fn((rows: Array<{ postId: string; tagId: string; autoTagged?: boolean }>) => {
           insertedAssignments.push(...rows)
           return { onConflictDoNothing: vi.fn(async () => undefined) }
         }),
@@ -98,11 +97,9 @@ vi.mock('@/lib/server/db', async () => {
   }
 })
 
-import { backfillAiTagsForBoard } from '../post.autotag'
+import { reevaluateAiTag } from '../post.autotag'
 
-const BOARD_ID = 'board_1' as BoardId
 const BUG_TAG = { id: 'post_tag_bug', name: 'Bug', aiPrompt: 'Reports of broken behavior' }
-
 const POST_A = { id: 'post_a', title: 'Export button crashes', content: 'Clicking export throws' }
 const POST_B = { id: 'post_b', title: 'Please add dark mode', content: 'A dark theme would help' }
 
@@ -111,49 +108,58 @@ beforeEach(() => {
   insertedAssignments.length = 0
   mockConfig.openaiApiKey = 'test-key'
   mockConfig.openaiBaseUrl = 'http://localhost:9999/v1'
-  candidateTags.value = [BUG_TAG]
-  untaggedPosts.value = [{ ...POST_A }, { ...POST_B }]
+  tagRows.value = [BUG_TAG]
+  recentPosts.value = [{ ...POST_A }, { ...POST_B }]
   mockChat.mockResolvedValue({ matches: [] })
 })
 
-describe('backfillAiTagsForBoard', () => {
-  it('applies AI-prompted tags to the board’s untagged posts and reports the outcome', async () => {
+describe('reevaluateAiTag', () => {
+  it('re-applies the tag to recent posts that match, marked as AI-applied', async () => {
     mockChat.mockResolvedValueOnce({ matches: ['Bug'] }).mockResolvedValueOnce({ matches: [] })
 
-    const result = await backfillAiTagsForBoard(BOARD_ID)
+    const result = await reevaluateAiTag(BUG_TAG.id as PostTagId)
 
     expect(mockChat).toHaveBeenCalledTimes(2)
     expect(insertedAssignments).toEqual([
-      { postId: POST_A.id as PostId, tagId: BUG_TAG.id, autoTagged: true },
+      { postId: POST_A.id as PostId, tagId: BUG_TAG.id as PostTagId, autoTagged: true },
     ])
-    expect(result).toEqual({ scanned: 2, tagged: 1, hasMore: false })
+    expect(result).toEqual({ scanned: 2, tagged: 1 })
   })
 
-  it('bounds the batch and reports that untagged posts remain', async () => {
-    untaggedPosts.value = [{ ...POST_A }, { ...POST_B }]
+  it('evaluates against only the saved tag, not every prompted tag', async () => {
     mockChat.mockResolvedValue({ matches: ['Bug'] })
 
-    const result = await backfillAiTagsForBoard(BOARD_ID, 1)
+    await reevaluateAiTag(BUG_TAG.id as PostTagId)
 
-    expect(mockChat).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ scanned: 1, tagged: 1, hasMore: true })
+    const prompt = mockChat.mock.calls[0][0].messages[0].content as string
+    expect(prompt).toContain('"Bug"')
+    expect(prompt).toContain(BUG_TAG.aiPrompt)
   })
 
-  it('does nothing when the board has no untagged posts', async () => {
-    untaggedPosts.value = []
+  it('does nothing when the tag has no AI prompt', async () => {
+    tagRows.value = [{ ...BUG_TAG, aiPrompt: null }]
 
-    const result = await backfillAiTagsForBoard(BOARD_ID)
+    const result = await reevaluateAiTag(BUG_TAG.id as PostTagId)
 
-    expect(result).toEqual({ scanned: 0, tagged: 0, hasMore: false })
+    expect(result).toEqual({ scanned: 0, tagged: 0 })
+    expect(mockChat).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when the tag does not exist', async () => {
+    tagRows.value = []
+
+    const result = await reevaluateAiTag(BUG_TAG.id as PostTagId)
+
+    expect(result).toEqual({ scanned: 0, tagged: 0 })
     expect(mockChat).not.toHaveBeenCalled()
   })
 
   it('degrades to zero tags when the AI client is not configured', async () => {
     mockConfig.openaiApiKey = undefined
 
-    const result = await backfillAiTagsForBoard(BOARD_ID)
+    const result = await reevaluateAiTag(BUG_TAG.id as PostTagId)
 
-    expect(result).toEqual({ scanned: 2, tagged: 0, hasMore: false })
+    expect(result).toEqual({ scanned: 2, tagged: 0 })
     expect(mockChat).not.toHaveBeenCalled()
     expect(insertedAssignments).toEqual([])
   })
@@ -163,11 +169,11 @@ describe('backfillAiTagsForBoard', () => {
       .mockRejectedValueOnce(new Error('upstream timeout'))
       .mockResolvedValueOnce({ matches: ['Bug'] })
 
-    const result = await backfillAiTagsForBoard(BOARD_ID)
+    const result = await reevaluateAiTag(BUG_TAG.id as PostTagId)
 
-    expect(result).toEqual({ scanned: 2, tagged: 1, hasMore: false })
+    expect(result).toEqual({ scanned: 2, tagged: 1 })
     expect(insertedAssignments).toEqual([
-      { postId: POST_B.id as PostId, tagId: BUG_TAG.id, autoTagged: true },
+      { postId: POST_B.id as PostId, tagId: BUG_TAG.id as PostTagId, autoTagged: true },
     ])
   })
 })
