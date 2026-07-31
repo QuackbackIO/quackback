@@ -13,6 +13,7 @@ export const ASSISTANT_CITATION_TYPES = [
   'ticket',
   'changelog',
   'document',
+  'webpage',
 ] as const
 
 export type AssistantCitationType = (typeof ASSISTANT_CITATION_TYPES)[number]

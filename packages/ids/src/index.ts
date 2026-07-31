@@ -127,6 +127,7 @@ export type {
   AssistantToolCallId,
   AssistantSnippetId,
   AssistantDocumentId,
+  AssistantWebSourceId,
   TicketId,
   TicketStatusId,
   TicketTypeId,

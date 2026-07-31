@@ -81,6 +81,7 @@ export const ID_PREFIXES = {
   assistant_tool_call: 'assistant_tool_call',
   assistant_snippet: 'assistant_snippet',
   assistant_document: 'assistant_document',
+  assistant_web_source: 'assistant_web_source',
   assistant_event: 'assistant_event',
 
   // Tickets (support platform §4.2)

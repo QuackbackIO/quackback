@@ -63,9 +63,9 @@ export type AssistantInvolvementTrigger = (typeof ASSISTANT_INVOLVEMENT_TRIGGERS
 export type AssistantInvolvementStatus = (typeof ASSISTANT_INVOLVEMENT_STATUSES)[number]
 export type AssistantHandoffReason = (typeof ASSISTANT_HANDOFF_REASONS)[number]
 
-/** One cited source captured on an involvement (a help-center article, a feedback post, an admin-curated snippet, a past-conversation summary, a closed ticket, a changelog entry, or an uploaded knowledge document). `type` mirrors ASSISTANT_CITATION_TYPES (apps/web citation-types.ts). */
+/** One cited source captured on an involvement (a help-center article, a feedback post, an admin-curated snippet, a past-conversation summary, a closed ticket, a changelog entry, an uploaded knowledge document, or an admin-added web page). `type` mirrors ASSISTANT_CITATION_TYPES (apps/web citation-types.ts). */
 export interface AssistantInvolvementSource {
-  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document'
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document' | 'webpage'
   id: string
   title?: string
   url?: string

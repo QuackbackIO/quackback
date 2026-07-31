@@ -162,7 +162,9 @@ export interface AssistantKnowledgeSnapshot {
  * (copilot only), `tickets → ticket` (copilot only), `changelog → changelog`.
  * Snippets have no per-agent toggle — they are curated assistant content, so
  * the snippets source is registered whenever the ceiling is team (Copilot) and
- * never on the public Agent turn.
+ * never on the public Agent turn. Web sources (admin-crawled public pages)
+ * likewise have no toggle: public by construction, so registered for both
+ * agents at every ceiling — an empty table simply retrieves nothing.
  */
 export function resolveAssistantKnowledgeSnapshot(
   agent: AssistantAgentKind,
@@ -173,6 +175,10 @@ export function resolveAssistantKnowledgeSnapshot(
   // Snippets: no per-agent toggle. Curated internal assistant content, so they
   // are available at the team ceiling always and never on a public turn.
   if (audience !== 'public') sources.add('snippet')
+  // Web sources: no per-agent toggle either. Admin-curated PUBLIC content
+  // (adding the URL is the opt-in; no rows means nothing to retrieve), so
+  // they serve both agents at every ceiling.
+  sources.add('webpage')
   switch (agent) {
     case 'agent': {
       const k = config.agents.agent.knowledge
@@ -208,6 +214,7 @@ const SOURCE_TYPE_PROMPT_LABELS: Record<AssistantCitationType, string> = {
   ticket: 'resolved ticket summaries',
   changelog: 'changelog entries',
   document: 'uploaded knowledge documents',
+  webpage: 'web pages the team has added',
 }
 
 /**
@@ -268,6 +275,9 @@ export async function resolveKnowledgeSources(
   }
   if (enabledSet.has('document')) {
     sources.push((await import('./documents-retrieval')).documentsKnowledgeSource)
+  }
+  if (enabledSet.has('webpage')) {
+    sources.push((await import('./web-sources-retrieval')).webpageKnowledgeSource)
   }
   return sources
 }

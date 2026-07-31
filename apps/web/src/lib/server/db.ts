@@ -391,6 +391,8 @@ export {
   // Schema tables - assistant knowledge documents
   assistantDocuments,
   assistantDocumentsRelations,
+  // Schema tables - assistant web sources
+  assistantWebSources,
   // Schema tables - assistant pending actions
   assistantPendingActions,
   ASSISTANT_PENDING_ACTION_STATUSES,
@@ -432,6 +434,7 @@ export type {
   AssistantPendingActionStatus,
   AssistantToolCallStatus,
   AssistantSnippet,
+  AssistantWebSource,
   ConversationSummary,
   MacroScope,
   MacroPriority,

@@ -663,7 +663,7 @@ export interface ConversationAttachment {
 // `type` mirrors ASSISTANT_CITATION_TYPES (apps/web citation-types.ts); a
 // standalone copy here so the db package owns no dependency on the app.
 export interface ConversationMessageCitation {
-  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document'
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document' | 'webpage'
   id: string
   title: string
   url: string

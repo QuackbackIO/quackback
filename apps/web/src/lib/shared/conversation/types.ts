@@ -103,8 +103,8 @@ export interface ConversationMessageCitation {
   // Mirrors ASSISTANT_CITATION_TYPES (citation-types.ts); a client-safe copy so
   // this shared type never imports the server domain leaf. 'ticket'/'changelog'
   // are copilot-only (team ceiling); customer-persisted turns only ever carry
-  // 'article'/'post'/'changelog'/'document'.
-  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document'
+  // 'article'/'post'/'changelog'/'document'/'webpage'.
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document' | 'webpage'
   id: string
   title: string
   url: string

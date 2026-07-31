@@ -29,7 +29,7 @@ export interface CopilotHistoryEntry {
 export interface CopilotCitation {
   // Mirrors ASSISTANT_CITATION_TYPES (citation-types.ts); a client-safe copy so
   // this shared contract never imports the server domain leaf.
-  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document'
+  type: 'article' | 'post' | 'snippet' | 'summary' | 'ticket' | 'changelog' | 'document' | 'webpage'
   id: string
   title: string
   url: string
