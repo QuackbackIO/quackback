@@ -1569,6 +1569,9 @@ function InboxPage() {
           disableSnooze={hasTicketTarget}
           disableTag={hasTicketTarget}
           disableMacro={hasTicketTarget}
+          spam={nav.kind === 'view' && nav.view === 'spam'}
+          onRestore={() => runConversationOnlyBulk({ type: 'restore_spam' }, 'Restored')}
+          onDeleteForever={() => runConversationOnlyBulk({ type: 'delete_forever' }, 'Deleted')}
         />
       )}
 

@@ -476,6 +476,22 @@ export async function sendVisitorMessage(
   // event instead of a direct call.
   void emitMessageCreated(actor, author, txResult.message, txResult.conversation, created)
 
+  // A brand-new conversation is a spam-classification candidate: the filter
+  // files only obvious spam (workspace-trusted senders bypass it), and every
+  // failure leaves the thread in triage. Fire-and-forget so a slow provider
+  // never delays the visitor's send.
+  if (created) {
+    void import('./conversation.spam-filter')
+      .then((m) =>
+        m.maybeAutoFileSpam(txResult.conversation.id, {
+          senderEmail: txResult.conversation.visitorEmail ?? null,
+          subject: null,
+          content: content || fallbackLabel,
+        })
+      )
+      .catch((err) => log.warn({ err }, 'spam classification failed'))
+  }
+
   // Quinn, out of band: a widget customer message may trigger an assistant turn.
   // Fire-and-forget with full error isolation so it never blocks or fails the
   // customer's send; the deep gate (respond flag, AI configured, silence rule)
@@ -1118,6 +1134,62 @@ export async function restoreConversationFromSpam(
   publishConversationUpdate(conversationId, dto)
   void emitConversationStatusChanged(actor, updated, existing.status)
   return dto
+}
+
+/**
+ * Spam-filter action: file a freshly created conversation as spam. Unlike
+ * endConversation this is system-initiated and quiet on the customer side —
+ * no 'Conversation ended' notice reaches the (presumed abusive) sender, only
+ * a team-only marker records the filing. Only a live, not-yet-ended thread is
+ * filed: an agent who already closed or ended the conversation has made a
+ * human decision the filter must not overwrite. Returns whether the filing
+ * happened, so the caller can tell a real filing from a skipped one.
+ */
+export async function autoFileConversationAsSpam(conversationId: ConversationId): Promise<boolean> {
+  const existing = await loadConversationOr404(conversationId)
+  if (existing.status === 'closed' || existing.endReason !== null) return false
+  const now = new Date()
+  const [updated] = await db
+    .update(conversations)
+    .set({
+      status: 'closed',
+      resolvedAt: now,
+      endReason: 'spam',
+      endNote: 'Auto-filed by the spam filter',
+      updatedAt: now,
+    })
+    .where(eq(conversations.id, conversationId))
+    .returning()
+  await emitSystemMessage(conversationId, 'Conversation auto-filed as spam', undefined, {
+    internal: true,
+  })
+  const dto = await conversationToDTO(updated, 'agent')
+  publishConversationUpdate(conversationId, dto)
+  void emitConversationStatusChanged(systemActor(), updated, existing.status)
+  log.info({ conversation_id: conversationId }, 'conversation auto-filed as spam')
+  return true
+}
+
+/**
+ * Agent action: permanently delete a spam-ended conversation. Hard delete —
+ * every child row (messages, participants, summaries, assignments, …) goes
+ * with it through the FK cascades, so this is irreversible by design: it
+ * exists for the Spam view's "delete forever", and only a conversation still
+ * marked spam may be deleted through it. A live or merely-closed thread is
+ * rejected loud — inbox hygiene never destroys a real customer thread.
+ */
+export async function deleteConversationPermanently(
+  conversationId: ConversationId,
+  actor: Actor
+): Promise<void> {
+  const decision = canActAsAgent(actor)
+  if (!decision.allowed) throw new ForbiddenError('FORBIDDEN', decision.reason)
+  const existing = await loadConversationOr404(conversationId)
+  if (existing.endReason !== 'spam') {
+    throw new ValidationError('VALIDATION_ERROR', 'Conversation is not marked as spam')
+  }
+  await db.delete(conversations).where(eq(conversations.id, conversationId))
+  log.info({ conversation_id: conversationId }, 'conversation permanently deleted')
 }
 
 /**

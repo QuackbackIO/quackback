@@ -37,8 +37,12 @@ vi.mock('../conversation.query', async (importOriginal) => ({
   conversationToDTO: vi.fn(async (row: { id: string }) => ({ id: row.id })),
 }))
 
-import { db, conversations, principal, user, eq, sql } from '@/lib/server/db'
-import { endConversation, restoreConversationFromSpam } from '../conversation.service'
+import { db, conversations, conversationMessages, principal, user, eq, sql } from '@/lib/server/db'
+import {
+  endConversation,
+  restoreConversationFromSpam,
+  deleteConversationPermanently,
+} from '../conversation.service'
 import { listConversationsForAgent } from '../conversation.query'
 
 let available = false
@@ -163,5 +167,37 @@ describe.skipIf(!available)('spam lifecycle', () => {
   it('restore rejects a conversation that was never marked spam', async () => {
     const id = await seedConversation()
     await expect(restoreConversationFromSpam(id, agentActor())).rejects.toThrow()
+  })
+
+  it('delete-forever removes a spam-ended conversation and its cascaded children', async () => {
+    const id = await seedConversation()
+    await db.insert(conversationMessages).values({
+      conversationId: id,
+      principalId: visitorPrincipalId,
+      senderType: 'visitor',
+      content: 'buy my stuff',
+    })
+    await endConversation(id, 'spam', null, agentActor())
+
+    await deleteConversationPermanently(id, agentActor())
+
+    const stored = await db.query.conversations.findFirst({ where: eq(conversations.id, id) })
+    expect(stored).toBeUndefined()
+    const messages = await db
+      .select({ id: conversationMessages.id })
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, id))
+    expect(messages).toEqual([])
+    const spam = await listConversationsForAgent({ spamOnly: true }, agentActor())
+    expect(spam.conversations.map((c) => c.id)).not.toContain(id)
+    // The row is gone, so the afterEach conversation delete is a harmless no-op.
+    conversationId = null
+  })
+
+  it('delete-forever rejects a conversation that is not marked spam', async () => {
+    const id = await seedConversation()
+    await expect(deleteConversationPermanently(id, agentActor())).rejects.toThrow()
+    const stored = await db.query.conversations.findFirst({ where: eq(conversations.id, id) })
+    expect(stored?.status).toBe('open')
   })
 })

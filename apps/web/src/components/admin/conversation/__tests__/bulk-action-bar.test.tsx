@@ -128,3 +128,35 @@ describe('BulkActionBar — macro control', () => {
     expect(screen.getByRole('button', { name: 'Macro' })).toBeDisabled()
   })
 })
+
+describe('BulkActionBar — spam mode', () => {
+  it('offers restore and delete-forever instead of the triage actions', () => {
+    renderBar({ spam: true, onRestore: () => {}, onDeleteForever: () => {} })
+
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete forever' })).toBeInTheDocument()
+    // Triage actions are meaningless on a spam-ended thread and stay hidden.
+    expect(screen.queryByRole('button', { name: 'Assign' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Priority' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Snooze' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+  })
+
+  it('reports a restore for the whole selection', async () => {
+    const onRestore = vi.fn()
+    renderBar({ spam: true, onRestore, onDeleteForever: () => {} })
+    await userEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    expect(onRestore).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks for confirmation before deleting forever', async () => {
+    const onDeleteForever = vi.fn()
+    renderBar({ spam: true, count: 2, onRestore: () => {}, onDeleteForever })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }))
+    // Not yet: a hard delete must be a two-step act.
+    expect(onDeleteForever).not.toHaveBeenCalled()
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }))
+    expect(onDeleteForever).toHaveBeenCalledTimes(1)
+  })
+})

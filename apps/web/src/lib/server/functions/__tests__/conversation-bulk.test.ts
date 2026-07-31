@@ -40,6 +40,8 @@ const hoisted = vi.hoisted(() => ({
   setConversationStatus: vi.fn(),
   snoozeConversation: vi.fn(),
   sendAgentMessage: vi.fn(),
+  restoreConversationFromSpam: vi.fn(),
+  deleteConversationPermanently: vi.fn(),
   assertRequiredAttributesForClose: vi.fn(),
   attachTag: vi.fn(),
   getMacro: vi.fn(),
@@ -88,6 +90,8 @@ vi.mock('@/lib/server/domains/conversation/conversation.service', () => ({
   setConversationStatus: hoisted.setConversationStatus,
   snoozeConversation: hoisted.snoozeConversation,
   sendAgentMessage: hoisted.sendAgentMessage,
+  restoreConversationFromSpam: hoisted.restoreConversationFromSpam,
+  deleteConversationPermanently: hoisted.deleteConversationPermanently,
 }))
 
 vi.mock('@/lib/server/domains/macros', () => ({
@@ -134,6 +138,8 @@ beforeEach(() => {
   hoisted.setConversationStatus.mockResolvedValue({})
   hoisted.snoozeConversation.mockResolvedValue({})
   hoisted.sendAgentMessage.mockResolvedValue({})
+  hoisted.restoreConversationFromSpam.mockResolvedValue({})
+  hoisted.deleteConversationPermanently.mockResolvedValue(undefined)
   hoisted.assertRequiredAttributesForClose.mockResolvedValue(undefined)
   hoisted.attachTag.mockResolvedValue([])
   hoisted.getMacro.mockResolvedValue({
@@ -498,5 +504,62 @@ describe('bulkUpdateConversationsFn — macro reply', () => {
       { id: 'conversation_c2', reason: 'Macro not found' },
     ])
     expect(hoisted.sendAgentMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('bulkUpdateConversationsFn — spam bulk actions', () => {
+  it('routes restore_spam to restoreConversationFromSpam for every item', async () => {
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2'],
+      action: { type: 'restore_spam' },
+    })
+    expect(result).toEqual({ succeeded: ['conversation_c1', 'conversation_c2'], failed: [] })
+    expect(hoisted.restoreConversationFromSpam).toHaveBeenCalledTimes(2)
+    expect(hoisted.restoreConversationFromSpam).toHaveBeenNthCalledWith(1, 'conversation_c1', ACTOR)
+    expect(hoisted.restoreConversationFromSpam).toHaveBeenNthCalledWith(2, 'conversation_c2', ACTOR)
+  })
+
+  it('routes delete_forever to deleteConversationPermanently with per-item isolation', async () => {
+    hoisted.deleteConversationPermanently.mockImplementation(async (id: string) => {
+      if (id === 'conversation_c2') throw new Error('Conversation is not marked as spam')
+    })
+    const result = await call({
+      conversationIds: ['conversation_c1', 'conversation_c2', 'conversation_c3'],
+      action: { type: 'delete_forever' },
+    })
+    expect(result.succeeded).toEqual(['conversation_c1', 'conversation_c3'])
+    expect(result.failed).toEqual([
+      { id: 'conversation_c2', reason: 'Conversation is not marked as spam' },
+    ])
+    expect(hoisted.deleteConversationPermanently).toHaveBeenCalledTimes(3)
+  })
+
+  it('gates restore_spam on conversation.set_status (a member may restore)', async () => {
+    hoisted.requireAuth.mockResolvedValue({
+      ...AUTH,
+      principal: { ...AUTH.principal, role: 'member' as const },
+    })
+    const res = await call({
+      conversationIds: ['conversation_c1'],
+      action: { type: 'restore_spam' },
+    })
+    expect(res.succeeded).toEqual(['conversation_c1'])
+    expect(hoisted.restoreConversationFromSpam).toHaveBeenCalledTimes(1)
+  })
+
+  it('gates delete_forever on conversation.manage, not set_status', async () => {
+    // 'member' holds set_status but deliberately NOT conversation.manage (the
+    // destructive permission), so a status-only agent cannot bulk-delete.
+    const held = permissionsForLegacyRole('member')
+    expect(held.has(PERMISSIONS.CONVERSATION_SET_STATUS)).toBe(true)
+    if (held.has(PERMISSIONS.CONVERSATION_MANAGE)) return // premise guard
+    hoisted.requireAuth.mockResolvedValue({
+      ...AUTH,
+      principal: { ...AUTH.principal, role: 'member' as const },
+    })
+    await expect(
+      call({ conversationIds: ['conversation_c1'], action: { type: 'delete_forever' } })
+    ).rejects.toThrow(/conversation\.manage/)
+    expect(hoisted.deleteConversationPermanently).not.toHaveBeenCalled()
   })
 })

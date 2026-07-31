@@ -1389,6 +1389,10 @@ const bulkConversationActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('tag'), tagId: z.string() }),
   z.object({ type: z.literal('close') }),
   z.object({ type: z.literal('reopen') }),
+  // Spam-view actions: restore returns a spam-ended thread to the open queue;
+  // delete_forever hard-deletes it (spam-ended only — the service enforces).
+  z.object({ type: z.literal('restore_spam') }),
+  z.object({ type: z.literal('delete_forever') }),
   // Reply with a macro: the body is rendered against each conversation's own
   // visitor context and posted as an agent reply, then the macro's bundled
   // actions run (mirrors applyMacroFn's render + apply, sent immediately).
@@ -1412,6 +1416,10 @@ function permissionForBulkAction(type: BulkConversationAction['type']) {
   if (type === 'assign' || type === 'assign_team') return PERMISSIONS.CONVERSATION_ASSIGN
   if (type === 'tag') return PERMISSIONS.CONVERSATION_SET_TAGS
   if (type === 'macro') return PERMISSIONS.CONVERSATION_REPLY
+  // A permanent delete is destructive — gated on conversation.manage, the
+  // catalogue's delete permission, not on the status permission a restore
+  // legitimately rides.
+  if (type === 'delete_forever') return PERMISSIONS.CONVERSATION_MANAGE
   return PERMISSIONS.CONVERSATION_SET_STATUS
 }
 
@@ -1439,6 +1447,8 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
       setConversationStatus,
       snoozeConversation,
       sendAgentMessage,
+      restoreConversationFromSpam,
+      deleteConversationPermanently,
     } = await import('@/lib/server/domains/conversation/conversation.service')
     const { assertRequiredAttributesForClose } =
       await import('@/lib/server/domains/conversation-attributes/close-guard')
@@ -1512,6 +1522,10 @@ export const bulkUpdateConversationsFn = createServerFn({ method: 'POST' })
           }
         case 'reopen':
           return (id) => setConversationStatus(id, 'open', actor)
+        case 'restore_spam':
+          return (id) => restoreConversationFromSpam(id, actor)
+        case 'delete_forever':
+          return (id) => deleteConversationPermanently(id, actor)
       }
     })()
 
