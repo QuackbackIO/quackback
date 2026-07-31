@@ -42,6 +42,7 @@ import { PERMISSIONS } from '@/lib/shared/permissions'
 import { officeHoursScheduleSchema } from '@/lib/server/domains/settings/settings.office-hours'
 import { changelogSettingsSchema } from '@/lib/shared/changelog-settings'
 import { workflowAbandonedAutoCloseSchema } from '@/lib/shared/workflows/abandoned-auto-close'
+import { MAX_TRUSTED_SENDERS } from '@/lib/shared/trusted-senders'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'settings' })
@@ -959,6 +960,32 @@ export const updateWorkflowAbandonedAutoCloseFn = createServerFn({ method: 'POST
     const { updateWorkflowAbandonedAutoCloseSettings } =
       await import('@/lib/server/domains/settings/settings.workflows')
     return await updateWorkflowAbandonedAutoCloseSettings(data)
+  })
+
+// ============================================
+// Spam-Filter Trusted Senders
+// ============================================
+
+const updateSpamFilterConfigSchema = z.object({
+  trustedSenders: z.array(z.string().max(320)).max(MAX_TRUSTED_SENDERS),
+})
+
+/** The spam filter's trusted-sender list (admin read, for the settings UI). */
+export const getSpamFilterConfigFn = createServerFn({ method: 'GET' }).handler(async () => {
+  log.debug('get spam filter config')
+  await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+  const { getSpamFilterConfig } = await import('@/lib/server/domains/settings/settings.spam')
+  return await getSpamFilterConfig()
+})
+
+/** Replace the trusted-sender list wholesale (add/remove are list rewrites). */
+export const updateSpamFilterConfigFn = createServerFn({ method: 'POST' })
+  .validator(updateSpamFilterConfigSchema)
+  .handler(async ({ data }) => {
+    log.info({ trusted_count: data.trustedSenders.length }, 'update spam filter config')
+    await requireAuth({ permission: PERMISSIONS.SETTINGS_MANAGE })
+    const { updateSpamFilterConfig } = await import('@/lib/server/domains/settings/settings.spam')
+    return await updateSpamFilterConfig(data)
   })
 
 // ============================================

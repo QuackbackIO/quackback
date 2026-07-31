@@ -8,7 +8,10 @@
  */
 import { db, eq, settings } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
+import { MAX_TRUSTED_SENDERS, normalizeTrustedSenderEntry } from '@/lib/shared/trusted-senders'
 import { invalidateSettingsCache, requireSettings } from './settings.helpers'
+
+export { MAX_TRUSTED_SENDERS }
 
 const log = logger.child({ component: 'settings-spam' })
 
@@ -19,26 +22,6 @@ export interface SpamFilterConfig {
 }
 
 export const DEFAULT_SPAM_FILTER_CONFIG: SpamFilterConfig = { trustedSenders: [] }
-
-/** Cap on list size — the match runs on every inbound message, and an
- *  unbounded list only ever grows by operator mistake. */
-export const MAX_TRUSTED_SENDERS = 500
-
-/** Normalize one entry: trimmed, lower-cased, and plausibly an address or a
- *  domain. Anything else is dropped rather than stored to match nothing. */
-function normalizeTrustedSenderEntry(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null
-  const entry = raw.trim().toLowerCase()
-  if (!entry || entry.length > 320 || /\s/.test(entry)) return null
-  const bare = entry.startsWith('@') ? entry.slice(1) : entry
-  // A domain entry is dot-separated labels; an address entry adds a local part.
-  if (
-    !/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(bare) &&
-    !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(bare)
-  )
-    return null
-  return entry
-}
 
 /** Parse the stored JSON, tolerating missing/malformed data as "no trust list". */
 export function parseSpamFilterConfig(json: string | null): SpamFilterConfig {
