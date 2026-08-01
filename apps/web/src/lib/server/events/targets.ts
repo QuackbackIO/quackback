@@ -325,7 +325,13 @@ async function getIntegrationTargets(
     targets.push({
       type: m.integrationType,
       target: { channelId },
-      config: { accessToken, rootUrl: context.portalBaseUrl },
+      config: {
+      accessToken,
+      rootUrl: context.portalBaseUrl,
+      ...(m.integrationType === 'trello'
+        ? { apiKey: process.env.TRELLO_API_KEY }
+        : {}),
+	},
     })
   }
 

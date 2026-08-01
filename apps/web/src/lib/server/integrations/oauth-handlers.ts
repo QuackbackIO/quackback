@@ -23,6 +23,7 @@ import {
   isValidTenantDomain,
 } from './oauth'
 import { logger } from '@/lib/server/logger'
+import { trelloFragmentBridgeResponse } from './trello/fragment-bridge'
 
 const log = logger.child({ component: 'oauth' })
 
@@ -109,7 +110,7 @@ export async function handleOAuthConnect(
 }
 
 /**
- * Handle the OAuth callback (GET /oauth/:integration/callback)
+ * Handle the OAuth callback (GET/POST /oauth/:integration/callback)
  */
 export async function handleOAuthCallback(
   request: Request,
@@ -121,15 +122,22 @@ export async function handleOAuthCallback(
     return Response.json({ error: 'Unknown integration' }, { status: 404 })
   }
 
+  if (request.method === 'POST' && integrationType !== 'trello') {
+    return Response.json(
+      { error: 'Method not allowed' },
+      { status: 405, headers: { Allow: 'GET' } }
+    )
+  }
+
   const settingsPath = definition.catalog.settingsPath
   const errorUrl = (base: string, reason: string) =>
     buildSettingsUrl(base, settingsPath, integrationType, 'error', reason)
 
   const url = new URL(request.url)
-  const code = url.searchParams.get('code')
+  let code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
   const errorParam = definition.oauth.errorParam ?? 'error'
-  const providerError = url.searchParams.get(errorParam)
+  let providerError = url.searchParams.get(errorParam)
 
   const stateData = verifyOAuthState<OAuthState>(state || '')
   if (!stateData || stateData.type !== definition.oauth.stateType) {
@@ -145,6 +153,29 @@ export async function handleOAuthCallback(
 
   if (!isValidTenantDomain(returnDomain)) {
     return redirectResponse(errorUrl(FALLBACK_URL, 'invalid_tenant'))
+  }
+
+  // Trello's fragment callback keeps the long-lived access token out of the
+  // HTTP request. The bridge page reads it in the browser and POSTs it back so
+  // it never appears in the callback query string or reverse-proxy access log.
+  if (integrationType === 'trello' && request.method === 'GET' && !code && !providerError) {
+    return trelloFragmentBridgeResponse()
+  }
+
+  if (request.method === 'POST') {
+    try {
+      const contentType = request.headers.get('content-type') || ''
+      if (!contentType.startsWith('application/x-www-form-urlencoded')) {
+        return redirectResponse(errorUrl(tenantUrl, 'invalid_request'))
+      }
+      const formData = await request.formData()
+      const postedCode = formData.get('code')
+      const postedError = formData.get(errorParam)
+      code = typeof postedCode === 'string' ? postedCode : code
+      providerError = typeof postedError === 'string' ? postedError : providerError
+    } catch {
+      return redirectResponse(errorUrl(tenantUrl, 'invalid_request'))
+    }
   }
 
   if (providerError) {
