@@ -36,11 +36,12 @@ async function azureDevOpsApi(
 
   if (!response.ok) {
     const status = response.status
-    if (status === 401) throw Object.assign(new Error('Unauthorized'), { status })
-    if (status === 403) throw Object.assign(new Error('Forbidden'), { status })
-    if (status === 429) throw Object.assign(new Error('Rate limited'), { status })
-    if (status >= 500) throw Object.assign(new Error(`Server error ${status}`), { status })
-    throw Object.assign(new Error(`HTTP ${status}`), { status })
+    const detail = await response.text().catch(() => '')
+    if (status === 401) throw Object.assign(new Error('Unauthorized'), { status, detail })
+    if (status === 403) throw Object.assign(new Error('Forbidden'), { status, detail })
+    if (status === 429) throw Object.assign(new Error('Rate limited'), { status, detail })
+    if (status >= 500) throw Object.assign(new Error(`Server error ${status}`), { status, detail })
+    throw Object.assign(new Error(`HTTP ${status}: ${detail}`), { status, detail })
   }
 
   return response
@@ -89,14 +90,34 @@ export async function createWorkItem(
   organization: string,
   project: string,
   type: string,
-  fields: { title: string; description: string }
+  fields: { title: string; description: string; postUrl: string; parentId?: number }
 ): Promise<CreateWorkItemResult> {
   const url = `https://dev.azure.com/${encodeURIComponent(organization)}/${encodeURIComponent(project)}/_apis/wit/workitems/$${encodeURIComponent(type)}?api-version=7.1`
 
-  const patchBody = [
+  const patchBody: Array<Record<string, unknown>> = [
     { op: 'add', path: '/fields/System.Title', value: fields.title },
     { op: 'add', path: '/fields/System.Description', value: fields.description },
+    {
+      op: 'add',
+      path: '/relations/-',
+      value: {
+        rel: 'Hyperlink',
+        url: fields.postUrl,
+        attributes: { comment: 'Quackback idea' },
+      },
+    },
   ]
+
+  if (fields.parentId) {
+    patchBody.push({
+      op: 'add',
+      path: '/relations/-',
+      value: {
+        rel: 'System.LinkTypes.Hierarchy-Reverse',
+        url: `https://dev.azure.com/${encodeURIComponent(organization)}/_apis/wit/workitems/${fields.parentId}`,
+      },
+    })
+  }
 
   const response = await azureDevOpsApi('POST', url, pat, patchBody)
   const data = (await response.json()) as { id: number; _links: { html: { href: string } } }

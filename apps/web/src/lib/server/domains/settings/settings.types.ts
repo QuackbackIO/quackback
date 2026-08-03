@@ -243,6 +243,19 @@ export interface PortalAccessConfig {
 }
 
 /**
+ * External bug-tracker hint shown on the feedback form when the typed title
+ * matches a trigger keyword. Off by default — self-hosters opt in with their
+ * own tracker URL. Keywords match as a leading word-boundary substring (see
+ * matchesBugTrackerKeywords), so "issue" also matches "issues"/"issued" but
+ * not "tissue", and "bug" doesn't match inside "debug".
+ */
+export interface PortalBugTrackerConfig {
+  enabled: boolean
+  url: string
+  keywords: string[]
+}
+
+/**
  * Portal configuration
  * Controls the public feedback portal behavior
  */
@@ -257,6 +270,8 @@ export interface PortalConfig {
   access?: PortalAccessConfig
   /** Support tab (conversations on the portal). Optional — absent = disabled. */
   support?: PortalSupportConfig
+  /** External bug-tracker hint on the feedback form. Optional — absent = disabled. */
+  bugTracker?: PortalBugTrackerConfig
 }
 
 /**
@@ -285,6 +300,7 @@ export const DEFAULT_PORTAL_CONFIG: PortalConfig = {
   moderationDefault: { requireApproval: 'none' },
   access: { visibility: 'public', allowedDomains: [], widgetSignIn: false, allowedSegmentIds: [] },
   support: { enabled: false },
+  bugTracker: { enabled: false, url: '', keywords: ['bug', 'issue'] },
 }
 
 /**
@@ -615,6 +631,7 @@ export interface UpdatePortalConfigInput {
   moderationDefault?: ModerationDefault
   access?: Partial<PortalAccessConfig>
   support?: Partial<PortalSupportConfig>
+  bugTracker?: Partial<PortalBugTrackerConfig>
 }
 
 // =============================================================================
@@ -653,6 +670,8 @@ export interface PublicPortalConfig {
    * CTA. `allowedDomains` remains server-only.
    */
   portalAccess?: { isPrivate: boolean; widgetSignIn: boolean }
+  /** Bug-tracker hint for the feedback form. Absent = disabled. */
+  bugTracker?: { url: string; keywords: string[] }
 }
 
 // =============================================================================

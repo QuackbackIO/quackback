@@ -82,7 +82,9 @@ export async function changeStatus(
       boardSlug: board.slug,
     },
     previousStatusName,
-    newStatus.name
+    newStatus.name,
+    prevStatus?.slug ?? 'open',
+    newStatus.slug
   )
 
   createActivity({

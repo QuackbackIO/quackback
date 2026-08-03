@@ -93,6 +93,9 @@ export interface PostStatusChangedPayload {
   post: EventPostRef
   previousStatus: string
   newStatus: string
+  /** Stable identifiers (names are editable) so consumers can match a status across renames. */
+  previousStatusSlug: string
+  newStatusSlug: string
 }
 
 export interface CommentCreatedPayload {

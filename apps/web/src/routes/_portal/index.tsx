@@ -64,6 +64,7 @@ export const Route = createFileRoute('/_portal/')({
     // Per-board vote/submit gating is server-computed (portalData.boardPermissions);
     // the feed and header read it per board instead of a workspace-wide flag.
     const welcomeCard = org.publicPortalConfig?.welcomeCard
+    const bugTracker = org.publicPortalConfig?.bugTracker
 
     return {
       org,
@@ -71,6 +72,7 @@ export const Route = createFileRoute('/_portal/')({
       isEmpty: portalData.boards.length === 0,
       session,
       welcomeCard,
+      bugTracker,
     }
   },
   head: ({ loaderData }) => {
@@ -99,7 +101,7 @@ function PublicPortalPage() {
   const intl = useIntl()
   const loaderData = Route.useLoaderData()
   const search = Route.useSearch()
-  const { org, session, welcomeCard } = loaderData
+  const { org, session, welcomeCard, bugTracker } = loaderData
 
   // Read filters directly from URL for instant updates
   const currentBoard = search.board
@@ -180,6 +182,7 @@ function PublicPortalPage() {
         user={user}
         boardPermissions={portalData.boardPermissions}
         welcomeCard={welcomeCard}
+        bugTracker={bugTracker}
       />
     </div>
   )

@@ -11,6 +11,7 @@ import {
   DEFAULT_PORTAL_CONFIG,
   PORTAL_WELCOME_CARD_TITLE_MAX,
   type PortalWelcomeCard,
+  type PortalBugTrackerConfig,
 } from './settings.types'
 
 const log = logger.child({ component: 'settings-helpers' })
@@ -136,6 +137,49 @@ export function normalizeWelcomeCardInput(
   }
   if (input.body !== undefined) {
     normalized.body = sanitizeTiptapContent(input.body)
+  }
+  return normalized
+}
+
+/**
+ * Project a stored bug-tracker config for public consumption. Disabled or
+ * blank-URL configs must not leak through the public portal config endpoint.
+ *
+ * @internal
+ */
+export function publicBugTracker(
+  config: PortalBugTrackerConfig | undefined
+): { url: string; keywords: string[] } | undefined {
+  if (!config?.enabled || !config.url.trim()) return undefined
+  return { url: config.url, keywords: config.keywords }
+}
+
+/**
+ * Normalize a partial `bugTracker` update before it's merged into stored
+ * portalConfig. Trims the URL and de-dupes/trims/drops-empty keywords so
+ * `deepMerge`'s wholesale array replace always stores a clean list.
+ *
+ * @internal
+ */
+export function normalizeBugTrackerInput(
+  input: Partial<PortalBugTrackerConfig> | undefined
+): Partial<PortalBugTrackerConfig> | undefined {
+  if (!input) return input
+  const normalized: Partial<PortalBugTrackerConfig> = { ...input }
+  if (typeof input.url === 'string') {
+    normalized.url = input.url.trim()
+  }
+  if (input.keywords) {
+    const seen = new Set<string>()
+    normalized.keywords = input.keywords.reduce<string[]>((acc, kw) => {
+      const trimmed = kw.trim()
+      const key = trimmed.toLowerCase()
+      if (trimmed && !seen.has(key)) {
+        seen.add(key)
+        acc.push(trimmed)
+      }
+      return acc
+    }, [])
   }
   return normalized
 }

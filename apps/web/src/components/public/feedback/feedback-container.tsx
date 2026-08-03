@@ -48,6 +48,8 @@ interface FeedbackContainerProps {
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
   /** Welcome card to render above the post list. Undefined / disabled = hidden. */
   welcomeCard?: PortalWelcomeCardData
+  /** External bug-tracker hint for the feedback form. Undefined / disabled = hidden. */
+  bugTracker?: { url: string; keywords: string[] }
 }
 
 export function FeedbackContainer({
@@ -66,6 +68,7 @@ export function FeedbackContainer({
   user,
   boardPermissions,
   welcomeCard,
+  bugTracker,
 }: FeedbackContainerProps): React.ReactElement {
   const intl = useIntl()
   const router = useRouter()
@@ -230,6 +233,7 @@ export function FeedbackContainer({
             defaultBoardId={boardIdForCreate}
             user={effectiveUser}
             boardPermissions={boardPermissions}
+            bugTracker={bugTracker}
             onPostCreated={handlePostCreated}
           />
 

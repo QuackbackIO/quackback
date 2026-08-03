@@ -158,6 +158,8 @@ export async function createComment(
   let comment: Comment
   let previousStatusName: string | null = null
   let newStatusName: string | null = null
+  let previousStatusSlug: string | null = null
+  let newStatusSlug: string | null = null
 
   if (shouldChangeStatus) {
     // Fetch new status and current post status in parallel
@@ -174,6 +176,8 @@ export async function createComment(
 
     previousStatusName = prevStatus?.name ?? 'Open'
     newStatusName = newStatus.name
+    previousStatusSlug = prevStatus?.slug ?? 'open'
+    newStatusSlug = newStatus.slug
 
     // Atomic transaction: insert comment + update post status + conditionally increment comment count
     const result = await db.transaction(async (tx) => {
@@ -308,7 +312,7 @@ export async function createComment(
     )
 
     // Dispatch status change event if status was changed
-    if (shouldChangeStatus && previousStatusName && newStatusName) {
+    if (shouldChangeStatus && previousStatusName && newStatusName && newStatusSlug) {
       await dispatchPostStatusChanged(
         buildEventActor(author),
         {
@@ -318,7 +322,9 @@ export async function createComment(
           boardSlug: board.slug,
         },
         previousStatusName,
-        newStatusName
+        newStatusName,
+        previousStatusSlug ?? 'open',
+        newStatusSlug
       )
     }
   }

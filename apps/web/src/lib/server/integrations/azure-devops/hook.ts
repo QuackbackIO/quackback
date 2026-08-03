@@ -1,6 +1,6 @@
 /**
  * Azure DevOps hook handler.
- * Creates work items when feedback events occur.
+ * Creates a work item when a post's status changes to "Planned".
  */
 
 import type { HookHandler, HookResult } from '../../events/hook-types'
@@ -12,6 +12,9 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'azure-devops' })
 
+/** Slug of the status that triggers work item creation (stable across renames of "Planned"). */
+const TARGET_STATUS_SLUG = 'planned'
+
 export interface AzureDevOpsTarget {
   channelId: string // "projectName:workItemType"
 }
@@ -21,14 +24,19 @@ export interface AzureDevOpsConfig {
   organizationUrl: string
   organizationName: string
   rootUrl: string
+  /** Work item ID to file created items under, as configured in integration settings. */
+  parentWorkItemId?: string
 }
 
 export const azureDevOpsHook: HookHandler = {
   async run(event: EventData, target: unknown, config: unknown): Promise<HookResult> {
     const { channelId } = target as AzureDevOpsTarget
-    const { accessToken, organizationName, rootUrl } = config as AzureDevOpsConfig
+    const { accessToken, organizationName, rootUrl, parentWorkItemId } = config as AzureDevOpsConfig
+    const parsedParentId = parentWorkItemId ? Number(parentWorkItemId) : NaN
+    const parentId =
+      Number.isFinite(parsedParentId) && parsedParentId > 0 ? parsedParentId : undefined
 
-    if (event.type !== 'post.created') {
+    if (event.type !== 'post.status_changed' || event.data.newStatusSlug !== TARGET_STATUS_SLUG) {
       return { success: true }
     }
 
@@ -46,12 +54,14 @@ export const azureDevOpsHook: HookHandler = {
       'creating work item'
     )
 
-    const { title, description } = buildAzureDevOpsWorkItemBody(event, rootUrl)
+    const { title, description, postUrl } = buildAzureDevOpsWorkItemBody(event, rootUrl)
 
     try {
       const result = await createWorkItem(accessToken, organizationName, project, workItemType, {
         title,
         description,
+        postUrl,
+        parentId,
       })
 
       log.info({ work_item_id: result.id }, 'work item created')
