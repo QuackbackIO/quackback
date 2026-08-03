@@ -15,10 +15,10 @@ import {
   getPendingMergeSuggestionSummary,
   getMergeSuggestionCountsForPosts,
 } from '@/lib/server/domains/merge-suggestions/merge-suggestion.service'
+import { toIsoString } from '@/lib/shared/utils'
+
 import { logger } from '@/lib/server/logger'
-
 const log = logger.child({ component: 'merge-suggestions' })
-
 // ============================================
 // Server Functions
 // ============================================
@@ -39,7 +39,7 @@ export const getMergeSuggestionsForPostFn = createServerFn({ method: 'GET' })
       const suggestions = await getPendingSuggestionsForPost(data.postId as PostId)
       return suggestions.map((s) => ({
         ...s,
-        createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
+        createdAt: toIsoString(s.createdAt),
       }))
     } catch (error) {
       log.error({ err: error }, 'get merge suggestions for post failed')

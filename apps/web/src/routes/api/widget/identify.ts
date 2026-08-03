@@ -19,6 +19,7 @@ import { getWidgetConfig, getWidgetSecret } from '@/lib/server/domains/settings/
 import { getAllUserVotedPostIds } from '@/lib/server/domains/posts/post.public'
 import { getPublicUrlOrNull } from '@/lib/server/storage/s3'
 import { resolveAndMergeAnonymousToken } from '@/lib/server/auth/identify-merge'
+import { linkContactForWidgetUser } from '@/lib/server/auth/link-contact'
 import { verifyHS256JWT } from '@/lib/server/widget/identity-token'
 import {
   validateAndCoerceAttributes,
@@ -426,6 +427,17 @@ export const Route = createFileRoute('/api/widget/identify')({
           getAllUserVotedPostIds(principalId),
         ])
         const votedPostIds = Array.from(votedPostIdSet)
+
+        // Best-effort: link this widget user to a CRM contact when their
+        // identity was cryptographically verified via ssoToken. This is what
+        // lets later widget requests (e.g. ticket list/detail) authorise on
+        // requesterContactId. Unverified identifies are skipped because their
+        // email is attacker-spoofable.
+        await linkContactForWidgetUser({
+          userId,
+          email: identified.email,
+          verified: body.ssoToken !== undefined,
+        })
 
         // Record HMAC-verification provenance for this session. The
         // widget-handoff route reads this to decide whether to grant

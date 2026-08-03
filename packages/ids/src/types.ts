@@ -49,6 +49,21 @@ export type RoadmapId = TypeId<'roadmap'>
 /** Changelog entry ID - e.g., changelog_01h455vb4pex5vsknk084sn02q */
 export type ChangelogId = TypeId<'changelog'>
 
+/** Changelog category ID - e.g., changelog_cat_01h455vb4pex5vsknk084sn02q */
+export type ChangelogCategoryId = TypeId<'changelog_cat'>
+
+/** Changelog product ID - e.g., changelog_prod_01h455vb4pex5vsknk084sn02q */
+export type ChangelogProductId = TypeId<'changelog_prod'>
+
+/** Per-segment changelog visibility override ID - e.g., clseg_vis_01h455vb4pex5vsknk084sn02q */
+export type ChangelogSegmentVisibilityId = TypeId<'clseg_vis'>
+
+/** Widget application ID - e.g., widget_app_01h455vb4pex5vsknk084sn02q */
+export type WidgetApplicationId = TypeId<'widget_app'>
+
+/** Widget environment profile ID - e.g., widget_profile_01h455vb4pex5vsknk084sn02q */
+export type WidgetProfileId = TypeId<'widget_profile'>
+
 /** Support-inbox conversation ID - e.g., conversation_01h455vb4pex5vsknk084sn02q */
 export type ConversationId = TypeId<'conversation'>
 
@@ -212,6 +227,116 @@ export type ApiKeyId = TypeId<'api_key'>
 export type WebhookId = TypeId<'webhook'>
 
 // ============================================
+// Ticketing — RBAC, teams, audit (Phase 1)
+// ============================================
+
+/** Team ID - e.g., team_01h455vb4pex5vsknk084sn02q */
+export type TeamId = TypeId<'team'>
+
+/** Team membership ID - e.g., team_member_01h455vb4pex5vsknk084sn02q */
+export type TeamMembershipId = TypeId<'team_member'>
+
+/** Role ID - e.g., role_01h455vb4pex5vsknk084sn02q */
+export type RoleId = TypeId<'role'>
+
+/** Permission ID - e.g., perm_01h455vb4pex5vsknk084sn02q */
+export type PermissionId = TypeId<'perm'>
+
+/** Role-permission grant ID - e.g., role_perm_01h455vb4pex5vsknk084sn02q */
+export type RolePermissionId = TypeId<'role_perm'>
+
+/** Principal role assignment ID - e.g., role_asgn_01h455vb4pex5vsknk084sn02q */
+export type RoleAssignmentId = TypeId<'role_asgn'>
+
+/** Audit event ID - e.g., audit_01h455vb4pex5vsknk084sn02q */
+export type AuditEventId = TypeId<'audit'>
+
+// ============================================
+// Ticketing — Phase 2: organizations & contacts
+// ============================================
+
+/** Organization ID - e.g., org_01h455vb4pex5vsknk084sn02q */
+export type OrganizationId = TypeId<'org'>
+
+/** Contact ID - e.g., contact_01h455vb4pex5vsknk084sn02q */
+export type ContactId = TypeId<'contact'>
+
+/** Contact ↔ portal user link ID - e.g., cu_link_01h455vb4pex5vsknk084sn02q */
+export type ContactUserLinkId = TypeId<'cu_link'>
+
+// ============================================
+// Ticketing — Phase 3: ticket core
+// ============================================
+
+/** Ticket ID - e.g., ticket_01h455vb4pex5vsknk084sn02q */
+export type TicketId = TypeId<'ticket'>
+
+/** Ticket status ID - e.g., ticket_status_01h455vb4pex5vsknk084sn02q */
+export type TicketStatusId = TypeId<'ticket_status'>
+
+/** Ticket thread (message) ID - e.g., ticket_thread_01h455vb4pex5vsknk084sn02q */
+export type TicketThreadId = TypeId<'ticket_thread'>
+
+/** Ticket attachment ID - e.g., ticket_att_01h455vb4pex5vsknk084sn02q */
+export type TicketAttachmentId = TypeId<'ticket_att'>
+
+/** Ticket participant (watcher/collaborator/cc) ID - e.g., ticket_part_01h455vb4pex5vsknk084sn02q */
+export type TicketParticipantId = TypeId<'ticket_part'>
+
+/** Ticket share grant ID - e.g., ticket_share_01h455vb4pex5vsknk084sn02q */
+export type TicketShareId = TypeId<'ticket_share'>
+
+/** Ticket activity event ID - e.g., ticket_act_01h455vb4pex5vsknk084sn02q */
+export type TicketActivityId = TypeId<'ticket_act'>
+
+// ============================================
+// Ticketing — Inboxes, channels, routing (Phase 4)
+// ============================================
+
+/** Inbox ID - e.g., inbox_01h455vb4pex5vsknk084sn02q */
+export type InboxId = TypeId<'inbox'>
+
+/** Inbox channel ID - e.g., inbox_ch_01h455vb4pex5vsknk084sn02q */
+export type InboxChannelId = TypeId<'inbox_ch'>
+
+/** Inbox membership ID - e.g., inbox_mem_01h455vb4pex5vsknk084sn02q */
+export type InboxMembershipId = TypeId<'inbox_mem'>
+
+/** Routing rule ID - e.g., route_rule_01h455vb4pex5vsknk084sn02q */
+export type RoutingRuleId = TypeId<'route_rule'>
+
+// ============================================
+// Ticketing — SLA + escalations (Phase 5)
+// ============================================
+
+/** Business hours calendar ID - e.g., bizhrs_01h455vb4pex5vsknk084sn02q */
+export type BusinessHoursId = TypeId<'bizhrs'>
+
+/** SLA policy ID - e.g., sla_pol_01h455vb4pex5vsknk084sn02q */
+export type SlaPolicyId = TypeId<'sla_pol'>
+
+/** SLA target ID - e.g., sla_tgt_01h455vb4pex5vsknk084sn02q */
+export type SlaTargetId = TypeId<'sla_tgt'>
+
+/** Per-ticket SLA clock ID - e.g., sla_clk_01h455vb4pex5vsknk084sn02q */
+export type TicketSlaClockId = TypeId<'sla_clk'>
+
+/** Escalation rule ID - e.g., esc_rule_01h455vb4pex5vsknk084sn02q */
+export type EscalationRuleId = TypeId<'esc_rule'>
+
+/** SLA escalation log entry ID - e.g., esc_log_01h455vb4pex5vsknk084sn02q */
+export type SlaEscalationLogId = TypeId<'esc_log'>
+
+/** Per-ticket subscription ID - e.g., tkt_sub_01h455vb4pex5vsknk084sn02q */
+export type TicketSubscriptionId = TypeId<'tkt_sub'>
+
+/** Webhook delivery attempt ID - e.g., wh_deliv_01h455vb4pex5vsknk084sn02q */
+export type WebhookDeliveryId = TypeId<'wh_deliv'>
+
+/** Portal tab segment override ID - e.g., portal_tab_override_01h455vb4pex5vsknk084sn02q */
+export type PortalTabOverrideId = TypeId<'portal_tab_override'>
+
+// ============================================
 // Billing Entity IDs
 // ============================================
 
@@ -260,6 +385,11 @@ export interface EntityIdMap {
   merge_suggestion: MergeSuggestionId
   roadmap: RoadmapId
   changelog: ChangelogId
+  changelog_category: ChangelogCategoryId
+  changelog_product: ChangelogProductId
+  changelog_segment_visibility: ChangelogSegmentVisibilityId
+  widget_application: WidgetApplicationId
+  widget_profile: WidgetProfileId
   conversation: ConversationId
   chat_message: ChatMessageId
   chat_tag: ChatTagId
@@ -295,6 +425,50 @@ export interface EntityIdMap {
   category: HelpCenterCategoryId
   article: HelpCenterArticleId
   article_feedback: HelpCenterFeedbackId
+
+  // Ticketing — Phase 1
+  team: TeamId
+  team_membership: TeamMembershipId
+  role: RoleId
+  permission: PermissionId
+  role_permission: RolePermissionId
+  role_assignment: RoleAssignmentId
+  audit_event: AuditEventId
+
+  // Ticketing — Phase 2
+  organization: OrganizationId
+  contact: ContactId
+  contact_user_link: ContactUserLinkId
+
+  // Ticketing — Phase 3
+  ticket: TicketId
+  ticket_status: TicketStatusId
+  ticket_thread: TicketThreadId
+  ticket_attachment: TicketAttachmentId
+  ticket_participant: TicketParticipantId
+  ticket_share: TicketShareId
+  ticket_activity: TicketActivityId
+
+  // Ticketing — Phase 4
+  inbox: InboxId
+  inbox_channel: InboxChannelId
+  inbox_membership: InboxMembershipId
+  routing_rule: RoutingRuleId
+
+  // Ticketing — Phase 5
+  business_hours: BusinessHoursId
+  sla_policy: SlaPolicyId
+  sla_target: SlaTargetId
+  ticket_sla_clock: TicketSlaClockId
+  escalation_rule: EscalationRuleId
+  sla_escalation_log: SlaEscalationLogId
+
+  // Ticketing — Phase 7
+  ticket_subscription: TicketSubscriptionId
+  webhook_delivery: WebhookDeliveryId
+
+  // Portal tab configuration
+  portal_tab_override: PortalTabOverrideId
 }
 
 /**

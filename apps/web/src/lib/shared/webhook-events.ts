@@ -6,10 +6,12 @@
 export {
   WEBHOOK_EVENTS,
   WEBHOOK_EVENT_CONFIG,
+  WEBHOOK_EVENT_CATEGORIES,
   isValidWebhookUrl,
 } from '@/lib/server/events/integrations/webhook/constants'
 export type {
   WebhookEventType,
+  WebhookEventCategory,
   WebhookTarget,
   WebhookConfig,
 } from '@/lib/server/events/integrations/webhook/constants'

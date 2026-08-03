@@ -5,6 +5,7 @@ import {
   fetchMergeSuggestionSummaryFn,
   fetchMergeSuggestionCountsForPostsFn,
 } from '@/lib/server/functions/merge-suggestions'
+import { ensureData } from '@/lib/client/query/ensure-data'
 
 /**
  * Query options factory for merge suggestions.
@@ -19,7 +20,8 @@ export const mergeSuggestionQueries = {
   summary: () =>
     queryOptions({
       queryKey: ['merge-suggestions', 'summary'],
-      queryFn: () => fetchMergeSuggestionSummaryFn(),
+      queryFn: async () =>
+        ensureData(await fetchMergeSuggestionSummaryFn(), 'mergeSuggestionSummary'),
       staleTime: 30 * 1000,
     }),
 
@@ -29,7 +31,11 @@ export const mergeSuggestionQueries = {
   countsForPosts: (postIds: PostId[]) =>
     queryOptions({
       queryKey: ['merge-suggestions', 'counts', postIds],
-      queryFn: () => fetchMergeSuggestionCountsForPostsFn({ data: { postIds } }),
+      queryFn: async () =>
+        ensureData(
+          await fetchMergeSuggestionCountsForPostsFn({ data: { postIds } }),
+          'mergeSuggestionCounts'
+        ),
       staleTime: 30 * 1000,
       enabled: postIds.length > 0,
     }),
@@ -40,7 +46,11 @@ export const mergeSuggestionQueries = {
   forPost: (postId: PostId) =>
     queryOptions({
       queryKey: ['merge-suggestions', 'post', postId],
-      queryFn: () => getMergeSuggestionsForPostFn({ data: { postId } }),
+      queryFn: async () =>
+        ensureData(
+          await getMergeSuggestionsForPostFn({ data: { postId } }),
+          'mergeSuggestionsForPost'
+        ),
       staleTime: 30 * 1000,
     }),
 }

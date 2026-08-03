@@ -102,6 +102,8 @@ export const Route = createFileRoute('/api/chat/stream')({
         const url = new URL(request.url)
         const scope = url.searchParams.get('scope') // 'inbox' for agents
         const conversationIdParam = url.searchParams.get('conversationId')
+        const surfaceParam = url.searchParams.get('surface')
+        const surface = surfaceParam === 'portal' || surfaceParam === 'widget' ? surfaceParam : null
 
         const me = await resolveStreamPrincipal(request)
         if (!me) {
@@ -124,6 +126,23 @@ export const Route = createFileRoute('/api/chat/stream')({
           segmentIds: new Set(),
         }
 
+        if (!isTeamMember(me.role)) {
+          if (!surface) return new Response('Not found', { status: 404 })
+          if (actor.principalType === 'user') {
+            try {
+              const { segmentIdsForPrincipal } =
+                await import('@/lib/server/domains/segments/segment-membership.service')
+              actor.segmentIds = await segmentIdsForPrincipal(me.principalId)
+            } catch {
+              actor.segmentIds = new Set()
+            }
+          }
+          const { evaluateSupportAccessForActor } =
+            await import('@/lib/server/domains/settings/settings.support')
+          const supportAccess = await evaluateSupportAccessForActor(surface, actor)
+          if (!supportAccess.granted) return new Response('Not found', { status: 404 })
+        }
+
         // Resolve which channel(s) to subscribe to, authorizing FIRST.
         const channels: string[] = []
         let backfillConversationId: ConversationId | null = null
@@ -141,10 +160,10 @@ export const Route = createFileRoute('/api/chat/stream')({
           }
         } else if (conversationIdParam) {
           const conversationId = conversationIdParam as ConversationId
-          // A cookie-authed (non-token) visitor bypassed the mint-time portal
-          // gate, so re-check portal access here. Token streams were already
-          // gated at mint; team members reach chat from the admin inbox.
-          if (me.via === 'session' && !isTeamMember(me.role)) {
+          // A cookie-authed portal visitor bypassed the mint-time portal gate,
+          // so re-check portal access here. Widget chat is governed by widget
+          // chat access, and token streams were already gated at mint.
+          if (surface === 'portal' && me.via === 'session' && !isTeamMember(me.role)) {
             const { resolvePortalAccessForRequest } =
               await import('@/lib/server/functions/portal-access')
             const access = await resolvePortalAccessForRequest()

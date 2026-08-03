@@ -87,7 +87,10 @@ export const linearHook: HookHandler = {
         return { success: false, error: 'No issue returned', shouldRetry: false }
       }
 
-      log.info({ issue_id: issue.id, issue_identifier: issue.identifier, team_id: teamId }, 'issue created')
+      log.info(
+        { issue_id: issue.id, issue_identifier: issue.identifier, team_id: teamId },
+        'issue created'
+      )
       return {
         success: true,
         externalId: issue.id,
