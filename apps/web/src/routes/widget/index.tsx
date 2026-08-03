@@ -10,9 +10,11 @@ import { WidgetShell } from '@/components/widget/widget-shell'
 import {
   type WidgetTab,
   type WidgetView,
+  type EnabledTabs,
   resolveInitialTab,
   resolveInitialView,
   supportRootView,
+  supportEnabled,
   homeEnabled,
 } from '@/components/widget/widget-nav'
 import { WidgetHome } from '@/components/widget/widget-home'
@@ -27,17 +29,27 @@ import { WidgetLiveChat } from '@/components/widget/widget-live-chat'
 import type { ConversationId } from '@quackback/ids'
 import { WidgetMessagesSection } from '@/components/widget/widget-messages-section'
 import { useWidgetAuth } from '@/components/widget/widget-auth-provider'
+import { WidgetSupportCard } from '@/components/widget/widget-support-card'
+import { WidgetSupportList } from '@/components/widget/widget-support-list'
+import { WidgetSupportNew } from '@/components/widget/widget-support-new'
+import { WidgetSupportDetail } from '@/components/widget/widget-support-detail'
 import { portalQueries } from '@/lib/client/queries/portal'
 import { fetchBoardCapabilitiesFn } from '@/lib/server/functions/portal'
 import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 import { widgetQueryKeys, INITIAL_SESSION_VERSION } from '@/lib/client/hooks/use-widget-vote'
 import { CHAT_PRESENCE_QUERY_KEY } from '@/components/widget/use-chat-presence'
+import { resolveWidgetContextFn } from '@/lib/server/functions/widget-context'
 
 const searchSchema = z.object({
   board: z.string().optional(),
   // `?c=<conversationId>` opens the widget straight to live chat — used by the
   // deep link in agent-reply emails. Navigation only; carries no capability.
   c: z.string().optional(),
+  applicationKey: z.string().optional(),
+  environment: z.string().optional(),
+  hostOrigin: z.string().optional(),
+  app: z.string().optional(),
+  env: z.string().optional(),
 })
 
 export const Route = createFileRoute('/widget/')({
@@ -45,6 +57,55 @@ export const Route = createFileRoute('/widget/')({
   loader: async ({ context, location }) => {
     const { queryClient, settings, session } = context
     const search = location.search as z.infer<typeof searchSchema>
+    const widgetContext = await resolveWidgetContextFn({
+      data: {
+        applicationKey: search.applicationKey ?? search.app,
+        environment: search.environment ?? search.env,
+        hostOrigin: search.hostOrigin,
+      },
+    })
+    const widgetConfig = widgetContext.publicConfig
+    const feedbackFilters = widgetContext.contentFilters.feedback
+    const allowedBoardIds = new Set(feedbackFilters?.boardIds ?? [])
+    const allowedBoardSlugs = new Set(feedbackFilters?.boardSlugs ?? [])
+    const allowedStatusIds = new Set(feedbackFilters?.statusIds ?? [])
+    const hasBoardFilter = allowedBoardIds.size > 0 || allowedBoardSlugs.size > 0
+    const hasStatusFilter = allowedStatusIds.size > 0
+    const changelogFilter = widgetContext.contentFilters.changelog
+    const changelogHasVisibleEntries =
+      changelogFilter?.mode !== 'selected_entries' || (changelogFilter.entryIds?.length ?? 0) > 0
+
+    const { getBaseUrl } = await import('@/lib/server/config')
+
+    if (!widgetConfig.enabled) {
+      return {
+        widgetEnabled: false,
+        posts: [],
+        postsHasMore: false,
+        statuses: [],
+        boards: [],
+        orgSlug: settings?.slug ?? '',
+        boardPermissions: {},
+        tabs: {
+          feedback: false,
+          changelog: false,
+          help: false,
+          chat: false,
+          home: false,
+        },
+        linkPreviews: false,
+        defaultBoard: undefined,
+        imageUploadsInWidget: false,
+        ticketingEnabled: false,
+        supportCategories: [],
+        chatConfigured: false,
+        portalAccess: {
+          isPrivate: settings?.publicPortalConfig?.portalAccess?.isPrivate ?? false,
+          widgetSignIn: settings?.publicPortalConfig?.portalAccess?.widgetSignIn ?? false,
+        },
+        portalOrigin: getBaseUrl(),
+      }
+    }
 
     const portalData = await queryClient.ensureQueryData(
       portalQueries.portalData({
@@ -59,14 +120,38 @@ export const Route = createFileRoute('/widget/')({
       new Set(portalData.votedPostIds)
     )
 
-    const { getBaseUrl } = await import('@/lib/server/config')
+    const boards = portalData.boards
+      .filter((board) => {
+        if (!hasBoardFilter) return true
+        return allowedBoardIds.has(board.id) || allowedBoardSlugs.has(board.slug)
+      })
+      .map((b) => ({
+        id: b.id as string,
+        name: b.name,
+        slug: b.slug,
+      }))
+    const allowedBoardIdSet = new Set(boards.map((board) => board.id))
+    const feedbackHasVisibleBoard = !hasBoardFilter || boards.length > 0
+    const feedbackTabEnabled = (widgetConfig.tabs?.feedback ?? true) && feedbackHasVisibleBoard
+    const defaultBoard =
+      widgetConfig.defaultBoard && boards.some((board) => board.slug === widgetConfig.defaultBoard)
+        ? widgetConfig.defaultBoard
+        : hasBoardFilter
+          ? boards[0]?.slug
+          : widgetConfig.defaultBoard
 
-    // Same triple-gate as the `chat` tab below: Support Inbox flag + live chat
-    // enabled + tab on. Hoisted so we only compute presence when chat shows.
-    const chatTabEnabled =
+    // Same gate as the `chat` tab below: widget enabled + Support Inbox flag +
+    // live chat enabled + tab on. Hoisted so we only compute presence when chat shows.
+    const chatConfigured =
+      (widgetConfig.enabled ?? false) &&
       ((settings?.featureFlags as { supportInbox?: boolean } | undefined)?.supportInbox ?? false) &&
-      (settings?.publicWidgetConfig?.chat?.enabled ?? false) &&
-      (settings?.publicWidgetConfig?.tabs?.chat ?? false)
+      (widgetConfig.chat?.enabled ?? false) &&
+      (widgetConfig.tabs?.chat ?? false)
+    const { getSupportSurfaceAccessFn } = await import('@/lib/server/functions/chat')
+    const supportAccess = chatConfigured
+      ? await getSupportSurfaceAccessFn({ data: { surface: 'widget' } })
+      : { granted: false }
+    const chatTabEnabled = chatConfigured && supportAccess.granted
 
     // Presence is tenant-global (not visitor-specific), so the anonymous SSR
     // baseline value is exactly correct for every visitor — seed the shared
@@ -88,30 +173,37 @@ export const Route = createFileRoute('/widget/')({
     }
 
     return {
-      posts: portalData.posts.items.map((p) => ({
-        id: p.id,
-        title: p.title,
-        voteCount: p.voteCount,
-        statusId: p.statusId,
-        commentCount: p.commentCount,
-        board: p.board,
-      })),
+      widgetEnabled: true,
+      posts: portalData.posts.items
+        .map((p) => ({
+          id: p.id,
+          title: p.title,
+          voteCount: p.voteCount,
+          statusId: p.statusId,
+          commentCount: p.commentCount,
+          board: p.board,
+        }))
+        .filter((post) => {
+          if (hasBoardFilter && (!post.board || !allowedBoardIdSet.has(post.board.id))) return false
+          if (hasStatusFilter && (!post.statusId || !allowedStatusIds.has(post.statusId))) {
+            return false
+          }
+          return true
+        }),
       postsHasMore: portalData.posts.hasMore,
-      statuses: portalData.statuses.map((s) => ({
-        id: s.id as string,
-        name: s.name,
-        color: s.color,
-      })),
+      statuses: portalData.statuses
+        .filter((s) => !hasStatusFilter || allowedStatusIds.has(s.id))
+        .map((s) => ({
+          id: s.id as string,
+          name: s.name,
+          color: s.color,
+        })),
       // fetchPortalData already filtered boards through boardViewFilter
       // against the request actor (including widget-supplied segments via
       // the signed identity token). Re-filtering by audience.kind here
       // would silently drop authenticated/segment boards that the actor
       // is legitimately allowed to see.
-      boards: portalData.boards.map((b) => ({
-        id: b.id as string,
-        name: b.name,
-        slug: b.slug,
-      })),
+      boards,
       orgSlug: settings?.slug ?? '',
       // Per-board submit/vote capability for the request actor, server-computed
       // (boardCapabilitiesForActor composes each board's access tier with the
@@ -120,20 +212,34 @@ export const Route = createFileRoute('/widget/')({
       // advertises an action the board's tier rejects (#191). Keyed by board id.
       boardPermissions: portalData.boardPermissions,
       tabs: {
-        feedback: settings?.publicWidgetConfig?.tabs?.feedback ?? true,
-        changelog: settings?.publicWidgetConfig?.tabs?.changelog ?? false,
+        feedback: feedbackTabEnabled,
+        changelog: (widgetConfig.tabs?.changelog ?? false) && changelogHasVisibleEntries,
         help:
           ((settings?.featureFlags as { helpCenter?: boolean } | undefined)?.helpCenter ?? false) &&
           (settings?.helpCenterConfig?.enabled ?? false) &&
-          (settings?.publicWidgetConfig?.tabs?.help ?? false),
+          (widgetConfig.tabs?.help ?? false),
         // Support Inbox flag + live chat enabled + tab on (computed above).
         chat: chatTabEnabled,
         // Admin opt-out for the aggregated Home tab (defaults to shown).
-        home: settings?.publicWidgetConfig?.tabs?.home ?? true,
+        home: widgetConfig.tabs?.home ?? true,
       },
       linkPreviews:
         (settings?.featureFlags as { linkPreviews?: boolean } | undefined)?.linkPreviews ?? false,
-      defaultBoard: settings?.publicWidgetConfig?.defaultBoard,
+      defaultBoard,
+      imageUploadsInWidget: widgetConfig.imageUploadsInWidget ?? true,
+      ticketingEnabled: widgetConfig.ticketing?.enabled ?? false,
+      supportCategories: (widgetContext.supportConfig.categories ?? [])
+        .filter((category) => category.visible !== false)
+        .map((category) => ({
+          categoryKey: category.categoryKey,
+          label: category.label,
+          description: category.description,
+          icon: category.icon,
+          defaultPriority: category.defaultPriority,
+          allowedPriorities: category.allowedPriorities,
+          display: category.display,
+        })),
+      chatConfigured,
       portalAccess: {
         isPrivate: settings?.publicPortalConfig?.portalAccess?.isPrivate ?? false,
         widgetSignIn: settings?.publicPortalConfig?.portalAccess?.widgetSignIn ?? false,
@@ -155,21 +261,75 @@ interface SuccessPost {
   board: { id: string; name: string; slug: string }
 }
 
+interface WidgetListPost {
+  id: string
+  title: string
+  voteCount: number
+  statusId: string | null
+  commentCount: number
+  board: { id: string; name: string; slug: string }
+}
+
+type SupportReturnView = Extract<WidgetView, 'overview' | 'help' | 'messages' | 'feedback'>
+
+function resolveSupportReturnView(tabs: EnabledTabs): SupportReturnView {
+  if (homeEnabled(tabs)) return 'overview'
+  if (supportEnabled(tabs)) return supportRootView(tabs)
+  return 'feedback'
+}
+
+function activeTabForSupportReturnView(view: SupportReturnView): WidgetTab {
+  if (view === 'overview') return 'home'
+  if (view === 'help' || view === 'messages') return 'help'
+  return 'feedback'
+}
+
+type WidgetLoaderData = ReturnType<typeof Route.useLoaderData>
+
 function WidgetPage() {
+  const data = Route.useLoaderData()
+  if (!data.widgetEnabled) return null
+  return <EnabledWidgetPage data={data} />
+}
+
+function EnabledWidgetPage({ data }: { data: WidgetLoaderData }) {
   const {
-    posts,
     postsHasMore,
     statuses,
     boards,
     orgSlug,
     boardPermissions,
-    tabs,
+    tabs: loaderTabs,
     linkPreviews,
     defaultBoard,
+    imageUploadsInWidget,
+    ticketingEnabled,
+    supportCategories,
+    chatConfigured,
     portalAccess,
     portalOrigin,
-  } = Route.useLoaderData()
+  } = data
+  const posts = data.posts as WidgetListPost[]
+
   const { ensureSession, sessionVersion } = useWidgetAuth()
+  const { data: chatAccess } = useQuery({
+    queryKey: ['widget', 'supportAccess', sessionVersion],
+    queryFn: async () => {
+      const { getSupportSurfaceAccessFn } = await import('@/lib/server/functions/chat')
+      return getSupportSurfaceAccessFn({
+        data: { surface: 'widget' },
+        headers: getWidgetAuthHeaders(),
+      })
+    },
+    enabled: chatConfigured,
+    initialData:
+      sessionVersion === INITIAL_SESSION_VERSION ? { granted: loaderTabs.chat } : undefined,
+    staleTime: 30 * 1000,
+  })
+  const tabs = useMemo(
+    () => ({ ...loaderTabs, chat: chatConfigured && (chatAccess?.granted ?? false) }),
+    [loaderTabs, chatConfigured, chatAccess?.granted]
+  )
 
   // The loader seeds boardPermissions for the anonymous SSR baseline (no Bearer
   // at loader time). Refetch it for the REAL actor with the widget's Bearer
@@ -207,6 +367,14 @@ function WidgetPage() {
     resumeConversationId ? (resumeConversationId as ConversationId) : null
   )
 
+  useEffect(() => {
+    if (view !== 'chat' || tabs.chat) return
+    const nextTab = resolveInitialTab(tabs)
+    setActiveTab(nextTab)
+    setView(resolveInitialView(tabs))
+    setChatTarget(null)
+  }, [view, tabs])
+
   const [successPost, setSuccessPost] = useState<SuccessPost | null>(null)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [selectedChangelogId, setSelectedChangelogId] = useState<string | null>(null)
@@ -216,7 +384,11 @@ function WidgetPage() {
     name: string
     icon: string | null
   } | null>(null)
-  const [createdPosts, setCreatedPosts] = useState<typeof posts>([])
+  const [createdPosts, setCreatedPosts] = useState<WidgetListPost[]>([])
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
+  const [supportReturnView, setSupportReturnView] = useState<SupportReturnView>(() =>
+    resolveSupportReturnView(tabs)
+  )
 
   const allPosts = useMemo(() => {
     const createdIds = new Set(createdPosts.map((p) => p.id))
@@ -229,6 +401,18 @@ function WidgetPage() {
     setView('chat')
   }, [])
 
+  const openSupport = useCallback(
+    (returnView?: SupportReturnView, ticketId?: string) => {
+      if (!ticketingEnabled) return
+      const nextReturnView = returnView ?? resolveSupportReturnView(tabs)
+      setSupportReturnView(nextReturnView)
+      setActiveTab(activeTabForSupportReturnView(nextReturnView))
+      setSelectedTicketId(ticketId ?? null)
+      setView(ticketId ? 'support-detail' : 'support-list')
+    },
+    [tabs, ticketingEnabled]
+  )
+
   // Listen for quackback:open messages from the SDK
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -236,8 +420,10 @@ function WidgetPage() {
       const msg = event.data
       if (!msg || typeof msg !== 'object' || msg.type !== 'quackback:open' || !msg.data) return
 
-      const opts = msg.data as { view?: string }
-      if (opts.view === 'changelog' && tabs.changelog) {
+      const opts = msg.data as { view?: string; ticketId?: string }
+      if (opts.view === 'support' && ticketingEnabled) {
+        openSupport(undefined, opts.ticketId)
+      } else if (opts.view === 'changelog' && tabs.changelog) {
         setActiveTab('changelog')
         setView('changelog')
       } else if (opts.view === 'help' && (tabs.help || tabs.chat)) {
@@ -252,17 +438,17 @@ function WidgetPage() {
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [tabs, openChat])
+  }, [tabs, openChat, openSupport, ticketingEnabled])
 
   const handlePostCreated = useCallback((post: SuccessPost) => {
-    setCreatedPosts((prev) => [
+    setCreatedPosts((prev: WidgetListPost[]) => [
       {
-        id: post.id as (typeof prev)[number]['id'],
+        id: post.id,
         title: post.title,
         voteCount: post.voteCount,
-        statusId: post.statusId as (typeof prev)[number]['statusId'],
+        statusId: post.statusId,
         commentCount: 0,
-        board: post.board as (typeof prev)[number]['board'],
+        board: post.board,
       },
       ...prev,
     ])
@@ -295,6 +481,22 @@ function WidgetPage() {
       setView('help')
       return
     }
+    if (view === 'support-detail') {
+      setSelectedTicketId(null)
+      setView('support-list')
+      return
+    }
+    if (view === 'support-new') {
+      setSelectedTicketId(null)
+      setView('support-list')
+      return
+    }
+    if (view === 'support-list') {
+      setSelectedTicketId(null)
+      setActiveTab(activeTabForSupportReturnView(supportReturnView))
+      setView(supportReturnView)
+      return
+    }
     if (view === 'chat') {
       // Chat is opened from the support surface; back returns to its root
       // (help articles, or the messages list for a chat-only widget).
@@ -303,7 +505,7 @@ function WidgetPage() {
     }
     setSelectedPostId(null)
     setView('feedback')
-  }, [view, selectedCategory, tabs])
+  }, [view, selectedCategory, tabs, supportReturnView])
 
   const handleTabChange = useCallback(
     (tab: WidgetTab) => {
@@ -349,7 +551,24 @@ function WidgetPage() {
     setView('help-detail')
   }, [])
 
+  const handleSupportNewTicket = useCallback(() => {
+    setView('support-new')
+  }, [])
+
+  const handleSupportTicketSelect = useCallback((ticketId: string) => {
+    setSelectedTicketId(ticketId)
+    setView('support-detail')
+  }, [])
+
+  const handleSupportTicketCreated = useCallback((ticket: { id: string }) => {
+    setSelectedTicketId(ticket.id)
+    setView('support-detail')
+  }, [])
+
+  const showFeedbackSupportCard = ticketingEnabled && !homeEnabled(tabs) && !supportEnabled(tabs)
+
   // Root views have no back arrow. 'messages' is the chat-only support root.
+  // Ticketing views keep a back arrow and return through their recorded origin.
   const shellOnBack =
     view !== 'overview' &&
     view !== 'feedback' &&
@@ -374,6 +593,7 @@ function WidgetPage() {
           tabs={tabs}
           onLeaveFeedback={() => handleTabChange('feedback')}
           onGetHelp={() => handleTabChange('help')}
+          onOpenSupport={ticketingEnabled ? () => openSupport('overview') : undefined}
           onResumeChat={() => openChat()}
           onSeeChangelog={() => handleTabChange('changelog')}
           onOpenChangelogEntry={(id) => {
@@ -397,6 +617,14 @@ function WidgetPage() {
 
       {view === 'messages' && (
         <div className="flex h-full flex-col overflow-y-auto px-3 pb-3">
+          {ticketingEnabled && (
+            <div className="w-full pt-2">
+              <WidgetSupportCard
+                onOpen={() => openSupport('messages')}
+                categories={supportCategories}
+              />
+            </div>
+          )}
           <WidgetMessagesSection onOpenChat={openChat} />
         </div>
       )}
@@ -410,6 +638,8 @@ function WidgetPage() {
           onArticleSelect={handleHelpArticleSelect}
           onCategorySelect={handleHelpCategorySelect}
           onOpenChat={tabs.chat ? () => openChat() : undefined}
+          onOpenSupport={ticketingEnabled ? () => openSupport(supportRootView(tabs)) : undefined}
+          supportCategories={supportCategories}
         />
       )}
 
@@ -445,8 +675,37 @@ function WidgetPage() {
           defaultBoard={defaultBoard}
           onPostSelect={handlePostSelect}
           onPostCreated={handlePostCreated}
+          imageUploadsInWidget={imageUploadsInWidget}
+          supportSlot={
+            showFeedbackSupportCard ? (
+              <WidgetSupportCard
+                onOpen={() => openSupport('feedback')}
+                categories={supportCategories}
+              />
+            ) : undefined
+          }
         />
       </div>
+
+      {view === 'support-list' && (
+        <WidgetSupportList
+          onNewTicket={handleSupportNewTicket}
+          onTicketSelect={handleSupportTicketSelect}
+          categories={supportCategories}
+        />
+      )}
+
+      {view === 'support-new' && (
+        <WidgetSupportNew
+          onCreated={handleSupportTicketCreated}
+          categories={supportCategories}
+          imageUploadsInWidget={imageUploadsInWidget}
+        />
+      )}
+
+      {view === 'support-detail' && selectedTicketId && (
+        <WidgetSupportDetail ticketId={selectedTicketId} />
+      )}
 
       {view === 'post-detail' && selectedPostId && (
         <WidgetPostDetail postId={selectedPostId} statuses={statuses} />

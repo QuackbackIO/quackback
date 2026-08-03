@@ -16,7 +16,7 @@ import { dispatchPostCreated, buildEventActor } from '@/lib/server/events/dispat
 import { extractMentions, extractMentionExcerpts } from './extract-mentions'
 import { syncPostMentions } from './sync-post-mentions'
 import { buildPostUrl } from '@/lib/server/integrations/message-utils'
-import { getBaseUrl } from '@/lib/server/config'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 
 type PostSnapshot = Pick<Post, 'id' | 'title' | 'content' | 'boardId' | 'contentJson' | 'voteCount'>
 type AuthorSnapshot = {
@@ -97,7 +97,7 @@ export async function announcePublishedPost(
       await syncPostMentions({
         postId: post.id,
         postTitle: post.title,
-        postUrl: buildPostUrl(getBaseUrl(), board.slug, post.id),
+        postUrl: buildPostUrl(resolvePublicBaseUrl(), board.slug, post.id),
         mentionedIds,
         excerptByPrincipalId: extractMentionExcerpts(post.contentJson),
         actor: buildEventActor(author),

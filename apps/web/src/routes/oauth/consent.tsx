@@ -49,12 +49,19 @@ interface ScopeGroup {
   description: string
   read: boolean
   write: boolean
+  manage: boolean
 }
 
 function groupScopes(scopes: string[]): ScopeGroup[] {
   const scopeSet = new Set(scopes)
 
-  const groups: { read?: string; write?: string; label: string; description: string }[] = [
+  const groups: {
+    read?: string
+    write?: string
+    manage?: string
+    label: string
+    description: string
+  }[] = [
     {
       read: 'read:feedback',
       write: 'write:feedback',
@@ -73,6 +80,19 @@ function groupScopes(scopes: string[]): ScopeGroup[] {
       description: 'Categories and articles',
     },
     {
+      read: 'read:tickets',
+      write: 'write:tickets',
+      manage: 'manage:tickets',
+      label: 'Tickets',
+      description: 'Tickets, threads, participants, and shares',
+    },
+    {
+      read: 'read:contacts',
+      write: 'write:contacts',
+      label: 'Contacts',
+      description: 'Contacts and customer organizations',
+    },
+    {
       read: 'read:chat',
       write: 'write:chat',
       label: 'Conversations',
@@ -86,8 +106,9 @@ function groupScopes(scopes: string[]): ScopeGroup[] {
       description: g.description,
       read: g.read ? scopeSet.has(g.read) : false,
       write: g.write ? scopeSet.has(g.write) : false,
+      manage: g.manage ? scopeSet.has(g.manage) : false,
     }))
-    .filter((g) => g.read || g.write)
+    .filter((g) => g.read || g.write || g.manage)
 }
 
 const HIDDEN_SCOPES = new Set(['openid', 'profile', 'email', 'offline_access'])
@@ -243,6 +264,11 @@ function ConsentPage() {
                   {group.write && (
                     <span className="text-[11px] font-medium text-muted-foreground/80 border border-border/50 rounded-md px-1.5 py-0.5">
                       Write
+                    </span>
+                  )}
+                  {group.manage && (
+                    <span className="text-[11px] font-medium text-muted-foreground/80 border border-border/50 rounded-md px-1.5 py-0.5">
+                      Manage
                     </span>
                   )}
                 </div>

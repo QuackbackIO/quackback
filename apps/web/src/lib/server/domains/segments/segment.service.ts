@@ -37,6 +37,37 @@ import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'segments' })
 
+/**
+ * Best-effort webhook dispatch for segment lifecycle events. Lazy import +
+ * `service` actor + try/catch so a dispatch failure never aborts the mutation.
+ * Mirrors the config-plane fire helpers.
+ */
+async function fireSegmentEvent(
+  kind: 'created' | 'updated' | 'deleted',
+  segment: Segment,
+  changedFields?: string[]
+): Promise<void> {
+  try {
+    const { dispatchSegmentCreated, dispatchSegmentUpdated, dispatchSegmentDeleted } =
+      await import('@/lib/server/events/dispatch')
+    const actor = { type: 'service' as const, displayName: 'segment-system' }
+    const ref = {
+      id: segment.id,
+      slug: segment.slug,
+      name: segment.name,
+      type: segment.type,
+      color: segment.color ?? null,
+      createdAt: segment.createdAt ? segment.createdAt.toISOString() : null,
+      updatedAt: segment.updatedAt ? segment.updatedAt.toISOString() : null,
+    }
+    if (kind === 'created') await dispatchSegmentCreated(actor, ref)
+    else if (kind === 'updated') await dispatchSegmentUpdated(actor, ref, changedFields ?? [])
+    else await dispatchSegmentDeleted(actor, ref)
+  } catch (err) {
+    log.error({ err }, `failed to dispatch segment.${kind} event`)
+  }
+}
+
 // ============================================
 // Helpers
 // ============================================
@@ -178,7 +209,9 @@ export async function createSegment(input: CreateSegmentInput): Promise<Segment>
     })
     .returning()
 
-  return rowToSegment(row)
+  const segment = rowToSegment(row)
+  void fireSegmentEvent('created', segment)
+  return segment
 }
 
 /**
@@ -220,7 +253,12 @@ export async function updateSegment(
 
   const [row] = await db.update(segments).set(updates).where(eq(segments.id, segmentId)).returning()
 
-  return rowToSegment(row)
+  const segment = rowToSegment(row)
+  // `slug` is a derived side-effect of renaming; report the caller-facing
+  // input fields instead so receivers see the intent, not the implementation.
+  const changedFields = Object.keys(updates).filter((k) => k !== 'slug')
+  void fireSegmentEvent('updated', segment, changedFields)
+  return segment
 }
 
 /**
@@ -243,6 +281,8 @@ export async function deleteSegment(segmentId: SegmentId): Promise<void> {
     await tx.delete(userSegments).where(eq(userSegments.segmentId, segmentId))
     await tx.update(segments).set({ deletedAt: new Date() }).where(eq(segments.id, segmentId))
   })
+
+  void fireSegmentEvent('deleted', existing)
 }
 
 // ============================================

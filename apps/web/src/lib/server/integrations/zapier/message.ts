@@ -5,6 +5,7 @@
 
 import type { EventData } from '../../events/types'
 import { stripHtml, truncate, formatStatus } from '../../events/hook-utils'
+import { toIsoString } from '@/lib/shared/utils'
 
 interface ZapierPayload {
   event: string
@@ -114,7 +115,7 @@ export function buildZapierPayload(event: EventData, rootUrl: string): ZapierPay
     default:
       return {
         event: (event as { type: string }).type,
-        timestamp: new Date().toISOString(),
+        timestamp: toIsoString(new Date()),
         portal_url: rootUrl,
         post: { id: '', title: '', board: '', url: '' },
       }

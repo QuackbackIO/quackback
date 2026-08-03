@@ -5,6 +5,9 @@ export interface PanelOptions {
   widgetUrl: string
   placement: 'left' | 'right'
   defaultBoard?: string
+  applicationKey?: string
+  environment?: string
+  hostOrigin?: string
   showCloseButton?: boolean
   locale?: string
   onBackdropClick: () => void
@@ -22,6 +25,9 @@ export function createPanel(opts: PanelOptions): PanelHandle {
 
   const params: string[] = []
   if (opts.defaultBoard) params.push(`board=${encodeURIComponent(opts.defaultBoard)}`)
+  if (opts.applicationKey) params.push(`applicationKey=${encodeURIComponent(opts.applicationKey)}`)
+  if (opts.environment) params.push(`environment=${encodeURIComponent(opts.environment)}`)
+  if (opts.hostOrigin) params.push(`hostOrigin=${encodeURIComponent(opts.hostOrigin)}`)
   if (opts.showCloseButton) params.push('showClose=1')
   if (opts.locale) params.push(`locale=${encodeURIComponent(opts.locale)}`)
   const url = opts.widgetUrl + (params.length ? '?' + params.join('&') : '')

@@ -18,6 +18,7 @@ import type {
   ChatTagId,
   SegmentId,
 } from '@quackback/ids'
+import type { SupportSurface } from '@/lib/server/domains/settings/settings.support'
 import {
   MAX_CHAT_MESSAGE_LENGTH,
   MAX_CHAT_ATTACHMENTS,
@@ -50,10 +51,14 @@ const attachmentSchema = z.object({
   size: z.number().int().nonnegative(),
 })
 
+const supportSurfaceSchema = z.enum(['widget', 'portal'])
+const supportSurfaceInputSchema = z.object({ surface: supportSurfaceSchema })
+
 // Content may be empty only when attachments are present (validated in the
 // service); allow empty here and let the service enforce the real rule.
 const sendMessageSchema = z.object({
   conversationId: z.string().optional(),
+  surface: supportSurfaceSchema,
   content: z.string().max(MAX_CHAT_MESSAGE_LENGTH).default(''),
   // Rich-composer TipTap doc (inline embeds / images). Sanitized server-side;
   // the plain `content` is the doc's text, kept for previews/notifications/search.
@@ -64,10 +69,14 @@ const sendMessageSchema = z.object({
 })
 
 const conversationIdSchema = z.object({ conversationId: z.string() })
+const conversationSurfaceSchema = conversationIdSchema.extend({
+  surface: supportSurfaceSchema.optional(),
+})
 
 const listMessagesSchema = z.object({
   conversationId: z.string(),
   before: z.string().optional(),
+  surface: supportSurfaceSchema.optional(),
 })
 
 const listConversationsSchema = z.object({
@@ -88,11 +97,13 @@ const listConversationsSchema = z.object({
 })
 
 const messageIdSchema = z.object({ messageId: z.string() })
+const messageIdSurfaceSchema = messageIdSchema.extend({ surface: supportSurfaceSchema.optional() })
 
 const csatSchema = z.object({
   conversationId: z.string(),
   rating: z.number().int().min(1).max(5),
   comment: z.string().max(2000).optional(),
+  surface: supportSurfaceSchema.optional(),
 })
 
 const agentSendSchema = z.object({
@@ -174,13 +185,52 @@ async function assertConversationsEnabled(): Promise<void> {
  * caller must have portal access. Team members (agents) bypass the portal
  * check — they reach these endpoints from the admin inbox. Throws on failure.
  */
-async function assertVisitorChatAccess(role: string | null): Promise<void> {
-  await assertConversationsEnabled()
-  if (isTeamMember(role)) return
-  const { resolvePortalAccessForRequest } = await import('./portal-access')
-  const access = await resolvePortalAccessForRequest()
-  if (!access.granted) throw new Error('Portal access required')
+async function assertVisitorChatAccess(
+  role: string | null,
+  surface?: SupportSurface
+): Promise<void> {
+  if (isTeamMember(role)) {
+    await assertConversationsEnabled()
+    return
+  }
+  if (!surface) throw new Error('Support surface is required')
+  const { isSupportSurfaceEnabled, evaluateSupportAccessForRequest } =
+    await import('@/lib/server/domains/settings/settings.support')
+  if (!(await isSupportSurfaceEnabled(surface))) {
+    throw new Error('Chat is not enabled')
+  }
+  const supportAccess = await evaluateSupportAccessForRequest(surface)
+  if (!supportAccess.granted) throw new Error('Support access required')
+  if (surface === 'portal') {
+    const { resolvePortalAccessForRequest } = await import('./portal-access')
+    const portalAccess = await resolvePortalAccessForRequest()
+    if (!portalAccess.granted) throw new Error('Portal access required')
+  }
 }
+
+async function canUseVisitorChatSurface(surface: SupportSurface): Promise<boolean> {
+  const { evaluateSupportAccessForRequest } =
+    await import('@/lib/server/domains/settings/settings.support')
+  const supportAccess = await evaluateSupportAccessForRequest(surface)
+  if (!supportAccess.granted) return false
+  if (surface === 'portal') {
+    const { resolvePortalAccessForRequest } = await import('./portal-access')
+    const portalAccess = await resolvePortalAccessForRequest()
+    return portalAccess.granted
+  }
+  return true
+}
+
+export const getSupportSurfaceAccessFn = createServerFn({ method: 'GET' })
+  .inputValidator(supportSurfaceInputSchema)
+  .handler(async ({ data }) => {
+    try {
+      return { granted: await canUseVisitorChatSurface(data.surface) }
+    } catch (error) {
+      console.error('[fn:chat] getSupportSurfaceAccessFn failed:', error)
+      return { granted: false }
+    }
+  })
 
 // ── Visitor functions ────────────────────────────────────────────────────
 
@@ -190,7 +240,7 @@ export const sendChatMessageFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorChatAccess(ctx.principal.role, data.surface)
 
       // Throttle per principal: bounds write/notify fanout and runaway
       // conversation creation. Agents (team) send via sendAgentMessageFn.
@@ -268,7 +318,10 @@ export const getChatPresenceFn = createServerFn({ method: 'GET' }).handler(
 //  - omitted        → the visitor's active/most-recent thread (default)
 //  - a conversation → that thread, if the caller owns it (else greeting state)
 //  - null           → "new": config + greeting with no thread
-const myChatSchema = z.object({ conversationId: z.string().nullish() }).optional()
+const myChatSchema = z.object({
+  conversationId: z.string().nullish(),
+  surface: supportSurfaceSchema,
+})
 
 /** The current visitor's active conversation + first page of messages. */
 export const getMyChatFn = createServerFn({ method: 'GET' })
@@ -276,23 +329,25 @@ export const getMyChatFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     try {
       const { getLiveChatConfig } = await import('@/lib/server/domains/settings/settings.widget')
-      const { isConversationsEnabled } =
+      const { isSupportSurfaceEnabled } =
         await import('@/lib/server/domains/settings/settings.support')
       const { getSettings } = await import('./workspace')
       const { isEmailConfigured } = await import('@quackback/email')
       const { canEmailVisitor } = await import('@/lib/shared/chat/reply-capability')
+      const surface = data.surface
       const [enabled, liveChatConfig, appSettings] = await Promise.all([
-        isConversationsEnabled(),
+        isSupportSurfaceEnabled(surface),
         getLiveChatConfig(),
         getSettings(),
       ])
+      const accessGranted = enabled ? await canUseVisitorChatSurface(surface) : false
       const preChatEmail = liveChatConfig.preChatEmail ?? 'off'
       const emailConfigured = isEmailConfigured()
       // Note: team-availability presence is NOT returned here. The widget reads it
       // from the shared useChatPresence query (getChatPresenceFn) so every surface
       // agrees and only one poll runs — this fn is just the visitor's thread.
       const base = {
-        enabled,
+        enabled: enabled && accessGranted,
         welcomeMessage: liveChatConfig.welcomeMessage ?? null,
         offlineMessage: liveChatConfig.offlineMessage ?? null,
         // Falls back to the workspace name (as the settings help text promises)
@@ -310,7 +365,7 @@ export const getMyChatFn = createServerFn({ method: 'GET' })
         isReadOnly: false,
       }
 
-      if (!enabled || !hasAuthCredentials()) {
+      if (!enabled || !accessGranted || !hasAuthCredentials()) {
         return { ...base, conversation: null, messages: [], hasMore: false }
       }
 
@@ -319,9 +374,9 @@ export const getMyChatFn = createServerFn({ method: 'GET' })
         return { ...base, conversation: null, messages: [], hasMore: false }
       }
 
-      // Gate reads behind portal access for non-team callers (degrade gracefully
-      // to the greeting-only state rather than throwing on the bootstrap path).
-      if (!isTeamMember(ctx.principal.role)) {
+      // Portal Support lives inside the portal and must still respect the
+      // portal-wide access gate. Widget chat is governed by widget chat access.
+      if (surface === 'portal' && !isTeamMember(ctx.principal.role)) {
         const { resolvePortalAccessForRequest } = await import('./portal-access')
         const access = await resolvePortalAccessForRequest()
         if (!access.granted) {
@@ -329,7 +384,7 @@ export const getMyChatFn = createServerFn({ method: 'GET' })
         }
       }
 
-      const target = data?.conversationId
+      const target = data.conversationId
 
       // "New conversation": config + greeting, no thread. The first send creates
       // it (sendVisitorMessage with no conversationId).
@@ -398,29 +453,38 @@ export const getMyChatFn = createServerFn({ method: 'GET' })
  * history is merged onto the account (P2.4). Visitor-side DTOs (no agent-only
  * fields). Returns an empty list rather than throwing on the bootstrap path.
  */
-export const getMyConversationsFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    const { isConversationsEnabled } =
-      await import('@/lib/server/domains/settings/settings.support')
-    if (!(await isConversationsEnabled()) || !hasAuthCredentials()) return { conversations: [] }
+export const getMyConversationsFn = createServerFn({ method: 'GET' })
+  .inputValidator(supportSurfaceInputSchema)
+  .handler(async ({ data }) => {
+    try {
+      const surface = data.surface
+      const { isSupportSurfaceEnabled } =
+        await import('@/lib/server/domains/settings/settings.support')
+      if (
+        !(await isSupportSurfaceEnabled(surface)) ||
+        !(await canUseVisitorChatSurface(surface)) ||
+        !hasAuthCredentials()
+      )
+        return { conversations: [] }
 
-    const ctx = await getOptionalAuth()
-    if (!ctx?.principal) return { conversations: [] }
+      const ctx = await getOptionalAuth()
+      if (!ctx?.principal) return { conversations: [] }
 
-    // Non-team callers must hold portal access (mirrors getMyChatFn gating).
-    if (!isTeamMember(ctx.principal.role)) {
-      const { resolvePortalAccessForRequest } = await import('./portal-access')
-      const access = await resolvePortalAccessForRequest()
-      if (!access.granted) return { conversations: [] }
+      // Portal Support lives inside the portal and must still respect the
+      // portal-wide access gate. Widget chat is governed by widget chat access.
+      if (surface === 'portal' && !isTeamMember(ctx.principal.role)) {
+        const { resolvePortalAccessForRequest } = await import('./portal-access')
+        const access = await resolvePortalAccessForRequest()
+        if (!access.granted) return { conversations: [] }
+      }
+
+      const { listConversationsForVisitor } = await import('@/lib/server/domains/chat/chat.query')
+      return { conversations: await listConversationsForVisitor(ctx.principal.id, 50, 'visitor') }
+    } catch (error) {
+      console.error('[fn:chat] getMyConversationsFn failed:', error)
+      throw error
     }
-
-    const { listConversationsForVisitor } = await import('@/lib/server/domains/chat/chat.query')
-    return { conversations: await listConversationsForVisitor(ctx.principal.id, 50, 'visitor') }
-  } catch (error) {
-    log.error({ err: error }, 'get my conversations failed')
-    throw error
-  }
-})
+  })
 
 /** Older messages for a conversation the caller can view (keyset pagination). */
 export const listChatMessagesFn = createServerFn({ method: 'GET' })
@@ -428,7 +492,7 @@ export const listChatMessagesFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorChatAccess(ctx.principal.role, data.surface)
       const actor = await policyActorFromAuth(ctx)
       const { assertConversationViewable } = await import('@/lib/server/domains/chat/chat.service')
       const { listMessages, enrichMessagesForAgent } =
@@ -459,11 +523,11 @@ export const listChatMessagesFn = createServerFn({ method: 'GET' })
 
 /** Mark a conversation read up to now for the caller's side. */
 export const markChatReadFn = createServerFn({ method: 'POST' })
-  .validator(conversationIdSchema)
+  .inputValidator(conversationSurfaceSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorChatAccess(ctx.principal.role, data.surface)
       const actor = await policyActorFromAuth(ctx)
       // The service derives the side from the actor's relationship to the
       // conversation (a team member in a thread they own is the visitor).
@@ -478,11 +542,11 @@ export const markChatReadFn = createServerFn({ method: 'POST' })
 
 /** Broadcast that the caller is typing (ephemeral; client-throttled). */
 export const sendChatTypingFn = createServerFn({ method: 'POST' })
-  .validator(conversationIdSchema)
+  .inputValidator(conversationSurfaceSchema)
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorChatAccess(ctx.principal.role, data.surface)
       const actor = await policyActorFromAuth(ctx)
       // Side derived in the service from conversation ownership, not role.
       const { signalTyping } = await import('@/lib/server/domains/chat/chat.service')
@@ -500,7 +564,7 @@ export const submitCsatFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorChatAccess(ctx.principal.role, data.surface)
       const actor = await policyActorFromAuth(ctx)
       const { recordCsat } = await import('@/lib/server/domains/chat/chat.service')
       await recordCsat(data.conversationId as ConversationId, data.rating, data.comment, actor)
@@ -529,25 +593,27 @@ export const setAgentAvailabilityFn = createServerFn({ method: 'POST' })
   })
 
 /** Mint a short-lived token authorizing this principal's SSE stream. */
-export const mintChatStreamTokenFn = createServerFn({ method: 'GET' }).handler(async () => {
-  try {
-    const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
-    await assertVisitorChatAccess(ctx.principal.role)
-    const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
-    return { token: mintStreamToken(ctx.principal.id) }
-  } catch (error) {
-    log.error({ err: error }, 'mint chat stream token failed')
-    throw error
-  }
-})
-
-/** Soft-delete a message (team members; or a visitor deleting their own). */
-export const deleteChatMessageFn = createServerFn({ method: 'POST' })
-  .validator(messageIdSchema)
+export const mintChatStreamTokenFn = createServerFn({ method: 'GET' })
+  .inputValidator(supportSurfaceInputSchema.optional())
   .handler(async ({ data }) => {
     try {
       const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
-      await assertVisitorChatAccess(ctx.principal.role)
+      await assertVisitorChatAccess(ctx.principal.role, data?.surface)
+      const { mintStreamToken } = await import('@/lib/server/realtime/stream-token')
+      return { token: mintStreamToken(ctx.principal.id) }
+    } catch (error) {
+      console.error('[fn:chat] mintChatStreamTokenFn failed:', error)
+      throw error
+    }
+  })
+
+/** Soft-delete a message (team members; or a visitor deleting their own). */
+export const deleteChatMessageFn = createServerFn({ method: 'POST' })
+  .inputValidator(messageIdSurfaceSchema)
+  .handler(async ({ data }) => {
+    try {
+      const ctx = await requireAuth({ roles: ['admin', 'member', 'user'] })
+      await assertVisitorChatAccess(ctx.principal.role, data.surface)
       const actor = await policyActorFromAuth(ctx)
       const { deleteChatMessage } = await import('@/lib/server/domains/chat/chat.service')
       await deleteChatMessage(data.messageId as ChatMessageId, actor)

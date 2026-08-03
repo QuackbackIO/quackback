@@ -59,6 +59,7 @@ export async function createNotificationsBatch(
         body: input.body ?? null,
         postId: input.postId ?? null,
         commentId: input.commentId ?? null,
+        ticketId: input.ticketId ?? null,
         metadata: input.metadata ?? null,
       }))
     )
@@ -126,6 +127,7 @@ export async function getNotificationsForMember(
       body: inAppNotifications.body,
       postId: inAppNotifications.postId,
       commentId: inAppNotifications.commentId,
+      ticketId: inAppNotifications.ticketId,
       metadata: inAppNotifications.metadata,
       readAt: inAppNotifications.readAt,
       archivedAt: inAppNotifications.archivedAt,
@@ -199,6 +201,7 @@ export async function getNotificationsForMember(
       body: denied ? 'This activity is no longer visible to you.' : row.body,
       postId: row.postId,
       commentId: row.commentId,
+      ticketId: row.ticketId,
       metadata: denied ? null : (row.metadata as Record<string, unknown> | null),
       readAt: row.readAt,
       archivedAt: row.archivedAt,
@@ -292,10 +295,7 @@ export async function archiveNotification(
   principalId: PrincipalId,
   notificationId: NotificationId
 ): Promise<void> {
-  log.debug(
-    { principal_id: principalId, notification_id: notificationId },
-    'archive notification'
-  )
+  log.debug({ principal_id: principalId, notification_id: notificationId }, 'archive notification')
   const existing = await db.query.inAppNotifications.findFirst({
     where: and(
       eq(inAppNotifications.id, notificationId),
