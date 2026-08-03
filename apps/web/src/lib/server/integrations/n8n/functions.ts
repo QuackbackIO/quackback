@@ -5,6 +5,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { safeFetch } from '../../content/ssrf-guard'
+import { toIsoString } from '@/lib/shared/utils'
 
 /**
  * Save an n8n webhook URL as the integration connection.
@@ -23,7 +24,7 @@ export const saveN8nWebhookFn = createServerFn({ method: 'POST' })
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         event: 'test',
-        timestamp: new Date().toISOString(),
+        timestamp: toIsoString(new Date()),
         message: 'Quackback webhook test',
       }),
     })

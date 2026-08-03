@@ -7,6 +7,7 @@ import { resolveLocale } from '@/lib/shared/i18n'
 import { WidgetAuthProvider } from '@/components/widget/widget-auth-provider'
 import { extractSessionTokenFromCookie } from '@/lib/server/functions/portal-session-token'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
+import { resolveWidgetContextFn } from '@/lib/server/functions/widget-context'
 
 const setIframeHeaders = createServerFn({ method: 'GET' }).handler(async () => {
   setResponseHeader('Content-Security-Policy', 'frame-ancestors *')
@@ -41,8 +42,22 @@ export const Route = createFileRoute('/widget')({
   // setIframeHeaders() can set frame-ancestors/X-Frame-Options on the
   // document response, and the locale is resolved from Accept-Language.
   ssr: 'data-only',
-  validateSearch: (search: Record<string, unknown>): { locale?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>
+  ): {
+    locale?: string
+    applicationKey?: string
+    environment?: string
+    hostOrigin?: string
+    app?: string
+    env?: string
+  } => ({
     locale: typeof search.locale === 'string' ? search.locale : undefined,
+    applicationKey: typeof search.applicationKey === 'string' ? search.applicationKey : undefined,
+    environment: typeof search.environment === 'string' ? search.environment : undefined,
+    hostOrigin: typeof search.hostOrigin === 'string' ? search.hostOrigin : undefined,
+    app: typeof search.app === 'string' ? search.app : undefined,
+    env: typeof search.env === 'string' ? search.env : undefined,
   }),
   loader: async ({ context, location }) => {
     const { settings, session } = context
@@ -84,8 +99,29 @@ export const Route = createFileRoute('/widget')({
 
     // location.search isn't generically typed inside the loader — cast to
     // the validateSearch shape, matching the pattern in _portal/index.tsx.
-    const { locale: explicitLocale } = location.search as { locale?: string }
+    const {
+      locale: explicitLocale,
+      applicationKey,
+      environment,
+      hostOrigin,
+      app,
+      env,
+    } = location.search as {
+      locale?: string
+      applicationKey?: string
+      environment?: string
+      hostOrigin?: string
+      app?: string
+      env?: string
+    }
     const locale = await getWidgetLocale({ data: { explicitLocale } })
+    const widgetContext = await resolveWidgetContextFn({
+      data: {
+        applicationKey: applicationKey ?? app,
+        environment: environment ?? env,
+        hostOrigin,
+      },
+    })
 
     return {
       org: redactSettingsForClient(org),
@@ -95,7 +131,10 @@ export const Route = createFileRoute('/widget')({
       customCss,
       portalUser,
       portalSessionToken,
-      hmacRequired: settings?.publicWidgetConfig?.hmacRequired ?? false,
+      hmacRequired: widgetContext.publicConfig.hmacRequired ?? false,
+      publicWidgetConfig: widgetContext.publicConfig,
+      widgetContextToken: widgetContext.contextToken,
+      widgetContextSource: widgetContext.source,
       locale,
     }
   },
@@ -104,8 +143,15 @@ export const Route = createFileRoute('/widget')({
 })
 
 function WidgetLayout() {
-  const { themeStyles, customCss, portalUser, portalSessionToken, hmacRequired, locale } =
-    Route.useLoaderData()
+  const {
+    themeStyles,
+    customCss,
+    portalUser,
+    portalSessionToken,
+    hmacRequired,
+    widgetContextToken,
+    locale,
+  } = Route.useLoaderData()
 
   return (
     <WidgetAuthProvider
@@ -113,6 +159,7 @@ function WidgetLayout() {
       portalSessionToken={portalSessionToken}
       hmacRequired={hmacRequired}
       initialLocale={locale}
+      widgetContextToken={widgetContextToken}
     >
       {themeStyles && <style dangerouslySetInnerHTML={{ __html: themeStyles }} />}
       {customCss && <style dangerouslySetInnerHTML={{ __html: customCss }} />}

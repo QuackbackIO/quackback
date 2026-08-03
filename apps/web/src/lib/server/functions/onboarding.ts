@@ -225,6 +225,7 @@ export const setupWorkspaceFn = createServerFn({ method: 'POST' })
             workspace: true,
             boards: false,
           },
+          source: 'self-hosted',
           useCase,
         }
 
@@ -344,6 +345,7 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
         const setupState: SetupState = getSetupState(existingSettings.setupState) ?? {
           version: 1,
           steps: { core: true, workspace: false, boards: false },
+          source: 'self-hosted',
         }
 
         const updatedState: SetupState = { ...setupState, useCase: data.useCase }
@@ -370,6 +372,7 @@ export const saveUseCaseFn = createServerFn({ method: 'POST' })
         const setupState: SetupState = {
           version: 1,
           steps: { core: true, workspace: false, boards: false },
+          source: 'self-hosted',
           useCase: data.useCase,
         }
 

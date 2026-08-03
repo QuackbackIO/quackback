@@ -7,13 +7,16 @@ import { RichTextContent, isRichTextContent } from '@/components/ui/rich-text-ed
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 
 interface WidgetHelpDetailProps {
   articleSlug: string
 }
 
 export function WidgetHelpDetail({ articleSlug }: WidgetHelpDetailProps) {
-  const { data: article, isLoading } = useQuery(publicHelpCenterQueries.articleBySlug(articleSlug))
+  const { data: article, isLoading } = useQuery(
+    publicHelpCenterQueries.articleBySlug(articleSlug, getWidgetAuthHeaders())
+  )
 
   const handleViewOnPortal = useCallback(() => {
     if (!article) return
