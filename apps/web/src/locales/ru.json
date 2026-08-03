@@ -33,6 +33,7 @@
   "widget.home.form.errorEmail": "Не удалось проверить email. Попробуйте еще раз.",
   "widget.home.form.errorSession": "Не удалось продолжить. Попробуйте еще раз.",
   "widget.home.form.errorNetwork": "Ошибка сети. Попробуйте снова.",
+  "widget.home.form.errorReauthRequired": "Your session has expired. Please sign in again to submit feedback.",
   "widget.home.similar.heading": "Похожие предложения",
   "widget.home.popular.heading": "Популярные предложения",
   "widget.home.popular.search.placeholder": "Поиск предложений...",

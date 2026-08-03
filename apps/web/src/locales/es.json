@@ -33,6 +33,7 @@
   "widget.home.form.errorEmail": "No se pudo verificar tu correo electrónico. Inténtalo de nuevo.",
   "widget.home.form.errorSession": "No se pudo crear la sesión. Inténtalo de nuevo.",
   "widget.home.form.errorNetwork": "Error de red. Inténtalo de nuevo.",
+  "widget.home.form.errorReauthRequired": "Your session has expired. Please sign in again to submit feedback.",
   "widget.home.similar.heading": "Ideas similares",
   "widget.home.popular.heading": "Ideas populares",
   "widget.home.popular.search.placeholder": "Buscar ideas...",

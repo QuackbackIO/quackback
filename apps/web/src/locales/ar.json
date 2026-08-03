@@ -33,6 +33,7 @@
   "widget.home.form.errorEmail": "تعذّر التحقق من بريدك الإلكتروني. يرجى المحاولة مرة أخرى.",
   "widget.home.form.errorSession": "تعذّر إنشاء الجلسة. يرجى المحاولة مرة أخرى.",
   "widget.home.form.errorNetwork": "خطأ في الشبكة. يرجى المحاولة مرة أخرى.",
+  "widget.home.form.errorReauthRequired": "Your session has expired. Please sign in again to submit feedback.",
   "widget.home.similar.heading": "أفكار مشابهة",
   "widget.home.popular.heading": "أفكار رائجة",
   "widget.home.popular.search.placeholder": "ابحث عن أفكار...",

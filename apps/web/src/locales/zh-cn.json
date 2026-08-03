@@ -33,6 +33,7 @@
   "widget.home.form.errorEmail": "无法验证你的邮箱。请重试。",
   "widget.home.form.errorSession": "无法创建会话。请重试。",
   "widget.home.form.errorNetwork": "网络错误。请重试。",
+  "widget.home.form.errorReauthRequired": "Your session has expired. Please sign in again to submit feedback.",
   "widget.home.similar.heading": "相似想法",
   "widget.home.popular.heading": "热门想法",
   "widget.home.popular.search.placeholder": "搜索想法…",

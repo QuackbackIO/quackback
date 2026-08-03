@@ -33,6 +33,7 @@
   "widget.home.form.errorEmail": "無法驗證你的電子郵件。請再試一次。",
   "widget.home.form.errorSession": "無法建立工作階段。請再試一次。",
   "widget.home.form.errorNetwork": "網路錯誤。請再試一次。",
+  "widget.home.form.errorReauthRequired": "Your session has expired. Please sign in again to submit feedback.",
   "widget.home.similar.heading": "相似的想法",
   "widget.home.popular.heading": "熱門想法",
   "widget.home.popular.search.placeholder": "搜尋想法...",
