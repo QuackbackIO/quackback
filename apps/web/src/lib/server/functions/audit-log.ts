@@ -17,6 +17,7 @@ import { and, auditLog, db, desc, eq, gte, ilike, lte, notInArray } from '@/lib/
 import type { SQL } from 'drizzle-orm'
 import type { AuditEventOutcome, JsonValue } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
+import { toIsoString } from '@/lib/shared/utils'
 
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 500
@@ -108,7 +109,7 @@ export const listAuditEventsFn = createServerFn({ method: 'GET' })
 
     const events: AuditEventRow[] = visible.map((row) => ({
       id: row.id,
-      occurredAt: row.occurredAt.toISOString(),
+      occurredAt: toIsoString(row.occurredAt),
       actorUserId: row.actorUserId,
       actorEmail: row.actorEmail,
       actorRole: row.actorRole,

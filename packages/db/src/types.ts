@@ -11,7 +11,12 @@ import type {
   postNotes,
 } from './schema/posts'
 import type { integrations } from './schema/integrations'
-import type { changelogEntries, changelogEntryPosts } from './schema/changelog'
+import type {
+  changelogCategories,
+  changelogEntries,
+  changelogEntryPosts,
+  changelogProducts,
+} from './schema/changelog'
 import type {
   conversations,
   chatMessages,
@@ -21,12 +26,38 @@ import type {
   chatMessageFlags,
 } from './schema/chat'
 import type { principal } from './schema/auth'
+import type { teams, teamMemberships } from './schema/teams'
+import type { roles, permissions, rolePermissions, principalRoleAssignments } from './schema/roles'
+import type { auditEvents } from './schema/audit-events'
+import type { organizations, contacts, contactUserLinks } from './schema/organizations'
+import type { ticketStatuses } from './schema/ticket-statuses'
+import type {
+  tickets,
+  ticketThreads,
+  ticketAttachments,
+  ticketParticipants,
+  ticketShares,
+  ticketActivity,
+} from './schema/tickets'
+import type { inboxes, inboxChannels, inboxMemberships } from './schema/inboxes'
+import type { routingRules } from './schema/routing-rules'
+import type {
+  businessHours,
+  slaPolicies,
+  slaTargets,
+  ticketSlaClocks,
+  escalationRules,
+  slaEscalationLog,
+} from './schema/sla'
+import type { ticketSubscriptions } from './schema/ticket-subscriptions'
+import type { webhookDeliveries } from './schema/webhook-deliveries'
+import type { widgetApplications, widgetEnvironmentProfiles } from './schema/widget-profiles'
 
 // Status categories (defined here to avoid circular imports in tests)
 export const STATUS_CATEGORIES = ['active', 'complete', 'closed'] as const
 export type StatusCategory = (typeof STATUS_CATEGORIES)[number]
 
-// Moderation states for posts — single source of truth, kept in sync with
+// Moderation states for posts - single source of truth, kept in sync with
 // the posts.moderation_state column enum (schema.test.ts pins the match).
 export const MODERATION_STATES = [
   'published',
@@ -50,13 +81,13 @@ export interface BoardSettings {
 // ----------------------------------------------------------------------
 // Per-action access tiers (View+Vote / Comment / Submit) and per-board
 // approval overrides. The legacy `BoardAudience` discriminated union was
-// removed in migration 0080 — every reader now consults `BoardAccess`.
+// removed in migration 0080 - every reader now consults `BoardAccess`.
 // ----------------------------------------------------------------------
 
 export const ACCESS_TIERS = ['anonymous', 'authenticated', 'segments', 'team'] as const
 export type AccessTier = (typeof ACCESS_TIERS)[number]
 
-/** Restriction rank — higher number is stricter. Used for tier-invariant
+/** Restriction rank - higher number is stricter. Used for tier-invariant
  *  checks: a derived action (comment / submit) cannot be more permissive
  *  than view. */
 export const ACCESS_TIER_RANK: Record<AccessTier, number> = {
@@ -80,7 +111,7 @@ export interface BoardAccess {
   vote: AccessTier
   comment: AccessTier
   submit: AccessTier
-  /** Per-action segment allowlists — used wherever the matching tier is
+  /** Per-action segment allowlists - used wherever the matching tier is
    *  'segments'. A board can say "Active Users can view & comment, but
    *  only Beta testers can submit." Invalid (and rejected on save) when
    *  an action's tier is 'segments' but that action's list is empty. */
@@ -220,9 +251,11 @@ export interface SetupState {
     boards: boolean // At least one board created or explicitly skipped
   }
   completedAt?: string // ISO timestamp when onboarding was fully completed
+  source: 'cloud' | 'self-hosted' // How this instance was provisioned
   useCase?: UseCaseType // Product type for personalized board recommendations
 }
 
+// Default setup state for new instances (self-hosted starts with workspace incomplete)
 export const DEFAULT_SETUP_STATE: SetupState = {
   version: 1,
   steps: {
@@ -230,13 +263,15 @@ export const DEFAULT_SETUP_STATE: SetupState = {
     workspace: false,
     boards: false,
   },
+  source: 'self-hosted',
 }
 
 // Helper to parse setup state from settings
 export function getSetupState(setupStateJson: string | null): SetupState | null {
   if (!setupStateJson) return null
   try {
-    return JSON.parse(setupStateJson) as SetupState
+    const parsed = JSON.parse(setupStateJson) as SetupState
+    return { ...parsed, source: parsed.source ?? 'self-hosted' }
   } catch {
     return null
   }
@@ -292,7 +327,7 @@ export type NewPostNote = InferInsertModel<typeof postNotes>
 export type CommentReaction = InferSelectModel<typeof commentReactions>
 export type NewCommentReaction = InferInsertModel<typeof commentReactions>
 
-// Support-inbox conversation statuses — kept in sync with the conversations.status
+// Support-inbox conversation statuses - kept in sync with the conversations.status
 // column enum (schema.test.ts pins the match).
 export const CONVERSATION_STATUSES = ['open', 'pending', 'closed'] as const
 export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number]
@@ -317,19 +352,19 @@ export type ConversationEndReason = (typeof CONVERSATION_END_REASONS)[number]
 export const AGENT_AVAILABILITY_VALUES = ['online', 'away'] as const
 export type AgentAvailability = (typeof AGENT_AVAILABILITY_VALUES)[number]
 
-// The inbound channel a conversation arrived on — kept in sync with the
+// The inbound channel a conversation arrived on - kept in sync with the
 // conversations.channel column enum. Existing live-chat threads default to
 // 'messenger'; 'email' and 'web_form' are wired up in later phases. This turns
 // "live chat vs ticket" into one polymorphic conversation with a channel field.
 export const CHANNELS = ['messenger', 'email', 'web_form'] as const
 export type Channel = (typeof CHANNELS)[number]
 
-// Agent-set conversation priority for inbox triage — kept in sync with the
+// Agent-set conversation priority for inbox triage - kept in sync with the
 // conversations.priority column enum. 'none' = unset (the default).
 export const CONVERSATION_PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
 export type ConversationPriority = (typeof CONVERSATION_PRIORITIES)[number]
 
-// Which side of a conversation a message came from — kept in sync with the
+// Which side of a conversation a message came from - kept in sync with the
 // chat_messages.sender_type column enum. 'system' rows are status events (e.g.
 // assignment) shown to both sides; attributed to the relevant agent's principal
 // and never counted as unread.
@@ -357,7 +392,7 @@ export interface ChatSystemEvent {
 }
 
 // An agent-only suggestion (carried on an internal note) to track a resolved
-// conversation as a feedback post. Surfaced exclusively via the agent DTO — it
+// conversation as a feedback post. Surfaced exclusively via the agent DTO - it
 // never reaches the visitor.
 export interface PostSuggestion {
   boardId: string
@@ -406,10 +441,113 @@ export type ChangelogEntry = InferSelectModel<typeof changelogEntries>
 export type NewChangelogEntry = InferInsertModel<typeof changelogEntries>
 export type ChangelogEntryPost = InferSelectModel<typeof changelogEntryPosts>
 export type NewChangelogEntryPost = InferInsertModel<typeof changelogEntryPosts>
+export type ChangelogCategory = InferSelectModel<typeof changelogCategories>
+export type NewChangelogCategory = InferInsertModel<typeof changelogCategories>
+export type ChangelogProduct = InferSelectModel<typeof changelogProducts>
+export type NewChangelogProduct = InferInsertModel<typeof changelogProducts>
 
 // Principal types
 export type Principal = InferSelectModel<typeof principal>
 export type NewPrincipal = InferInsertModel<typeof principal>
+
+// Ticketing — Phase 1
+export type Team = InferSelectModel<typeof teams>
+export type NewTeam = InferInsertModel<typeof teams>
+export type TeamMembership = InferSelectModel<typeof teamMemberships>
+export type NewTeamMembership = InferInsertModel<typeof teamMemberships>
+export type RoleRecord = InferSelectModel<typeof roles>
+export type NewRoleRecord = InferInsertModel<typeof roles>
+export type PermissionRecord = InferSelectModel<typeof permissions>
+export type NewPermissionRecord = InferInsertModel<typeof permissions>
+export type RolePermission = InferSelectModel<typeof rolePermissions>
+export type NewRolePermission = InferInsertModel<typeof rolePermissions>
+export type PrincipalRoleAssignment = InferSelectModel<typeof principalRoleAssignments>
+export type NewPrincipalRoleAssignment = InferInsertModel<typeof principalRoleAssignments>
+export type AuditEvent = InferSelectModel<typeof auditEvents>
+export type NewAuditEvent = InferInsertModel<typeof auditEvents>
+
+// Ticketing — Phase 2 (organizations & contacts)
+export type Organization = InferSelectModel<typeof organizations>
+export type NewOrganization = InferInsertModel<typeof organizations>
+export type Contact = InferSelectModel<typeof contacts>
+export type NewContact = InferInsertModel<typeof contacts>
+export type ContactUserLink = InferSelectModel<typeof contactUserLinks>
+export type NewContactUserLink = InferInsertModel<typeof contactUserLinks>
+
+// Ticketing — Phase 3 (ticket core)
+export type TicketStatusEntity = InferSelectModel<typeof ticketStatuses>
+export type NewTicketStatusEntity = InferInsertModel<typeof ticketStatuses>
+export type Ticket = InferSelectModel<typeof tickets>
+export type NewTicket = InferInsertModel<typeof tickets>
+export type TicketThread = InferSelectModel<typeof ticketThreads>
+export type NewTicketThread = InferInsertModel<typeof ticketThreads>
+export type TicketAttachment = InferSelectModel<typeof ticketAttachments>
+export type NewTicketAttachment = InferInsertModel<typeof ticketAttachments>
+export type TicketParticipant = InferSelectModel<typeof ticketParticipants>
+export type NewTicketParticipant = InferInsertModel<typeof ticketParticipants>
+export type TicketShare = InferSelectModel<typeof ticketShares>
+export type NewTicketShare = InferInsertModel<typeof ticketShares>
+export type TicketActivity = InferSelectModel<typeof ticketActivity>
+export type NewTicketActivity = InferInsertModel<typeof ticketActivity>
+
+// Ticketing — Phase 4 (inboxes, channels, routing)
+export type Inbox = InferSelectModel<typeof inboxes>
+export type NewInbox = InferInsertModel<typeof inboxes>
+export type InboxChannel = InferSelectModel<typeof inboxChannels>
+export type NewInboxChannel = InferInsertModel<typeof inboxChannels>
+export type InboxMembership = InferSelectModel<typeof inboxMemberships>
+export type NewInboxMembership = InferInsertModel<typeof inboxMemberships>
+export type RoutingRule = InferSelectModel<typeof routingRules>
+export type NewRoutingRule = InferInsertModel<typeof routingRules>
+
+// Ticketing — Phase 5 (SLA + escalations)
+export type BusinessHours = InferSelectModel<typeof businessHours>
+export type NewBusinessHours = InferInsertModel<typeof businessHours>
+export type SlaPolicy = InferSelectModel<typeof slaPolicies>
+export type NewSlaPolicy = InferInsertModel<typeof slaPolicies>
+export type SlaTarget = InferSelectModel<typeof slaTargets>
+export type NewSlaTarget = InferInsertModel<typeof slaTargets>
+export type TicketSlaClock = InferSelectModel<typeof ticketSlaClocks>
+export type NewTicketSlaClock = InferInsertModel<typeof ticketSlaClocks>
+export type EscalationRule = InferSelectModel<typeof escalationRules>
+export type NewEscalationRule = InferInsertModel<typeof escalationRules>
+export type SlaEscalationLogEntry = InferSelectModel<typeof slaEscalationLog>
+export type NewSlaEscalationLogEntry = InferInsertModel<typeof slaEscalationLog>
+
+export type TicketSubscription = InferSelectModel<typeof ticketSubscriptions>
+export type NewTicketSubscription = InferInsertModel<typeof ticketSubscriptions>
+
+export type WebhookDelivery = InferSelectModel<typeof webhookDeliveries>
+export type NewWebhookDelivery = InferInsertModel<typeof webhookDeliveries>
+
+// Widget applications and environment profiles
+export type WidgetApplication = InferSelectModel<typeof widgetApplications>
+export type NewWidgetApplication = InferInsertModel<typeof widgetApplications>
+export type WidgetEnvironmentProfile = InferSelectModel<typeof widgetEnvironmentProfiles>
+export type NewWidgetEnvironmentProfile = InferInsertModel<typeof widgetEnvironmentProfiles>
+
+// Re-export SLA literal-union types & business-hours interfaces from the schema.
+export type {
+  SlaTargetKind,
+  SlaClockState,
+  SlaPolicyScope,
+  EscalationRecipientType,
+  EscalationChannel,
+  BusinessHoursRange,
+  BusinessHoursWeek,
+  BusinessHoursHoliday,
+} from './schema/sla'
+// Re-export ticket-related literal-union types used by the SLA domain.
+export type {
+  TicketPriority,
+  TicketChannel,
+  TicketVisibilityScope,
+  TicketThreadAudience,
+  TicketParticipantRole,
+  TicketShareLevel,
+} from './schema/tickets'
+export type { TicketStatusCategory } from './schema/ticket-statuses'
+export type { AuditDiff, AuditJsonValue } from './schema/audit-events'
 
 // Extended types for queries with relations
 export type CommentWithReplies = Comment & {

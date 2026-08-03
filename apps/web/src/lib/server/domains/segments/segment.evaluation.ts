@@ -40,6 +40,55 @@ function stringOperatorSql(
   return null
 }
 
+function linkedContactSql(predicate: ReturnType<typeof sql>): ReturnType<typeof sql> {
+  return sql`EXISTS (
+    SELECT 1
+    FROM contact_user_links cul
+    INNER JOIN contacts c ON c.id = cul.contact_id AND c.archived_at IS NULL
+    WHERE cul.user_id = u.id
+      AND (${predicate})
+  )`
+}
+
+function linkedOrganizationSql(predicate: ReturnType<typeof sql>): ReturnType<typeof sql> {
+  return sql`EXISTS (
+    SELECT 1
+    FROM contact_user_links cul
+    INNER JOIN contacts c ON c.id = cul.contact_id AND c.archived_at IS NULL
+    LEFT JOIN organizations o ON o.id = c.organization_id AND o.archived_at IS NULL
+    WHERE cul.user_id = u.id
+      AND (${predicate})
+  )`
+}
+
+function valueListSql(
+  values: (string | number)[],
+  normalize?: (value: string | number) => string
+): ReturnType<typeof sql> {
+  return sql.join(
+    values.map((value) => sql`${normalize ? normalize(value) : String(value)}`),
+    sql`, `
+  )
+}
+
+function textFieldConditionSql(
+  field: ReturnType<typeof sql>,
+  operator: string,
+  value: string | number | boolean | (string | number)[] | undefined,
+  opts: { lower?: boolean; nullableNeq?: boolean } = {}
+): ReturnType<typeof sql> | null {
+  const sqlField = opts.lower ? sql`LOWER(${field})` : field
+  const sqlValue = opts.lower ? String(value).toLowerCase() : String(value)
+  const strResult = stringOperatorSql(sqlField, operator, sqlValue)
+  if (strResult) return strResult
+  const sqlOp = OPERATOR_SQL[operator]
+  if (!sqlOp) return null
+  if (operator === 'neq' && opts.nullableNeq) {
+    return sql`(${field} IS NULL OR ${sqlField} != ${sqlValue})`
+  }
+  return sql`${sqlField} ${sql.raw(sqlOp)} ${sqlValue}`
+}
+
 /**
  * Build a SQL condition fragment for a single rule condition.
  * Returns a SQL template or null if the condition is unsupported.
@@ -90,6 +139,42 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
       // principal.type is always set — is_set is always true, is_not_set is never true
       case 'principal_type':
         return isSet ? sql`TRUE` : sql`FALSE`
+      case 'contact_title':
+        return linkedContactSql(
+          isSet
+            ? sql`c.title IS NOT NULL AND c.title <> ''`
+            : sql`(c.title IS NULL OR c.title = '')`
+        )
+      case 'contact_metadata_key': {
+        const key = condition.metadataKey
+        if (!key) return null
+        return linkedContactSql(
+          isSet
+            ? sql`(c.metadata::jsonb->>${key}) IS NOT NULL`
+            : sql`(c.metadata::jsonb->>${key}) IS NULL`
+        )
+      }
+      case 'organization_domain':
+        return linkedOrganizationSql(
+          isSet
+            ? sql`o.domain IS NOT NULL AND o.domain <> ''`
+            : sql`(o.domain IS NULL OR o.domain = '')`
+        )
+      case 'organization_external_id':
+        return linkedOrganizationSql(
+          isSet
+            ? sql`o.external_id IS NOT NULL AND o.external_id <> ''`
+            : sql`(o.external_id IS NULL OR o.external_id = '')`
+        )
+      case 'organization_metadata_key': {
+        const key = condition.metadataKey
+        if (!key) return null
+        return linkedOrganizationSql(
+          isSet
+            ? sql`(o.metadata::jsonb->>${key}) IS NOT NULL`
+            : sql`(o.metadata::jsonb->>${key}) IS NULL`
+        )
+      }
       default:
         return null
     }
@@ -128,6 +213,24 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
         return sql`COALESCE((SELECT a.provider_id FROM account a WHERE a.user_id = u.id ORDER BY a.created_at ASC LIMIT 1), 'email') IN (${placeholders})`
       case 'principal_type':
         return sql`p.type IN (${placeholders})`
+      case 'contact_title':
+        return linkedContactSql(sql`c.title IN (${placeholders})`)
+      case 'contact_metadata_key': {
+        const key = condition.metadataKey
+        if (!key) return null
+        return linkedContactSql(sql`(c.metadata::jsonb->>${key}) IN (${placeholders})`)
+      }
+      case 'organization_domain': {
+        const domains = valueListSql(values, (v) => String(v).toLowerCase())
+        return linkedOrganizationSql(sql`LOWER(o.domain) IN (${domains})`)
+      }
+      case 'organization_external_id':
+        return linkedOrganizationSql(sql`o.external_id IN (${placeholders})`)
+      case 'organization_metadata_key': {
+        const key = condition.metadataKey
+        if (!key) return null
+        return linkedOrganizationSql(sql`(o.metadata::jsonb->>${key}) IN (${placeholders})`)
+      }
       default:
         return null
     }
@@ -270,6 +373,56 @@ function buildConditionSql(condition: SegmentCondition): ReturnType<typeof sql> 
       const sqlOp = OPERATOR_SQL[operator]
       if (!sqlOp) return null
       return sql`p.type ${sql.raw(sqlOp)} ${String(value)}`
+    }
+
+    case 'contact_title': {
+      const conditionSql = textFieldConditionSql(sql`c.title`, operator, value, {
+        nullableNeq: true,
+      })
+      return conditionSql ? linkedContactSql(conditionSql) : null
+    }
+
+    case 'contact_metadata_key': {
+      const key = condition.metadataKey
+      if (!key) return null
+      const conditionSql = textFieldConditionSql(
+        sql`(c.metadata::jsonb->>${key})`,
+        operator,
+        value,
+        {
+          nullableNeq: true,
+        }
+      )
+      return conditionSql ? linkedContactSql(conditionSql) : null
+    }
+
+    case 'organization_domain': {
+      const conditionSql = textFieldConditionSql(sql`o.domain`, operator, value, {
+        lower: true,
+        nullableNeq: true,
+      })
+      return conditionSql ? linkedOrganizationSql(conditionSql) : null
+    }
+
+    case 'organization_external_id': {
+      const conditionSql = textFieldConditionSql(sql`o.external_id`, operator, value, {
+        nullableNeq: true,
+      })
+      return conditionSql ? linkedOrganizationSql(conditionSql) : null
+    }
+
+    case 'organization_metadata_key': {
+      const key = condition.metadataKey
+      if (!key) return null
+      const conditionSql = textFieldConditionSql(
+        sql`(o.metadata::jsonb->>${key})`,
+        operator,
+        value,
+        {
+          nullableNeq: true,
+        }
+      )
+      return conditionSql ? linkedOrganizationSql(conditionSql) : null
     }
 
     default:

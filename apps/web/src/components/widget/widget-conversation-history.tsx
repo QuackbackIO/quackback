@@ -30,7 +30,8 @@ export function WidgetConversationHistory({
     queryKey: ['widget', 'my-conversations'],
     // Forward the widget Bearer token, or token-authed visitors fail the
     // server-side hasAuthCredentials() guard and always get an empty list.
-    queryFn: () => getMyConversationsFn({ headers: getWidgetAuthHeaders() }),
+    queryFn: () =>
+      getMyConversationsFn({ data: { surface: 'widget' }, headers: getWidgetAuthHeaders() }),
     staleTime: 30_000,
   })
 

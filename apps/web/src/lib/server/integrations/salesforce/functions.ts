@@ -21,7 +21,7 @@ export const getSalesforceConnectUrl = createServerFn({ method: 'GET' }).handler
     const { randomBytes } = await import('crypto')
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { signOAuthState } = await import('@/lib/server/auth/oauth-state')
-    const { config } = await import('@/lib/server/config')
+    const { getOAuthReturnDomain } = await import('@/lib/server/integrations/oauth')
 
     const auth = await requireAuth({ roles: ['admin'] })
     const { hasPlatformCredentials } =
@@ -31,7 +31,7 @@ export const getSalesforceConnectUrl = createServerFn({ method: 'GET' }).handler
         'Salesforce platform credentials not configured. Configure them in integration settings first.'
       )
     }
-    const returnDomain = new URL(config.baseUrl).host
+    const returnDomain = getOAuthReturnDomain()
 
     const state = signOAuthState({
       type: 'salesforce_oauth',

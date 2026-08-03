@@ -16,6 +16,8 @@ import { typeIdWithDefault, typeIdColumn, typeIdColumnNullable } from '@quackbac
 import { principal } from './auth'
 import { boards } from './boards'
 import { postExternalLinks } from './external-links'
+import { ticketExternalLinks } from './ticket-external-links'
+import { integrationUserMappings } from './integration-user-mappings'
 import type { IntegrationConfig, EventMappingActionConfig, EventMappingFilters } from '../types'
 
 /**
@@ -50,11 +52,16 @@ export const integrations = pgTable(
     lastErrorAt: timestamp('last_error_at', { withTimezone: true }),
     errorCount: integer('error_count').notNull().default(0),
 
+    /** User-friendly label for multi-instance integrations (e.g. repo name for GitHub) */
+    label: varchar('label', { length: 100 }),
+
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    unique('integration_type_unique').on(table.integrationType),
+    // NOTE: unique('integration_type_unique') was removed in migration 0057
+    // to allow multiple integrations per type (e.g. multiple GitHub repos).
+    // Replaced by a partial expression index in SQL: integration_type_channel_unique
     index('idx_integrations_type_status').on(table.integrationType, table.status),
     // CHECK constraint to ensure error count is never negative
     check('error_count_non_negative', sql`error_count >= 0`),
@@ -169,6 +176,8 @@ export const integrationsRelations = relations(integrations, ({ one, many }) => 
   }),
   eventMappings: many(integrationEventMappings),
   externalLinks: many(postExternalLinks),
+  ticketExternalLinks: many(ticketExternalLinks),
+  userMappings: many(integrationUserMappings),
   slackChannelMonitors: many(slackChannelMonitors),
 }))
 

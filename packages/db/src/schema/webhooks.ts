@@ -31,6 +31,8 @@ export const webhooks = pgTable(
     events: text('events').array().notNull(),
     /** Optional filter: only trigger for posts in these boards */
     boardIds: text('board_ids').array(),
+    /** Optional filter: only trigger for tickets in these inboxes */
+    inboxIds: text('inbox_ids').array(),
     /** Webhook status: active or disabled */
     status: text('status', { enum: ['active', 'disabled'] })
       .notNull()

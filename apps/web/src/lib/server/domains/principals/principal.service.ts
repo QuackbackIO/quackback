@@ -138,7 +138,7 @@ export async function listTeamMembers(): Promise<TeamMember[]> {
       .from(principal)
       .innerJoin(user, eq(principal.userId, user.id))
       .leftJoin(lastSession, eq(lastSession.userId, user.id))
-      .where(eq(principal.type, 'user'))
+      .where(and(eq(principal.type, 'user'), ne(principal.role, 'user')))
 
     // The `max()` aggregate comes back as a string from postgres-js
     // (Date mapping only fires on plain timestamp column selects);

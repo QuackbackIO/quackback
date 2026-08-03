@@ -1,6 +1,6 @@
 import { getAuth, getOTP } from './index'
 import { mintMagicLinkUrl } from './magic-link-mint'
-import { config } from '@/lib/server/config'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'auth-email-signin' })
@@ -17,9 +17,10 @@ export async function requestEmailSignin(opts: {
   callbackURL: string
 }): Promise<void> {
   const auth = await getAuth()
+  const portalUrl = resolvePublicBaseUrl()
   const headers = new Headers({
-    Origin: config.baseUrl,
-    Host: new URL(config.baseUrl).host,
+    Origin: portalUrl,
+    Host: new URL(portalUrl).host,
   })
 
   const { db } = await import('@/lib/server/db')
@@ -42,7 +43,7 @@ export async function requestEmailSignin(opts: {
       email: opts.email,
       callbackPath: opts.callbackURL,
       errorCallbackPath,
-      portalUrl: config.baseUrl,
+      portalUrl,
     }),
     auth.api.sendVerificationOTP({
       body: { email: opts.email, type: 'sign-in' },
