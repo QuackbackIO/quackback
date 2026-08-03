@@ -306,6 +306,13 @@ const updatePortalConfigSchema = z.object({
       enabled: z.boolean().optional(),
     })
     .optional(),
+  bugTracker: z
+    .object({
+      enabled: z.boolean().optional(),
+      url: z.union([z.string().url(), z.literal('')]).optional(),
+      keywords: z.array(z.string().min(1).max(40)).max(10).optional(),
+    })
+    .optional(),
 })
 
 const saveLogoKeySchema = z.object({

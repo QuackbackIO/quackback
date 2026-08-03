@@ -1,5 +1,5 @@
 import type { BoardId } from '@quackback/ids'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useIntl, FormattedMessage } from 'react-intl'
 import { useKeyboardSubmit } from '@/lib/client/hooks/use-keyboard-submit'
 import { useRouter, useRouteContext } from '@tanstack/react-router'
@@ -22,6 +22,8 @@ import { useAuthBroadcast } from '@/lib/client/hooks/use-auth-broadcast'
 import { useSimilarPosts } from '@/lib/client/hooks/use-similar-posts'
 import { useEnsureAnonSession } from '@/lib/client/hooks/use-ensure-anon-session'
 import { SimilarPostsCard } from '@/components/public/similar-posts-card'
+import { BugTrackerHintCard } from '@/components/public/bug-tracker-hint-card'
+import { matchesBugTrackerKeywords } from '@/lib/shared/utils/bug-tracker'
 import { signOut } from '@/lib/client/auth-client'
 import { resolveSubmitState } from '@/components/public/feedback/submit-permission'
 import type { JSONContent } from '@tiptap/react'
@@ -44,6 +46,8 @@ export interface FeedbackHeaderProps {
    * `canSubmit` instead of the workspace-wide flag.
    */
   boardPermissions?: Record<string, { canSubmit: boolean; canVote: boolean }>
+  /** External bug-tracker hint. Undefined / disabled = hidden. */
+  bugTracker?: { url: string; keywords: string[] }
   onPostCreated?: (postId: string, boardSlug: string) => void
 }
 
@@ -52,6 +56,7 @@ export function FeedbackHeaderAnimated({
   defaultBoardId,
   user,
   boardPermissions,
+  bugTracker,
   onPostCreated,
 }: FeedbackHeaderProps) {
   const intl = useIntl()
@@ -120,6 +125,12 @@ export function FeedbackHeaderAnimated({
     title,
     enabled: expanded,
   })
+
+  // Hint at the external issue tracker when the title reads like a bug report.
+  const bugTrackerMatch = useMemo(
+    () => !!bugTracker?.url && matchesBugTrackerKeywords(title, bugTracker.keywords),
+    [title, bugTracker]
+  )
 
   const handleContentChange = useCallback(function (
     json: JSONContent,
@@ -376,6 +387,13 @@ export function FeedbackHeaderAnimated({
                 onImageUpload={canUploadImages ? uploadImage : undefined}
               />
             </motion.div>
+
+            {/* Bug tracker hint - shown when the title looks like a bug report */}
+            <BugTrackerHintCard
+              url={bugTracker?.url ?? ''}
+              show={bugTrackerMatch}
+              className="px-4 sm:px-5 pb-3"
+            />
 
             {/* Similar posts card - shown above footer as pre-submit prompt */}
             <SimilarPostsCard

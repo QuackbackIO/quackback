@@ -69,6 +69,33 @@ function PortalSettingsPage() {
     }
   }
 
+  const [bugTrackerEnabled, setBugTrackerEnabled] = useState(
+    config.bugTracker?.enabled ?? DEFAULT_PORTAL_CONFIG.bugTracker!.enabled
+  )
+  const [bugTrackerUrl, setBugTrackerUrl] = useState(
+    config.bugTracker?.url ?? DEFAULT_PORTAL_CONFIG.bugTracker!.url
+  )
+  const [bugTrackerKeywordsInput, setBugTrackerKeywordsInput] = useState(
+    (config.bugTracker?.keywords ?? DEFAULT_PORTAL_CONFIG.bugTracker!.keywords).join(', ')
+  )
+  const [savingBugTracker, setSavingBugTracker] = useState(false)
+
+  async function handleSaveBugTracker() {
+    setSavingBugTracker(true)
+    try {
+      const keywords = bugTrackerKeywordsInput
+        .split(',')
+        .map((kw) => kw.trim())
+        .filter(Boolean)
+      await updatePortalConfig.mutateAsync({
+        bugTracker: { enabled: bugTrackerEnabled, url: bugTrackerUrl.trim(), keywords },
+      })
+      startTransition(() => router.invalidate())
+    } finally {
+      setSavingBugTracker(false)
+    }
+  }
+
   const previewCard = useMemo<PortalWelcomeCardData>(
     () => ({ enabled: true, title, body }),
     [title, body]
@@ -165,6 +192,65 @@ function PortalSettingsPage() {
             <InlineSpinner visible={isBusy} />
             <Button onClick={handleSave} disabled={isBusy}>
               {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Bug tracker"
+        description="Point bug reports to an external issue tracker instead of the feedback board"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border/50 p-4">
+            <div>
+              <Label htmlFor="bug-tracker-enabled" className="text-sm font-medium cursor-pointer">
+                Show bug-report hint
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Shown on the feedback form when a title matches one of the trigger keywords below
+              </p>
+            </div>
+            <Switch
+              id="bug-tracker-enabled"
+              checked={bugTrackerEnabled}
+              onCheckedChange={setBugTrackerEnabled}
+              aria-label="Show bug-report hint"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bug-tracker-url" className="text-sm font-medium">
+              Issue tracker URL
+            </Label>
+            <Input
+              id="bug-tracker-url"
+              type="url"
+              value={bugTrackerUrl}
+              onChange={(e) => setBugTrackerUrl(e.target.value)}
+              placeholder="https://github.com/your-org/your-repo/issues"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="bug-tracker-keywords" className="text-sm font-medium">
+              Trigger keywords
+            </Label>
+            <Input
+              id="bug-tracker-keywords"
+              value={bugTrackerKeywordsInput}
+              onChange={(e) => setBugTrackerKeywordsInput(e.target.value)}
+              placeholder="bug, issue"
+            />
+            <p className="text-xs text-muted-foreground">
+              Comma-separated words to match in a post title
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <InlineSpinner visible={savingBugTracker} />
+            <Button onClick={handleSaveBugTracker} disabled={savingBugTracker}>
+              {savingBugTracker ? 'Saving…' : 'Save'}
             </Button>
           </div>
         </div>

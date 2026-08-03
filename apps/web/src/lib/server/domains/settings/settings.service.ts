@@ -42,6 +42,8 @@ import {
   normalizeWelcomeCardInput,
   mergeWelcomeCard,
   publicWelcomeCard,
+  normalizeBugTrackerInput,
+  publicBugTracker,
 } from './settings.helpers'
 
 const log = logger.child({ component: 'settings' })
@@ -596,6 +598,7 @@ export async function updatePortalConfig(input: UpdatePortalConfigInput): Promis
     const normalizedWelcome = normalizeWelcomeCardInput(input.welcomeCard)
     const inputWithoutWelcome: UpdatePortalConfigInput = { ...input }
     delete inputWithoutWelcome.welcomeCard
+    inputWithoutWelcome.bugTracker = normalizeBugTrackerInput(input.bugTracker)
     const org = await requireSettings()
     const existing = parseJsonConfig(org.portalConfig, DEFAULT_PORTAL_CONFIG)
     const updated = deepMerge(existing, inputWithoutWelcome as Partial<PortalConfig>)
@@ -715,6 +718,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
 
     const oidcProviders = await getPublicOidcProviders()
     const welcome = publicWelcomeCard(portalConfig.welcomeCard)
+    const bugTracker = publicBugTracker(portalConfig.bugTracker)
     return {
       features: portalConfig.features,
       ...(oidcProviders.length > 0 && { oidcProviders }),
@@ -723,6 +727,7 @@ export async function getPublicPortalConfig(): Promise<PublicPortalConfig> {
         isPrivate: portalConfig.access?.visibility === 'private',
         widgetSignIn: portalConfig.access?.widgetSignIn ?? false,
       },
+      ...(bugTracker && { bugTracker }),
     }
   } catch (error) {
     log.error({ err: error }, 'get public portal config failed')
@@ -797,6 +802,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
       },
       publicPortalConfig: (() => {
         const welcome = publicWelcomeCard(portalConfig.welcomeCard)
+        const bugTracker = publicBugTracker(portalConfig.bugTracker)
         return {
           features: portalConfig.features,
           ...(portalOidcProviders.length > 0 && { oidcProviders: portalOidcProviders }),
@@ -805,6 +811,7 @@ export async function getTenantSettings(): Promise<TenantSettings | null> {
             isPrivate: portalConfig.access?.visibility === 'private',
             widgetSignIn: portalConfig.access?.widgetSignIn ?? false,
           },
+          ...(bugTracker && { bugTracker }),
         }
       })(),
       publicWidgetConfig: {
