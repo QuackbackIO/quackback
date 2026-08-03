@@ -37,6 +37,9 @@ function buildAuth(overrides: {
       role: overrides.principalRole ?? 'user',
       type: overrides.principalType ?? 'user',
     },
+    ipAddress: null,
+    userAgent: null,
+    source: 'web',
   }
 }
 

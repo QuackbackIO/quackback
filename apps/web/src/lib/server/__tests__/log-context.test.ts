@@ -6,11 +6,7 @@
  * through the call stack.
  */
 import { describe, it, expect } from 'vitest'
-import {
-  getLogContext,
-  runWithLogContext,
-  setLogContext,
-} from '../log-context'
+import { getLogContext, runWithLogContext, setLogContext } from '../log-context'
 
 describe('log-context', () => {
   it('returns undefined outside a request scope', () => {

@@ -11,6 +11,7 @@ import {
   fetchPublicRoadmapPosts,
   fetchPortalData,
 } from '@/lib/server/functions/portal'
+import { ensureData } from '@/lib/client/query/ensure-data'
 
 /**
  * Query options factory for portal/public routes.
@@ -49,7 +50,7 @@ export const portalQueries = {
         params.responded,
       ],
       queryFn: async () => {
-        const data = await fetchPortalData({ data: params })
+        const data = ensureData(await fetchPortalData({ data: params }), 'portalData')
         // Deserialize dates and cast branded types from server response
         return {
           ...data,
@@ -73,7 +74,7 @@ export const portalQueries = {
   boards: () =>
     queryOptions({
       queryKey: ['portal', 'boards'],
-      queryFn: () => fetchPublicBoards(),
+      queryFn: async () => ensureData(await fetchPublicBoards(), 'portalBoards'),
     }),
 
   /**
@@ -82,7 +83,7 @@ export const portalQueries = {
   posts: (filters: { boardSlug?: string; search?: string; sort: 'top' | 'new' | 'trending' }) =>
     queryOptions({
       queryKey: ['portal', 'posts', filters],
-      queryFn: () => fetchPublicPosts({ data: filters }),
+      queryFn: async () => ensureData(await fetchPublicPosts({ data: filters }), 'portalPosts'),
     }),
 
   /**
@@ -91,7 +92,7 @@ export const portalQueries = {
   statuses: () =>
     queryOptions({
       queryKey: ['portal', 'statuses'],
-      queryFn: () => fetchPublicStatuses(),
+      queryFn: async () => ensureData(await fetchPublicStatuses(), 'portalStatuses'),
     }),
 
   /**
@@ -100,7 +101,7 @@ export const portalQueries = {
   tags: () =>
     queryOptions({
       queryKey: ['portal', 'tags'],
-      queryFn: () => fetchPublicTags(),
+      queryFn: async () => ensureData(await fetchPublicTags(), 'portalTags'),
     }),
 
   /**
@@ -109,7 +110,7 @@ export const portalQueries = {
   avatars: (principalIds: PrincipalId[]) =>
     queryOptions({
       queryKey: ['portal', 'avatars', principalIds],
-      queryFn: () => fetchAvatars({ data: principalIds }),
+      queryFn: async () => ensureData(await fetchAvatars({ data: principalIds }), 'avatars'),
       // Avatars don't change often
       staleTime: 5 * 60 * 1000, // 5 minutes
     }),
@@ -120,7 +121,7 @@ export const portalQueries = {
   roadmaps: () =>
     queryOptions({
       queryKey: ['portal', 'roadmaps'],
-      queryFn: () => fetchPublicRoadmaps(),
+      queryFn: async () => ensureData(await fetchPublicRoadmaps(), 'portalRoadmaps'),
       // Roadmaps don't change often
       staleTime: 2 * 60 * 1000, // 2 minutes
     }),
@@ -137,7 +138,8 @@ export const portalQueries = {
     queryOptions({
       // Don't include offset/limit in query key to allow cache sharing with infinite queries
       queryKey: ['portal', 'roadmapPosts', params.roadmapId, params.statusId],
-      queryFn: () => fetchPublicRoadmapPosts({ data: params }),
+      queryFn: async () =>
+        ensureData(await fetchPublicRoadmapPosts({ data: params }), 'portalRoadmapPosts'),
       staleTime: 60 * 1000, // 1 minute
     }),
 }

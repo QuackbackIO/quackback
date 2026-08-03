@@ -180,13 +180,15 @@ async function getS3Client(): Promise<S3ClientInstance> {
  * so it works with both public and private buckets (e.g., Railway Buckets).
  * Users who want direct endpoint URLs can set S3_PUBLIC_URL to their endpoint.
  */
-function buildPublicUrl(s3Config: S3Config, key: string): string {
+function buildPublicUrl(s3Config: S3Config, key: string, requestOrigin?: string): string {
   if (s3Config.publicUrl) {
     return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
   }
 
-  // Default to the presigned URL redirect route — works with any bucket
-  return `${config.baseUrl.replace(/\/$/, '')}/api/storage/${key}`
+  // Use the request's origin when available so tunneled / proxied dev servers
+  // return URLs the browser can actually reach (instead of localhost).
+  const base = (requestOrigin ?? config.baseUrl).replace(/\/$/, '')
+  return `${base}/api/storage/${key}`
 }
 
 // ============================================================================
@@ -295,7 +297,8 @@ export function verifyProxyUploadToken(
 export async function uploadObject(
   key: string,
   body: Buffer | Uint8Array,
-  contentType: string
+  contentType: string,
+  requestOrigin?: string
 ): Promise<string> {
   const s3Config = getS3Config()
   const client = await getS3Client()
@@ -310,7 +313,7 @@ export async function uploadObject(
 
   await client.send(command)
 
-  return buildPublicUrl(s3Config, key)
+  return buildPublicUrl(s3Config, key, requestOrigin)
 }
 
 // ============================================================================
@@ -351,7 +354,37 @@ export function isAllowedImageType(contentType: string): boolean {
 }
 
 /**
- * Maximum allowed file size in bytes (5MB).
+ * Blocked MIME types for general file attachments — executables and scripts
+ * that could be harmful if opened by a user.
+ */
+const BLOCKED_ATTACHMENT_TYPES = new Set([
+  'application/x-msdownload',
+  'application/x-executable',
+  'application/x-msdos-program',
+  'application/x-sh',
+  'application/x-csh',
+  'application/x-bat',
+  'application/x-msi',
+  'application/vnd.microsoft.portable-executable',
+  'text/x-shellscript',
+])
+
+/**
+ * Validate that a MIME type is safe to accept as a general file attachment.
+ * Blocks executables and scripts; allows everything else.
+ */
+export function isAllowedAttachmentType(contentType: string): boolean {
+  const normalised = contentType.split(';')[0].trim().toLowerCase()
+  return !BLOCKED_ATTACHMENT_TYPES.has(normalised)
+}
+
+/**
+ * Maximum allowed file size in bytes for general attachments (25MB).
+ */
+export const MAX_ATTACHMENT_FILE_SIZE = 25 * 1024 * 1024
+
+/**
+ * Maximum allowed file size in bytes for inline images (5MB).
  */
 export const MAX_FILE_SIZE = 5 * 1024 * 1024
 
@@ -361,10 +394,14 @@ export const MAX_FILE_SIZE = 5 * 1024 * 1024
  *
  * @param formData - Already-parsed request FormData (must contain a `file` field)
  * @param storagePrefix - Bucket prefix, e.g. "portal-images"
+ * @param requestOrigin - Optional origin derived from the incoming request (e.g. "https://my-tunnel.trycloudflare.com").
+ *   When provided and S3_PUBLIC_URL is not set, this replaces BASE_URL in the returned publicUrl so that
+ *   tunneled / proxied dev servers return URLs the browser can actually reach.
  */
 export async function uploadImageFromFormData(
   formData: FormData,
-  storagePrefix: string
+  storagePrefix: string,
+  requestOrigin?: string
 ): Promise<Response> {
   const file = formData.get('file')
   if (!(file instanceof File)) {
@@ -390,7 +427,7 @@ export async function uploadImageFromFormData(
     if (sniffImageMime(body) !== file.type) {
       return Response.json({ error: 'File content does not match its type' }, { status: 400 })
     }
-    const publicUrl = await uploadObject(key, body, file.type)
+    const publicUrl = await uploadObject(key, body, file.type, requestOrigin)
     return Response.json({ publicUrl })
   } catch {
     return Response.json({ error: 'Upload failed' }, { status: 500 })

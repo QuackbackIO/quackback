@@ -8,6 +8,7 @@ import {
   sendNewCommentEmail,
   sendChangelogPublishedEmail,
   sendPostMentionEmail,
+  sendTicketEventEmail,
 } from '@quackback/email'
 import type { HookHandler, HookResult, EmailTarget, EmailConfig } from '../hook-types'
 import type { EventData, EventPostMentionedData } from '../types'
@@ -71,6 +72,26 @@ export const emailHook: HookHandler = {
           workspaceName: cfg.workspaceName,
           unsubscribeUrl,
           logoUrl: cfg.logoUrl,
+        })
+      } else if (event.type.startsWith('ticket.')) {
+        result = await sendTicketEventEmail({
+          to: email,
+          title: cfg.title as string,
+          body: cfg.body as string | undefined,
+          ticketSubject: cfg.ticketSubject as string,
+          ticketUrl: cfg.ticketUrl as string,
+          workspaceName: cfg.workspaceName,
+          unsubscribeUrl,
+          logoUrl: cfg.logoUrl,
+          priorityLabel: cfg.priorityLabel as string | undefined,
+          statusLabel: cfg.statusLabel as string | undefined,
+          summary: cfg.summary,
+          eventLabel: cfg.eventLabel,
+          actorName: cfg.actorName,
+          occurredAt: cfg.occurredAt,
+          details: cfg.details,
+          contentSections: cfg.contentSections,
+          quote: cfg.quote,
         })
       } else {
         return { success: false, error: `Unsupported event type: ${event.type}` }

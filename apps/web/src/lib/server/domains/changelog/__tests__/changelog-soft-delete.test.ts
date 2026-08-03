@@ -16,7 +16,15 @@ const changelogEntriesTable = {
   deletedAt: { name: 'deleted_at' },
 }
 
-vi.mock('@/lib/server/db', () => ({
+// Base the mock on the real module (the `db` export is a lazy Proxy, so
+// importOriginal does NOT open a connection) and override only `db` plus the
+// drizzle operators these tests inspect. This way the changelog import graph —
+// which transitively pulls ticket.subscriptions.ts and its `gt`/`tickets`/
+// `ticketSubscriptions` imports — finds every named export it needs without
+// having to enumerate them here, while the operator overrides below keep the
+// query-shape assertions intact.
+vi.mock('@/lib/server/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/db')>()),
   db: {
     query: {
       changelogEntries: {

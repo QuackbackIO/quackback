@@ -27,6 +27,7 @@ import { ConflictError, ForbiddenError, ValidationError } from '@/lib/shared/err
 import { httpsUrl } from '@/lib/shared/schemas/auth'
 import { actorFromAuth, withAuditEvent } from '@/lib/server/audit/log'
 import { requireAuth } from './auth-helpers'
+import { toIsoString } from '@/lib/shared/utils'
 
 const verifiedDomainId = z.string().regex(/^domain_/) as z.ZodType<`domain_${string}`>
 
@@ -411,7 +412,7 @@ export const verifyProviderDomainFn = createServerFn({ method: 'POST' })
       return { verified: false, reason: 'mismatch' }
     }
 
-    const verifiedAt = new Date().toISOString()
+    const verifiedAt = toIsoString(new Date())
     try {
       await stampVerifiedDomain({
         id: dom.id,

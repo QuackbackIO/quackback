@@ -36,6 +36,14 @@ export const Quackback = {
   open(options?: OpenOptions): void {
     sdk.dispatch('open', options)
   },
+  /**
+   * Shortcut for `open({ view: 'support', ticketId? })`. With no argument,
+   * opens the support ticket list. With a ticket id, deep-links into that
+   * ticket's detail view.
+   */
+  openSupport(ticketId?: string): void {
+    sdk.dispatch('openSupport', ticketId)
+  },
   close(): void {
     sdk.dispatch('close')
   },

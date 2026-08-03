@@ -4,6 +4,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import type { PrincipalId } from '@quackback/ids'
+import { toIsoString } from '@/lib/shared/utils'
 
 export interface HubSpotOAuthState {
   type: 'hubspot_oauth'
@@ -24,7 +25,7 @@ export const getHubSpotConnectUrl = createServerFn({ method: 'GET' }).handler(
     const { randomBytes } = await import('crypto')
     const { requireAuth } = await import('../../functions/auth-helpers')
     const { signOAuthState } = await import('@/lib/server/auth/oauth-state')
-    const { config } = await import('@/lib/server/config')
+    const { getOAuthReturnDomain } = await import('@/lib/server/integrations/oauth')
 
     const auth = await requireAuth({ roles: ['admin'] })
     const { hasPlatformCredentials } =
@@ -34,7 +35,7 @@ export const getHubSpotConnectUrl = createServerFn({ method: 'GET' }).handler(
         'HubSpot platform credentials not configured. Configure them in integration settings first.'
       )
     }
-    const returnDomain = new URL(config.baseUrl).host
+    const returnDomain = getOAuthReturnDomain()
 
     const state = signOAuthState({
       type: 'hubspot_oauth',
@@ -95,7 +96,7 @@ export const searchHubSpotContactFn = createServerFn({ method: 'POST' })
           .update(integrations)
           .set({
             secrets: newSecrets,
-            config: { ...cfg, tokenExpiresAt: newExpiry.toISOString() },
+            config: { ...cfg, tokenExpiresAt: toIsoString(newExpiry) },
             updatedAt: new Date(),
           })
           .where(eqOp(integrations.integrationType, 'hubspot'))

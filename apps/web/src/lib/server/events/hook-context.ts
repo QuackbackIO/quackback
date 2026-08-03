@@ -6,9 +6,9 @@
  */
 
 import { db } from '@/lib/server/db'
-import { getBaseUrl } from '@/lib/server/config'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { logger } from '@/lib/server/logger'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 
 const log = logger.child({ component: 'hook-context' })
 
@@ -42,7 +42,7 @@ export async function buildHookContext(): Promise<HookContext | null> {
 
   return {
     workspaceName: settings.name,
-    portalBaseUrl: getBaseUrl(),
+    portalBaseUrl: resolvePublicBaseUrl(),
     logoUrl: getEmailSafeUrl(settings.logoKey),
   }
 }
