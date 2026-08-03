@@ -44,7 +44,10 @@ import type {
 import { Route } from '../categories/index'
 import { Route as CategoryDetailRoute } from '../categories/$categoryId'
 
-type MockedHandler = (ctx: { request: Request; params?: Record<string, string> }) => Promise<Response>
+type MockedHandler = (ctx: {
+  request: Request
+  params?: Record<string, string>
+}) => Promise<Response>
 type MockedRouteShape = { options: { server: { handlers: Record<string, MockedHandler> } } }
 
 // Access handlers
@@ -75,10 +78,29 @@ const mockAuthContext: ApiAuthContext = {
     expiresAt: null,
     createdAt: new Date('2026-01-01'),
     revokedAt: null,
+    scopes: [],
+    allowedTeamIds: [],
+    allowedInboxIds: [],
+    lastIp: null,
+    lastUserAgent: null,
+    rotatedAt: null,
+    compatLegacyFullAccess: true,
+    compatAcknowledgedAt: null,
   },
   principalId: 'principal_1' as PrincipalId,
   role: 'admin',
   importMode: false,
+  ipAddress: null,
+  userAgent: null,
+  source: 'api',
+  key: {
+    id: 'api_key_test' as ApiKeyId,
+    name: 'test',
+    scopes: [],
+    allowedTeamIds: [],
+    allowedInboxIds: [],
+    compatLegacyFullAccess: true,
+  },
 }
 
 const mockTeamAuthContext: ApiAuthContext = {
@@ -92,10 +114,29 @@ const mockTeamAuthContext: ApiAuthContext = {
     expiresAt: null,
     createdAt: new Date('2026-01-01'),
     revokedAt: null,
+    scopes: [],
+    allowedTeamIds: [],
+    allowedInboxIds: [],
+    lastIp: null,
+    lastUserAgent: null,
+    rotatedAt: null,
+    compatLegacyFullAccess: true,
+    compatAcknowledgedAt: null,
   },
   principalId: 'principal_1' as PrincipalId,
   role: 'member',
   importMode: false,
+  ipAddress: null,
+  userAgent: null,
+  source: 'api',
+  key: {
+    id: 'api_key_test' as ApiKeyId,
+    name: 'test',
+    scopes: [],
+    allowedTeamIds: [],
+    allowedInboxIds: [],
+    compatLegacyFullAccess: true,
+  },
 }
 
 beforeEach(() => {
@@ -118,6 +159,9 @@ describe('GET /api/v1/help-center/categories', () => {
       icon: '\u{1F4DA}',
       parentId: null,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 0,
       articleCount: 5,
       publishedArticleCount: 5,
@@ -154,6 +198,9 @@ describe('GET /api/v1/help-center/categories', () => {
       icon: null,
       parentId: null,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 1,
       articleCount: 0,
       publishedArticleCount: 0,
@@ -193,6 +240,9 @@ describe('POST /api/v1/help-center/categories', () => {
       icon: '\u{1F4B0}',
       parentId: 'category_01jk0000000000000000000001' as HelpCenterCategoryId,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-01'),
@@ -231,6 +281,9 @@ describe('POST /api/v1/help-center/categories', () => {
       icon: null,
       parentId: null,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-01'),
@@ -259,9 +312,7 @@ describe('POST /api/v1/help-center/categories', () => {
 
   it('returns 403 when auth fails (non-admin)', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
-    vi.mocked(withApiKeyAuth).mockRejectedValue(
-      new ForbiddenError('FORBIDDEN', 'Admin required')
-    )
+    vi.mocked(withApiKeyAuth).mockRejectedValue(new ForbiddenError('FORBIDDEN', 'Admin required'))
 
     const request = createRequest('POST', 'http://localhost/api/v1/help-center/categories', {
       name: 'Test',
@@ -288,6 +339,9 @@ describe('GET /api/v1/help-center/categories/:categoryId', () => {
       icon: '\u{1F680}',
       parentId: null,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-02'),
@@ -358,6 +412,9 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
       icon: '\u{2728}',
       parentId: null,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-03'),
@@ -395,6 +452,9 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
       icon: null,
       parentId: 'category_01jk0000000000000000000002' as HelpCenterCategoryId,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-03'),
@@ -434,6 +494,9 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
       icon: null,
       parentId: null,
       isPublic: true,
+      visibility: 'public',
+      allowedSegmentIds: [],
+      allowedPrincipalIds: [],
       position: 0,
       createdAt: new Date('2026-01-01'),
       updatedAt: new Date('2026-01-03'),
@@ -461,9 +524,7 @@ describe('PATCH /api/v1/help-center/categories/:categoryId', () => {
 
   it('returns 403 when auth fails (non-admin)', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
-    vi.mocked(withApiKeyAuth).mockRejectedValue(
-      new ForbiddenError('FORBIDDEN', 'Admin required')
-    )
+    vi.mocked(withApiKeyAuth).mockRejectedValue(new ForbiddenError('FORBIDDEN', 'Admin required'))
 
     const request = createRequest(
       'PATCH',
@@ -500,9 +561,7 @@ describe('DELETE /api/v1/help-center/categories/:categoryId', () => {
 
   it('returns 403 when auth fails (non-admin)', async () => {
     vi.mocked(isFeatureEnabled).mockResolvedValue(true)
-    vi.mocked(withApiKeyAuth).mockRejectedValue(
-      new ForbiddenError('FORBIDDEN', 'Admin required')
-    )
+    vi.mocked(withApiKeyAuth).mockRejectedValue(new ForbiddenError('FORBIDDEN', 'Admin required'))
 
     const request = createRequest(
       'DELETE',

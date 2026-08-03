@@ -5,17 +5,17 @@ are opt-in: a webhook only receives the event types listed in its subscription.
 
 ## Topics
 
-| Topic                           | Fired when                                                                                               |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `conversation.created`          | A visitor starts a new conversation.                                                                     |
-| `conversation.status_changed`   | A conversation moves between `open`/`pending`/`closed`.                                                  |
-| `conversation.assigned`         | A conversation is assigned to or unassigned from an agent (includes auto-routing).                       |
-| `conversation.priority_changed` | A conversation's priority changes.                                                                       |
-| `conversation.csat_submitted`   | A visitor submits their satisfaction rating. Fires once per survey.                                      |
+| Topic                             | Fired when                                                                                                       |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `conversation.created`            | A visitor starts a new conversation.                                                                             |
+| `conversation.status_changed`     | A conversation moves between `open`/`pending`/`closed`.                                                          |
+| `conversation.assigned`           | A conversation is assigned to or unassigned from an agent (includes auto-routing).                               |
+| `conversation.priority_changed`   | A conversation's priority changes.                                                                               |
+| `conversation.csat_submitted`     | A visitor submits their satisfaction rating. Fires once per survey.                                              |
 | `conversation.csat_comment_added` | A visitor adds the optional free-text comment to their rating. Fires once per survey, only if a comment is left. |
-| `message.created`               | A visitor or agent sends a public message.                                                               |
-| `message.note_created`          | An agent adds an **internal note**. Private content — subscribe only if your endpoint should receive it. |
-| `message.deleted`               | A public message is soft-deleted.                                                                        |
+| `message.created`                 | A visitor or agent sends a public message.                                                                       |
+| `message.note_created`            | An agent adds an **internal note**. Private content — subscribe only if your endpoint should receive it.         |
+| `message.deleted`                 | A public message is soft-deleted.                                                                                |
 
 Internal-note deletions are not emitted. System messages (e.g. "chat ended") are
 represented by `conversation.*` events, not `message.created`. Anonymous visitors'

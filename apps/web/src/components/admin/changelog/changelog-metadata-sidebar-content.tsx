@@ -6,6 +6,8 @@ import {
   MagnifyingGlassIcon,
   ChevronUpIcon,
   UserIcon,
+  Squares2X2Icon,
+  CubeIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
@@ -16,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { useQuery } from '@tanstack/react-query'
 import { searchShippedPostsFn } from '@/lib/server/functions/changelog'
+import { changelogQueries } from '@/lib/client/queries/changelog'
 import { TimeAgo } from '@/components/ui/time-ago'
 import {
   SidebarRow,
@@ -26,6 +29,7 @@ import {
   type StatusOption,
 } from '@/components/shared/sidebar-primitives'
 import { cn } from '@/lib/shared/utils'
+import { Input } from '@/components/ui/input'
 import type { PostId } from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 
@@ -34,6 +38,10 @@ interface ChangelogMetadataSidebarContentProps {
   onPublishStateChange: (state: PublishState) => void
   linkedPostIds: PostId[]
   onLinkedPostsChange: (postIds: PostId[]) => void
+  categoryName: string
+  onCategoryNameChange: (name: string) => void
+  productName: string
+  onProductNameChange: (name: string) => void
   authorName?: string | null
   publishedAt?: string | null
   displayDateValue?: Date
@@ -52,6 +60,10 @@ export function ChangelogMetadataSidebarContent({
   onPublishStateChange,
   linkedPostIds,
   onLinkedPostsChange,
+  categoryName,
+  onCategoryNameChange,
+  productName,
+  onProductNameChange,
   authorName,
   publishedAt,
   displayDateValue,
@@ -85,6 +97,7 @@ export function ChangelogMetadataSidebarContent({
     queryFn: () => searchShippedPostsFn({ data: { query: search || undefined, limit: 30 } }),
     staleTime: 30 * 1000,
   })
+  const { data: taxonomy } = useQuery(changelogQueries.taxonomy())
 
   // Get selected post details
   const selectedPosts = posts.filter((p) => linkedPostIds.includes(p.id))
@@ -162,6 +175,38 @@ export function ChangelogMetadataSidebarContent({
           />
         </div>
       )}
+
+      <div className="space-y-3">
+        <SidebarRow icon={<Squares2X2Icon className="h-4 w-4" />} label="Category" alignTop>
+          <Input
+            list="changelog-category-options"
+            value={categoryName}
+            onChange={(event) => onCategoryNameChange(event.target.value)}
+            placeholder="Feature"
+            className="h-8 w-36 text-xs"
+          />
+        </SidebarRow>
+        <datalist id="changelog-category-options">
+          {(taxonomy?.categories ?? []).map((category) => (
+            <option key={category.id} value={category.name} />
+          ))}
+        </datalist>
+
+        <SidebarRow icon={<CubeIcon className="h-4 w-4" />} label="Product" alignTop>
+          <Input
+            list="changelog-product-options"
+            value={productName}
+            onChange={(event) => onProductNameChange(event.target.value)}
+            placeholder="Core app"
+            className="h-8 w-36 text-xs"
+          />
+        </SidebarRow>
+        <datalist id="changelog-product-options">
+          {(taxonomy?.products ?? []).map((product) => (
+            <option key={product.id} value={product.name} />
+          ))}
+        </datalist>
+      </div>
 
       {/* Published date shown on the public changelog - only when published */}
       {publishState.type === 'published' && (

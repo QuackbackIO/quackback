@@ -48,8 +48,12 @@ export const ntfyHook: HookHandler = {
       })
       if (!response.ok) {
         const status = response.status
-        log.error({ status, topic }, 'ntfy delivery failed')
-        return { success: false, error: `ntfy returned ${status}`, shouldRetry: status === 429 || status >= 500 }
+        log.error(`[ntfy] ❌ ntfy returned ${status}`)
+        return {
+          success: false,
+          error: `ntfy returned ${status}`,
+          shouldRetry: status === 429 || status >= 500,
+        }
       }
       log.info({ topic }, 'notification delivered')
       return { success: true }

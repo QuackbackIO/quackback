@@ -11,6 +11,7 @@ import {
   UserMinusIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/solid'
+import { KeyIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -20,6 +21,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { ManagePrincipalRolesDialog } from './manage-principal-roles-dialog'
+import type { PrincipalId } from '@quackback/ids'
 import {
   updateMemberRoleFn,
   removeTeamMemberFn,
@@ -46,6 +49,7 @@ export function MemberActions({
   const [isLoading, setIsLoading] = useState(false)
   const [roleDialogOpen, setRoleDialogOpen] = useState(false)
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
+  const [manageRolesOpen, setManageRolesOpen] = useState(false)
   const [resetTfaDialogOpen, setResetTfaDialogOpen] = useState(false)
   const [forceSignOutDialogOpen, setForceSignOutDialogOpen] = useState(false)
 
@@ -142,6 +146,10 @@ export function MemberActions({
               </>
             )}
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setManageRolesOpen(true)} className="gap-2">
+            <KeyIcon className="h-4 w-4" />
+            Manage roles
+          </DropdownMenuItem>
           {userId ? (
             <DropdownMenuItem onClick={() => setResetTfaDialogOpen(true)} className="gap-2">
               <ShieldExclamationIcon className="h-4 w-4" />
@@ -206,6 +214,13 @@ export function MemberActions({
         confirmLabel={isLoading ? 'Removing...' : 'Remove from team'}
         isPending={isLoading}
         onConfirm={handleRemove}
+      />
+
+      <ManagePrincipalRolesDialog
+        open={manageRolesOpen}
+        onOpenChange={setManageRolesOpen}
+        principalId={principalId as PrincipalId}
+        principalName={memberName}
       />
 
       <ConfirmDialog

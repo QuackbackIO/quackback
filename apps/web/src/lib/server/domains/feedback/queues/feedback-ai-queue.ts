@@ -24,32 +24,34 @@ const DEFAULT_JOB_OPTS = {
 }
 
 let initPromise: Promise<{
-  queue: Queue<FeedbackAiJob>
-  worker: Worker<FeedbackAiJob>
+  queue: Queue
+  worker: Worker
 }> | null = null
 
-function ensureQueue(): Promise<Queue<FeedbackAiJob>> {
+function ensureQueue(): Promise<Queue> {
   if (!initPromise) {
     initPromise = initializeQueue().catch((err) => {
       initPromise = null
       throw err
     })
   }
-  return initPromise.then(({ queue }) => queue)
+  const promise = initPromise
+  if (!promise) throw new Error('Feedback AI queue failed to initialize')
+  return promise.then(({ queue }) => queue)
 }
 
 async function initializeQueue() {
   const connection = getQueueRedis()
 
-  const queue = new Queue<FeedbackAiJob>(QUEUE_NAME, {
+  const queue = new Queue(QUEUE_NAME, {
     connection,
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<FeedbackAiJob>(
+  const worker = new Worker(
     QUEUE_NAME,
     async (job) => {
-      const data = job.data
+      const data = job.data as FeedbackAiJob
 
       switch (data.type) {
         case 'extract-signals': {

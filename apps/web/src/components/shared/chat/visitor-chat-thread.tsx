@@ -64,6 +64,8 @@ export interface VisitorChatThreadPresence {
 }
 
 export interface VisitorChatThreadProps {
+  /** Which support surface owns this visitor thread. Drives server-side access policy. */
+  surface: 'widget' | 'portal'
   /** Which thread to open: an id opens that thread, 'new' starts a fresh one,
    *  undefined resumes the visitor's active/most-recent thread. */
   conversationTarget?: ConversationId | 'new'
@@ -109,6 +111,7 @@ export interface VisitorChatThreadProps {
  * uploads, help search) comes in through props.
  */
 export function VisitorChatThread({
+  surface,
   conversationTarget,
   linkPreviews = false,
   getAuthHeaders = NO_HEADERS,
@@ -172,10 +175,10 @@ export function VisitorChatThread({
   const sendTyping = useCallback(() => {
     if (!conversationId) return
     void sendChatTypingFn({
-      data: { conversationId },
+      data: { conversationId, surface },
       headers: getAuthHeaders(),
     }).catch(() => {})
-  }, [conversationId, getAuthHeaders])
+  }, [conversationId, getAuthHeaders, surface])
   const { remoteTyping, onLocalInput, onRemoteTyping, clearRemoteTyping } =
     useChatTyping(sendTyping)
 
@@ -243,6 +246,7 @@ export function VisitorChatThread({
           // 'new' → null (blank greeting); an id → that thread; undefined → active.
           data: {
             conversationId: conversationTarget === 'new' ? null : (conversationTarget ?? undefined),
+            surface,
           },
           headers: getAuthHeaders(),
         })
@@ -269,14 +273,14 @@ export function VisitorChatThread({
       cancelled = true
     }
     // getAuthHeaders is identity-stable per surface; sessionVersion is the reload key.
-  }, [sessionVersion, conversationTarget])
+  }, [sessionVersion, conversationTarget, surface])
 
   // Refetch the authoritative thread after a reconnect to catch anything missed.
   const refreshMessages = useCallback(async () => {
     if (!conversationId) return
     try {
       const page = await listChatMessagesFn({
-        data: { conversationId },
+        data: { conversationId, surface },
         headers: getAuthHeaders(),
       })
       setMessages(page.messages)
@@ -284,7 +288,7 @@ export function VisitorChatThread({
     } catch {
       /* keep current messages */
     }
-  }, [conversationId, getAuthHeaders])
+  }, [conversationId, getAuthHeaders, surface])
 
   // Prepend an older page (keyset cursor = oldest loaded message id).
   const loadOlder = useCallback(async () => {
@@ -292,7 +296,7 @@ export function VisitorChatThread({
     setLoadingOlder(true)
     try {
       const page = await listChatMessagesFn({
-        data: { conversationId, before: messages[0].id },
+        data: { conversationId, before: messages[0].id, surface },
         headers: getAuthHeaders(),
       })
       setMessages((prev) => {
@@ -305,7 +309,7 @@ export function VisitorChatThread({
     } finally {
       setLoadingOlder(false)
     }
-  }, [conversationId, loadingOlder, messages, getAuthHeaders])
+  }, [conversationId, loadingOlder, messages, getAuthHeaders, surface])
 
   useChatStream({
     enabled: conversationId != null,
@@ -313,11 +317,14 @@ export function VisitorChatThread({
     buildUrl: async () => {
       if (!conversationId) return null
       try {
-        const { token } = await mintChatStreamTokenFn({ headers: getAuthHeaders() })
+        const { token } = await mintChatStreamTokenFn({
+          data: { surface },
+          headers: getAuthHeaders(),
+        })
         if (!token) return null
         return `/api/chat/stream?conversationId=${encodeURIComponent(
           conversationId
-        )}&token=${encodeURIComponent(token)}`
+        )}&surface=${encodeURIComponent(surface)}&token=${encodeURIComponent(token)}`
       } catch {
         return null
       }
@@ -353,7 +360,7 @@ export function VisitorChatThread({
       setCsatRating(rating)
       setCsatJustRated(true)
       void submitCsatFn({
-        data: { conversationId, rating },
+        data: { conversationId, rating, surface },
         headers: getAuthHeaders(),
       }).catch(() => {
         // Roll back so the stars reappear for a retry — unless a later CSAT
@@ -364,7 +371,7 @@ export function VisitorChatThread({
         }
       })
     },
-    [conversationId, getAuthHeaders]
+    [conversationId, getAuthHeaders, surface]
   )
 
   // Optional follow-up: attach a comment to the rating already on file.
@@ -374,10 +381,10 @@ export function VisitorChatThread({
     setCsatCommentDone(true)
     const trimmed = csatComment.trim()
     void submitCsatFn({
-      data: { conversationId, rating: csatRating, comment: trimmed || undefined },
+      data: { conversationId, rating: csatRating, comment: trimmed || undefined, surface },
       headers: getAuthHeaders(),
     }).catch(() => setCsatCommentDone(false)) // reopen the box for a retry on failure
-  }, [conversationId, csatRating, csatComment, getAuthHeaders])
+  }, [conversationId, csatRating, csatComment, getAuthHeaders, surface])
 
   // Prompt for a rating once the conversation is closed and not yet rated.
   const showCsatPrompt =
@@ -504,8 +511,10 @@ export function VisitorChatThread({
   useEffect(() => {
     if (!conversationId) return
     if (messages.at(-1)?.senderType !== 'agent') return
-    void markChatReadFn({ data: { conversationId }, headers: getAuthHeaders() }).catch(() => {})
-  }, [conversationId, lastMessageId])
+    void markChatReadFn({ data: { conversationId, surface }, headers: getAuthHeaders() }).catch(
+      () => {}
+    )
+  }, [conversationId, lastMessageId, surface])
 
   const send = useCallback(async () => {
     const text = messageText.trim()
@@ -531,6 +540,7 @@ export function VisitorChatThread({
       const res = await sendChatMessageFn({
         data: {
           conversationId: conversationId ?? undefined,
+          surface,
           content: text,
           // Embeds ride along as the (server-sanitized) TipTap doc; images go as
           // attachments (the tray) — matching admin.
@@ -578,6 +588,7 @@ export function VisitorChatThread({
     clearAttachments,
     getAuthHeaders,
     onConversationStarted,
+    surface,
   ])
 
   const renderRow = (row: ChatRow) => {

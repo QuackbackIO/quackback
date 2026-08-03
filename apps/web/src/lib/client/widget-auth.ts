@@ -31,6 +31,7 @@ function anonTokenKey(): string {
 }
 
 let _widgetToken: string | null = null
+let _widgetContextToken: string | null = null
 
 export function setWidgetToken(token: string): void {
   _widgetToken = token
@@ -38,6 +39,14 @@ export function setWidgetToken(token: string): void {
 
 export function getWidgetToken(): string | null {
   return _widgetToken
+}
+
+export function setWidgetContextToken(token: string | null | undefined): void {
+  _widgetContextToken = token ?? null
+}
+
+export function getWidgetContextToken(): string | null {
+  return _widgetContextToken
 }
 
 /** Clears the in-memory token AND any persisted anonymous copy. */
@@ -123,11 +132,16 @@ export function hasWidgetToken(): boolean {
  * Returns Authorization: Bearer header if a token exists, empty object otherwise.
  */
 export function getWidgetAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {}
   const token = getWidgetToken()
   if (token) {
-    return { Authorization: `Bearer ${token}` }
+    headers.Authorization = `Bearer ${token}`
   }
-  return {}
+  const contextToken = getWidgetContextToken()
+  if (contextToken) {
+    headers['X-Quackback-Widget-Context'] = contextToken
+  }
+  return headers
 }
 
 /**

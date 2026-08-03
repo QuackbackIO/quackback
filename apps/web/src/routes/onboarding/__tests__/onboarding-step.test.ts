@@ -22,6 +22,7 @@ describe('pickOnboardingStep', () => {
         state: {
           setupState: {
             version: 1,
+            source: 'self-hosted',
             useCase: 'saas',
             steps: { core: false, workspace: true, boards: false },
           },
@@ -38,6 +39,7 @@ describe('pickOnboardingStep', () => {
         state: {
           setupState: {
             version: 1,
+            source: 'self-hosted',
             useCase: 'saas',
             steps: { core: false, workspace: false, boards: false },
           },
@@ -60,6 +62,7 @@ describe('pickOnboardingStep', () => {
         state: {
           setupState: {
             version: 1,
+            source: 'self-hosted',
             steps: { core: true, workspace: true, boards: false },
           },
           principalRecord: { id: 'p1', role: 'admin' },
