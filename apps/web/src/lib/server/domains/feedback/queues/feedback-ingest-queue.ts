@@ -24,32 +24,34 @@ const DEFAULT_JOB_OPTS = {
 }
 
 let initPromise: Promise<{
-  queue: Queue<FeedbackIngestJob>
-  worker: Worker<FeedbackIngestJob>
+  queue: Queue
+  worker: Worker
 }> | null = null
 
-function ensureQueue(): Promise<Queue<FeedbackIngestJob>> {
+function ensureQueue(): Promise<Queue> {
   if (!initPromise) {
     initPromise = initializeQueue().catch((err) => {
       initPromise = null
       throw err
     })
   }
-  return initPromise.then(({ queue }) => queue)
+  const promise = initPromise
+  if (!promise) throw new Error('Feedback ingest queue failed to initialize')
+  return promise.then(({ queue }) => queue)
 }
 
 async function initializeQueue() {
   const connection = getQueueRedis()
 
-  const queue = new Queue<FeedbackIngestJob>(QUEUE_NAME, {
+  const queue = new Queue(QUEUE_NAME, {
     connection,
     defaultJobOptions: DEFAULT_JOB_OPTS,
   })
 
-  const worker = new Worker<FeedbackIngestJob>(
+  const worker = new Worker(
     QUEUE_NAME,
     async (job) => {
-      const data = job.data
+      const data = job.data as FeedbackIngestJob
 
       switch (data.type) {
         case 'enrich-context': {

@@ -24,10 +24,10 @@ import {
   updateRoadmap,
 } from '@/lib/server/domains/roadmaps/roadmap.service'
 import { getRoadmapPosts } from '@/lib/server/domains/roadmaps/roadmap.query'
+import { toIsoString } from '@/lib/shared/utils'
+
 import { logger } from '@/lib/server/logger'
-
 const log = logger.child({ component: 'roadmaps' })
-
 // ============================================
 // Schemas
 // ============================================
@@ -114,8 +114,8 @@ export const fetchRoadmaps = createServerFn({ method: 'GET' }).handler(async () 
       description: roadmap.description,
       isPublic: roadmap.isPublic,
       position: roadmap.position,
-      createdAt: roadmap.createdAt.toISOString(),
-      updatedAt: roadmap.updatedAt.toISOString(),
+      createdAt: toIsoString(roadmap.createdAt),
+      updatedAt: toIsoString(roadmap.updatedAt),
     }))
   } catch (error) {
     log.error({ err: error }, 'list roadmaps failed')
@@ -142,8 +142,8 @@ export const fetchRoadmap = createServerFn({ method: 'GET' })
         description: roadmap.description,
         isPublic: roadmap.isPublic,
         position: roadmap.position,
-        createdAt: roadmap.createdAt.toISOString(),
-        updatedAt: roadmap.updatedAt.toISOString(),
+        createdAt: toIsoString(roadmap.createdAt),
+        updatedAt: toIsoString(roadmap.updatedAt),
       }
     } catch (error) {
       log.error({ err: error }, 'get roadmap failed')
@@ -179,8 +179,8 @@ export const createRoadmapFn = createServerFn({ method: 'POST' })
         description: roadmap.description,
         isPublic: roadmap.isPublic,
         position: roadmap.position,
-        createdAt: roadmap.createdAt.toISOString(),
-        updatedAt: roadmap.updatedAt.toISOString(),
+        createdAt: toIsoString(roadmap.createdAt),
+        updatedAt: toIsoString(roadmap.updatedAt),
       }
     } catch (error) {
       log.error({ err: error }, 'create roadmap failed')
@@ -211,8 +211,8 @@ export const updateRoadmapFn = createServerFn({ method: 'POST' })
         description: roadmap.description,
         isPublic: roadmap.isPublic,
         position: roadmap.position,
-        createdAt: roadmap.createdAt.toISOString(),
-        updatedAt: roadmap.updatedAt.toISOString(),
+        createdAt: toIsoString(roadmap.createdAt),
+        updatedAt: toIsoString(roadmap.updatedAt),
       }
     } catch (error) {
       log.error({ err: error }, 'update roadmap failed')

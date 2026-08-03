@@ -6,7 +6,7 @@ import {
   type UpdateWidgetConfigInput,
   type PublicWidgetConfig,
 } from '../settings.types'
-import { generateWidgetSecret } from '../settings.widget'
+import { generateWidgetSecret, publicLiveChatConfig } from '../settings.widget'
 
 describe('Widget Config Types', () => {
   describe('DEFAULT_LIVE_CHAT_CONFIG', () => {
@@ -27,6 +27,10 @@ describe('Widget Config Types', () => {
     it('should not have optional fields set', () => {
       expect(DEFAULT_WIDGET_CONFIG.defaultBoard).toBeUndefined()
       expect(DEFAULT_WIDGET_CONFIG.position).toBeUndefined()
+    })
+
+    it('should have ticketing.enabled set to false (opt-in)', () => {
+      expect(DEFAULT_WIDGET_CONFIG.ticketing?.enabled).toBe(false)
     })
   })
 
@@ -88,6 +92,29 @@ describe('Widget Config Types', () => {
       expect(publicConfig.enabled).toBe(true)
       // identifyVerification is NOT in PublicWidgetConfig (type-level check)
       expect('identifyVerification' in publicConfig).toBe(false)
+    })
+
+    it('should accept ticketing.enabled', () => {
+      const publicConfig: PublicWidgetConfig = {
+        enabled: true,
+        ticketing: { enabled: true },
+      }
+      expect(publicConfig.ticketing?.enabled).toBe(true)
+    })
+
+    it('strips support access policy from the public chat projection', () => {
+      const publicChat = publicLiveChatConfig({
+        ...DEFAULT_LIVE_CHAT_CONFIG,
+        access: {
+          mode: 'selected',
+          segmentIds: ['segment_vip'],
+          principalIds: ['principal_vip'],
+        },
+      })
+
+      expect(publicChat).not.toHaveProperty('access')
+      expect(JSON.stringify(publicChat)).not.toContain('segment_vip')
+      expect(JSON.stringify(publicChat)).not.toContain('principal_vip')
     })
   })
 })

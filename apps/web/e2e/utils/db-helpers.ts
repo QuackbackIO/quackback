@@ -36,6 +36,43 @@ export function getMagicLinkToken(email: string): string {
 }
 
 /**
+ * Get the most recent live email OTP code for an email. Better-auth stores
+ * email OTP rows as `sign-in-otp-<email>` with value `<code>:<attempts>`.
+ */
+export function getOtpCode(email: string, _host?: string): string {
+  const query = `
+    SELECT value
+    FROM verification
+    WHERE identifier = 'sign-in-otp-${email.replace(/'/g, "''")}'
+      AND expires_at > NOW()
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
+
+  try {
+    const result = execSync(
+      `dotenv -e ../../.env -- bun -e ${JSON.stringify(`
+        import postgres from 'postgres'
+        const sql = postgres(process.env.DATABASE_URL)
+        const rows = await sql.unsafe(${JSON.stringify(query)})
+        if (rows.length === 0) throw new Error('No live OTP verification row found')
+        console.log(String(rows[0].value).split(':')[0])
+        await sql.end()
+      `)}`,
+      {
+        encoding: 'utf-8',
+        cwd: resolve(__dirname, '../..'), // apps/web directory
+      }
+    )
+
+    return result.trim()
+  } catch (error) {
+    const err = error as { stderr?: string; message: string }
+    throw new Error(`Failed to get OTP code: ${err.stderr || err.message}`, { cause: error })
+  }
+}
+
+/**
  * Ensure a test user has the required role for E2E testing
  *
  * This is a test utility that ensures the demo user has the 'admin' role

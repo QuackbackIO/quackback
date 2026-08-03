@@ -39,6 +39,12 @@ vi.mock('@tanstack/react-start', () => ({
       validator() {
         return chain
       },
+      // Newer createServerFn chains use inputValidator() in place of/alongside
+      // validator(); support both so the chain resolves regardless of which the
+      // server fn under test uses.
+      inputValidator() {
+        return chain
+      },
       handler(fn: AnyHandler) {
         chain._handler = fn
         return chain

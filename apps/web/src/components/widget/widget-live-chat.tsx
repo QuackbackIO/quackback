@@ -46,6 +46,7 @@ export function WidgetLiveChat({
       search: async (q: string, signal: AbortSignal) => {
         const res = await fetch(`/api/widget/kb-search?q=${encodeURIComponent(q)}&limit=3`, {
           signal,
+          headers: getWidgetAuthHeaders(),
         })
         if (!res.ok) return []
         const json = (await res.json()) as {
@@ -59,6 +60,7 @@ export function WidgetLiveChat({
 
   return (
     <VisitorChatThread
+      surface="widget"
       conversationTarget={conversationTarget}
       linkPreviews={linkPreviews}
       getAuthHeaders={getWidgetAuthHeaders}

@@ -18,6 +18,7 @@ type Command =
   | 'identify'
   | 'logout'
   | 'open'
+  | 'openSupport'
   | 'close'
   | 'showLauncher'
   | 'hideLauncher'
@@ -132,6 +133,9 @@ export function createSDK(): SDK {
       widgetUrl: `${config!.instanceUrl}/widget`,
       placement: config!.placement ?? 'right',
       defaultBoard: config!.defaultBoard,
+      applicationKey: config!.applicationKey,
+      environment: config!.environment,
+      hostOrigin: window.location.origin,
       showCloseButton: config!.launcher === false,
       locale: config!.locale,
       onBackdropClick: () => dispatch('close'),
@@ -203,6 +207,9 @@ export function createSDK(): SDK {
         if (!next.instanceUrl) throw new Error('Quackback: init requires { instanceUrl }')
         if (!isSafeHttpUrl(next.instanceUrl))
           throw new Error('Quackback: instanceUrl must be an http(s) URL')
+        if (!!next.applicationKey !== !!next.environment) {
+          throw new Error('Quackback: applicationKey and environment must be provided together')
+        }
         // Validate before destroy so a bad re-init leaves the working instance intact.
         if (config) dispatch('destroy')
         config = next
@@ -214,8 +221,18 @@ export function createSDK(): SDK {
         sendIdentity(initialIdentity)
         const reveal = revealLauncherOnce()
         const fallback = window.setTimeout(reveal, LAUNCHER_REVEAL_FALLBACK_MS)
-        void fetchServerConfig(config.instanceUrl)
-          .then(applyServerTheme)
+        void fetchServerConfig(config.instanceUrl, {
+          applicationKey: config.applicationKey,
+          environment: config.environment,
+          hostOrigin: window.location.origin,
+        })
+          .then((serverCfg) => {
+            if (serverCfg.enabled === false) {
+              dispatch('destroy')
+              return
+            }
+            applyServerTheme(serverCfg)
+          })
           .finally(() => {
             window.clearTimeout(fallback)
             window.setTimeout(reveal, LAUNCHER_REVEAL_DELAY_MS)
@@ -244,18 +261,25 @@ export function createSDK(): SDK {
         launcher?.setOpen(true)
         panelOpen = true
         const ctx = opts as {
-          view?: 'home' | 'new-post' | 'changelog' | 'help'
+          view?: 'home' | 'new-post' | 'changelog' | 'help' | 'support'
           postId?: string
           articleId?: string
           entryId?: string
+          ticketId?: string
         }
         emitter.emit('open', {
           view: ctx.view,
           postId: ctx.postId,
           articleId: ctx.articleId,
           entryId: ctx.entryId,
+          ticketId: ctx.ticketId,
         })
         return
+      }
+      case 'openSupport': {
+        const ticketId = a as string | undefined
+        const opts: OpenOptions = ticketId ? { view: 'support', ticketId } : { view: 'support' }
+        return dispatch('open', opts)
       }
       case 'close':
         panel?.hide()

@@ -1,0 +1,53 @@
+/**
+ * POST /api/v1/moderation/comments/:commentId/reject — reject a pending comment (optional reason).
+ */
+import { createFileRoute } from '@tanstack/react-router'
+import { z } from 'zod'
+import { withApiKeyAuth, assertScopeAllowed } from '@/lib/server/domains/api/auth'
+import {
+  successResponse,
+  forbiddenResponse,
+  badRequestResponse,
+  handleDomainError,
+} from '@/lib/server/domains/api/responses'
+import { parseTypeId } from '@/lib/server/domains/api/validation'
+import { PERMISSIONS } from '@/lib/server/domains/authz'
+import { hasPermission, loadPermissionSet } from '@/lib/server/domains/authz/authz.service'
+import type { CommentId } from '@quackback/ids'
+
+const bodySchema = z.object({ reason: z.string().max(1000).optional() })
+
+export const Route = createFileRoute('/api/v1/moderation/comments/$commentId/reject')({
+  server: {
+    handlers: {
+      POST: async ({ request, params }) => {
+        try {
+          const auth = await withApiKeyAuth(request, { role: 'team' })
+          assertScopeAllowed(auth, PERMISSIONS.MODERATION_MANAGE)
+          const set = await loadPermissionSet(auth.principalId)
+          if (!hasPermission(set, PERMISSIONS.MODERATION_MANAGE)) {
+            return forbiddenResponse('moderation.manage permission required')
+          }
+          const commentId = parseTypeId<CommentId>(params.commentId, 'comment', 'comment ID')
+          const parsed = bodySchema.safeParse(await request.json().catch(() => ({})))
+          if (!parsed.success) {
+            return badRequestResponse('Invalid request body', {
+              errors: parsed.error.flatten().fieldErrors,
+            })
+          }
+          const { rejectComment } =
+            await import('@/lib/server/domains/moderation/moderation.service')
+          await rejectComment(
+            commentId,
+            parsed.data.reason,
+            { role: auth.role, type: 'api_key' },
+            request.headers
+          )
+          return successResponse({ ok: true, commentId })
+        } catch (error) {
+          return handleDomainError(error)
+        }
+      },
+    },
+  },
+})

@@ -48,7 +48,10 @@ export const notificationHook: HookHandler = {
       return { success: true }
     }
 
-    log.debug({ event_type: event.type, member_count: principalIds.length }, 'creating notifications')
+    log.debug(
+      { event_type: event.type, member_count: principalIds.length },
+      'creating notifications'
+    )
 
     try {
       const notifications = buildNotifications(event, principalIds, cfg)

@@ -32,8 +32,9 @@ export interface BuiltinField {
    * - 'attribute': a stored property on the user record (shown in User Attributes view)
    * - 'account': account-level facts (principal type, account age) — segment rules only
    * - 'activity': engagement counts — segment rules only
+   * - 'crm': linked contact / organization facts — segment rules only
    */
-  group: 'attribute' | 'account' | 'activity'
+  group: 'attribute' | 'account' | 'activity' | 'crm'
   /** Short description shown as a tooltip or helper text */
   description?: string
   /** Enum fields: list of accepted values rendered as a select input */
@@ -203,6 +204,46 @@ export const BUILTIN_FIELDS = [
       { value: 'eq', label: 'equals' },
       { value: 'neq', label: 'not equals' },
     ],
+  },
+  {
+    key: 'contact_title',
+    label: 'Contact Title',
+    type: 'string',
+    group: 'crm',
+    description:
+      'Title from a linked CRM contact. Only portal users linked to a contact can match this field.',
+  },
+  {
+    key: 'contact_metadata_key',
+    label: 'Contact Metadata Key',
+    type: 'string',
+    group: 'crm',
+    description:
+      'Value from a linked CRM contact metadata key. Only portal users linked to a contact can match this field.',
+  },
+  {
+    key: 'organization_domain',
+    label: 'Organization Domain',
+    type: 'string',
+    group: 'crm',
+    description:
+      'Domain from the linked contact organization. Only portal users linked to a contact can match this field.',
+  },
+  {
+    key: 'organization_external_id',
+    label: 'Organization External ID',
+    type: 'string',
+    group: 'crm',
+    description:
+      'External CRM ID from the linked contact organization. Only portal users linked to a contact can match this field.',
+  },
+  {
+    key: 'organization_metadata_key',
+    label: 'Organization Metadata Key',
+    type: 'string',
+    group: 'crm',
+    description:
+      'Value from a linked organization metadata key. Only portal users linked to a contact can match this field.',
   },
   {
     key: 'post_count',

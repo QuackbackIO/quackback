@@ -24,9 +24,32 @@ import {
 import { toUuid, type RoadmapId, type PostId, type PrincipalId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/shared/errors'
 import { createActivity } from '@/lib/server/domains/activity/activity.service'
+import {
+  dispatchRoadmapCreated,
+  dispatchRoadmapUpdated,
+  dispatchRoadmapDeleted,
+} from '@/lib/server/events/dispatch'
+import type { EventActor, EventRoadmapRef } from '@/lib/server/events/types'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'roadmaps' })
+
+/** Service-actor fallback for roadmap lifecycle events. */
+const roadmapEventActor: EventActor = { type: 'service', displayName: 'roadmaps-system' }
+
+/** Build the fixed-shape webhook ref from a roadmap row. */
+function toRoadmapRef(roadmap: Roadmap): EventRoadmapRef {
+  return {
+    id: roadmap.id,
+    slug: roadmap.slug,
+    name: roadmap.name,
+    description: roadmap.description ?? null,
+    isPublic: roadmap.isPublic,
+    position: roadmap.position,
+    createdAt: roadmap.createdAt?.toISOString() ?? null,
+    updatedAt: roadmap.updatedAt?.toISOString() ?? null,
+  }
+}
 import type {
   CreateRoadmapInput,
   UpdateRoadmapInput,
@@ -86,6 +109,7 @@ export async function createRoadmap(input: CreateRoadmapInput): Promise<Roadmap>
     })
     .returning()
 
+  void dispatchRoadmapCreated(roadmapEventActor, toRoadmapRef(roadmap)).catch(() => {})
   return roadmap
 }
 
@@ -115,6 +139,10 @@ export async function updateRoadmap(id: RoadmapId, input: UpdateRoadmapInput): P
     throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${id} not found`)
   }
 
+  const changedFields = Object.keys(updateData)
+  void dispatchRoadmapUpdated(roadmapEventActor, toRoadmapRef(updated), changedFields).catch(
+    () => {}
+  )
   return updated
 }
 
@@ -125,6 +153,11 @@ export async function updateRoadmap(id: RoadmapId, input: UpdateRoadmapInput): P
  */
 export async function deleteRoadmap(id: RoadmapId): Promise<void> {
   log.debug({ roadmap_id: id }, 'delete roadmap')
+  // Snapshot before the mutation so the delete event carries a populated ref.
+  const snapshot = await db.query.roadmaps.findFirst({
+    where: and(eq(roadmaps.id, id), isNull(roadmaps.deletedAt)),
+  })
+
   const result = await db
     .update(roadmaps)
     .set({ deletedAt: new Date() })
@@ -133,6 +166,10 @@ export async function deleteRoadmap(id: RoadmapId): Promise<void> {
 
   if (result.length === 0) {
     throw new NotFoundError('ROADMAP_NOT_FOUND', `Roadmap with ID ${id} not found`)
+  }
+
+  if (snapshot) {
+    void dispatchRoadmapDeleted(roadmapEventActor, toRoadmapRef(snapshot)).catch(() => {})
   }
 }
 
@@ -213,10 +250,7 @@ export async function addPostToRoadmap(
   input: AddPostToRoadmapInput,
   actorPrincipalId?: PrincipalId
 ): Promise<void> {
-  log.debug(
-    { post_id: input.postId, roadmap_id: input.roadmapId },
-    'add post to roadmap'
-  )
+  log.debug({ post_id: input.postId, roadmap_id: input.roadmapId }, 'add post to roadmap')
   // Verify roadmap exists
   const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
   if (!roadmap) {
@@ -300,10 +334,7 @@ export async function removePostFromRoadmap(
  * Uses a single batch UPDATE with CASE WHEN for efficiency
  */
 export async function reorderPostsInColumn(input: ReorderPostsInput): Promise<void> {
-  log.debug(
-    { roadmap_id: input.roadmapId, count: input.postIds.length },
-    'reorder posts in column'
-  )
+  log.debug({ roadmap_id: input.roadmapId, count: input.postIds.length }, 'reorder posts in column')
   // Verify roadmap exists
   const roadmap = await db.query.roadmaps.findFirst({ where: eq(roadmaps.id, input.roadmapId) })
   if (!roadmap) {

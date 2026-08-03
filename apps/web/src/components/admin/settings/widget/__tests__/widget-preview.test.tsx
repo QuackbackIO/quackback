@@ -101,4 +101,29 @@ describe('WidgetPreview — chat tab', () => {
     expect(screen.getByText('Hello there')).toBeTruthy()
     expect(screen.queryByText('Support')).toBeNull()
   })
+
+  it('renders the support ticket entry when ticketing is enabled', () => {
+    render(
+      <WidgetPreview
+        position="bottom-right"
+        tabs={{ feedback: true, changelog: false, help: false, chat: false }}
+        ticketingEnabled
+      />
+    )
+
+    expect(screen.getByText('Contact support')).toBeTruthy()
+    expect(screen.getByText('Get help directly from our team.')).toBeTruthy()
+  })
+
+  it('does not render the support ticket entry when ticketing is disabled', () => {
+    render(
+      <WidgetPreview
+        position="bottom-right"
+        tabs={{ feedback: true, changelog: false, help: false, chat: false }}
+        ticketingEnabled={false}
+      />
+    )
+
+    expect(screen.queryByText('Contact support')).toBeNull()
+  })
 })
