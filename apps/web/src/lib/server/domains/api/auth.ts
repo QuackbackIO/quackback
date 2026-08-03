@@ -9,9 +9,10 @@ import { verifyApiKey } from '@/lib/server/domains/api-keys/api-key.service'
 import type { ApiKey } from '@/lib/server/domains/api-keys'
 import { checkRateLimit, getClientIp } from './rate-limit'
 import { UnauthorizedError, ForbiddenError, RateLimitError } from '@/lib/shared/errors'
-import { db, principal, eq } from '@/lib/server/db'
+import { db, principal, apiKeys, eq } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { isAdmin, isTeamMember } from '@/lib/shared/roles'
+import type { PermissionKey } from '@/lib/server/domains/authz/authz.permissions'
 
 export type MemberRole = 'admin' | 'member' | 'user'
 
@@ -24,6 +25,21 @@ export interface ApiAuthContext {
   role: MemberRole
   /** Whether the request is in import mode (suppresses side effects, raises rate limit) */
   importMode: boolean
+  /** Client IP address (best-effort, from CDN headers or socket). */
+  ipAddress: string | null
+  /** User-agent header (truncated to 500 chars). */
+  userAgent: string | null
+  /** Audit source for write paths originating from API key requests. */
+  source: 'api'
+  /** Quick-reference scope info for the calling key. */
+  key: {
+    id: ApiKey['id']
+    name: string
+    scopes: string[]
+    allowedTeamIds: string[]
+    allowedInboxIds: string[]
+    compatLegacyFullAccess: boolean
+  }
 }
 
 /**
@@ -69,11 +85,39 @@ export async function requireApiKey(request: Request): Promise<ApiAuthContext | 
   // Default to most restrictive role if principal not found
   const role = (principalRecord?.role as MemberRole) ?? 'user'
 
+  const ipAddress = getClientIp(request) || null
+  const ua = request.headers.get('user-agent')
+  const userAgent = ua ? ua.slice(0, 500) : null
+
+  // Best-effort: update last_ip/last_user_agent. last_used_at is already
+  // updated inside verifyApiKey; we pile these into a separate fire-and-forget
+  // UPDATE so a failure here never blocks auth.
+  if (ipAddress || userAgent) {
+    db.update(apiKeys)
+      .set({ lastIp: ipAddress, lastUserAgent: userAgent })
+      .where(eq(apiKeys.id, apiKey.id))
+      .execute()
+      .catch(() => {
+        // ignore
+      })
+  }
+
   return {
     apiKey,
     principalId: apiKey.principalId,
     role,
     importMode: false,
+    ipAddress,
+    userAgent,
+    source: 'api',
+    key: {
+      id: apiKey.id,
+      name: apiKey.name,
+      scopes: apiKey.scopes,
+      allowedTeamIds: apiKey.allowedTeamIds,
+      allowedInboxIds: apiKey.allowedInboxIds,
+      compatLegacyFullAccess: apiKey.compatLegacyFullAccess,
+    },
   }
 }
 
@@ -122,4 +166,68 @@ export async function withApiKeyAuth(
   }
 
   return auth
+}
+
+// ---------------------------------------------------------------------------
+// Scope enforcement (Phase 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Enforce that the authenticated API key is allowed to use `permission`.
+ *
+ * Semantics:
+ *   - If `key.scopes` is empty AND `compatLegacyFullAccess` is true → allow
+ *     (backwards-compatible behavior for keys created before scoping shipped).
+ *   - If `key.scopes` is empty AND compat is false → deny (admin opted out).
+ *   - Otherwise → allow only if `permission` is in `key.scopes`.
+ *
+ * Throws `ForbiddenError` on denial.
+ */
+export function assertScopeAllowed(ctx: ApiAuthContext, permission: PermissionKey): void {
+  const { scopes, compatLegacyFullAccess } = ctx.key
+  if (scopes.length === 0) {
+    if (compatLegacyFullAccess) return
+    throw new ForbiddenError(
+      'API_KEY_SCOPE_DENIED',
+      `API key has no scopes; missing required scope: ${permission}`
+    )
+  }
+  if (!scopes.includes(permission)) {
+    throw new ForbiddenError(
+      'API_KEY_SCOPE_DENIED',
+      `API key is not scoped for required permission: ${permission}`
+    )
+  }
+}
+
+/**
+ * Enforce that the authenticated API key is allowed to act on `teamId`.
+ * Empty `allowedTeamIds` means "no team restriction".
+ */
+export function assertTeamAllowed(ctx: ApiAuthContext, teamId: string | null | undefined): void {
+  if (!teamId) return
+  const { allowedTeamIds } = ctx.key
+  if (allowedTeamIds.length === 0) return
+  if (!allowedTeamIds.includes(teamId)) {
+    throw new ForbiddenError(
+      'API_KEY_TEAM_DENIED',
+      `API key is not allowed to access team ${teamId}`
+    )
+  }
+}
+
+/**
+ * Enforce that the authenticated API key is allowed to act on `inboxId`.
+ * Empty `allowedInboxIds` means "no inbox restriction".
+ */
+export function assertInboxAllowed(ctx: ApiAuthContext, inboxId: string | null | undefined): void {
+  if (!inboxId) return
+  const { allowedInboxIds } = ctx.key
+  if (allowedInboxIds.length === 0) return
+  if (!allowedInboxIds.includes(inboxId)) {
+    throw new ForbiddenError(
+      'API_KEY_INBOX_DENIED',
+      `API key is not allowed to access inbox ${inboxId}`
+    )
+  }
 }

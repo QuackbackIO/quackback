@@ -156,6 +156,66 @@ pg_dump -Fc quackback > quackback_backup.dump
 pg_restore -d quackback quackback_backup.dump
 ```
 
+### Scheduled Jobs (pg_cron)
+
+Quackback ships a few background jobs that need to run on a schedule. The
+provided `docker/postgres/Dockerfile` already enables the `pg_cron` and
+`http` (`pg_net`) extensions; if you bring your own Postgres, install both
+extensions and add `pg_cron` to `shared_preload_libraries`.
+
+Two jobs are recommended:
+
+1. **SLA escalation tick** — calls the internal endpoint
+   `POST /api/v1/internal/sla-tick` every minute. The endpoint is gated by
+   the `INTERNAL_TASK_SECRET` env var, which must match the
+   `x-internal-secret` header sent by the cron job.
+2. **Webhook delivery audit purge** — trims the `webhook_deliveries` audit
+   table to ~30 days so it doesn't grow unbounded.
+
+Run the following SQL once against your Quackback database (replace
+`http://web:3000` with whatever URL the Postgres container can reach the web
+app on, and `your-internal-secret` with the value of `INTERNAL_TASK_SECRET`):
+
+```sql
+-- One-time: store the shared secret as a database GUC so the job body
+-- doesn't have to hard-code it.
+ALTER DATABASE quackback SET app.internal_secret = 'your-internal-secret';
+
+-- SLA escalation tick — every minute
+SELECT cron.schedule(
+  'quackback-sla-tick',
+  '* * * * *',
+  $$
+    SELECT net.http_post(
+      url     := 'http://web:3000/api/v1/internal/sla-tick',
+      body    := '{}'::jsonb,
+      headers := jsonb_build_object(
+        'content-type',     'application/json',
+        'x-internal-secret', current_setting('app.internal_secret')
+      )
+    );
+  $$
+);
+
+-- Webhook delivery audit purge — daily at 03:00 UTC, keep 30 days
+SELECT cron.schedule(
+  'quackback-webhook-deliveries-purge',
+  '0 3 * * *',
+  $$ DELETE FROM webhook_deliveries WHERE attempted_at < now() - interval '30 days' $$
+);
+```
+
+Inspect, pause or remove jobs:
+
+```sql
+SELECT jobid, schedule, jobname, active FROM cron.job;
+SELECT cron.unschedule('quackback-sla-tick');
+```
+
+> If you don't run pg_cron, you can drive the SLA tick from any external
+> scheduler (systemd timer, Kubernetes CronJob, GitHub Actions cron, etc.)
+> by issuing the same authenticated `POST` request once per minute.
+
 ---
 
 ## Building from Source

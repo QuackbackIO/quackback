@@ -9,6 +9,7 @@ bun run setup              # One-time setup (deps, Docker, migrations, seed)
 bun run dev                # Dev server at localhost:3000 (login: demo@example.com / password)
 bun run build && bun run db:generate && bun run db:migrate
 bun run test && bun run test:e2e && bun run lint && bun run typecheck
+bun apps/web/scripts/backfill-ticket-contacts.ts [--dry-run]   # One-shot: link existing portal users to contacts and backfill tickets.requesterContactId
 ```
 
 ## Rules

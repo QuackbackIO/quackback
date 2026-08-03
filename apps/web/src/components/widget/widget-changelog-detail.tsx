@@ -9,6 +9,7 @@ import type { ChangelogId } from '@quackback/ids'
 import type { JSONContent } from '@tiptap/react'
 import { WidgetPortalTitle } from './widget-portal-title'
 import { sendToHost } from '@/lib/client/widget-bridge'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -23,7 +24,9 @@ interface WidgetChangelogDetailProps {
 }
 
 export function WidgetChangelogDetail({ entryId }: WidgetChangelogDetailProps) {
-  const { data: entry, isLoading } = useQuery(publicChangelogQueries.detail(entryId as ChangelogId))
+  const { data: entry, isLoading } = useQuery(
+    publicChangelogQueries.detail(entryId as ChangelogId, getWidgetAuthHeaders())
+  )
 
   const changelogEntryId = entry?.id
   const handleViewOnPortal = useCallback(() => {

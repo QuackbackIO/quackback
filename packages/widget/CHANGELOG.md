@@ -1,5 +1,26 @@
 # @quackback/widget
 
+## 0.2.1 — 2026-05-02
+
+- New event on `Quackback.on(...)`:
+  - `ticket:reopened` — `{ ticketId, statusId, alreadyOpen }`. Fires when the user reopens one of their previously-solved tickets from the widget. `alreadyOpen: true` indicates the ticket was already in an open/pending/on_hold category, so no status transition occurred.
+
+No breaking changes; existing subscribers are unaffected.
+
+## 0.2.0 — 2026-05-02
+
+Adds a first-class **support ticketing** surface so host apps can let end-users open and follow up on tickets directly from the widget.
+
+- New deep-link target: `Quackback.open({ view: 'support', ticketId? })` — opens the support tab, or jumps straight to a ticket's detail view.
+- New shortcut: `Quackback.openSupport(ticketId?)` — sugar for the same call. Use without an argument to land on the ticket list, with a ticket id to deep-link into a thread.
+- New events on `Quackback.on(...)`:
+  - `ticket:created` — `{ id, subject, statusId, statusCategory }`
+  - `ticket:replied` — `{ ticketId, threadId }`
+  - `ticket:resolved` — `{ ticketId, statusId, alreadyResolved }` (`alreadyResolved: true` indicates the ticket was already in a solved/closed state, so no transition occurred)
+- The existing `open` event payload now includes `view: 'support'` and an optional `ticketId` field for support deep-links.
+
+This release only adds to the public surface; existing integrations are unaffected.
+
 ## 0.1.5 - 2026-05-18
 
 - Fix: `Quackback("init", { launcher: false, placement: "left" })` from a script-tag install now applies your options instead of silently keeping the default launcher and right-side placement. A repeat `init` call also reconfigures cleanly.

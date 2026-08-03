@@ -31,6 +31,7 @@ import { sanitizeTiptapContent } from '@/lib/server/sanitize-tiptap'
  * CodeBlockLowlight (lowlight needs no special markdown handling; StarterKit's
  * codeBlock handles ``` fences).
  */
+
 const SERVER_EXTENSIONS = [
   StarterKit.configure({
     heading: { levels: [1, 2, 3] },
@@ -44,7 +45,7 @@ const SERVER_EXTENSIONS = [
   TableRow,
   TableCell,
   TableHeader,
-]
+] as any[]
 
 /** Singleton MarkdownManager - created once at module load */
 const manager = new MarkdownManager({
@@ -205,6 +206,7 @@ function emojiNodeToText(node: JSONContent): string {
  * Slim extension set for comments — no images, no tables, no YouTube.
  * Comments are short, dense, and inline; we want the safe subset only.
  */
+
 const COMMENT_EXTENSIONS = [
   StarterKit.configure({
     heading: { levels: [1, 2, 3] },
@@ -214,7 +216,7 @@ const COMMENT_EXTENSIONS = [
   Underline,
   TaskList,
   TaskItem.configure({ nested: true }),
-]
+] as any[]
 
 const commentManager = new MarkdownManager({
   extensions: COMMENT_EXTENSIONS,

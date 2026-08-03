@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ChevronRightIcon } from '@heroicons/react/24/solid'
 import { publicHelpCenterQueries } from '@/lib/client/queries/help-center'
 import { CategoryIcon } from '@/components/help-center/category-icon'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 
 interface WidgetHelpCategoryProps {
   categoryId: string
@@ -18,7 +19,9 @@ export function WidgetHelpCategory({
   categoryIcon,
   onArticleSelect,
 }: WidgetHelpCategoryProps) {
-  const articlesQuery = useQuery(publicHelpCenterQueries.articlesForCategory(categoryId))
+  const articlesQuery = useQuery(
+    publicHelpCenterQueries.articlesForCategory(categoryId, getWidgetAuthHeaders())
+  )
 
   return (
     <div className="flex flex-col h-full">

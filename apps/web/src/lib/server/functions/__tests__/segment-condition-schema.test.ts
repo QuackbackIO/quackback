@@ -19,6 +19,9 @@ vi.mock('@tanstack/react-start', () => ({
       validator() {
         return chain
       },
+      inputValidator() {
+        return chain
+      },
       handler() {
         return chain
       },
@@ -52,6 +55,11 @@ describe('segmentConditionSchema — attribute allowlist', () => {
     'last_active_days_ago',
     'signup_source',
     'principal_type',
+    'contact_title',
+    'contact_metadata_key',
+    'organization_domain',
+    'organization_external_id',
+    'organization_metadata_key',
   ])('accepts attribute "%s"', (attribute) => {
     const result = segmentConditionSchema.safeParse({ attribute, ...baseCondition })
     expect(result.success, `expected success for attribute "${attribute}"`).toBe(true)
@@ -99,6 +107,11 @@ describe('createSegmentSchema — new built-in field conditions', () => {
 
   it('accepts a segment with a "locale" condition', () => {
     const result = createSegmentSchema.safeParse(makePayload('locale'))
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a segment with an "organization_domain" condition', () => {
+    const result = createSegmentSchema.safeParse(makePayload('organization_domain'))
     expect(result.success).toBe(true)
   })
 

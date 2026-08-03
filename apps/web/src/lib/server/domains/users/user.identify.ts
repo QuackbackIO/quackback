@@ -23,6 +23,7 @@ import {
   mergeMetadata,
   validateInputAttributes,
 } from './user.attributes'
+import { linkContactForUser } from '@/lib/server/auth/link-contact'
 
 /**
  * Identify (create or update) a portal user by email.
@@ -157,6 +158,13 @@ export async function identifyPortalUser(
     throw new NotFoundError('PRINCIPAL_NOT_FOUND', `No principal found for user ${userRecord.id}`)
   }
 
+  await linkContactForUser({
+    userId: userRecord.id as UserId,
+    email: userRecord.email,
+    emailVerified: userRecord.emailVerified,
+    anonymous: false,
+  })
+
   return {
     principalId: principalRecord.id as PrincipalId,
     userId: userRecord.id,
@@ -249,6 +257,13 @@ export async function updatePortalUser(
     where: eq(user.id, userId),
     columns: USER_COLUMNS,
   }))!
+
+  await linkContactForUser({
+    userId: updated.id as UserId,
+    email: updated.email,
+    emailVerified: updated.emailVerified,
+    anonymous: false,
+  })
 
   return {
     principalId,

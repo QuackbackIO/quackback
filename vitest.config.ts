@@ -11,6 +11,10 @@ export default defineConfig({
     // the module graph for later tests. 20s gives headroom; genuine hangs
     // still fail well before the suite stalls.
     testTimeout: 20000,
+    // The suite is import-heavy and several mock-based tests are sensitive to
+    // worker CPU starvation. Keep the default command stable while allowing
+    // one-off overrides such as `VITEST_MAX_WORKERS=75% bun run test -- --run`.
+    maxWorkers: process.env.VITEST_MAX_WORKERS ?? '50%',
     include: ['**/*.test.ts', '**/*.test.tsx'],
     setupFiles: [path.resolve(__dirname, './vitest.setup.ts')],
     exclude: [
@@ -25,6 +29,11 @@ export default defineConfig({
       // Widget package has its own vitest.config.ts with happy-dom — run via
       // `bun run --cwd packages/widget test`. Don't double-run from the root.
       'packages/widget/**',
+      // TanStack Router uses dots as path separators, so the route file for
+      // POST /api/v1/webhooks/:webhookId/test is named `$webhookId.test.ts`.
+      // That collides with the `*.test.ts` glob — it's a route module, not a
+      // test suite. Real route tests live under routes/**/__tests__/.
+      '**/routes/api/v1/webhooks/$webhookId.test.ts',
     ],
     // Use ts-node or vite's transformation instead of stripping
     typecheck: {
@@ -32,6 +41,37 @@ export default defineConfig({
     },
     env: {
       DATABASE_URL: 'postgresql://postgres:password@localhost:5432/quackback_test',
+      // Mirror CI's env so any test that transitively loads server config
+      // (config.ts validates baseUrl/secretKey/redisUrl on first access) is
+      // self-sufficient and does not depend on the developer's shell env.
+      BASE_URL: 'http://localhost:3000',
+      SECRET_KEY: 'test-secret-key-for-vitest-only-min-32-chars-long',
+      REDIS_URL: 'redis://localhost:6379',
+    },
+    coverage: {
+      // v8 instrumentation. Activated only with `--coverage`, so normal runs are
+      // unaffected. The JSON reporter feeds scripts/diff-coverage.mjs, which
+      // enforces 100% line/branch coverage on lines changed by this branch.
+      provider: 'v8',
+      reporter: ['text-summary', 'json', 'json-summary'],
+      reportsDirectory: './coverage',
+      // Instrument only files that tests actually load (all: false). Changed
+      // files never loaded by any test surface as missing in the report and the
+      // diff-coverage gate counts their changed lines as uncovered.
+      all: false,
+      include: ['apps/web/src/**/*.{ts,tsx}', 'packages/*/src/**/*.{ts,tsx}'],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/__tests__/**',
+        '**/e2e/**',
+        '**/*.d.ts',
+        '**/types.ts',
+        // Generated / declarative route trees and config — no behavior to cover.
+        '**/routeTree.gen.ts',
+        '**/*.config.{ts,js}',
+        'apps/web/src/locales/**',
+      ],
     },
   },
   esbuild: {

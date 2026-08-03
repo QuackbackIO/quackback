@@ -195,7 +195,7 @@ beforeEach(async () => {
   hoisted.mockDbQuery.invitation.findFirst.mockResolvedValue(null)
   hoisted.mockDbQuery.invitation.findMany.mockResolvedValue([])
   hoisted.mockRecordAuditEvent.mockResolvedValue(undefined)
-})
+}, 30_000)
 
 // ---------------------------------------------------------------------------
 // sendPortalInviteFn

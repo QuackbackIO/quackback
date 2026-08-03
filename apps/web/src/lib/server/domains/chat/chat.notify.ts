@@ -136,10 +136,7 @@ export async function notifyAgentReply(opts: {
     if (!recipient) {
       // The visitor is offline and unreachable — surface it instead of dropping
       // silently (the inbox can flag conversations with no reply-to address).
-      log.warn(
-        { conversation_id: opts.conversationId },
-        'agent reply undeliverable (no email)'
-      )
+      log.warn({ conversation_id: opts.conversationId }, 'agent reply undeliverable (no email)')
       return
     }
 

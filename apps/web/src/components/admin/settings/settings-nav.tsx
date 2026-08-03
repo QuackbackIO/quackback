@@ -14,6 +14,10 @@ import {
   BeakerIcon,
   BookOpenIcon,
   TagIcon,
+  InboxStackIcon,
+  ArrowsRightLeftIcon,
+  ClockIcon,
+  ShieldExclamationIcon,
   MegaphoneIcon,
 } from '@heroicons/react/24/solid'
 import { FilterSection } from '@/components/shared/filter-section'
@@ -48,7 +52,7 @@ export function buildNavSections(flags?: {
         },
         {
           label: 'Audit log',
-          to: '/admin/settings/security/audit-log',
+          to: '/admin/settings/audit',
           icon: DocumentTextIcon,
         },
         { label: 'Developers', to: '/admin/settings/developers', icon: CommandLineIcon },
@@ -56,10 +60,43 @@ export function buildNavSections(flags?: {
       ],
     },
     {
+      label: 'Workspace',
+      items: [
+        { label: 'Inboxes', to: '/admin/settings/inboxes', icon: InboxStackIcon },
+        { label: 'Teams', to: '/admin/settings/teams', icon: UserGroupIcon },
+        {
+          label: 'Routing rules',
+          to: '/admin/settings/routing-rules',
+          icon: ArrowsRightLeftIcon,
+        },
+      ],
+    },
+    {
+      label: 'SLA',
+      items: [
+        {
+          label: 'Business hours',
+          to: '/admin/settings/business-hours',
+          icon: ClockIcon,
+        },
+        { label: 'SLA policies', to: '/admin/settings/sla', icon: ShieldExclamationIcon },
+      ],
+    },
+    {
+      label: 'Security',
+      items: [{ label: 'Roles & permissions', to: '/admin/settings/roles', icon: ShieldCheckIcon }],
+    },
+    {
       label: 'Customization',
       items: [
         { label: 'Branding', to: '/admin/settings/branding', icon: PaintBrushIcon },
         { label: 'Portal', to: '/admin/settings/portal', icon: MegaphoneIcon },
+        { label: 'Portal Tabs', to: '/admin/settings/portal-tabs', icon: Squares2X2Icon },
+        {
+          label: 'Changelog Visibility',
+          to: '/admin/settings/changelog-visibility',
+          icon: DocumentTextIcon,
+        },
         { label: 'Widget', to: '/admin/settings/widget', icon: ChatBubbleLeftRightIcon },
       ],
     },
@@ -93,9 +130,12 @@ export function buildNavSections(flags?: {
     sections.push({ label: 'Support', items: supportItems })
   }
 
+  // Customers — entry point to the CRM people directory. Always present and
+  // anchored last (after Support), so customer management is reachable from
+  // settings regardless of which support flags are on.
   sections.push({
     label: 'Customers',
-    items: [{ label: 'People', to: '/admin/settings/people', icon: UserGroupIcon }],
+    items: [{ label: 'People', to: '/admin/customers/people', icon: UsersIcon }],
   })
 
   return sections
