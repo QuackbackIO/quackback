@@ -35,7 +35,7 @@ async function getMagicLinkToken(): Promise<string> {
   const result = await sql`
     SELECT identifier, value, expires_at
     FROM verification
-    WHERE value::text ILIKE ${'%"email":"' + email + '"%'}
+    WHERE value->>'email' = ${email}
       AND identifier NOT LIKE 'sign-in-otp-%'
       AND expires_at > NOW()
     ORDER BY created_at DESC
