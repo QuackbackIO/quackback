@@ -2,6 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { FormattedMessage } from 'react-intl'
 import { contentPreview } from '@/lib/shared/utils/string'
 import { publicChangelogQueries } from '@/lib/client/queries/changelog'
+import { getWidgetAuthHeaders } from '@/lib/client/widget-auth'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -26,7 +27,7 @@ interface WidgetChangelogTeaserProps {
  * they never disagree about whether content exists.
  */
 export function WidgetChangelogTeaser({ onOpenEntry, onSeeAll }: WidgetChangelogTeaserProps) {
-  const { data } = useInfiniteQuery(publicChangelogQueries.list())
+  const { data } = useInfiniteQuery(publicChangelogQueries.list(getWidgetAuthHeaders()))
   const latest = data?.pages[0]?.items[0]
   if (!latest) return null
 

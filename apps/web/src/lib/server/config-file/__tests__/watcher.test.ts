@@ -30,7 +30,7 @@ describe('watchConfigFile', () => {
     const stop = watchConfigFile(path, (r) => {
       events.push(r)
     })
-    await wait(60)
+    await waitFor(() => events.length >= 1)
     stop()
     expect(events.length).toBeGreaterThanOrEqual(1)
     const last = events[events.length - 1] as { kind: string }
@@ -42,7 +42,7 @@ describe('watchConfigFile', () => {
     const stop = watchConfigFile(path, (r) => {
       events.push(r)
     })
-    await wait(60)
+    await waitFor(() => events.length >= 1)
     stop()
     const last = events[events.length - 1] as { kind: string }
     expect(last.kind).toBe('absent')
@@ -74,12 +74,12 @@ describe('watchConfigFile', () => {
       },
       { pollIntervalMs: 30 }
     )
-    await wait(50)
+    await waitFor(() => events.length >= 1)
     writeFileSync(
       path,
       `apiVersion: quackback.io/v1\nkind: QuackbackConfig\nspec: { workspace: { name: Different } }\n`
     )
-    await wait(80)
+    await waitFor(() => events.length >= 2)
     stop()
     expect(events.length).toBe(2)
   })
@@ -121,4 +121,13 @@ describe('watchConfigFile', () => {
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await wait(10)
+  }
+  throw new Error('Timed out waiting for watcher event')
 }

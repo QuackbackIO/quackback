@@ -3,7 +3,15 @@
  */
 
 import type { TiptapContent } from '@/lib/server/db'
-import type { ChangelogId, PrincipalId, PostId } from '@quackback/ids'
+import type {
+  BoardId,
+  ChangelogCategoryId,
+  ChangelogId,
+  ChangelogProductId,
+  PrincipalId,
+  PostId,
+  StatusId,
+} from '@quackback/ids'
 import type { PublishState } from '@/lib/shared/schemas/changelog'
 
 export type { PublishState } from '@/lib/shared/schemas/changelog'
@@ -19,6 +27,10 @@ export interface CreateChangelogInput {
   title: string
   content: string
   contentJson?: TiptapContent | null
+  categoryId?: ChangelogCategoryId | null
+  categoryName?: string | null
+  productId?: ChangelogProductId | null
+  productName?: string | null
   /** IDs of posts to link to this changelog entry */
   linkedPostIds?: PostId[]
   /** Publish state */
@@ -33,6 +45,10 @@ export interface UpdateChangelogInput {
   title?: string
   content?: string
   contentJson?: TiptapContent | null
+  categoryId?: ChangelogCategoryId | null
+  categoryName?: string | null
+  productId?: ChangelogProductId | null
+  productName?: string | null
   /** IDs of posts to link (replaces existing links) */
   linkedPostIds?: PostId[]
   /** Publish state (if changing) */
@@ -65,16 +81,33 @@ export interface ChangelogEntryWithDetails {
   content: string
   contentJson: TiptapContent | null
   principalId: PrincipalId | null
+  categoryId: ChangelogCategoryId | null
+  productId: ChangelogProductId | null
   publishedAt: Date | null
   displayDate: Date | null
   createdAt: Date
   updatedAt: Date
   /** Author information - only shown in admin views */
   author: ChangelogAuthor | null
+  category: ChangelogCategorySummary | null
+  product: ChangelogProductSummary | null
   /** Linked posts */
   linkedPosts: ChangelogLinkedPost[]
   /** Computed status based on publishedAt */
   status: 'draft' | 'scheduled' | 'published'
+}
+
+export interface ChangelogCategorySummary {
+  id: ChangelogCategoryId
+  name: string
+  slug: string
+  color: string | null
+}
+
+export interface ChangelogProductSummary {
+  id: ChangelogProductId
+  name: string
+  slug: string
 }
 
 /**
@@ -116,6 +149,8 @@ export interface PublicChangelogEntry {
   title: string
   content: string
   contentJson: TiptapContent | null
+  category: ChangelogCategorySummary | null
+  product: ChangelogProductSummary | null
   publishedAt: Date
   linkedPosts: PublicChangelogLinkedPost[]
 }
@@ -127,7 +162,9 @@ export interface PublicChangelogLinkedPost {
   id: PostId
   title: string
   voteCount: number
+  boardId: BoardId
   boardSlug: string
+  statusId: StatusId | null
   status: {
     name: string
     color: string
@@ -141,4 +178,9 @@ export interface PublicChangelogListResult {
   items: PublicChangelogEntry[]
   nextCursor: string | null
   hasMore: boolean
+}
+
+export interface ChangelogTaxonomyListResult {
+  categories: ChangelogCategorySummary[]
+  products: ChangelogProductSummary[]
 }

@@ -26,6 +26,10 @@ export interface InitOptions {
   instanceUrl: InstanceUrl
   placement?: 'left' | 'right'
   defaultBoard?: string
+  /** Public identifier for the external app embedding this widget. */
+  applicationKey?: string
+  /** Public environment identifier, e.g. local, development, staging, production. */
+  environment?: string
   /** Set `launcher: false` to hide the default floating button and open programmatically. */
   launcher?: boolean
   /**
@@ -44,8 +48,8 @@ export interface InitOptions {
  *
  * For anonymous sessions, call `identify()` with no argument — don't pass
  * `{ anonymous: true }`. (The runtime still accepts `{ anonymous: true }` for
- * backwards-compat with older integrations, but it's not in the type so
- * TypeScript users get nudged to the cleaner form.)
+ * backwards-compat with muscle memory from Intercom/Featurebase, but it's not
+ * in the type so TypeScript users get nudged to the cleaner form.)
  */
 export type Identity =
   | { ssoToken: string }
@@ -57,7 +61,6 @@ export type Identity =
  * - `{ view: 'new-post', title?, body?, board? }` pre-fills the new-post form
  * - `{ view: 'changelog', entryId? }` opens the changelog, optionally to one entry
  * - `{ view: 'help', query? }` opens help, optionally with search prefilled
- * - `{ view: 'chat' }` opens the live chat view
  * - `{ postId }` deep-links to a specific post
  * - `{ articleId }` deep-links to a help article
  *
@@ -71,7 +74,7 @@ export type OpenOptions =
   | { view: 'new-post'; title?: string; body?: string; board?: string }
   | { view: 'changelog'; entryId?: string }
   | { view: 'help'; query?: string }
-  | { view: 'chat' }
+  | { view: 'support'; ticketId?: string }
   | { postId: string }
   | { articleId: string }
 
@@ -89,10 +92,11 @@ export interface WidgetUser {
 export interface EventMap {
   ready: Record<string, never>
   open: {
-    view?: 'home' | 'new-post' | 'changelog' | 'help'
+    view?: 'home' | 'new-post' | 'changelog' | 'help' | 'support'
     postId?: string
     articleId?: string
     entryId?: string
+    ticketId?: string
   }
   close: Record<string, never>
   'post:created': {
@@ -111,6 +115,32 @@ export interface EventMap {
   }
   /** Fires when an anonymous user supplies an email inline. */
   'email-submitted': { email: string }
+  /** Fires when the user successfully creates a support ticket from the widget. */
+  'ticket:created': {
+    id: string
+    subject: string
+    statusId: string
+    statusCategory: 'open' | 'pending' | 'on_hold' | 'solved' | 'closed'
+  }
+  /** Fires when the user posts a reply on one of their tickets. */
+  'ticket:replied': {
+    ticketId: string
+    threadId: string
+  }
+  /** Fires when the user marks one of their tickets as resolved. */
+  'ticket:resolved': {
+    ticketId: string
+    statusId: string
+    /** True when the ticket was already in a solved/closed status; no transition occurred. */
+    alreadyResolved: boolean
+  }
+  /** Fires when the user reopens one of their previously-solved tickets. */
+  'ticket:reopened': {
+    ticketId: string
+    statusId: string
+    /** True when the ticket was already in an open category; no transition occurred. */
+    alreadyOpen: boolean
+  }
 }
 
 export type EventName = keyof EventMap

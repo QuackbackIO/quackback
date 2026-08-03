@@ -104,7 +104,11 @@ export async function acceptMergeSuggestion(
   opts?: { swapDirection?: boolean }
 ): Promise<void> {
   log.info(
-    { merge_suggestion_id: id, principal_id: principalId, swap_direction: opts?.swapDirection ?? false },
+    {
+      merge_suggestion_id: id,
+      principal_id: principalId,
+      swap_direction: opts?.swapDirection ?? false,
+    },
     'accept merge suggestion'
   )
   const suggestion = await db.query.mergeSuggestions.findFirst({
@@ -284,7 +288,10 @@ export async function getPendingMergeSuggestions(opts: {
   }>
   total: number
 }> {
-  log.debug({ sort: opts.sort ?? 'newest', limit: opts.limit ?? 50 }, 'get pending merge suggestions')
+  log.debug(
+    { sort: opts.sort ?? 'newest', limit: opts.limit ?? 50 },
+    'get pending merge suggestions'
+  )
   // Step 1: Fetch count + merge suggestion rows in parallel
   const orderBy =
     opts.sort === 'relevance'

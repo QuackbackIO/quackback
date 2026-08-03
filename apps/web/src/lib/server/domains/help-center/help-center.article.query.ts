@@ -22,6 +22,13 @@ import type {
   ListArticlesParams,
   ArticleListResult,
 } from './help-center.types'
+import { canActorViewCategory, type HelpCenterVisibilityActor } from './help-center.visibility'
+
+function normalizeIdArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
 
 // ============================================================================
 // Article Queries
@@ -178,16 +185,85 @@ export async function listArticles(params: ListArticlesParams): Promise<ArticleL
   }
 }
 
-export async function listPublicArticles(params: {
-  categoryId?: string
-  search?: string
-  cursor?: string
-  limit?: number
-}): Promise<ArticleListResult> {
-  return listArticles({ ...params, status: 'published' })
+export async function listPublicArticles(
+  params: {
+    categoryId?: string
+    search?: string
+    cursor?: string
+    limit?: number
+  },
+  actor: HelpCenterVisibilityActor | null = null
+): Promise<ArticleListResult> {
+  const result = await listArticles({ ...params, status: 'published' })
+
+  const categoryIds = [...new Set(result.items.map((item) => item.category.id))]
+  if (categoryIds.length === 0) return result
+
+  const categories = await db.query.helpCenterCategories.findMany({
+    where: and(
+      inArray(helpCenterCategories.id, categoryIds as HelpCenterCategoryId[]),
+      isNull(helpCenterCategories.deletedAt)
+    ),
+    columns: {
+      id: true,
+      isPublic: true,
+      visibility: true,
+      allowedSegmentIds: true,
+      allowedPrincipalIds: true,
+    },
+  })
+
+  const visible = new Set(
+    categories
+      .filter((cat) =>
+        canActorViewCategory(
+          {
+            ...cat,
+            allowedSegmentIds: normalizeIdArray(cat.allowedSegmentIds),
+            allowedPrincipalIds: normalizeIdArray(cat.allowedPrincipalIds),
+          },
+          actor
+        )
+      )
+      .map((cat) => cat.id)
+  )
+
+  return {
+    ...result,
+    items: result.items.filter((item) => visible.has(item.category.id)),
+  }
 }
 
-export async function listPublicArticlesForCategory(categoryId: string) {
+export async function listPublicArticlesForCategory(
+  categoryId: string,
+  actor: HelpCenterVisibilityActor | null = null
+) {
+  const category = await db.query.helpCenterCategories.findFirst({
+    where: and(
+      eq(helpCenterCategories.id, categoryId as HelpCenterCategoryId),
+      isNull(helpCenterCategories.deletedAt)
+    ),
+    columns: {
+      id: true,
+      isPublic: true,
+      visibility: true,
+      allowedSegmentIds: true,
+      allowedPrincipalIds: true,
+    },
+  })
+
+  if (!category) return []
+
+  const canView = canActorViewCategory(
+    {
+      ...category,
+      allowedSegmentIds: normalizeIdArray(category.allowedSegmentIds),
+      allowedPrincipalIds: normalizeIdArray(category.allowedPrincipalIds),
+    },
+    actor
+  )
+  if (!canView) return []
+
   // Join category so we can enforce isPublic + non-deleted on the
   // category side. Without these checks, an admin marking a category
   // private only hid it from the public nav — direct category-id

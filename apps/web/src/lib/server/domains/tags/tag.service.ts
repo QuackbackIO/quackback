@@ -14,9 +14,29 @@ import { db, eq, and, isNull, asc, type Tag, tags, boards, postTags, posts } fro
 import type { TagId, BoardId } from '@quackback/ids'
 import { NotFoundError, ValidationError, ConflictError, InternalError } from '@/lib/shared/errors'
 import type { CreateTagInput, UpdateTagInput } from './tag.types'
+import {
+  dispatchTagCreated,
+  dispatchTagUpdated,
+  dispatchTagDeleted,
+} from '@/lib/server/events/dispatch'
+import type { EventActor, EventTagRef } from '@/lib/server/events/types'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'tags' })
+
+/** Service-actor fallback for tag lifecycle events. */
+const tagEventActor: EventActor = { type: 'service', displayName: 'tags-system' }
+
+/** Build the fixed-shape webhook ref from a tag row. */
+function toTagRef(tag: Tag): EventTagRef {
+  return {
+    id: tag.id,
+    name: tag.name,
+    color: tag.color ?? null,
+    description: tag.description ?? null,
+    createdAt: tag.createdAt?.toISOString() ?? null,
+  }
+}
 
 /**
  * Create a new tag
@@ -67,6 +87,7 @@ export async function createTag(input: CreateTagInput): Promise<Tag> {
     })
     .returning()
 
+  void dispatchTagCreated(tagEventActor, toTagRef(tag)).catch(() => {})
   return tag
 }
 
@@ -136,6 +157,8 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
     throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
   }
 
+  const changedFields = Object.keys(updateData)
+  void dispatchTagUpdated(tagEventActor, toTagRef(updatedTag), changedFields).catch(() => {})
   return updatedTag
 }
 
@@ -150,6 +173,11 @@ export async function updateTag(id: TagId, input: UpdateTagInput): Promise<Tag> 
  */
 export async function deleteTag(id: TagId): Promise<void> {
   log.debug({ tag_id: id }, 'delete tag')
+  // Snapshot before the mutation so the delete event carries a populated ref.
+  const snapshot = await db.query.tags.findFirst({
+    where: and(eq(tags.id, id), isNull(tags.deletedAt)),
+  })
+
   // Soft delete the tag by setting deletedAt
   const result = await db
     .update(tags)
@@ -159,6 +187,10 @@ export async function deleteTag(id: TagId): Promise<void> {
 
   if (result.length === 0) {
     throw new NotFoundError('TAG_NOT_FOUND', `Tag with ID ${id} not found`)
+  }
+
+  if (snapshot) {
+    void dispatchTagDeleted(tagEventActor, toTagRef(snapshot)).catch(() => {})
   }
 }
 

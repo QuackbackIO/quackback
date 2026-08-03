@@ -30,7 +30,10 @@ vi.mock('@quackback/email', () => ({
 
 vi.mock('@/lib/server/storage/s3', () => ({ getEmailSafeUrl: () => null }))
 
-vi.mock('@/lib/server/config', () => ({ config: { baseUrl: 'https://acme.quackback.io' } }))
+vi.mock('@/lib/server/config', () => ({
+  config: { baseUrl: 'https://acme.quackback.io' },
+  getBaseUrl: () => 'https://acme.quackback.io',
+}))
 
 import { requestEmailSignin } from '../email-signin'
 

@@ -14,6 +14,8 @@ import {
   addMonitoredChannelFn,
   updateMonitoredChannelFn,
   removeMonitoredChannelFn,
+  upsertUserMappingFn,
+  deleteUserMappingFn,
   type UpdateIntegrationInput,
   type DeleteIntegrationInput,
   type AddNotificationChannelInput,
@@ -22,6 +24,8 @@ import {
   type AddMonitoredChannelInput,
   type UpdateMonitoredChannelInput,
   type RemoveMonitoredChannelInput,
+  type UpsertUserMappingInput,
+  type DeleteUserMappingInput,
 } from '@/lib/server/functions/integrations'
 
 /**
@@ -132,6 +136,34 @@ export function useRemoveMonitoredChannel() {
 
   return useMutation({
     mutationFn: (input: RemoveMonitoredChannelInput) => removeMonitoredChannelFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/**
+ * Upsert an integration user mapping (GitHub username ↔ workspace member)
+ */
+export function useUpsertUserMapping() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: UpsertUserMappingInput) => upsertUserMappingFn({ data: input }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
+    },
+  })
+}
+
+/**
+ * Delete an integration user mapping
+ */
+export function useDeleteUserMapping() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: DeleteUserMappingInput) => deleteUserMappingFn({ data: input }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'integrations'] })
     },

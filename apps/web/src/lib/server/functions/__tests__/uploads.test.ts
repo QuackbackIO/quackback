@@ -44,6 +44,7 @@ const mockSession: WidgetAuthContext = {
   settings: { id: 'workspace_test1' as WorkspaceId, slug: 'test', name: 'Test' },
   user: { id: 'user_test1' as UserId, email: 'a@b.com', name: 'A', image: null },
   principal: { id: 'principal_test1' as PrincipalId, role: 'user' as const, type: 'user' },
+  contactId: null,
 }
 
 describe('getWidgetImageUploadUrlFn', () => {

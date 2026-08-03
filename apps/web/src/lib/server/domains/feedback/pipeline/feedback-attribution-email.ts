@@ -7,7 +7,7 @@
  */
 
 import { db, eq, principal, user, posts } from '@/lib/server/db'
-import { getBaseUrl } from '@/lib/server/config'
+import { resolvePublicBaseUrl } from '@/lib/server/public-url'
 import { getEmailSafeUrl } from '@/lib/server/storage/s3'
 import { generateUnsubscribeToken } from '@/lib/server/domains/subscriptions/subscription.service'
 import { realEmail } from '@/lib/shared/anonymous-email'
@@ -69,7 +69,7 @@ export async function sendFeedbackAttributionEmail(
     const workspaceName = workspace?.name ?? 'Quackback'
 
     // Build post URL
-    const baseUrl = getBaseUrl()
+    const baseUrl = resolvePublicBaseUrl()
     const boardSlug = post.board?.slug ?? 'general'
     const postUrl = `${baseUrl}/b/${boardSlug}/posts/${postId}`
 

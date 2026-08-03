@@ -211,6 +211,9 @@ describe('actorFromAuth', () => {
       user: { id: 'user_admin1' as never, email: 'admin@example.com', name: 'A', image: null },
       principal: { id: 'principal_admin1' as never, role: 'admin', type: 'user' },
       settings: { id: 'workspace_1' as never, slug: 's', name: 'n', logoKey: null },
+      ipAddress: null,
+      userAgent: null,
+      source: 'web',
     })
 
     expect(actor).toEqual({
