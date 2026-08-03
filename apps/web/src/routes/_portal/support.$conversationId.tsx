@@ -1,4 +1,10 @@
-import { createFileRoute, Navigate, useNavigate, useRouteContext } from '@tanstack/react-router'
+import {
+  createFileRoute,
+  Navigate,
+  redirect,
+  useNavigate,
+  useRouteContext,
+} from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -10,7 +16,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { VisitorChatThread } from '@/components/shared/chat/visitor-chat-thread'
 import { useAuthPopoverSafe } from '@/components/auth/auth-popover-context'
 import { usePortalImageUpload } from '@/lib/client/hooks/use-image-upload'
-import { getChatPresenceFn } from '@/lib/server/functions/chat'
+import { getChatPresenceFn, getSupportSurfaceAccessFn } from '@/lib/server/functions/chat'
 import { CHAT_PRESENCE_POLL_MS, type ChatPresence } from '@/lib/shared/chat/presence'
 import {
   PORTAL_CHAT_PRESENCE_QUERY_KEY,
@@ -18,6 +24,10 @@ import {
 } from '@/lib/client/queries/portal-support'
 
 export const Route = createFileRoute('/_portal/support/$conversationId')({
+  beforeLoad: async () => {
+    const access = await getSupportSurfaceAccessFn({ data: { surface: 'portal' } })
+    if (!access.granted) throw redirect({ to: '/' })
+  },
   component: SupportThreadPage,
 })
 
@@ -98,6 +108,7 @@ function SupportThreadPage() {
       ) : (
         <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
           <VisitorChatThread
+            surface="portal"
             // Remount when switching threads so per-thread state never bleeds.
             key={conversationId}
             conversationTarget={

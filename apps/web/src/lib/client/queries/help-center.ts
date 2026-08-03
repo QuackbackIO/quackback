@@ -92,16 +92,22 @@ export const helpCenterQueries = {
 // ============================================================================
 
 export const publicHelpCenterQueries = {
-  categories: () =>
+  categories: (headers?: Record<string, string>) =>
     queryOptions({
-      queryKey: helpCenterKeys.publicCategories(),
-      queryFn: () => listPublicCategoriesFn({ data: {} }),
+      queryKey: [
+        ...helpCenterKeys.publicCategories(),
+        headers?.['X-Quackback-Widget-Context'],
+      ] as const,
+      queryFn: () => listPublicCategoriesFn({ data: {}, headers }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 
-  articleList: (categoryId?: string) =>
+  articleList: (categoryId?: string, headers?: Record<string, string>) =>
     infiniteQueryOptions({
-      queryKey: helpCenterKeys.publicArticleList(categoryId),
+      queryKey: [
+        ...helpCenterKeys.publicArticleList(categoryId),
+        headers?.['X-Quackback-Widget-Context'],
+      ] as const,
       queryFn: ({ pageParam }) =>
         listPublicArticlesFn({
           data: {
@@ -109,23 +115,32 @@ export const publicHelpCenterQueries = {
             cursor: pageParam,
             limit: 20,
           },
+          headers,
         }),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
       staleTime: STALE_TIME_MEDIUM,
     }),
 
-  articleBySlug: (slug: string) =>
+  articleBySlug: (slug: string, headers?: Record<string, string>) =>
     queryOptions({
-      queryKey: helpCenterKeys.publicArticleDetail(slug),
-      queryFn: () => getPublicArticleBySlugFn({ data: { slug } }),
+      queryKey: [
+        ...helpCenterKeys.publicArticleDetail(slug),
+        headers?.['X-Quackback-Widget-Context'],
+      ] as const,
+      queryFn: () => getPublicArticleBySlugFn({ data: { slug }, headers }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 
-  articlesForCategory: (categoryId: string) =>
+  articlesForCategory: (categoryId: string, headers?: Record<string, string>) =>
     queryOptions({
-      queryKey: [...helpCenterKeys.public(), 'category-articles', categoryId] as const,
-      queryFn: () => listPublicArticlesForCategoryFn({ data: { categoryId } }),
+      queryKey: [
+        ...helpCenterKeys.public(),
+        'category-articles',
+        categoryId,
+        headers?.['X-Quackback-Widget-Context'],
+      ] as const,
+      queryFn: () => listPublicArticlesForCategoryFn({ data: { categoryId }, headers }),
       staleTime: STALE_TIME_MEDIUM,
     }),
 }

@@ -12,11 +12,29 @@ export interface ApiKey {
   expiresAt: Date | null
   createdAt: Date
   revokedAt: Date | null
+  scopes: string[]
+  allowedTeamIds: string[]
+  allowedInboxIds: string[]
+  lastIp: string | null
+  lastUserAgent: string | null
+  rotatedAt: Date | null
+  compatLegacyFullAccess: boolean
+  compatAcknowledgedAt: Date | null
 }
 
 export interface CreateApiKeyInput {
   name: string
   expiresAt?: Date | null
+  scopes?: string[]
+  allowedTeamIds?: string[]
+  allowedInboxIds?: string[]
+}
+
+export interface UpdateApiKeyInput {
+  name?: string
+  scopes?: string[]
+  allowedTeamIds?: string[]
+  allowedInboxIds?: string[]
 }
 
 export interface CreateApiKeyResult {

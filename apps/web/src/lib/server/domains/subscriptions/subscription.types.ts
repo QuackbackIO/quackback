@@ -51,4 +51,11 @@ export interface NotificationPreferencesData {
   emailStatusChange: boolean
   emailNewComment: boolean
   emailMuted: boolean
+  emailTicketThreads: boolean
+  emailTicketProperties: boolean
+  emailTicketStatus: boolean
+  emailTicketAssignment: boolean
+  emailTicketParticipants: boolean
+  emailTicketShares: boolean
+  emailTicketSla: boolean
 }

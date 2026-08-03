@@ -7,6 +7,7 @@ import {
   NewspaperIcon,
   BookOpenIcon,
   ChatBubbleLeftRightIcon,
+  LifebuoyIcon,
   PaperAirplaneIcon,
   PaperClipIcon,
 } from '@heroicons/react/24/solid'
@@ -30,12 +31,14 @@ interface WidgetPreviewProps {
   tabs?: { feedback?: boolean; changelog?: boolean; help?: boolean; chat?: boolean }
   /** Chat config, surfaced so the chat view mirrors the real widget. */
   chat?: { teamName?: string; welcomeMessage?: string }
+  ticketingEnabled?: boolean
 }
 
 export function WidgetPreview({
   position,
   tabs = { feedback: true, changelog: false, help: false, chat: false },
   chat,
+  ticketingEnabled = false,
 }: WidgetPreviewProps) {
   const [isOpen, setIsOpen] = useState(true)
   const enabledTabs = TAB_ORDER.filter((t) => Boolean(tabs[t]))
@@ -89,6 +92,7 @@ export function WidgetPreview({
           <div className="flex-1 overflow-hidden px-2.5 pb-1.5">
             {activeTab === 'feedback' ? (
               <>
+                {ticketingEnabled && <MockSupportTicketEntry />}
                 <div className="relative mb-1.5">
                   <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/50" />
                   <div className="w-full pl-6 pr-2 py-1.5 text-[10px] rounded-lg border border-border bg-muted/30 text-muted-foreground/60">
@@ -114,6 +118,7 @@ export function WidgetPreview({
                     Search help articles...
                   </div>
                 </div>
+                {ticketingEnabled && <MockSupportTicketEntry />}
                 <div className="grid grid-cols-2 gap-1.5">
                   <MockHelpCategory icon="📚" title="Getting started" articles={4} />
                   <MockHelpCategory icon="💳" title="Account & billing" articles={6} />
@@ -201,6 +206,24 @@ export function WidgetPreview({
           <path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 0 0 1.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0 0 15.75 7.5Z" />
         </svg>
       </button>
+    </div>
+  )
+}
+
+function MockSupportTicketEntry() {
+  return (
+    <div className="mb-1.5 flex items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1.5">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
+        <LifebuoyIcon className="h-3 w-3 text-primary" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[10px] font-medium text-foreground leading-tight">
+          Contact support
+        </span>
+        <span className="block truncate text-[7px] text-muted-foreground/70">
+          Get help directly from our team.
+        </span>
+      </span>
     </div>
   )
 }

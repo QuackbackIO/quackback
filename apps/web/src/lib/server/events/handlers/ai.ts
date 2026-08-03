@@ -106,7 +106,10 @@ async function processEmbedding(postId: PostId, title: string, content: string):
   // Fetch tags to include in embedding for better semantic matching
   const tagNames = await getPostTagNames(postId)
   if (tagNames.length > 0) {
-    log.debug({ post_id: postId, tag_count: tagNames.length, tags: tagNames }, 'including tags in embedding')
+    log.debug(
+      { post_id: postId, tag_count: tagNames.length, tags: tagNames },
+      'including tags in embedding'
+    )
   }
 
   const success = await generatePostEmbedding(postId, title, content, tagNames)

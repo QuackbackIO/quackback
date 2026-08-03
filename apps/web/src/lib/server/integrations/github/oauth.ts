@@ -26,7 +26,7 @@ export function getGitHubOAuthUrl(
     client_id: clientId,
     redirect_uri: redirectUri,
     state,
-    scope: 'repo',
+    scope: 'repo admin:repo_hook',
   })
 
   return `https://github.com/login/oauth/authorize?${params}`

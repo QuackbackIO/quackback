@@ -22,7 +22,63 @@ declare global {
 
 const sdk = createSDK()
 const w = window
-const bakedUrl = w.__QUACKBACK_URL__
+const currentScript =
+  typeof document !== 'undefined' ? (document.currentScript as HTMLScriptElement | null) : null
+
+function originFromScript(script: HTMLScriptElement | null): string | undefined {
+  const src = script?.src
+  if (!src) return undefined
+  try {
+    return new URL(src, window.location.href).origin
+  } catch {
+    return undefined
+  }
+}
+
+// Prefer the actual script origin so proxy/tunnel URLs don't accidentally boot
+// a localhost BASE_URL baked into the served bundle.
+const bakedUrl = originFromScript(currentScript) ?? w.__QUACKBACK_URL__
+
+function scriptDatasetDefaults(script: HTMLScriptElement | null): {
+  applicationKey?: string
+  environment?: string
+} {
+  return {
+    applicationKey: script?.dataset.applicationKey,
+    environment: script?.dataset.environment,
+  }
+}
+
+function previousBootstrapScript(script: HTMLScriptElement | null): HTMLScriptElement | null {
+  if (typeof document === 'undefined') return null
+  const scripts = Array.from(document.scripts)
+  const currentIndex = script ? scripts.indexOf(script) : scripts.length
+  const candidates = currentIndex >= 0 ? scripts.slice(0, currentIndex) : scripts
+
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const candidate = candidates[index] as HTMLScriptElement
+    if (candidate.dataset.applicationKey || candidate.dataset.environment) return candidate
+  }
+
+  return null
+}
+
+function resolveScriptDefaults(): {
+  applicationKey?: string
+  environment?: string
+} {
+  const directDefaults = scriptDatasetDefaults(currentScript)
+  const fallbackDefaults = scriptDatasetDefaults(previousBootstrapScript(currentScript))
+
+  return {
+    applicationKey: directDefaults.applicationKey ?? fallbackDefaults.applicationKey,
+    environment: directDefaults.environment ?? fallbackDefaults.environment,
+  }
+}
+
+const scriptDefaults = {
+  ...resolveScriptDefaults(),
+}
 
 // Suppresses the deferred fallback once the host has taken explicit control:
 // either by initializing (their options take precedence) or by destroying
@@ -33,7 +89,11 @@ function dispatch(command: unknown, a?: unknown, b?: unknown): unknown {
   if (command === 'init' || command === 'destroy') bootSuppressed = true
   if (command === 'init' && bakedUrl) {
     const opts = a && typeof a === 'object' ? (a as Record<string, unknown>) : {}
-    if (!opts.instanceUrl) a = { ...opts, instanceUrl: bakedUrl }
+    a = {
+      ...scriptDefaults,
+      ...opts,
+      instanceUrl: opts.instanceUrl ?? bakedUrl,
+    }
   }
   return sdk.dispatch(command as 'init', a, b)
 }

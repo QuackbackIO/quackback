@@ -1,4 +1,5 @@
 import { createFileRoute, getRouteApi, notFound, Link } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { formatDistanceToNow } from 'date-fns'
@@ -17,6 +18,7 @@ import {
 import { JsonLd } from '@/components/json-ld'
 import { buildArticleJsonLd, buildBreadcrumbJsonLd } from '@/lib/shared/json-ld'
 import { cn, stripMarkdownPreview } from '@/lib/shared/utils'
+import { getSupportSurfaceAccessFn } from '@/lib/server/functions/chat'
 import type { JSONContent } from '@tiptap/react'
 
 const helpCenterApi = getRouteApi('/_portal/hc')
@@ -76,8 +78,15 @@ function ArticleDetailPage() {
   const { category, articles, allCategories } = categoryApi.useLoaderData()
   const { helpCenterConfig } = helpCenterApi.useLoaderData()
   const { baseUrl, settings } = Route.useRouteContext()
-  const supportEnabled =
+  const supportConfigured =
     !!settings?.featureFlags?.supportInbox && !!settings?.portalConfig?.support?.enabled
+  const supportAccess = useQuery({
+    queryKey: ['portal', 'support-access'],
+    queryFn: () => getSupportSurfaceAccessFn({ data: { surface: 'portal' } }),
+    enabled: supportConfigured,
+    staleTime: 30_000,
+  })
+  const supportEnabled = supportConfigured && (supportAccess.data?.granted ?? false)
 
   const breadcrumbs = buildCategoryBreadcrumbs({
     allCategories,

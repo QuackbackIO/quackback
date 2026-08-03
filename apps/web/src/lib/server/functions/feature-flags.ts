@@ -13,6 +13,7 @@ export const updateFeatureFlagsFn = createServerFn({ method: 'POST' })
     z.object({
       helpCenter: z.boolean().optional(),
       aiFeedbackExtraction: z.boolean().optional(),
+      tickets: z.boolean().optional(),
       supportInbox: z.boolean().optional(),
       linkPreviews: z.boolean().optional(),
     })

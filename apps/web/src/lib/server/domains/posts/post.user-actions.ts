@@ -104,10 +104,7 @@ export async function userEditPost(
   input: UserEditPostInput,
   actor: { principalId: PrincipalId; role: 'admin' | 'member' | 'user' }
 ): Promise<Post> {
-  log.info(
-    { post_id: postId, principal_id: actor.principalId, role: actor.role },
-    'user edit post'
-  )
+  log.info({ post_id: postId, principal_id: actor.principalId, role: actor.role }, 'user edit post')
   // Validate input first (no DB needed)
   if (!input.title?.trim()) {
     throw new ValidationError('VALIDATION_ERROR', 'Title is required')
