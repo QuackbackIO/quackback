@@ -1,0 +1,180 @@
+/**
+ * P07 — a background job enqueued for alpha executing against bravo's database.
+ *
+ * Under the pooled design the worker tier is shared: one always-warm
+ * `QUACKBACK_ROLE=worker` fleet drains queues for every tenant
+ * (SAAS-HOSTING-STACK.md §1, §5 caveat 3). A job carries no request scope, so
+ * whatever tenant the worker's `db` resolves to is the tenant the job writes to.
+ * There is no second gate — the write succeeds, against the wrong database.
+ *
+ * The probe drives a real write on alpha through the REST API, lets the derived
+ * background work settle, and then asks a question that needs no knowledge of
+ * which queue ran: does anything anywhere in bravo's database now reference
+ * alpha's row?
+ *
+ * The positive control is what makes a null answer meaningful. It requires that
+ * alpha's OWN database gained a derived row — a row in some table other than
+ * `posts` referencing the post id. If no background side effect is observable at
+ * all, the probe is blind and says so instead of passing.
+ */
+
+import { scanForMarker, describeHits, type ScanHit } from '../db-scan'
+import { markerSearchForms } from '../db'
+import { blocked, control, describeResponse, error, leak, pass } from './helpers'
+import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
+
+/** How long to let queues and the outbox relay settle before scanning. */
+const SETTLE_MS = 4000
+
+async function settle(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function scanAll(
+  handle: TenantHandle,
+  markers: string[]
+): Promise<{ hits: ScanHit[]; truncated: boolean }> {
+  const hits: ScanHit[] = []
+  let truncated = false
+  for (const marker of markers) {
+    const result = await scanForMarker(handle.db!, marker)
+    hits.push(...result.hits)
+    truncated ||= result.truncated
+  }
+  return { hits, truncated }
+}
+
+export const p07BackgroundJob: Probe = {
+  id: 'P07',
+  name: 'background-job-cross-tenant-write',
+  family: 'jobs',
+  proves:
+    'A write driven on alpha produces derived background rows in alpha’s database and none at all in ' +
+    'bravo’s — no queue, outbox, activity or notification row referencing alpha’s entity exists on the other side.',
+  requires: ['http', 'api-key', 'db'],
+  poolingCaveat:
+    'Today each tenant runs its own worker process bound to one DATABASE_URL, so a job physically ' +
+    'cannot reach the other database. This probe becomes the real test when one shared worker tier ' +
+    'drains queues for every tenant; until then it establishes the observation baseline and proves ' +
+    'the scan can actually see derived rows.',
+
+  async run(ctx: ProbeContext) {
+    const { alpha, bravo, config } = ctx
+    const attempted =
+      "drive an idempotent update to alpha's fixture post through the REST API, wait for the derived " +
+      "background work to settle, then scan bravo's entire content, event, conversation and job schema " +
+      "for any reference to alpha's post"
+
+    if (!alpha.db || !bravo.db) {
+      return blocked({
+        attempted,
+        reason:
+          'both tenant database URLs are required: whether a job wrote to the wrong database is a ' +
+          'row-level question and cannot be observed over HTTP. Pass --alpha-db and --bravo-db.',
+      })
+    }
+    if (!config.alphaApiKey || !alpha.fixture) {
+      return blocked({
+        attempted,
+        reason: 'alpha’s REST API key and provisioned fixture are required to drive the write',
+      })
+    }
+
+    const controls: ControlOutcome[] = []
+    const postId = alpha.fixture.postId
+
+    // --- drive the write ----------------------------------------------------
+    // An update rather than a create, so a second run re-triggers the same
+    // background work without accumulating rows and changing the next verdict.
+    const update = await alpha.http.request(`/api/v1/posts/${postId}`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${config.alphaApiKey}` },
+      body: JSON.stringify({ content: alpha.fixture.postBody }),
+    })
+    if (update.status >= 400) {
+      return error({
+        attempted,
+        observed: describeResponse(update, 300),
+        reason:
+          'the write that was supposed to enqueue background work was rejected, so nothing was ' +
+          'enqueued and no conclusion about job routing is available',
+        controls,
+      })
+    }
+    await settle(SETTLE_MS)
+
+    const markers = [...markerSearchForms(postId), alpha.markers.canary]
+
+    // --- positive control: the write is observable at all -------------------
+    const ownScan = await scanAll(alpha, markers)
+    const derived = ownScan.hits.filter((h) => h.table !== 'posts')
+    controls.push(
+      control(
+        'positive',
+        'alpha’s database gained derived rows referencing the post',
+        derived.length > 0,
+        derived.length > 0
+          ? `derived rows in ${describeHits(derived)}`
+          : `only the posts row itself matched (${describeHits(ownScan.hits)}) — no background side ` +
+              `effect is observable, so a clean scan of bravo would prove nothing`
+      )
+    )
+    if (derived.length === 0) {
+      return error({
+        attempted,
+        observed: `alpha scan matched ${describeHits(ownScan.hits) || 'nothing'}`,
+        reason:
+          'the write produced no observable derived rows in its own database within the settle window, ' +
+          'so this probe is blind: an absence of rows in bravo would be equally explained by there ' +
+          'being no background work at all. Not a pass.',
+        controls,
+      })
+    }
+
+    // --- negative: nothing of alpha's reached bravo -------------------------
+    const foreignScan = await scanAll(bravo, markers)
+    controls.push(
+      control(
+        'negative',
+        'bravo’s database contains no reference to alpha’s post or canary',
+        foreignScan.hits.length === 0,
+        foreignScan.hits.length === 0
+          ? 'no rows matched in any scanned table'
+          : `ALPHA'S DATA FOUND IN BRAVO: ${describeHits(foreignScan.hits)}`
+      )
+    )
+
+    if (foreignScan.truncated || ownScan.truncated) {
+      controls.push(
+        control(
+          'invariant',
+          'the schema scan completed without truncation',
+          false,
+          'the column-scan ceiling was reached, so a clean result is not conclusive'
+        )
+      )
+    }
+
+    const failed = controls.filter((c) => c.kind !== 'positive' && !c.ok)
+    if (failed.length > 0) {
+      return leak({
+        attempted,
+        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
+        reason:
+          'background work driven by one tenant left rows in the other tenant’s database, or the scan ' +
+          'could not be completed. Under a shared worker tier this is silent — the write succeeds and ' +
+          'nothing errors.',
+        controls,
+        evidence: { postId, hits: foreignScan.hits },
+      })
+    }
+
+    return pass({
+      attempted,
+      observed: `alpha gained derived rows in ${describeHits(derived)}; bravo matched nothing`,
+      reason: 'the background work driven on alpha wrote only to alpha’s database',
+      controls,
+      evidence: { postId, derivedTables: [...new Set(derived.map((h) => h.table))] },
+    })
+  },
+}

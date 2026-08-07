@@ -1,0 +1,147 @@
+/**
+ * P09 — the assistant's service principal id from alpha written into bravo's rows.
+ *
+ * `assistant.orchestrator.ts:62` memoises `memoizedAssistantPrincipalId` in
+ * module scope, with a sibling memo in `messages/assistant-principal.ts:16-17`.
+ * The value is a `principal.id` from whichever tenant's database happened to be
+ * resolved first after boot. SAAS-HOSTING-STACK.md §4.1 spells out the
+ * consequence: it is then written as a foreign key into another tenant's
+ * `conversation_messages`, `assistant_involvements` and workflow action rows —
+ * "FK violation, or silent misattribution".
+ *
+ * Silent misattribution is the case worth catching. If bravo happens to hold a
+ * principal row with the same id — impossible today, entirely possible after a
+ * restore, a clone, or a seeded fixture — the FK is satisfied and Quinn's
+ * replies in bravo are attributed to a principal from alpha. Nothing errors.
+ */
+
+import { ASSISTANT_PRINCIPAL_SQL, markerSearchForms, typeId } from '../db'
+import { scanForMarker, describeHits, type ScanHit } from '../db-scan'
+import { blocked, control, leak, pass } from './helpers'
+import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
+
+async function assistantPrincipalId(handle: TenantHandle): Promise<string | null> {
+  if (!handle.db) return null
+  const [row] = await handle.db.query<{ id: string }>(ASSISTANT_PRINCIPAL_SQL)
+  if (!row) return null
+  return typeId('principal', row.id)
+}
+
+export const p09AssistantPrincipal: Probe = {
+  id: 'P09',
+  name: 'assistant-service-principal-cross-tenant',
+  family: 'assistant',
+  proves:
+    'Each tenant’s assistant service principal is its own row, and neither tenant’s database contains ' +
+    'a single reference to the other’s assistant principal id in any column of any content, ' +
+    'conversation or attribution table.',
+  requires: ['db'],
+  poolingCaveat:
+    'The memo this targets is process-scoped, so it can only be poisoned once one process serves both ' +
+    'tenants. Today the probe proves the two ids are distinct and unreferenced, which is the baseline ' +
+    'the pooled check will be measured against.',
+
+  async run(ctx: ProbeContext) {
+    const { alpha, bravo } = ctx
+    const attempted =
+      "read each tenant's assistant service principal id and search the other tenant's entire " +
+      'content, conversation and attribution schema for it, in both TypeID and uuid form'
+
+    if (!alpha.db || !bravo.db) {
+      return blocked({
+        attempted,
+        reason:
+          'both tenant database URLs are required: the assistant principal id is never exposed over ' +
+          'HTTP, and misattribution is a foreign-key-level fact. Pass --alpha-db and --bravo-db.',
+      })
+    }
+
+    const alphaId = await assistantPrincipalId(alpha)
+    const bravoId = await assistantPrincipalId(bravo)
+
+    if (!alphaId || !bravoId) {
+      return blocked({
+        attempted,
+        reason:
+          `the assistant service principal is provisioned lazily on first use and is missing on ` +
+          `${!alphaId ? 'alpha' : ''}${!alphaId && !bravoId ? ' and ' : ''}${!bravoId ? 'bravo' : ''}. ` +
+          'Send one message to the assistant in each tenant so the principal exists, then re-run. ' +
+          'Reported as blocked rather than passed: an absent principal cannot be misattributed, ' +
+          'which is not the same as isolation being proven.',
+      })
+    }
+
+    const controls: ControlOutcome[] = []
+    controls.push(
+      control(
+        'invariant',
+        'the two tenants have distinct assistant principal ids',
+        alphaId !== bravoId,
+        alphaId !== bravoId
+          ? `alpha ${alphaId}, bravo ${bravoId}`
+          : `IDENTICAL (${alphaId}) — a memoised id from either tenant satisfies the foreign key in both, so misattribution would be undetectable at the database level`
+      )
+    )
+
+    // The uuid form is essential: principal.id is a native uuid column, so a
+    // scan for the TypeID string alone matches nothing and would always "pass".
+    for (const [owner, foreign, id] of [
+      ['alpha', bravo, alphaId],
+      ['bravo', alpha, bravoId],
+    ] as const) {
+      const forms = markerSearchForms(id)
+      const hits: ScanHit[] = []
+      let truncated = false
+      for (const form of forms) {
+        const result = await scanForMarker(foreign.db!, form)
+        hits.push(...result.hits)
+        truncated ||= result.truncated
+      }
+      // The foreign tenant's own `principal` table legitimately contains its own
+      // assistant row; a hit there for the OTHER tenant's id is what matters, and
+      // the id forms differ, so any hit at all is a genuine cross-tenant reference.
+      controls.push(
+        control(
+          'negative',
+          `${owner}'s assistant principal id appears nowhere in ${foreign.slot}'s database`,
+          hits.length === 0,
+          hits.length === 0
+            ? `searched ${forms.length} id form(s) across the content and attribution tables, no rows matched`
+            : `FOUND IN ${foreign.slot.toUpperCase()}: ${describeHits(hits)}`
+        )
+      )
+      if (truncated) {
+        controls.push(
+          control(
+            'invariant',
+            `the scan of ${foreign.slot}'s schema completed without truncation`,
+            false,
+            'the column-scan ceiling was reached, so a clean result is not conclusive'
+          )
+        )
+      }
+    }
+
+    const failed = controls.filter((c) => !c.ok)
+    if (failed.length > 0) {
+      return leak({
+        attempted,
+        observed: failed.map((c) => `${c.label}: ${c.detail}`).join(' | '),
+        reason:
+          'one tenant’s assistant service principal is referenced by, or indistinguishable from, the ' +
+          'other’s. Every assistant reply, involvement and workflow action attributed through it is ' +
+          'attributed across the tenant boundary.',
+        controls,
+        evidence: { alphaAssistantPrincipalId: alphaId, bravoAssistantPrincipalId: bravoId },
+      })
+    }
+
+    return pass({
+      attempted,
+      observed: `alpha ${alphaId} and bravo ${bravoId} are distinct and neither appears in the other's database`,
+      reason: 'assistant attribution is confined to the tenant that owns the principal row',
+      controls,
+      evidence: { alphaAssistantPrincipalId: alphaId, bravoAssistantPrincipalId: bravoId },
+    })
+  },
+}
