@@ -1,0 +1,24 @@
+# Files excluded from the `railway up` upload archive.
+# The Docker build context is filtered separately by .dockerignore; this file
+# controls what leaves the machine in the first place.
+.git
+node_modules
+**/node_modules
+.output
+**/.output
+dist
+**/dist
+.turbo
+coverage
+**/coverage
+test-results
+playwright-report
+llm-poc
+artifacts
+.worktrees
+.serena
+.claude
+.agents
+scratchpad
+*.log
+*.tsbuildinfo
