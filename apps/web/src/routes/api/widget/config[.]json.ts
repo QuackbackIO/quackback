@@ -1,11 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { publicTenantCacheHeaders } from '@/lib/server/tenancy/http-cache'
 
 function jsonResponse(body: unknown, maxAge: number): Response {
   return new Response(JSON.stringify(body), {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
-      'Cache-Control': `public, max-age=${maxAge}`,
+      // Same path for every tenant, different body for each — see http-cache.ts.
+      ...publicTenantCacheHeaders(maxAge),
     },
   })
 }

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { readBodyWithLimit } from '@/lib/server/utils/read-body'
 import { logger } from '@/lib/server/logger'
+import { currentTenantNamespace } from '@/lib/server/tenancy/tenant-keyed'
 
 const log = logger.child({ component: 'storage' })
 
@@ -72,6 +73,20 @@ const proxyCache = createProxyCache({
   maxTotalBytes: 32 * 1024 * 1024,
 })
 
+/**
+ * The proxy cache holds file BYTES keyed by storage key, in process memory.
+ *
+ * Storage keys are per-bucket and the bucket is the tenant boundary, so two
+ * tenants' keys share a namespace in this heap the moment one process serves
+ * both — and a hit returns the other tenant's file with a 200 and no error.
+ * That is worse than the edge-cache case below: it needs no CDN and no
+ * misconfiguration, only a key that appears in two buckets, which is exactly
+ * what an import or a migration produces.
+ */
+function proxyCacheKey(key: string): string {
+  return `${currentTenantNamespace()} ${key}`
+}
+
 const KEY_PREFIX = '/api/storage/'
 
 function extractKey(url: URL): string | null {
@@ -123,7 +138,7 @@ export async function handleProxyUpload({ request }: { request: Request }): Prom
   }
 
   await uploadObject(key, body, ct)
-  proxyCache.delete(key)
+  proxyCache.delete(proxyCacheKey(key))
   return new Response(null, { status: 200 })
 }
 
@@ -171,7 +186,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
 
   try {
     if (config.s3Proxy || forceProxy) {
-      const cached = proxyCache.get(key)
+      const cached = proxyCache.get(proxyCacheKey(key))
       if (cached) {
         return new Response(cached.data, {
           status: 200,
@@ -180,6 +195,9 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
             'Cache-Control': isPublicStorageKey(key)
               ? 'public, max-age=31536000, immutable'
               : 'private, max-age=3600, immutable',
+            // The key namespace is per-bucket and the bucket is the tenant
+            // boundary, so the same path can name a different object per host.
+            Vary: 'Host',
             // Stored Content-Types originate from upload requests — never
             // let a browser second-guess them on a same-origin response.
             'X-Content-Type-Options': 'nosniff',
@@ -190,7 +208,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       const { body, contentType } = await getS3Object(key)
       const data = await new Response(body).arrayBuffer()
 
-      proxyCache.set(key, data, contentType)
+      proxyCache.set(proxyCacheKey(key), data, contentType)
 
       return new Response(data, {
         status: 200,
@@ -199,6 +217,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
           'Cache-Control': isPublicStorageKey(key)
             ? 'public, max-age=31536000, immutable'
             : 'private, max-age=3600, immutable',
+          Vary: 'Host',
           'X-Content-Type-Options': 'nosniff',
         },
       })
@@ -211,6 +230,7 @@ export async function handleStorageGet({ request }: { request: Request }): Promi
       headers: {
         Location: presignedUrl,
         'Cache-Control': isPublicStorageKey(key) ? 'public, max-age=86400' : 'private, no-store',
+        Vary: 'Host',
       },
     })
   } catch (error) {

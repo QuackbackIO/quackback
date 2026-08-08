@@ -32,6 +32,7 @@ export const Route = createFileRoute('/.well-known/oauth-protected-resource')({
             headers: {
               'Content-Type': 'application/json',
               'Cache-Control': 'public, max-age=3600',
+              Vary: 'Host',
             },
           }
         )
