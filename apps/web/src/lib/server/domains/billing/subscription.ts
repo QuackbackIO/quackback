@@ -82,6 +82,15 @@ export interface SubscriptionSnapshot {
   cancelAtPeriodEnd: boolean
   /** Subscription item id per meter, for quantity pushes. */
   items: Partial<Record<BillingMeter, { itemId: string; quantity: number }>>
+  /**
+   * Items the catalogue cannot account for — their price appears in no plan.
+   *
+   * Recorded rather than dropped, because "this meter has no item" and "this
+   * meter's item is billing under a price I no longer recognise" are opposite
+   * situations that used to be indistinguishable. Creating an item in the
+   * second case duplicates a live charge; see `syncSeats`.
+   */
+  unaccountedItems: Array<{ itemId: string; priceId: string; licensed: boolean }>
   /** When this snapshot was read from the provider. */
   fetchedAt: Date
 }
@@ -122,6 +131,7 @@ export function toSnapshot(
   fetchedAt: Date
 ): SubscriptionSnapshot {
   const items: SubscriptionSnapshot['items'] = {}
+  const unaccountedItems: SubscriptionSnapshot['unaccountedItems'] = []
   let plan: PlanId | null = null
 
   for (const item of subscription.items?.data ?? []) {
@@ -141,7 +151,32 @@ export function toSnapshot(
     }
     const prices = itemPlan ? config.catalogue[itemPlan] : undefined
     const meter = prices ? meterForPrice(prices, priceId) : null
-    if (meter) items[meter] = { itemId: item.id, quantity: item.quantity ?? 0 }
+    if (meter) {
+      items[meter] = { itemId: item.id, quantity: item.quantity ?? 0 }
+      continue
+    }
+    // The price is in no plan in the catalogue. The overwhelmingly likely
+    // cause is a rotated price: a price's amount is immutable at the provider,
+    // so ANY repricing mints a new price object and retires the old one, while
+    // existing subscriptions keep billing under the retired id.
+    //
+    // `licensed` distinguishes a seat line, which can be duplicated, from a
+    // metered one, which carries no quantity and cannot. An item whose
+    // `usage_type` the provider did not report is treated as licensed: the
+    // conservative reading, because the cost of guessing wrong is a duplicate
+    // charge rather than a skipped sync.
+    unaccountedItems.push({
+      itemId: item.id,
+      priceId,
+      licensed: item.price?.recurring?.usage_type !== 'metered',
+    })
+  }
+
+  if (unaccountedItems.length > 0) {
+    log.warn(
+      { subscriptionRef: subscription.id, unaccountedItems },
+      'subscription carries items whose price is in no plan; the catalogue may be out of step with a repricing'
+    )
   }
 
   return {
@@ -154,8 +189,21 @@ export function toSnapshot(
       : null,
     cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
     items,
+    unaccountedItems,
     fetchedAt,
   }
+}
+
+/**
+ * Does this subscription's status entitle its plan?
+ *
+ * Exported so callers that act on the provider — rather than on the product's
+ * own state — can ask before acting. `effectivePlan()` already encodes the
+ * same rule for the plan decision; this exposes the predicate itself so a
+ * second copy of the status list never appears.
+ */
+export function entitlesPlan(snapshot: SubscriptionSnapshot): boolean {
+  return ENTITLING_STATUSES.has(snapshot.status)
 }
 
 /** The plan a snapshot entitles, after the status rule. */

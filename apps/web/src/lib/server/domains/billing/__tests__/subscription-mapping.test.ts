@@ -7,7 +7,13 @@
  * things the rest of the module depends on.
  */
 import { describe, expect, it } from 'vitest'
-import { effectivePlan, normalizeStatus, toSnapshot, UNSUBSCRIBED_PLAN } from '../subscription'
+import {
+  effectivePlan,
+  entitlesPlan,
+  normalizeStatus,
+  toSnapshot,
+  UNSUBSCRIBED_PLAN,
+} from '../subscription'
 import { BILLING_PROVIDER, type BillingConfig } from '../billing.config'
 import type { ProviderSubscription } from '../provider/client'
 
@@ -65,8 +71,71 @@ describe('toSnapshot', () => {
         // or the seat sync would treat "no quantity" as a change to push.
         resolvedOutcome: { itemId: 'si_outcome', quantity: 0 },
       },
+      unaccountedItems: [],
       fetchedAt: FETCHED_AT,
     })
+  })
+
+  it('records an item whose price is in no plan instead of dropping it', () => {
+    // A rotated price. The provider makes a price's amount immutable, so any
+    // repricing mints a new price object and retires the old one — while live
+    // subscriptions keep billing under the retired id. Dropping such an item
+    // makes it invisible, and invisible reads as absent to the seat sync.
+    const snapshot = toSnapshot(
+      subscription({
+        items: {
+          data: [
+            { id: 'si_seat', quantity: 2, price: { id: 'price_pro_seat' } },
+            // Retired: `pro.liteSeat` has since been rotated to a new id.
+            { id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite_retired' } },
+          ],
+        },
+      }),
+      CONFIG,
+      FETCHED_AT
+    )
+    expect(snapshot.items).toEqual({ fullSeat: { itemId: 'si_seat', quantity: 2 } })
+    expect(snapshot.unaccountedItems).toEqual([
+      { itemId: 'si_lite', priceId: 'price_pro_lite_retired', licensed: true },
+    ])
+  })
+
+  it('marks an unaccounted metered item as not licensed', () => {
+    // A metered line carries no quantity and cannot be duplicated into a
+    // second seat charge, so it must not block seat creation.
+    const snapshot = toSnapshot(
+      subscription({
+        items: {
+          data: [
+            { id: 'si_seat', quantity: 2, price: { id: 'price_pro_seat' } },
+            {
+              id: 'si_usage',
+              price: { id: 'price_retired_usage', recurring: { usage_type: 'metered' } },
+            },
+          ],
+        },
+      }),
+      CONFIG,
+      FETCHED_AT
+    )
+    expect(snapshot.unaccountedItems).toEqual([
+      { itemId: 'si_usage', priceId: 'price_retired_usage', licensed: false },
+    ])
+  })
+
+  it('treats an unaccounted item of unreported type as licensed', () => {
+    // The conservative reading: guessing "metered" wrongly costs a duplicate
+    // charge, guessing "licensed" wrongly costs a skipped creation.
+    const snapshot = toSnapshot(
+      subscription({
+        items: { data: [{ id: 'si_x', quantity: 1, price: { id: 'price_unknown' } }] },
+      }),
+      CONFIG,
+      FETCHED_AT
+    )
+    expect(snapshot.unaccountedItems).toEqual([
+      { itemId: 'si_x', priceId: 'price_unknown', licensed: true },
+    ])
   })
 
   it('reports no plan when no price is in the catalogue', () => {
@@ -77,6 +146,8 @@ describe('toSnapshot', () => {
     )
     expect(snapshot.plan).toBeNull()
     expect(snapshot.items).toEqual({})
+    // Unresolved, but not forgotten.
+    expect(snapshot.unaccountedItems).toHaveLength(1)
   })
 
   it('carries a null period end rather than an epoch date', () => {
@@ -113,6 +184,18 @@ describe('normalizeStatus', () => {
     // confirm as paid, so it must not read as a confirmed payment. It still
     // entitles the plan, so a vendor adding a status cannot cut customers off.
     expect(normalizeStatus('some_future_status')).toBe('past_due')
+  })
+})
+
+describe('entitlesPlan', () => {
+  const base = toSnapshot(subscription(), CONFIG, FETCHED_AT)
+
+  it.each(['active', 'trialing', 'past_due'] as const)('entitles on %s', (status) => {
+    expect(entitlesPlan({ ...base, status })).toBe(true)
+  })
+
+  it.each(['canceled', 'paused'] as const)('does not entitle on %s', (status) => {
+    expect(entitlesPlan({ ...base, status })).toBe(false)
   })
 })
 

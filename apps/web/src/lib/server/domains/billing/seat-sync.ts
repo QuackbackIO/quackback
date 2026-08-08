@@ -25,6 +25,7 @@ import {
 import type { BillingProviderClient } from './provider/client'
 import { countSeats, type SeatCounts } from './seats'
 import {
+  entitlesPlan,
   recordSyncedQuantities,
   syncedQuantitiesFor,
   type SubscriptionSnapshot,
@@ -104,11 +105,27 @@ export async function syncSeats(
 
   if (!snapshot) return { skipped: true, unchanged: false, desired, seats }
 
+  // Nothing is pushed to a subscription whose status does not entitle its
+  // plan. The provider refuses updates to a canceled subscription, so without
+  // this a `customer.subscription.updated` carrying `canceled` — which arrives
+  // BEFORE `.deleted` — throws, answers 500 and redelivers until the deletion
+  // lands. No wrong bill, because `applySubscription` has already written the
+  // downgrade; just retry noise and error-log churn over a state the module
+  // already knows the answer to.
+  if (!entitlesPlan(snapshot)) {
+    log.info(
+      { subscriptionRef: snapshot.subscriptionRef, status: snapshot.status },
+      'subscription status does not entitle its plan; skipping the seat push'
+    )
+    return { skipped: true, unchanged: false, desired, seats }
+  }
+
   // Keyed on the subscription being synced. An earlier version read "the most
   // recently updated row" and compared its ref, which returns {} whenever any
   // other subscription row happens to be newer — and re-pushes an unchanged
   // seat count, which is a redundant proration event at the provider.
   const synced = await syncedQuantitiesFor(snapshot.subscriptionRef)
+  const unaccountedLicensed = snapshot.unaccountedItems.filter((item) => item.licensed)
 
   const updates: Array<{ id?: string; price?: string; quantity: number }> = []
   for (const meter of SEAT_METERS) {
@@ -127,6 +144,30 @@ export async function syncSeats(
 
     // No item on the subscription for this meter.
     //
+    // But "no item" is only trustworthy when every item on the subscription
+    // was accounted for. An item whose price is in no plan — a rotated price,
+    // which is unavoidable because a price's amount is immutable at the
+    // provider — resolves to no meter and is therefore invisible here.
+    // Creating a replacement would leave the old line billing alongside the
+    // new one, and the customer pays for the same seats twice, on the same
+    // invoice, indefinitely. The blast radius is the existing book at the
+    // moment of a repricing.
+    //
+    // Refusing is the only correct guard: matching by price would not help,
+    // because the price about to be created is precisely the one the
+    // subscription does NOT carry. Updates to items that DID resolve continue
+    // normally — a stale line is a reason not to add, not a reason to freeze.
+    if (unaccountedLicensed.length > 0) {
+      log.warn(
+        {
+          subscriptionRef: snapshot.subscriptionRef,
+          meter,
+          unaccountedItems: unaccountedLicensed,
+        },
+        'refusing to create a subscription item while the subscription carries a licensed item the catalogue cannot account for'
+      )
+      continue
+    }
     // `copilotSeat` is never created here. The add-on is opt-in and is bought
     // at checkout; creating it on a sync would charge for it without anyone
     // choosing it, which is the exact defect the opt-in exists to prevent.
@@ -199,10 +240,15 @@ export function checkoutLineItems(
   const items: Array<{ price: string; quantity?: number }> = []
 
   // A licensed line with a zero quantity is rejected, so a meter with nothing
-  // to bill is omitted rather than floored. `billableQuantities` guarantees at
-  // least one licensed line: every teammate is a seat of one class or the
-  // other, the person running checkout is a teammate, and a plan with no lite
-  // price counts all of them as full.
+  // to bill is omitted rather than floored.
+  //
+  // At `total = 0` this emits no licensed line at all, and the provider would
+  // refuse the session. That does not happen in practice — whoever runs
+  // checkout is a teammate, so `total >= 1` — but the guarantee rests on that
+  // caller-side invariant, NOT on anything this function constructs. Stated
+  // precisely because the defect this file exists to document came from a
+  // comment claiming a construction-level guarantee that held only under an
+  // unstated precondition.
   if (quantities.fullSeat > 0) {
     items.push({ price: prices.seat, quantity: quantities.fullSeat })
   }

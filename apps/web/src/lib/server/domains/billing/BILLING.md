@@ -279,6 +279,53 @@ the plan. Two consequences follow, both handled:
   *creates* a missing seat item, bounded to meters the plan sells and
   **never** to the opt-in add-on, which is bought at checkout or not at all.
 
+### Creation only when the catalogue accounts for everything
+
+Creating an item is the one place this module can invent a charge, so it
+carries a guard the update path does not need.
+
+`toSnapshot` resolves each item's meter by looking its price up in the
+catalogue. An item whose price is in **no** plan therefore resolves to nothing
+— and "resolves to nothing" used to be indistinguishable from "there is no
+item". That is not an exotic state: a price's amount is **immutable** at the
+provider, so *any* repricing mints a new price object and retires the old one,
+while live subscriptions keep billing under the retired id. The sync would see
+no lite item, create one at the new price, and the customer would pay for the
+same seats twice on the same invoice, indefinitely. The blast radius is the
+existing book at the moment of a repricing — exactly when a duplicate line is
+least tolerable.
+
+So unresolved items are **recorded rather than dropped**
+(`SubscriptionSnapshot.unaccountedItems`), and creation is refused while any
+*licensed* one is present. Three things about the shape:
+
+- **Refusal is the only correct guard here.** Matching an existing item by
+  price would not help: the price about to be created is precisely the one the
+  subscription does not carry.
+- **Updates continue.** A stale line is a reason not to add, not a reason to
+  freeze; the items that did resolve still track the product's seat count, or a
+  repricing would silently stop all seat billing until someone noticed.
+- **The lookup rule is untouched.** `toSnapshot` looks each item up under *its
+  own* plan, which is what makes a downgrade leave an orphaned item resolvable.
+  Only the disposal of a genuinely unresolvable item changed.
+
+A metered item is marked `licensed: false` and does not block, since it carries
+no quantity and cannot become a second seat charge. An item whose `usage_type`
+the provider did not report is treated as licensed — guessing "metered" wrongly
+costs a duplicate charge, guessing "licensed" wrongly costs a skipped creation.
+
+### Nothing is pushed to a subscription that does not entitle its plan
+
+`syncSeats` returns early unless `entitlesPlan(snapshot)`. The provider sends
+`customer.subscription.updated` carrying `canceled` **before** it sends
+`.deleted`, and refuses updates to a canceled subscription — so without the
+guard the push throws, the handler answers 500, and the delivery redelivers
+until the deletion lands. No wrong bill, because `applySubscription` has
+already written the downgrade; it is retry noise and error-log churn over a
+state the module already knows the answer to. The predicate is exported from
+`subscription.ts` rather than restated, so the entitling-status list exists
+once.
+
 ### Copilot
 
 **Operator decision.** *"Copilot bills per paid user/month."*

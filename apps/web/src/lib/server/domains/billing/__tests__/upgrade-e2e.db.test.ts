@@ -78,7 +78,7 @@ const { BILLING_PROVIDER, resetBillingConfigCache } = await import('../billing.c
 const { applySubscription, currentSubscriptionRef } = await import('../subscription')
 const { getBillingConfig } = await import('../billing.config')
 import type { BillingProviderClient } from '../provider/client'
-const { countSeats, seatBreakdown } = await import('../seats')
+const { countSeats } = await import('../seats')
 const { billableQuantities, checkoutLineItems } = await import('../seat-sync')
 
 const fixture = await createDbTestFixture({
@@ -207,6 +207,46 @@ afterEach(async () => {
 afterAll(async () => {
   await fixture.close()
 })
+
+/**
+ * Create `count` teammates whose only support-surface permission is a read, so
+ * they classify as lite seats.
+ */
+async function addLiteTeammates(count: number): Promise<void> {
+  const roleId = createId('role')
+  await testDb.insert(roles).values({
+    id: roleId,
+    key: `lite-${roleId}`,
+    name: `Lite-${roleId}`,
+    isSystem: false,
+    createdAt: new Date(),
+  })
+  for (const key of [PERMISSIONS.POST_CREATE, PERMISSIONS.CONVERSATION_VIEW]) {
+    const [permission] = await testDb
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(eq(permissions.key, key))
+      .limit(1)
+    await testDb
+      .insert(rolePermissions)
+      .values({ id: createId('role_permission'), roleId, permissionId: permission!.id })
+  }
+  for (let i = 0; i < count; i++) {
+    const userId = createId('user')
+    await testDb.insert(user).values({ id: userId, name: `pm${i}`, email: `${userId}@example.test` })
+    const principalId = createId('principal')
+    await testDb.insert(principal).values({
+      id: principalId,
+      userId,
+      role: 'member',
+      type: 'user',
+      createdAt: new Date(),
+    })
+    await testDb
+      .insert(principalRoleAssignments)
+      .values({ id: createId('role_assignment'), principalId, roleId, teamId: null })
+  }
+}
 
 describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
   it('takes a workspace from ungated, through a named refusal, to the feature working', async () => {
@@ -510,47 +550,13 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     // board writes and support reads. Checkout used to floor the seat line to
     // one and the first webhook pushed it back to zero — either rejecting the
     // update and 500ing forever, or charging and crediting a phantom seat.
-    const roleId = createId('role')
-    await testDb.insert(roles).values({
-      id: roleId,
-      key: `lite-${roleId}`,
-      name: `Lite-${roleId}`,
-      isSystem: false,
-      createdAt: new Date(),
-    })
-    for (const key of [PERMISSIONS.POST_CREATE, PERMISSIONS.CONVERSATION_VIEW]) {
-      const [permission] = await testDb
-        .select({ id: permissions.id })
-        .from(permissions)
-        .where(eq(permissions.key, key))
-        .limit(1)
-      await testDb
-        .insert(rolePermissions)
-        .values({ id: createId('role_permission'), roleId, permissionId: permission!.id })
-    }
-
-    const liteIds: string[] = []
-    for (let i = 0; i < 3; i++) {
-      const userId = createId('user')
-      await testDb.insert(user).values({ id: userId, name: `pm${i}`, email: `${userId}@example.test` })
-      const principalId = createId('principal')
-      await testDb.insert(principal).values({
-        id: principalId,
-        userId,
-        role: 'member',
-        type: 'user',
-        createdAt: new Date(),
-      })
-      await testDb
-        .insert(principalRoleAssignments)
-        .values({ id: createId('role_assignment'), principalId, roleId, teamId: null })
-      liteIds.push(principalId)
-    }
-
+    const before = await countSeats()
+    await addLiteTeammates(3)
     const seats = await countSeats()
-    // Scoped check: the three teammates just added are all lite.
-    const rows = (await seatBreakdown()).filter((row) => liteIds.includes(row.principalId))
-    expect(rows.map((row) => row.lite)).toEqual([true, true, true])
+    // Scoped: the three just added are lite, whatever else the shared test
+    // database happens to contain.
+    expect(seats.lite).toBe(before.lite + 3)
+    expect(seats.full).toBe(before.full)
 
     // Checkout and the sync must derive the same numbers.
     const config = getBillingConfig()!
@@ -605,6 +611,120 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     expect(pushed).toContainEqual({ price: 'price_pro_seat', quantity: seats.full })
     // The add-on is never created by a sync, however many paid seats exist.
     expect(pushed.some((item) => item.price === 'price_pro_copilot')).toBe(false)
+  })
+
+  it('does not duplicate a line when a price has been rotated', async () => {
+    // The defect the creation path introduced, in its real shape.
+    //
+    // A price's amount is immutable at the provider, so ANY repricing mints a
+    // new price object and retires the old one — while live subscriptions keep
+    // billing under the retired id. That item resolves to no meter, and "no
+    // meter" used to be indistinguishable from "no item", so the sync created
+    // a replacement and the customer paid for the same seats twice, on the
+    // same invoice, indefinitely.
+    //
+    // Deliberately a ROTATION and not a missing item: those two look identical
+    // to the code being tested, which is the whole defect.
+    //
+    // Lite teammates are required, not decoration: with a derived lite count of
+    // zero the creation branch is short-circuited by `want <= 0` and the test
+    // passes whether or not the guard exists. It has to be a case where the
+    // sync genuinely WOULD create.
+    await addLiteTeammates(3)
+    const seats = await countSeats()
+    expect(seats.lite).toBeGreaterThan(0)
+
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    const stub = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    stub.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: {
+        data: [
+          { id: 'si_seat', quantity: 1, price: { id: 'price_pro_seat' } },
+          // Billing 3 lite seats under a price the catalogue has retired.
+          { id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite_retired' } },
+        ],
+      },
+    }))
+
+    await deliver(
+      {
+        id: 'evt_rotated',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      stub
+    )
+
+    const pushed = (calls.updates[0]?.items ?? []) as Array<Record<string, unknown>>
+    // No new lite line. The old si_lite is still billing 3 lite seats under
+    // the retired price; adding price_pro_lite at 3 would bill them twice on
+    // the same invoice, indefinitely.
+    expect(pushed.some((item) => item.price === 'price_pro_lite')).toBe(false)
+    // Nothing at all was created — every push targets an existing item id.
+    expect(pushed.every((item) => item.id !== undefined)).toBe(true)
+  })
+
+  it('still updates the items it CAN account for while one is unaccounted', async () => {
+    // A stale line is a reason not to add, not a reason to freeze: the seats
+    // that did resolve must still track the product's count, or a repricing
+    // would silently stop all seat billing until someone noticed.
+    const seatsBefore = await countSeats()
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    const stub = makeStub(calls, 'active', { ...INITIAL_QUANTITIES })
+    stub.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: {
+        data: [
+          // Reports a quantity that does not match the derived count.
+          { id: 'si_seat', quantity: 999, price: { id: 'price_pro_seat' } },
+          { id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite_retired' } },
+        ],
+      },
+    }))
+
+    await deliver(
+      {
+        id: 'evt_rotated_update',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      stub
+    )
+
+    const pushed = (calls.updates[0]?.items ?? []) as Array<Record<string, unknown>>
+    expect(pushed).toContainEqual({ id: 'si_seat', quantity: seatsBefore.full })
+  })
+
+  it('pushes nothing to a subscription whose status does not entitle its plan', async () => {
+    // The provider sends `customer.subscription.updated` with `canceled`
+    // BEFORE `.deleted`, and refuses updates to a canceled subscription — so
+    // pushing would throw, answer 500, and redeliver until the deletion lands.
+    // No wrong bill, because the downgrade is already written; just retry
+    // noise over a state the module already knows the answer to.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_canceled_update',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'canceled')
+    )
+    expect(calls.updates).toEqual([])
+    // The plan still moved — the guard is on the outbound push, not on
+    // applying what the provider said.
+    const row = await testDb.query.settings.findFirst()
+    expect(row?.cloud).toMatchObject({ plan: 'free', billing: { status: 'canceled' } })
   })
 
   it('refuses to write a plan the config file has pinned', async () => {
