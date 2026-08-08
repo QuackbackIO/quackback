@@ -17,6 +17,8 @@
 /** The only value that changes behaviour. Anything else is single-tenant. */
 export const POOLED_TENANCY = 'pooled'
 
-export function isPooledTenancy(env: { QUACKBACK_TENANCY?: string } = process.env): boolean {
+export function isPooledTenancy(
+  env: Record<string, string | undefined> = process.env
+): boolean {
   return env.QUACKBACK_TENANCY === POOLED_TENANCY
 }
