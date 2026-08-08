@@ -6,6 +6,7 @@ import { resolveLocale, type SupportedLocale } from '@/lib/shared/i18n'
 import type { Session, PrincipalType } from '@/lib/server/auth/session'
 import type { TenantSettings } from '@/lib/server/domains/settings'
 import type { SessionId, UserId } from '@quackback/ids'
+import { isBillingConfigured } from '@/lib/server/domains/billing/billing.config'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'bootstrap' })
@@ -40,6 +41,19 @@ export interface BootstrapData {
    *  Threaded into the admin route the same way `themeCookie` is, so the
    *  banner renders in its final expanded/collapsed state on first paint. */
   updateBannerDismissedVersion: string | null
+  /**
+   * Whether this deployment has a billing provider configured.
+   *
+   * A single boolean, and deliberately nothing more: the admin settings nav
+   * needs to know whether a Billing item exists, and nothing else on the
+   * client is entitled to a billing fact. No customer reference, no
+   * subscription reference, no plan, no price — every one of those stays
+   * server-side, and `settings.cloud` remains in `SERVER_ONLY_SETTINGS_KEYS`.
+   *
+   * False on every install with no provider configured, which is what keeps
+   * the nav byte-identical to today for self-hosters.
+   */
+  billingEnabled: boolean
 }
 
 // Returns both the session (with principalType) AND the user role in
@@ -207,6 +221,7 @@ const getBootstrapDataInternal = createServerOnlyFn(async (): Promise<BootstrapD
     registeredAuthProviders,
     acceptLanguageLocale,
     updateBannerDismissedVersion,
+    billingEnabled: isBillingConfigured(),
   }
 })
 

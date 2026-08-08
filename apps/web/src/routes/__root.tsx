@@ -68,6 +68,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       registeredAuthProviders,
       acceptLanguageLocale,
       updateBannerDismissedVersion,
+      billingEnabled,
     } = await getBootstrapData()
 
     if (!isOnboardingExempt(location.pathname)) {
@@ -115,6 +116,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       registeredAuthProviders,
       acceptLanguageLocale,
       updateBannerDismissedVersion,
+      billingEnabled,
     }
   },
   head: () => ({

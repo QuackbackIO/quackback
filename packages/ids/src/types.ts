@@ -159,6 +159,12 @@ export type UserTagId = TypeId<'user_tag'>
 /** Company attribute definition ID - e.g., company_attr_01h455vb4pex5vsknk084sn02q */
 export type CompanyAttributeId = TypeId<'company_attr'>
 
+/** Billing provider webhook event ID - e.g., billing_event_01h455vb4pex5vsknk084sn02q */
+export type BillingEventId = TypeId<'billing_event'>
+
+/** Billing usage ledger row ID - e.g., billing_usage_01h455vb4pex5vsknk084sn02q */
+export type BillingUsageId = TypeId<'billing_usage'>
+
 // RBAC
 export type RoleId = TypeId<'role'>
 export type PermissionId = TypeId<'perm'>
@@ -417,6 +423,8 @@ export interface EntityIdMap {
   pipeline_log: PipelineLogId
   post_activity: PostActivityId
   page_view: PageViewId
+  billing_event: BillingEventId
+  billing_usage: BillingUsageId
   company: CompanyId
   assistant_involvement: AssistantInvolvementId
   assistant_guidance: AssistantGuidanceRuleId

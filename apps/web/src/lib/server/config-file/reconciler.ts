@@ -35,9 +35,6 @@ export interface SettingsUpdate {
   slug?: string
   /** Re-applied to the locked, latest setup state by production deps. */
   setupWorkspace?: ConfigWorkspace
-  tierLimits?: string
-  /** Merged cloud block, written as jsonb (not a JSON string, unlike tierLimits). */
-  cloud?: StoredCloudConfig
   managedFieldPaths: string[]
 }
 
@@ -65,6 +62,31 @@ export interface ReconcileDeps {
    *  seed-workspace path removed, the file is the sole seed channel
    *  when no settings row exists yet. */
   createSettings: (insert: SettingsInsert) => Promise<void>
+  /**
+   * Apply the file's `cloud` block through `writeCloudConfig`, the single
+   * mutation seam for that column.
+   *
+   * Deliberately NOT part of `updateSettings`. `settings.cloud` has a second
+   * writer (the billing module), and a plain `SET cloud = <merged>` computed
+   * from a row read earlier in this function silently erases anything that
+   * writer committed in between. Routing through the seam puts the read, the
+   * merge and the write inside one row lock, and — as a second benefit —
+   * subjects the file's block to the same `validatePatch` the other writer
+   * gets, which a direct column write skipped.
+   *
+   * Returns whether the row actually changed, so the caller can decide about
+   * cache invalidation without a second read.
+   */
+  applyCloudConfig: (patch: CloudConfigPatch) => Promise<boolean>
+  /**
+   * Apply the file's `tierLimits` block through `writeTierLimits`.
+   *
+   * Same reasoning as `applyCloudConfig`: the billing module became a second
+   * writer of this column, so a merge computed from a row read earlier in
+   * this function and written whole can erase it. Routing both writers
+   * through one locked seam is what makes the column safe.
+   */
+  applyTierLimits: (limits: Record<string, unknown> | null) => Promise<boolean>
   invalidateSettingsCache: () => Promise<void>
   invalidateTierLimitsCache: () => Promise<void>
   /** Post-reconcile status reporter. Optional so unit tests don't have
@@ -130,28 +152,38 @@ export async function reconcileFileIntoDb(
     if (serialized !== current.setupState) update.setupWorkspace = spec.workspace
   }
 
+  // Like the cloud block, tier limits travel their own locked seam; the check
+  // here is only a fast path so a steady-state tick opens no transaction.
+  let tierLimitsChanged = false
   if (spec.tierLimits !== undefined) {
     const serialized = JSON.stringify(spec.tierLimits)
-    if (serialized !== current.tierLimits) update.tierLimits = serialized
+    if (serialized !== current.tierLimits) {
+      tierLimitsChanged = await deps.applyTierLimits(spec.tierLimits)
+    }
   }
 
+  // The cloud block travels its own path — see `ReconcileDeps.applyCloudConfig`.
+  // The equivalence test here is only a fast path that keeps a steady-state
+  // 30-second tick from opening a locking transaction; the seam repeats it
+  // under the row lock, which is where the decision that matters is made.
+  let cloudChanged = false
   if (spec.cloud !== undefined) {
-    // Merged, not replaced: the file owns only what it declares, so a billing
-    // reference written by the other writer survives a reconcile that names
-    // just a plan. `cloudConfigEquivalent` ignores the write stamp so a
-    // steady-state file does not rewrite the row on every 30-second tick.
-    const merged = mergeCloudConfig(current.cloud ?? null, toCloudPatch(spec.cloud), {
-      writer: 'config',
-    })
-    if (!cloudConfigEquivalent(merged, current.cloud ?? null)) update.cloud = merged
+    const patch = toCloudPatch(spec.cloud)
+    const wouldMerge = mergeCloudConfig(current.cloud ?? null, patch, { writer: 'config' })
+    if (!cloudConfigEquivalent(wouldMerge, current.cloud ?? null)) {
+      cloudChanged = await deps.applyCloudConfig(patch)
+    }
   }
 
   const pathsChanged = !arrayEquals(newPaths, current.managedFieldPaths)
   const hasFieldUpdates = Object.keys(update).length > 1 // > 1 because managedFieldPaths is always set
 
-  if (!pathsChanged && !hasFieldUpdates) {
-    return
-  }
+  // Both seams invalidate their own caches when they write, so a reconcile
+  // that touched only those columns is already fully applied.
+  void cloudChanged
+  void tierLimitsChanged
+
+  if (!pathsChanged && !hasFieldUpdates) return
 
   await deps.updateSettings(update)
   await deps.invalidateSettingsCache()

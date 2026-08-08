@@ -221,6 +221,11 @@ export {
   // Schema tables - export runs (workspace data export)
   exportRuns,
   exportRunsRelations,
+  // Schema tables - billing (this workspace's own subscription; unrelated to
+  // integrations/stripe, which reads a customer's payment provider)
+  billingWebhookEvents,
+  billingUsageEvents,
+  billingSubscriptionState,
   // Schema tables - changelog
   changelogEntries,
   changelogEntriesRelations,
