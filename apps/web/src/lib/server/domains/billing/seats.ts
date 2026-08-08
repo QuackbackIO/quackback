@@ -25,6 +25,8 @@
  *
  * ## What a lite seat is
  *
+ * > *A lite seat is read-only on the customer support side.* (operator)
+ *
  * **There is no lite-seat class in the product today, and this module does
  * not invent a column for one.** Every custom RBAC role rides
  * `principal.role = 'member'` on purpose (`principal.service.ts`: "Custom
@@ -32,25 +34,39 @@
  * Owner from a read-only custom role. A cheaper seat therefore has to be
  * *derived* from something the product already models.
  *
- * The derivation used here: **a lite seat is a teammate whose entire
- * effective workspace permission set is read-only.** Not a flag an admin can
- * set — a consequence of the access they were actually granted. That matters
- * commercially: to get the cheaper rate you must genuinely give the person no
- * ability to change anything, so the discount cannot be claimed by relabelling.
+ * The derivation: **a lite seat is a teammate who holds no write permission
+ * on the customer-support surface** — conversations, tickets and the inbox —
+ * regardless of what they can do elsewhere. So a product manager who writes
+ * freely on feedback boards and roadmaps but only observes the support inbox
+ * is a lite seat. Full seats are support agents; lite seats are everyone else
+ * who needs visibility. The surface itself is derived from the permission
+ * catalogue's own categories in `permission-classes.ts`.
+ *
+ * Not a flag an admin can set — a consequence of the access actually granted.
+ * That matters commercially: the cheaper rate requires genuinely withholding
+ * every support-side write, so the discount cannot be claimed by relabelling.
  *
  * Effective permissions are resolved exactly as the authorization layer
  * resolves them (`permissionsForPrincipal`): workspace-wide role assignments
  * if the principal has any, the legacy preset otherwise. Since both legacy
- * presets (`admin → owner`, `member → manager`) contain write permissions,
- * every principal without a custom role assignment is a full seat, which is
- * the correct answer for every install that has not adopted custom roles.
+ * presets (`admin → owner`, `member → manager`) contain support writes, every
+ * principal without a custom role assignment is a full seat, which is the
+ * correct answer for every install that has not adopted custom roles.
  *
  * ## Copilot
  *
- * The Copilot add-on is charged per teammate who can actually use Copilot,
- * which the product already models as the `copilot.use` permission — the
- * gate every Copilot entry point checks (`assistant/copilot-gate.ts`). No new
- * concept, and it moves automatically when a role changes.
+ * > *Copilot bills per paid user/month.* (operator)
+ *
+ * So the billed quantity is **full seats**, not the number of teammates
+ * holding `copilot.use`. The permission still decides who may *use* Copilot —
+ * `assistant/copilot-gate.ts` is unchanged — but it no longer decides what is
+ * charged, and `copilotEligible` below is reported for the admin surface
+ * only, deliberately named so it cannot be mistaken for a billing quantity.
+ *
+ * Lite seats are excluded from the add-on: a read-only support viewer has no
+ * write action for Copilot to assist, so charging them for a capability they
+ * cannot exercise would be wrong. That exclusion is an assumption, recorded
+ * in BILLING.md so it is cheap to reverse.
  */
 
 import {
@@ -68,18 +84,25 @@ import type { PrincipalId } from '@quackback/ids'
 import { permissionsForLegacyRole } from '@/lib/server/policy/permissions'
 import { PERMISSIONS, type PermissionKey } from '@/lib/shared/permissions'
 import type { Role } from '@/lib/shared/roles'
-import { WRITE_PERMISSIONS } from './permission-classes'
+import { SUPPORT_WRITE_PERMISSIONS } from './permission-classes'
 
 /** Legacy roles that occupy a seat. Mirrors `isTeamMember()`. */
 const SEAT_ROLES: Role[] = ['admin', 'member']
 
 export interface SeatCounts {
-  /** Teammates holding at least one write permission. */
+  /** Teammates holding at least one customer-support write permission. */
   full: number
-  /** Teammates whose effective permission set is entirely read-only. */
+  /** Teammates with no customer-support write permission. */
   lite: number
-  /** Teammates (of either class) who can use Copilot. */
-  copilot: number
+  /**
+   * Teammates who may use Copilot, by permission.
+   *
+   * Reporting only. The Copilot add-on bills per paid user, so its quantity
+   * is `full` — see `desiredQuantities()`. Named `copilotEligible` rather
+   * than `copilot` precisely so it cannot be picked up as a billing figure by
+   * someone reading the shape rather than the docs.
+   */
+  copilotEligible: number
   /** `full + lite`. The number `maxTeamSeats` caps and `/admin/usage` reports. */
   total: number
 }
@@ -88,25 +111,28 @@ export interface SeatBreakdownRow {
   principalId: PrincipalId
   role: Role
   lite: boolean
-  copilot: boolean
+  copilotEligible: boolean
   permissionCount: number
 }
 
-const WRITE_SET: ReadonlySet<PermissionKey> = new Set(WRITE_PERMISSIONS)
+const SUPPORT_WRITE_SET: ReadonlySet<PermissionKey> = new Set(SUPPORT_WRITE_PERMISSIONS)
 
 /** Classify one already-resolved permission set. Pure — the rule in one place. */
 export function classifySeat(effective: ReadonlySet<PermissionKey>): {
   lite: boolean
-  copilot: boolean
+  copilotEligible: boolean
 } {
-  let hasWrite = false
+  let hasSupportWrite = false
   for (const key of effective) {
-    if (WRITE_SET.has(key)) {
-      hasWrite = true
+    if (SUPPORT_WRITE_SET.has(key)) {
+      hasSupportWrite = true
       break
     }
   }
-  return { lite: !hasWrite, copilot: effective.has(PERMISSIONS.COPILOT_USE) }
+  return {
+    lite: !hasSupportWrite,
+    copilotEligible: effective.has(PERMISSIONS.COPILOT_USE),
+  }
 }
 
 /**
@@ -165,12 +191,12 @@ export async function seatBreakdown(): Promise<SeatBreakdownRow[]> {
     // workspace-wide assignment gets its legacy role's preset. Both presets
     // carry write permissions, so this is always a full seat.
     const effective = entry.hasAssignment ? entry.keys : permissionsForLegacyRole(entry.role)
-    const { lite, copilot } = classifySeat(effective)
+    const { lite, copilotEligible } = classifySeat(effective)
     out.push({
       principalId,
       role: entry.role,
       lite,
-      copilot,
+      copilotEligible,
       permissionCount: effective.size,
     })
   }
@@ -182,11 +208,11 @@ export async function countSeats(): Promise<SeatCounts> {
   const rows = await seatBreakdown()
   let full = 0
   let lite = 0
-  let copilot = 0
+  let copilotEligible = 0
   for (const row of rows) {
     if (row.lite) lite++
     else full++
-    if (row.copilot) copilot++
+    if (row.copilotEligible) copilotEligible++
   }
-  return { full, lite, copilot, total: full + lite }
+  return { full, lite, copilotEligible, total: full + lite }
 }

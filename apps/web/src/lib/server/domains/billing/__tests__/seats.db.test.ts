@@ -7,14 +7,28 @@
  * fallback for the no-assignment case is exactly where a seat count goes
  * quietly wrong, and quietly wrong here means a wrong invoice.
  *
- * Every row this file counts is created inside the rollback transaction, and
- * every assertion is a **delta** against a baseline taken at the start of the
- * test. That is not a stylistic choice: an earlier version cleared the
- * `principal` table first, and a no-WHERE DELETE takes a row lock on every
- * principal in the shared test database — which made this file contend with
- * every other suite touching principals and fail intermittently under the
- * full run. Nothing else commits, so the baseline is stable and the deltas
- * are exact.
+ * Every assertion is scoped to **the principals this test created**, never to
+ * a whole-table count. Two earlier versions were not, and both were wrong for
+ * different reasons:
+ *
+ *  - Clearing the `principal` table first took a row lock on every principal
+ *    in the shared test database, making this file contend with every other
+ *    suite touching principals.
+ *  - Taking a baseline count and asserting deltas assumed the committed
+ *    population is constant for the duration of a test. It is not:
+ *    `quackback_test` is shared across checkouts, so another process can
+ *    commit principals between the baseline and the assertion. That produced
+ *    exactly the kind of failure that never reproduces in isolation.
+ *
+ * Scoping to created ids removes the assumption altogether.
+ *
+ * A third version briefly asserted that `countSeats()` agreed with a fold of
+ * `seatBreakdown()` over the whole table. That was removed rather than fixed:
+ * `countSeats()` *is* that fold, so the assertion was near-tautological, and
+ * because the two reads are separate statements a concurrent commit between
+ * them made it fail for a reason unrelated to anything it claimed to check.
+ * The whole-table count is exercised where it matters — `upgrade-e2e` pushes
+ * it to the provider.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId, type PrincipalId, type RoleId, type TeamId, type UserId } from '@quackback/ids'
@@ -95,25 +109,35 @@ async function addTeammate(input: {
       .insert(principalRoleAssignments)
       .values({ id: createId('role_assignment'), principalId, roleId, teamId: null })
   }
+  created.push(principalId)
   return principalId
 }
 
-let baseline: SeatCounts
+/** Principals created by the test currently running. */
+let created: PrincipalId[] = []
 
 beforeEach(async () => {
   await fixture.begin()
-  baseline = await countSeats()
+  created = []
 })
 
-/** Counts minus the rows that were already there. */
+/**
+ * Seat counts over the principals this test created.
+ *
+ * Folded from the same `seatBreakdown()` rows `countSeats()` folds, so the
+ * classification under test is the real one — only the population is scoped.
+ */
 async function seatDelta(): Promise<SeatCounts> {
-  const now = await countSeats()
-  return {
-    full: now.full - baseline.full,
-    lite: now.lite - baseline.lite,
-    copilot: now.copilot - baseline.copilot,
-    total: now.total - baseline.total,
+  const rows = await breakdownFor(created)
+  let full = 0
+  let lite = 0
+  let copilotEligible = 0
+  for (const row of rows) {
+    if (row.lite) lite++
+    else full++
+    if (row.copilotEligible) copilotEligible++
   }
+  return { full, lite, copilotEligible, total: full + lite }
 }
 
 /** Breakdown rows for principals this test created. */
@@ -133,7 +157,7 @@ afterAll(async () => {
 
 describe.skipIf(!fixture.available)('seat derivation', () => {
   it('counts nobody when no teammate is added', async () => {
-    expect(await seatDelta()).toEqual({ full: 0, lite: 0, copilot: 0, total: 0 })
+    expect(await seatDelta()).toEqual({ full: 0, lite: 0, copilotEligible: 0, total: 0 })
   })
 
   it('counts admins and members, and nothing else', async () => {
@@ -145,7 +169,7 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
     await addTeammate({ role: 'user', type: 'anonymous' })
     await addTeammate({ role: 'admin', type: 'service' })
 
-    expect(await seatDelta()).toEqual({ full: 2, lite: 0, copilot: 2, total: 2 })
+    expect(await seatDelta()).toEqual({ full: 2, lite: 0, copilotEligible: 2, total: 2 })
   })
 
   it('counts a teammate with no custom role as a full seat', async () => {
@@ -160,7 +184,7 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
         principalId: id,
         role: 'member',
         lite: false,
-        copilot: true,
+        copilotEligible: true,
         permissionCount: permissionsForLegacyRole('member').size,
       },
     ])
@@ -171,7 +195,7 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
       role: 'member',
       grants: [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.ANALYTICS_VIEW, PERMISSIONS.PEOPLE_VIEW],
     })
-    expect(await seatDelta()).toEqual({ full: 0, lite: 1, copilot: 0, total: 1 })
+    expect(await seatDelta()).toEqual({ full: 0, lite: 1, copilotEligible: 0, total: 1 })
   })
 
   it('promotes the seat to full the moment one write permission is granted', async () => {
@@ -182,13 +206,13 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
       role: 'member',
       grants: [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.CONVERSATION_REPLY],
     })
-    expect(await seatDelta()).toEqual({ full: 1, lite: 0, copilot: 0, total: 1 })
+    expect(await seatDelta()).toEqual({ full: 1, lite: 0, copilotEligible: 0, total: 1 })
   })
 
   it('counts a custom role with no permissions at all as a lite seat', async () => {
     const id = await addTeammate({ role: 'member', grants: [] })
     expect(await breakdownFor([id])).toEqual([
-      { principalId: id, role: 'member', lite: true, copilot: false, permissionCount: 0 },
+      { principalId: id, role: 'member', lite: true, copilotEligible: false, permissionCount: 0 },
     ])
   })
 
@@ -198,7 +222,7 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
       role: 'member',
       grants: [PERMISSIONS.CONVERSATION_VIEW, PERMISSIONS.COPILOT_USE],
     })
-    expect(await seatDelta()).toEqual({ full: 1, lite: 1, copilot: 1, total: 2 })
+    expect(await seatDelta()).toEqual({ full: 1, lite: 1, copilotEligible: 1, total: 2 })
   })
 
   it('ignores a team-scoped assignment when resolving workspace permissions', async () => {
@@ -215,7 +239,7 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
       role: 'member',
       grants: [PERMISSIONS.CONVERSATION_VIEW],
     })
-    expect(await seatDelta()).toEqual({ full: 0, lite: 1, copilot: 0, total: 1 })
+    expect(await seatDelta()).toEqual({ full: 0, lite: 1, copilotEligible: 0, total: 1 })
 
     const teamId: TeamId = createId('team')
     await testDb.insert(teams).values({ id: teamId, name: `Team-${teamId}` })
@@ -243,7 +267,7 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
     })
 
     // Still lite. The team-scoped write grant was not counted.
-    expect(await seatDelta()).toEqual({ full: 0, lite: 1, copilot: 0, total: 1 })
+    expect(await seatDelta()).toEqual({ full: 0, lite: 1, copilotEligible: 0, total: 1 })
   })
 
   it('does not double-count a teammate holding two custom roles', async () => {
@@ -276,6 +300,6 @@ describe.skipIf(!fixture.available)('seat derivation', () => {
 
     // Two assignments, four joined rows, one seat — and the union of the two
     // roles' permissions promotes it to full.
-    expect(await seatDelta()).toEqual({ full: 1, lite: 0, copilot: 0, total: 1 })
+    expect(await seatDelta()).toEqual({ full: 1, lite: 0, copilotEligible: 0, total: 1 })
   })
 })

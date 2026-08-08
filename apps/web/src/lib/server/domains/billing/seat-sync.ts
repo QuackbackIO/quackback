@@ -36,12 +36,20 @@ export interface SeatSyncResult {
   seats: SeatCounts
 }
 
-/** The quantity each seat meter should carry, given the counts. */
+/**
+ * The quantity each seat meter should carry, given the counts.
+ *
+ * `copilotSeat` is **full seats**, not the number of teammates holding
+ * `copilot.use`: the operator's rule is that Copilot bills per paid user per
+ * month. Lite seats are excluded because a read-only support viewer has no
+ * write action for Copilot to assist — an assumption, recorded in BILLING.md,
+ * and reversible here in one line by switching to `seats.total`.
+ */
 export function desiredQuantities(seats: SeatCounts): Record<SeatMeter, number> {
   return {
     fullSeat: seats.full,
     liteSeat: seats.lite,
-    copilotSeat: seats.copilot,
+    copilotSeat: seats.full,
   }
 }
 
@@ -109,12 +117,11 @@ export interface CheckoutAddOns {
   /**
    * Whether to buy the Copilot add-on.
    *
-   * **Opt-in, and default false.** Both legacy role presets carry
-   * `copilot.use`, so on any workspace that has not adopted custom roles the
-   * derived Copilot count equals total headcount. Adding the line whenever
-   * that count is non-zero — which an earlier version did — would have sold
-   * the add-on to every seat on every upgrade without the customer ever
-   * choosing it. A derived *quantity* is right; a derived *purchase* is not.
+   * **Opt-in, and default false.** The add-on bills per paid user, so buying
+   * it charges for every full seat — adding that line automatically, as an
+   * earlier version did, would have sold it to the whole team on every
+   * upgrade without the customer choosing it. A derived *quantity* is right;
+   * a derived *purchase* is not.
    *
    * Note the asymmetry with `syncSeats()`, and that it is deliberate: the
    * sync only ever adjusts an item the subscription already has, so it cannot
@@ -140,8 +147,10 @@ export function checkoutLineItems(
   if (prices.liteSeat && seats.lite > 0) {
     items.push({ price: prices.liteSeat, quantity: seats.lite })
   }
-  if (addOns.copilot === true && prices.copilotSeat && seats.copilot > 0) {
-    items.push({ price: prices.copilotSeat, quantity: seats.copilot })
+  if (addOns.copilot === true && prices.copilotSeat) {
+    // Same expression as the seat line above, so the add-on and the seats it
+    // bills against can never disagree by construction.
+    items.push({ price: prices.copilotSeat, quantity: Math.max(1, seats.full) })
   }
   // Metered items carry no quantity — the provider rejects a checkout session
   // that gives one.

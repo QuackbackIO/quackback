@@ -130,6 +130,28 @@ reconcile drops the quantity. There is no deactivated-but-retained state:
 `user` and `principal` carry no status column, and teammates cannot even be
 blocked (`blocking.ts:27`).
 
+### Scope: new tenants only
+
+**Operator decision.** *"Billing should work under new way for new tenants."*
+
+This module owns tenants provisioned on the new stack. Existing tenants stay
+on the control-plane billing path, and **there is no migration between them** —
+so a provider customer with no workspace stamp being refused is not a
+limitation to work around, it is the boundary working. Such customers belong
+to the old path by definition.
+
+The practical consequence: `ensureCustomer()` stamps before checkout on every
+tenant this module serves, so the adoption path exists for robustness rather
+than as a routine flow.
+
+> **Hazard, not a workaround.** Seeding `cloud.billing.customerRef` through
+> `config.yaml` looks like a way to hand this module a pre-made customer. It
+> is not: declaring `cloud.billing` makes it a managed path, after which
+> `writeCloudConfig` refuses the billing writer with `FIELD_MANAGED`, the
+> webhook handler throws, and **every delivery 500s and retries forever**.
+> Nothing needs this now that the scope is new tenants only; it is recorded
+> so nobody rediscovers it as an idea.
+
 ### What a lite seat is
 
 **There is no lite-seat class in the product today.** That is a finding, not
@@ -140,11 +162,29 @@ seat predicate above cannot tell an Owner from a read-only custom role. There
 are four system presets — Owner, Admin, Manager, Contributor — and all four
 are operator-grade. No viewer role exists anywhere in the catalogue.
 
-A cheaper seat therefore has to be **derived**, and the derivation this module
-uses is:
+A cheaper seat therefore has to be **derived**.
 
-> **A lite seat is a teammate whose entire effective workspace permission set
-> is read-only.**
+**Operator decision.** *"A lite seat is read-only on the customer support
+side."* So the derivation is:
+
+> **A lite seat is a teammate who holds no write permission on the
+> customer-support surface** — conversations, tickets and the inbox —
+> regardless of what they can do elsewhere.
+
+Full seats are support agents; lite seats are everyone else who needs
+visibility. So a product manager who writes freely on feedback boards and
+roadmaps but only *observes* the support inbox is a **lite** seat. That is the
+case worth stating, because it is the one the two readings disagree about.
+
+| Reading | A PM who writes on boards, reads the inbox | Status |
+| --- | --- | --- |
+| **Support-scoped** — no write on conversations / tickets / inbox | **lite** | **chosen** |
+| Globally read-only — writes nothing anywhere | full | alternative |
+
+Reversing it is one edit: widen `SUPPORT_SURFACE_CATEGORIES` in
+`permission-classes.ts` to every catalogue category. The tests are written so
+that doing so turns five of them red with the reasons named, rather than
+passing quietly under a different commercial model.
 
 Effective permissions are resolved exactly as the authorization layer resolves
 them (`permissionsForPrincipal`): workspace-wide role assignments if the
@@ -153,41 +193,63 @@ excluded, because they narrow access inside a team rather than conferring it.
 
 Three properties this buys:
 
-- **It is not gameable.** To get the reduced rate you must genuinely give the
-  person no ability to change anything. A flag on the role would be free to
-  set; this is not.
+- **It is not gameable.** To get the reduced rate you must genuinely withhold
+  every support-side write. A flag on the role would be free to set; this is
+  not.
 - **It is invisible on existing installs.** Both legacy presets carry write
   permissions, so a workspace that has never adopted custom roles has zero
   lite seats and its bill does not change the day the definition ships.
 - **It moves on its own.** Grant a viewer one write permission and the next
   reconcile bills them at the full rate.
 
-The read-only/write split is an **explicit two-list partition** in
-`permission-classes.ts`, not a `.view` suffix test — the RBAC catalogue's own
-header forbids prefix filters, and a suffix test misfiles `post.view_private`
-(read), `copilot.use` (write) and `status_page.publish` (write). A test
-asserts the two lists partition the live catalogue exactly, so a permission
-added later fails CI until someone classifies it rather than silently landing
-in whichever bucket over- or under-charges.
+**The surface is derived from the catalogue, the split within it is
+explicit.** `SUPPORT_SURFACE_CATEGORIES` names the catalogue categories that
+constitute customer support (`conversation`, `support`), plus a short
+`SUPPORT_SURFACE_EXTRAS` list for permissions filed elsewhere that still act
+there — today only `copilot.use`. Within that surface, read and write are two
+enumerated lists, not a `.view` suffix test: the RBAC catalogue's own header
+forbids prefix filters, and a suffix test misfiles `post.view_private` (read),
+`copilot.use` (an agent tool) and `status_page.publish` (a write).
 
-**Copilot** is an **opt-in add-on**, and the opt-in is load-bearing. The
-*quantity* is derived — teammates holding `copilot.use`, the permission every
-Copilot entry point already gates on (`assistant/copilot-gate.ts`) — but the
-*purchase* is not. Both legacy role presets carry `copilot.use`, so on any
-workspace that has not adopted custom roles the derived count equals total
-headcount; an add-on inferred from a non-zero count would have been sold to
-every seat on the first upgrade without the customer ever choosing it.
-`checkoutLineItems()` therefore adds the line only when the caller passes
-`addOns.copilot`, and the admin control defaults to unchecked while showing
-how many teammates would be billed.
+A test asserts the two lists partition the derived surface exactly, so a
+permission added to a support category fails CI until someone classifies it
+rather than silently landing in whichever bucket over- or under-charges.
+
+Two judgement calls inside the surface, both reversible in one line:
+
+- **`copilot.use` counts as a support write.** It is an agent tool that acts
+  inside a thread and spends AI budget. Filed under `ai`, so it reaches the
+  surface only via the extras list.
+- **`assistant.manage` does not.** Configuring how the AI agent behaves is
+  workspace administration in the same class as `settings.manage`, not an
+  action taken on a conversation.
+
+### Copilot
+
+**Operator decision.** *"Copilot bills per paid user/month."*
+
+So the billed quantity is **full seats** — not the number of teammates holding
+`copilot.use`. That permission still decides who may *use* Copilot
+(`assistant/copilot-gate.ts` is untouched), but it no longer decides what is
+charged. `SeatCounts.copilotEligible` reports it for the admin surface and is
+named so it cannot be mistaken for a billing figure.
+
+> **Assumption, stated so it is cheap to reverse: lite seats are excluded.**
+> A read-only support viewer has no write action for Copilot to assist, so
+> charging them for a capability they cannot exercise would be wrong. If the
+> operator wants Copilot billed on every paid user including lite seats, it is
+> `seats.full` -> `seats.total` in `desiredQuantities()`, and the matching
+> line in `checkoutLineItems()`.
+
+**The purchase stays opt-in**, and the opt-in is load-bearing: because the
+add-on bills per paid user, adding the line automatically would charge for the
+whole team on the first upgrade without the customer choosing it.
+`checkoutLineItems()` adds it only when the caller passes `addOns.copilot`,
+and the admin control defaults to unchecked while stating what it would cost.
 
 The asymmetry with `syncSeats()` is deliberate: the sync only ever adjusts an
 item the subscription already has, so it cannot introduce a charge. Purchase
 happens at checkout and nowhere else.
-
-*(Whether headcount-derived Copilot is the right commercial default is an
-operator decision, not an engineering one. Making it opt-in is the reversible
-choice; deriving it is one line away if the operator wants it.)*
 
 ### What a billable outcome is
 
@@ -310,7 +372,14 @@ customer's portal, invoices and card.
 
 The check runs on the **re-fetched** subscription rather than the event
 payload, for the same reason the ordering guarantee does: the payload is a
-claim, the API response is the fact. A foreign event is acknowledged (200,
+claim, the API response is the fact.
+
+A cheap **payload pre-filter** runs before the re-fetch, purely to protect
+provider quota: without it every workspace spends a subscription fetch on
+every event belonging to every other workspace, which is N-times amplification
+against a per-account rate limit that grows with the fleet. It reads the
+payload, so it can only *refuse*, never approve — a payload claiming our
+customer still reaches the authoritative check. A foreign event is acknowledged (200,
 `handled: false, foreign: true`) and recorded as consumed — a non-2xx would
 make the provider retry it forever — and logged at `warn`.
 
@@ -328,7 +397,15 @@ A customer created outside this module carries no stamp and is refused, with a
 question — unlike an entitlement read, which fails *open* because it gates
 commerce, this gates who gets billed, so a failed customer lookup refuses too.
 The contract for a provisioning flow that wants to hand this module a
-pre-made customer is one metadata key.
+pre-made customer is one metadata key. Given the new-tenants-only scope above,
+nothing needs that today.
+
+A customer lookup that **fails** is deliberately not the same as a stamp that
+does not match. A mismatch is definitive — the event is foreign, acknowledged
+and consumed. A transient lookup error is not an answer at all, so it is left
+to throw: the handler's error path releases the claim and answers 500, and the
+provider redelivers. Swallowing it as "foreign" would consume a workspace's
+own first subscription on a provider blip, with no retry.
 
 **Two ways this window was reopened after it had closed**, both fixed, both
 worth stating because the second was self-inflicted by the fix for something
@@ -520,4 +597,11 @@ exact-line allowlist.
   read off whichever state row is newest.
 - **`CLAIM_LEASE_MS` is a guess with a rationale, not a measurement.** Five
   minutes against a handler whose duration under a slow provider has not been
-  measured. Too short duplicates work; too long delays recovery.
+  measured. Too short duplicates work; too long delays recovery. Two handlers
+  that do overlap both push the same seat quantities under an **identical
+  idempotency key**, so the provider collapses the second — the overlap is
+  absorbed at the provider, not merely semantically equivalent.
+- **`syncSeats` reads then writes.** Two overlapping handlers can both read
+  the synced quantities before either writes them. Harmless in effect for the
+  reason above, but it is a read-modify-write where a single conditional write
+  would be stronger.

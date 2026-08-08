@@ -342,6 +342,23 @@ async function dispatch(
     return 'ignored'
   }
 
+  // Cheap pre-filter, purely to avoid burning provider quota.
+  //
+  // Under one operator account every tenant receives every other tenant's
+  // events, so without this each workspace would spend a `getSubscription`
+  // (and sometimes a `getCustomer`) on every event belonging to every other
+  // workspace — N-times amplification against a per-account rate limit that
+  // grows with the fleet.
+  //
+  // It reads the PAYLOAD, so it is a hint and nothing more: it can only
+  // refuse, never approve. A payload claiming our customer still goes to the
+  // authoritative check below.
+  const claimedCustomer = str(event.data?.object?.customer)
+  if (identity.customerRef !== null && claimedCustomer !== null && claimedCustomer !== identity.customerRef) {
+    logForeign(event, claimedCustomer, identity.customerRef)
+    return 'foreign'
+  }
+
   // Re-fetch rather than trust the payload. This is what makes out-of-order
   // delivery a non-event: whichever order two updates arrive in, both apply
   // the subscription's current state. It is also what makes the ownership
@@ -435,24 +452,26 @@ async function ownsSubscription(
   }
   if (customerRef === null) return false
 
-  try {
-    const customer = await client.getCustomer(customerRef)
-    const stamp = customer.metadata?.[WORKSPACE_STAMP_KEY]
-    if (typeof stamp !== 'string' || stamp.length === 0) {
-      log.warn(
-        { customerRef },
-        'refusing to adopt a subscription: its customer carries no workspace stamp'
-      )
-      return false
-    }
-    return stamp === (await workspaceStamp())
-  } catch (error) {
-    // A failed lookup is not evidence of ownership. Unlike an entitlement
-    // read — which fails open because it gates commerce — this gates identity,
-    // and the cost of guessing wrong is another tenant's billing account.
-    log.error({ err: error, customerRef }, 'customer lookup failed; refusing to adopt')
+  // A lookup FAILURE is deliberately not caught here.
+  //
+  // "Cannot tell" and "told, and the answer is no" are different outcomes and
+  // must not collapse into one. A stamp mismatch is definitive: the event is
+  // foreign, gets acknowledged, and is recorded as consumed. A transient
+  // lookup error is not an answer at all — swallowing it as `false` would
+  // mark the event processed with no retry path, so a provider blip would
+  // permanently drop a workspace's own first subscription. Letting it throw
+  // puts it on the handler's error path, which releases the claim and answers
+  // 500 so the provider redelivers.
+  const customer = await client.getCustomer(customerRef)
+  const stamp = customer.metadata?.[WORKSPACE_STAMP_KEY]
+  if (typeof stamp !== 'string' || stamp.length === 0) {
+    log.warn(
+      { customerRef },
+      'refusing to adopt a subscription: its customer carries no workspace stamp'
+    )
     return false
   }
+  return stamp === (await workspaceStamp())
 }
 
 function logForeign(event: ProviderEvent, eventCustomer: string | null, ours: string | null): void {

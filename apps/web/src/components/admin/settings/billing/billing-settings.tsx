@@ -182,12 +182,11 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
               <span className="space-y-0.5">
                 <span className="block text-[13px] font-medium">Add Copilot</span>
                 <span className="block text-[13px] text-muted-foreground">
-                  Charged per teammate who can use Copilot.{' '}
-                  {overview.seats.copilot === 1
-                    ? '1 teammate can today.'
-                    : `${overview.seats.copilot} teammates can today.`}{' '}
-                  Change that in Members &amp; Teams before subscribing if it is more than
-                  you want.
+                  Billed per paid user.{' '}
+                  {overview.seats.full === 1
+                    ? 'You have 1 full seat.'
+                    : `You have ${overview.seats.full} full seats.`}{' '}
+                  Lite seats are not charged for Copilot.
                 </span>
               </span>
             </label>
@@ -280,7 +279,6 @@ function SeatSummary({ overview }: { overview: BillingOverview }) {
     <div className="flex flex-wrap gap-6">
       <Metric label="Full seats" value={overview.seats.full} />
       <Metric label="Lite seats" value={overview.seats.lite} />
-      <Metric label="Copilot seats" value={overview.seats.copilot} />
     </div>
   )
 }

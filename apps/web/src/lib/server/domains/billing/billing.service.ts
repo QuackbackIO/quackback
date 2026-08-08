@@ -238,7 +238,7 @@ export async function startCheckout(input: {
     // The add-on is part of the intent, so changing one's mind about it must
     // open a NEW session rather than reuse the one without it.
     idempotencyKey: `checkout:${customerRef}:${input.plan}:${seats.full}:${seats.lite}:${
-      addOns.copilot === true ? seats.copilot : 0
+      addOns.copilot === true ? 'copilot' : 'no-copilot'
     }`,
   })
 

@@ -477,7 +477,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     expect(await storedCloud()).toMatchObject({ billing: { customerRef: MINE.customer } })
   })
 
-  it('records a foreign event as consumed, so it is not re-fetched forever', async () => {
+  it('records a foreign event as consumed, so it is not re-examined forever', async () => {
     const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     await deliver(
       subscriptionEvent('evt_foreign_twice', OTHER.subscription, OTHER.customer),
@@ -488,7 +488,57 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
       stub(calls, 'business', OTHER.customer, OTHER.subscription)
     )
     expect(second.body).toMatchObject({ duplicate: true })
-    // One fetch total: the redelivery short-circuits on the event ledger.
-    expect(calls.fetched).toEqual([OTHER.subscription])
+    // Zero fetches: the payload pre-filter refused it before spending any
+    // provider quota, and the redelivery short-circuits on the event ledger.
+    expect(calls.fetched).toEqual([])
+  })
+
+  it('spends no provider quota on an event whose payload names another customer', async () => {
+    // Under one operator account every tenant receives every other tenant's
+    // events. Without a pre-filter each workspace would spend a subscription
+    // fetch on every event belonging to every other workspace — N-times
+    // amplification against a per-account rate limit that grows with the
+    // fleet. The pre-filter reads the payload, so it can only refuse; a
+    // payload claiming our customer still reaches the authoritative check.
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
+    const result = await deliver(
+      subscriptionEvent('evt_cheap_reject', OTHER.subscription, OTHER.customer),
+      stub(calls, 'business', OTHER.customer, OTHER.subscription)
+    )
+    expect(result.body).toMatchObject({ handled: false, foreign: true })
+    expect(calls.fetched).toEqual([])
+    expect(calls.customerLookups).toEqual([])
+  })
+
+  it('retries rather than consuming an event whose customer lookup failed', async () => {
+    // "Cannot tell" is not "the answer is no". Swallowing a lookup error as
+    // "foreign" would mark the event processed with no retry path, so a
+    // provider blip would permanently drop a workspace's own first
+    // subscription. It must land on the handler's error path instead, which
+    // releases the claim and asks the provider to redeliver.
+    await testDb.delete(billingSubscriptionState)
+    await testDb.update(settings).set({ cloud: null })
+
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
+    const broken = stub(calls, 'pro', MINE.customer, MINE.subscription)
+    broken.getCustomer = vi.fn(async () => {
+      throw new Error('provider unavailable')
+    })
+
+    const result = await deliver(
+      subscriptionEvent('evt_lookup_fails', MINE.subscription, MINE.customer),
+      broken
+    )
+    expect(result).toEqual({ status: 500, body: { error: 'handler_failed' } })
+    // The claim was released, so the redelivery is not mistaken for a duplicate.
+    expect(await testDb.select().from(billingWebhookEvents)).toHaveLength(0)
+
+    // And the retry succeeds once the provider recovers.
+    const retry = await deliver(
+      subscriptionEvent('evt_lookup_fails', MINE.subscription, MINE.customer),
+      stub(calls, 'pro', MINE.customer, MINE.subscription, await workspaceStamp())
+    )
+    expect(retry).toEqual({ status: 200, body: { received: true, handled: true } })
+    expect(await storedCloud()).toMatchObject({ billing: { customerRef: MINE.customer } })
   })
 })

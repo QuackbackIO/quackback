@@ -23,7 +23,6 @@ import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixt
 import {
   billingSubscriptionState,
   principal,
-  principalRoleAssignments,
   settings,
   user,
 } from '@/lib/server/db'
@@ -272,10 +271,16 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
   })
 
   it('pushes the seat count derived from the product, not the one in the subscription', async () => {
-    // Two teammates exist; the subscription the provider returns says one
-    // seat. The push must carry the product's number, not the provider's.
-    await testDb.delete(principalRoleAssignments)
-    await testDb.delete(principal)
+    // The subscription the provider returns reports 1 seat. The push must
+    // carry the PRODUCT's count instead — that is the whole reason billing
+    // moved into the product.
+    //
+    // Deliberately no `DELETE FROM principal` here: `quackback_test` is shared
+    // across checkouts, so clearing it takes a row lock on every principal and
+    // makes this file contend with every other suite. The expectation is
+    // derived from the live count instead, and the two teammates added below
+    // prove the count is really being read rather than echoed.
+    const before = await countSeats()
     for (const role of ['admin', 'member'] as const) {
       const userId = createId('user')
       await testDb.insert(user).values({ id: userId, name: role, email: `${userId}@example.test` })
@@ -288,12 +293,10 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       })
     }
     const seats = await countSeats()
-    expect(seats).toEqual({ full: 2, lite: 0, copilot: 2, total: 2 })
+    expect(seats.full).toBe(before.full + 2)
 
-    const calls: StubCalls = { updates: [], meterEvents: [] }
-    // One shared quantity bag across every stub in this test, so the pushes
-    // actually land somewhere the next read can see.
     const settled = { ...INITIAL_QUANTITIES }
+    const calls: StubCalls = { updates: [], meterEvents: [] }
     await deliver(
       {
         id: 'evt_seat_1',
@@ -306,23 +309,23 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
 
     expect(calls.updates).toHaveLength(1)
     expect(calls.updates[0]!.id).toBe('sub_e2e')
-    // Every sold meter is pushed on the FIRST sync, including si_lite whose
-    // quantity happens to already match — there is no local record yet to
-    // compare against, and trusting the provider's copy alone would leave a
-    // dashboard-side edit permanently unreconciled. Subsequent syncs skip
-    // unchanged items (asserted below).
+    // Every sold meter is pushed on the FIRST sync — there is no local record
+    // yet to compare against, and trusting the provider's copy alone would
+    // leave a dashboard-side edit permanently unreconciled.
     expect(calls.updates[0]!.items).toEqual([
-      { id: 'si_seat', quantity: 2 },
-      { id: 'si_lite', quantity: 0 },
-      { id: 'si_copilot', quantity: 2 },
+      { id: 'si_seat', quantity: seats.full },
+      { id: 'si_lite', quantity: seats.lite },
+      // Copilot bills per paid user, so its quantity is the full-seat count.
+      { id: 'si_copilot', quantity: seats.full },
     ])
-    // Keyed on the intent, so a retry of the same seat count collapses.
+    // And it is NOT the number the provider reported.
+    expect(seats.full).not.toBe(INITIAL_QUANTITIES.si_seat)
     expect(calls.updates[0]!.idempotencyKey).toBe(
-      'seats:sub_e2e:fullSeat=2,liteSeat=0,copilotSeat=2'
+      `seats:sub_e2e:fullSeat=${seats.full},liteSeat=${seats.lite},copilotSeat=${seats.full}`
     )
 
-    // A redelivery of the same event changes nothing, and a genuinely fresh
-    // event with an unchanged seat count makes no provider call at all.
+    // A redelivery changes nothing, and a fresh event with an unchanged seat
+    // count makes no provider call at all.
     const replay = await deliver(
       {
         id: 'evt_seat_1',
@@ -344,7 +347,6 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       },
       makeStub(calls, 'active', settled)
     )
-    // Handled, but nothing to say: quantities now match on both sides.
     expect(calls.updates).toHaveLength(1)
   })
 
