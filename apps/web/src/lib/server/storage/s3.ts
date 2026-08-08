@@ -20,6 +20,12 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { config } from '@/lib/server/config'
 import { sniffImageMime } from '@/lib/server/content/magic-bytes'
+import { getCurrentTenant } from '@/lib/server/tenancy/tenant-context'
+import {
+  currentTenantNamespace,
+  SINGLE_TENANT_NAMESPACE,
+  TenantKeyedCache,
+} from '@/lib/server/tenancy/tenant-keyed'
 
 // ============================================================================
 // Configuration
@@ -36,32 +42,136 @@ export interface S3Config {
 }
 
 /**
- * Check if S3 storage is configured.
- * Returns true if all required environment variables are set.
+ * Where a tenant's objects live and how their URLs are formed. Deliberately
+ * carries no credentials: rendering a public asset URL must not depend on
+ * resolving a secret, so the two are split and only the paths that actually
+ * talk to storage pay for credential resolution.
  */
-export function isS3Configured(): boolean {
-  return !!(config.s3Bucket && config.s3Region && config.s3AccessKeyId && config.s3SecretAccessKey)
+export interface StoragePlacement {
+  endpoint?: string
+  bucket: string
+  region: string
+  forcePathStyle: boolean
+  publicUrl?: string
+  /**
+   * Origin the `/api/storage` fallback URL is built from. Pinned to the
+   * tenant's canonical base URL, never derived from the request: contentJson
+   * stores ABSOLUTE image URLs, so an origin that followed whichever hostname
+   * the visitor happened to use would bake that hostname into stored content.
+   */
+  originUrl: string
 }
 
 /**
- * Get S3 configuration from environment variables.
- * Throws if required variables are missing.
+ * The active tenant's placement, or the process-wide one when unscoped.
+ * Returns null when storage is not configured at all.
  */
-export function getS3Config(): S3Config {
-  if (!config.s3Bucket || !config.s3Region || !config.s3AccessKeyId || !config.s3SecretAccessKey) {
-    throw new Error(
-      'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
-    )
+export function getStoragePlacementOrNull(): StoragePlacement | null {
+  const tenant = getCurrentTenant()
+  if (tenant) {
+    const storage = tenant.storage
+    return {
+      endpoint: storage.endpoint || undefined,
+      bucket: storage.bucket,
+      region: storage.region,
+      forcePathStyle: storage.forcePathStyle,
+      publicUrl: storage.publicUrl || undefined,
+      originUrl: tenant.routing.baseUrl,
+    }
   }
-
+  if (!config.s3Bucket || !config.s3Region) return null
   return {
     endpoint: config.s3Endpoint || undefined,
     bucket: config.s3Bucket,
     region: config.s3Region,
-    accessKeyId: config.s3AccessKeyId,
-    secretAccessKey: config.s3SecretAccessKey,
     forcePathStyle: config.s3ForcePathStyle ?? true,
     publicUrl: config.s3PublicUrl || undefined,
+    originUrl: config.baseUrl,
+  }
+}
+
+export function getStoragePlacement(): StoragePlacement {
+  const placement = getStoragePlacementOrNull()
+  if (!placement) {
+    throw new Error(
+      'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
+    )
+  }
+  return placement
+}
+
+/** Credentials for one bucket. Never logged, never cached to disk. */
+export interface StorageCredentials {
+  accessKeyId: string
+  secretAccessKey: string
+}
+
+/**
+ * Resolves a registry `credentialRef` — one of the secret-reference schemes in
+ * `tenancy/vendor/secret-ref.ts` — to real keys.
+ *
+ * A seam rather than an implementation: this process holds no secret-store
+ * client, and inventing one here would mean guessing at an auth method, a mount
+ * path and a rotation story. Unset, every credentialled storage operation fails
+ * loud and specific instead of silently reaching for the fleet-wide environment
+ * keys — which would hand one tenant a client pointed at another tenant's
+ * bucket, holding credentials that might well open it.
+ */
+export type StorageCredentialResolver = (credentialRef: string) => StorageCredentials
+
+let credentialResolver: StorageCredentialResolver | null = null
+
+export function setStorageCredentialResolver(resolver: StorageCredentialResolver | null): void {
+  credentialResolver = resolver
+}
+
+function resolveStorageCredentials(): StorageCredentials {
+  const tenant = getCurrentTenant()
+  if (!tenant) {
+    if (!config.s3AccessKeyId || !config.s3SecretAccessKey) {
+      throw new Error(
+        'S3 storage is not configured. Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.'
+      )
+    }
+    return { accessKeyId: config.s3AccessKeyId, secretAccessKey: config.s3SecretAccessKey }
+  }
+  const ref = tenant.storage.credentialRef
+  if (!credentialResolver) {
+    const scheme = ref.slice(0, Math.max(ref.indexOf('://'), 0)) || 'unknown'
+    throw new Error(
+      `No storage credential resolver is configured, so the '${scheme}' credential reference ` +
+        `for tenant ${tenant.tenantId} cannot be resolved. Register one with ` +
+        'setStorageCredentialResolver() during startup.'
+    )
+  }
+  return credentialResolver(ref)
+}
+
+/**
+ * Check if S3 storage is configured. True whenever a bucket can be addressed —
+ * credential resolution is a separate failure, reported where it happens.
+ */
+export function isS3Configured(): boolean {
+  if (getCurrentTenant()) return true
+  return !!(config.s3Bucket && config.s3Region && config.s3AccessKeyId && config.s3SecretAccessKey)
+}
+
+/**
+ * Full storage configuration including credentials. Only for the paths that
+ * actually sign or send a request; use {@link getStoragePlacement} for anything
+ * that just needs to name a bucket or build a URL.
+ */
+export function getS3Config(): S3Config {
+  const placement = getStoragePlacement()
+  const credentials = resolveStorageCredentials()
+  return {
+    endpoint: placement.endpoint,
+    bucket: placement.bucket,
+    region: placement.region,
+    accessKeyId: credentials.accessKeyId,
+    secretAccessKey: credentials.secretAccessKey,
+    forcePathStyle: placement.forcePathStyle,
+    publicUrl: placement.publicUrl,
   }
 }
 
@@ -118,9 +228,27 @@ interface PresignerModule {
   ) => Promise<string>
 }
 
+/*
+ * These two hold the SDK's own module namespace objects, not configuration or
+ * credentials — the same value the ESM loader hands every importer. They stay
+ * process-wide because partitioning them by tenant would store N references to
+ * one object and buy nothing.
+ */
 let _s3Module: S3Module | null = null
 let _presignerModule: PresignerModule | null = null
-let _s3Client: S3ClientInstance | null = null
+
+/**
+ * One client per tenant. The client is built FROM a bucket, an endpoint and a
+ * credential pair, so a process-wide one is a handle on whichever tenant
+ * happened to upload first — every later tenant's upload then lands in that
+ * bucket, under a key that reads as valid from both sides.
+ *
+ * The bound is a client count, not a correctness limit: eviction only costs the
+ * evicted tenant a rebuild on its next upload, so it is sized to sit above the
+ * tenant count one pod realistically serves rather than to be exact.
+ */
+const s3Clients = new TenantKeyedCache<S3ClientInstance>(256)
+const S3_CLIENT_KEY = 'client'
 
 /**
  * Get the AWS S3 module singleton.
@@ -142,17 +270,15 @@ async function getPresignerModule(): Promise<PresignerModule> {
   return _presignerModule
 }
 
-/**
- * Get the S3 client singleton.
- * Creates a new client on first call, reuses on subsequent calls.
- */
+/** Get the S3 client for the active tenant, building it on first use. */
 async function getS3Client(): Promise<S3ClientInstance> {
-  if (_s3Client) return _s3Client
+  const existing = s3Clients.get(S3_CLIENT_KEY)
+  if (existing) return existing
 
   const s3Config = getS3Config()
   const { S3Client } = await getS3Module()
 
-  _s3Client = new S3Client({
+  const client = new S3Client({
     region: s3Config.region,
     endpoint: s3Config.endpoint,
     forcePathStyle: s3Config.forcePathStyle,
@@ -161,8 +287,9 @@ async function getS3Client(): Promise<S3ClientInstance> {
       secretAccessKey: s3Config.secretAccessKey,
     },
   })
+  s3Clients.set(S3_CLIENT_KEY, client)
 
-  return _s3Client
+  return client
 }
 
 // ============================================================================
@@ -170,15 +297,19 @@ async function getS3Client(): Promise<S3ClientInstance> {
 // ============================================================================
 
 /**
- * Build a public URL for a storage key based on the S3 configuration.
+ * Build a public URL for a storage key based on the resolved placement.
  *
  * Priority:
- * 1. S3_PUBLIC_URL — explicit CDN, custom domain, or proxy URL
- * 2. BASE_URL/api/storage — presigned URL redirect (works with any bucket)
+ * 1. the placement's public URL — explicit CDN, custom domain, or proxy URL
+ * 2. <origin>/api/storage — presigned URL redirect (works with any bucket)
  *
  * The /api/storage route generates presigned GET URLs and returns a 302 redirect,
- * so it works with both public and private buckets (e.g., Railway Buckets).
- * Users who want direct endpoint URLs can set S3_PUBLIC_URL to their endpoint.
+ * so it works with both public and private buckets. Deployments that want direct
+ * endpoint URLs set S3_PUBLIC_URL to their endpoint.
+ *
+ * Which prefixes are public is fleet-wide policy, not tenant data: the set below
+ * names the key spaces this application serves without a capability token, and
+ * it means the same thing in every workspace.
  */
 const PUBLIC_STORAGE_PREFIXES = new Set([
   'assistant-avatars',
@@ -198,8 +329,30 @@ export function isPublicStorageKey(key: string): boolean {
   return PUBLIC_STORAGE_PREFIXES.has(key.split('/', 1)[0] ?? '')
 }
 
+/**
+ * The signed message binds the tenant as well as the object key.
+ *
+ * Object keys are per-bucket, so `attachments/<uuid>` names a different object
+ * in every tenant while reading identically here. If the signing secret is ever
+ * shared across tenants — which it is whenever the fleet-wide environment keys
+ * are in play — a read token minted for one tenant would verify against
+ * another's object without the binding.
+ *
+ * The single-tenant namespace signs the historical message byte for byte:
+ * these tokens are embedded in absolute URLs stored in contentJson, so a
+ * changed message invalidates every private asset link already written.
+ */
+function tenantBind(message: string): string {
+  const namespace = currentTenantNamespace()
+  if (namespace === SINGLE_TENANT_NAMESPACE) return message
+  return `t:${namespace}|${message}`
+}
+
 function storageReadSig(secret: string, key: string): string {
-  return createHmac('sha256', secret).update(`read|${key}`).digest('hex').slice(0, 32)
+  return createHmac('sha256', secret)
+    .update(tenantBind(`read|${key}`))
+    .digest('hex')
+    .slice(0, 32)
 }
 
 /** Verify the capability attached to a private storage URL. */
@@ -213,16 +366,18 @@ export function verifyStorageReadToken(secret: string, key: string, sig: string 
   }
 }
 
-function buildPublicUrl(s3Config: S3Config, key: string): string {
-  if (s3Config.publicUrl && isPublicStorageKey(key)) {
-    return `${s3Config.publicUrl.replace(/\/$/, '')}/${key}`
+function buildPublicUrl(placement: StoragePlacement, key: string): string {
+  if (placement.publicUrl && isPublicStorageKey(key)) {
+    return `${placement.publicUrl.replace(/\/$/, '')}/${key}`
   }
 
   // Private objects always pass through the application with an unforgeable
   // read capability, even when a public CDN endpoint is configured.
-  const base = `${config.baseUrl.replace(/\/$/, '')}/api/storage/${key}`
+  const base = `${placement.originUrl.replace(/\/$/, '')}/api/storage/${key}`
   if (isPublicStorageKey(key)) return base
-  return `${base}?read=${storageReadSig(s3Config.secretAccessKey, key)}`
+  // Only the private branch needs a secret, so a public asset URL still renders
+  // on a tenant whose credential reference has no resolver.
+  return `${base}?read=${storageReadSig(resolveStorageCredentials().secretAccessKey, key)}`
 }
 
 // ============================================================================
@@ -252,7 +407,7 @@ export async function generatePresignedUploadUrl(
   expiresIn: number = 900
 ): Promise<PresignedUploadUrl> {
   const s3Config = getS3Config()
-  const publicUrl = buildPublicUrl(s3Config, key)
+  const publicUrl = buildPublicUrl(getStoragePlacement(), key)
 
   if (config.s3Proxy) {
     const uploadUrl = buildProxyUploadUrl(s3Config.secretAccessKey, key, contentType, expiresIn)
@@ -279,8 +434,10 @@ export async function generatePresignedUploadUrl(
 
 function proxyUploadSig(secret: string, key: string, contentType: string, exp: number): string {
   // truncated to 128 bits; sufficient for short-lived upload auth
+  // Tenant-bound for the same reason as the read token: the object key alone
+  // does not say which bucket the write lands in.
   return createHmac('sha256', secret)
-    .update(`${key}|${contentType}|${exp}`)
+    .update(tenantBind(`${key}|${contentType}|${exp}`))
     .digest('hex')
     .slice(0, 32)
 }
@@ -291,10 +448,11 @@ function buildProxyUploadUrl(
   contentType: string,
   expiresIn: number
 ): string {
-  if (!config.baseUrl) throw new Error('BASE_URL must be set to use S3_PROXY upload')
+  const origin = getStoragePlacement().originUrl
+  if (!origin) throw new Error('BASE_URL must be set to use S3_PROXY upload')
   const exp = Date.now() + expiresIn * 1000
   const sig = proxyUploadSig(secret, key, contentType, exp)
-  const base = config.baseUrl.replace(/\/$/, '')
+  const base = origin.replace(/\/$/, '')
   return `${base}/api/storage/${key}?ct=${encodeURIComponent(contentType)}&exp=${exp}&sig=${sig}`
 }
 
@@ -346,7 +504,7 @@ export async function uploadObject(
 
   await client.send(command)
 
-  return buildPublicUrl(s3Config, key)
+  return buildPublicUrl(getStoragePlacement(), key)
 }
 
 // ============================================================================
@@ -484,7 +642,7 @@ export function getPublicUrlOrNull(key: string | null | undefined): string | nul
   if (!key) return null
   if (!isS3Configured()) return null
 
-  return buildPublicUrl(getS3Config(), key)
+  return buildPublicUrl(getStoragePlacement(), key)
 }
 
 /**
@@ -497,9 +655,9 @@ export function getEmailSafeUrl(key: string | null | undefined): string | null {
   if (!key) return null
   if (!isS3Configured()) return null
 
-  const s3Config = getS3Config()
-  const storageUrl = buildPublicUrl(s3Config, key)
-  if (s3Config.publicUrl && isPublicStorageKey(key)) return storageUrl
+  const placement = getStoragePlacement()
+  const storageUrl = buildPublicUrl(placement, key)
+  if (placement.publicUrl && isPublicStorageKey(key)) return storageUrl
 
   // Force proxy mode so email clients get bytes directly (no 302 redirect)
   const url = new URL(storageUrl)

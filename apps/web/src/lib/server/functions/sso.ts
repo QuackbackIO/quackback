@@ -108,7 +108,14 @@ export const clearSsoClientSecretFn = createServerFn({ method: 'POST' }).handler
  */
 async function assertVerifyDomainRateLimit(tenantId: string, domainId: string): Promise<void> {
   const { getRedis } = await import('@/lib/server/redis')
-  const took = await getRedis().set(`verify-domain:${tenantId}:${domainId}`, '1', 'EX', 10, 'NX')
+  const { tenantKey } = await import('@/lib/server/tenancy/tenant-keyed')
+  const took = await getRedis().set(
+    tenantKey(`verify-domain:${tenantId}:${domainId}`),
+    '1',
+    'EX',
+    10,
+    'NX'
+  )
   if (took !== 'OK') {
     throw new ConflictError(
       'VERIFY_RATE_LIMITED',

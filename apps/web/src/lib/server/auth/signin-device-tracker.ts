@@ -12,6 +12,7 @@
  */
 import { createHash } from 'node:crypto'
 import { getRedis } from '@/lib/server/redis'
+import { tenantKey } from '@/lib/server/tenancy/tenant-keyed'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'signin-device-tracker' })
@@ -29,7 +30,10 @@ export function computeDeviceFingerprint(userAgent: string, ip: string): string 
   return createHash('sha256').update(`${userAgent}|${normalisedIp}`).digest('hex').slice(0, 32)
 }
 
-const key = (userId: string) => `user:devices:${userId}`
+// User ids are only unique within a workspace database, so an unnamespaced set
+// would let one tenant's sign-in suppress another's new-device alert — the
+// notification whose entire job is to be the first sign of a stolen credential.
+const key = (userId: string) => tenantKey(`user:devices:${userId}`)
 
 /**
  * Atomic claim: returns true iff this is the first sighting (SADD

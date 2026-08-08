@@ -5,11 +5,13 @@
  * count) so an outage doesn't lock callers out.
  */
 import { getRedis } from '@/lib/server/redis'
+import { tenantKey } from '@/lib/server/tenancy/tenant-keyed'
 import { logger } from '@/lib/server/logger'
 
 const log = logger.child({ component: 'redis-rate-bucket' })
 
 export interface RateBucketSpec {
+  /** Logical bucket name. Namespaced by tenant before it reaches Redis. */
   key: string
   windowSeconds: number
 }
@@ -19,12 +21,24 @@ export interface RateBucketResult {
   count: number | null
 }
 
+/**
+ * Callers build bucket names out of identifiers that only mean something inside
+ * one workspace (a principal id, an email, an IP paired with an action). Left
+ * unnamespaced, one workspace's traffic spends another's budget — a denial of
+ * service that needs no credentials and crosses the tenant boundary in the one
+ * store that survives a restart.
+ */
+function wireKey(spec: RateBucketSpec): string {
+  return tenantKey(spec.key)
+}
+
 /** Increment one bucket. Returns the new count, or `null` on Redis error. */
 export async function incrementBucket(spec: RateBucketSpec): Promise<RateBucketResult> {
   try {
+    const key = wireKey(spec)
     const pipeline = getRedis().multi()
-    pipeline.incr(spec.key)
-    pipeline.expire(spec.key, spec.windowSeconds, 'NX')
+    pipeline.incr(key)
+    pipeline.expire(key, spec.windowSeconds, 'NX')
     const results = await pipeline.exec()
     return { count: Number(results?.[0]?.[1] ?? 0) }
   } catch (error) {
@@ -46,8 +60,9 @@ export async function incrementBuckets(
   try {
     const pipeline = getRedis().multi()
     for (const spec of specs) {
-      pipeline.incr(spec.key)
-      pipeline.expire(spec.key, spec.windowSeconds, 'NX')
+      const key = wireKey(spec)
+      pipeline.incr(key)
+      pipeline.expire(key, spec.windowSeconds, 'NX')
     }
     const results = await pipeline.exec()
     if (!results) return specs.map(() => null)
@@ -65,7 +80,7 @@ export async function incrementBuckets(
  */
 export async function bucketRetryAfter(spec: RateBucketSpec): Promise<number> {
   try {
-    const ttl = await getRedis().ttl(spec.key)
+    const ttl = await getRedis().ttl(wireKey(spec))
     return ttl > 0 ? ttl : spec.windowSeconds
   } catch {
     return spec.windowSeconds

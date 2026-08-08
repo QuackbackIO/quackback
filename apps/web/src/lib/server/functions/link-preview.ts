@@ -19,6 +19,7 @@ import { isTeamMember } from '@/lib/shared/roles'
 import { parseEmbedUrl } from '@/lib/shared/embeds/parse-embed-url'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { cacheGet, cacheSet, getRedis } from '@/lib/server/redis'
+import { tenantKey } from '@/lib/server/tenancy/tenant-keyed'
 import { getClientIp } from '@/lib/server/domains/api/rate-limit'
 import type { LinkPreview } from '@/lib/server/content/unfurl'
 import { logger } from '@/lib/server/logger'
@@ -74,8 +75,8 @@ export const unfurlLinkFn = createServerFn({ method: 'GET' })
         const redis = getRedis()
         const ip = getClientIp(getRequestHeaders())
         const checks: Array<[string, number]> = [
-          [`linkpreview:rl:p:${ctx.principal.id}`, RATE_LIMIT_MAX],
-          [`linkpreview:rl:ip:${ip}`, RATE_LIMIT_IP_MAX],
+          [tenantKey(`linkpreview:rl:p:${ctx.principal.id}`), RATE_LIMIT_MAX],
+          [tenantKey(`linkpreview:rl:ip:${ip}`), RATE_LIMIT_IP_MAX],
         ]
         for (const [key, max] of checks) {
           const count = await redis.incr(key)

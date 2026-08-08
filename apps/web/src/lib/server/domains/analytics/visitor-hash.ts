@@ -9,6 +9,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { getRedis } from '@/lib/server/redis'
+import { tenantKey, TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
 import { logger } from '@/lib/server/logger'
 import { toIsoDateOnly } from '@/lib/shared/utils/date'
 
@@ -23,7 +24,13 @@ export function utcDateKey(now: Date = new Date()): string {
 
 // The salt is constant per UTC day, so the beacon hot path serves it from
 // process memory; Redis is only consulted on each pod's first beacon of a day.
-let cachedSalt: { dateKey: string; salt: string } | null = null
+//
+// Per tenant, in both the heap and Redis. A shared salt would hash the same
+// visitor to the same key in every workspace, so the layer-1 key becomes a
+// fleet-wide visitor identifier — exactly the cross-site correlation the daily
+// rotation exists to make impossible, reintroduced across tenants instead of
+// across days.
+const cachedSalts = new TenantKeyedCache<string>()
 
 /**
  * Get-or-create the salt for the given UTC day. Race-safe across pods:
@@ -36,13 +43,15 @@ let cachedSalt: { dateKey: string; salt: string } | null = null
  */
 export async function getDailySalt(now: Date = new Date()): Promise<string | null> {
   const dateKey = utcDateKey(now)
-  if (cachedSalt?.dateKey === dateKey) return cachedSalt.salt
+  const cached = cachedSalts.get(dateKey)
+  if (cached) return cached
   try {
     const redis = getRedis()
+    const saltKey = tenantKey(`visitor:salt:${dateKey}`)
     const fresh = randomBytes(32).toString('hex')
-    await redis.set(`visitor:salt:${dateKey}`, fresh, 'EX', SALT_TTL_SECONDS, 'NX')
-    const salt = await redis.get(`visitor:salt:${dateKey}`)
-    if (salt) cachedSalt = { dateKey, salt }
+    await redis.set(saltKey, fresh, 'EX', SALT_TTL_SECONDS, 'NX')
+    const salt = await redis.get(saltKey)
+    if (salt) cachedSalts.set(dateKey, salt)
     return salt
   } catch (error) {
     log.error({ err: error }, 'daily salt unavailable, dropping event')

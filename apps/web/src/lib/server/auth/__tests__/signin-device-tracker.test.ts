@@ -86,9 +86,9 @@ describe('isDeviceUnseen', () => {
       sadd: ReturnType<typeof vi.fn>
       expire: ReturnType<typeof vi.fn>
     }
-    expect(pipeline.sadd).toHaveBeenCalledWith('user:devices:user_abc', 'fp')
+    expect(pipeline.sadd).toHaveBeenCalledWith('t:_:user:devices:user_abc', 'fp')
     // 90 days, NX so existing TTL is preserved
-    expect(pipeline.expire).toHaveBeenCalledWith('user:devices:user_abc', 7_776_000, 'NX')
+    expect(pipeline.expire).toHaveBeenCalledWith('t:_:user:devices:user_abc', 7_776_000, 'NX')
   })
 
   it('atomic across concurrent first-sights — only one caller gets true', async () => {
@@ -118,7 +118,7 @@ describe('markDeviceSeen', () => {
   it('slides the 90-day TTL forward', async () => {
     mockExpire.mockResolvedValueOnce(1)
     await markDeviceSeen('user_abc')
-    expect(mockExpire).toHaveBeenCalledWith('user:devices:user_abc', 7_776_000)
+    expect(mockExpire).toHaveBeenCalledWith('t:_:user:devices:user_abc', 7_776_000)
   })
 
   it('swallows Redis errors', async () => {
@@ -131,7 +131,7 @@ describe('forgetDevice', () => {
   it('SREMs the fingerprint from the user SET', async () => {
     mockSrem.mockResolvedValueOnce(1)
     await forgetDevice('user_abc', 'fp')
-    expect(mockSrem).toHaveBeenCalledWith('user:devices:user_abc', 'fp')
+    expect(mockSrem).toHaveBeenCalledWith('t:_:user:devices:user_abc', 'fp')
   })
 
   it('swallows Redis errors', async () => {

@@ -8,6 +8,7 @@
 import Redis from 'ioredis'
 import { config } from './config'
 import { logger } from '@/lib/server/logger'
+import { tenantKey } from './tenancy/tenant-keyed'
 
 const log = logger.child({ component: 'redis' })
 
@@ -31,6 +32,19 @@ export function getRedis(): Redis {
 // Cache helpers
 // ============================================================================
 
+/**
+ * Logical cache key names. These are NOT the strings that reach Redis:
+ * `cacheGet`/`cacheSet`/`cacheDel` namespace every key by the active tenant
+ * before it goes on the wire.
+ *
+ * The namespacing deliberately lives in the three helpers rather than here.
+ * Half of these names are built by concatenation at the call site
+ * (`PRINCIPAL_BY_USER`, the SSO-test session keys, the link-preview and
+ * unfurl keys), so a namespace applied at the key table would be one
+ * `${'settings:tenant'}:extra` away from being bypassed — and a bypassed
+ * Redis key is not a stale read, it is one tenant's settings row served to
+ * another and surviving a restart.
+ */
 export const CACHE_KEYS = {
   TENANT_SETTINGS: 'settings:tenant',
   INTEGRATION_MAPPINGS: 'hooks:integration-mappings',
@@ -54,7 +68,7 @@ export const CACHE_KEYS = {
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
-    const raw = await getRedis().get(key)
+    const raw = await getRedis().get(tenantKey(key))
     return raw ? JSON.parse(raw) : null
   } catch (err) {
     log.warn({ err, key }, 'cache get failed')
@@ -64,7 +78,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 
 export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
   try {
-    await getRedis().set(key, JSON.stringify(value), 'EX', ttlSeconds)
+    await getRedis().set(tenantKey(key), JSON.stringify(value), 'EX', ttlSeconds)
   } catch (err) {
     log.warn({ err, key }, 'cache set failed')
   }
@@ -72,7 +86,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
 
 export async function cacheDel(...keys: string[]): Promise<void> {
   try {
-    await getRedis().del(...keys)
+    await getRedis().del(...keys.map(tenantKey))
   } catch (err) {
     log.warn({ err, keys }, 'cache del failed')
   }

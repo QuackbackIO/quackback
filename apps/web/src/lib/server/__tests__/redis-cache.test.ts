@@ -27,6 +27,7 @@ vi.mock('@/lib/server/config', () => ({
 
 // Import after mocks
 const { cacheGet, cacheSet, cacheDel, CACHE_KEYS } = await import('../redis')
+const { withTenant } = await import('@/lib/server/__tests__/tenant-scope')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -41,6 +42,62 @@ describe('CACHE_KEYS', () => {
   })
 })
 
+describe('tenant namespacing', () => {
+  it('namespaces a get by the active tenant', async () => {
+    mockGet.mockResolvedValue(null)
+
+    await withTenant('tenant-alpha', () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))
+
+    expect(mockGet).toHaveBeenCalledWith('t:tenant-alpha:settings:tenant')
+  })
+
+  it('namespaces a set by the active tenant', async () => {
+    mockSet.mockResolvedValue('OK')
+
+    await withTenant('tenant-alpha', () => cacheSet(CACHE_KEYS.TENANT_SETTINGS, { a: 1 }, 60))
+
+    expect(mockSet).toHaveBeenCalledWith(
+      't:tenant-alpha:settings:tenant',
+      JSON.stringify({ a: 1 }),
+      'EX',
+      60
+    )
+  })
+
+  it('namespaces every key of a multi-key delete', async () => {
+    mockDel.mockResolvedValue(2)
+
+    await withTenant('tenant-alpha', () =>
+      cacheDel(CACHE_KEYS.TENANT_SETTINGS, CACHE_KEYS.ACTIVE_WEBHOOKS)
+    )
+
+    expect(mockDel).toHaveBeenCalledWith(
+      't:tenant-alpha:settings:tenant',
+      't:tenant-alpha:hooks:webhooks-active:v2'
+    )
+  })
+
+  it('namespaces a key built by concatenation at the call site', async () => {
+    mockGet.mockResolvedValue(null)
+
+    await withTenant('tenant-bravo', () => cacheGet(CACHE_KEYS.PRINCIPAL_BY_USER('user_abc')))
+
+    expect(mockGet).toHaveBeenCalledWith('t:tenant-bravo:principal:user:user_abc')
+  })
+
+  it('gives two tenants different wire keys for the same logical key', async () => {
+    mockGet.mockResolvedValue(null)
+
+    await withTenant('tenant-alpha', () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))
+    await withTenant('tenant-bravo', () => cacheGet(CACHE_KEYS.TENANT_SETTINGS))
+
+    expect(mockGet.mock.calls.map((c) => c[0])).toEqual([
+      't:tenant-alpha:settings:tenant',
+      't:tenant-bravo:settings:tenant',
+    ])
+  })
+})
+
 describe('cacheGet', () => {
   it('returns parsed JSON when key exists', async () => {
     const data = { name: 'test', count: 42 }
@@ -48,7 +105,7 @@ describe('cacheGet', () => {
 
     const result = await cacheGet<typeof data>('my-key')
 
-    expect(mockGet).toHaveBeenCalledWith('my-key')
+    expect(mockGet).toHaveBeenCalledWith('t:_:my-key')
     expect(result).toEqual(data)
   })
 
@@ -85,7 +142,7 @@ describe('cacheSet', () => {
 
     await cacheSet('my-key', data, 300)
 
-    expect(mockSet).toHaveBeenCalledWith('my-key', JSON.stringify(data), 'EX', 300)
+    expect(mockSet).toHaveBeenCalledWith('t:_:my-key', JSON.stringify(data), 'EX', 300)
   })
 
   it('swallows Redis errors (non-fatal)', async () => {
@@ -102,7 +159,7 @@ describe('cacheDel', () => {
 
     await cacheDel('my-key')
 
-    expect(mockDel).toHaveBeenCalledWith('my-key')
+    expect(mockDel).toHaveBeenCalledWith('t:_:my-key')
   })
 
   it('deletes multiple keys at once', async () => {
@@ -110,7 +167,7 @@ describe('cacheDel', () => {
 
     await cacheDel('key-a', 'key-b')
 
-    expect(mockDel).toHaveBeenCalledWith('key-a', 'key-b')
+    expect(mockDel).toHaveBeenCalledWith('t:_:key-a', 't:_:key-b')
   })
 
   it('swallows Redis errors (non-fatal)', async () => {

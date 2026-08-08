@@ -42,8 +42,13 @@ describe('incrementBucket', () => {
       incr: ReturnType<typeof vi.fn>
       expire: ReturnType<typeof vi.fn>
     }
-    expect(pipeline.incr).toHaveBeenCalledWith('foo')
-    expect(pipeline.expire).toHaveBeenCalledWith('foo', 300, 'NX')
+    // Rate-limit buckets live in a shared Redis, so the key carries a tenant
+    // segment. `_` is the single-tenant namespace: one stable prefix rather than
+    // an absent one, so pooled and self-hosted are the same code path. Asserted
+    // literally rather than through `tenantKey()` — a test that rebuilt the key
+    // with the same helper the code uses could not notice the helper changing.
+    expect(pipeline.incr).toHaveBeenCalledWith('t:_:foo')
+    expect(pipeline.expire).toHaveBeenCalledWith('t:_:foo', 300, 'NX')
   })
 
   it('returns count=null on Redis error (fail-open signal)', async () => {

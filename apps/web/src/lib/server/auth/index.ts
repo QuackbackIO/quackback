@@ -1,4 +1,4 @@
-import { betterAuth } from 'better-auth'
+import { betterAuth, type RateLimit } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import {
   anonymous,
@@ -16,6 +16,8 @@ import { generateId, type PrincipalId, type UserId } from '@quackback/ids'
 import { API_KEY_SCOPES } from '@/lib/server/domains/api-keys/api-key-scopes'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { getTenantScope, runWithTenantScope } from '@/lib/server/tenancy/tenant-context'
+import { TenantKeyedCache } from '@/lib/server/tenancy/tenant-keyed'
 import type { GenericOAuthConfig } from './build-oauth-configs'
 import { isSignInMethodEnabled } from '@/lib/shared/signin-methods'
 
@@ -26,16 +28,32 @@ const log = logger.child({ component: 'auth-config' })
 // combined sign-in email) drain the stash and email themselves.
 const STASH_TTL_MS = 30_000
 
+/**
+ * A stash entry is a live credential keyed by an email address, and an address
+ * is not unique across workspaces: `admin@example.com` can hold an account in
+ * any number of them. Keyed by address alone, the second workspace to mint a
+ * link for that address overwrites the first, and whichever flow drains the
+ * stash next emails a token minted against the other workspace's database —
+ * a sign-in link for an account its recipient does not own.
+ */
 function makeStash<T>() {
-  const m = new Map<string, { value: T; ts: number }>()
+  const m = new TenantKeyedCache<{ value: T; ts: number }>()
   return {
     set(key: string, value: T) {
       const k = key.toLowerCase()
       m.set(k, { value, ts: Date.now() })
-      setTimeout(() => {
+      // The sweep is what stops an undrained token living in heap for the life
+      // of the process, so it has to keep firing. A timer callback runs with no
+      // ambient scope, where every tenant-keyed read resolves to the
+      // single-tenant namespace — it would miss the entry it was armed for and
+      // delete an unrelated one. Re-entering the scope that armed it is the
+      // only way the sweep addresses the same entry `set` just wrote.
+      const scope = getTenantScope()
+      const sweep = () => {
         const s = m.get(k)
         if (s && Date.now() - s.ts >= STASH_TTL_MS) m.delete(k)
-      }, STASH_TTL_MS)
+      }
+      setTimeout(() => (scope ? runWithTenantScope(scope, sweep) : sweep()), STASH_TTL_MS)
     },
     take(key: string): T | undefined {
       const k = key.toLowerCase()
@@ -75,12 +93,50 @@ export const getOTP = (purpose: OtpPurpose, email: string) => otpStash.take(otpK
 // Lazy-initialized auth instance
 // This prevents client bundling of database code
 type AuthInstance = Awaited<ReturnType<typeof createAuth>>['instance']
-let _auth: AuthInstance | null = null
+
+/**
+ * The built auth instance, per tenant.
+ *
+ * The instance closes over a database adapter, a set of registered OAuth
+ * providers, this workspace's trusted origins and its base URL — everything
+ * that decides who may sign in and where they land. One shared instance in a
+ * pooled process authenticates every tenant against whichever tenant built it.
+ *
+ * The version guard has to be partitioned with it. `auth_config_version` is a
+ * small per-workspace counter, so two workspaces sitting on the same number is
+ * routine rather than unlikely; compared across tenants it reads "unchanged"
+ * and hands back a cached instance built for someone else.
+ */
+const authInstances = new TenantKeyedCache<AuthInstance>(256)
 // Cross-pod invalidation: the version of `settings.auth_config_version`
-// at the time the cached _auth was built. Compared per-request against
+// at the time the cached instance was built. Compared per-request against
 // the current value (via the existing settings cache, no extra DB
-// round-trip). Mismatch → resetAuth(), other pods' writes propagate.
-let _authConfigVersion: number | null = null
+// round-trip). Mismatch → rebuild, other pods' writes propagate.
+const authConfigVersions = new TenantKeyedCache<number>(256)
+const AUTH_CACHE_KEY = 'instance'
+
+const rateLimitCounters = new TenantKeyedCache<RateLimit>(20_000)
+
+/**
+ * Rate-limit counters, partitioned by tenant.
+ *
+ * Exported for the isolation tests: the leak this replaces is invisible from
+ * outside (a 429 looks the same whichever workspace's traffic earned it), so
+ * the only way to assert the separation is to read the counters directly.
+ */
+export const tenantRateLimitStorage = {
+  async get(key: string): Promise<RateLimit | null> {
+    return rateLimitCounters.get(key) ?? null
+  },
+  async set(key: string, value: RateLimit): Promise<void> {
+    rateLimitCounters.set(key, value)
+  },
+}
+
+/** Test seam: forget the active tenant's rate-limit counters. */
+export function __resetRateLimitCountersForTenant(): void {
+  rateLimitCounters.clearTenant()
+}
 
 async function createAuth() {
   // Dynamic imports to prevent client bundling
@@ -306,6 +362,15 @@ async function createAuth() {
       before: hooksBefore,
       after: hooksAfter,
     },
+
+    // The library's own memory storage is a module-scope Map shared by every
+    // instance in the process, keyed by client IP and path — so one workspace's
+    // sign-in attempts spend every other workspace's budget, and a single
+    // attacker can lock out the whole fleet from one address. Supplying storage
+    // takes precedence over that map entirely. Entry expiry lives in the
+    // library's own window arithmetic (`lastRequest` vs the rule's window), so
+    // this only has to hold and bound; the cache evicts oldest-first.
+    rateLimit: { customStorage: tenantRateLimitStorage },
     // Route the library's internal logging through pino, redacted. Without it
     // those lines bypass the app logger entirely — unstructured, uncorrelated,
     // and on a resolution failure carrying the whole user-info payload
@@ -765,32 +830,35 @@ async function createAuth() {
  * auth-instance-affecting write path.
  */
 export async function getAuth(): Promise<AuthInstance> {
+  let instance = authInstances.get(AUTH_CACHE_KEY)
+  const builtVersion = authConfigVersions.get(AUTH_CACHE_KEY)
   // Skip the version check when no instance is cached yet — the build
   // path below records the version after creation.
-  if (_auth && _authConfigVersion !== null) {
+  if (instance && builtVersion !== undefined) {
     const { getTenantSettings } = await import('@/lib/server/domains/settings/settings.service')
     const t = await getTenantSettings()
     const current = t?.settings?.authConfigVersion
-    if (typeof current === 'number' && current !== _authConfigVersion) {
-      _auth = null
-      _authConfigVersion = null
+    if (typeof current === 'number' && current !== builtVersion) {
+      resetAuth()
+      instance = undefined
     }
   }
-  if (!_auth) {
+  if (!instance) {
     const built = await createAuth()
-    _auth = built.instance
-    _authConfigVersion = built.authConfigVersion
+    instance = built.instance
+    authInstances.set(AUTH_CACHE_KEY, instance)
+    authConfigVersions.set(AUTH_CACHE_KEY, built.authConfigVersion)
   }
-  return _auth
+  return instance
 }
 
 /**
- * Reset the auth instance so it's re-created on next access.
+ * Reset the active tenant's auth instance so it's re-created on next access.
  * Call after changing auth provider credentials in the DB.
  */
 export function resetAuth(): void {
-  _auth = null
-  _authConfigVersion = null
+  authInstances.delete(AUTH_CACHE_KEY)
+  authConfigVersions.delete(AUTH_CACHE_KEY)
 }
 
 // Export a proxy object that lazily initializes auth on first access

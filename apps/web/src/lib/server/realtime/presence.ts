@@ -10,6 +10,7 @@
  * an abandoned set.
  */
 import { getRedis } from '../redis'
+import { tenantKey } from '../tenancy/tenant-keyed'
 import { db, principal, eq, and, inArray } from '@/lib/server/db'
 import type { PrincipalId } from '@quackback/ids'
 import { logger } from '@/lib/server/logger'
@@ -19,11 +20,23 @@ const log = logger.child({ component: 'presence' })
 /** TTL must comfortably exceed the SSE heartbeat interval (20s). */
 export const PRESENCE_TTL_SECONDS = 45
 
-const AGENTS_ZSET = 'conversation:presence:agents'
+/**
+ * The set of online agents, namespaced per tenant.
+ *
+ * A single shared set would make one workspace's agents count as "someone is
+ * online" for every other workspace — and `listOnlineAgentIds` feeds
+ * conversation routing, so a foreign principal id would be assigned a
+ * conversation it cannot see. Resolved per call rather than at module load:
+ * the namespace comes from the request scope, which does not exist yet when
+ * this module is first evaluated.
+ */
+function agentsKey(): string {
+  return tenantKey('conversation:presence:agents')
+}
 
 /** Per-principal set of live stream ids, each scored by its last-heartbeat ms. */
 function streamsKey(principalId: PrincipalId): string {
-  return `conversation:presence:streams:${principalId}`
+  return tenantKey(`conversation:presence:streams:${principalId}`)
 }
 
 /** Members older than this haven't heartbeat within the TTL → treat as gone. */
@@ -61,7 +74,7 @@ async function writePresent(
   // Backstop so an abandoned set (a replica that died mid-stream) is reclaimed
   // even if no one reads it again; refreshed on every heartbeat.
   await redis.expire(streamsKey(principalId), PRESENCE_TTL_SECONDS)
-  if (isAgent) await redis.zadd(AGENTS_ZSET, now, principalId)
+  if (isAgent) await redis.zadd(agentsKey(), now, principalId)
 }
 
 /** Register a new stream for a principal and mark them present. */
@@ -107,7 +120,7 @@ export async function clearPresence(
       CLEAR_PRESENCE_SCRIPT,
       2,
       streamsKey(principalId),
-      AGENTS_ZSET,
+      agentsKey(),
       streamId,
       String(staleCutoff()),
       principalId,
@@ -140,8 +153,8 @@ export async function isPrincipalOnline(principalId: PrincipalId): Promise<boole
 export async function isAnyAgentOnline(): Promise<boolean> {
   try {
     const redis = getRedis()
-    await redis.zremrangebyscore(AGENTS_ZSET, 0, staleCutoff())
-    const count = await redis.zcard(AGENTS_ZSET)
+    await redis.zremrangebyscore(agentsKey(), 0, staleCutoff())
+    const count = await redis.zcard(agentsKey())
     return count > 0
   } catch (err) {
     log.warn({ err }, 'any agent online check failed')
@@ -158,8 +171,8 @@ export async function isAnyAgentOnline(): Promise<boolean> {
 export async function listOnlineAgentIds(): Promise<PrincipalId[]> {
   try {
     const redis = getRedis()
-    await redis.zremrangebyscore(AGENTS_ZSET, 0, staleCutoff())
-    const ids = await redis.zrange(AGENTS_ZSET, 0, -1)
+    await redis.zremrangebyscore(agentsKey(), 0, staleCutoff())
+    const ids = await redis.zrange(agentsKey(), 0, -1)
     return ids as PrincipalId[]
   } catch (err) {
     log.warn({ err }, 'list online agents failed')

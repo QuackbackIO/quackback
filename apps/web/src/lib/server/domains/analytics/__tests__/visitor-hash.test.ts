@@ -36,13 +36,13 @@ describe('getDailySalt', () => {
 
     expect(salt).toBe('stored-salt')
     expect(mockSet).toHaveBeenCalledWith(
-      'visitor:salt:2026-07-01',
+      't:_:visitor:salt:2026-07-01',
       expect.any(String),
       'EX',
       48 * 60 * 60,
       'NX'
     )
-    expect(mockGet).toHaveBeenCalledWith('visitor:salt:2026-07-01')
+    expect(mockGet).toHaveBeenCalledWith('t:_:visitor:salt:2026-07-01')
   })
 
   it('returns null when Redis is unavailable (caller drops the event)', async () => {

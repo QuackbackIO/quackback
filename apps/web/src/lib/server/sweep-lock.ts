@@ -25,11 +25,11 @@
  *    lapses.
  */
 import { sql } from 'drizzle-orm'
-import { config } from '@/lib/server/config'
 import { db } from '@/lib/server/db'
 import { getExecuteRows } from '@/lib/server/utils/execute-rows'
 import { logger } from '@/lib/server/logger'
 import { runFleetPass } from '@/lib/server/tenancy/fleet'
+import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import { getTenantScope } from '@/lib/server/tenancy/tenant-context'
 
 const log = logger.child({ component: 'sweep-lock' })
@@ -61,7 +61,7 @@ export async function withSweepLock(
   // OWN database, so once `db` is scoped the lock is already per-tenant — which
   // is exactly the semantics wanted: two tenants must sweep independently, and
   // two replicas must not sweep the same tenant concurrently.
-  if (config.isPooledTenancy && !getTenantScope()) {
+  if (isPooledTenancy() && !getTenantScope()) {
     await runFleetPass('sweep', () => acquireAndRun(name, ttlMs, fn, opts))
     return
   }

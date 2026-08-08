@@ -10,6 +10,7 @@
 
 import { createDb, type Database as PostgresDatabase } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
+import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import {
   getScopedDatabase,
   TenantScopeMissingError,
@@ -99,7 +100,13 @@ function getDatabase(): Database {
   const scoped = getScopedDatabase()
   if (scoped) return scoped
 
-  if (config.isPooledTenancy) {
+  // Read from the environment rather than through `config`. `config` validates
+  // the whole application configuration, and making the first `db` access
+  // anywhere do that would turn an unrelated missing variable into a database
+  // error — including inside unit tests that mock `db` and never wanted a
+  // config. `tenancy/mode.ts` documents the pairing, and a test pins the two
+  // readings together.
+  if (isPooledTenancy()) {
     throw new TenantScopeMissingError('A `db` call was made with no tenant resolved.')
   }
 

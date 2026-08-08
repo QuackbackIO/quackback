@@ -80,7 +80,7 @@ describe('presence (per-principal stream set)', () => {
 
   it('prunes a crashed replica’s stale stream so it cannot keep a principal online', async () => {
     // A ghost stream whose last heartbeat is older than the TTL.
-    set(`conversation:presence:streams:${A}`).set(
+    set(`t:_:conversation:presence:streams:${A}`).set(
       'ghost',
       Date.now() - (PRESENCE_TTL_SECONDS + 5) * 1000
     )
@@ -97,6 +97,6 @@ describe('presence (per-principal stream set)', () => {
     await markPresent(A, 'stream-1', false)
     await refreshPresence(A, 'stream-1', false)
     expect(await isPrincipalOnline(A)).toBe(true)
-    expect(store.get(`conversation:presence:streams:${A}`)?.size).toBe(1)
+    expect(store.get(`t:_:conversation:presence:streams:${A}`)?.size).toBe(1)
   })
 })

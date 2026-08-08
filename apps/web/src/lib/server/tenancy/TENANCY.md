@@ -279,6 +279,37 @@ suspend?") is answered yes — under `QUACKBACK_ROLE=web`, and only under it.
 
 ---
 
+### The surface the isolation probe cannot judge
+
+The Piece 1 probe suite's own README records `/api/widget/config.json` as
+unguarded for any tenant on a greyscale or default brand colour: the planted
+identity token lives in the workspace name or the portal welcome headline, and
+that surface carries neither — only colours. So it was checked directly, on the
+live pooled fleet, with a positive control on every assertion.
+
+Two tenants were given distinct brand colours through custom CSS (the path
+`extractThemeFromCss` actually reads) and the shared settings cache was dropped
+between orderings:
+
+| Order | Result |
+| --- | --- |
+| cold, alpha first | PASS — each host served **its own** colour, neither served the other's |
+| cold, bravo first | PASS |
+| six alternating requests, then re-read both | PASS |
+
+The ordering matters and is not decoration. A cache that is last-writer-wins is
+asymmetric: testing one direction leaves detection to whichever tenant's value
+happened to survive, which is a defect class this run has already been bitten by.
+
+**The positive control is the load-bearing part.** A first pass of this check
+reported PASS on every surface while *neither* host served its own marker at all
+— both tenants were freshly provisioned and redirected to `/onboarding`, so the
+bodies were identical and empty of identity. An "isolation" result from a surface
+that renders no identity is not a result. The check now reports `ERROR` rather
+than `PASS` whenever a host fails to serve its own marker.
+
+---
+
 ## 5. Background subsystems
 
 About 25–35 files across ~15 subsystems run with no request scope. Under pooled
