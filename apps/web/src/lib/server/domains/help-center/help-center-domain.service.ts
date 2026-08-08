@@ -78,9 +78,15 @@ export async function setHelpCenterDomain(
   domainInput: string | null
 ): Promise<HelpCenterDomainConfig> {
   if (domainInput === null || domainInput.trim() === '') {
+    // Clearing a domain is always allowed. Refusing it would strand a
+    // downgraded workspace on a domain it can no longer manage.
     const updated = await updateHelpCenterConfig({ domain: { domain: null, verifiedAt: null } })
     return updated.domain
   }
+  // Plan gate. No-op on any install without a cloud config, which is every
+  // self-hosted one — see domains/settings/cloud/entitlements.ts.
+  const { requireEntitlement } = await import('@/lib/server/domains/settings/cloud/entitlements')
+  await requireEntitlement('customDomain')
   const normalized = normalizeDomain(domainInput)
   if (!normalized) {
     throw new ValidationError('HC_DOMAIN_INVALID', 'Must be a public FQDN (e.g. "help.acme.com")')

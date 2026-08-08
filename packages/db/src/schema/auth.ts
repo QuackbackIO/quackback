@@ -70,6 +70,36 @@ export interface StoredAssistantConfig {
 }
 
 /**
+ * Structural twin of `CloudConfig` (apps/web
+ * `lib/server/domains/settings/cloud/cloud.types.ts`). packages/db can't import
+ * apps/web, so this hand-written interface mirrors that type's shape with
+ * widened primitives (`string` instead of the `PlanId` union, an index
+ * signature instead of the closed entitlement-key set). A drift tripwire in
+ * apps/web (`domains/settings/cloud/__tests__/cloud-stored-shape.test.ts`)
+ * asserts the two stay structurally compatible — edit both sides together.
+ *
+ * A NULL column (the default for every existing and every self-hosted row)
+ * means "no cloud config", which resolves to `enabled: false`.
+ */
+export interface StoredCloudBilling {
+  provider?: string | null
+  customerRef?: string | null
+  subscriptionRef?: string | null
+  status?: string | null
+  currentPeriodEnd?: string | null
+}
+
+export interface StoredCloudConfig {
+  enabled: boolean
+  plan?: string | null
+  entitlements?: Record<string, boolean>
+  billing?: StoredCloudBilling | null
+  /** Which writer last set plan/entitlements — 'config' or 'billing'. */
+  source?: string | null
+  updatedAt?: string | null
+}
+
+/**
  * User table - User identities for the application
  */
 export const user = pgTable(
@@ -418,6 +448,20 @@ export const settings = pgTable('settings', {
    * on).
    */
   tierLimits: text('tier_limits'),
+  /**
+   * Optional cloud configuration block (see {@link StoredCloudConfig}):
+   * which plan the workspace is on, which feature entitlements that plan
+   * unlocks, and opaque billing-provider references.
+   *
+   * NULL — the default, and the only value a self-hosted install ever has —
+   * means no cloud config, which resolves to `enabled: false`: no plan, no
+   * entitlement gating, no upsell.
+   *
+   * Deliberately NOT an input to numeric enforcement. `tierLimits` above
+   * remains the sole source for `getTierLimits()`; this column adds the
+   * boolean/plan layer beside it.
+   */
+  cloud: jsonb('cloud').$type<StoredCloudConfig>(),
   /**
    * JSON array of dot-paths whose values are managed by the
    * declarative config file (`/etc/quackback/config.yaml`). When a

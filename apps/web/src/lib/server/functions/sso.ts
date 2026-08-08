@@ -244,6 +244,15 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
+    // Plan gate. Disabling a provider stays open so a downgraded workspace can
+    // always take one out of service; only creating or reconfiguring one needs
+    // the entitlement. No-op on any install without a cloud config.
+    if (data.enabled !== false) {
+      const { requireEntitlement } =
+        await import('@/lib/server/domains/settings/cloud/entitlements')
+      await requireEntitlement('sso')
+    }
+
     const { listIdentityProviders, upsertIdentityProvider } =
       await import('@/lib/server/domains/settings/identity-providers.service')
     const existing = await listIdentityProviders()
