@@ -39,7 +39,10 @@ export default defineRailway(() => {
     // without the explicit `sh -c` the variable substitution is not expanded.
     preDeployCommand: ['sh -c \'DATABASE_URL="$DIRECT_DATABASE_URL" bun /app/migrate.mjs\''],
 
-    deploy: { restartPolicyType: 'ON_FAILURE', restartPolicyMaxRetries: 3 },
+    // Only the retry count is declared. The restart policy itself is already
+    // the platform default, and a value equal to the default is accepted but
+    // never stored — declaring it here would show as permanent plan drift.
+    deploy: { restartPolicyMaxRetries: 3 },
 
     env: {
       NODE_ENV: 'production',
