@@ -29,7 +29,17 @@ const ROUTES_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../../../ro
 const ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = []
 
 function sourceFiles(dir: string, acc: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
+  // A missing directory returns nothing rather than throwing, so a moved route
+  // tree fails the "found routes to scan at all" assertion below with a legible
+  // message instead of crashing collection — which reads as an infrastructure
+  // problem rather than as the guard reporting that it has gone blind.
+  let entries: string[]
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return acc
+  }
+  for (const entry of entries) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) sourceFiles(full, acc)
     else if (/\.tsx?$/.test(entry) && !full.includes('__tests__')) acc.push(full)

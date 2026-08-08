@@ -104,9 +104,26 @@ export function logStartupBanner(): void {
     .then(({ validateAiConfig }) => validateAiConfig())
     .catch((err) => log.error({ err }, 'ai config validation failed'))
 
-  import('@/integrations/segment/server/user-sync')
-    .then(({ warnIfSegmentInboundIsInsecure }) => warnIfSegmentInboundIsInsecure())
-    .catch((err) => log.error({ err }, 'failed to validate Segment inbound configuration'))
+  // Reads the tenant's integration rows, so it is per-database work. Under
+  // pooled tenancy it runs once per tenant — and, like the startup backfill
+  // below, only on a replica that already does background work, because a
+  // fleet-wide read on every web boot would wake every suspended compute.
+  //
+  // This one was found by the `db` proxy's own scope tripwire rather than by the
+  // sweep that preceded it: it is a boot-time configuration warning, which is
+  // not where anyone looks for a database query.
+  if (config.isPooledTenancy && !shouldRunWorkers()) {
+    log.info('pooled tenancy on a web replica — integration config validation runs on the worker tier')
+  } else {
+    Promise.all([
+      import('@/integrations/segment/server/user-sync'),
+      import('@/lib/server/tenancy/fleet'),
+    ])
+      .then(([{ warnIfSegmentInboundIsInsecure }, { runFleetPass }]) =>
+        runFleetPass('sweep', () => warnIfSegmentInboundIsInsecure())
+      )
+      .catch((err) => log.error({ err }, 'failed to validate Segment inbound configuration'))
+  }
 
   // Wire SIGTERM/SIGINT once — the rest of this function spawns
   // long-lived workers + sweepers, so register the drain handler before
