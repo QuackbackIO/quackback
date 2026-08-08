@@ -60,12 +60,19 @@ candidate paths and silently discards any that fail its safety checks, then
 falls through to a bare `railway-iac-ts` on `PATH`, which genuinely does not
 exist — hence the ENOENT. Two things get a candidate discarded here:
 
-1. **A candidate that is group- or world-writable is rejected.** Package
-   managers do not all install with the same mode, so the helper can land at
-   `777` and be thrown away without comment.
+1. **A candidate that is group- or world-writable is rejected** — `775` is
+   refused just as `777` is. The published tarball ships `dist/iac/bin.js` at
+   `777`, so a clean install lands in the rejected state on its own; this is not
+   something a package manager did locally.
 2. **`node_modules/.bin/railway-iac-ts` is a symlink**, and a symlink's own mode
-   on Linux is always `lrwxrwxrwx`. If the check does not follow the link it
-   sees `777` and rejects it, so `chmod` on the real file changes nothing.
+   on Linux is always `lrwxrwxrwx`. The check does not follow the link, so it
+   sees `777` and rejects it no matter what the target is set to.
+
+The second cause is the operative one, and it makes `chmod` a dead end. Tested
+four ways: symlink at `777` fails, symlink whose target is `755` fails, symlink
+with the whole directory chain at `755` fails, and only replacing the symlink
+with a real `755` file succeeds. Since package managers that link binaries will
+recreate the symlink on every install, do not try to fix this with permissions.
 
 Point the CLI straight at the real file instead. An **absolute** path is
 required; a relative one reproduces the same ENOENT:
@@ -77,6 +84,17 @@ railway config plan
 
 `railway config plan --runner /abs/path/to/bin.js` works identically if you
 prefer a flag to an environment variable.
+
+One further prerequisite, which this repo already satisfies: the runner
+`import()`s its own entry point with a query string appended, and Node refuses
+that for a `.cjs` file, so in a project without `"type": "module"` you clear the
+trap above only to land on:
+
+```txt
+Cannot find module '.../dist/iac/index.cjs?namespace=...'
+```
+
+Adding `"type": "module"` to the nearest `package.json` resolves it immediately.
 
 Two smaller traps in the same area:
 
@@ -92,6 +110,48 @@ Two smaller traps in the same area:
 
 To check for drift in CI, use `railway config plan --detailed-exit-code`: `0`
 means clean, `2` means changes are pending, anything else is an error.
+
+## What the drift gate does not cover: `replicas`
+
+**A clean `plan` does not mean the service is placed where this file says.**
+`replicas` is read from `.railway/railway.ts` and then ignored: `plan` never
+reports a difference on it and `apply` never writes it.
+
+Verified with a paired control on one file. Declaring `europe-west4` against a
+service stored in `us-east4-eqdc4a` still reports "already up to date" and exits
+`0`; changing `healthcheckTimeout` in the same file exits `2` and lists only the
+healthcheck. The gate works — it cannot see placement.
+
+This matters more than it sounds. Placement is not sticky, because
+`multiRegionConfig` is **merged rather than replaced**: writing one region adds
+it alongside whatever is already stored. A service can therefore drift to two
+regions, or back to the platform default, and the only symptom is a deploy that
+fails with `Your plan can only deploy to a single region` — or, worse, one that
+succeeds on the wrong continent. Every query in a server-rendered page pays that
+distance.
+
+So treat placement as unmanaged and check it directly, especially before and
+after any deploy:
+
+```bash
+railway environment config --json | jq '.services[].deploy.multiRegionConfig'
+```
+
+To change it, name every region explicitly and set the ones you do not want to
+`null` — otherwise the merge leaves them in place:
+
+```bash
+railway api 'mutation($eid: String!, $sid: String!, $in: ServiceInstanceUpdateInput!) {
+  serviceInstanceUpdate(environmentId: $eid, serviceId: $sid, input: $in)
+}' --variables '{"eid":"<env-id>","sid":"<service-id>",
+  "in":{"multiRegionConfig":{"<region-to-drop>":null,"us-east4-eqdc4a":{"numReplicas":1}}}}'
+```
+
+`railway service scale <alias>=<n>` is the friendlier route but it merges the
+same way, and its aliases (`us-east`, `us-west`, `eu-west`, `southeast-asia`) do
+not accept the region ids that appear in the stored config, so it cannot always
+express the removal. The `replicas` declaration is kept in `.railway/railway.ts`
+as a record of intent, not as something enforced.
 
 ## Notes
 

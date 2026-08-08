@@ -26,6 +26,10 @@ export default defineRailway(() => {
 
     // Virginia, same metro as the Neon us-east-1 project. An SSR render issues
     // many sequential queries, so the pairing is load-bearing.
+    //
+    // Declared intent only — placement is NOT enforced from here. Plan never
+    // diffs it and apply never writes it, so a clean plan says nothing about
+    // where this runs. Verify it directly; see the README.
     replicas: { 'us-east4-eqdc4a': 1 },
 
     healthcheckPath: '/api/health/ready',
