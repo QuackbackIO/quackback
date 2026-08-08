@@ -161,7 +161,7 @@ beforeEach(async () => {
   await fixture.begin()
   await testDb.insert(settings).values({
     name: 'Upgrade E2E',
-    slug: `upgrade-e2e-${Date.now()}`,
+    slug: `upgrade-e2e-${createId('workspace')}`,
     createdAt: new Date(),
   })
   process.env.BILLING_API_KEY = 'sk_test_e2e'

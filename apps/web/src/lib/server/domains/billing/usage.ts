@@ -42,9 +42,7 @@ import {
   eq,
   gte,
   inArray,
-  isNotNull,
   isNull,
-  lte,
   sql,
 } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
@@ -218,22 +216,4 @@ export async function usageSummary(since: Date): Promise<{
   const total = row?.total ?? 0
   const reported = row?.reported ?? 0
   return { total, reported, pending: total - reported }
-}
-
-/** Count of ledger rows already reported. Used by tests and support tooling. */
-export async function reportedCount(): Promise<number> {
-  const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(billingUsageEvents)
-    .where(isNotNull(billingUsageEvents.reportedAt))
-  return row?.n ?? 0
-}
-
-/** Retention sweep: drop ledger rows that are reported and older than `before`. */
-export async function pruneReportedUsage(before: Date): Promise<number> {
-  const rows = await db
-    .delete(billingUsageEvents)
-    .where(and(isNotNull(billingUsageEvents.reportedAt), lte(billingUsageEvents.occurredAt, before)))
-    .returning({ id: billingUsageEvents.id })
-  return rows.length
 }

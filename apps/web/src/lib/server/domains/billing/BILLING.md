@@ -392,6 +392,13 @@ reports zero destructive findings for it.
   Webhooks keep state current in practice; a missed delivery needs a human
   click until a sweeper is added. It is deliberately the same routine the
   webhook path runs, so adding the timer is a registration, not a design.
+- **No retention sweep for either ledger.** `billing_webhook_events` and
+  `billing_usage_events` grow without bound. The webhook ledger's window has
+  to exceed the provider's redelivery horizon (months, not hours), and the
+  usage ledger is the record of what was billed, so neither is trivially
+  prunable — but both need a policy eventually. No pruning code is written
+  rather than written-and-unwired, so there is nothing to mistake for a
+  working sweep.
 - **Usage is reported one event per HTTP call.** Fine at the volumes a single
   workspace produces; a batching endpoint would be better at fleet scale.
 - **`cloud.upgradeUrl` is still off-type.** `StoredCloudConfig` does not

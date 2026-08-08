@@ -20,6 +20,7 @@
  * leak nested inside an object the shape does not name would pass the latter.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { settings } from '@/lib/server/db'
 import { redactSettingsForClient } from '@/lib/shared/redact-portal-config'
@@ -139,7 +140,7 @@ beforeEach(async () => {
   await fixture.begin()
   await testDb.insert(settings).values({
     name: 'Leak Check',
-    slug: `leak-check-${Date.now()}`,
+    slug: `leak-check-${createId('workspace')}`,
     createdAt: new Date(),
   })
   process.env.BILLING_API_KEY = SECRETS.apiKey

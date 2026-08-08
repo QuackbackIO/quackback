@@ -14,6 +14,7 @@
  * system will keep ignoring.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import { billingWebhookEvents, settings } from '@/lib/server/db'
 
@@ -125,7 +126,7 @@ beforeEach(async () => {
   await testDb.delete(billingWebhookEvents)
   await testDb.insert(settings).values({
     name: 'Replay',
-    slug: `replay-${Date.now()}`,
+    slug: `replay-${createId('workspace')}`,
     createdAt: new Date(),
   })
   process.env.BILLING_API_KEY = 'sk_test_replay'

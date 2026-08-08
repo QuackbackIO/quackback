@@ -21,7 +21,6 @@ import { countSeats, type SeatCounts } from './seats'
 import {
   currentSubscriptionRef,
   recordSyncedQuantities,
-  toSnapshot,
   type SubscriptionSnapshot,
 } from './subscription'
 import type { PlanId } from '../settings/cloud/cloud.types'
@@ -125,13 +124,4 @@ export function checkoutLineItems(
   // that gives one.
   if (prices.outcome) items.push({ price: prices.outcome })
   return items
-}
-
-/** Re-derive a snapshot from a provider subscription. Convenience for callers. */
-export function snapshotFrom(
-  subscription: Parameters<typeof toSnapshot>[0],
-  config: BillingConfig,
-  fetchedAt: Date
-): SubscriptionSnapshot {
-  return toSnapshot(subscription, config, fetchedAt)
 }

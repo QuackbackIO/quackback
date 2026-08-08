@@ -27,7 +27,7 @@
  * a valid, correctly-signed duplicate, and only (2) stops it.
  */
 
-import { billingWebhookEvents, db, eq, sql } from '@/lib/server/db'
+import { billingWebhookEvents, db, eq } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getBillingConfig } from './billing.config'
 import { makeProviderClient, type BillingProviderClient } from './provider/client'
@@ -245,13 +245,4 @@ function subscriptionRefFrom(event: ProviderEvent): string | null {
     return (ref as { id: string }).id
   }
   return null
-}
-
-/** Retention sweep for the idempotency ledger. */
-export async function pruneWebhookEvents(before: Date): Promise<number> {
-  const rows = await db
-    .delete(billingWebhookEvents)
-    .where(sql`${billingWebhookEvents.receivedAt} < ${before}`)
-    .returning({ id: billingWebhookEvents.providerEventId })
-  return rows.length
 }
