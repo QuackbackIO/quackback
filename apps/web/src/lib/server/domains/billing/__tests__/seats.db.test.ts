@@ -51,7 +51,7 @@ vi.mock('@/lib/server/db', async (importOriginal) => ({
   db: (await import('@/lib/server/__tests__/db-test-fixture')).testDb,
 }))
 
-const { countSeats, seatBreakdown } = await import('../seats')
+const { seatBreakdown } = await import('../seats')
 import type { SeatBreakdownRow, SeatCounts } from '../seats'
 
 const fixture = await createDbTestFixture({

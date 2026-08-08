@@ -71,9 +71,22 @@ export const SUPPORT_SURFACE_CATEGORIES: readonly PermissionCategory[] = [
  *   conversation, and it spends real money doing so. Treating it as a support
  *   action is a judgement call and is flagged as such in BILLING.md.
  *
- * `assistant.manage` is deliberately **not** here: configuring how the AI
- * agent behaves is workspace administration in the same class as
- * `settings.manage`, not an action taken on a conversation.
+ * `assistant.manage` is **not** here, and that is an open question rather than
+ * a settled call — it is with the operator, because it moves money. Both sides:
+ *
+ * - *Leave it off.* Configuring how the AI agent behaves is workspace
+ *   administration in the same class as `settings.manage`. It is reached from
+ *   the automation settings area, not from the inbox.
+ * - *Put it on.* The inclusion rule used for `sla.manage`, `routing.manage`
+ *   and `workflow.manage` is "none touches a single conversation directly,
+ *   but each decides what happens to every conversation" — and
+ *   `assistant.manage` gates the agent's persona, guidance, custom actions and
+ *   knowledge, which is what every customer is automatically told. As it
+ *   stands this file calls *using* Copilot a support write and *configuring*
+ *   it not one, which is hard to defend as a distinction.
+ *
+ * Moving it is one line here plus the classification below; the tests name the
+ * cases that would change.
  */
 export const SUPPORT_SURFACE_EXTRAS: readonly PermissionKey[] = [PERMISSIONS.COPILOT_USE]
 

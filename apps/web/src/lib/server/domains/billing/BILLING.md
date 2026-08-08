@@ -217,12 +217,67 @@ rather than silently landing in whichever bucket over- or under-charges.
 
 Two judgement calls inside the surface, both reversible in one line:
 
-- **`copilot.use` counts as a support write.** It is an agent tool that acts
-  inside a thread and spends AI budget. Filed under `ai`, so it reaches the
-  surface only via the extras list.
-- **`assistant.manage` does not.** Configuring how the AI agent behaves is
-  workspace administration in the same class as `settings.manage`, not an
-  action taken on a conversation.
+- **`copilot.use` counts as a support write.** The firm reason is not that it
+  drafts replies but that it **spends metered AI budget on the support
+  surface**: a seat that can consume the workspace's AI spend is not what the
+  lite rate is for. The counter-case is self-defeating anyway — Copilot's
+  output is a draft reply, so `copilot.use` without `conversation.reply` is a
+  role nobody builds deliberately, and classifying it read-only opens the
+  cheapest gaming route there is: grant Copilot, withhold reply, pay lite, have
+  a full-rate colleague paste the draft.
+
+  A useful consequence falls out of this: because `copilot.use` is a support
+  write, **`lite ⇒ !copilotEligible` is a theorem**, so billing the add-on on
+  `seats.full` can never charge for someone ineligible. It is pinned by a test
+  rather than left as a coincidence.
+- **`assistant.manage` does not — and that is an OPEN QUESTION with the
+  operator, not a settled call.** It moves money, so it is recorded here with
+  both sides rather than decided in code review:
+
+  | Position | Argument |
+  | --- | --- |
+  | Leave it off (current) | Configuring the AI agent is workspace administration, in the same class as `settings.manage`. It is reached from the automation settings area, not the inbox. |
+  | Put it on | The rule used to include `sla.manage`, `routing.manage` and `workflow.manage` is *"none touches a single conversation directly, but each decides what happens to every conversation"* — and `assistant.manage` gates the agent's persona, guidance, custom actions and knowledge, which is what every customer is automatically told. As it stands the module calls *using* Copilot a support write and *configuring* it not one. |
+
+  Moving it is one entry in `SUPPORT_SURFACE_EXTRAS` plus its classification.
+
+### One derivation, not two
+
+`billableQuantities(seats, prices)` is the single expression that decides what
+every meter is charged. Checkout and every subsequent sync both call it.
+
+That is a correction, and the way it went wrong is worth keeping. Checkout used
+to floor the seat line to `Math.max(1, full)` — so a subscription is never
+created with a zero quantity on its only licensed item — while the sync used a
+bare `full`. The two agree at every value except zero, and zero stopped being
+hypothetical the moment "lite" was narrowed to the customer-support surface: an
+**all-lite workspace** (a feedback-only install that has adopted custom roles)
+is now an ordinary configuration. Such a workspace bought one full seat and one
+Copilot seat at checkout, and the very first webhook pushed both to zero —
+either rejecting the update and 500ing the webhook forever, or charging and
+crediting a seat nobody occupied.
+
+Two tests each asserted one half of that contradiction — one that the add-on
+matched the seat quantity *at the floor*, one that lite seats are excluded from
+the add-on — and neither could see the other. **Two tests can each be right and
+jointly describe an impossible system.** The property test that would have
+caught it asserts the two paths agree *across a range of seat shapes*, and it
+now exists.
+
+The floor is gone rather than duplicated. Billing one seat where nobody occupies
+one is a phantom charge, and "bills per paid user" cannot mean "bills 1 when
+there are no paid users"; a plan minimum, if the operator wants one, belongs in
+the plan. Two consequences follow, both handled:
+
+- **A checkout could otherwise have no licensed line at all**, on a plan that
+  sells no lite seat. So `billableQuantities` takes the plan's prices: **a plan
+  with no lite price has no lite seats**, and counts every teammate as full.
+  There is no cheaper product to put them on.
+- **A seat class with a zero quantity at checkout has no subscription item**,
+  and the sync used to skip any meter without one — so the first support agent
+  hired by an all-lite workspace would never have been billed. The sync now
+  *creates* a missing seat item, bounded to meters the plan sells and
+  **never** to the opt-in add-on, which is bought at checkout or not at all.
 
 ### Copilot
 
@@ -238,8 +293,8 @@ named so it cannot be mistaken for a billing figure.
 > A read-only support viewer has no write action for Copilot to assist, so
 > charging them for a capability they cannot exercise would be wrong. If the
 > operator wants Copilot billed on every paid user including lite seats, it is
-> `seats.full` -> `seats.total` in `desiredQuantities()`, and the matching
-> line in `checkoutLineItems()`.
+> `fullSeat` -> `seats.total` in `billableQuantities()` — **one place**, which
+> is the point of the next section.
 
 **The purchase stays opt-in**, and the opt-in is load-bearing: because the
 add-on bills per paid user, adding the line automatically would charge for the

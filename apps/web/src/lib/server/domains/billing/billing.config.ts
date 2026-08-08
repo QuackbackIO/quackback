@@ -277,6 +277,20 @@ export function planForPrice(catalogue: BillingCatalogue, priceId: string): Plan
   return null
 }
 
+/** The price id selling `meter` under `prices`, or null when the plan does not sell it. */
+export function priceForMeter(prices: PlanPrices, meter: BillingMeter): string | null {
+  switch (meter) {
+    case 'fullSeat':
+      return prices.seat
+    case 'liteSeat':
+      return prices.liteSeat ?? null
+    case 'copilotSeat':
+      return prices.copilotSeat ?? null
+    case 'resolvedOutcome':
+      return prices.outcome ?? null
+  }
+}
+
 /** Which meter a price id represents within `plan`, or null. */
 export function meterForPrice(prices: PlanPrices, priceId: string): BillingMeter | null {
   if (prices.seat === priceId) return 'fullSeat'

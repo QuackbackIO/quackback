@@ -19,10 +19,16 @@
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId } from '@quackback/ids'
+import { PERMISSIONS } from '@/lib/shared/permissions'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
 import {
   billingSubscriptionState,
+  eq,
+  permissions,
   principal,
+  principalRoleAssignments,
+  rolePermissions,
+  roles,
   settings,
   user,
 } from '@/lib/server/db'
@@ -72,7 +78,8 @@ const { BILLING_PROVIDER, resetBillingConfigCache } = await import('../billing.c
 const { applySubscription, currentSubscriptionRef } = await import('../subscription')
 const { getBillingConfig } = await import('../billing.config')
 import type { BillingProviderClient } from '../provider/client'
-const { countSeats } = await import('../seats')
+const { countSeats, seatBreakdown } = await import('../seats')
+const { billableQuantities, checkoutLineItems } = await import('../seat-sync')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -493,6 +500,111 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     )
     // Still one. The seat count did not change, so nothing should be sent.
     expect(calls.updates).toHaveLength(1)
+  })
+
+  it('bills an all-lite workspace consistently from checkout through the first sync', async () => {
+    // The boundary two separate quantity expressions got wrong, end to end.
+    //
+    // Narrowing "lite" to the customer-support surface makes an all-lite
+    // workspace ordinary: a feedback-only install whose custom role grants
+    // board writes and support reads. Checkout used to floor the seat line to
+    // one and the first webhook pushed it back to zero — either rejecting the
+    // update and 500ing forever, or charging and crediting a phantom seat.
+    const roleId = createId('role')
+    await testDb.insert(roles).values({
+      id: roleId,
+      key: `lite-${roleId}`,
+      name: `Lite-${roleId}`,
+      isSystem: false,
+      createdAt: new Date(),
+    })
+    for (const key of [PERMISSIONS.POST_CREATE, PERMISSIONS.CONVERSATION_VIEW]) {
+      const [permission] = await testDb
+        .select({ id: permissions.id })
+        .from(permissions)
+        .where(eq(permissions.key, key))
+        .limit(1)
+      await testDb
+        .insert(rolePermissions)
+        .values({ id: createId('role_permission'), roleId, permissionId: permission!.id })
+    }
+
+    const liteIds: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const userId = createId('user')
+      await testDb.insert(user).values({ id: userId, name: `pm${i}`, email: `${userId}@example.test` })
+      const principalId = createId('principal')
+      await testDb.insert(principal).values({
+        id: principalId,
+        userId,
+        role: 'member',
+        type: 'user',
+        createdAt: new Date(),
+      })
+      await testDb
+        .insert(principalRoleAssignments)
+        .values({ id: createId('role_assignment'), principalId, roleId, teamId: null })
+      liteIds.push(principalId)
+    }
+
+    const seats = await countSeats()
+    // Scoped check: the three teammates just added are all lite.
+    const rows = (await seatBreakdown()).filter((row) => liteIds.includes(row.principalId))
+    expect(rows.map((row) => row.lite)).toEqual([true, true, true])
+
+    // Checkout and the sync must derive the same numbers.
+    const config = getBillingConfig()!
+    const lines = checkoutLineItems(config, 'pro', seats, { copilot: true })
+    const seatLine = lines.find((line) => line.price === 'price_pro_seat')
+    const copilotLine = lines.find((line) => line.price === 'price_pro_copilot')
+
+    // With no support-side writer anywhere, both are absent rather than floored.
+    if (seats.full === 0) {
+      expect(seatLine).toBeUndefined()
+      expect(copilotLine).toBeUndefined()
+    }
+    // And whatever the shape, checkout equals what the sync would push.
+    const desired = billableQuantities(seats, config.catalogue.pro)
+    expect(seatLine?.quantity ?? 0).toBe(desired.fullSeat)
+    expect(copilotLine?.quantity ?? 0).toBe(desired.copilotSeat)
+  })
+
+  it('creates a seat item on sync when the class had none at checkout', async () => {
+    // The leak removing the floor could have introduced: an all-lite workspace
+    // buys no full-seat item, then hires a support agent. The sync used to
+    // skip any meter with no existing item, so that agent would never be
+    // billed. Creating the item is bounded to seat meters the plan sells —
+    // never the opt-in add-on.
+    const settled = { si_seat: 0, si_lite: 0, si_copilot: 0 }
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    const stub = makeStub(calls, 'active', settled)
+    // A subscription that carries only the lite item, as an all-lite checkout
+    // would have produced.
+    stub.getSubscription = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_e2e',
+      status: 'active',
+      current_period_end: 1_774_915_200,
+      items: { data: [{ id: 'si_lite', quantity: 3, price: { id: 'price_pro_lite' } }] },
+    }))
+
+    await deliver(
+      {
+        id: 'evt_grow',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      stub
+    )
+
+    const seats = await countSeats()
+    expect(calls.updates).toHaveLength(1)
+    const pushed = calls.updates[0]!.items as Array<Record<string, unknown>>
+    // The missing full-seat item is created by price, at the derived quantity.
+    expect(pushed).toContainEqual({ price: 'price_pro_seat', quantity: seats.full })
+    // The add-on is never created by a sync, however many paid seats exist.
+    expect(pushed.some((item) => item.price === 'price_pro_copilot')).toBe(false)
   })
 
   it('refuses to write a plan the config file has pinned', async () => {

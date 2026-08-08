@@ -98,7 +98,7 @@ export interface SeatCounts {
    * Teammates who may use Copilot, by permission.
    *
    * Reporting only. The Copilot add-on bills per paid user, so its quantity
-   * is `full` — see `desiredQuantities()`. Named `copilotEligible` rather
+   * is `full` — see `billableQuantities()`. Named `copilotEligible` rather
    * than `copilot` precisely so it cannot be picked up as a billing figure by
    * someone reading the shape rather than the docs.
    */
