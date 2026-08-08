@@ -290,7 +290,19 @@ stable slug and therefore persists per *tenant*. Boards are never rewritten;
 posts are. So re-running with the tenant↔slot mapping swapped leaves each tenant
 holding the previous run's slot canary, and the suite reads that as the other
 tenant's data — in both directions, symmetrically, with nothing having crossed.
-Run `--teardown` between orderings, or the second ordering measures the first.
+And **`--teardown` is not sufficient**: it removes the fixture the *current*
+configuration names, so rows created under a different tenant↔slot mapping
+survive it and accumulate. After three runs each tenant held two boards and two
+posts, each carrying whichever slot canary it held when that row was written,
+and P07 reported a LEAK in both directions from it.
+
+The check that separates accumulation from a real leak is **row identity, not
+canary counts**: a cross-tenant write puts the same row id in both databases.
+Accumulation leaves every id distinct, each created locally. Verified here —
+zero overlap, and `settings.name` (planted per tenant and never rotated) stayed
+correct on both, which is the control that proves nothing crossed.
+
+Delete by canary in SQL rather than relying on `--teardown` between orderings.
 
 **Plant the identity token where a public surface renders it.** `settings.name`
 is not enough — no judged surface renders it, so P06 reports `ERROR` (it could
