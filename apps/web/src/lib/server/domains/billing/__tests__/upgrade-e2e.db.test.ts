@@ -63,7 +63,7 @@ const { getTierLimits, invalidateTierLimitsCache } = await import(
 const { EntitlementRequiredError } = await import('@/lib/server/errors/entitlement-error')
 const { handleBillingWebhook } = await import('../webhook.service')
 const { signWebhookPayload } = await import('../provider/signature')
-const { resetBillingConfigCache } = await import('../billing.config')
+const { BILLING_PROVIDER, resetBillingConfigCache } = await import('../billing.config')
 const { applySubscription, currentSubscriptionRef } = await import('../subscription')
 const { getBillingConfig } = await import('../billing.config')
 import type { BillingProviderClient } from '../provider/client'
@@ -240,7 +240,7 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
       plan: 'pro',
       source: 'billing',
       billing: {
-        provider: 'stripe',
+        provider: BILLING_PROVIDER,
         customerRef: 'cus_e2e',
         subscriptionRef: 'sub_e2e',
         status: 'active',
@@ -381,6 +381,51 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     await expect(requireEntitlement('customDomain')).resolves.toBeUndefined()
     const row = await testDb.query.settings.findFirst()
     expect(row?.cloud).toMatchObject({ plan: 'pro', billing: { status: 'past_due' } })
+  })
+
+  it('recovers a missed delivery through the reconcile path', async () => {
+    // The webhook is the fast path, not the only one. A delivery that never
+    // arrives — or whose handler dies past its claim lease — would otherwise
+    // leave the workspace on the wrong plan until a human pressed Refresh,
+    // with nothing surfacing that it happened. `reconcileBilling()` is the
+    // recovery, and it runs on a timer in `startup.ts`.
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_initial',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls)
+    )
+    invalidateTierLimitsCache()
+    expect(await getTierLimits()).toMatchObject({ maxBoards: 25 })
+
+    // The customer cancels at the provider. No webhook reaches us.
+    const cancelled = makeStub(calls, 'canceled')
+    const { reconcileBilling } = await import('../billing.service')
+    const result = await reconcileBilling({ client: cancelled })
+    invalidateTierLimitsCache()
+
+    expect(result).toEqual({ reconciled: true, plan: 'free' })
+    await expect(requireEntitlement('customDomain')).rejects.toBeInstanceOf(
+      EntitlementRequiredError
+    )
+    expect(await getTierLimits()).toMatchObject({ maxBoards: 2 })
+  })
+
+  it('reconciles to Free when the workspace never subscribed', async () => {
+    // The other half: a billing-enabled deployment must gate an unsubscribed
+    // workspace as Free rather than leaving it ungated.
+    const { reconcileBilling } = await import('../billing.service')
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    expect(await reconcileBilling({ client: makeStub(calls) })).toEqual({
+      reconciled: true,
+      plan: 'free',
+    })
+    const row = await testDb.query.settings.findFirst()
+    expect(row?.cloud).toMatchObject({ enabled: true, plan: 'free' })
   })
 
   it('refuses to write a plan the config file has pinned', async () => {

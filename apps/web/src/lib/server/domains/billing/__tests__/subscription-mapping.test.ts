@@ -8,11 +8,11 @@
  */
 import { describe, expect, it } from 'vitest'
 import { effectivePlan, normalizeStatus, toSnapshot, UNSUBSCRIBED_PLAN } from '../subscription'
-import type { BillingConfig } from '../billing.config'
+import { BILLING_PROVIDER, type BillingConfig } from '../billing.config'
 import type { ProviderSubscription } from '../provider/client'
 
 const CONFIG: BillingConfig = {
-  provider: 'stripe',
+  provider: BILLING_PROVIDER,
   apiKey: 'sk_test_x',
   webhookSecret: 'whsec_x',
   livemode: false,

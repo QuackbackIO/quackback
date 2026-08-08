@@ -2,9 +2,10 @@
  * Self-serve billing tables.
  *
  * These exist to bill *this workspace* for its use of Quackback — they are
- * unrelated to `integrations/stripe`, which reads a *customer's* payment
- * provider to annotate their feedback with revenue. Same vendor, opposite
- * direction of money.
+ * unrelated to the payment-provider integration under
+ * `apps/web/src/integrations/`, which reads a *customer's* own account to
+ * annotate their feedback with revenue. Same vendor, opposite direction of
+ * money.
  *
  * Every table here is inert on an install with no billing provider
  * configured: nothing writes to them, nothing reads them, and the admin UI

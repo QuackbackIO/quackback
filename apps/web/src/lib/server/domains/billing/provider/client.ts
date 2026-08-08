@@ -1,11 +1,12 @@
 /**
  * A thin, typed client over the billing provider's REST API.
  *
- * No SDK dependency. The repo already talks to this vendor over plain `fetch`
- * (`integrations/stripe/server/hook.ts`), the surface needed here is nine
- * endpoints, and an SDK would add a large dependency whose main value —
- * exhaustive types for an API we use a sliver of — we get more cheaply by
- * declaring the sliver.
+ * No SDK dependency. The repo already talks to this provider over plain
+ * `fetch` from the customer-data enrichment integration under
+ * `apps/web/src/integrations/`, the surface needed here is nine endpoints,
+ * and an SDK would add a large dependency whose main value — exhaustive types
+ * for an API we use a sliver of — we get more cheaply by declaring the
+ * sliver.
  *
  * Everything is form-encoded, because that is what the API accepts, including
  * the bracketed array syntax for subscription items.
@@ -16,6 +17,7 @@ import type { BillingConfig } from '../billing.config'
 
 const log = logger.child({ component: 'billing-provider' })
 
+// Wire constant: the provider's API host, fixed by the protocol.
 const API_ROOT = 'https://api.stripe.com/v1'
 
 /** Raised for any non-2xx. Carries enough to decide whether to retry. */
@@ -259,6 +261,7 @@ export function makeProviderClient(config: BillingConfig): BillingProviderClient
           ['event_name', input.meter],
           ['identifier', input.identifier],
           ['timestamp', String(input.timestamp)],
+          // Wire field name, defined by the provider's meter-event schema.
           ['payload[stripe_customer_id]', input.customer],
           ['payload[value]', String(input.value)],
         ],

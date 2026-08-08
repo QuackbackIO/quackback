@@ -41,9 +41,9 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
   }
 })
 
-const { handleBillingWebhook } = await import('../webhook.service')
+const { handleBillingWebhook, CLAIM_LEASE_MS } = await import('../webhook.service')
 const { signWebhookPayload } = await import('../provider/signature')
-const { resetBillingConfigCache } = await import('../billing.config')
+const { BILLING_PROVIDER, resetBillingConfigCache } = await import('../billing.config')
 import type { BillingProviderClient } from '../provider/client'
 
 const fixture = await createDbTestFixture({
@@ -283,6 +283,78 @@ describe.skipIf(!fixture.available)('webhook idempotency and replay', () => {
     const result = await handleBillingWebhook(raw, signature, { client: stub('pro') })
     expect(result).toEqual({ status: 400, body: { error: 'billing_not_configured' } })
     expect(await testDb.select().from(billingWebhookEvents)).toHaveLength(0)
+    expect(await storedPlan()).toBeNull()
+  })
+
+  it('retries a claim whose handler crashed before it could release it', async () => {
+    // The normal error path releases the claim. This is the abnormal one: a
+    // pod kill, an OOM, or a failing releaseClaim leaves the row behind with
+    // processed_at NULL. Before the lease existed, every subsequent
+    // redelivery was answered "duplicate" while nothing had ever been
+    // applied — the event was stranded permanently and silently, and the
+    // module's own docstring claimed otherwise.
+    const crashedAt = new Date(Date.now() - CLAIM_LEASE_MS - 60_000)
+    await testDb.insert(billingWebhookEvents).values({
+      providerEventId: 'evt_crashed',
+      provider: BILLING_PROVIDER,
+      eventType: 'customer.subscription.updated',
+      receivedAt: crashedAt,
+      processedAt: null,
+    })
+
+    const result = await deliver(event('evt_crashed', 'customer.subscription.updated'), stub('pro'))
+    expect(result).toEqual({ status: 200, body: { received: true, handled: true } })
+    expect(await storedPlan()).toBe('pro')
+
+    // The row was reclaimed rather than duplicated, and is now settled.
+    const rows = await testDb.select().from(billingWebhookEvents)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.processedAt).not.toBeNull()
+  })
+
+  it('treats a claim that is still in flight as a duplicate', async () => {
+    // The other side of the lease. A redelivery arriving while the first
+    // attempt is genuinely running must NOT start a second handler: two
+    // concurrent runs would push seat quantities twice and race the snapshot
+    // guard for no benefit.
+    await testDb.insert(billingWebhookEvents).values({
+      providerEventId: 'evt_inflight',
+      provider: BILLING_PROVIDER,
+      eventType: 'customer.subscription.updated',
+      receivedAt: new Date(),
+      processedAt: null,
+    })
+
+    const result = await deliver(
+      event('evt_inflight', 'customer.subscription.updated'),
+      stub('business')
+    )
+    expect(result).toEqual({
+      status: 200,
+      body: { received: true, handled: false, duplicate: true },
+    })
+    expect(await storedPlan()).toBeNull()
+  })
+
+  it('treats a completed claim as a duplicate however old it is', async () => {
+    // Age alone must not reopen a settled event, or every redelivery after
+    // the lease window would re-run the handler forever.
+    await testDb.insert(billingWebhookEvents).values({
+      providerEventId: 'evt_done',
+      provider: BILLING_PROVIDER,
+      eventType: 'customer.subscription.updated',
+      receivedAt: new Date(Date.now() - CLAIM_LEASE_MS * 100),
+      processedAt: new Date(Date.now() - CLAIM_LEASE_MS * 100),
+    })
+
+    const result = await deliver(
+      event('evt_done', 'customer.subscription.updated'),
+      stub('business')
+    )
+    expect(result).toEqual({
+      status: 200,
+      body: { received: true, handled: false, duplicate: true },
+    })
     expect(await storedPlan()).toBeNull()
   })
 

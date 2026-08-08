@@ -6,6 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  BILLING_PROVIDER,
   getBillingConfig,
   isBillingConfigured,
   meterForPrice,
@@ -61,7 +62,7 @@ describe('getBillingConfig', () => {
     const config = getBillingConfig()
     expect(config).not.toBeNull()
     expect(config!.livemode).toBe(false)
-    expect(config!.provider).toBe('stripe')
+    expect(config!.provider).toBe(BILLING_PROVIDER)
     expect(config!.catalogue).toEqual(CATALOGUE)
   })
 

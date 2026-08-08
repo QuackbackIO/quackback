@@ -19,11 +19,18 @@ import type { TierLimits } from '../settings/tier-limits.types'
 const log = logger.child({ component: 'billing-config' })
 
 /**
- * The only provider implemented. Named as a value rather than assumed so a
- * stored `billing.provider` can be compared against it, and so a second
+ * Identifier for the one provider implementation, stored in
+ * `settings.cloud.billing.provider` so support can tell which integration
+ * wrote a reference. Named as a value rather than assumed, so a second
  * provider is an additive change rather than a rewrite.
+ *
+ * Neutral by rule: this file is under `lib/server/`, where CLAUDE.md's
+ * carve-out for genuinely-integrated products (scoped to
+ * `apps/web/src/integrations/**`) does not reach. Wire values — the API host,
+ * the signature header, form field names — necessarily keep the vendor's
+ * spelling because the protocol defines them; identifiers we choose do not.
  */
-export const BILLING_PROVIDER = 'stripe' as const
+export const BILLING_PROVIDER = 'hosted-subscriptions' as const
 
 export type BillingProvider = typeof BILLING_PROVIDER
 

@@ -11,6 +11,7 @@ import { billingQueries } from '@/lib/client/queries/billing'
 import { SettingsCard } from '@/components/admin/settings/settings-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 
@@ -36,6 +37,12 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
       overview.purchasablePlans[0]?.id ??
       ''
   )
+  // Off by default, deliberately. The Copilot seat count is derived from who
+  // holds `copilot.use`, which on a workspace with no custom roles is
+  // everyone — so an add-on that followed the count would be bought for the
+  // whole team without anyone choosing it.
+  const [buyCopilot, setBuyCopilot] = useState(false)
+  const selectedPlan = overview.purchasablePlans.find((plan) => plan.id === targetPlan)
 
   async function run<T>(kind: typeof busy, action: () => Promise<T>, onDone: (value: T) => void) {
     setBusy(kind)
@@ -131,7 +138,10 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
             onClick={() =>
               void run(
                 'checkout',
-                () => startCheckoutFn({ data: { plan: targetPlan as never } }),
+                () =>
+                  startCheckoutFn({
+                    data: { plan: targetPlan as never, copilot: buyCopilot },
+                  }),
                 (result) => {
                   window.location.href = result.url
                 }
@@ -161,6 +171,28 @@ function BillingBody({ overview }: { overview: BillingOverview }) {
             </Button>
           )}
         </div>
+        {selectedPlan?.copilotAddOn && (
+          <div className="border-t border-border/50 px-4 py-3 sm:px-6">
+            <label className="flex items-start gap-2.5">
+              <Checkbox
+                checked={buyCopilot}
+                onCheckedChange={(next) => setBuyCopilot(next === true)}
+                className="mt-0.5"
+              />
+              <span className="space-y-0.5">
+                <span className="block text-[13px] font-medium">Add Copilot</span>
+                <span className="block text-[13px] text-muted-foreground">
+                  Charged per teammate who can use Copilot.{' '}
+                  {overview.seats.copilot === 1
+                    ? '1 teammate can today.'
+                    : `${overview.seats.copilot} teammates can today.`}{' '}
+                  Change that in Members &amp; Teams before subscribing if it is more than
+                  you want.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
       </SettingsCard>
 
       <SettingsCard title="Included in your plan">

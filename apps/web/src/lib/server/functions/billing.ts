@@ -23,6 +23,13 @@ const log = logger.child({ component: 'billing-fn' })
 
 const checkoutSchema = z.object({
   plan: z.enum(PLAN_IDS),
+  /**
+   * Buy the Copilot add-on. Defaults to false, and the default is the point:
+   * the derived Copilot seat count equals headcount on any workspace that has
+   * not adopted custom roles, so an add-on inferred from it would be sold to
+   * everyone without being asked for.
+   */
+  copilot: z.boolean().default(false),
   /** Path the provider returns the browser to. Same-origin, path only. */
   returnPath: z
     .string()
@@ -62,8 +69,9 @@ export const startCheckoutFn = createServerFn({ method: 'POST' })
       plan: data.plan,
       actorEmail: auth.user.email ?? null,
       returnPath: data.returnPath,
+      addOns: { copilot: data.copilot },
     })
-    log.info({ plan: data.plan }, 'checkout session started')
+    log.info({ plan: data.plan, copilot: data.copilot }, 'checkout session started')
     return result
   })
 

@@ -101,11 +101,31 @@ export async function syncSeats(
   return { skipped: false, unchanged: false, desired, seats }
 }
 
+/** Optional extras a customer can choose to buy alongside a plan. */
+export interface CheckoutAddOns {
+  /**
+   * Whether to buy the Copilot add-on.
+   *
+   * **Opt-in, and default false.** Both legacy role presets carry
+   * `copilot.use`, so on any workspace that has not adopted custom roles the
+   * derived Copilot count equals total headcount. Adding the line whenever
+   * that count is non-zero — which an earlier version did — would have sold
+   * the add-on to every seat on every upgrade without the customer ever
+   * choosing it. A derived *quantity* is right; a derived *purchase* is not.
+   *
+   * Note the asymmetry with `syncSeats()`, and that it is deliberate: the
+   * sync only ever adjusts an item the subscription already has, so it cannot
+   * introduce a charge. Purchase happens here and nowhere else.
+   */
+  copilot?: boolean
+}
+
 /** Line items for a new checkout at `plan`, with quantities already derived. */
 export function checkoutLineItems(
   config: BillingConfig,
   plan: PlanId,
-  seats: SeatCounts
+  seats: SeatCounts,
+  addOns: CheckoutAddOns = {}
 ): Array<{ price: string; quantity?: number }> {
   const prices = config.catalogue[plan]
   if (!prices) return []
@@ -117,7 +137,7 @@ export function checkoutLineItems(
   if (prices.liteSeat && seats.lite > 0) {
     items.push({ price: prices.liteSeat, quantity: seats.lite })
   }
-  if (prices.copilotSeat && seats.copilot > 0) {
+  if (addOns.copilot === true && prices.copilotSeat && seats.copilot > 0) {
     items.push({ price: prices.copilotSeat, quantity: seats.copilot })
   }
   // Metered items carry no quantity — the provider rejects a checkout session

@@ -13,9 +13,9 @@ import { config as appConfig } from '@/lib/server/config'
 import { getCloudConfig } from '../settings/cloud/cloud.service'
 import { PLAN_CATALOGUE, type PlanId } from '../settings/cloud/cloud.types'
 import { listEntitlements } from '../settings/cloud/entitlements'
-import { getBillingConfig, type BillingConfig } from './billing.config'
+import { BILLING_PROVIDER, getBillingConfig, type BillingConfig } from './billing.config'
 import { makeProviderClient, type BillingProviderClient } from './provider/client'
-import { checkoutLineItems, syncSeats } from './seat-sync'
+import { checkoutLineItems, syncSeats, type CheckoutAddOns } from './seat-sync'
 import { countSeats, type SeatCounts } from './seats'
 import { applySubscription, currentSubscriptionRef, toSnapshot } from './subscription'
 import { deriveOutcomeUsage, pushOutcomeUsage, usageSummary } from './usage'
@@ -45,8 +45,14 @@ export interface BillingPaymentMethod {
 }
 
 export interface BillingOverview {
-  /** Which plans this deployment sells, cheapest first. */
-  purchasablePlans: Array<{ id: PlanId; name: string; grants: string[] }>
+  /**
+   * Which plans this deployment sells, cheapest first.
+   *
+   * `copilotAddOn` says only whether the plan OFFERS the add-on, never what
+   * it costs — a boolean, so no price identifier reaches the client. It
+   * drives whether the opt-in control renders at all.
+   */
+  purchasablePlans: Array<{ id: PlanId; name: string; grants: string[]; copilotAddOn: boolean }>
   plan: PlanId | null
   planName: string | null
   status: string | null
@@ -135,7 +141,12 @@ export async function getBillingOverview(): Promise<BillingOverview | null> {
       .filter((id): id is PlanId => id in PLAN_CATALOGUE)
       .map((id) => PLAN_CATALOGUE[id])
       .sort((a, b) => a.rank - b.rank)
-      .map((plan) => ({ id: plan.id, name: plan.name, grants: [...plan.grants] })),
+      .map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        grants: [...plan.grants],
+        copilotAddOn: Boolean(config.catalogue[plan.id]?.copilotSeat),
+      })),
     plan: cloud.plan,
     planName: cloud.plan ? PLAN_CATALOGUE[cloud.plan].name : null,
     status: cloud.billing.status,
@@ -194,6 +205,8 @@ export async function startCheckout(input: {
   plan: PlanId
   actorEmail: string | null
   returnPath: string
+  /** Optional extras. Absent means none — the add-on is never assumed. */
+  addOns?: CheckoutAddOns
 }): Promise<{ url: string }> {
   const config = getBillingConfig()
   if (!config) throw new BillingNotConfiguredError()
@@ -204,7 +217,8 @@ export async function startCheckout(input: {
   const client = makeProviderClient(config)
   const customerRef = await ensureCustomer(client, input.actorEmail)
   const seats = await countSeats()
-  const lineItems = checkoutLineItems(config, input.plan, seats)
+  const addOns = input.addOns ?? {}
+  const lineItems = checkoutLineItems(config, input.plan, seats, addOns)
 
   const base = config.returnUrl || appConfig.baseUrl
   const session = await client.createCheckoutSession({
@@ -212,10 +226,14 @@ export async function startCheckout(input: {
     lineItems,
     successUrl: `${base}${input.returnPath}?checkout=done`,
     cancelUrl: `${base}${input.returnPath}?checkout=cancelled`,
-    metadata: { plan: input.plan },
+    metadata: { plan: input.plan, copilot: addOns.copilot === true ? 'yes' : 'no' },
     // Keyed on the intent, so a double-clicked upgrade button reuses one
     // session instead of opening two subscriptions.
-    idempotencyKey: `checkout:${customerRef}:${input.plan}:${seats.full}:${seats.lite}:${seats.copilot}`,
+    // The add-on is part of the intent, so changing one's mind about it must
+    // open a NEW session rather than reuse the one without it.
+    idempotencyKey: `checkout:${customerRef}:${input.plan}:${seats.full}:${seats.lite}:${
+      addOns.copilot === true ? seats.copilot : 0
+    }`,
   })
 
   if (!session.url) throw new Error('Provider returned a checkout session with no URL.')
@@ -297,7 +315,7 @@ async function ensureCustomer(
 
   const { writeCloudConfig } = await import('../settings/cloud/cloud.service')
   await writeCloudConfig(
-    { billing: { provider: 'stripe', customerRef: created.id } },
+    { billing: { provider: BILLING_PROVIDER, customerRef: created.id } },
     { writer: 'billing' }
   )
   log.info('billing customer created')

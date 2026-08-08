@@ -11,13 +11,13 @@ It is **off unless configured**, and off is byte-for-byte today's behaviour.
 
 ---
 
-## Why it lives here, and not in `integrations/stripe`
+## Why it lives here, and not under `integrations/`
 
-`apps/web/src/integrations/stripe/` is a customer-data enrichment integration:
-an admin connects **their own** payment account, and a `post.created` hook
-looks up the feedback author's revenue to annotate the post
-(`integrations/stripe/server/hook.ts`). Money flows towards the customer's
-business, and the credential belongs to the customer.
+The payment-provider integration under `apps/web/src/integrations/` is
+customer-data enrichment: an admin connects **their own** payment account, and
+a `post.created` hook looks up the feedback author's revenue to annotate the
+post. Money flows towards the customer's business, and the credential belongs
+to the customer.
 
 This module bills **Quackback's tenants for Quackback**. Money flows towards
 us, the credential is the operator's, and no admin may configure it. The two
@@ -170,9 +170,24 @@ asserts the two lists partition the live catalogue exactly, so a permission
 added later fails CI until someone classifies it rather than silently landing
 in whichever bucket over- or under-charges.
 
-**Copilot** is charged per teammate holding `copilot.use` — the permission
-every Copilot entry point already gates on (`assistant/copilot-gate.ts`). No
-new concept, and it follows a role change automatically.
+**Copilot** is an **opt-in add-on**, and the opt-in is load-bearing. The
+*quantity* is derived — teammates holding `copilot.use`, the permission every
+Copilot entry point already gates on (`assistant/copilot-gate.ts`) — but the
+*purchase* is not. Both legacy role presets carry `copilot.use`, so on any
+workspace that has not adopted custom roles the derived count equals total
+headcount; an add-on inferred from a non-zero count would have been sold to
+every seat on the first upgrade without the customer ever choosing it.
+`checkoutLineItems()` therefore adds the line only when the caller passes
+`addOns.copilot`, and the admin control defaults to unchecked while showing
+how many teammates would be billed.
+
+The asymmetry with `syncSeats()` is deliberate: the sync only ever adjusts an
+item the subscription already has, so it cannot introduce a charge. Purchase
+happens at checkout and nowhere else.
+
+*(Whether headcount-derived Copilot is the right commercial default is an
+operator decision, not an engineering one. Making it opt-in is the reversible
+choice; deriving it is one line away if the operator wants it.)*
 
 ### What a billable outcome is
 
@@ -264,27 +279,78 @@ tests go red, the three that do not depend on the lock stay green.
 
 ---
 
-## Webhooks: three guarantees, three mechanisms
+## Webhooks: four guarantees, four mechanisms
 
-Conflating these is how billing systems double-charge.
+Conflating these is how billing systems double-charge — or charge the wrong
+party.
 
 | Problem | Mechanism |
 | --- | --- |
 | Forged request | HMAC-SHA256 over `<timestamp>.<raw body>`, constant-time compare, ±300s tolerance |
-| Redelivery | `billing_webhook_events`, primary-keyed on the provider's own event id. The claim is an INSERT; a conflict means duplicate |
+| **Event about another customer** | The re-fetched subscription's customer must equal this workspace's. See below |
+| Redelivery | `billing_webhook_events`, primary-keyed on the provider's own event id, claimed by an upsert guarded on `processed_at IS NULL` plus a staleness lease |
 | Out-of-order delivery | The handler **never trusts the event payload**. It re-fetches the subscription from the provider API and applies that, so two events arriving backwards converge on the same state |
 | Two concurrent fetches | `billing_subscription_state.snapshot_fetched_at` refuses a snapshot older than the one already applied |
 
-Two details worth stating because they are easy to get wrong:
+### Ownership: the one a signature cannot answer
+
+A webhook endpoint subscribes to event **types**, never to customers, and the
+endpoint secret authenticates the *endpoint* rather than the subject. Under one
+operator account with a per-tenant endpoint URL, **every tenant's endpoint
+receives every other tenant's subscription events**, each correctly signed for
+the endpoint that receives it. "Correctly signed" means "really from the
+provider" — never "about us".
+
+Without the check, one ordinary delivery does three things, and the third is
+the worst: this workspace's plan silently becomes whatever a stranger bought;
+this workspace's seat count is pushed onto **the stranger's** subscription,
+changing their invoice; and because `currentSubscriptionRef()` orders by
+`updated_at`, the foreign row wins, so "Manage billing" opens another
+customer's portal, invoices and card.
+
+The check runs on the **re-fetched** subscription rather than the event
+payload, for the same reason the ordering guarantee does: the payload is a
+claim, the API response is the fact. A foreign event is acknowledged (200,
+`handled: false, foreign: true`) and recorded as consumed — a non-2xx would
+make the provider retry it forever — and logged at `warn`.
+
+One deliberate carve-out: a workspace with **no** customer yet adopts the
+first subscription it is told about, because checkout completes at the
+provider before any reference exists locally and rejecting it would make
+self-serve signup impossible. The window closes at the end of that same first
+event. The residual exposure is a foreign event arriving before a workspace's
+own checkout completes; `ensureCustomer()` creates the customer before
+checkout on the self-serve path, so in practice it only exists for a
+subscription created out of band.
+
+### Three more details worth stating
 
 - **The signature's timestamp tolerance is transport anti-replay, not
   idempotency.** A legitimate redelivery inside the window is a valid,
   correctly-signed duplicate; only the event ledger stops it.
-- **A failed handler releases its claim.** Without that, a transient provider
-  outage permanently consumes an event the provider will keep resending and
-  the system will keep ignoring — an idempotency guard turned into a
-  data-loss bug. The response is 500 so the provider retries; a bad signature
-  or unparseable body is 400, because retrying those forever helps nobody.
+- **A failed handler releases its claim**, and a *crashed* one is reclaimed
+  after `CLAIM_LEASE_MS`. The normal error path deletes the claim row; a pod
+  kill, an OOM or a failing release cannot, so the claim upsert also reclaims
+  any row that is unprocessed and older than the lease. Without that second
+  half, an interrupted delivery was answered "duplicate" forever while nothing
+  had ever been applied. An attempt that is unprocessed but *recent* is still
+  a duplicate — running two handlers concurrently would push seat quantities
+  twice for no benefit.
+- **The response code is the retry instruction.** 500 for anything a resend
+  could fix; 400 for a bad signature or unparseable body, because retrying
+  those forever helps nobody.
+
+## Recovery: the reconcile timer
+
+`reconcileBilling()` runs every 15 minutes under a cross-instance sweep lock
+(`billing_reconcile`), registered inside `startBackgroundProcessing()` — so it
+is role-gated off `QUACKBACK_ROLE=web` replicas and is a no-op on any install
+with no provider configured.
+
+It is the **same routine the webhook path runs**, which is what keeps a missed
+delivery a delay rather than a permanent divergence: it re-reads the
+subscription, re-applies plan and limits, pushes seat quantities, and derives
+and reports usage. The admin page's Refresh button calls it too.
 
 Seat quantities are pushed as *declarative* quantities rather than usage
 events, which is why they need no ledger: pushing the same number twice is a
@@ -381,17 +447,22 @@ reports zero destructive findings for it.
 
 ---
 
+## A note on naming
+
+The vendor is named only where the protocol defines the spelling — the API
+host, the signature header, and one form field in the meter-event payload.
+`CLAUDE.md`'s carve-out for genuinely-integrated products is scoped to
+`apps/web/src/integrations/**`, which this module deliberately is not, so
+everything we choose ourselves (`BILLING_PROVIDER`, comments, test fixtures)
+describes the pattern instead. `no-vendor-names.test.ts` enforces it with an
+exact-line allowlist.
+
 ## Known gaps
 
 - **Only the entitlements Piece 16 wired are enforced.** `customDomain` and
   `sso` have gates; the other seven catalogue entries are documented but not
   yet at their chokepoints. A plan change moves them all in `listEntitlements()`
   and the admin UI, but seven of them gate nothing yet.
-- **No reconcile schedule.** `reconcileBilling()` exists and is correct, and
-  the admin page has a Refresh button, but nothing calls it on a timer.
-  Webhooks keep state current in practice; a missed delivery needs a human
-  click until a sweeper is added. It is deliberately the same routine the
-  webhook path runs, so adding the timer is a registration, not a design.
 - **No retention sweep for either ledger.** `billing_webhook_events` and
   `billing_usage_events` grow without bound. The webhook ledger's window has
   to exceed the provider's redelivery horizon (months, not hours), and the

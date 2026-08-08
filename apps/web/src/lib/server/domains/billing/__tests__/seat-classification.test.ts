@@ -81,8 +81,50 @@ describe('checkoutLineItems', () => {
     },
   } as unknown as BillingConfig
 
+  it('never sells the Copilot add-on unless it is asked for', () => {
+    // The default matters more than any other case in this file. Both legacy
+    // role presets carry `copilot.use`, so on a workspace that has not
+    // adopted custom roles the derived Copilot count IS the headcount — an
+    // add-on inferred from a non-zero count would be bought for the whole
+    // team on the first upgrade, without the customer choosing it.
+    const seats = { full: 2, lite: 1, copilot: 2, total: 3 }
+    expect(checkoutLineItems(config, 'pro', seats)).toEqual([
+      { price: 'price_seat', quantity: 2 },
+      { price: 'price_lite', quantity: 1 },
+      { price: 'price_outcome' },
+    ])
+    // And an explicitly-false opt-in is the same as an absent one.
+    expect(checkoutLineItems(config, 'pro', seats, { copilot: false })).toEqual(
+      checkoutLineItems(config, 'pro', seats)
+    )
+  })
+
+  it('sells the Copilot add-on when it is asked for, at the derived quantity', () => {
+    // The inverse: opting in must actually buy it, and the quantity is still
+    // derived — you pay for the people who can use it, not a number typed in.
+    expect(
+      checkoutLineItems(config, 'pro', { full: 2, lite: 1, copilot: 2, total: 3 }, { copilot: true })
+    ).toEqual([
+      { price: 'price_seat', quantity: 2 },
+      { price: 'price_lite', quantity: 1 },
+      { price: 'price_copilot', quantity: 2 },
+      { price: 'price_outcome' },
+    ])
+  })
+
+  it('omits the add-on when opted in but nobody can use Copilot', () => {
+    expect(
+      checkoutLineItems(config, 'pro', { full: 2, lite: 0, copilot: 0, total: 2 }, { copilot: true })
+    ).toEqual([
+      { price: 'price_seat', quantity: 2 },
+      { price: 'price_outcome' },
+    ])
+  })
+
   it('builds one line per sold meter', () => {
-    expect(checkoutLineItems(config, 'pro', { full: 2, lite: 1, copilot: 1, total: 3 })).toEqual([
+    expect(
+      checkoutLineItems(config, 'pro', { full: 2, lite: 1, copilot: 1, total: 3 }, { copilot: true })
+    ).toEqual([
       { price: 'price_seat', quantity: 2 },
       { price: 'price_lite', quantity: 1 },
       { price: 'price_copilot', quantity: 1 },
@@ -93,7 +135,9 @@ describe('checkoutLineItems', () => {
   })
 
   it('omits meters with a zero count', () => {
-    expect(checkoutLineItems(config, 'pro', { full: 3, lite: 0, copilot: 0, total: 3 })).toEqual([
+    expect(
+      checkoutLineItems(config, 'pro', { full: 3, lite: 0, copilot: 0, total: 3 }, { copilot: true })
+    ).toEqual([
       { price: 'price_seat', quantity: 3 },
       { price: 'price_outcome' },
     ])
