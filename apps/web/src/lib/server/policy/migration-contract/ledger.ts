@@ -98,6 +98,8 @@ export function staleAllowlistEntries(
 const KIND_LABEL: Record<DestructiveFinding['kind'], string> = {
   drop_column: 'DROP COLUMN',
   drop_table: 'DROP TABLE',
+  drop_view: 'DROP VIEW',
+  drop_type: 'DROP TYPE',
   drop_constraint: 'DROP CONSTRAINT',
   rename_column: 'RENAME COLUMN',
   rename_table: 'RENAME TO (table)',
@@ -163,11 +165,14 @@ export function renderContractDoc(
   for (const e of withFindings) {
     const findingList = e.findings
       .map((f) => {
-        // drop_table / rename_table already fold the table name into `detail`
-        // (the drop target, or "old -> new"); prefixing it again would read
+        // drop_table / drop_view / drop_type / rename_table already fold the
+        // dropped/renamed name into `detail`; prefixing it again would read
         // as `t.t` / `t.t -> new`.
         const subject =
-          f.kind === 'drop_table' || f.kind === 'rename_table'
+          f.kind === 'drop_table' ||
+          f.kind === 'drop_view' ||
+          f.kind === 'drop_type' ||
+          f.kind === 'rename_table'
             ? f.detail
             : `${f.table ?? ''}.${f.detail}`
         return `${KIND_LABEL[f.kind]} ${subject}`

@@ -35,6 +35,18 @@ A trailing rationale is allowed and encouraged:
 ALTER TABLE posts DROP COLUMN legacy_slug;
 ```
 
+The comment can also trail real DDL on the same line rather than stand alone
+above it — both are recognized:
+
+```sql
+ALTER TABLE posts DROP COLUMN legacy_slug; -- @contract: safe-after 0.14.0
+```
+
+`safe-after 0.0.0` is rejected as malformed rather than accepted: it's
+syntactically a version but not a real release, and a version nobody could
+plausibly name a release makes for an unreviewable rubber stamp. Name the
+actual release.
+
 **The annotation covers the whole file, not just the statement below it.** A
 migration file is already the atomic deploy/review unit — drizzle's journal
 applies them one at a time, in order — so one contract claim for the file is
@@ -51,12 +63,14 @@ written down, not to adjudicate it.
 
 ## What counts as destructive
 
-Detected, at minimum per the brief, plus one addition:
+Detected, at minimum per the brief, plus three additions:
 
 | DDL                                        | Why it breaks a still-running old code version                                                                                                                                                                                                                                                                                       |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `DROP COLUMN`                              | A read or write against the column errors immediately.                                                                                                                                                                                                                                                                               |
 | `DROP TABLE`                               | Same, for the whole table.                                                                                                                                                                                                                                                                                                           |
+| `DROP VIEW` / `DROP MATERIALIZED VIEW`     | Same failure mode as DROP TABLE, for old code that queries the view directly. No historical instance — this codebase has never shipped a SQL view — added defensively since the failure mode is identical and detection costs nothing extra.                                                                                         |
+| `DROP TYPE`                                | Old code reading or writing a column typed against the dropped enum/composite type errors. Same "no historical instance, added defensively" note as DROP VIEW.                                                                                                                                                                       |
 | `DROP CONSTRAINT`                          | Required by the brief; also matches every historical instance, which drops an FK alongside a column it referenced.                                                                                                                                                                                                                   |
 | `RENAME COLUMN`                            | The name old code addresses no longer resolves.                                                                                                                                                                                                                                                                                      |
 | `ALTER TABLE ... RENAME TO` (table rename) | Same, for the table name.                                                                                                                                                                                                                                                                                                            |
@@ -73,6 +87,24 @@ historical instances change a pgvector column's dimension, a hard break for
 old code with the old dimension baked in. Over-flagging a genuinely safe
 widening costs a one-line annotation; under-flagging a real narrowing ships
 an outage.
+
+**`COLUMN` is optional everywhere Postgres allows it, and every clause
+matches both spellings.** `DROP [COLUMN]`, `ALTER [COLUMN] ... TYPE`, `ALTER
+[COLUMN] ... SET NOT NULL`, `ALTER [COLUMN] ... DROP DEFAULT`, and `RENAME
+[COLUMN] ... TO` are all legal with the keyword omitted — `ALTER TABLE t
+DROP x;` drops a column exactly like `ALTER TABLE t DROP COLUMN x;`. A
+scanner that only recognized the long form would silently stop working the
+day an author typed the shorthand, so both are pinned in
+`__tests__/scan.test.ts`. Making `COLUMN` optional creates a real ambiguity
+that's handled explicitly rather than assumed away: with the keyword gone,
+bare `DROP x`, `DROP CONSTRAINT x`, `ALTER x DROP DEFAULT`, and `ALTER x
+DROP NOT NULL` all start with the literal token `DROP`, so the column-drop
+regex carries a negative lookahead excluding `CONSTRAINT` / `DEFAULT` /
+`NOT` / `IDENTITY` / `EXPRESSION` right after it — otherwise `ALTER TABLE x
+ALTER y DROP DEFAULT` would misread as dropping a column literally named
+`default`. The rename side has the same shape (`RENAME x TO y` vs. bare
+`RENAME TO y` vs. `RENAME CONSTRAINT x TO y`) and is resolved the same way:
+each disambiguation case is a named test, not an assumption.
 
 ## What's deliberately not detected, and why
 
@@ -118,6 +150,21 @@ an outage.
   breaking old code) is out of scope. This linter is about _cross-version
   compatibility_, not whether a migration succeeds against real data —
   that's what running it against a Neon branch pre-flight (§10.8) is for.
+
+## Comments and string literals
+
+`stripNoise` blanks both SQL comment styles — `--` line comments and `/* ...
+*/` block comments, including Postgres's (non-standard) nested block
+comments — and `'...'` string literals before any DDL keyword regex runs, in
+that order, as one pass. The ordering matters: a comment is consumed as a
+whole span before its contents are ever checked for a quote, so an
+apostrophe inside a comment's own prose ("doesn't", "the customer's
+request") can never be misread as opening a real string and swallowing
+whatever DDL follows it — a failure mode a naive strip-strings-first (or
+regex-only) approach falls into. The same pass is what keeps DDL-shaped
+words inside a comment (`-- see 0032's DROP COLUMN` or the block-comment
+equivalent) or inside a jsonb default's string data from ever reaching a
+keyword regex as if they were live code.
 
 ## Grandfathering history
 
@@ -171,8 +218,15 @@ classifications.
 - **Extraction tests** (`__tests__/scan.test.ts`): pin the DDL-detection and
   annotation-parsing rules on synthetic snippets, including the
   false-positive traps a naive `grep` would fall into — DDL-shaped words
-  inside a `--` comment or a `'...'` string literal, an apostrophe inside an
-  English comment, and DDL nested inside a `DO $$ ... $$` block.
+  inside a `--` comment, a `/* ... */` block comment (including nested
+  ones), or a `'...'` string literal; an apostrophe inside either comment
+  style; and DDL nested inside a `DO $$ ... $$` block. A dedicated
+  `COLUMN keyword is optional` group pins every shorthand form (`DROP x`,
+  `ALTER x TYPE`, `ALTER x SET NOT NULL`, `ALTER x DROP DEFAULT`, `RENAME x
+TO y`) alongside the specific collision each shorthand risks — `DROP
+CONSTRAINT`, `ALTER x DROP DEFAULT`, `ALTER x DROP NOT NULL`, `RENAME
+CONSTRAINT`, and a bare table `RENAME TO` are each asserted as still
+  correctly resolved, not just assumed safe by construction.
 
 ## When you're blocked by this
 
