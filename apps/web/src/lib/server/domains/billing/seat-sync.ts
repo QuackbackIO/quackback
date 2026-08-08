@@ -19,8 +19,8 @@ import { SEAT_METERS, type BillingConfig, type SeatMeter } from './billing.confi
 import type { BillingProviderClient } from './provider/client'
 import { countSeats, type SeatCounts } from './seats'
 import {
-  currentSubscriptionRef,
   recordSyncedQuantities,
+  syncedQuantitiesFor,
   type SubscriptionSnapshot,
 } from './subscription'
 import type { PlanId } from '../settings/cloud/cloud.types'
@@ -61,8 +61,11 @@ export async function syncSeats(
 
   if (!snapshot) return { skipped: true, unchanged: false, desired, seats }
 
-  const stored = await currentSubscriptionRef()
-  const synced = stored?.subscriptionRef === snapshot.subscriptionRef ? stored.syncedQuantities : {}
+  // Keyed on the subscription being synced. An earlier version read "the most
+  // recently updated row" and compared its ref, which returns {} whenever any
+  // other subscription row happens to be newer — and re-pushes an unchanged
+  // seat count, which is a redundant proration event at the provider.
+  const synced = await syncedQuantitiesFor(snapshot.subscriptionRef)
 
   const updates: Array<{ id: string; quantity: number }> = []
   for (const meter of SEAT_METERS) {

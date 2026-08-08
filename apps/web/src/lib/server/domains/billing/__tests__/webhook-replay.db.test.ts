@@ -62,8 +62,22 @@ const CATALOGUE = {
 
 type Client = BillingProviderClient
 
+/**
+ * A provider stub whose customer carries this workspace's stamp.
+ *
+ * Needed because the workspace in this suite has no customer on record, so
+ * every delivery takes the adoption path — and adoption is verified against
+ * the provider rather than assumed. An unstamped customer here would be
+ * refused as foreign, which is correct behaviour and the wrong thing for this
+ * suite to be testing.
+ */
 function stub(plan: 'pro' | 'business', onFetch?: () => void): Client {
   return {
+    getCustomer: vi.fn(async (id: string) => ({
+      id,
+      email: null,
+      metadata: { quackback_workspace: stampedWorkspaceId },
+    })),
     getSubscription: vi.fn(async (id: string) => {
       onFetch?.()
       return {
@@ -90,7 +104,6 @@ function stub(plan: 'pro' | 'business', onFetch?: () => void): Client {
     })),
     reportMeterEvent: vi.fn(),
     createCustomer: vi.fn(),
-    getCustomer: vi.fn(),
     createCheckoutSession: vi.fn(),
     createPortalSession: vi.fn(),
     listInvoices: vi.fn(async () => []),
@@ -121,6 +134,8 @@ async function storedPlan(): Promise<string | null> {
   return (row?.cloud as { plan?: string } | null)?.plan ?? null
 }
 
+let stampedWorkspaceId = ''
+
 beforeEach(async () => {
   await fixture.begin()
   await testDb.delete(billingWebhookEvents)
@@ -133,6 +148,8 @@ beforeEach(async () => {
   process.env.BILLING_WEBHOOK_SECRET = SECRET
   process.env.BILLING_PRICES = JSON.stringify(CATALOGUE)
   resetBillingConfigCache()
+  const { workspaceStamp } = await import('../identity')
+  stampedWorkspaceId = await workspaceStamp()
 })
 
 afterEach(async () => {

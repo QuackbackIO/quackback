@@ -53,8 +53,11 @@ vi.mock('@/lib/server/domains/settings/settings.service', async (importOriginal)
 
 const { handleBillingWebhook } = await import('../webhook.service')
 const { signWebhookPayload } = await import('../provider/signature')
-const { getBillingConfig, resetBillingConfigCache } = await import('../billing.config')
+const { BILLING_PROVIDER, getBillingConfig, resetBillingConfigCache } = await import(
+  '../billing.config'
+)
 const { applySubscription, currentSubscriptionRef, toSnapshot } = await import('../subscription')
+const { workspaceStamp } = await import('../identity')
 
 const fixture = await createDbTestFixture({
   probe: async (db) => {
@@ -79,10 +82,30 @@ const CATALOGUE = {
 interface Calls {
   fetched: string[]
   pushes: string[]
+  customerLookups: string[]
 }
 
-function stub(calls: Calls, plan: 'pro' | 'business', customer: string, ref: string): BillingProviderClient {
+/**
+ * @param stampedFor Workspace id the customer's provider-side metadata claims
+ *   it was created for. `null` models a customer created outside this module
+ *   (no stamp), which must never be adopted.
+ */
+function stub(
+  calls: Calls,
+  plan: 'pro' | 'business',
+  customer: string,
+  ref: string,
+  stampedFor: string | null = null
+): BillingProviderClient {
   return {
+    getCustomer: vi.fn(async (id: string) => {
+      calls.customerLookups.push(id)
+      return {
+        id,
+        email: null,
+        metadata: stampedFor ? { quackback_workspace: stampedFor } : {},
+      }
+    }),
     getSubscription: vi.fn(async (id: string) => {
       calls.fetched.push(id)
       return {
@@ -107,7 +130,6 @@ function stub(calls: Calls, plan: 'pro' | 'business', customer: string, ref: str
     }),
     reportMeterEvent: vi.fn(),
     createCustomer: vi.fn(),
-    getCustomer: vi.fn(),
     createCheckoutSession: vi.fn(),
     createPortalSession: vi.fn(),
     listInvoices: vi.fn(async () => []),
@@ -193,7 +215,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
   })
 
   it('refuses a correctly-signed event for a different customer', async () => {
-    const calls: Calls = { fetched: [], pushes: [] }
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_foreign', OTHER.subscription, OTHER.customer),
       stub(calls, 'business', OTHER.customer, OTHER.subscription)
@@ -228,7 +250,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     // A payload claiming our customer while the real subscription belongs to
     // someone else must not pass. The check therefore has to run after the
     // re-fetch, on what the provider says the subscription actually is.
-    const calls: Calls = { fetched: [], pushes: [] }
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       // Payload lies: says cus_mine.
       subscriptionEvent('evt_spoofed', OTHER.subscription, MINE.customer),
@@ -244,7 +266,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
   it('still handles an event for this workspace', async () => {
     // The inverse assertion. "Refuses everything" would satisfy the tests
     // above and break the product.
-    const calls: Calls = { fetched: [], pushes: [] }
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_mine', MINE.subscription, MINE.customer),
       stub(calls, 'business', MINE.customer, MINE.subscription)
@@ -262,7 +284,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     // The deletion path is the one case that cannot re-fetch, so it needs its
     // own check — and it is the most damaging one to get wrong, because it
     // downgrades the workspace to Free.
-    const calls: Calls = { fetched: [], pushes: [] }
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const raw = {
       id: 'evt_foreign_delete',
       type: 'customer.subscription.deleted',
@@ -276,7 +298,7 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
   })
 
   it('handles a deletion for this workspace', async () => {
-    const calls: Calls = { fetched: [], pushes: [] }
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const raw = {
       id: 'evt_my_delete',
       type: 'customer.subscription.deleted',
@@ -289,41 +311,174 @@ describe.skipIf(!fixture.available)('webhook customer scoping', () => {
     expect(await currentSubscriptionRef()).toBeNull()
   })
 
-  it('adopts the first subscription when the workspace has none yet', async () => {
-    // Checkout completes before any reference is stored, so the very first
-    // event has nothing to compare against. That is the one case where an
-    // unknown customer is legitimately ours — and it is why the check cannot
-    // simply be "reject anything unrecognised".
+  it('adopts a first subscription whose customer this workspace created', async () => {
+    // Checkout completes at the provider before any reference exists locally,
+    // so the very first event has nothing local to compare against. It is
+    // resolved AT THE PROVIDER instead: `ensureCustomer()` stamps the
+    // workspace id into the customer's metadata, and adoption requires it to
+    // match. Rejecting outright would make self-serve signup impossible.
     await testDb.delete(billingSubscriptionState)
     await testDb.update(settings).set({ cloud: null })
+    const workspaceId = await workspaceStamp()
 
-    const calls: Calls = { fetched: [], pushes: [] }
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     const result = await deliver(
       subscriptionEvent('evt_first', MINE.subscription, MINE.customer),
-      stub(calls, 'pro', MINE.customer, MINE.subscription)
+      stub(calls, 'pro', MINE.customer, MINE.subscription, workspaceId)
     )
     expect(result).toEqual({ status: 200, body: { received: true, handled: true } })
+    expect(calls.customerLookups).toEqual([MINE.customer])
     expect(await storedCloud()).toMatchObject({
       plan: 'pro',
       billing: { customerRef: MINE.customer },
     })
   })
 
+  it('refuses to adopt a subscription whose customer carries no workspace stamp', async () => {
+    // A customer created outside this module — a provisioning flow that has
+    // not been taught the contract, or a stranger's. Refusing is the correct
+    // direction for an identity question: a diagnosable failure rather than a
+    // silent cross-tenant adoption.
+    await testDb.delete(billingSubscriptionState)
+    await testDb.update(settings).set({ cloud: null })
+
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
+    const result = await deliver(
+      subscriptionEvent('evt_unstamped', OTHER.subscription, OTHER.customer),
+      stub(calls, 'business', OTHER.customer, OTHER.subscription, null)
+    )
+    expect(result.body).toMatchObject({ handled: false, foreign: true })
+    expect(await storedCloud()).toBeNull()
+    expect(calls.pushes).toEqual([])
+  })
+
+  it('refuses to adopt a subscription stamped for a different workspace', async () => {
+    await testDb.delete(billingSubscriptionState)
+    await testDb.update(settings).set({ cloud: null })
+
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
+    const result = await deliver(
+      subscriptionEvent('evt_other_ws', OTHER.subscription, OTHER.customer),
+      stub(calls, 'business', OTHER.customer, OTHER.subscription, 'workspace_someone_else')
+    )
+    expect(result.body).toMatchObject({ handled: false, foreign: true })
+    expect(await storedCloud()).toBeNull()
+  })
+
   it('does not adopt a stranger once this workspace has a customer', async () => {
-    // The adoption window closes as soon as a customer is known — otherwise
-    // the first-subscription carve-out would reopen the whole hole.
-    const calls: Calls = { fetched: [], pushes: [] }
+    // The adoption window closes as soon as a customer is known — and once it
+    // is, the provider is not even consulted.
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     await deliver(
       subscriptionEvent('evt_intruder', OTHER.subscription, OTHER.customer),
-      stub(calls, 'business', OTHER.customer, OTHER.subscription)
+      // Stamped for US, to make the point: with a customer on record the
+      // stamp is irrelevant, because equality already answers the question.
+      stub(calls, 'business', OTHER.customer, OTHER.subscription, await workspaceStamp())
     )
     expect(await storedCloud()).toMatchObject({
       billing: { customerRef: MINE.customer },
     })
+    expect(calls.customerLookups).toEqual([])
+  })
+
+  // ---------------------------------------------------------------------
+  // Re-entry: the ways the window was reopened after it had closed
+  // ---------------------------------------------------------------------
+
+  it('keeps the customer after a cancellation, so the window does not reopen', async () => {
+    // The defect this pins: `applySubscription(null, …)` nulled `customerRef`
+    // along with the subscription, so a workspace that had ever cancelled was
+    // back to "no customer known" — permanently adoptable. Asserting the
+    // WHOLE identity block, because the earlier test asserted only the fields
+    // it expected to change and that is precisely where the hole was.
+    await deliver(
+      {
+        id: 'evt_cancel',
+        type: 'customer.subscription.deleted',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: MINE.subscription, customer: MINE.customer } },
+      },
+      stub({ fetched: [], pushes: [], customerLookups: [] }, 'pro', MINE.customer, MINE.subscription)
+    )
+
+    const cloud = await storedCloud()
+    expect(cloud).toMatchObject({ plan: 'free' })
+    expect((cloud as { billing: Record<string, unknown> }).billing).toEqual({
+      provider: BILLING_PROVIDER,
+      // The customer survives its subscription — commercially true, and what
+      // keeps the ownership check able to answer.
+      customerRef: MINE.customer,
+      subscriptionRef: null,
+      status: null,
+      currentPeriodEnd: null,
+    })
+  })
+
+  it('still refuses a foreign event after a cancellation', async () => {
+    // The sequence the previous suite never ran: cancel, then deliver.
+    await deliver(
+      {
+        id: 'evt_cancel_2',
+        type: 'customer.subscription.deleted',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: MINE.subscription, customer: MINE.customer } },
+      },
+      stub({ fetched: [], pushes: [], customerLookups: [] }, 'pro', MINE.customer, MINE.subscription)
+    )
+
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
+    const result = await deliver(
+      subscriptionEvent('evt_after_cancel', OTHER.subscription, OTHER.customer),
+      stub(calls, 'business', OTHER.customer, OTHER.subscription, await workspaceStamp())
+    )
+    expect(result.body).toMatchObject({ handled: false, foreign: true })
+    expect(await storedCloud()).toMatchObject({
+      plan: 'free',
+      billing: { customerRef: MINE.customer },
+    })
+    expect(calls.pushes).toEqual([])
+  })
+
+  it('still refuses a foreign event after a reconcile tick', async () => {
+    // Re-entry 2: the sweep added to make a missed webhook recoverable was
+    // itself calling the null-apply on every unsubscribed workspace, erasing
+    // the identity the ownership check depends on — every fifteen minutes,
+    // for the entire free population.
+    const { reconcileBilling } = await import('../billing.service')
+    await testDb.delete(billingSubscriptionState)
+
+    const reconciled = await reconcileBilling({
+      client: stub(
+        { fetched: [], pushes: [], customerLookups: [] },
+        'pro',
+        MINE.customer,
+        MINE.subscription
+      ),
+    })
+    // A known customer with no recorded subscription is ambiguous: they may
+    // have cancelled, or a subscription may exist that this workspace has lost
+    // track of. Asserting Free from a timer resolves that by downgrading
+    // someone who may well be paying, which no human asked for — so the sweep
+    // leaves the plan alone and says so. Pinning the PLAN is what makes this
+    // assertion see the skip; pinning only the customer would pass either way,
+    // because keeping the customer is already guaranteed upstream.
+    expect(reconciled).toEqual({ reconciled: true, plan: 'pro' })
+    expect(await storedCloud()).toMatchObject({
+      plan: 'pro',
+      billing: { customerRef: MINE.customer },
+    })
+
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
+    const result = await deliver(
+      subscriptionEvent('evt_after_sweep', OTHER.subscription, OTHER.customer),
+      stub(calls, 'business', OTHER.customer, OTHER.subscription, await workspaceStamp())
+    )
+    expect(result.body).toMatchObject({ handled: false, foreign: true })
+    expect(await storedCloud()).toMatchObject({ billing: { customerRef: MINE.customer } })
   })
 
   it('records a foreign event as consumed, so it is not re-fetched forever', async () => {
-    const calls: Calls = { fetched: [], pushes: [] }
+    const calls: Calls = { fetched: [], pushes: [], customerLookups: [] }
     await deliver(
       subscriptionEvent('evt_foreign_twice', OTHER.subscription, OTHER.customer),
       stub(calls, 'business', OTHER.customer, OTHER.subscription)

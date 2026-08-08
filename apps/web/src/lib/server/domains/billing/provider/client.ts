@@ -50,6 +50,12 @@ export class BillingProviderError extends Error {
 export interface ProviderCustomer {
   id: string
   email: string | null
+  /**
+   * Provider-side key/value bag. Carries the workspace stamp this module
+   * writes at creation, which is what lets an adoption decision be verified
+   * against the provider rather than assumed.
+   */
+  metadata?: Record<string, string> | null
   /** Provider-side default payment method, when the API expanded one. */
   invoice_settings?: { default_payment_method?: string | null } | null
 }

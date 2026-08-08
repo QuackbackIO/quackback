@@ -32,6 +32,21 @@ const log = logger.child({ component: 'billing-config' })
  */
 export const BILLING_PROVIDER = 'hosted-subscriptions' as const
 
+/**
+ * Provider-customer metadata key holding the workspace id that created it.
+ *
+ * Written by `ensureCustomer()` and read on the one path that would otherwise
+ * have to take a customer's ownership on trust: a workspace with no recorded
+ * customer deciding whether an incoming subscription is its own. Comparing
+ * the stamp against this workspace's id turns that decision from an
+ * assumption into something the provider can be asked to confirm.
+ *
+ * A customer created outside this module carries no stamp, so it is never
+ * adopted. That is the intended failure direction — a loud refusal an
+ * operator can diagnose, rather than a silent cross-tenant adoption.
+ */
+export const WORKSPACE_STAMP_KEY = 'quackback_workspace'
+
 export type BillingProvider = typeof BILLING_PROVIDER
 
 // ---------------------------------------------------------------------------

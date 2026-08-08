@@ -314,28 +314,57 @@ claim, the API response is the fact. A foreign event is acknowledged (200,
 `handled: false, foreign: true`) and recorded as consumed — a non-2xx would
 make the provider retry it forever — and logged at `warn`.
 
-One deliberate carve-out: a workspace with **no** customer yet adopts the
-first subscription it is told about, because checkout completes at the
-provider before any reference exists locally and rejecting it would make
-self-serve signup impossible. The window closes at the end of that same first
-event. The residual exposure is a foreign event arriving before a workspace's
-own checkout completes; `ensureCustomer()` creates the customer before
-checkout on the self-serve path, so in practice it only exists for a
-subscription created out of band.
+### Adoption: the case with nothing local to compare against
+
+A workspace with **no** recorded customer cannot answer the ownership question
+locally, because checkout completes at the provider before any reference
+exists here. Rejecting outright would make self-serve signup impossible, so
+the question is answered **at the provider** instead: `ensureCustomer()`
+stamps this workspace's id into the customer's metadata
+(`WORKSPACE_STAMP_KEY`), and adoption requires that stamp to match.
+
+A customer created outside this module carries no stamp and is refused, with a
+`warn` naming the reference. That is the right direction for an identity
+question — unlike an entitlement read, which fails *open* because it gates
+commerce, this gates who gets billed, so a failed customer lookup refuses too.
+The contract for a provisioning flow that wants to hand this module a
+pre-made customer is one metadata key.
+
+**Two ways this window was reopened after it had closed**, both fixed, both
+worth stating because the second was self-inflicted by the fix for something
+else:
+
+1. `applySubscription(null, …)` used to null `customerRef` along with the
+   subscription, so **every cancellation** returned the workspace to "no
+   customer known" — permanently adoptable. A null snapshot now clears the
+   subscription and keeps the customer, which is also just correct: a provider
+   customer outlives every subscription it holds, and destroying the reference
+   throws away the "which account is this" answer support needs most.
+2. The reconcile sweep called that same null-apply on every workspace without
+   a live subscription — so the mechanism added to make a missed webhook
+   recoverable was erasing the identity the ownership check depends on, every
+   fifteen minutes, for the whole free population. The sweep now leaves a
+   known-customer workspace alone (see below).
 
 ### Three more details worth stating
 
 - **The signature's timestamp tolerance is transport anti-replay, not
   idempotency.** A legitimate redelivery inside the window is a valid,
   correctly-signed duplicate; only the event ledger stops it.
-- **A failed handler releases its claim**, and a *crashed* one is reclaimed
+- **A failed handler releases its claim**, and a *stale* one is reclaimed
   after `CLAIM_LEASE_MS`. The normal error path deletes the claim row; a pod
   kill, an OOM or a failing release cannot, so the claim upsert also reclaims
   any row that is unprocessed and older than the lease. Without that second
   half, an interrupted delivery was answered "duplicate" forever while nothing
-  had ever been applied. An attempt that is unprocessed but *recent* is still
-  a duplicate — running two handlers concurrently would push seat quantities
-  twice for no benefit.
+  had ever been applied.
+- **The lease reduces duplicate work; it does not exclude it.** A handler
+  parked in a slow provider call past the window is indistinguishable from a
+  dead one, so a redelivery at `CLAIM_LEASE_MS + 1s` reclaims it and both run.
+  That is inherent to leasing on a timeout rather than on liveness. What makes
+  the overlap safe is idempotence *underneath* the lease — no-op write seams,
+  the snapshot ordering guard, per-subscription synced quantities, and
+  provider-side dedupe keys on usage. Do not add a step that relies on the
+  lease for correctness.
 - **The response code is the retry instruction.** 500 for anything a resend
   could fix; 400 for a bad signature or unparseable body, because retrying
   those forever helps nobody.
@@ -351,6 +380,15 @@ It is the **same routine the webhook path runs**, which is what keeps a missed
 delivery a delay rather than a permanent divergence: it re-reads the
 subscription, re-applies plan and limits, pushes seat quantities, and derives
 and reports usage. The admin page's Refresh button calls it too.
+
+One case it deliberately does **not** resolve: a workspace with a known
+customer and no locally-recorded subscription. That is ambiguous — either they
+cancelled, or a subscription exists at the provider this workspace has lost
+track of — and asserting Free from a timer resolves it by downgrading someone
+who may well be paying. The sweep logs and leaves the plan alone; the webhook
+path handles real transitions. (Resolving it properly means asking the
+provider which subscriptions the customer has, which needs a list endpoint
+this client does not have yet.)
 
 Seat quantities are pushed as *declarative* quantities rather than usage
 events, which is why they need no ledger: pushing the same number twice is a
@@ -477,4 +515,9 @@ exact-line allowlist.
   and not fixed here.
 - **Proration is the provider's.** Seat changes are pushed as quantity
   updates and whatever proration behaviour the prices carry applies. The
-  product does not model it.
+  product does not model it — which is why a *redundant* push is not free, and
+  why the synced-quantity comparison is keyed per subscription rather than
+  read off whichever state row is newest.
+- **`CLAIM_LEASE_MS` is a guess with a rationale, not a measurement.** Five
+  minutes against a handler whose duration under a slow provider has not been
+  measured. Too short duplicates work; too long delays recovery.

@@ -13,9 +13,15 @@ import { config as appConfig } from '@/lib/server/config'
 import { getCloudConfig } from '../settings/cloud/cloud.service'
 import { PLAN_CATALOGUE, type PlanId } from '../settings/cloud/cloud.types'
 import { listEntitlements } from '../settings/cloud/entitlements'
-import { BILLING_PROVIDER, getBillingConfig, type BillingConfig } from './billing.config'
+import {
+  BILLING_PROVIDER,
+  WORKSPACE_STAMP_KEY,
+  getBillingConfig,
+  type BillingConfig,
+} from './billing.config'
 import { makeProviderClient, type BillingProviderClient } from './provider/client'
 import { checkoutLineItems, syncSeats, type CheckoutAddOns } from './seat-sync'
+import { workspaceStamp } from './identity'
 import { countSeats, type SeatCounts } from './seats'
 import { applySubscription, currentSubscriptionRef, toSnapshot } from './subscription'
 import { deriveOutcomeUsage, pushOutcomeUsage, usageSummary } from './usage'
@@ -276,8 +282,23 @@ export async function reconcileBilling(deps: { client?: BillingProviderClient } 
   const stored = await currentSubscriptionRef()
 
   if (!stored) {
-    // No subscription: still assert the unsubscribed plan, so a workspace on
-    // a billing-enabled deployment is gated as Free rather than ungated.
+    const cloud = await getCloudConfig()
+    if (cloud.billing.customerRef) {
+      // A known customer with no locally-recorded subscription is ambiguous:
+      // either they cancelled (and the webhook already wrote Free), or a
+      // subscription exists at the provider that this workspace has lost
+      // track of. Asserting Free from a timer would resolve that ambiguity by
+      // downgrading a customer who may well be paying — the expensive
+      // direction of the guess, and one no human asked for. The webhook path
+      // handles real transitions; this leaves the plan alone and says so.
+      log.info(
+        { plan: cloud.plan },
+        'billing reconcile: customer known but no subscription recorded; leaving the plan as it is'
+      )
+      return { reconciled: true, plan: cloud.plan }
+    }
+    // Never had a customer: assert the unsubscribed plan, so a workspace on a
+    // billing-enabled deployment is gated as Free rather than ungated.
     const result = await applySubscription(null, config)
     return { reconciled: true, plan: result.plan }
   }
@@ -308,9 +329,12 @@ async function ensureCustomer(
   const cloud = await getCloudConfig()
   if (cloud.billing.customerRef) return cloud.billing.customerRef
 
+  // The workspace stamp is what lets `webhook.service.ts` verify, rather
+  // than assume, that an incoming subscription belongs to this workspace when
+  // it has no customer on record yet.
   const created = await client.createCustomer({
     ...(actorEmail ? { email: actorEmail } : {}),
-    metadata: { source: 'quackback' },
+    metadata: { source: 'quackback', [WORKSPACE_STAMP_KEY]: await workspaceStamp() },
   })
 
   const { writeCloudConfig } = await import('../settings/cloud/cloud.service')

@@ -19,9 +19,11 @@
  *     defect rather than a robustness gap.
  *  3. **Idempotency** — the `billing_webhook_events` table, keyed by the
  *     provider's own event id. The claim is an upsert guarded on
- *     `processed_at IS NULL` plus a stale lease, so a completed event is a
- *     duplicate, an in-flight one is a duplicate, and only a *crashed*
- *     attempt is retried.
+ *     `processed_at IS NULL` plus a staleness lease, so a completed event is a
+ *     duplicate, a recently-claimed one is a duplicate, and a *crashed*
+ *     attempt is eventually retried rather than stranded. Note the lease
+ *     reduces duplicate work but does not exclude it — see `CLAIM_LEASE_MS`
+ *     for why that is inherent, and what makes the overlap safe.
  *  4. **Ordering** — the handler never trusts the event payload's copy of the
  *     object. It re-fetches the subscription from the provider API and
  *     applies *that*, so two events arriving backwards converge on the same
@@ -56,7 +58,8 @@
 import { and, billingWebhookEvents, db, eq, isNull, lt } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { getCloudConfig } from '../settings/cloud/cloud.service'
-import { getBillingConfig } from './billing.config'
+import { WORKSPACE_STAMP_KEY, getBillingConfig } from './billing.config'
+import { workspaceStamp } from './identity'
 import { makeProviderClient, type BillingProviderClient } from './provider/client'
 import { verifyWebhookSignature } from './provider/signature'
 import {
@@ -81,12 +84,30 @@ export const SIGNATURE_HEADER = 'stripe-signature'
 /**
  * How long a claimed-but-unfinished delivery is assumed to still be running.
  *
- * The window separates two states the claim row cannot otherwise tell apart:
- * a handler that is mid-flight (must not be run a second time concurrently)
- * and one whose process died between claiming and releasing (must be retried,
- * or the event is stranded forever). The handler makes at most a few provider
- * calls, so minutes is generous; the provider's own retry horizon is days, so
- * a reclaim always has redeliveries left to ride in on.
+ * ## What this guarantees, and what it does not
+ *
+ * It guarantees that a **crashed** attempt is eventually retried rather than
+ * stranded: a process killed between claiming and releasing leaves a row that
+ * would otherwise answer "duplicate" forever while nothing was ever applied.
+ *
+ * It does **not** guarantee mutual exclusion. A fixed lease cannot: a handler
+ * that is genuinely still running past the window — parked in a slow provider
+ * call, say — is indistinguishable from a dead one, so a redelivery at
+ * `CLAIM_LEASE_MS + 1s` reclaims it and both run. That is inherent to leasing
+ * on a timeout rather than on liveness, and the window is chosen so it is
+ * rare, not impossible.
+ *
+ * What makes the overlap harmless is that the work behind it is idempotent
+ * independently of this lease. `applySubscription` writes through seams that
+ * no-op when nothing changed and refuses an older snapshot;
+ * `recordSyncedQuantities` makes the loser of a seat push a no-op; usage
+ * events carry their own provider-side dedupe key. The lease reduces
+ * duplicate work; it is the idempotence underneath that makes duplicate work
+ * safe. Do not add a step here that relies on the lease for correctness.
+ *
+ * Five minutes: comfortably longer than a handler's few provider calls, and
+ * far inside the provider's multi-day retry horizon, so a reclaimed event
+ * always has redeliveries left to ride in on.
  */
 export const CLAIM_LEASE_MS = 5 * 60 * 1000
 
@@ -214,23 +235,25 @@ export async function handleBillingWebhook(
 /**
  * Claim an event id, or report it as already consumed.
  *
- * One statement, so two concurrent deliveries of the same event cannot both
- * win: the conflicting one takes a row lock on the existing row and its
- * `WHERE` decides the outcome.
+ * One statement, so two deliveries arriving at the same instant cannot both
+ * win: the conflicting one takes a row lock and its `WHERE` decides.
  *
  * The `WHERE` distinguishes three states a bare `ON CONFLICT DO NOTHING`
  * collapses into one:
  *
- * - **completed** (`processed_at` set) — a duplicate. Do nothing.
- * - **in flight** (`processed_at` NULL, claimed recently) — a duplicate.
- *   Running the handler alongside itself would push seat quantities twice and
- *   race the snapshot guard for no benefit.
- * - **crashed** (`processed_at` NULL, claimed longer ago than the lease) —
- *   reclaimed and retried. This is the state the previous implementation had
- *   no way to express: the normal error path releases the claim, but a pod
- *   kill, an OOM or a failing `releaseClaim` left the row behind and every
- *   subsequent redelivery was answered "duplicate" while nothing had ever
- *   been applied. The event was stranded permanently, silently.
+ * - **completed** (`processed_at` set) — a duplicate. Do nothing, forever,
+ *   regardless of age.
+ * - **recently claimed** (`processed_at` NULL, inside the lease) — a
+ *   duplicate. Very probably still running.
+ * - **stale** (`processed_at` NULL, older than the lease) — reclaimed and
+ *   retried. Usually a crash; occasionally a handler that is simply slow, in
+ *   which case both run. See `CLAIM_LEASE_MS` for why that trade is made
+ *   deliberately and what absorbs it.
+ *
+ * The state the previous implementation could not express is the third one:
+ * the normal error path releases the claim, but a pod kill, an OOM or a
+ * failing `releaseClaim` left the row behind, and every subsequent redelivery
+ * was answered "duplicate" while nothing had ever been applied.
  */
 async function claimEvent(
   event: ProviderEvent,
@@ -297,6 +320,10 @@ async function dispatch(
     // Free, which is the most damaging thing an unowned event can do.
     const subscriptionRef = str(event.data.object.id)
     const customerRef = str(event.data.object.customer)
+    // No adoption on this path, deliberately: a deletion for a customer this
+    // workspace has never recorded cannot be about a subscription it holds,
+    // and adopting one would only ever downgrade it to Free on a stranger's
+    // cancellation.
     const ours =
       (identity.subscriptionRef !== null && subscriptionRef === identity.subscriptionRef) ||
       (identity.customerRef !== null && customerRef === identity.customerRef)
@@ -323,7 +350,7 @@ async function dispatch(
   const subscription = await client.getSubscription(subscriptionRef)
   const snapshot = toSnapshot(subscription, config, fetchedAt)
 
-  if (!ownsSubscription(identity, snapshot.customerRef)) {
+  if (!(await ownsSubscription(identity, snapshot.customerRef, client))) {
     logForeign(event, snapshot.customerRef, identity.customerRef)
     return 'foreign'
   }
@@ -372,24 +399,60 @@ async function workspaceBillingIdentity(): Promise<BillingIdentity> {
 /**
  * Is `customerRef` this workspace's?
  *
- * A workspace with no customer yet **adopts** the first subscription it is
- * told about. That carve-out is necessary, not lax: checkout completes at the
- * provider before any reference exists locally, so the very first event has
- * nothing to compare against and rejecting it would make self-serve signup
- * impossible. The window closes the moment a customer is known — which is at
- * the end of that same first event — so it cannot be used to walk in later.
+ * Two paths, and the second is the one that has to be earned rather than
+ * assumed.
  *
- * The residual exposure is narrow and worth stating plainly: a foreign event
- * arriving in the gap between "this workspace has no customer" and "its own
- * checkout completes" would be adopted. Closing it entirely needs the
- * customer to be created before checkout rather than discovered from the
- * webhook — which `ensureCustomer()` already does on the self-serve path, so
- * in practice the gap only exists for a workspace whose subscription was
- * created out of band.
+ * **A known customer** is a plain equality check. This is the normal case:
+ * `ensureCustomer()` records the customer before checkout opens, so by the
+ * time any event arrives there is something to compare against.
+ *
+ * **No known customer** cannot be resolved locally — there is nothing to
+ * compare — so it is resolved *at the provider*. `ensureCustomer()` stamps
+ * the workspace id into the customer's metadata at creation, and adoption
+ * requires that stamp to match. A customer this workspace did not create
+ * carries no stamp, or someone else's, and is refused.
+ *
+ * An earlier version simply returned true here. Combined with a null-apply
+ * that erased `customerRef`, that meant every cancellation — and every
+ * fifteen-minute reconcile tick on an unsubscribed workspace — reopened the
+ * window permanently, for the entire free population rather than for one
+ * event. The stamp is what makes the remaining case decidable instead of
+ * merely narrow.
+ *
+ * The residual gap is now a customer created **outside this module** — a
+ * control-plane provisioning flow, say — which will be refused until it
+ * writes the same stamp. That is the correct direction for an identity
+ * question: a loud, diagnosable refusal rather than a silent adoption, and
+ * the contract the provisioning side needs is one metadata key.
  */
-function ownsSubscription(identity: BillingIdentity, customerRef: string | null): boolean {
-  if (identity.customerRef === null) return true
-  return customerRef !== null && customerRef === identity.customerRef
+async function ownsSubscription(
+  identity: BillingIdentity,
+  customerRef: string | null,
+  client: BillingProviderClient
+): Promise<boolean> {
+  if (identity.customerRef !== null) {
+    return customerRef !== null && customerRef === identity.customerRef
+  }
+  if (customerRef === null) return false
+
+  try {
+    const customer = await client.getCustomer(customerRef)
+    const stamp = customer.metadata?.[WORKSPACE_STAMP_KEY]
+    if (typeof stamp !== 'string' || stamp.length === 0) {
+      log.warn(
+        { customerRef },
+        'refusing to adopt a subscription: its customer carries no workspace stamp'
+      )
+      return false
+    }
+    return stamp === (await workspaceStamp())
+  } catch (error) {
+    // A failed lookup is not evidence of ownership. Unlike an entitlement
+    // read — which fails open because it gates commerce — this gates identity,
+    // and the cost of guessing wrong is another tenant's billing account.
+    log.error({ err: error, customerRef }, 'customer lookup failed; refusing to adopt')
+    return false
+  }
 }
 
 function logForeign(event: ProviderEvent, eventCustomer: string | null, ours: string | null): void {

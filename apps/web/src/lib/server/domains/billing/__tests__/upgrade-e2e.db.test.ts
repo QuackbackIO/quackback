@@ -20,7 +20,13 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createId } from '@quackback/ids'
 import { createDbTestFixture, testDb } from '@/lib/server/__tests__/db-test-fixture'
-import { principal, principalRoleAssignments, settings, user } from '@/lib/server/db'
+import {
+  billingSubscriptionState,
+  principal,
+  principalRoleAssignments,
+  settings,
+  user,
+} from '@/lib/server/db'
 
 vi.mock('@/lib/server/db', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/server/db')>()),
@@ -112,6 +118,14 @@ interface StubCalls {
  */
 function makeStub(calls: StubCalls, status = 'active', quantities = { ...INITIAL_QUANTITIES }) {
   return {
+    // Stamped for this workspace: the suite's workspace has no customer on
+    // record, so every delivery takes the adoption path, which verifies the
+    // stamp against the provider rather than assuming ownership.
+    getCustomer: vi.fn(async (id: string) => ({
+      id,
+      email: null,
+      metadata: { quackback_workspace: stampedWorkspaceId },
+    })),
     getSubscription: vi.fn(async (id: string) => ({
       id,
       customer: 'cus_e2e',
@@ -139,7 +153,6 @@ function makeStub(calls: StubCalls, status = 'active', quantities = { ...INITIAL
       calls.meterEvents.push({ identifier: input.identifier, value: input.value })
     }),
     createCustomer: vi.fn(),
-    getCustomer: vi.fn(),
     createCheckoutSession: vi.fn(),
     createPortalSession: vi.fn(),
     listInvoices: vi.fn(async () => []),
@@ -157,6 +170,8 @@ function deliver(
   return handleBillingWebhook(raw, signature, { client, now })
 }
 
+let stampedWorkspaceId = ''
+
 beforeEach(async () => {
   await fixture.begin()
   await testDb.insert(settings).values({
@@ -169,6 +184,8 @@ beforeEach(async () => {
   process.env.BILLING_PRICES = JSON.stringify(CATALOGUE)
   resetBillingConfigCache()
   invalidateTierLimitsCache()
+  const { workspaceStamp } = await import('../identity')
+  stampedWorkspaceId = await workspaceStamp()
 })
 
 afterEach(async () => {
@@ -426,6 +443,54 @@ describe.skipIf(!fixture.available)('self-serve upgrade, end to end', () => {
     })
     const row = await testDb.query.settings.findFirst()
     expect(row?.cloud).toMatchObject({ enabled: true, plan: 'free' })
+  })
+
+  it('does not re-push an unchanged seat count when another subscription row is newer', async () => {
+    // The deterministic form of a flake that would not reproduce: an unchanged
+    // seat count re-pushed on a later delivery. The cause was reading the
+    // synced quantities off "the most recently updated row" in
+    // `billing_subscription_state` rather than off the subscription being
+    // synced — so any newer row for a different subscription made the sync
+    // believe nothing had been pushed.
+    //
+    // At the provider a redundant push is not free: it is a proration event on
+    // a real invoice, which is exactly the class of bug that is invisible in
+    // tests and expensive in production.
+    const settled = { ...INITIAL_QUANTITIES }
+    const calls: StubCalls = { updates: [], meterEvents: [] }
+    await deliver(
+      {
+        id: 'evt_a',
+        type: 'customer.subscription.created',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', settled)
+    )
+    expect(calls.updates).toHaveLength(1)
+
+    // A second, unrelated subscription row lands with a newer updated_at —
+    // a stale record from an earlier subscription, or a second one in flight.
+    await testDb.insert(billingSubscriptionState).values({
+      subscriptionRef: 'sub_unrelated',
+      provider: BILLING_PROVIDER,
+      customerRef: 'cus_e2e',
+      snapshotFetchedAt: new Date(),
+      syncedQuantities: {},
+      updatedAt: new Date(Date.now() + 60_000),
+    })
+
+    await deliver(
+      {
+        id: 'evt_b',
+        type: 'customer.subscription.updated',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'sub_e2e', customer: 'cus_e2e' } },
+      },
+      makeStub(calls, 'active', settled)
+    )
+    // Still one. The seat count did not change, so nothing should be sent.
+    expect(calls.updates).toHaveLength(1)
   })
 
   it('refuses to write a plan the config file has pinned', async () => {

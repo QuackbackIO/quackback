@@ -31,7 +31,7 @@ import { and, billingSubscriptionState, db, eq, lt, sql } from '@/lib/server/db'
 import { logger } from '@/lib/server/logger'
 import { writeCloudConfig } from '../settings/cloud/cloud.service'
 import { writeTierLimits } from '../settings/tier-limits.write'
-import type { BillingStatus } from '../settings/cloud/cloud.types'
+import type { BillingStatus, CloudBilling } from '../settings/cloud/cloud.types'
 import type { PlanId } from '../settings/cloud/cloud.types'
 import type { TierLimits } from '../settings/tier-limits.types'
 import {
@@ -180,6 +180,30 @@ export interface ApplyResult {
  * Idempotent end to end: both write seams no-op when nothing changed, so a
  * redelivered webhook, a reconcile tick and a manual refresh all converge on
  * the same row without churning it.
+ *
+ * ## A null snapshot clears the SUBSCRIPTION, never the CUSTOMER
+ *
+ * This distinction is load-bearing twice over.
+ *
+ * Commercially it is simply correct: a provider customer outlives every
+ * subscription it ever holds. Cancelling ends a subscription; it does not
+ * dissolve the account, its payment methods or its invoice history. Erasing
+ * `customerRef` would throw away the "which account is this workspace"
+ * answer that `CloudBilling` exists to hold — precisely what support needs
+ * most when billing has gone wrong — and would orphan the customer at the
+ * provider so the next upgrade silently created a second one.
+ *
+ * For safety it is worse than that. `ownsSubscription()` in
+ * `webhook.service.ts` treats a workspace with no known customer as one that
+ * may adopt whatever subscription it is next told about, because checkout
+ * completes at the provider before any reference exists locally. An earlier
+ * version nulled `customerRef` here, so **every cancellation reopened that
+ * adoption window permanently**, and the reconcile sweep reopened it every
+ * fifteen minutes for the entire unsubscribed population. A stranger's
+ * routine subscription event was then adopted whole: their plan applied to
+ * this workspace, this workspace's seat count pushed onto their subscription,
+ * and their portal — invoices, card, cancellation — reachable from this
+ * workspace's admin UI.
  */
 export async function applySubscription(
   snapshot: SubscriptionSnapshot | null,
@@ -195,6 +219,18 @@ export async function applySubscription(
 
   const plan = effectivePlan(snapshot)
 
+  // `customerRef` is present in the patch only when there IS a snapshot. The
+  // key is omitted rather than set to null on the empty path, because
+  // `mergeCloudConfig` merges the billing block field by field — an explicit
+  // null would overwrite the stored customer, an absent key leaves it alone.
+  const billing: Partial<CloudBilling> = {
+    provider: BILLING_PROVIDER,
+    subscriptionRef: snapshot?.subscriptionRef ?? null,
+    status: snapshot?.status ?? null,
+    currentPeriodEnd: snapshot?.currentPeriodEnd ?? null,
+  }
+  if (snapshot) billing.customerRef = snapshot.customerRef
+
   const cloud = await writeCloudConfig(
     {
       // Turning the switch on is part of applying a subscription: a
@@ -203,13 +239,7 @@ export async function applySubscription(
       // reaches this line, which is why the default stays off.
       enabled: true,
       plan,
-      billing: {
-        provider: BILLING_PROVIDER,
-        customerRef: snapshot?.customerRef ?? null,
-        subscriptionRef: snapshot?.subscriptionRef ?? null,
-        status: snapshot?.status ?? null,
-        currentPeriodEnd: snapshot?.currentPeriodEnd ?? null,
-      },
+      billing,
     },
     { writer: 'billing' }
   )
@@ -285,6 +315,28 @@ async function recordSnapshot(snapshot: SubscriptionSnapshot): Promise<void> {
     })
 }
 
+/**
+ * Quantities last pushed for one specific subscription.
+ *
+ * Keyed by subscription ref rather than read off "the most recently updated
+ * row". `billing_subscription_state` can legitimately hold more than one row
+ * — a row is written per subscription reference seen, and only an explicit
+ * deletion removes one — so the newest row is not necessarily the one being
+ * synced. Reading the wrong row makes `syncSeats` believe nothing has been
+ * pushed and re-push an unchanged seat count, which at the provider is a
+ * redundant proration event on a real invoice.
+ */
+export async function syncedQuantitiesFor(
+  subscriptionRef: string
+): Promise<Record<string, number>> {
+  const [row] = await db
+    .select({ syncedQuantities: billingSubscriptionState.syncedQuantities })
+    .from(billingSubscriptionState)
+    .where(eq(billingSubscriptionState.subscriptionRef, subscriptionRef))
+    .limit(1)
+  return (row?.syncedQuantities ?? {}) as Record<string, number>
+}
+
 /** Record the quantities last pushed, so an unchanged seat count is a no-op. */
 export async function recordSyncedQuantities(
   subscriptionRef: string,
@@ -309,7 +361,13 @@ export async function currentSubscriptionRef(): Promise<{
       syncedQuantities: billingSubscriptionState.syncedQuantities,
     })
     .from(billingSubscriptionState)
-    .orderBy(sql`${billingSubscriptionState.updatedAt} DESC`)
+    // Tie-broken on the primary key. `updated_at` alone is not a total order:
+    // two rows written in the same millisecond leave the winner up to the
+    // planner, which is a coin-flip that shows up as an unreproducible test
+    // failure long before anyone reasons about it.
+    .orderBy(
+      sql`${billingSubscriptionState.updatedAt} DESC, ${billingSubscriptionState.subscriptionRef} DESC`
+    )
     .limit(1)
   if (!row) return null
   return {
