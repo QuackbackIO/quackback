@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { config } from '@/lib/server/config'
 import { db, sql, getMigrationStatus } from '@/lib/server/db'
-import { getControlSql } from '@/lib/server/tenancy/registry'
+// The mode is read from the environment rather than through `config`: the
+// readiness probe must not fail because some unrelated variable is missing —
+// that would report the process unhealthy for a reason it is not.
+import { isPooledTenancy } from '@/lib/server/tenancy/mode'
 import { getQueueRedis } from '@/lib/server/queue/redis-config'
 import { getWorkerBootStatus } from '@/lib/server/queue/worker-registry'
 import { getProcessRole } from '@/lib/server/queue/role'
@@ -51,7 +53,11 @@ async function checkDb(): Promise<void> {
   // control store — without it no hostname resolves at all. Probing a tenant
   // would also be actively harmful: it would wake a suspended Neon compute
   // every few seconds, defeating the idle-cost model the pooling exists for.
-  if (config.isPooledTenancy) {
+  if (isPooledTenancy()) {
+    // Imported here rather than at module scope: a single-tenant probe must not
+    // drag the tenancy stack (and `postgres`) into its module graph for a branch
+    // it never takes.
+    const { getControlSql } = await import('@/lib/server/tenancy/registry')
     await getControlSql()`SELECT 1`
     return
   }
@@ -80,7 +86,7 @@ async function checkMigrations(): Promise<void> {
   // it happened to see, so the probe goes blind during exactly the rolling
   // migration it exists to catch. A tenant mid-migration must degrade alone —
   // that is the per-tenant `MIN_SCHEMA_VERSION` gate's job, not the probe's.
-  if (config.isPooledTenancy) return
+  if (isPooledTenancy()) return
   if (migrationsKnownUpToDate) return
   const status = await getMigrationStatus(db)
   if (!status.upToDate) throw new MigrationsBehind()
