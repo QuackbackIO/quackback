@@ -67,7 +67,7 @@ describe('setHelpCenterDomain — plan gate', () => {
     // The bar: a refusal that says only "not allowed" fails. This one names it.
     expect(caught!.requiredPlanName).toBe('Pro')
     expect(caught!.message).toBe(
-      'Custom domains is a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
+      'Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
     // Nothing was written.
     expect(hoisted.mockUpdateHelpCenterConfig).not.toHaveBeenCalled()

@@ -74,7 +74,7 @@ describe('the refusal names the plan', () => {
     expect(err.currentPlan).toBe('free')
     expect(err.currentPlanName).toBe('Free')
     expect(err.message).toBe(
-      'Custom domains is a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
+      'Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.'
     )
   })
 
@@ -99,7 +99,7 @@ describe('the refusal names the plan', () => {
     const err = buildRefusal(cloud({ plan: null }), 'workflows')
     expect(err.currentPlan).toBeNull()
     expect(err.requiredPlanName).toBe('Pro')
-    expect(err.message).toBe('Workflows is a Pro feature. Upgrade to Pro to enable it.')
+    expect(err.message).toBe('Workflows are a Pro feature. Upgrade to Pro to enable it.')
   })
 
   it.each(ENTITLEMENT_KEYS)('%s refuses with a nameable plan from the free tier', (key) => {
@@ -162,7 +162,7 @@ describe('requireEntitlement against a configured workspace', () => {
     })
     const { requireEntitlement } = await import('../entitlements')
     await expect(requireEntitlement('customDomain')).rejects.toThrow(
-      /Custom domains is a Pro feature/
+      /Custom domains are a Pro feature/
     )
   })
 

@@ -30,8 +30,19 @@ function redactPortalConfig(portalConfig: PortalConfig): RedactedPortalConfig {
  * exposing it lets anyone forge verified identities. The rest are
  * server-side state (tier enforcement, setup progress, metadata config
  * bags) with no client reader.
+ *
+ * `cloud` sits here alongside `tierLimits` for the same reason and one more:
+ * its `billing` sub-block holds provider customer and subscription references,
+ * which are account identifiers rather than product config and must never be
+ * serialized into a router context or loader payload.
  */
-const SERVER_ONLY_SETTINGS_KEYS = ['widgetSecret', 'metadata', 'tierLimits', 'setupState'] as const
+const SERVER_ONLY_SETTINGS_KEYS = [
+  'widgetSecret',
+  'metadata',
+  'tierLimits',
+  'cloud',
+  'setupState',
+] as const
 
 function stripServerOnlyKeys<T extends object>(row: T): T {
   if (!SERVER_ONLY_SETTINGS_KEYS.some((key) => key in row)) return row

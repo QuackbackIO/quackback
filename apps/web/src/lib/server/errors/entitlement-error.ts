@@ -5,6 +5,10 @@ export interface EntitlementErrorPayload {
   entitlement: string
   /** Human-readable feature name used in the message, e.g. 'Custom domains'. */
   friendly: string
+  /** Whether {@link friendly} takes a plural verb ("are" rather than "is"). */
+  friendlyIsPlural: boolean
+  /** Indefinite article for {@link requiredPlanName} ("a Pro", "an Enterprise"). */
+  requiredPlanArticle: 'a' | 'an' | null
   /** Plan the workspace is on right now, or null when it has none. */
   currentPlan: string | null
   /** Display name for {@link currentPlan}, or null. */
@@ -83,9 +87,14 @@ export class EntitlementRequiredError extends TierLimitError {
  * the entire point of this error existing alongside the numeric one.
  */
 function buildMessage(payload: EntitlementErrorPayload): string {
+  // Both the verb and the article are supplied by the catalogue rather than
+  // inferred here. Inferring either produced real defects ("Custom domains is
+  // a Enterprise feature") that substring assertions could not see.
+  const verb = payload.friendlyIsPlural ? 'are' : 'is'
   const on = payload.currentPlanName ? ` Your workspace is on ${payload.currentPlanName}.` : ''
   if (!payload.requiredPlanName) {
-    return `${payload.friendly} is not included in your plan.${on} Contact us to enable it.`
+    return `${payload.friendly} ${verb} not included in your plan.${on} Contact us to enable it.`
   }
-  return `${payload.friendly} is a ${payload.requiredPlanName} feature.${on} Upgrade to ${payload.requiredPlanName} to enable it.`
+  const article = payload.requiredPlanArticle ?? 'a'
+  return `${payload.friendly} ${verb} ${article} ${payload.requiredPlanName} feature.${on} Upgrade to ${payload.requiredPlanName} to enable it.`
 }

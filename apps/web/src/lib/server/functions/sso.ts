@@ -244,21 +244,29 @@ export const upsertIdentityProviderFn = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const auth = await requireAuth({ permission: PERMISSIONS.AUTH_MANAGE })
 
-    // Plan gate. Disabling a provider stays open so a downgraded workspace can
-    // always take one out of service; only creating or reconfiguring one needs
-    // the entitlement. No-op on any install without a cloud config.
-    if (data.enabled !== false) {
-      const { requireEntitlement } =
-        await import('@/lib/server/domains/settings/cloud/entitlements')
-      await requireEntitlement('sso')
-    }
-
     const { listIdentityProviders, upsertIdentityProvider } =
       await import('@/lib/server/domains/settings/identity-providers.service')
     const existing = await listIdentityProviders()
     const prior = data.id
       ? existing.find((p) => p.id === data.id)
       : existing.find((p) => p.registrationId === data.registrationId)
+
+    // Plan gate. The carve-out is exactly one shape — taking a currently-enabled
+    // provider out of service — so a workspace that loses the entitlement can
+    // still switch SSO off. It deliberately mirrors the lockout check below
+    // rather than the looser `data.enabled !== false`: that form also let a
+    // caller CREATE a provider, persisting a full set of connection details and
+    // an idp.created audit event, merely by sending `enabled: false`. Editing an
+    // already-disabled provider is a reconfiguration, not a take-out-of-service,
+    // and needs the entitlement like any other write.
+    //
+    // No-op on any install without a cloud config.
+    const isTakingProviderOutOfService = data.enabled === false && prior?.enabled === true
+    if (!isTakingProviderOutOfService) {
+      const { requireEntitlement } =
+        await import('@/lib/server/domains/settings/cloud/entitlements')
+      await requireEntitlement('sso')
+    }
 
     // Refuse to disable the workspace's only working sign-in method (lockout).
     // Only a true→false transition on a currently-usable provider can do it.

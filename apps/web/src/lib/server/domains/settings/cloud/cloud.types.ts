@@ -59,6 +59,13 @@ export interface PlanDefinition {
    * entitlement, so a refusal names the smallest upgrade that would work.
    */
   rank: number
+  /**
+   * Indefinite article for {@link name} in refusal copy ("a Pro feature",
+   * "an Enterprise feature"). Declared rather than derived: an initial-vowel
+   * test is wrong for names like "Unlimited" ("an Unlimited plan") and
+   * "One" ("a One plan"), and there are only a handful of plans.
+   */
+  article: 'a' | 'an'
   /** Entitlements this plan grants by default. */
   grants: readonly EntitlementKey[]
 }
@@ -86,48 +93,58 @@ export interface PlanDefinition {
 export const ENTITLEMENTS = {
   customDomain: {
     friendly: 'Custom domains',
+    plural: true,
     tierFeature: 'customDomain',
-    chokepoint: 'lib/server/functions/help-center-domain.ts',
+    chokepoint:
+      'lib/server/domains/help-center/help-center-domain.service.ts (setHelpCenterDomain)',
   },
   sso: {
     friendly: 'Single sign-on',
+    plural: false,
     tierFeature: 'customOidcProvider',
     chokepoint: 'lib/server/functions/sso.ts (upsertIdentityProviderFn)',
   },
   aiAssistant: {
     friendly: 'The AI assistant',
+    plural: false,
     tierFeature: null,
     chokepoint:
       'lib/server/domains/assistant/assistant.orchestrator.ts, lib/server/domains/assistant/copilot-gate.ts',
   },
   aiInsights: {
     friendly: 'AI insights',
+    plural: true,
     tierFeature: null,
     chokepoint:
       'the enforceAiTokenBudget() family: summaries, sentiment, merge suggestions, auto-tagging',
   },
   workflows: {
     friendly: 'Workflows',
+    plural: true,
     tierFeature: null,
     chokepoint: 'lib/server/domains/workflows/workflow.service.ts (createWorkflow)',
   },
   apiAccess: {
     friendly: 'API access',
+    plural: false,
     tierFeature: null,
     chokepoint: 'lib/server/domains/api/auth.ts (withApiKeyAuth)',
   },
   mcpServer: {
     friendly: 'The MCP server',
+    plural: false,
     tierFeature: 'mcpServer',
     chokepoint: 'lib/server/mcp/handler.ts',
   },
   webhooks: {
     friendly: 'Webhooks',
+    plural: true,
     tierFeature: 'webhooks',
     chokepoint: 'lib/server/domains/webhooks/webhook.service.ts',
   },
   auditLog: {
     friendly: 'The audit log',
+    plural: false,
     tierFeature: null,
     chokepoint: 'lib/server/functions/audit-log.ts (listAuditEventsFn)',
   },
@@ -136,9 +153,21 @@ export const ENTITLEMENTS = {
 export interface EntitlementDefinition {
   /** Feature name as it appears in refusal copy. Sentence-cased. */
   friendly: string
+  /**
+   * Whether {@link friendly} takes a plural verb ("Custom domains **are**"
+   * vs "Single sign-on **is**"). Declared per entry rather than guessed from
+   * the string: a trailing "s" is not a reliable plural marker ("API access",
+   * "Single sign-on"), and this text is the one string the whole entitlement
+   * layer exists to produce.
+   */
+  plural: boolean
   /** Matching `tier_limits.features` key, or null when there is none. */
   tierFeature: keyof TierFeatureFlags | null
-  /** Where the gate sits. Documentation, not executable — kept honest by review. */
+  /**
+   * Where the gate sits, or will sit. Documentation, not executable — kept
+   * honest by review. Only `customDomain` and `sso` are wired today; for the
+   * rest this names the intended seam, not live code.
+   */
   chokepoint: string
 }
 
@@ -164,18 +193,21 @@ export function isEntitlementKey(value: string): value is EntitlementKey {
 export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   free: {
     id: 'free',
+    article: 'a',
     name: 'Free',
     rank: 0,
     grants: [],
   },
   pro: {
     id: 'pro',
+    article: 'a',
     name: 'Pro',
     rank: 1,
     grants: ['customDomain', 'aiAssistant', 'aiInsights', 'workflows', 'apiAccess', 'webhooks'],
   },
   business: {
     id: 'business',
+    article: 'a',
     name: 'Business',
     rank: 2,
     grants: [
@@ -191,6 +223,7 @@ export const PLAN_CATALOGUE: Record<PlanId, PlanDefinition> = {
   },
   enterprise: {
     id: 'enterprise',
+    article: 'an',
     name: 'Enterprise',
     rank: 3,
     grants: [

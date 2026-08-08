@@ -69,7 +69,7 @@ names.
 
 | Key            | Chokepoint                                                                                                            | Why it is a plan boundary                                                                                                                                                                                               |
 | -------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `customDomain` | `functions/help-center-domain.ts` → `setHelpCenterDomain`                                                             | Standard paid boundary. `tier_limits.features.customDomain` has existed since tier limits shipped and **was never enforced anywhere** — this closes a hole the schema already declared                                  |
+| `customDomain` | `help-center/help-center-domain.service.ts` → `setHelpCenterDomain`                                                   | Standard paid boundary. `tier_limits.features.customDomain` has existed since tier limits shipped and **was never enforced anywhere** — this closes a hole the schema already declared                                  |
 | `sso`          | `functions/sso.ts` → `upsertIdentityProviderFn`                                                                       | Classic enterprise boundary. Runtime _registration_ already reads `features.customOidcProvider`, but provider CRUD was ungated                                                                                          |
 | `aiAssistant`  | `assistant.orchestrator.ts`, `assistant/copilot-gate.ts`                                                              | The two entry points for the customer-facing agent and inbox Copilot. Distinct from `aiTokensPerMonth`: the budget answers "how much", this answers "at all"                                                            |
 | `aiInsights`   | The `enforceAiTokenBudget()` family — summaries, sentiment, merge suggestions, auto-tagging, attribute classification | One coherent family, all already funnelling through one helper                                                                                                                                                          |
@@ -146,7 +146,7 @@ payload gains what upsell needs:
   "error": "entitlement_required",
   "limit": "entitlements.customDomain",
   "entitlement": "customDomain",
-  "message": "Custom domains is a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.",
+  "message": "Custom domains are a Pro feature. Your workspace is on Free. Upgrade to Pro to enable it.",
   "currentPlan": "free",
   "currentPlanName": "Free",
   "requiredPlan": "pro",
@@ -228,9 +228,15 @@ spec:
   entitlement override, at which point `tier_limits.features` can shrink.
 - **Only two gates are wired.** `customDomain` and `sso` are gated at their
   chokepoints. The remaining seven catalogue entries are documented but not yet
-  enforced — each one is a one-line `await requireEntitlement(k)` at the
-  chokepoint named above, and each should land with its own test rather than in
-  a bulk sweep.
+  enforced — the `chokepoint` field on those entries names _where the gate will
+  go_, not where one is, and only the two wired entries describe live code. Each
+  is a one-line `await requireEntitlement(k)`, and each should land with its own
+  test rather than in a bulk sweep.
+- **`aiAssistant` needs care when it is wired.** Both of its named chokepoints
+  already gate on the `inboxAi` feature flag, so a naive addition would put an
+  admin's Labs toggle and a plan entitlement on the same line — the exact
+  conflation the exclusion rule above exists to prevent. Gate it upstream of the
+  flag check, or gate a different seam.
 
 ## `CLAUDE.md` needs amending
 

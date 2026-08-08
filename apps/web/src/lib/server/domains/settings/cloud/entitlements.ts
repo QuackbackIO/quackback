@@ -98,6 +98,8 @@ export function buildRefusal(config: CloudConfig, key: EntitlementKey): Entitlem
   return new EntitlementRequiredError({
     entitlement: key,
     friendly: definition.friendly,
+    friendlyIsPlural: definition.plural,
+    requiredPlanArticle: required?.article ?? null,
     currentPlan: current?.id ?? null,
     currentPlanName: current?.name ?? null,
     requiredPlan: required?.id ?? null,
