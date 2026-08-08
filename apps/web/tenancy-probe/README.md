@@ -40,6 +40,21 @@ secret, record it, print it, and still return `PASS`. Classifying a control is
 now the whole of a probe's verdict logic; there is no filter that can record a
 signal without counting it.
 
+**A marker must be able to accuse.** A string only means something if its
+appearance in the other tenant's output has no innocent explanation. Two filters
+stand between a stored value and a verdict (`vocabulary.ts`): tokens that could
+appear in any tenant's output are never admitted (greys and near-universal
+colours, short strings, names built entirely from common product vocabulary, and
+anything this suite's own fixture writes into both tenants), and an admitted
+token only accuses when the host serving it shows **none of its own identity**
+on that surface. A host rendering its own name alongside a word that happens to
+also be in the other's settings is plainly rendering itself.
+
+**Every cross-tenant attempt is made in both directions.** Every `negative`
+control declares its direction and a test asserts both are covered. This is not
+tidiness: an email-keyed credential stash is last-writer-wins, so testing one
+direction leaves detection to whichever tenant's value happens to survive.
+
 **Every response is scanned for the other tenant's markers.** Probes assert on
 what they attacked; the tripwire catches what the probe author did not think to
 check. Its vocabulary is per-tenant canary strings plus tenant-unique TypeIDs,
@@ -103,9 +118,11 @@ and a leak stays legible when the JSON is piped away.
 | `1`  | a probe could not execute (`ERROR` or `BLOCKED`); nothing leaked |
 | `2`  | a cross-tenant observation was made                              |
 
-`--allow-blocked` makes `BLOCKED` non-fatal for exit purposes. It never makes a
-`LEAK` or an `ERROR` pass, and the blocked probes are still listed first in the
-summary.
+`--allow-blocked` makes `BLOCKED` non-fatal **for the exit code only**. The JSON
+`verdict` still reads `FAIL`, and `exitTolerates` records what was waived — a CI
+check keyed on `verdict` must never read green while probes did not run. It
+never makes a `LEAK` or an `ERROR` pass, and blocked probes are still listed
+first in the summary.
 
 `--only` restricts the run to named probes. A filtered run sets `partial: true`
 and lists `filteredOut` in the JSON, so a consumer reading `verdict: "PASS"`
@@ -233,7 +250,14 @@ every cross-tenant attempt would be refused for the wrong reason, and the probe
 would report a false `PASS`. This makes that drift break `bun run test` instead.
 
 `__tests__/end-to-end.test.ts` drives the real `runSuite → report → exit code`
-path against a planted fleet, rather than calling `probe.run()` directly. This
+path against a planted fleet, rather than calling `probe.run()` directly. It
+tests **both poles**: alongside each planted leak it runs correct fleets built
+specifically to trip the identity vocabulary — a workspace whose CSS contains an
+ordinary `#ffffff`, a workspace named `Support` that the other tenant's own
+navigation renders, and a workspace named after the board this suite creates in
+both tenants. All three must exit 0, and a real leak on a generically-named
+fleet must still exit 2. It also runs a shared credential stash under **both**
+write-order polarities. This
 is the file that matters most, and it exists because probe-level tests were not
 enough: three defects survived an earlier sensitivity pass — P02 could never
 execute at all, P07's blind guard was satisfied by fixture data, and P06 reported

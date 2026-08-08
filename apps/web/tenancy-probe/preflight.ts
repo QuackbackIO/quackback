@@ -12,6 +12,7 @@
 import { createTenantHttp, type FetchLike } from './http'
 import { createTenantDb, typeId, SETTINGS_ROW_SQL } from './db'
 import { discoverMarkers, provisionFixture, verifyCollisions, CANARY } from './fixtures'
+import { isGenericToken } from './vocabulary'
 import type {
   Capability,
   ProbeConfig,
@@ -398,6 +399,29 @@ export async function runPreflight(
   // own correct response, so non-exclusive markers are dropped from both. The
   // fixture ids are exempt: `verifyCollisions` has already established those
   // differ, because if they did not, the two URLs would be one database.
+  // Generic candidates first. A workspace named `Support` or `Feature Requests`
+  // is rendered by the OTHER tenant's own navigation, so admitting it as a
+  // marker made the global tripwire and P08 accuse correctly isolated fleets.
+  const generic: string[] = []
+  for (const handle of both) {
+    for (const key of ['workspaceName', 'workspaceSlug']) {
+      const value = handle.markers.ids[key]
+      if (value && isGenericToken(value)) {
+        delete handle.markers.ids[key]
+        generic.push(`${handle.slot}.${key}="${value}"`)
+      }
+    }
+  }
+  if (generic.length > 0) {
+    steps.push({
+      name: 'marker:generic-values-dropped',
+      ok: true,
+      detail:
+        `${generic.join(', ')} — too generic to accuse. A value the other tenant's own UI would ` +
+        "render anyway cannot be evidence that it served this tenant's data.",
+    })
+  }
+
   const shared: string[] = []
   for (const [key, value] of Object.entries(alpha.markers.ids)) {
     if (bravo.markers.ids[key] !== value) continue

@@ -14,7 +14,7 @@
  */
 
 import { mintWidgetIdentityToken } from '../crypto'
-import { blocked, control, decide, describeResponse, error } from './helpers'
+import { blocked, control, decide, dirFrom, describeResponse, error } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, ProbeResponse } from '../types'
 
 /** Colliding end-user identity. Not the admin: identify refuses team principals. */
@@ -123,7 +123,8 @@ export const p04WidgetIdentify: Probe = {
         crossAtoBBody === null,
         crossAtoBBody
           ? `SESSION MINTED for user ${crossAtoBBody.user?.id} — bravo accepted a token alpha signed`
-          : `refused: ${describeResponse(crossAtoB, 160)}`
+          : `refused: ${describeResponse(crossAtoB, 160)}`,
+        'a-to-b'
       )
     )
 
@@ -136,29 +137,50 @@ export const p04WidgetIdentify: Probe = {
         crossBtoABody === null,
         crossBtoABody
           ? `SESSION MINTED for user ${crossBtoABody.user?.id} — alpha accepted a token bravo signed`
-          : `refused: ${describeResponse(crossBtoA, 160)}`
+          : `refused: ${describeResponse(crossBtoA, 160)}`,
+        'b-to-a'
       )
     )
 
-    // --- negative: replay the issued widget session token --------------------
-    // A distinct code path: the widget session token is an opaque uuid looked up
-    // in `session`, not a signed credential, so it exercises the row lookup
-    // rather than the signature check.
-    const replay = await ctx.newClient(bravo).request('/api/widget/session', {
-      headers: { authorization: `Bearer ${ownBody.sessionToken}` },
-      expectsForeignMarkers: true,
-    })
-    const replayedUser = replay.json<{ data?: { user?: { id?: string } | null } }>()?.data?.user
-    controls.push(
-      control(
-        'negative',
-        "alpha's widget session token → bravo /api/widget/session",
-        !replayedUser,
-        replayedUser
-          ? `RESOLVED to user ${replayedUser.id} on bravo`
-          : `refused: ${describeResponse(replay, 160)}`
+    // --- negative: replay each issued widget session token at the other host --
+    //
+    // A distinct code path from the signature check: the widget session token is
+    // an opaque row lookup, not a signed credential. Run in both directions —
+    // with a shared session store the surviving row decides which direction
+    // succeeds, and a single-direction test leaves that to chance.
+    const ownBravo = identified(await identify(ctx.newClient(bravo), bravoToken, false))
+    for (const [fromSlot, toSlot, to, token] of [
+      ['alpha', 'bravo', bravo, ownBody.sessionToken],
+      ['bravo', 'alpha', alpha, ownBravo?.sessionToken],
+    ] as const) {
+      if (!token) {
+        controls.push(
+          control(
+            'positive',
+            `${fromSlot} minted a widget session token`,
+            false,
+            `${fromSlot} did not return a session token to replay`
+          )
+        )
+        continue
+      }
+      const replay = await ctx.newClient(to).request('/api/widget/session', {
+        headers: { authorization: `Bearer ${token}` },
+        expectsForeignMarkers: true,
+      })
+      const replayedUser = replay.json<{ data?: { user?: { id?: string } | null } }>()?.data?.user
+      controls.push(
+        control(
+          'negative',
+          `${fromSlot}'s widget session token → ${toSlot} /api/widget/session`,
+          !replayedUser,
+          replayedUser
+            ? `RESOLVED to user ${replayedUser.id} on ${toSlot}`
+            : `refused: ${describeResponse(replay, 160)}`,
+          dirFrom(fromSlot)
+        )
       )
-    )
+    }
 
     return decide({
       attempted,

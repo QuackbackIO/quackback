@@ -8,15 +8,22 @@
  * a typo'd URL as perfect isolation.
  */
 
+import { MIN_MARKER_LENGTH } from '../tripwire'
 import type { ControlOutcome, ProbeOutcome, ProbeResponse, TenantMarkers } from '../types'
 
 export function control(
   kind: ControlOutcome['kind'],
   label: string,
   ok: boolean,
-  detail: string
+  detail: string,
+  direction?: ControlOutcome['direction']
 ): ControlOutcome {
-  return { kind, label, ok, detail }
+  return { kind, label, ok, detail, ...(direction ? { direction } : {}) }
+}
+
+/** Direction helper for the `from → to` loops every cross-tenant probe uses. */
+export function dirFrom(fromSlot: 'alpha' | 'bravo'): 'a-to-b' | 'b-to-a' {
+  return fromSlot === 'alpha' ? 'a-to-b' : 'b-to-a'
 }
 
 export function pass(args: {
@@ -150,12 +157,24 @@ export function requirePositiveControl(
   })
 }
 
-/** Every marker of `owner` that appears verbatim in `text`. */
+/**
+ * Every marker of `owner` that appears verbatim in `text`.
+ *
+ * The length floor matches the tripwire's. Without it this matched any marker
+ * at all, so a workspace named `Support` — a word bravo's own navigation
+ * renders — was reported as a cross-tenant observation. Markers are additionally
+ * filtered for genericity where they are built (`discoverMarkers`); this floor
+ * is the backstop for anything that slips through.
+ */
 export function markersPresent(text: string, owner: TenantMarkers): string[] {
   const found: string[] = []
-  if (owner.canary && text.includes(owner.canary)) found.push(`canary=${owner.canary}`)
+  if (owner.canary.length >= MIN_MARKER_LENGTH && text.includes(owner.canary)) {
+    found.push(`canary=${owner.canary}`)
+  }
   for (const [name, value] of Object.entries(owner.ids)) {
-    if (value && text.includes(value)) found.push(`${name}=${value}`)
+    if (value && value.length >= MIN_MARKER_LENGTH && text.includes(value)) {
+      found.push(`${name}=${value}`)
+    }
   }
   return found
 }

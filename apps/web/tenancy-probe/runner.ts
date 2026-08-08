@@ -201,8 +201,12 @@ export async function runSuite(
   for (const r of results) counts[r.verdict]++
 
   const finishedAt = new Date()
-  const allPass =
-    counts.LEAK === 0 && counts.ERROR === 0 && (counts.BLOCKED === 0 || config.allowBlocked)
+  // `verdict` describes the RUN, not the operator's tolerance for it. An earlier
+  // version folded --allow-blocked into this field, so a run with four blocked
+  // probes emitted `verdict: "PASS"` alongside `counts.BLOCKED: 4`, and any CI
+  // check keyed on `verdict` read green while 4 of 9 probes never executed.
+  // The flag now affects only the exit code, and says so in `exitTolerates`.
+  const allPass = counts.LEAK === 0 && counts.ERROR === 0 && counts.BLOCKED === 0
 
   const report: ProbeReport = {
     suite: 'quackback-tenant-isolation',
@@ -220,6 +224,7 @@ export async function runSuite(
     verdict: allPass ? 'PASS' : 'FAIL',
     partial: filteredOut.length > 0,
     filteredOut,
+    exitTolerates: config.allowBlocked ? (['BLOCKED'] as Verdict[]) : [],
     counts,
     tripwireHits: tripwire.hits(),
     probes: results,
@@ -239,6 +244,7 @@ export async function runSuite(
  */
 export function exitCodeFor(report: ProbeReport): 0 | 1 | 2 {
   if (report.counts.LEAK > 0) return 2
-  if (report.verdict === 'FAIL') return 1
+  if (report.counts.ERROR > 0) return 1
+  if (report.counts.BLOCKED > 0 && !report.exitTolerates.includes('BLOCKED')) return 1
   return 0
 }

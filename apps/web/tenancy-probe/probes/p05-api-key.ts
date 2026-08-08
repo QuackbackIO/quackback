@@ -14,7 +14,15 @@
  * in response to alpha's credential.
  */
 
-import { blocked, control, decide, describeResponse, error, markersPresent } from './helpers'
+import {
+  blocked,
+  control,
+  decide,
+  dirFrom,
+  describeResponse,
+  error,
+  markersPresent,
+} from './helpers'
 import type { ControlOutcome, Probe, ProbeContext } from '../types'
 
 interface BoardsBody {
@@ -114,7 +122,7 @@ export const p05ApiKey: Probe = {
       crossDetail = `HTTP ${crossAtoB.status}, expected 401: ${describeResponse(crossAtoB, 200)}`
     }
     controls.push(
-      control('negative', "alpha's key → bravo GET /api/v1/boards", crossOk, crossDetail)
+      control('negative', "alpha's key → bravo GET /api/v1/boards", crossOk, crossDetail, 'a-to-b')
     )
 
     // --- negative: the reverse direction ------------------------------------
@@ -129,32 +137,39 @@ export const p05ApiKey: Probe = {
         crossBtoA.status === 401,
         crossBtoA.status === 401
           ? 'refused with 401'
-          : `HTTP ${crossBtoA.status}, expected 401: ${describeResponse(crossBtoA, 200)}`
+          : `HTTP ${crossBtoA.status}, expected 401: ${describeResponse(crossBtoA, 200)}`,
+        'b-to-a'
       )
     )
 
     // --- negative: a data-bearing endpoint, searched for the foreign canary --
-    // If the key were honoured against the wrong pool, this is where a real row
-    // would surface. The canary is in the request, so the tripwire is suppressed
-    // and the assertion is made here explicitly on the result set.
-    const search = await bravo.http.request(
-      `/api/v1/posts?search=${encodeURIComponent(alpha.markers.canary)}&limit=20`,
-      { headers: bearer(alphaKey), expectsForeignMarkers: true }
-    )
-    const searchResults = search.json<{ data?: Array<{ id: string; title: string }> }>()?.data ?? []
-    const returnedAlphaPost = searchResults.some((p) => p.id === alpha.fixture?.postId)
-    controls.push(
-      control(
-        'negative',
-        "alpha's key → bravo GET /api/v1/posts?search=<alpha canary>",
-        search.status === 401 || (searchResults.length === 0 && !returnedAlphaPost),
-        search.status === 401
-          ? 'refused with 401'
-          : returnedAlphaPost
-            ? `returned ALPHA's fixture post ${alpha.fixture?.postId}`
-            : `HTTP ${search.status} with ${searchResults.length} result(s), expected 401`
+    // If a key were honoured against the wrong pool, this is where a real row
+    // would surface. Both directions: an asymmetric test lets a shared key
+    // table hide behind whichever lookup happens to resolve.
+    for (const [fromSlot, toSlot, from, to, key] of [
+      ['alpha', 'bravo', alpha, bravo, alphaKey],
+      ['bravo', 'alpha', bravo, alpha, bravoKey],
+    ] as const) {
+      const search = await to.http.request(
+        `/api/v1/posts?search=${encodeURIComponent(from.markers.canary)}&limit=20`,
+        { headers: bearer(key), expectsForeignMarkers: true }
       )
-    )
+      const results = search.json<{ data?: Array<{ id: string; title: string }> }>()?.data ?? []
+      const returnedForeignPost = results.some((p) => p.id === from.fixture?.postId)
+      controls.push(
+        control(
+          'negative',
+          `${fromSlot}'s key → ${toSlot} GET /api/v1/posts?search=<${fromSlot} canary>`,
+          search.status === 401 || (results.length === 0 && !returnedForeignPost),
+          search.status === 401
+            ? 'refused with 401'
+            : returnedForeignPost
+              ? `returned ${fromSlot.toUpperCase()}'s fixture post ${from.fixture?.postId}`
+              : `HTTP ${search.status} with ${results.length} result(s), expected 401`,
+          dirFrom(fromSlot)
+        )
+      )
+    }
 
     return decide({
       attempted,

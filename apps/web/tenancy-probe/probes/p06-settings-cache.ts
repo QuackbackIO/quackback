@@ -35,6 +35,7 @@
 
 import { control, describeResponse, blocked, decide } from './helpers'
 import { SETTINGS_ROW_SQL, typeId, type SettingsRow } from '../db'
+import { admissibleTokens, colourTokens } from '../vocabulary'
 import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
 
 /** Public surfaces whose content is derived from the cached settings row. */
@@ -46,54 +47,27 @@ const SETTINGS_SURFACES = [
 const INTERLEAVE_ROUNDS = 3
 
 /**
- * Shorter tokens produce chance matches — a four-character hex fragment or a
- * workspace called "Demo" would fire against unrelated markup, and a probe that
- * cries wolf gets switched off.
+ * Every string that could identify this tenant in a served response.
+ *
+ * Only the name, the slug, the workspace id and the theme COLOURS are mined.
+ * An earlier version walked every leaf of `portal_config` and `widget_config`
+ * too, which contributed `paragraph`, `public`, `none` and the rest of the enum
+ * vocabulary — none of which identifies anybody, all of which turned up in the
+ * other tenant's ordinary output and produced exit 2 on correct fleets.
+ *
+ * Everything here is then passed through `admissibleTokens`, so greys,
+ * near-universal colours, short strings, all-common-word names and anything
+ * this suite's own fixture writes are dropped before they can accuse.
  */
-const MIN_TOKEN_LENGTH = 6
-
-/** Pull every distinctive string out of a stored JSON settings column. */
-function leafStrings(raw: string | null): string[] {
-  if (!raw) return []
-  const out: string[] = []
-  const walk = (value: unknown): void => {
-    if (typeof value === 'string') {
-      out.push(value)
-    } else if (Array.isArray(value)) {
-      value.forEach(walk)
-    } else if (value && typeof value === 'object') {
-      Object.values(value).forEach(walk)
-    }
-  }
-  try {
-    walk(JSON.parse(raw))
-  } catch {
-    // Not JSON (custom CSS is plain text); fall through to the raw scan below.
-  }
-  // Colours reach `/api/widget/config.json` as hex regardless of how they were
-  // stored, so they are the one token class that survives the theme pipeline.
-  out.push(...(raw.match(/#[0-9a-fA-F]{6}\b/g) ?? []))
-  return out
-}
-
-/** Every string that could identify this tenant in a served response. */
 function identityTokens(row: SettingsRow): Set<string> {
-  const tokens = new Set<string>()
-  const add = (value: string | null | undefined) => {
-    if (value && value.trim().length >= MIN_TOKEN_LENGTH) tokens.add(value.trim())
-  }
-  add(typeId('workspace', row.id))
-  add(row.slug)
-  add(row.name)
-  for (const column of [
-    row.branding_config,
-    row.custom_css,
-    row.portal_config,
-    row.widget_config,
-  ]) {
-    for (const leaf of leafStrings(column)) add(leaf)
-  }
-  return tokens
+  const candidates: string[] = []
+  const workspaceId = typeId('workspace', row.id)
+  if (workspaceId) candidates.push(workspaceId)
+  if (row.slug) candidates.push(row.slug)
+  if (row.name) candidates.push(row.name)
+  candidates.push(...colourTokens(row.branding_config))
+  candidates.push(...colourTokens(row.custom_css))
+  return new Set(admissibleTokens(candidates))
 }
 
 /** Tokens that belong to `owner` and not to the other tenant. */
@@ -161,8 +135,15 @@ export const p06SettingsCache: Probe = {
       return decide({
         attempted,
         controls,
-        leakReason: '',
-        onPass: { observed: '', reason: '' },
+        // Every early return here follows a failed `visibility` control, so
+        // `decide()` yields ERROR. The pass text is filled in anyway: if a
+        // future edit removed the guarding control, an empty PASS reason would
+        // be considerably worse than a slightly wrong one.
+        leakReason: 'a settings-derived response crossed the tenant boundary',
+        onPass: {
+          observed: 'the probe returned before it could compare both tenants',
+          reason: 'no settings-derived surface was compared',
+        },
         evidence,
       })
     }
@@ -191,8 +172,15 @@ export const p06SettingsCache: Probe = {
       return decide({
         attempted,
         controls,
-        leakReason: '',
-        onPass: { observed: '', reason: '' },
+        // Every early return here follows a failed `visibility` control, so
+        // `decide()` yields ERROR. The pass text is filled in anyway: if a
+        // future edit removed the guarding control, an empty PASS reason would
+        // be considerably worse than a slightly wrong one.
+        leakReason: 'a settings-derived response crossed the tenant boundary',
+        onPass: {
+          observed: 'the probe returned before it could compare both tenants',
+          reason: 'no settings-derived surface was compared',
+        },
         evidence,
       })
     }
@@ -233,18 +221,52 @@ export const p06SettingsCache: Probe = {
       const discriminating = ownOnAlpha[0].length > 0 || ownOnBravo[0].length > 0
       if (discriminating) discriminatingSurfaces++
 
-      // --- the leak check: a host serving the other tenant's identity --------
+      // --- the leak check ----------------------------------------------------
+      //
+      // A foreign token only accuses when the host serving it shows NONE of its
+      // own identity on this surface. That is the difference between "bravo is
+      // serving alpha's cached blob" and "bravo rendered its own page, which
+      // happens to contain a word that is also in alpha's settings".
+      //
+      // Byte comparison cannot make this distinction: a per-request nonce makes
+      // a leaking response differ from the original, and an incidental overlap
+      // makes a correct response contain a foreign token. Asking whose identity
+      // the host is actually presenting is unaffected by both.
+      const bravoServesAlphaInstead = foreignOnBravo.length > 0 && ownOnBravo[0].length === 0
+      const alphaServesBravoInstead = foreignOnAlpha.length > 0 && ownOnAlpha[0].length === 0
+      const incidental = [
+        ...(foreignOnBravo.length > 0 && !bravoServesAlphaInstead
+          ? [
+              `bravo also renders its own identity (${ownOnBravo[0]}), so ${JSON.stringify(foreignOnBravo)} is incidental overlap`,
+            ]
+          : []),
+        ...(foreignOnAlpha.length > 0 && !alphaServesBravoInstead
+          ? [
+              `alpha also renders its own identity (${ownOnAlpha[0]}), so ${JSON.stringify(foreignOnAlpha)} is incidental overlap`,
+            ]
+          : []),
+      ]
+      if (incidental.length > 0) evidence[`incidental:${surface.path}`] = incidental
+
       controls.push(
         control(
           'negative',
-          `${surface.label} carries no foreign tenant identity`,
-          foreignOnAlpha.length === 0 && foreignOnBravo.length === 0,
-          foreignOnAlpha.length === 0 && foreignOnBravo.length === 0
-            ? discriminating
-              ? 'each host served only its own stored identity'
-              : 'no foreign identity present (this surface carries no identity of its own either)'
-            : `FOREIGN IDENTITY SERVED — bravo returned alpha's ${JSON.stringify(foreignOnBravo.slice(0, 4))}; ` +
-                `alpha returned bravo's ${JSON.stringify(foreignOnAlpha.slice(0, 4))}`
+          `${surface.label} presents each tenant's own identity, not the other's`,
+          !bravoServesAlphaInstead && !alphaServesBravoInstead,
+          bravoServesAlphaInstead || alphaServesBravoInstead
+            ? `FOREIGN IDENTITY SERVED — ` +
+                (bravoServesAlphaInstead
+                  ? `bravo returned alpha's ${JSON.stringify(foreignOnBravo.slice(0, 4))} and none of its own; `
+                  : '') +
+                (alphaServesBravoInstead
+                  ? `alpha returned bravo's ${JSON.stringify(foreignOnAlpha.slice(0, 4))} and none of its own`
+                  : '')
+            : discriminating
+              ? `each host served its own stored identity${incidental.length > 0 ? ` (${incidental.join('; ')})` : ''}`
+              : 'this surface carries no stored identity for either tenant',
+          // One control, both directions: it evaluates whether EITHER host is
+          // presenting the other's identity instead of its own.
+          'both'
         )
       )
 
@@ -262,7 +284,8 @@ export const p06SettingsCache: Probe = {
             alphaStable && bravoStable
               ? 'the identity token set was constant on both hosts'
               : `IDENTITY MOVED MID-INTERLEAVE (alpha rounds: ${JSON.stringify(ownOnAlpha)}, ` +
-                  `bravo rounds: ${JSON.stringify(ownOnBravo)}) — the signature of a cache key with no tenant segment`
+                  `bravo rounds: ${JSON.stringify(ownOnBravo)}) — the signature of a cache key with no tenant segment`,
+            'both'
           )
         )
       }

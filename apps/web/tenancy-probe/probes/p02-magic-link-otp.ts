@@ -20,7 +20,7 @@ import {
   redeemMagicLinkOn,
   verifyOtpOn,
 } from '../auth-flows'
-import { blocked, control, error, leak, pass } from './helpers'
+import { blocked, control, dirFrom, decide, error } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, ProbeOutcome, TenantHandle } from '../types'
 
 function expectedUserId(handle: TenantHandle): string | undefined {
@@ -93,7 +93,8 @@ export const p02MagicLinkOtp: Probe = {
         !crossAtoB.sessionEstablished,
         crossAtoB.sessionEstablished
           ? `SESSION ESTABLISHED for user ${crossAtoB.userId}`
-          : `refused: ${crossAtoB.detail}`
+          : `refused: ${crossAtoB.detail}`,
+        'a-to-b'
       )
     )
 
@@ -107,7 +108,8 @@ export const p02MagicLinkOtp: Probe = {
         !crossBtoA.sessionEstablished,
         crossBtoA.sessionEstablished
           ? `SESSION ESTABLISHED for user ${crossBtoA.userId}`
-          : `refused: ${crossBtoA.detail}`
+          : `refused: ${crossBtoA.detail}`,
+        'b-to-a'
       )
     )
 
@@ -144,43 +146,79 @@ export const p02MagicLinkOtp: Probe = {
     )
 
     // ---- sign-in OTP -------------------------------------------------------
+    //
+    // BOTH directions, deliberately. An earlier version attempted only
+    // alpha's-OTP-on-bravo, and the in-process stash it targets
+    // (`auth/index.ts:29-51`) is a Map keyed by lowercased email — so whichever
+    // tenant minted LAST is the entry that survives, and the only redemption
+    // that could succeed was the one never attempted. A shared stash produced a
+    // fully green run. Which tenant survives is a property of the stash's write
+    // order, not something this suite gets to assume, so both are tried.
     const otpA = await mintAndReadOtpOn(alpha.http, alpha.db, email)
     const otpB = await mintAndReadOtpOn(bravo.http, bravo.db, email)
 
     if (otpA.token && otpB.token) {
       evidence.bothTenantsHeldLiveOtpRows = true
-      // A code that happens to be identical would make a cross-redemption
-      // indistinguishable from a correct one. Report it rather than silently
-      // producing an unreadable verdict.
-      evidence.otpCodesCollided = otpA.token === otpB.token
+      // Two identical six-digit codes would make a cross-redemption
+      // indistinguishable from a correct one. Report it rather than emitting an
+      // unreadable verdict.
+      const codesCollided = otpA.token === otpB.token
+      evidence.otpCodesCollided = codesCollided
 
-      const otpCrossAtoB = await verifyOtpOn(ctx.newClient(bravo), email, otpA.token, {
-        expectsForeignMarkers: true,
-      })
-      controls.push(
-        control(
-          'negative',
-          "alpha's sign-in OTP → bravo /api/auth/sign-in/email-otp",
-          !otpCrossAtoB.sessionEstablished || otpA.token === otpB.token,
-          otpCrossAtoB.sessionEstablished
-            ? otpA.token === otpB.token
-              ? 'session established, but both tenants minted the SAME 6-digit code, so this is inconclusive — re-run'
-              : `SESSION ESTABLISHED for user ${otpCrossAtoB.userId}`
-            : `refused: ${otpCrossAtoB.detail}`
+      for (const [fromSlot, toSlot, to, code] of [
+        ['alpha', 'bravo', bravo, otpA.token],
+        ['bravo', 'alpha', alpha, otpB.token],
+      ] as const) {
+        const cross = await verifyOtpOn(ctx.newClient(to), email, code, {
+          expectsForeignMarkers: true,
+        })
+        controls.push(
+          control(
+            'negative',
+            `${fromSlot}'s sign-in OTP → ${toSlot} /api/auth/sign-in/email-otp`,
+            !cross.sessionEstablished || codesCollided,
+            cross.sessionEstablished
+              ? codesCollided
+                ? 'session established, but both tenants minted the SAME six-digit code, so this is inconclusive — re-run'
+                : `SESSION ESTABLISHED for user ${cross.userId}`
+              : `refused: ${cross.detail}`,
+            dirFrom(fromSlot)
+          )
         )
-      )
+      }
 
-      const otpOwnB = await verifyOtpOn(ctx.newClient(bravo), email, otpB.token)
-      controls.push(
-        control(
-          'positive',
-          "bravo's sign-in OTP → bravo",
-          otpOwnB.sessionEstablished && (!wantB || otpOwnB.userId === wantB),
-          otpOwnB.sessionEstablished
-            ? `session for user ${otpOwnB.userId}`
-            : `no session: ${otpOwnB.detail}`
+      if (codesCollided) {
+        controls.push(
+          control(
+            'visibility',
+            'the two tenants minted different six-digit OTPs',
+            false,
+            'both tenants minted the same code, so a cross-tenant redemption is indistinguishable ' +
+              'from a correct one. Re-run; a repeat suggests the codes are not independently generated.'
+          )
         )
-      )
+      }
+
+      // Positive controls last, so a cross attempt cannot have consumed the row
+      // first and "it still works at home" is proven rather than assumed.
+      for (const [slot, handle, code, want] of [
+        ['alpha', alpha, otpA.token, wantA],
+        ['bravo', bravo, otpB.token, wantB],
+      ] as const) {
+        const own = await verifyOtpOn(ctx.newClient(handle), email, code)
+        controls.push(
+          control(
+            'positive',
+            `${slot}'s sign-in OTP → ${slot}`,
+            own.sessionEstablished && (!want || own.userId === want),
+            own.sessionEstablished
+              ? own.userId === want || !want
+                ? `session for user ${own.userId}`
+                : `session established but for user ${own.userId}, expected ${slot}'s admin ${want}`
+              : `no session: ${own.detail}`
+          )
+        )
+      }
     } else {
       controls.push(
         control(
@@ -192,40 +230,20 @@ export const p02MagicLinkOtp: Probe = {
       )
     }
 
-    const failedPositives = controls.filter((c) => c.kind === 'positive' && !c.ok)
-    const failedNegatives = controls.filter((c) => c.kind === 'negative' && !c.ok)
-
-    if (failedNegatives.length > 0) {
-      return leak({
-        attempted,
-        observed: failedNegatives.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason:
-          'a sign-in credential minted by one tenant established a session on the other. With the ' +
-          'colliding admin address this produces a session that looks entirely legitimate.',
-        controls,
-        evidence,
-      })
-    }
-    if (failedPositives.length > 0) {
-      return error({
-        attempted,
-        observed: failedPositives.map((c) => `${c.label}: ${c.detail}`).join(' | '),
-        reason:
-          'the positive controls failed, so the refusals above are not evidence of isolation — the ' +
-          'sign-in flow does not work within its own tenant either.',
-        controls,
-        evidence,
-      })
-    }
-
-    return pass({
+    return decide({
       attempted,
-      observed:
-        'each tenant held a live magic-link row and OTP for the identical address; cross-tenant ' +
-        'redemption was refused in both directions, and each tenant’s own credential resolved to its own admin user',
-      reason:
-        'sign-in credentials are bound to the tenant that minted them, even under a full address collision',
       controls,
+      leakReason:
+        'a sign-in credential minted by one tenant established a session on the other. With the ' +
+        'colliding admin address this produces a session that looks entirely legitimate.',
+      onPass: {
+        observed:
+          'each tenant held a live magic-link row and OTP for the identical address; cross-tenant ' +
+          'redemption was refused in BOTH directions for both credential types, and each tenant\u2019s own ' +
+          'credential resolved to its own admin user',
+        reason:
+          'sign-in credentials are bound to the tenant that minted them, even under a full address collision',
+      },
       evidence,
     })
   },

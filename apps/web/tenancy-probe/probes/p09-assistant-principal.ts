@@ -23,7 +23,7 @@ import {
   type ScanHit,
   type ScanResult,
 } from '../db-scan'
-import { blocked, control, decide } from './helpers'
+import { blocked, control, decide, dirFrom } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
 
 async function assistantPrincipalId(handle: TenantHandle): Promise<string | null> {
@@ -113,7 +113,8 @@ export const p09AssistantPrincipal: Probe = {
           hits.length === 0,
           hits.length === 0
             ? `searched ${forms.length} id form(s) across the content and attribution tables, no rows matched`
-            : `FOUND IN ${foreign.slot.toUpperCase()}: ${describeHits(hits)}`
+            : `FOUND IN ${foreign.slot.toUpperCase()}: ${describeHits(hits)}`,
+          dirFrom(owner)
         )
       )
       controls.push(scanCoverage(results))

@@ -88,7 +88,11 @@ export const p03StorageToken: Probe = {
     const bogusRejected = bogus.status === REJECTED
     controls.push(
       control(
-        'negative',
+        // Not a cross-tenant attempt: it establishes that this deployment can
+        // express "rejected" at all, so a 403 from the other tenant is
+        // meaningful. A failure here means the probe is blind, not that
+        // anything leaked.
+        'visibility',
         'a capability signed with a wrong secret → alpha',
         bogusRejected,
         bogusRejected
@@ -145,7 +149,8 @@ export const p03StorageToken: Probe = {
         !accepted(crossAtoB),
         accepted(crossAtoB)
           ? `ACCEPTED (${describeResponse(crossAtoB, 160)}) — bravo honoured a capability alpha signed`
-          : 'refused with 403'
+          : 'refused with 403',
+        'a-to-b'
       )
     )
 
@@ -157,7 +162,8 @@ export const p03StorageToken: Probe = {
         !accepted(crossBtoA),
         accepted(crossBtoA)
           ? `ACCEPTED (${describeResponse(crossBtoA, 160)}) — alpha honoured a capability bravo signed`
-          : 'refused with 403'
+          : 'refused with 403',
+        'b-to-a'
       )
     )
 

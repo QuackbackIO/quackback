@@ -77,6 +77,20 @@ export interface ControlOutcome {
   label: string
   ok: boolean
   detail: string
+  /**
+   * Which way across the tenant boundary this control looked.
+   *
+   * Required on every `negative` control, and asserted per probe by
+   * `__tests__/end-to-end.test.ts`. The reason it is declared rather than
+   * inferred: P02 attempted only alpha's-OTP-on-bravo, and because an
+   * email-keyed stash is last-writer-wins, the surviving credential was
+   * bravo's — so the only cross-redemption that could have succeeded was the
+   * one never attempted, and a planted leak produced a fully green run.
+   * Detection must not depend on which tenant's value happens to survive.
+   *
+   * `both` is for a control that evaluates both directions in one check.
+   */
+  direction?: 'a-to-b' | 'b-to-a' | 'both'
 }
 
 /** What a probe returns. The runner turns exceptions into `ERROR` itself. */
@@ -330,6 +344,12 @@ export interface ProbeReport {
   partial: boolean
   /** Probe ids excluded by `--only`. Empty on a full run. */
   filteredOut: string[]
+  /**
+   * Verdicts the operator asked the EXIT CODE to tolerate (via `--allow-blocked`).
+   * `verdict` itself never softens: it always describes what actually happened,
+   * so a CI check keyed on it cannot read green while probes did not run.
+   */
+  exitTolerates: Verdict[]
   counts: Record<Verdict, number>
   /** Every tripwire hit seen anywhere in the run, including outside probes. */
   tripwireHits: TripwireHit[]

@@ -274,8 +274,11 @@ export async function discoverMarkers(handle: TenantHandle): Promise<TenantMarke
       if (workspaceId) ids.workspaceId = workspaceId
       // The name and slug are what a leaked settings blob actually carries —
       // `/api/widget/config.json` has no identifier in it at all and the portal
-      // document carries the name. Preflight drops either of these if the two
-      // tenants share it, since a shared value cannot attribute a leak.
+      // document carries the name. They are admitted as CANDIDATES only:
+      // preflight drops any that are generic (a workspace called `Support`
+      // appears in the other tenant's own navigation) or shared between the
+      // tenants. `vocabulary.ts` reads this module's fixture constants, so the
+      // filter deliberately lives there and not here.
       if (settings.name) ids.workspaceName = settings.name
       if (settings.slug) ids.workspaceSlug = settings.slug
       // Scanned like any other marker — a signing secret in a response body is

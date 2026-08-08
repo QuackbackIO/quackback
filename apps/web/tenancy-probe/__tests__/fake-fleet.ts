@@ -51,6 +51,22 @@ export interface FleetLeaks {
   noBackgroundProcessing?: boolean
   /** Both tenants' assistant work is attributed to one shared principal id. */
   sharedAssistantPrincipal?: boolean
+  /**
+   * A shared, email-keyed credential stash (§4.1 `magicLinkStash` / `otpStash`).
+   *
+   * The policy decides WHICH tenant's value survives the collision, and therefore
+   * which direction of cross-redemption can succeed. It is a genuine coin flip in
+   * production — a `Map.set` is last-writer-wins, but mint ordering is not
+   * something a probe suite gets to assume — so both polarities are tested.
+   */
+  sharedStash?: 'first-writer-wins' | 'last-writer-wins'
+}
+
+/** Per-tenant identity overrides, for building precision (non-leaking) fleets. */
+export interface FleetIdentity {
+  name?: string
+  theme?: string
+  customCss?: string | null
 }
 
 export interface FakeSettings {
@@ -72,6 +88,7 @@ export interface FakeTenant {
   workspaceSlug: string
   workspaceName: string
   themeColor: string
+  customCss: string | null
   settingsUuid: string
   assistantPrincipalUuid: string
   canary: string
@@ -134,6 +151,7 @@ function makeTenant(slot: TenantSlot): FakeTenant {
     workspaceSlug: `${slot}-workspace`,
     workspaceName: TENANT_IDENTITY[slot].name,
     themeColor: TENANT_IDENTITY[slot].theme,
+    customCss: null,
     settingsUuid: TENANT_IDENTITY[slot].uuid,
     assistantPrincipalUuid: TENANT_IDENTITY[slot].principalUuid,
     canary: CANARY[slot],
@@ -162,7 +180,7 @@ export function fakeSettings(t: FakeTenant): FakeSettings {
     widget_secret: t.widgetSecret,
     feature_flags: '{}',
     branding_config: JSON.stringify({ light: { primary: t.themeColor } }),
-    custom_css: `:root { --primary: ${t.themeColor}; }`,
+    custom_css: t.customCss ?? `:root { --primary: ${t.themeColor}; }`,
     portal_config: '{}',
     widget_config: '{}',
     auth_config_version: 0,
@@ -212,7 +230,52 @@ export class FakeFleet {
   readonly liveOtps = new Map<TenantSlot, string>()
   private mintCounter = 1
 
-  constructor(readonly leaks: FleetLeaks = {}) {}
+  /** The value that survived a shared-stash collision, per credential type. */
+  private stashSurvivor: { magic?: string; otp?: string } = {}
+
+  constructor(
+    readonly leaks: FleetLeaks = {},
+    readonly identity: Partial<Record<TenantSlot, FleetIdentity>> = {}
+  ) {
+    for (const slot of ['alpha', 'bravo'] as TenantSlot[]) {
+      const over = identity[slot]
+      if (!over) continue
+      const tenant = slot === 'alpha' ? this.alpha : this.bravo
+      if (over.name !== undefined) tenant.workspaceName = over.name
+      if (over.theme !== undefined) tenant.themeColor = over.theme
+      if (over.customCss !== undefined) tenant.customCss = over.customCss
+    }
+  }
+
+  /** Record a freshly minted credential, honouring the shared-stash policy. */
+  private mint(kind: 'magic' | 'otp', slot: TenantSlot, value: string): void {
+    const store = kind === 'magic' ? this.liveMagicLinks : this.liveOtps
+    store.set(slot, value)
+    if (!this.leaks.sharedStash) return
+    const existing = this.stashSurvivor[kind]
+    if (existing && this.leaks.sharedStash === 'first-writer-wins') return
+    this.stashSurvivor[kind] = value
+  }
+
+  /**
+   * Whether `value` is redeemable at `host`.
+   *
+   * Its own freshly minted value always is. Under a shared stash the surviving
+   * value is redeemable EVERYWHERE, which is the account-takeover shape: the
+   * code that reached one tenant's inbox opens the other tenant's account.
+   */
+  private redeemableAt(
+    kind: 'magic' | 'otp',
+    host: TenantSlot,
+    value: string
+  ): { ok: boolean; owner: TenantSlot | null } {
+    const store = kind === 'magic' ? this.liveMagicLinks : this.liveOtps
+    const owner = this.credentialOwner(store, value)
+    if (owner === host) return { ok: true, owner }
+    if (this.leaks.sharedStash && this.stashSurvivor[kind] === value) return { ok: true, owner }
+    if (this.leaks.sharedSessionStore && owner) return { ok: true, owner }
+    return { ok: false, owner }
+  }
 
   private credentialOwner(store: Map<TenantSlot, string>, value: string): TenantSlot | null {
     if (!value) return null
@@ -276,15 +339,14 @@ export class FakeFleet {
     // serve them back out of the `verification` table, exactly as the real flow
     // requires the probe to read them.
     if (path === '/api/auth/sign-in/magic-link' && method === 'POST') {
-      this.liveMagicLinks.set(tenant.slot, `magic-${tenant.slot}-${this.mintCounter++}`)
+      this.mint('magic', tenant.slot, `magic-${tenant.slot}-${this.mintCounter++}`)
       return json({ status: true })
     }
 
     if (path === '/api/auth/magic-link/verify') {
       const token = url.searchParams.get('token') ?? ''
-      const owner = this.credentialOwner(this.liveMagicLinks, token)
-      const accepted = owner && (owner === tenant.slot || Boolean(this.leaks.sharedSessionStore))
-      if (!accepted) {
+      const { ok: accepted, owner } = this.redeemableAt('magic', tenant.slot, token)
+      if (!accepted || !owner) {
         return new Response(null, {
           status: 302,
           headers: { location: '/auth/error?error=INVALID_TOKEN' },
@@ -303,7 +365,7 @@ export class FakeFleet {
     }
 
     if (path === '/api/auth/email-otp/send-verification-otp' && method === 'POST') {
-      this.liveOtps.set(tenant.slot, String(100000 + this.mintCounter++))
+      this.mint('otp', tenant.slot, String(100000 + this.mintCounter++))
       return json({ status: true })
     }
 

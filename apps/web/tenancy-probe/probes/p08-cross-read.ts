@@ -22,7 +22,7 @@ import {
   type ScanResult,
 } from '../db-scan'
 import { markerSearchForms } from '../db'
-import { control, decide, describeResponse, error, markersPresent } from './helpers'
+import { control, decide, dirFrom, describeResponse, error, markersPresent } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext } from '../types'
 import { FIXTURE } from '../fixtures'
 
@@ -99,70 +99,89 @@ export const p08CrossRead: Probe = {
         foreignResults.length === 0,
         foreignResults.length === 0
           ? `${crossPosts.length} result(s), all bravo's${bravoFoundOwn ? " (including bravo's own fixture post)" : ''}`
-          : `ALPHA'S ROWS RETURNED: ${foreignResults.map((p) => p.id).join(', ')}`
+          : `ALPHA'S ROWS RETURNED: ${foreignResults.map((p) => p.id).join(', ')}`,
+        'a-to-b'
       )
     )
     evidence.bravoSearchResultIds = crossPosts.map((p) => p.id)
 
-    // --- negative: alpha's canary on bravo ----------------------------------
-    const canarySearch = await bravo.http.request(searchPath(alpha.markers.canary), {
-      omitCookies: true,
-      expectsForeignMarkers: true,
-    })
-    const canaryPosts = canarySearch.json<WidgetSearchBody>()?.data?.posts ?? []
-    controls.push(
-      control(
-        'negative',
-        "bravo search for alpha's canary returns nothing",
-        canaryPosts.length === 0,
-        canaryPosts.length === 0
-          ? 'no results'
-          : `RETURNED ${canaryPosts.length} result(s): ${canaryPosts.map((p) => p.id).join(', ')}`
-      )
-    )
-
-    // --- negative: portal documents on the shared board slug ----------------
-    for (const path of ['/', `/b/${FIXTURE.boardSlug}`]) {
-      const doc = await bravo.http.request(path, { omitCookies: true })
-      const found = markersPresent(doc.text, alpha.markers)
+    // --- negative: each tenant's canary searched on the other ---------------
+    for (const [fromSlot, from, to] of [
+      ['alpha', alpha, bravo],
+      ['bravo', bravo, alpha],
+    ] as const) {
+      const canarySearch = await to.http.request(searchPath(from.markers.canary), {
+        omitCookies: true,
+        expectsForeignMarkers: true,
+      })
+      const canaryPosts = canarySearch.json<WidgetSearchBody>()?.data?.posts ?? []
       controls.push(
         control(
           'negative',
-          `bravo GET ${path} contains no alpha marker`,
-          found.length === 0,
-          found.length === 0
-            ? `HTTP ${doc.status}, clean`
-            : `HTTP ${doc.status}, ALPHA MARKERS PRESENT: ${found.join(', ')}`
+          `${to.slot} search for ${fromSlot}'s canary returns nothing`,
+          canaryPosts.length === 0,
+          canaryPosts.length === 0
+            ? 'no results'
+            : `RETURNED ${canaryPosts.length} result(s): ${canaryPosts.map((p) => p.id).join(', ')}`,
+          dirFrom(fromSlot)
         )
       )
     }
 
-    // --- negative: the whole of bravo's schema ------------------------------
-    if (bravo.db) {
-      const markers = [
-        alpha.markers.canary,
-        ...Object.values(alpha.markers.ids).flatMap(markerSearchForms),
-      ]
-      const hits: ScanHit[] = []
-      const results: ScanResult[] = []
-      for (const marker of markers) {
-        if (marker.length < 8) continue
-        const result = await scanForMarker(bravo.db, marker)
-        hits.push(...result.hits)
-        results.push(result)
-      }
-      controls.push(
-        control(
-          'negative',
-          "bravo's database contains none of alpha's markers",
-          hits.length === 0,
-          hits.length === 0
-            ? `scanned ${markers.length} marker form(s), no rows matched`
-            : `ALPHA'S DATA FOUND IN BRAVO: ${describeHits(hits)}`
+    // --- negative: portal documents on the shared board slug, both ways -----
+    for (const [fromSlot, from, to] of [
+      ['alpha', alpha, bravo],
+      ['bravo', bravo, alpha],
+    ] as const) {
+      for (const path of ['/', `/b/${FIXTURE.boardSlug}`]) {
+        const doc = await to.http.request(path, { omitCookies: true })
+        const found = markersPresent(doc.text, from.markers)
+        controls.push(
+          control(
+            'negative',
+            `${to.slot} GET ${path} contains no ${fromSlot} marker`,
+            found.length === 0,
+            found.length === 0
+              ? `HTTP ${doc.status}, clean`
+              : `HTTP ${doc.status}, ${fromSlot.toUpperCase()} MARKERS PRESENT: ${found.join(', ')}`,
+            dirFrom(fromSlot)
+          )
         )
-      )
+      }
+    }
+
+    // --- negative: each tenant's whole schema, scanned for the other --------
+    if (alpha.db && bravo.db) {
+      const results: ScanResult[] = []
+      for (const [fromSlot, from, to] of [
+        ['alpha', alpha, bravo],
+        ['bravo', bravo, alpha],
+      ] as const) {
+        const markers = [
+          from.markers.canary,
+          ...Object.values(from.markers.ids).flatMap(markerSearchForms),
+        ]
+        const hits: ScanHit[] = []
+        for (const marker of markers) {
+          if (marker.length < 8) continue
+          const result = await scanForMarker(to.db!, marker)
+          hits.push(...result.hits)
+          results.push(result)
+        }
+        controls.push(
+          control(
+            'negative',
+            `${to.slot}'s database contains none of ${fromSlot}'s markers`,
+            hits.length === 0,
+            hits.length === 0
+              ? `scanned ${markers.length} marker form(s), no rows matched`
+              : `${fromSlot.toUpperCase()}'S DATA FOUND IN ${to.slot.toUpperCase()}: ${describeHits(hits)}`,
+            dirFrom(fromSlot)
+          )
+        )
+        evidence[`databaseScanHits:${to.slot}`] = hits
+      }
       controls.push(scanCoverage(results))
-      evidence.databaseScanHits = hits
     }
 
     return decide({
@@ -175,7 +194,7 @@ export const p08CrossRead: Probe = {
         observed:
           `bravo's search for the colliding title returned only bravo's rows; alpha's canary matched ` +
           `nothing on bravo's public surfaces${bravo.db ? ' or anywhere in its database' : ''}`,
-        reason: 'no row, id or canary belonging to alpha is reachable from bravo',
+        reason: 'no row, id or canary belonging to either tenant is reachable from the other',
       },
       evidence,
     })

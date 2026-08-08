@@ -31,7 +31,7 @@ import type { Exchange, TenantMarkers, TenantSlot, TripwireHit, TripwireRecorder
  * garbage — a short marker would produce chance matches and a suite that cries
  * wolf gets switched off, which is the worst outcome available.
  */
-const MIN_MARKER_LENGTH = 12
+export const MIN_MARKER_LENGTH = 12
 
 const EXCERPT_RADIUS = 120
 

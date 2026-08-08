@@ -24,6 +24,7 @@ import {
   createFakeDb,
   fakeSettings,
   silentLogger,
+  type FleetIdentity,
   type FleetLeaks,
 } from './fake-fleet'
 import { toUuid } from '@quackback/ids'
@@ -40,9 +41,10 @@ function configFor(fleet: FakeFleet, over: Partial<ProbeConfig> = {}): ProbeConf
 async function run(
   leaks: FleetLeaks,
   over: Partial<ProbeConfig> = {},
-  probes = ALL_PROBES
+  probes = ALL_PROBES,
+  identity: Partial<Record<TenantSlot, FleetIdentity>> = {}
 ): Promise<{ report: ProbeReport; exit: number }> {
-  const fleet = new FakeFleet(leaks)
+  const fleet = new FakeFleet(leaks, identity)
   const config = configFor(fleet, over)
   const { report } = await runSuite(config, silentLogger, probes, {
     fetchImpl: fleet.fetch,
@@ -223,5 +225,150 @@ describe('run integrity', () => {
     }
     expect(report.counts.PASS).toBeGreaterThan(0)
     expect(exitCodeFor(report)).toBe(1)
+  })
+})
+
+/**
+ * Precision: correctly isolated fleets built specifically to trip the identity
+ * vocabulary.
+ *
+ * Every one of these exited 2 before the vocabulary was constrained. Recall and
+ * precision have to hold at the same time — a suite that finds every leak by
+ * accusing every fleet is no more useful than one that finds none.
+ */
+describe('correct fleets that must NOT be accused', () => {
+  it('tolerates a workspace theme containing an ordinary white', async () => {
+    // Alpha's custom CSS carries #ffffff; bravo has no custom CSS at all, so
+    // #ffffff is exclusive to alpha's settings row — yet every stylesheet in
+    // existence contains it, including the chrome bravo renders itself.
+    const { report, exit } = await run({}, {}, ALL_PROBES, {
+      alpha: { customCss: ':root { --primary: #a11111; --card: #ffffff; }' },
+      bravo: { customCss: ':root { --primary: #22bb44; }' },
+    })
+    expect(probe(report, 'P06').verdict).toBe('PASS')
+    expect(report.counts.LEAK).toBe(0)
+    expect(exit).toBe(0)
+  })
+
+  it('tolerates a workspace named Support, which the other tenant renders in its nav', async () => {
+    const { report, exit } = await run({}, {}, ALL_PROBES, {
+      alpha: { name: 'Support' },
+      bravo: { name: 'Helpdesk Central' },
+    })
+    expect(report.counts.LEAK).toBe(0)
+    expect(report.tripwireHits).toEqual([])
+    expect(exit).toBe(0)
+  })
+
+  it('tolerates a workspace named after the board this suite creates in BOTH tenants', async () => {
+    // `FIXTURE.boardName` is written into alpha and bravo by the harness, so
+    // finding it on the "wrong" host is the suite observing its own handiwork.
+    const { report, exit } = await run({}, {}, ALL_PROBES, {
+      alpha: { name: 'Feature Requests' },
+      bravo: { name: 'Product Ideas' },
+    })
+    expect(report.counts.LEAK).toBe(0)
+    expect(exit).toBe(0)
+  })
+
+  it('still catches a real leak on a fleet whose names are generic', async () => {
+    // The precision fixes must not have been bought by loosening detection: a
+    // genuine cache serve is caught even when neither name is distinctive,
+    // because the leaking host presents no identity of its own.
+    const { report, exit } = await run({ sharedSettingsCache: true }, {}, ALL_PROBES, {
+      alpha: { name: 'Support', theme: '#a11111' },
+      bravo: { name: 'Helpdesk Central', theme: '#22bb44' },
+    })
+    expect(probe(report, 'P06').verdict).toBe('LEAK')
+    expect(exit).toBe(2)
+  })
+})
+
+describe('shared credential stash, both polarities', () => {
+  // Which tenant's value survives an email-keyed stash collision is a coin
+  // flip. An earlier P02 attempted only alpha's-OTP-on-bravo, so a
+  // last-writer-wins stash — where bravo's value survives — produced a fully
+  // green run. Detection must not depend on mint ordering.
+  for (const policy of ['first-writer-wins', 'last-writer-wins'] as const) {
+    it(`catches a shared stash under ${policy} and exits 2`, async () => {
+      const { report, exit } = await run({ sharedStash: policy }, {}, [p02MagicLinkOtp])
+      const p02 = probe(report, 'P02')
+      expect(p02.verdict).toBe('LEAK')
+      expect(exit).toBe(2)
+    })
+  }
+
+  it('tests both directions for the OTP, not just one', async () => {
+    const { report } = await run({}, {}, [p02MagicLinkOtp])
+    const labels = probe(report, 'P02')
+      .controls.filter((c) => c.kind === 'negative')
+      .map((c) => c.label)
+    expect(labels).toContain("alpha's sign-in OTP → bravo /api/auth/sign-in/email-otp")
+    expect(labels).toContain("bravo's sign-in OTP → alpha /api/auth/sign-in/email-otp")
+  })
+})
+
+describe('directional symmetry', () => {
+  it('declares a direction on every negative control', async () => {
+    const { report } = await run({})
+    for (const p of report.probes) {
+      for (const c of p.controls.filter((x) => x.kind === 'negative')) {
+        expect(
+          c.direction,
+          `${p.id} control "${c.label}" has no declared direction — pass one to control()`
+        ).toBeDefined()
+      }
+    }
+  })
+
+  it('makes every cross-tenant attempt in both directions', async () => {
+    // The property the OTP gap violated: P02 attempted only
+    // alpha's-OTP-on-bravo, and because an email-keyed stash is
+    // last-writer-wins, the surviving credential was bravo's — so the only
+    // redemption that could have succeeded was the one never attempted.
+    // Asserted structurally so a new one-directional check cannot be added
+    // without this failing.
+    const { report } = await run({})
+    for (const p of report.probes) {
+      const negatives = p.controls.filter((c) => c.kind === 'negative')
+      if (negatives.length === 0) continue
+      const covered = new Set(
+        negatives.flatMap((c) => (c.direction === 'both' ? ['a-to-b', 'b-to-a'] : [c.direction]))
+      )
+      expect(
+        covered.has('a-to-b') && covered.has('b-to-a'),
+        `${p.id} (${p.name}) covers only ${[...covered].join(', ')}: ` +
+          negatives.map((c) => `${c.label} [${c.direction}]`).join(' | ')
+      ).toBe(true)
+    }
+  })
+})
+
+describe('--allow-blocked', () => {
+  it('never reports verdict PASS while probes did not run', async () => {
+    const fleet = new FakeFleet({})
+    const { report } = await runSuite(
+      baseConfig(fleet, { allowBlocked: true }),
+      silentLogger,
+      ALL_PROBES,
+      { fetchImpl: fleet.fetch }
+    )
+    expect(report.counts.BLOCKED).toBeGreaterThan(0)
+    // The flag softens the exit code only. A CI check keyed on `verdict` must
+    // not read green while four of nine probes never executed.
+    expect(report.verdict).toBe('FAIL')
+    expect(report.exitTolerates).toContain('BLOCKED')
+    expect(exitCodeFor(report)).toBe(0)
+  })
+
+  it('still fails the exit code on a leak even with --allow-blocked', async () => {
+    const fleet = new FakeFleet({ sharedApiKeys: true })
+    const { report } = await runSuite(
+      baseConfig(fleet, { allowBlocked: true }),
+      silentLogger,
+      ALL_PROBES,
+      { fetchImpl: fleet.fetch }
+    )
+    expect(exitCodeFor(report)).toBe(2)
   })
 })

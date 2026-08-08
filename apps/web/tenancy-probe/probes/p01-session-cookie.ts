@@ -17,6 +17,7 @@
 import {
   control,
   decide,
+  dirFrom,
   describeResponse,
   error,
   markersPresent,
@@ -87,73 +88,106 @@ export const p01SessionCookie: Probe = {
     const controls = [positive]
     const evidence: Record<string, unknown> = { alphaUserId: ownUser }
 
-    // --- negative 1: the cookie on bravo ------------------------------------
-    const foreign = ctx.newClient(bravo)
-    foreign.setCookieHeader(alphaCookie)
-    const cookieRes = await foreign.request('/api/auth/get-session', {
-      expectsForeignMarkers: true,
-    })
-    const cookieUser = cookieRes.json<SessionBody>()?.user?.id ?? null
-    controls.push(
-      control(
-        'negative',
-        'alpha cookie → bravo /api/auth/get-session',
-        cookieUser === null,
-        cookieUser === null
-          ? `refused: ${describeResponse(cookieRes, 120)}`
-          : `AUTHENTICATED as user ${cookieUser}`
-      )
-    )
-    evidence.bravoCookieResponse = describeResponse(cookieRes, 400)
+    // --- negatives, in BOTH directions --------------------------------------
+    //
+    // Direction matters whenever the thing under test is a keyed store: a
+    // shared session table or a shared better-auth instance cache resolves
+    // whichever entry survives, and testing one direction leaves detection to
+    // chance. The same asymmetry hid a shared OTP stash from P02 entirely.
+    const bravoCookie = bravo.adminCookies
+    // Retained for the identity note below: whose account bravo answered with
+    // when it accepted alpha's cookie is the difference between "served alpha's
+    // database" and "authenticated alpha against bravo's account".
+    let cookieUser: string | null = null
 
-    // --- negative 2: the raw token as a Bearer credential -------------------
-    const raw = rawSessionToken(alphaCookie)
-    let bearerUser: string | null = null
-    if (raw) {
-      const bearerClient = ctx.newClient(bravo)
-      const bearerRes = await bearerClient.request('/api/auth/get-session', {
-        headers: { authorization: `Bearer ${raw}` },
+    for (const [fromSlot, toSlot, to, cookie] of [
+      ['alpha', 'bravo', bravo, alphaCookie],
+      ['bravo', 'alpha', alpha, bravoCookie],
+    ] as const) {
+      if (!cookie) {
+        controls.push(
+          control(
+            'negative',
+            `${fromSlot} cookie → ${toSlot}`,
+            false,
+            `no admin session on ${fromSlot}`,
+            dirFrom(fromSlot)
+          )
+        )
+        continue
+      }
+
+      const foreign = ctx.newClient(to)
+      foreign.setCookieHeader(cookie)
+      const cookieRes = await foreign.request('/api/auth/get-session', {
         expectsForeignMarkers: true,
       })
-      bearerUser = bearerRes.json<SessionBody>()?.user?.id ?? null
+      const seenUser = cookieRes.json<SessionBody>()?.user?.id ?? null
+      if (fromSlot === 'alpha') cookieUser = seenUser
       controls.push(
         control(
           'negative',
-          "alpha's raw session token → bravo /api/auth/get-session as Bearer",
-          bearerUser === null,
-          bearerUser === null
-            ? `refused: ${describeResponse(bearerRes, 120)}`
-            : `AUTHENTICATED as user ${bearerUser}`
+          `${fromSlot} cookie → ${toSlot} /api/auth/get-session`,
+          seenUser === null,
+          seenUser === null
+            ? `refused: ${describeResponse(cookieRes, 120)}`
+            : `AUTHENTICATED as user ${seenUser}`,
+          dirFrom(fromSlot)
         )
       )
-      evidence.bravoBearerResponse = describeResponse(bearerRes, 400)
-    } else {
-      controls.push(
-        control(
-          'negative',
-          "alpha's raw session token → bravo as Bearer",
-          false,
-          'could not extract a raw session token from the cookie jar'
-        )
-      )
-    }
+      evidence[`${toSlot}CookieResponse`] = describeResponse(cookieRes, 400)
 
-    // --- negative 3: an authenticated document ------------------------------
-    const docClient = ctx.newClient(bravo)
-    docClient.setCookieHeader(alphaCookie)
-    const docRes = await docClient.request('/admin', { expectsForeignMarkers: true })
-    const alphaMarkersInDoc = markersPresent(docRes.text, alpha.markers)
-    controls.push(
-      control(
-        'negative',
-        'alpha cookie → bravo GET /admin',
-        alphaMarkersInDoc.length === 0,
-        alphaMarkersInDoc.length === 0
-          ? `HTTP ${docRes.status}, no alpha markers in the document`
-          : `HTTP ${docRes.status}, ALPHA MARKERS PRESENT: ${alphaMarkersInDoc.join(', ')}`
+      const raw = rawSessionToken(cookie)
+      if (raw) {
+        const bearerClient = ctx.newClient(to)
+        const bearerRes = await bearerClient.request('/api/auth/get-session', {
+          headers: { authorization: `Bearer ${raw}` },
+          expectsForeignMarkers: true,
+        })
+        const seenBearer = bearerRes.json<SessionBody>()?.user?.id ?? null
+        controls.push(
+          control(
+            'negative',
+            `${fromSlot}'s raw session token → ${toSlot} as Bearer`,
+            seenBearer === null,
+            seenBearer === null
+              ? `refused: ${describeResponse(bearerRes, 120)}`
+              : `AUTHENTICATED as user ${seenBearer}`,
+            dirFrom(fromSlot)
+          )
+        )
+      } else {
+        controls.push(
+          control(
+            'negative',
+            `${fromSlot}'s raw session token → ${toSlot} as Bearer`,
+            false,
+            'could not extract a raw session token from the cookie jar',
+            dirFrom(fromSlot)
+          )
+        )
+      }
+
+      const docClient = ctx.newClient(to)
+      docClient.setCookieHeader(cookie)
+      const docRes = await docClient.request('/admin', { expectsForeignMarkers: true })
+      const foreignMarkers = markersPresent(
+        docRes.text,
+        fromSlot === 'alpha' ? alpha.markers : bravo.markers
       )
-    )
-    evidence.bravoAdminDocMarkers = alphaMarkersInDoc
+      controls.push(
+        control(
+          'negative',
+          `${fromSlot} cookie → ${toSlot} GET /admin`,
+          foreignMarkers.length === 0,
+          foreignMarkers.length === 0
+            ? `HTTP ${docRes.status}, no ${fromSlot} markers in the document`
+            : `HTTP ${docRes.status}, ${fromSlot.toUpperCase()} MARKERS PRESENT: ${foreignMarkers.join(', ')}`,
+          dirFrom(fromSlot)
+        )
+      )
+      evidence[`${toSlot}AdminDocMarkers`] = foreignMarkers
+    }
 
     const identityNote =
       cookieUser && cookieUser === ownUser
@@ -168,8 +202,8 @@ export const p01SessionCookie: Probe = {
       leakReason: `a credential issued by alpha was honoured by bravo${identityNote}`,
       onPass: {
         observed:
-          `bravo refused all three presentations (cookie: ${describeResponse(cookieRes, 80)}; ` +
-          `bearer: ${bearerUser === null ? 'no session' : bearerUser}; document: no alpha markers)`,
+          'each host refused the other\u2019s session cookie, its raw token as a Bearer credential, and an ' +
+          'authenticated document request \u2014 in both directions',
         reason: 'alpha-issued session credentials authenticate on alpha and nowhere else',
       },
       evidence,

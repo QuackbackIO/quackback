@@ -27,7 +27,7 @@ import {
   type ScanResult,
 } from '../db-scan'
 import { markerSearchForms } from '../db'
-import { blocked, control, decide, describeResponse, error } from './helpers'
+import { blocked, control, decide, dirFrom, describeResponse, error } from './helpers'
 import type { ControlOutcome, Probe, ProbeContext, TenantHandle } from '../types'
 
 /** How long to let queues and the outbox relay settle before scanning. */
@@ -90,80 +90,103 @@ export const p07BackgroundJob: Probe = {
     }
 
     const controls: ControlOutcome[] = []
-    const postId = alpha.fixture.postId
 
-    // --- drive the write ----------------------------------------------------
-    // An update rather than a create, so a second run re-triggers the same
+    // --- drive the write on BOTH tenants ------------------------------------
+    // Updates rather than creates, so a second run re-triggers the same
     // background work without accumulating rows and changing the next verdict.
-    const update = await alpha.http.request(`/api/v1/posts/${postId}`, {
-      method: 'PATCH',
-      headers: { authorization: `Bearer ${config.alphaApiKey}` },
-      body: JSON.stringify({ content: alpha.fixture.postBody }),
-    })
-    if (update.status >= 400) {
-      return error({
-        attempted,
-        observed: describeResponse(update, 300),
-        reason:
-          'the write that was supposed to enqueue background work was rejected, so nothing was ' +
-          'enqueued and no conclusion about job routing is available',
-        controls,
+    // Both tenants are driven before the settle, so the symmetric check costs
+    // one settle window rather than two.
+    for (const handle of [alpha, bravo]) {
+      const key = handle.slot === 'alpha' ? config.alphaApiKey : config.bravoApiKey
+      if (!key || !handle.fixture) {
+        return blocked({
+          attempted,
+          reason: `${handle.slot}'s REST API key and provisioned fixture are required to drive the write`,
+        })
+      }
+      const update = await handle.http.request(`/api/v1/posts/${handle.fixture.postId}`, {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${key}` },
+        body: JSON.stringify({ content: handle.fixture.postBody }),
       })
+      if (update.status >= 400) {
+        return error({
+          attempted,
+          observed: `${handle.slot}: ${describeResponse(update, 300)}`,
+          reason:
+            'the write that was supposed to enqueue background work was rejected, so nothing was ' +
+            'enqueued and no conclusion about job routing is available',
+          controls,
+        })
+      }
     }
     await settle(SETTLE_MS)
 
-    // --- positive control: the write is observable at all -------------------
-    //
-    // Scanned by POST ID ONLY, with the tables the fixture itself occupies
-    // excluded. An earlier version also scanned for the canary and counted any
-    // non-`posts` hit as a derived row — but the fixture writes that canary
-    // into `boards.description`, so `boards` satisfied the guard and the probe
-    // returned PASS against a deployment with background processing switched
-    // off entirely. A visibility guard has to be satisfied by the write under
-    // test, never by fixture data that was already sitting there.
-    const postIdForms = markerSearchForms(postId)
-    const ownScan = await scanAll(alpha, postIdForms)
-    const derived = ownScan.hits.filter((h) => !FIXTURE_TABLES.has(h.table))
-    controls.push(
-      control(
-        'positive',
-        'alpha’s database gained derived rows referencing the post',
-        derived.length > 0,
-        derived.length > 0
-          ? `derived rows in ${describeHits(derived)}`
-          : `the post id appeared only in the fixture's own tables (${describeHits(ownScan.hits) || 'nothing'}) — ` +
-              `no background side effect is observable, so a clean scan of bravo would prove nothing`
+    const allScans: ScanResult[] = []
+    const derivedTables = new Set<string>()
+
+    for (const [ownerSlot, owner, other] of [
+      ['alpha', alpha, bravo],
+      ['bravo', bravo, alpha],
+    ] as const) {
+      const postId = owner.fixture!.postId
+      const postIdForms = markerSearchForms(postId)
+
+      // --- positive control: the write is observable at all -----------------
+      //
+      // Scanned by POST ID ONLY, with the tables the fixture itself occupies
+      // excluded. An earlier version also scanned for the canary and counted any
+      // non-`posts` hit as a derived row — but the fixture writes that canary
+      // into `boards.description`, so `boards` satisfied the guard and the probe
+      // returned PASS against a deployment with background processing switched
+      // off entirely. A visibility guard has to be satisfied by the write under
+      // test, never by fixture data that was already sitting there.
+      const ownScan = await scanAll(owner, postIdForms)
+      allScans.push(...ownScan.results)
+      const derived = ownScan.hits.filter((h) => !FIXTURE_TABLES.has(h.table))
+      for (const hit of derived) derivedTables.add(hit.table)
+      controls.push(
+        control(
+          'positive',
+          `${ownerSlot}'s database gained derived rows referencing its post`,
+          derived.length > 0,
+          derived.length > 0
+            ? `derived rows in ${describeHits(derived)}`
+            : `the post id appeared only in the fixture's own tables (${describeHits(ownScan.hits) || 'nothing'}) — ` +
+                `no background side effect is observable, so a clean scan of the other tenant would prove nothing`
+        )
       )
-    )
-    if (derived.length === 0) {
-      return error({
-        attempted,
-        observed: `alpha scan matched ${describeHits(ownScan.hits) || 'nothing'} outside the fixture tables`,
-        reason:
-          'the write produced no observable derived rows in its own database within the settle window, ' +
-          'so this probe is blind: an absence of rows in bravo would be equally explained by there ' +
-          'being no background work at all. Not a pass.',
-        controls,
-      })
+      if (derived.length === 0) {
+        return error({
+          attempted,
+          observed: `${ownerSlot} scan matched ${describeHits(ownScan.hits) || 'nothing'} outside the fixture tables`,
+          reason:
+            'the write produced no observable derived rows in its own database within the settle window, ' +
+            'so this probe is blind: an absence of rows in the other tenant would be equally explained ' +
+            'by there being no background work at all. Not a pass.',
+          controls,
+        })
+      }
+
+      // --- negative: nothing of this tenant's reached the other -------------
+      // Deliberately wider than the visibility scan: any trace, by id or by
+      // canary, is a finding wherever it landed.
+      const foreignScan = await scanAll(other, [...postIdForms, owner.markers.canary])
+      allScans.push(...foreignScan.results)
+      controls.push(
+        control(
+          'negative',
+          `${other.slot}'s database contains no reference to ${ownerSlot}'s post or canary`,
+          foreignScan.hits.length === 0,
+          foreignScan.hits.length === 0
+            ? 'no rows matched in any scanned table'
+            : `${ownerSlot.toUpperCase()}'S DATA FOUND IN ${other.slot.toUpperCase()}: ${describeHits(foreignScan.hits)}`,
+          dirFrom(ownerSlot)
+        )
+      )
     }
 
-    // --- negative: nothing of alpha's reached bravo -------------------------
-    // Deliberately wider than the visibility scan above: any trace of alpha, by
-    // id or by canary, is a finding wherever it landed.
-    const markers = [...postIdForms, alpha.markers.canary]
-    const foreignScan = await scanAll(bravo, markers)
-    controls.push(
-      control(
-        'negative',
-        'bravo’s database contains no reference to alpha’s post or canary',
-        foreignScan.hits.length === 0,
-        foreignScan.hits.length === 0
-          ? 'no rows matched in any scanned table'
-          : `ALPHA'S DATA FOUND IN BRAVO: ${describeHits(foreignScan.hits)}`
-      )
-    )
-
-    controls.push(scanCoverage([...ownScan.results, ...foreignScan.results]))
+    controls.push(scanCoverage(allScans))
 
     return decide({
       attempted,
@@ -172,10 +195,12 @@ export const p07BackgroundJob: Probe = {
         'background work driven by one tenant left rows in the other tenant’s database. Under a ' +
         'shared worker tier this is silent — the write succeeds and nothing errors.',
       onPass: {
-        observed: `alpha gained derived rows in ${describeHits(derived)}; bravo matched nothing`,
-        reason: 'the background work driven on alpha wrote only to alpha’s database',
+        observed:
+          `both tenants gained derived rows (${[...derivedTables].join(', ')}) and neither database ` +
+          'contained any trace of the other',
+        reason: 'background work driven on each tenant wrote only to that tenant’s database',
       },
-      evidence: { postId, derivedTables: [...new Set(derived.map((h) => h.table))] },
+      evidence: { derivedTables: [...derivedTables] },
     })
   },
 }
