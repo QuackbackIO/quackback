@@ -39,6 +39,7 @@ import postgres from 'postgres'
 import { createDbFromSql, type Database } from '@quackback/db/client'
 import { config } from '@/lib/server/config'
 import { logger } from '@/lib/server/logger'
+import { runWithLogContext } from '@/lib/server/log-context'
 import { evaluateTenantIdentity, observeTenantIdentity, TenantFingerprintRefusal } from './fingerprint'
 import { readNeonRolePassword, invalidateNeonRolePassword } from './neon-credentials'
 import type { TenantDescriptor } from './registry'
@@ -313,7 +314,14 @@ function ensureSweeper(): void {
   if (sweeper) return
   const periodMs = Math.max(5_000, Math.floor((config.tenantPoolIdleSeconds * 1000) / 3))
   sweeper = setInterval(() => {
-    void sweepIdlePools().catch((err) => log.warn({ err }, 'idle pool sweep failed'))
+    // Open a fresh log context. The first pool is created inside a request, so
+    // the interval inherits that request's AsyncLocalStorage store — and every
+    // eviction for the life of the process would then be stamped with one
+    // long-finished request's id and route. A log line that names a request
+    // which did not cause it is worse than one with no request at all.
+    void runWithLogContext({ request_id: crypto.randomUUID(), route: 'sweep:tenant-pools' }, () =>
+      sweepIdlePools().catch((err) => log.warn({ err }, 'idle pool sweep failed'))
+    )
   }, periodMs)
   // Never hold the process open. An eviction sweeper that prevented exit would
   // be the same class of bug as a pool that prevents suspend.

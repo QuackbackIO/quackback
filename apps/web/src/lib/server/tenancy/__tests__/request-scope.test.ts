@@ -131,6 +131,47 @@ describe('resolveTenantAndContinue', () => {
     }
   })
 
+  it.each(['/api/health', '/api/health/ready'])(
+    'serves %s without resolving a tenant at all',
+    async (path) => {
+      // The platform hits these every couple of seconds, and on a wildcard
+      // domain they arrive on a tenant hostname like everything else. Resolving
+      // a tenant would open a pool and therefore WAKE A SUSPENDED COMPUTE, once
+      // per probe, forever — silently destroying the idle-cost model that pool
+      // eviction exists to protect. There is no functional symptom, which is
+      // why it needs a test rather than an observation.
+      acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'x' })
+      const { resolveTenantAndContinue } = await import('../request-scope')
+      const result = await resolveTenantAndContinue({
+        request: new Request(`http://example.com${path}`, {
+          headers: { host: 't1.localhost' },
+        }),
+        next: async () => 'probed',
+        log: silentLog as never,
+      })
+      expect(result).toBe('probed')
+      expect(acquireScopeForHost).not.toHaveBeenCalled()
+    }
+  )
+
+  it('does NOT skip a path that merely starts like a health path', async () => {
+    // A prefix match here would exempt `/api/healthcheck-for-tenant` — and an
+    // exemption is a request served with no tenant, which under pooled tenancy
+    // means `db` throws rather than serving the wrong thing, but is still a
+    // route silently taken out of the tenant boundary.
+    acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: 'x' })
+    const { resolveTenantAndContinue } = await import('../request-scope')
+    const result = (await resolveTenantAndContinue({
+      request: new Request('http://example.com/api/health-report', {
+        headers: { host: 't1.localhost' },
+      }),
+      next: async () => 'served',
+      log: silentLog as never,
+    })) as Response
+    expect(acquireScopeForHost).toHaveBeenCalled()
+    expect(result.status).toBe(404)
+  })
+
   it('passes a missing Host header through the same refusal path', async () => {
     acquireScopeForHost.mockResolvedValue({ kind: 'unknown_host', hostname: '' })
     expect(((await serve(null)) as Response).status).toBe(404)

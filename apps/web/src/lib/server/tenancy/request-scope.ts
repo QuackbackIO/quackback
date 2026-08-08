@@ -44,6 +44,18 @@ function refusal(status: number, body: string): Response {
  * Resolve the tenant for `request` and run `next` inside its scope, or return
  * the refusal. Framework-free so it can be unit tested against a plain Request.
  */
+/**
+ * Paths that belong to the fleet, not to a tenant.
+ *
+ * The platform hits these every couple of seconds, and on a wildcard domain
+ * they arrive on a tenant hostname like everything else. Resolving a tenant for
+ * them would open a pool — and therefore **wake a suspended Neon compute** —
+ * once per probe, forever, which silently destroys the idle-cost model the
+ * pooling exists for. Readiness under pooled tenancy asserts only that the
+ * process can reach the control store, so it needs no tenant either.
+ */
+const FLEET_PATHS = ['/api/health', '/api/health/ready']
+
 export async function resolveTenantAndContinue<T>({
   request,
   next,
@@ -53,6 +65,8 @@ export async function resolveTenantAndContinue<T>({
   next: () => Promise<T>
   log?: Pick<typeof logger, 'warn' | 'error' | 'info'>
 }): Promise<T | Response> {
+  if (FLEET_PATHS.includes(new URL(request.url).pathname)) return next()
+
   const host = request.headers.get('host')
   const acquisition = await acquireScopeForHost(host, 'request')
 
